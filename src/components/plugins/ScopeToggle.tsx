@@ -7,6 +7,19 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { PluginScope } from "@/lib/plugin-scope";
 
+/** The segmented control of Capabilities (scope, Tailscale's modes): a
+ * rounded track, the chosen segment filled with the accent. */
+export const SEGMENT_GROUP = "flex w-fit max-w-full items-center gap-0.5 rounded-full border border-border p-0.5";
+
+export function segmentOptionClass(active: boolean, disabled = false): string {
+  return cn(
+    "flex h-7 min-w-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none disabled:cursor-default",
+    active
+      ? disabled ? "bg-ink/10 text-ink-secondary" : "bg-accent text-accent-ink"
+      : disabled ? "text-ink-tertiary" : "text-ink-secondary hover:bg-hover hover:text-ink",
+  );
+}
+
 export function ScopeToggle({ scope, botName, onScope, disabled = false, describedBy, organization = true }: {
   scope: PluginScope;
   botName?: string;
@@ -25,12 +38,7 @@ export function ScopeToggle({ scope, botName, onScope, disabled = false, describ
       disabled={disabled}
       data-plugins-scope-option={value}
       onClick={() => onScope(value)}
-      className={cn(
-        "flex h-7 min-w-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 motion-reduce:transition-none disabled:cursor-default",
-        scope === value
-          ? disabled ? "bg-ink/10 text-ink-secondary" : "bg-accent text-accent-ink"
-          : disabled ? "text-ink-tertiary" : "text-ink-secondary hover:bg-hover hover:text-ink",
-      )}
+      className={segmentOptionClass(scope === value, disabled)}
     >
       {icon}
       <span className="truncate">{label}</span>
@@ -44,7 +52,7 @@ export function ScopeToggle({ scope, botName, onScope, disabled = false, describ
       aria-describedby={describedBy}
       data-plugins-scope={scope}
       data-plugins-scope-disabled={disabled ? "" : undefined}
-      className="flex w-fit max-w-full items-center gap-0.5 rounded-full border border-border p-0.5"
+      className={SEGMENT_GROUP}
     >
       {botName && option("bot", t("connectApps.scope.bot", { name: botName }), <Bot size={13} aria-hidden="true" />)}
       {option("me", t("connectApps.scope.me"), <User size={13} aria-hidden="true" />)}

@@ -23,7 +23,7 @@ import {
 } from "./mcp-permissions.ts";
 
 /** A tool name each permission stands for (a per-profile one by example). */
-const SAMPLE: Record<string, string> = { query: "cw_psa__query", write: "cw_psa__write", action: "cw_psa__action", read_action: "edr__read_action", operation: "cw_psa__find_tickets" };
+const SAMPLE: Record<string, string> = { query: "cw_psa_query", write: "cw_psa_write", action: "cw_psa_action", read_action: "edr_read_action", operation: "cw_psa__find_tickets" };
 const toolOf = (x: (typeof MCP_PERMISSIONS)[number]) => (x.profileKind ? SAMPLE[x.profileKind]! : x.tool);
 
 const FULL = { externalRuntime: false, coordinating: true, ownThreadCreation: true, skillAuthoring: true, sharedComputers: true, voiceNotes: true, voiceCall: true, cloudHome: false, memoryEnabled: true, groupMemory: true, chief: true, botId: "b", agentApi: true };
@@ -58,8 +58,9 @@ describe("mcp permission registry", () => {
       // mcp/sagax_tools.rs
       "list_agents", "find_agents", "create_agent", "send_prompt", "await_turn", "read_transcript", "read_transcript_page", "read_latest_page", "read_latest_page_with_threads", "read_transcript_cold",
       "sagax_bots", "sagax_send", "sagax_thread", "sagax_routine_run", "sagax_routine_update", "sagax_approve", "sagax_nudge",
-      // per-profile tools, both separators
-      "cw_psa__query", "cw_psa__write", "cw_psa__action", "edr__read_action", "cw_psa__find_tickets", "twilio_lookups__Bucket_write", "cw_psa-query",
+      // per-profile tools: one `_` (1.9.19), `__` before, and `-`
+      "cw_psa_query", "cw_psa_write", "cw_psa_action", "edr_read_action", "cw_psa-query",
+      "cw_psa__query", "cw_psa__write", "cw_psa__action", "edr__read_action", "cw_psa__find_tickets", "twilio_lookups__Bucket_write",
       // memory v2 draft behind a switch (Perspicax #326)
       "memory_find", "memory_save", "memory_remove", "memory_suggestions",
     ];
@@ -68,16 +69,26 @@ describe("mcp permission registry", () => {
   });
 
   it("maps a per-profile tool by its pattern", () => {
-    expect(profileToolCall("cw_psa__query")).toEqual({ profile: "cw_psa", kind: "query", name: "query" });
+    expect(profileToolCall("cw_psa_query")).toEqual({ profile: "cw_psa", kind: "query", name: "query" });
     expect(profileToolCall("cw_psa-write")).toEqual({ profile: "cw_psa", kind: "write", name: "write" });
     expect(profileToolCall("twilio_lookups__Bucket_write")).toMatchObject({ profile: "twilio_lookups", kind: "write" });
-    expect(profileToolCall("edr__read_action")).toMatchObject({ kind: "read_action" });
+    expect(profileToolCall("edr_read_action")).toMatchObject({ profile: "edr", kind: "read_action" });
     expect(profileToolCall("cw_psa__find_tickets")).toMatchObject({ kind: "operation" });
+    // one `_`: the catalog's api ids split the name, the longest first
+    const apis = ["cw_psa", "cw_psa_time", "twilio_lookups"];
+    expect(profileToolCall("twilio_lookups_Bucket_write", apis)).toMatchObject({ profile: "twilio_lookups", kind: "write", name: "Bucket_write" });
+    expect(profileToolCall("cw_psa_find_tickets", apis)).toEqual({ profile: "cw_psa", kind: "operation", name: "find_tickets" });
+    expect(profileToolCall("cw_psa_time_entries_write", apis)).toEqual({ profile: "cw_psa_time", kind: "write", name: "entries_write" });
+    expect(profileToolCall("vpn_api_query", apis)).toBeNull();
+    expect(permissionForTool("cw_psa_find_tickets", apis)?.key).toBe("api:operation");
+    // Sagax's own and meta tools are never a profile's
+    expect(profileToolCall("memory_write")).toBeNull();
+    expect(profileToolCall("flow_action", ["flow"])).toBeNull();
     expect(profileToolCall("api_list")).toBeNull();
-    expect(permissionForTool("cw_psa__query")?.key).toBe("api:query");
-    expect(permissionForTool("cw_psa__write")?.key).toBe("api:write");
-    expect(permissionForTool("cw_psa__action")?.key).toBe("api:action");
-    expect(permissionForTool("edr__read_action")?.tier).toBe("read");
+    expect(permissionForTool("cw_psa_query")?.key).toBe("api:query");
+    expect(permissionForTool("cw_psa_write")?.key).toBe("api:write");
+    expect(permissionForTool("cw_psa_action")?.key).toBe("api:action");
+    expect(permissionForTool("edr_read_action")?.tier).toBe("read");
     expect(permissionForTool("cw_psa__find_tickets")?.tier).toBe("dispatch");
   });
 });
@@ -311,23 +322,26 @@ describe("coverage doc", () => {
 
 describe("per-resource permissions", () => {
   it("derives <profile>:<resource>.<verb> from the per-profile tools", () => {
-    expect(resourceKeyForCall("cw_psa__query", { resource: "Tickets" })).toBe("cw_psa:tickets.read");
-    expect(resourceKeyForCall("cw_psa__write", { resource: "tickets", action: "update" })).toBe("cw_psa:tickets.update");
+    expect(resourceKeyForCall("cw_psa_query", { resource: "Tickets" })).toBe("cw_psa:tickets.read");
+    expect(resourceKeyForCall("cw_psa_write", { resource: "tickets", action: "update" })).toBe("cw_psa:tickets.update");
     expect(resourceKeyForCall("cw_psa-write", { resource: "tickets", action: "delete" })).toBe("cw_psa:tickets.delete");
     expect(resourceKeyForCall("twilio_lookups__Bucket_write", { action: "create" })).toBe("twilio_lookups:bucket.create");
-    expect(resourceKeyForCall("cw_psa__action", { action: "merge_companies" })).toBe("cw_psa:merge_companies.run");
-    expect(resourceKeyForCall("edr__read_action", { action: "agents_count" })).toBe("edr:agents_count.read");
+    expect(resourceKeyForCall("cw_psa_action", { action: "merge_companies" })).toBe("cw_psa:merge_companies.run");
+    expect(resourceKeyForCall("edr_read_action", { action: "agents_count" })).toBe("edr:agents_count.read");
     expect(resourceKeyForCall("cw_psa__find_tickets", {})).toBe("cw_psa:find_tickets.run");
+    const catalog = new Map([["cw_psa", new Set(["tickets"])], ["twilio_lookups", new Set(["bucket"])]]);
+    expect(resourceKeyForCall("twilio_lookups_Bucket_write", { action: "create" }, catalog)).toBe("twilio_lookups:bucket.create");
+    expect(resourceKeyForCall("cw_psa_find_tickets", {}, catalog)).toBe("cw_psa:find_tickets.run");
     expect(resourceKeyForCall("api_list", { resource: "x" })).toBeNull();
-    expect(resourceKeyForCall("cw_psa__write", { resource: "../x", action: "update" })).toBeNull();
-    expect(resourceKeyForCall("cw_psa__write", { resource: "tickets" })).toBeNull();
-    expect(resourceKeyForCall("cw_psa__query", undefined)).toBeNull();
+    expect(resourceKeyForCall("cw_psa_write", { resource: "../x", action: "update" })).toBeNull();
+    expect(resourceKeyForCall("cw_psa_write", { resource: "tickets" })).toBeNull();
+    expect(resourceKeyForCall("cw_psa_query", undefined)).toBeNull();
   });
 
   it("vets names against the Perspicax catalog when one is given", () => {
     const catalog = new Map([["cw_psa", new Set(["tickets"])]]);
-    expect(resourceKeyForCall("cw_psa__write", { resource: "tickets", action: "update" }, catalog)).toBe("cw_psa:tickets.update");
-    expect(resourceKeyForCall("cw_psa__write", { resource: "invented", action: "update" }, catalog)).toBeNull();
+    expect(resourceKeyForCall("cw_psa_write", { resource: "tickets", action: "update" }, catalog)).toBe("cw_psa:tickets.update");
+    expect(resourceKeyForCall("cw_psa_write", { resource: "invented", action: "update" }, catalog)).toBeNull();
     expect(resourceKeyForCall("other__write", { resource: "tickets", action: "update" }, catalog)).toBeNull();
   });
 
@@ -345,11 +359,11 @@ describe("per-resource permissions", () => {
     const options = { principal: { id: "p", role: "operator" }, mode: "enforce" as const, ownBotId: "b", audit: (r: McpAuditRecord) => rows.push(r), deniedResources: ["cw_psa:tickets.*"] };
     let ran = 0;
     const run = async () => { ran++; return { text: "ok" }; };
-    const refused = await guardToolCall(options, "cw_psa__write", { resource: "tickets", action: "update" }, run);
+    const refused = await guardToolCall(options, "cw_psa_write", { resource: "tickets", action: "update" }, run);
     expect(refused).toMatchObject({ isError: true });
     expect(refused.text).toContain("cw_psa:tickets.update");
     expect(ran).toBe(0);
-    expect(await guardToolCall(options, "cw_psa__write", { resource: "contacts", action: "update" }, run)).toEqual({ text: "ok" });
+    expect(await guardToolCall(options, "cw_psa_write", { resource: "contacts", action: "update" }, run)).toEqual({ text: "ok" });
     expect(rows.map((r) => [r.decision, r.reason, r.resource])).toEqual([["denied", "resource_denied", "cw_psa:tickets.update"], ["allowed", "ok", "cw_psa:contacts.update"]]);
   });
 });
@@ -364,9 +378,9 @@ describe("harness identity and audit rows", () => {
   });
 
   it("copies only whitelisted fields into the activity-log row", () => {
-    const record = { at: "2026-10-14T00:00:00.000Z", principal: "p", role: "viewer", tool: "cw_psa__write", permission: "api:write", scope: "self", decision: "denied", reason: "not_granted", enforced: true, secret: "x", args: { a: 1 } } as unknown as McpAuditRecord;
+    const record = { at: "2026-10-14T00:00:00.000Z", principal: "p", role: "viewer", tool: "cw_psa_write", permission: "api:write", scope: "self", decision: "denied", reason: "not_granted", enforced: true, secret: "x", args: { a: 1 } } as unknown as McpAuditRecord;
     const row = mcpAuditRow(record, "bot1");
-    expect(row).toMatchObject({ category: "security", action: "mcp.deny", target: { kind: "bot", id: "bot1" }, after: { tool: "cw_psa__write", permission: "api:write", enforced: true } });
+    expect(row).toMatchObject({ category: "security", action: "mcp.deny", target: { kind: "bot", id: "bot1" }, after: { tool: "cw_psa_write", permission: "api:write", enforced: true } });
     expect(JSON.stringify(row)).not.toMatch(/secret|args/);
     expect(mcpAuditRow({ ...record, enforced: false }, "b").action).toBe("mcp.shadow");
     expect(mcpAuditRow({ ...record, decision: "allowed", enforced: false }, "b").action).toBe("mcp.call");

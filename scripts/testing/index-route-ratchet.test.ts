@@ -75,7 +75,7 @@ const EXACT: Record<string, number> = {
   // 12: wave 3 B3 moved bot browser live/action .exec(path) (#1388).
   // 10: wave 4 moved domain-check and shared-computers .exec(path) (#1388).
   ".exec(path)": 10,
-  ".test(path)": 9,
+  ".test(path)": 8,
   // 3: wave 4 moved ENVIRONMENT_PATHS.includes(path) (#1388).
   ".includes(path)": 3,
 };

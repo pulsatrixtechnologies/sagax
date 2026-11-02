@@ -1,6 +1,6 @@
 /** Isolated gallery for Playwright screenshots of every shape (2026-10-28):
  * the whole set live with its eyes, in the bots' colors, the pumpkin in
- * orange. Not shipped in the app. scripts/capture-shapes.mjs draws it for
+ * orange. Not shipped in the app. scripts/capture/shapes.mjs draws it for
  * docs/screenshots/shapes and checks every body on the page.
  * ?skin=<app skin> (pulsatrix dark, pulsatrix-light light), ?move=<shape move>
  * plays that move on every shape every few seconds, ?still=1 draws the still

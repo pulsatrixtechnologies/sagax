@@ -18,6 +18,7 @@
 import { UserSandboxUnavailable, type UserSandboxView } from "../user-sandbox-manager.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
+import { workspaceDiskLevel } from "../../shared/workspace-disk.ts";
 
 export type DiskState = "normal" | "almostFull" | "full";
 
@@ -55,6 +56,18 @@ export function diskStateForFree(freeBytes: number | null, totalBytes: number | 
   return freeBytes < Math.max(5 * GiB, (totalBytes ?? 0) * 0.1) ? "almostFull" : "normal";
 }
 
+/** The server environment's own volume (df): full under 200 MiB or 2%
+ * free, almost full under 10% free (at most 1 GiB), the rule the bot's
+ * warning uses (server/sandbox-bot-folder.ts workspaceDiskLevel). */
+export function diskStateForWorkspace(freeBytes: number, totalBytes: number | null): DiskState {
+  return workspaceDiskLevel(totalBytes && totalBytes > 0 ? { freeBytes, totalBytes } : null);
+}
+
+const DISK_ORDER: readonly DiskState[] = ["normal", "almostFull", "full"];
+export function worseDiskState(a: DiskState, b: DiskState): DiskState {
+  return DISK_ORDER.indexOf(a) >= DISK_ORDER.indexOf(b) ? a : b;
+}
+
 export interface SandboxLike {
   status(principalId: string): Promise<UserSandboxView>;
   update(principalId: string): Promise<UserSandboxView>;
@@ -88,7 +101,10 @@ export function sandboxStatus(view: UserSandboxView): ComputerStatus {
     kind: "org-sandbox",
     configured: true,
     state: view.state,
-    diskState: diskStateForQuota(view.workspaceBytes, limitBytes, view.overQuota),
+    diskState: worseDiskState(
+      diskStateForQuota(view.workspaceBytes, limitBytes, view.overQuota),
+      typeof view.workspaceFreeBytes === "number" ? diskStateForWorkspace(view.workspaceFreeBytes, view.workspaceTotalBytes ?? null) : "normal",
+    ),
     workspaceBytes: view.workspaceBytes,
     ...(limitBytes ? { limitBytes } : {}),
     ...(view.error ? { problem: view.error } : {}),

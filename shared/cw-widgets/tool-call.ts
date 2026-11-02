@@ -26,7 +26,7 @@ import { agreementFrom, looksLikeAgreement } from "./agreement.ts";
 import { companyFrom, looksLikeCompany } from "./company.ts";
 
 /** The ConnectWise words of a tool's name, from the `cw_psa` prefix on
- * (`mcp__perspicax_x__cw_psa_schedule__query` → cw, psa, schedule, query),
+ * (`mcp__perspicax_x__cw_psa_schedule_query` → cw, psa, schedule, query),
  * or every word of a tool on a ConnectWise server. Null for anything else. */
 export function cwToolWords(toolName: string): string[] | null {
   const name = toolName.trim().toLowerCase();
@@ -44,7 +44,7 @@ export function isCwTool(toolName: string): boolean {
   return cwToolWords(toolName) !== null;
 }
 
-/** A Perspicax view tool (`cw_psa__show_<view>`): served only when the
+/** A Perspicax view tool (`cw_psa_show_<view>`): served only when the
  * person's profile has "Vues interactives" on, and called only when a view
  * was wanted. The one ConnectWise call whose result is drawn as a widget on
  * its tool row; any other call stays an ordinary row and the bot answers in
@@ -68,7 +68,7 @@ const WRITE_WORDS = new Set([
 ]);
 
 /** A ConnectWise call that may change a record. A name that says neither
- * (a bare `cw_psa__ticket`) counts as a change: the gate stays closed. */
+ * (a bare `cw_psa_ticket`) counts as a change: the gate stays closed. */
 export function isCwWriteTool(toolName: string): boolean {
   const words = cwToolWords(toolName);
   if (!words) return false;

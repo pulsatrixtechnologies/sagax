@@ -73,7 +73,7 @@ Visible composer placeholder stays **Message &lt;botname&gt;** (measured).
 | Settings shell | Sagax richer settings retained | Already aligned (Sagax) | Measured Grok: separate settings modal. Sagax keeps its settings surface + themes/providers. Comparative layout: unmeasured. |
 | Bot detail panes | Sagax Library / Computer / richer tabs | Already aligned (Sagax) | Measured Grok: Details / Library / Computer three-pane. Sagax bot panel richer; comparative: unmeasured. |
 | Keyboard / focus | Close reachable; chat inert when covered; Escape back; focus returns to the opener | Done (real ChatView DOM + headless) | Escape from the empty docked composer closes (PageSurface); focus goes back to the card or Library row that opened the page (ChatView, `Composer focusOnOpen`). `ChatView.page-real.dom.test.ts`, `after-capture.json`. |
-| Light / dark / narrow / integration captures | Synthetic before/after on the real ChatView | Done | `scripts/capture-page-chat-real.mjs`, gallery `src/gallery/page-chat-real.html`, shots and DOM facts in `docs/screenshots/grok-convergence/real-chatview/`. Not native. |
+| Light / dark / narrow / integration captures | Synthetic before/after on the real ChatView | Done | `scripts/capture/page-chat-real.mjs`, gallery `src/gallery/page-chat-real.html`, shots and DOM facts in `docs/screenshots/grok-convergence/real-chatview/`. Not native. |
 
 ## Review fixes (tip after 250053459)
 
@@ -98,7 +98,7 @@ pnpm exec vitest run \
 pnpm exec tsc -p tsconfig.json --noEmit
 node scripts/generate-locale.mjs --check
 SAGAX_CHROMIUM="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
-  node scripts/capture-page-chat-real.mjs
+  node scripts/capture/page-chat-real.mjs
 ```
 
 Full suite, verify:merge, native builds, push/PR: root integration only.
@@ -155,7 +155,7 @@ pnpm exec vitest run \
 pnpm exec tsc -p tsconfig.json --noEmit   # exit 0
 node scripts/generate-locale.mjs --check  # catalogs valid
 pnpm gen:self-knowledge                   # knowledge.generated.json refreshed
-SAGAX_CHROMIUM="…/Google Chrome" node scripts/capture-page-chat-real.mjs
+SAGAX_CHROMIUM="…/Google Chrome" node scripts/capture/page-chat-real.mjs
 # stage after desktop: cover=true stage=true beside=false
 # optional beside: beside=true
 # narrow pane beside: cover=true beside=false hostWide=false
@@ -256,7 +256,7 @@ pnpm exec vitest run src/components/AppSidebar.layout.dom.test.ts \
 pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.gallery.json --noEmit
 pnpm exec oxlint --deny-warnings <touched files>
 node scripts/generate-locale.mjs --check   # no new keys
-node scripts/capture-sidebar-rail.mjs
+node scripts/capture/sidebar-rail.mjs
 ```
 
 Remaining: native Electron window at 700 px and a side-by-side with Grok at

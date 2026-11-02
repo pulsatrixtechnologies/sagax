@@ -68,11 +68,11 @@ final class CardActionsTests: XCTestCase {
         XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "Glob", input: nil), .read)
         XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "Bash", input: "ls"), .execute)
         XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "Write", input: nil), .write)
-        XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__perspicax__cw_psa_schedule__query", input: "{}"), .read)
+        XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__perspicax__cw_psa_schedule_query", input: "{}"), .read)
         XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__perspicax__cw_psa_tickets_delete", input: nil), .destructive)
         // a generic verb reads the arguments
-        XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__perspicax__cw_psa__write", input: #"{"method":"GET"}"#), .read)
-        XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__perspicax__cw_psa__write", input: #"{"method":"DELETE"}"#), .destructive)
+        XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__perspicax__cw_psa_write", input: #"{"method":"GET"}"#), .read)
+        XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__perspicax__cw_psa_write", input: #"{"method":"DELETE"}"#), .destructive)
         // annotations win
         XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__x__do_thing", input: nil, hints: ToolHints(readOnly: true)), .read)
         XCTAssertEqual(ApprovalRiskClassifier.risk(tool: "mcp__x__list_items", input: nil, hints: ToolHints(destructive: true)), .destructive)
@@ -600,7 +600,7 @@ final class ApprovalPlainWordsTests: XCTestCase {
         XCTAssertNil(AllowRuleText.savedRule(try card("{\(base),\"answered\":\"allow\"}")))
         XCTAssertNil(AllowRuleText.savedRule(try card("{\(base),\"answered\":\"deny\",\"alwaysAllowed\":\"mcp:a__b\"}")))
         XCTAssertEqual(AllowRuleText.action(of: "mcp:sagax-environment__run_command"), .runCommand)
-        XCTAssertEqual(AllowRuleText.action(of: "mcp:perspicax__cw_psa__write"), .named("cw psa write"))
+        XCTAssertEqual(AllowRuleText.action(of: "mcp:perspicax__cw_psa_write"), .named("cw psa write"))
         XCTAssertNil(AllowRuleText.action(of: "ask_bot:b2"))
     }
 }

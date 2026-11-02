@@ -242,6 +242,7 @@ export function outboundWiring(deps: OutboundWiringDeps) {
         consentAllows: allows,
         stageConsent: () => stageConsentCard(context.principalId!, context.botId, context.threadId),
         autoPlace: mode === "auto" || mode === "full",
+        ...(deps.now ? { now: deps.now } : {}),
       }, { principalId: context.principalId, botId: context.botId, threadId: context.threadId }, args);
     },
 

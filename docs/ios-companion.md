@@ -144,7 +144,7 @@ harness API:
   responses captured through the real sidecar.
 - A storage migration may change the bytes on disk without changing the app.
   If an API payload changes, regenerate the fixtures with
-  `node scripts/capture-companion-fixtures.mjs` and review the diff.
+  `node scripts/capture/companion-fixtures.mjs` and review the diff.
 
 The sidecar keeps its device registry in `~/.sagax/devices.json`. That is
 security state owned by the network boundary, not transcript data, so it does

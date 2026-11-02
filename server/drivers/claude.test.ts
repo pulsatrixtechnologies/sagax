@@ -4154,10 +4154,10 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     // an ask is a plain card: no reviewer claim
     const conn = connect(permissionSocketPath("t-auto-allow"));
     await new Promise<void>((resolve, reject) => { conn.on("connect", resolve); conn.on("error", reject); });
-    conn.write(JSON.stringify({ t: "ask", id: "ask-cw", tool: "mcp__perspicax__cw_psa__write", input: { resource: "activities", op: "close" } }) + "\n");
+    conn.write(JSON.stringify({ t: "ask", id: "ask-cw", tool: "mcp__perspicax__cw_psa_write", input: { resource: "activities", op: "close" } }) + "\n");
     const opened = await recorder.until((e) => e.type === "request.opened" && e.requestId === "ask-cw");
     conn.destroy();
-    expect(opened).toMatchObject({ requestType: "permission", tool: "mcp__perspicax__cw_psa__write" });
+    expect(opened).toMatchObject({ requestType: "permission", tool: "mcp__perspicax__cw_psa_write" });
     expect((opened as { nativeReview?: unknown }).nativeReview).toBeUndefined();
   });
 

@@ -13,6 +13,7 @@ import { boundToolResult, readOnHint, type BoundToolTextOptions } from "./tool-o
 import { wrapUntrusted } from "../shared/safety-review.ts";
 import type { SandboxExecInput, SandboxExecOutput } from "./sandboxd-core.ts";
 import { procSecretPath, resolvedReadRefusal, type ResolvedEnvironmentPath } from "./sensitive-path.ts";
+import { botFolderNote } from "./sandbox-bot-folder.ts";
 
 export const USER_SANDBOX_TOOLS = [
   {
@@ -323,7 +324,17 @@ const OPEN_GUARD = [
   "if mode == 'list':",
   "    if stat.S_ISDIR(st.st_mode):",
   "        os.fchdir(fd)",
-  "        os.execvp('ls', ['ls', '-la'])",
+  "        hide = []",
+  "        if real == '/workspace':",
+  "            # the tidy's links to moved files (server/sandbox-bot-folder.ts)",
+  "            try:",
+  "                names = [l.strip() for l in open('.hidden', encoding='utf-8')]",
+  "            except OSError:",
+  "                names = []",
+  "            for n in names:",
+  "                if n and '/' not in n and os.path.islink(n):",
+  "                    hide += ['-I', ''.join('\\\\' + c if c in '*?[]\\\\' else c for c in n)]",
+  "        os.execvp('ls', ['ls', '-la'] + hide)",
   "    os.execvp('ls', ['ls', '-la', '--', real])",
   "if not stat.S_ISREG(st.st_mode):",
   "    fail('%s is not a regular file' % real, 1)",
@@ -479,7 +490,19 @@ async function callSandboxComputerTool(name: string, args: Record<string, unknow
   return text("done");
 }
 
-export async function callUserSandboxTool(name: string, args: Record<string, unknown>, exec: ToolExec): Promise<ToolResult> {
+/** The tool list with the bot's own folder in the descriptions
+ * (server/sandbox-bot-folder.ts): relative paths start there. */
+export function userSandboxToolsFor(folder?: string | null): typeof USER_SANDBOX_TOOLS {
+  if (!folder) return USER_SANDBOX_TOOLS;
+  return USER_SANDBOX_TOOLS.map((tool) => {
+    if (tool.name === "run_command") return { ...tool, description: `${tool.description} ${botFolderNote(folder)}` };
+    if (tool.name === "read_file" || tool.name === "write_file") return { ...tool, description: tool.description.replace("Relative paths start at /workspace.", `Relative paths start at your folder, ${folder}; never write loose files at the /workspace root.`) };
+    if (tool.name === "list_files") return { ...tool, description: `List a directory in your server environment (default your folder, ${folder}).` };
+    return tool;
+  }) as unknown as typeof USER_SANDBOX_TOOLS;
+}
+
+export async function callUserSandboxTool(name: string, args: Record<string, unknown>, exec: ToolExec, folder?: string | null): Promise<ToolResult> {
   try {
     const refusedEarly = earlyRefusal(name, args, exec);
     if (refusedEarly) return text(refusedEarly, true);
@@ -534,7 +557,7 @@ export async function callUserSandboxTool(name: string, args: Record<string, unk
       return result.exitCode === 0 ? text(`wrote ${bytes.length} bytes to ${path}`) : text(result.stderr.trim() || `could not write ${path}`, true);
     }
     if (name === "list_files") {
-      const path = args.path === undefined ? "/workspace" : validPath(args.path);
+      const path = args.path === undefined ? folder || "/workspace" : validPath(args.path);
       const pathRefused = exec.pathRefusal?.(path);
       if (pathRefused) return text(pathRefused, true);
       const where = await resolveInSandbox(path, exec);
@@ -578,14 +601,22 @@ export async function handleUserSandboxMcp(
   method: string,
   params: unknown,
   exec: ToolExec,
-  options?: { hold?: BoundToolTextOptions["hold"] },
+  options?: {
+    hold?: BoundToolTextOptions["hold"];
+    /** The bot's own folder (its commands run there, server/sandbox-bot-folder.ts). */
+    folder?: string | null;
+    /** A disk-full warning to append to each answer, or null. */
+    diskWarning?: () => string | null;
+  },
 ): Promise<unknown> {
-  if (method === "tools/list") return { tools: USER_SANDBOX_TOOLS };
+  if (method === "tools/list") return { tools: userSandboxToolsFor(options?.folder) };
   if (method === "tools/call") {
     const call = (params ?? {}) as { name?: unknown; arguments?: unknown };
     if (typeof call.name !== "string") throw Object.assign(new Error("tools/call needs a tool name"), { status: 400 });
     const args = call.arguments && typeof call.arguments === "object" && !Array.isArray(call.arguments) ? call.arguments as Record<string, unknown> : {};
-    const result = await callUserSandboxTool(call.name, args, exec);
+    const answered = await callUserSandboxTool(call.name, args, exec, options?.folder);
+    const warning = call.name === "computer_list_tools" ? null : options?.diskWarning?.() ?? null;
+    const result: ToolResult = warning ? { ...answered, content: [...answered.content, { type: "text", text: warning }] } : answered;
     // What the model reads of a machine answer (tool-output-bound.ts): the
     // transport allows 256 KB of output and 1 MB of file, far past what a
     // conversation can keep. A screen or a tool catalog is left whole.

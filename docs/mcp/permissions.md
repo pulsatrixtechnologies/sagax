@@ -85,11 +85,11 @@ The per-profile tools are matched by name (`profileToolCall`); the
 
 | Name | Permission | Tier |
 |---|---|---|
-| `<profile>__query` | `api:query` | read |
-| `<profile>__write`, `<profile>__<resource>_write` | `api:write` | dispatch |
-| `<profile>__action` | `api:action` | dispatch |
-| `<profile>__read_action` | `api:action.read` | read |
-| any other `<profile>__<operation>` | `api:operation` | dispatch (not known to be a read) |
+| `<profile>_query` | `api:query` | read |
+| `<profile>_write`, `<profile>_<resource>_write` | `api:write` | dispatch |
+| `<profile>_action` | `api:action` | dispatch |
+| `<profile>_read_action` | `api:action.read` | read |
+| any other `<profile>_<operation>` | `api:operation` | dispatch (not known to be a read) |
 
 ## Dynamic keys
 
@@ -98,12 +98,12 @@ from its name and arguments:
 
 | Call | Key |
 |---|---|
-| `cw_psa__query` `{ resource: "tickets" }` | `cw_psa:tickets.read` |
-| `cw_psa__write` `{ resource: "tickets", action: "update" }` | `cw_psa:tickets.update` |
-| `cw_psa__tickets_write` `{ action: "delete" }` | `cw_psa:tickets.delete` |
-| `cw_psa__action` `{ action: "merge" }` | `cw_psa:merge.run` |
-| `cw_psa__read_action` `{ action: "usage" }` | `cw_psa:usage.read` |
-| `cw_psa__find_tickets` | `cw_psa:find_tickets.run` |
+| `cw_psa_query` `{ resource: "tickets" }` | `cw_psa:tickets.read` |
+| `cw_psa_write` `{ resource: "tickets", action: "update" }` | `cw_psa:tickets.update` |
+| `cw_psa_tickets_write` `{ action: "delete" }` | `cw_psa:tickets.delete` |
+| `cw_psa_action` `{ action: "merge" }` | `cw_psa:merge.run` |
+| `cw_psa_read_action` `{ action: "usage" }` | `cw_psa:usage.read` |
+| `cw_psa_find_tickets` | `cw_psa:find_tickets.run` |
 
 A call is allowed when the role holds the kind's permission and no deny rule
 matches the key. `SAGAX_MCP_DENY` lists the rules, comma separated: an exact

@@ -35,6 +35,10 @@ export interface MemoryManagerSource {
 export interface MemoryManagerSourcesDeps {
   /** Bots the caller may open in the manager. */
   bots(auth: RequestAuth): Array<{ id: string; name: string; mayWrite: boolean }>;
+  /** Whether this bot's memory routes answer the caller (the request gate's
+   * visibility and channel checks, then the memory owner gate). A bot they
+   * refuse is not listed: its row would only open on "no such bot". */
+  botReachable(auth: RequestAuth, botId: string): boolean;
   /** Team memory sections the caller may see. */
   teamSections(auth: RequestAuth): Array<{ section: string; label: string; mayWrite: boolean; count: number }>;
   /** Whether Perspicax notes are offered for this caller. */
@@ -48,6 +52,7 @@ export function createMemoryManagerRoutes(deps: MemoryManagerSourcesDeps): Route
 
     const sources: MemoryManagerSource[] = [];
     for (const bot of deps.bots(auth)) {
+      if (!deps.botReachable(auth, bot.id)) continue;
       sources.push({
         id: `bot:${bot.id}`,
         kind: "bot",

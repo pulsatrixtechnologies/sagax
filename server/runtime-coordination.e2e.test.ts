@@ -135,8 +135,9 @@ async function scenario(test: (f: any) => Promise<void>) {
     const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
     /** Stop this server as a quit or update would (SIGTERM) and start it
      * again on the same data and port. */
-    const restart = async (signal: NodeJS.Signals) => {
+    const restart = async (signal: NodeJS.Signals, beforeStart?: () => void) => {
       await waitForExit(server, { signal });
+      beforeStart?.();
       const env = verificationServerEnvironment(parentEnv, dataDir, Number(new URL(url).port));
       const log = openSync(session.info.logPath, "a", 0o600);
       server = spawn(process.execPath, verificationServerArgs(env), { cwd: ROOT, env, stdio: ["ignore", log, log] });
@@ -147,7 +148,7 @@ async function scenario(test: (f: any) => Promise<void>) {
       }, { timeout: 30_000 }).toBe(true);
     };
     try {
-      await test({ api, bot, clive, mira, dataDir, script, say, db, roots, children, eventsOf, turns, turn, own, body, told, messages, chips, said, final,
+      await test({ api, bot, clive, mira, dataDir, logPath: session.info.logPath, script, say, db, roots, children, eventsOf, turns, turn, own, body, told, messages, chips, said, final,
         gate, open, ready, settle, restart });
     } catch (error) {
       // What the fakes were told and what the chats hold, for a failure
@@ -375,6 +376,60 @@ it("S2b resumes the Chief once with a parked question, keeps one question card a
   const [listed, refused] = f.turn("C1").evidence.slice(-2).map((entry: any) => entry.response.result.content[0].text as string);
   expect(listed).toMatch(new RegExp(`\\(on @Mira, waiting on the person\\) \\[thread id: ${work}\\]`));
   expect(refused).toContain("waiting on the person's answer");
+}), hostTimeout(90_000));
+
+// S2d. A restart re-parks an open question while the server module still
+// loads: a store write early in boot (a legacy "· Results" thread marked by
+// markRoutineResultsThreads) emits a bot frame whose wireBot opens the
+// coordinator, and the restored card's message frame reaches the achievement
+// observers. They read autoTurnsByThread, declared further down: a
+// ReferenceError under strip-types, "change listener threw ... reading 'get'"
+// in the packaged bundle (0.8.29 on GOX).
+it("S2d re-parks a question during an early boot store write without a listener throwing", () => scenario(async (f) => {
+  f.script(f.clive.id,
+    { key: "C0", match: ["S2D-JOB"], steps: [{ arguments: { bot_ids: [f.mira.id], message: "S2D-BRIEF: tag the release." } }], reply: "C0: Mira is on it." },
+    { key: "C-ASKED", match: [QUESTION_RESUME, QUESTION_FROM_MIRA, "which repository?"], reply: "C-ASKED: Mira needs the repository." });
+  f.script(f.mira.id, { key: "M1", match: ["S2D-BRIEF"], reply: "I can tag it once I know where.\nNEEDS INPUT: which repository?" });
+  const job = f.clive.activeTaskId;
+  await f.say(f.clive.id, job, "S2D-JOB: have Mira tag the release.");
+  await expect.poll(() => f.children()[0]?.status, { timeout: 30_000 }).toBe("needs_input");
+  const parked = f.children()[0];
+  await expect.poll(async () => (await f.chips(job, "needs your input")).length, { timeout: 15_000 }).toBe(1);
+  await expect.poll(async () => await f.said(job, "C-ASKED: Mira needs the repository.") === 1 && f.roots()[0]?.status === "waiting", { timeout: 30_000 }).toBe(true);
+
+  // A results thread an older version named "<routine> · Results": the next
+  // start marks it, a store write while the module still loads.
+  const results = (await f.api("POST", `/api/bots/${f.mira.id}/tasks`, { title: "Nightly · Results" })).body.task;
+  expect(results.title).toBe("Nightly · Results");
+  const created = await f.api("POST", "/api/routines", { botId: f.mira.id, name: "Nightly", prompt: "Report once.", enabled: false, schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 86_400_000 } });
+  expect(created.status, JSON.stringify(created.body)).toBeLessThan(300);
+  const routinesPath = join(f.dataDir, "routines.json");
+  const before = readFileSync(f.logPath, "utf8").length;
+  await f.restart("SIGTERM", () => {
+    const file = JSON.parse(readFileSync(routinesPath, "utf8"));
+    for (const routine of file.routines) if (routine.name === "Nightly") routine.resultsThreadId = results.threadId;
+    writeFileSync(routinesPath, JSON.stringify(file));
+    // The card the person saw reads in an older wording, so the restart
+    // posts the question again: a message frame during the early write.
+    const messagesDb = new DatabaseSync(join(f.dataDir, "messages.db"));
+    try {
+      const changed = messagesDb.prepare("UPDATE messages SET json = json_set(json, '$.tool.name', 'Mira asked: which repository? (older wording)') WHERE thread_id = ? AND json LIKE '%needs your input:%'").run(job);
+      expect(changed.changes).toBe(1);
+    } finally {
+      messagesDb.close();
+    }
+  });
+  await expect.poll(() => f.eventsOf(parked.id).some((event: any) => event.kind === "restart_reconciled"), { timeout: 15_000 }).toBe(true);
+  await f.settle(500);
+  // the early write happened, and the question is still parked once
+  const marked = ((await f.api("GET", "/api/bots?messages=0")).body.bots as any[])
+    .find((bot) => bot.id === f.mira.id)?.tasks.find((task: any) => task.threadId === results.threadId);
+  expect(marked?.routineResults).toBe(true);
+  expect(f.children()[0]).toMatchObject({ status: "needs_input" });
+  expect(await f.chips(job, "needs your input")).toHaveLength(1);
+  expect(await f.chips(job, "(older wording)")).toHaveLength(1);
+  // Store catches subscriber exceptions: a healthy server alone proves nothing.
+  expect(readFileSync(f.logPath, "utf8").slice(before)).not.toMatch(/ReferenceError|change listener threw/);
 }), hostTimeout(90_000));
 
 // S3. A quit or update (SIGTERM) cuts Mira's turn. After the restart she

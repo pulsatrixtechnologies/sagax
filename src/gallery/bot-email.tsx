@@ -3,7 +3,7 @@
  * address" group above its neighbours, the Triggers builder with source
  * "Bot email" (no secret, no URL, the bot's address), and a Bot email
  * trigger's row opened. The capture script
- * (scripts/capture-bot-email.mjs) answers /api itself. Not shipped.
+ * (scripts/capture/bot-email.mjs) answers /api itself. Not shipped.
  * ?skin=<id>&lang=<code>&mail=on|off */
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";

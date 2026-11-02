@@ -212,10 +212,45 @@ export function acpRpcError(value: any, method: string): Error {
 /** A continuation nudge sent after a reasoning-only empty response: the live
  * session kept its reasoning but committed no content, so ask it to finish. */
 export const REASONING_CONTINUE_NUDGE =
-  "You returned your reasoning but no answer. Give your final answer now, or make your next tool call.";
+  "You returned your reasoning but no answer. Give your final answer now, or make your next tool call." +
+  " Keep it short, and do not redo the steps you already ran.";
 
 export const REASONING_ONLY_SOFT_MESSAGE =
   "kept returning its reasoning without a final answer. Nothing was changed. Send the message again, or lower this bot's reasoning effort.";
+
+/** What a reasoning-only turn that Sagax could not recover tells the person:
+ * whether Sagax already asked again (and with lower effort), and whether
+ * anything in the turn ran. "Nothing was changed" is only true when no tool
+ * ran (prod 2026-11-02: the turn had already reacted to a message). */
+export function reasoningOnlySoftMessage(input: { retried: boolean; loweredEffort: boolean; stepsRan: boolean }): string {
+  if (!input.retried && !input.stepsRan) return REASONING_ONLY_SOFT_MESSAGE;
+  // "even after Sagax asked it once more" is what empty-response-retry.ts
+  // reads to skip resending the whole message on top of this retry.
+  const asked = input.retried
+    ? `, even after Sagax asked it once more${input.loweredEffort ? " with lower reasoning effort" : ""}`
+    : "";
+  return input.stepsRan
+    ? `kept returning its reasoning without a final answer${asked}. The steps it already ran in this turn stand; only its final answer is missing. Ask it for a short summary, or lower this bot's reasoning effort.`
+    : `kept returning its reasoning without a final answer${asked}. Nothing was changed. Send the message again, or lower this bot's reasoning effort.`;
+}
+
+const EFFORT_RANK = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+/** The effort a reasoning-only nudge runs at: `low` when the session offers
+ * it below the current level, else the highest level below the current one
+ * (never `none`). Null when the current level is unknown or already lowest,
+ * so there is nothing to lower and nothing to restore. */
+export function lowerReasoningEffort(option: { options: ReadonlyArray<{ id: string }>; currentValue?: string } | undefined): string | null {
+  if (!option?.currentValue) return null;
+  const current = EFFORT_RANK.indexOf(option.currentValue);
+  if (current < 0) return null;
+  const below = option.options
+    .map((entry) => entry.id)
+    .filter((id) => id !== "none" && EFFORT_RANK.indexOf(id) >= 0 && EFFORT_RANK.indexOf(id) < current);
+  if (!below.length) return null;
+  if (below.includes("low")) return "low";
+  return below.reduce((best, id) => (EFFORT_RANK.indexOf(id) > EFFORT_RANK.indexOf(best) ? id : best));
+}
 
 
 

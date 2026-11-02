@@ -1,5 +1,5 @@
 /** Isolated gallery for headless screenshots of an open bot-to-bot
- * conversation ("A ⇆ B", header close) over the whole chat column, so its
+ * conversation ("A ⇆ B", Close Chat pill) over the whole chat column, so its
  * layout can be compared with a 1:1 chat at any window width. Neutral bot
  * names. Not shipped in the app. ?skin=<id>&lang=<code> */
 import { StrictMode } from "react";

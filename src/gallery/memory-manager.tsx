@@ -272,7 +272,10 @@ function Shell() {
     <div className="flex h-full bg-app" data-gallery-ready={ready ? "1" : "0"} style={{ width, height }}>
       <BotEditorStore value={store as never}>
         <PanelSlotProvider slot={null}>
-          <MemoryManagerPanel />
+          {/* the app's content frame, as automations-header.tsx draws it, so the card and its gutters match the app */}
+          <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col">
+            <MemoryManagerPanel />
+          </div>
         </PanelSlotProvider>
       </BotEditorStore>
     </div>

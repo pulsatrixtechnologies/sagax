@@ -6,6 +6,7 @@
 import type { Duplex } from "node:stream";
 
 import type { DockerApi, TtyExec, TtySize } from "./sandboxd-docker.ts";
+import { BOT_FOLDER_RE } from "./sandbox-bot-folder.ts";
 import {
   SANDBOX_INSTANCE_LABEL,
   SANDBOX_KEY_RE,
@@ -36,6 +37,10 @@ export interface SandboxStatus {
   overQuota: boolean;
   busy: number;
   limits: { memoryMb: number; cpus: number; pids: number; diskMb: number; tmpMb: number };
+  /** The filesystem of /workspace itself (df), measured with the usage:
+   * what is really left, whatever the quota says. Absent until measured. */
+  workspaceFreeBytes?: number;
+  workspaceTotalBytes?: number;
   /** Kubernetes: the sandbox's Pod is on its way up (state stays
    * "stopped" for older readers). Absent otherwise. */
   starting?: true;
@@ -52,6 +57,9 @@ export interface SandboxStats {
   memoryLimitBytes: number;
   workspaceBytes: number | null;
   workspaceQuotaBytes: number;
+  /** The /workspace filesystem itself (df), when measured. */
+  workspaceFreeBytes?: number;
+  workspaceTotalBytes?: number;
   /** e.g. "Debian GNU/Linux 12 (bookworm)", read inside the sandbox once. */
   os: string | null;
   arch: string | null;
@@ -102,6 +110,14 @@ export const MAX_TTY_STREAMS = 4;
 /** The login shell of the sandbox user, in a terminal. */
 export const SANDBOX_TTY_ARGV = ["/bin/bash", "-l"] as const;
 
+/** The terminal's shell, in the bot's own folder when one is named
+ * (server/sandbox-bot-folder.ts; created on first use), else /workspace.
+ * Only a folder of /workspace/bots is accepted. */
+export function ttyArgv(cwd?: string): string[] {
+  if (!cwd || !BOT_FOLDER_RE.test(cwd)) return [...SANDBOX_TTY_ARGV];
+  return ["/bin/sh", "-c", 'mkdir -p -- "$1/tmp" 2>/dev/null; cd -- "$1" 2>/dev/null && export TMPDIR="$1/tmp" SAGAX_BOT_DIR="$1"; exec /bin/bash -l', "sagax-tty", cwd];
+}
+
 export interface SandboxStdioSpec {
   argv: string[];
   env?: Record<string, string>;
@@ -121,7 +137,7 @@ const CONTROL_TOUCH_MS = 30_000;
 export class SandboxService {
   private readonly lastUsed = new Map<string, number>();
   private readonly busy = new Map<string, number>();
-  private readonly usage = new Map<string, { bytes: number; at: number }>();
+  private readonly usage = new Map<string, { bytes: number; at: number; freeBytes?: number; totalBytes?: number }>();
   private readonly locks = new Map<string, Promise<void>>();
   private readonly desktopStreams = new Map<string, number>();
   private readonly stdioStreams = new Map<string, number>();
@@ -204,6 +220,7 @@ export class SandboxService {
       lastUsedAt: this.lastUsed.get(key) ?? null,
       workspaceBytes: usage?.bytes ?? null,
       overQuota: usage ? usage.bytes > this.config.limits.workspaceQuotaBytes : false,
+      ...(usage?.freeBytes !== undefined && usage.totalBytes !== undefined ? { workspaceFreeBytes: usage.freeBytes, workspaceTotalBytes: usage.totalBytes } : {}),
       busy: this.busy.get(key) ?? 0,
       limits: this.limitsSummary(),
     };
@@ -303,6 +320,9 @@ export class SandboxService {
         await this.docker.createContainer(names.container, spec);
         container = await this.docker.inspectContainer(names.container);
       }
+      // Kubernetes: an older, smaller claim grows to the configured size
+      // before the start (best effort; Docker has nothing to grow).
+      await this.docker.growVolume?.(names.volume).catch(() => {});
       await this.docker.startContainer(names.container);
       this.touch(key);
       return this.status(key);
@@ -457,6 +477,7 @@ export class SandboxService {
       memoryLimitBytes: limits.memoryBytes,
       workspaceBytes: usage?.bytes ?? null,
       workspaceQuotaBytes: limits.workspaceQuotaBytes,
+      ...(usage?.freeBytes !== undefined && usage.totalBytes !== undefined ? { workspaceFreeBytes: usage.freeBytes, workspaceTotalBytes: usage.totalBytes } : {}),
       os: this.osInfo.get(key)?.os ?? null,
       arch: this.osInfo.get(key)?.arch ?? null,
       image: this.config.image.split("/").pop() ?? this.config.image,
@@ -545,7 +566,7 @@ export class SandboxService {
    * same sandbox and under the same user, limits and network policy as
    * every command a bot runs there. Starts the sandbox when needed and
    * counts as use while open. Nothing here runs on the host. */
-  async ttyStream(key: string, size: TtySize): Promise<TtyExec> {
+  async ttyStream(key: string, size: TtySize, cwd?: string): Promise<TtyExec> {
     this.checkKey(key);
     const cols = Math.floor(Number(size?.cols));
     const rows = Math.floor(Number(size?.rows));
@@ -560,7 +581,7 @@ export class SandboxService {
     let tty: TtyExec;
     try {
       tty = await this.docker.execTty(sandboxNames(key).container, {
-        Cmd: [...SANDBOX_TTY_ARGV], User: `${SANDBOX_UID}:${SANDBOX_UID}`, Env: ["TERM=xterm-256color"], WorkingDir: SANDBOX_WORKSPACE,
+        Cmd: ttyArgv(cwd), User: `${SANDBOX_UID}:${SANDBOX_UID}`, Env: ["TERM=xterm-256color"], WorkingDir: SANDBOX_WORKSPACE,
       }, { cols, rows });
     } catch (error) {
       this.releaseTtyStream(key);
@@ -606,7 +627,15 @@ export class SandboxService {
     }, 4096);
     const bytes = Number(/^(\d+)/.exec(result.stdout.toString("utf8"))?.[1]);
     if (!Number.isFinite(bytes)) return cached?.bytes ?? null;
-    this.usage.set(key, { bytes, at: this.now() });
+    // The volume itself: a quota above its real size (an older, smaller
+    // claim) must not hide a full disk (2026-11-02, "Free space: 11 MiB").
+    const disk = await this.docker.exec(sandboxNames(key).container, {
+      Cmd: ["df", "-P", "-B1", SANDBOX_WORKSPACE], User: `${SANDBOX_UID}:${SANDBOX_UID}`, Env: [], WorkingDir: "/",
+    }, 4096).catch(() => null);
+    const row = disk?.exitCode === 0 ? /\n\S+\s+(\d+)\s+\d+\s+(\d+)/.exec(disk.stdout.toString("utf8")) : null;
+    const totalBytes = row ? Number(row[1]) : NaN;
+    const freeBytes = row ? Number(row[2]) : NaN;
+    this.usage.set(key, { bytes, at: this.now(), ...(Number.isFinite(totalBytes) && Number.isFinite(freeBytes) && totalBytes > 0 ? { freeBytes, totalBytes } : {}) });
     return bytes;
   }
 

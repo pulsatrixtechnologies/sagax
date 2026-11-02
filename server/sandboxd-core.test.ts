@@ -2,7 +2,7 @@
 // capacity, removal, and the refusal to run without the egress policy.
 import { describe, expect, it } from "vitest";
 
-import { SandboxService } from "./sandboxd-core.ts";
+import { SANDBOX_TTY_ARGV, SandboxService, ttyArgv } from "./sandboxd-core.ts";
 import { FakeDocker } from "./testing/fake-docker.ts";
 import { sandboxIsolationProblems, sandboxKeyForPrincipal, sandboxNames, sandboxdConfigFromEnv } from "./user-sandbox-spec.ts";
 
@@ -186,5 +186,17 @@ describe("sandbox lifecycle", () => {
     await service.exec(alice, { argv: ["sleep", "9999"], timeoutSec: 99_999 });
     const commands = docker.execs.filter((entry) => entry.exec.Cmd[0] === "timeout");
     expect(commands.at(-1)!.exec.Cmd.slice(0, 4)).toEqual(["timeout", "-k", "2", "600"]);
+  });
+});
+
+describe("ttyArgv (2026-11-02)", () => {
+  it("opens the terminal in the bot's folder, only a folder of /workspace/bots", () => {
+    expect(ttyArgv()).toEqual([...SANDBOX_TTY_ARGV]);
+    expect(ttyArgv("/etc")).toEqual([...SANDBOX_TTY_ARGV]);
+    expect(ttyArgv("/workspace/bots/../x")).toEqual([...SANDBOX_TTY_ARGV]);
+    const argv = ttyArgv("/workspace/bots/helper-2");
+    expect(argv[0]).toBe("/bin/sh");
+    expect(argv.at(-1)).toBe("/workspace/bots/helper-2");
+    expect(argv[2]).toContain("exec /bin/bash -l");
   });
 });

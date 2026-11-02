@@ -135,7 +135,7 @@ interface OwnerRule {
   id: string;
   ownerId: string;          // la personne qui l'a créée (le propriétaire)
   botId: string | null;     // null = tous mes bots
-  tool: string;             // outil normalisé : "perspicax__cw_psa__write", "WebSearch"
+  tool: string;             // outil normalisé : "perspicax__cw_psa_write", "WebSearch"
   scope: Record<string, string>; // portée : cible tirée des arguments
   destructive?: "delete" | "bulk" | "external-message";
   behavior: "allow" | "ask" | "deny";

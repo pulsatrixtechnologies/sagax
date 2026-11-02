@@ -2557,6 +2557,7 @@ import {
   USER_SANDBOX_MCP_NAME
 } from "./user-sandbox-routing.ts";
 import { handleUserSandboxMcp } from "./user-sandbox-tools.ts";
+import { BotFolderRegistry, WorkspaceTidier, botFolderNote, botFolderPath, inBotFolder, rewriteMovedPaths, workspaceDiskWarning, type TidyMove } from "./sandbox-bot-folder.ts";
 import { enginePluginCommandRefusal } from "./person-integrations.ts";
 import { SandboxControlHolds } from "./sandbox-control.ts";
 import { DesktopBridges, resolveBotWorkplace, type WorkplaceDecision } from "./desktop-bridge.ts";
@@ -2965,6 +2966,12 @@ function masteryPrice(model: string | undefined): number | null {
   const price = model ? listPriceFor(model) : null;
   return price ? price.inputPerMillion + price.outputPerMillion : null;
 }
+/** The thread's running Auto pick and its payer, for the refusal memory.
+ * Declared before the frame observers that read it: a restart re-parks open
+ * questions from a store listener while the module still loads, and the
+ * packaged bundle (esbuild, top-level const as var) read it as undefined
+ * there ("change listener threw ... reading 'get'", 0.8.29 on an organization server). */
+const autoTurnsByThread = new Map<string, { payer: string; entry: AutoChainEntry }>();
 /** The model a thread's turn ran on: Auto's pick, else the thread's, else the bot's. */
 function masteryThreadModel(threadId: string): string | null {
   const bot = store.botByThread(threadId);
@@ -3202,7 +3209,7 @@ function samePerson(a: string | null | undefined, b: string | null | undefined):
 /** 2026-10-27: the product a tool serves, as the server that serves it
  * declared it (a Perspicax API's display name or title, api_list), for the
  * step row. The API id is a segment of the tool id before its verb
- * (`mcp__<server>__<api>__query`, or the `mcp` gateway's `tool`). Undefined
+ * (`mcp__<server>__<api>_query`, or the `mcp` gateway's `tool`). Undefined
  * when nothing declared one: the row then reads a generic name. */
 function declaredToolProduct(botId: string | undefined, name: string, input?: string): { product: string; productId: string } | undefined {
   if (!botId || !perspicaxMcp) return undefined;
@@ -6000,15 +6007,15 @@ function botBusyThreadCount(botId: string): number {
  * landing thread; used/max are capacity alone so a person wake may take
  * one slot past max.
  */
-function coordinatorSlotUse(n: HandoffView): { used: number; max: number; hardBlocked: boolean } {
+function coordinatorSlotUse(n: HandoffView): { used: number; max: number; hardBlocked: boolean } | undefined {
   if (reviewHolds(n)) return { used: 0, max: 0, hardBlocked: true };
   if (n.oneWay && n.priority !== "now" && n.parentId && ["source", "running"].includes(coordinator.node(n.parentId)?.status ?? "")) {
     return { used: 0, max: 0, hardBlocked: true };
   }
-  if (n.groupId) {
-    const blocked = Boolean(store.bot(n.botId)?.busy || (store.group(n.groupId) && groupIsWorking(store.group(n.groupId)!)));
-    return { used: 0, max: 0, hardBlocked: blocked };
-  }
+  // A room turn holds no thread slot (unattendedDispatchState): no slot
+  // math, so host.busy admits it. Counted as {used 0, max 0}, every room
+  // handoff and goal worker waited "for a free slot" forever (DEL-08).
+  if (n.groupId) return undefined;
   const hardBlocked = threadBusy(n.botId, n.threadId) || Boolean(activeGroupTurnForBot(n.botId));
   return {
     used: botBusyThreadCount(n.botId),
@@ -7014,7 +7021,15 @@ function soloArchiveText(text: string): { text: string; annotated: boolean } {
 /** What the bot is told about where its tools run, when it matters: on the
  * person's own computer, or in their server environment because their
  * computer is not connected (the UI says so too). Provider text only. */
-function withWorkplaceNote(text: string, decision: WorkplaceDecision, auto?: AutoComputerState | null): string {
+function withWorkplaceNote(text: string, decision: WorkplaceDecision, auto?: AutoComputerState | null, botId?: string): string {
+  // 2026-11-02: the bot's own folder of the server environment, whenever
+  // its tools may run there (server/sandbox-bot-folder.ts).
+  const folder = botId && userSandbox && (decision.target === "user-sandbox" || (auto?.auto && auto.sandboxConfigured)) ? sandboxBotFolder(botId) : null;
+  const withFolder = (out: string) => folder ? `${out}\n\n<workplace>${botFolderNote(folder)}</workplace>` : out;
+  return withFolder(workplaceNoteText(text, decision, auto));
+}
+
+function workplaceNoteText(text: string, decision: WorkplaceDecision, auto?: AutoComputerState | null): string {
   if (auto?.auto) return `${text}\n\n${autoComputerGuidance(auto, Boolean(decision.principal && desktopBridges.connected(decision.principal)))}`;
   if (decision.target === "user-desktop" && decision.reason === "desktop") {
     return `${text}\n\n<workplace>Your ${DESKTOP_BRIDGE_MCP_NAME} tools run on this person's own computer, through their Sagax desktop app: their files, apps, network and Local VM, as if you were on their machine.</workplace>`;
@@ -8529,6 +8544,61 @@ const userSandbox: UserSandboxManager | null = (() => {
   manager.start();
   return manager;
 })();
+// 2026-11-02: each bot works in its own folder of the environment,
+// /workspace/bots/<slug>/ (server/sandbox-bot-folder.ts). The folder names
+// are kept here so a renamed bot keeps its folder; the tidy moves the loose
+// files of the root once per start of an environment.
+const sandboxBotFolders = new BotFolderRegistry(join(DATA_DIR, "sandbox-bot-folders.json"));
+function sandboxBotFolder(botId: string): string | null {
+  const known = sandboxBotFolders.known(botId);
+  if (known) return botFolderPath(known);
+  const bot = store.bot(botId);
+  return bot ? sandboxBotFolders.folderFor(bot.id, bot.name) : null;
+}
+/** Which bot made each loose root entry: the bots whose conversations
+ * (messages and tool calls) name /workspace/<entry>, else the bare name
+ * when it is distinctive. Exactly one bot, or nobody. */
+function attributeSandboxEntries(_principalId: string, names: readonly string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  // Each lookup scans the stored messages: the first 200 entries only, the
+  // rest go to _unsorted (a root that messy is mostly one bot's output).
+  for (const name of names.slice(0, 200)) {
+    const botsFor = (fragment: string) => new Set(threadsReferencing(fragment).map((threadId) => store.botByThread(threadId)?.id).filter((id): id is string => Boolean(id)));
+    let bots = botsFor(`/workspace/${name}`);
+    if (bots.size === 0 && name.length >= 8 && /[._-]/.test(name)) bots = botsFor(name);
+    if (bots.size === 1) out.set(name, [...bots][0]!);
+  }
+  return out;
+}
+/** After a tidy: routines whose prompt or watched path named a moved file
+ * now name its new place (the move breaks nothing they do). */
+function updateRoutinePathsAfterTidy(principalId: string, moves: readonly TidyMove[]): void {
+  if (!routines) return;
+  const person = principalId.trim().toLowerCase();
+  for (const routine of routines.listRoutines()) {
+    // Only the routines that run in this person's environment.
+    const runsAs = effectiveRunAs({ botId: routine.botId, ...(routine.runAs ? { runAs: routine.runAs } : {}) })?.trim().toLowerCase();
+    if (runsAs !== person) continue;
+    const prompt = rewriteMovedPaths(routine.prompt, moves);
+    const precheck = routine.precheck ? JSON.parse(rewriteMovedPaths(JSON.stringify(routine.precheck), moves)) as typeof routine.precheck : undefined;
+    const promptChanged = prompt !== routine.prompt;
+    const precheckChanged = Boolean(routine.precheck) && JSON.stringify(precheck) !== JSON.stringify(routine.precheck);
+    if (!promptChanged && !precheckChanged) continue;
+    try {
+      routines.update(routine.id, { ...(promptChanged ? { prompt } : {}), ...(precheckChanged ? { precheck } : {}) });
+      console.log(`[workspace-tidy] routine ${routine.id}: paths updated to the moved files`);
+    } catch (error) {
+      console.error(`[workspace-tidy] routine ${routine.id}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+}
+const sandboxTidier = userSandbox ? new WorkspaceTidier({
+  exec: (principalId, input, botId) => userSandbox.exec(principalId, input, botId),
+  attribute: attributeSandboxEntries,
+  folderOf: (botId) => sandboxBotFolder(botId),
+  moved: (principalId, moves) => updateRoutinePathsAfterTidy(principalId, moves),
+  log: (line) => console.log(`[workspace-tidy] ${line}`),
+}) : null;
 if (userSandbox) {
   principals.onDisabledChanged((person, disabled) => {
     if (disabled) void userSandbox.personOut(person.id);
@@ -8707,7 +8777,8 @@ const outbound = outboundWiring({
   },
   language: () => (cfg.language === "en" ? "en" : "fr"),
   twilio: (turn, args) => perspicaxMcp
-    ? perspicaxMcp.callTool({ ...turn, name: "twilio_api__write", args })
+    // the `__` spelling only for a Perspicax before 1.9.19
+    ? perspicaxMcp.callTool({ ...turn, name: "twilio_api_write", legacyName: "twilio_api__write", args })
     : Promise.resolve({ ok: false as const, code: "profile_not_mounted" as const, error: "Perspicax is not linked on this server" }),
   // 2026-10-28: a conversation call, from the person's own Perspicax Voice
   // line and Twilio key (the turn's speaker, never another member's key)
@@ -13863,7 +13934,7 @@ const terminalFeature = installTerminalFeature({
       },
       async open(ctx) {
         if (!userSandbox) throw new Error("The server environment is not enabled on this server.");
-        return streamTerminalAttachment(await userSandbox.ttyStream(ctx.principalId, terminalSize(ctx), ctx.botId));
+        return streamTerminalAttachment(await userSandbox.ttyStream(ctx.principalId, terminalSize(ctx), ctx.botId, (ctx.botId ? sandboxBotFolder(ctx.botId) : null) ?? undefined));
       }
     },
     // Organization: the Local VM on the person's computer, through their app
@@ -16559,10 +16630,6 @@ const routedRoomReplies = new Map<string, { botId: string; routedBy: RoutedBy }>
 const turnUsage = new Map<string, { input: number; output: number; cachedInput?: number }>();
 /** What the window held on the latest model call of the turn in flight, banked beside the totals at turn.completed. */
 const turnContext = new Map<string, { tokens?: number; window?: number }>();
-
-// Bounded per active turn. OpenHands uses a bounded recent-event scan for
-// the same class of stuck-loop detection; retaining an unlimited set of
-// unique arguments would let one pathological turn grow the server forever.
 
 // ── stall watchdog ─────────────────────────────────────────────────────
 // ask_bot has a short inline wait budget, while room turns have a separately
@@ -19969,6 +20036,7 @@ bus.subscribe((event: RuntimeEvent) => {
         alreadyReported: lazyClaimAlreadyReported || computerParked,
         isRoutine: Boolean(routines?.runForThread(event.threadId) || routineRun),
         empty: isEngineEmptyFailure(emptyDetail),
+        detail: emptyDetail,
         take: () => emptyResponseRetry.take(event.threadId),
       });
       if (emptyRetried && bot) {
@@ -23878,10 +23946,13 @@ function routineWatchPlace(routine: WatchRoutine): WatchPlace {
         wake: () => { void userSandbox?.prewake(target.principal, bot.id); },
         exec: async (command, options) => {
           if (!userSandbox) return { exitCode: null, stdout: "", truncated: false, timedOut: false };
-          const result = await userSandbox.exec(target.principal, {
+          // In the bot's own folder, like its commands (server/sandbox-bot-folder.ts).
+          const input = {
             argv: ["/bin/sh", "-c", command], env: { LANG: "C.UTF-8" },
             timeoutSec: Math.max(1, Math.floor(options.timeoutMs / 1000)), maxOutputBytes: options.maxOutputBytes
-          }, bot.id);
+          };
+          const folder = sandboxBotFolder(bot.id);
+          const result = await userSandbox.exec(target.principal, folder ? inBotFolder(input, folder) : input, bot.id);
           return { exitCode: result.exitCode, stdout: result.stdout, truncated: result.truncated, timedOut: result.timedOut };
         }
       };
@@ -29009,8 +29080,6 @@ function autoCatalogLookup(driverKind: string, modelId: string): CatalogFacts | 
   autoCatalogMemo.set(memoKey, facts);
   return facts ?? undefined;
 }
-/** The thread's running Auto pick and its payer, for the refusal memory. */
-const autoTurnsByThread = new Map<string, { payer: string; entry: AutoChainEntry }>();
 /** Models a refusal took out, per payer, for 30 minutes. */
 const AUTO_REFUSAL_TTL_MS = 30 * 60_000;
 const autoRefusals = new Map<string, number>();
@@ -30803,6 +30872,9 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     withCommandVariables,
     userSandboxExec: (ownerId, input, botId) => userSandbox!.exec(ownerId, input as never, botId),
     userSandboxOverQuota: async (ownerId, botId) => userSandbox!.workspaceOverQuota(ownerId, botId),
+    sandboxBotFolder,
+    sandboxTidy: async (ownerId, botId) => { await sandboxTidier?.ensure(ownerId, botId); },
+    sandboxDiskWarning: (ownerId, folder) => workspaceDiskWarning(sandboxTidier?.disk(ownerId) ?? null, folder ?? undefined),
     enginePluginCommandRefusal,
     misuseTextRefusal,
     misusePathRefusal: (pathValue, meta) => misusePathRefusal(pathValue, meta),
@@ -31567,6 +31639,28 @@ ROUTES.push(createDesktopAppearanceRoutes({ store: createDesktopAppearanceStore(
 // The bot-memory panel's routes (MEMORY.md, memory/ topics, journal); the
 // store lookups — the 404 precheck and journal thread titles — stay explicit.
 // Memory manager catalog (local bots + team + Perspicax availability).
+/** The memory routes' own gate (createBotMemoryRoutes below): the Soul
+ * edit's gate, as for the Files category. */
+function botMemoryMayEdit(auth: RequestAuth, botId: string): boolean {
+  const bot = store.bot(botId);
+  return Boolean(bot) && ownerOrAdminOf(auth, bot!) && !callerBotsReadOnly(auth);
+}
+/** Whether GET /api/bots/<id>/memory answers this caller: the request
+ * gate's bot visibility and channel checks (the "Bot visibility" and
+ * "private threads" blocks of the request handler), then the memory
+ * routes' gate. The Memory page lists only these bots: an organization
+ * admin used to see every bot there and got "no such bot" on opening one
+ * whose Direct is someone else's (2026-11-02). */
+function botMemoryReachable(auth: RequestAuth, botId: string): boolean {
+  if (!store.bot(botId)) return false;
+  const path = `/api/bots/${botId}/memory`;
+  const subject: PathSubject = { kind: "bot", id: botId };
+  const visible = visibleTo(viewerFor(auth, path));
+  if (!visible.everything && !subjectVisible(subject, visible)) return false;
+  const scopedViewerId = serviceThreadViewer(serviceViewerClosed(auth, path, privateThreads()), channelFilterViewerId(auth));
+  if (scopedViewerId && !subjectSeesChannel(subject, scopedViewerId)) return false;
+  return botMemoryMayEdit(auth, botId);
+}
 ROUTES.push(createMemoryManagerRoutes({
   bots: (auth) => store.bots.filter((bot) => !bot.hidden).filter((bot) => {
     if (IDENTITY.kind !== "perspicax") return true;
@@ -31574,8 +31668,9 @@ ROUTES.push(createMemoryManagerRoutes({
   }).map((bot) => ({
     id: bot.id,
     name: bot.name,
-    mayWrite: ownerOrAdminOf(auth, bot) && !callerBotsReadOnly(auth),
+    mayWrite: botMemoryMayEdit(auth, bot.id),
   })),
+  botReachable: botMemoryReachable,
   teamSections: (auth) => {
     const may = auth.kind === "loopback"
       ? auth.trust !== "service"
@@ -31602,10 +31697,7 @@ ROUTES.push(createMemoryManagerRoutes({
 ROUTES.push(createBotMemoryRoutes({
   bot: (id) => store.bot(id),
   // the Soul edit's gate, as for the Files category below
-  mayEdit: (auth, botId) => {
-    const bot = store.bot(botId);
-    return Boolean(bot) && ownerOrAdminOf(auth, bot!) && !callerBotsReadOnly(auth);
-  },
+  mayEdit: botMemoryMayEdit,
   taskByThread: (botId, threadId) => store.taskByThread(botId, threadId),
   upkeep: memoryUpkeep,
   // the bot's Memory settings: recall by meaning, over its memory and its own chats
@@ -34233,20 +34325,20 @@ async function requestCwAction(auth: RequestAuth, threadId: string, body: Record
   const personal = languageOfRequest(auth);
   const language = cwActionLanguage(personal);
   const card = cwActionCard(action, language, actorPrincipalId(auth));
-  const cwProduct = declaredToolProduct(bot.id, "cw_psa__write");
-  const plain = approvalPlain({ botName: bot.name, tool: "cw_psa__write", toolInput: card.toolInput, detail: card.summary, ...(cwProduct ? { hints: cwProduct } : {}) }, serverApprovalWords(personal));
+  const cwProduct = declaredToolProduct(bot.id, "cw_psa_write");
+  const plain = approvalPlain({ botName: bot.name, tool: "cw_psa_write", toolInput: card.toolInput, detail: card.summary, ...(cwProduct ? { hints: cwProduct } : {}) }, serverApprovalWords(personal));
   // 2026-10-19 ("Toujours permettre" on every card): what Always allow
   // keeps here (this bot, this kind of ConnectWise change), and whether the
   // person already kept it (no security key of theirs protecting the write)
-  const described = ruleCandidateFor({ tool: "cw_psa__write", input: card.toolInput }, serverApprovalWords(personal));
+  const described = ruleCandidateFor({ tool: "cw_psa_write", input: card.toolInput }, serverApprovalWords(personal));
   const candidate = { ...described, tool: CW_WIDGET_RULE_TOOL };
   const answerer = approvalOwnerId(bot, threadId);
-  const stepUp = autoAnswerStepUp(bot, threadId, { tool: "cw_psa__write", input: card.toolInput, summary: card.summary });
+  const stepUp = autoAnswerStepUp(bot, threadId, { tool: "cw_psa_write", input: card.toolInput, summary: card.summary });
   // 2026-10-20 (security review): the answerer's rule answers only the
   // answerer's own request, never another member's in a group channel
   const ownRequest = Boolean(answerer) && actorPrincipalId(auth).trim().toLowerCase() === answerer.trim().toLowerCase();
   const kept = ownRequest && !stepUp.length && scopeKeepable(candidate.scope)
-    ? matchOwnerRule(ownerApprovals.rulesOf(answerer, bot.id).filter((rule) => rule.botId === bot.id), { ownerId: answerer, botId: bot.id, tool: CW_WIDGET_RULE_TOOL, input: card.toolInput })
+    ? cwWidgetRule(ownerApprovals.rulesOf(answerer, bot.id).filter((rule) => rule.botId === bot.id), answerer, bot.id, card.toolInput)
     : undefined;
   // the ConnectWise widget's own approval card; its write is then answered
   // in request.opened (widgetApproved); full-access: send
@@ -34261,7 +34353,7 @@ async function requestCwAction(auth: RequestAuth, threadId: string, body: Record
       requestId: card.requestId,
       // full-access: send
       requestType: "permission",
-      tool: "cw_psa__write",
+      tool: "cw_psa_write",
       toolInput: card.toolInput,
       ...(plain ? { plain } : {}),
       cwActionRequest: card.cwActionRequest,
@@ -34271,7 +34363,7 @@ async function requestCwAction(auth: RequestAuth, threadId: string, body: Record
   if (kept?.behavior === "allow") {
     const actor = cwActionActor(auth)!;
     appendDecision(DATA_DIR, {
-      threadId, requestId: card.requestId, botId: bot.id, botName: bot.name, tool: "cw_psa__write", summary: card.summary,
+      threadId, requestId: card.requestId, botId: bot.id, botName: bot.name, tool: "cw_psa_write", summary: card.summary,
       decision: "auto-approved", source: "owner-rule", rule: kept.id
     });
     const done = await allowCwAction(actor, threadId, message.id, { ...message.card!, ruleSaved: { id: kept.id, behavior: kept.behavior, description: kept.description } }, bot, action, languageOfRequest(auth));
@@ -34349,7 +34441,13 @@ async function allowCwAction(
 
 /** 2026-10-19: a widget's change is its own rule tool, apart from the
  * bot's own ConnectWise calls: "Always allow" here never covers those. */
-const CW_WIDGET_RULE_TOOL = "cw_widget:cw_psa__write";
+const CW_WIDGET_RULE_TOOL = "cw_widget:cw_psa_write";
+/** Rules kept before 2026-11-02 name the widget's write with `__`. */
+const CW_WIDGET_RULE_TOOL_BEFORE = "cw_widget:cw_psa__write";
+function cwWidgetRule(rules: Parameters<typeof matchOwnerRule>[0], ownerId: string, botId: string, input: Parameters<typeof matchOwnerRule>[1]["input"]) {
+  return matchOwnerRule(rules, { ownerId, botId, tool: CW_WIDGET_RULE_TOOL, input })
+    ?? matchOwnerRule(rules, { ownerId, botId, tool: CW_WIDGET_RULE_TOOL_BEFORE, input });
+}
 
 // ── a confidential thread's personal memory write (server/confidential-threads.ts) ──
 // Perspicax memory_write to the person's own tier ("me") from a confidential

@@ -1,4 +1,5 @@
-// Tools > Memory: the page's left column (2026-11-02), drawn like the
+// Tools > Memory: the page's right column (2026-11-02; Automations' calendar
+// rail side, width and border), drawn like the
 // Perspicax console's notes explorer: a search field (Cmd+O), the views with
 // their counts, then TIERS, each tier collapsible with its folder rows. A row
 // shows its actions (new note, new folder, rename, delete) on hover or focus,
@@ -198,7 +199,7 @@ function FolderRow({ folder, depth, renaming, onRenameDone, collapsed, onToggle 
   );
 }
 
-export function MemorySidebar({ query, onQuery, searchRef, shortcut, nav, tiers, renaming, onRenameDone, loading, footer }: {
+export function MemorySidebar({ query, onQuery, searchRef, shortcut, nav, tiers, renaming, onRenameDone, loading, footer, onCollapse }: {
   query: string;
   onQuery: (next: string) => void;
   searchRef: RefObject<HTMLInputElement | null>;
@@ -210,6 +211,9 @@ export function MemorySidebar({ query, onQuery, searchRef, shortcut, nav, tiers,
   onRenameDone: () => void;
   loading: ReactNode;
   footer: ReactNode;
+  /** Folds the column into its strip, as Automations' calendar rail does:
+   * the button sits in its own row above the search field. */
+  onCollapse?: () => void;
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const toggle = (key: string) => setCollapsed((current) => {
@@ -219,8 +223,15 @@ export function MemorySidebar({ query, onQuery, searchRef, shortcut, nav, tiers,
     return next;
   });
   return (
-    <aside aria-label={t("memoryManager.sidebarLabel")} className="flex h-full w-[280px] shrink-0 flex-col overflow-hidden border-r border-hairline/40 bg-panel" data-memory-sources="">
-      <div className="shrink-0 px-3 pb-2 pt-3">
+    <aside aria-label={t("memoryManager.sidebarLabel")} className="flex h-full w-[280px] shrink-0 flex-col overflow-hidden border-l border-hairline/40 bg-panel" data-memory-sources="">
+      {onCollapse && (
+        <div className="flex shrink-0 px-2 pt-2">
+          <button type="button" onClick={onCollapse} aria-label={t("memoryManager.explorerHide")} title={t("memoryManager.explorerHide")} className="rounded-md p-1 text-ink-secondary hover:bg-raised hover:text-ink" data-memory-explorer-hide="">
+            <ChevronRight size={16} aria-hidden="true" />
+          </button>
+        </div>
+      )}
+      <div className={cn("shrink-0 px-3 pb-2", onCollapse ? "pt-1" : "pt-3")}>
         <label className="flex h-9 min-w-0 items-center gap-1.5 rounded-lg border border-hairline/50 bg-app px-2.5 text-ink focus-within:ring-2 focus-within:ring-accent/60">
           <Search size={14} aria-hidden="true" className="shrink-0 text-ink-secondary" />
           <input

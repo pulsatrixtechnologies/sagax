@@ -2612,5 +2612,8 @@
   "pages.showConversation": "Mostrar conversa",
   "pages.hideConversation": "Ocultar conversa",
   "pages.close": "Fechar",
-  "folder.rename": "Renomear pasta"
+  "folder.rename": "Renomear pasta",
+  "orgComputer.diskFull": "O disco do ambiente de servidor está cheio: {free} livres de {total}. Os bots não conseguem mais salvar arquivos. Exclua arquivos grandes em /workspace.",
+  "orgComputer.diskAlmostFull": "O disco do ambiente de servidor está quase cheio: {free} livres de {total}.",
+  "orgComputer.diskFree": "{free} livres"
 }

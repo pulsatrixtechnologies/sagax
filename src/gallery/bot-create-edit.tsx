@@ -3,7 +3,7 @@
  * Synthetic bots only. Not shipped.
  * ?view=quick|template|import-zip|edit|bulk|teambot|catalog|archived|orgimport
  * &skin=<id>&lang=<code>&width=&height=
- * scripts/capture-bot-create-edit.mjs / scripts/capture-restore-windows.mjs */
+ * scripts/capture/bot-create-edit.mjs / scripts/capture/restore-windows.mjs */
 import { useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { BotWizard } from "../components/bot-wizard/BotWizard";

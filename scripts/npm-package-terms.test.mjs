@@ -44,7 +44,7 @@ describe("npm package term scan", () => {
   });
 
   it("finds a word joined to others by underscores, as in an MCP server or tool id", () => {
-    expect(blocked("// named whole (`mcp__perspicax_acmeco__cw_psa__query`)")).toEqual(["company"]);
+    expect(blocked("// named whole (`mcp__perspicax_acmeco__cw_psa_query`)")).toEqual(["company"]);
     expect(blocked('server: "perspicax_profil_pat_quill_limited"')).toEqual(["personal"]);
     expect(blocked("const id = 'zz123_backup'")).toEqual(["personal"]);
     expect(blocked("ask Vexa_bot")).toEqual(["bot-name"]);

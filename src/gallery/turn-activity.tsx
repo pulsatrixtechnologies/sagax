@@ -1,7 +1,7 @@
 /** Isolated gallery for headless screenshots of a bot's main chat seen from
  * its panel (2026-10-29): Details > Coding beside the sheet of the entry.
  * The list and the detail are what the server's activity route answered
- * for the scenario (scripts/capture-turn-activity.ts puts them on
+ * for the scenario (scripts/capture/turn-activity.ts puts them on
  * window.__TURN_FIXTURE__ before the page loads), so a capture of the route
  * before and after a change compares the real output. Not shipped; every
  * request is answered here, nothing reaches a server.
@@ -27,7 +27,7 @@ document.documentElement.lang = lang;
 const view = params.get("view") ?? "panel";
 
 const fixture = (window as unknown as { __TURN_FIXTURE__?: { list: BotActivityList; detail: BotActivityDetail; now: number } }).__TURN_FIXTURE__;
-if (!fixture) throw new Error("no __TURN_FIXTURE__: run scripts/capture-turn-activity.ts");
+if (!fixture) throw new Error("no __TURN_FIXTURE__: run scripts/capture/turn-activity.ts");
 const { list, detail, now } = fixture;
 const entry = list.items.find((item) => item.id === detail.id) ?? detail;
 

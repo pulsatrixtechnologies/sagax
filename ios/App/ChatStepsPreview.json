@@ -48,7 +48,7 @@
     "tool": {
       "name": "mcp",
       "ok": true,
-      "input": "{\"server\": \"pulsatrix-psa\", \"tool\": \"acme_desk__query\", \"args\": {\"resource\": \"service/tickets\", \"conditions\": \"summary contains 'checkout'\"}}",
+      "input": "{\"server\": \"pulsatrix-psa\", \"tool\": \"acme_desk_query\", \"args\": {\"resource\": \"service/tickets\", \"conditions\": \"summary contains 'checkout'\"}}",
       "durationMs": 2400,
       "output": "3 tickets"
     }

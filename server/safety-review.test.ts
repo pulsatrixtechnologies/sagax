@@ -243,7 +243,7 @@ describe("false holds in shadow (#1098)", () => {
     const calls = [
       { text: "agents__sagax_help\n{\"question\":\"routines\"}", surface: "mcp" as const, tool: "agents__sagax_help" },
       { text: "github__get_file_contents\n{\"path\":\"README.md\"}", surface: "mcp" as const, tool: "github__get_file_contents" },
-      { text: "cw_psa__query\n{\"resource\":\"tickets\"}", surface: "mcp" as const, tool: "perspicax" },
+      { text: "cw_psa_query\n{\"resource\":\"tickets\"}", surface: "mcp" as const, tool: "perspicax" },
       { text: "agents__memory_update\n{\"text\":\"note\"}", surface: "mcp" as const, tool: "agents__memory_update" },
       { text: "propose_routine\n{\"name\":\"daily\"}", surface: "routine" as const, tool: "agents__propose_routine" },
       { text: "npm install && npm test", surface: "shell" as const, tool: "run_command", ownEnvironment: true },

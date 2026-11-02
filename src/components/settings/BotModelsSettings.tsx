@@ -1,9 +1,10 @@
 // Settings > Models > Bot models (#1675): one page for the person's bots'
 // models. Works without a model turn. Own bots only; org allowed-engines
 // rules still apply through the same setModel / ModelPicker path.
-// Layout: a dense two-line list (Grok Bot / Cursor settings density), not a
-// fixed multi-column table that squeezes at the Settings pane width.
-import { Fragment, useId, useMemo, useRef, useState } from "react";
+// Layout: a table like Grok Bot / Cursor model settings (one row per bot,
+// aligned Model, Effort, Account and Backup columns under their headers),
+// stacking each row's controls two by two when the pane is narrow.
+import { Fragment, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, TriangleAlert, X } from "lucide-react";
 
 import { BotAvatar } from "@/components/Avatar";
@@ -36,12 +37,29 @@ import { modelEffortLevels } from "../../../shared/model-capabilities";
 import { engineOffer } from "../../../shared/offered-engines";
 import type { EffortLevel } from "../../../shared/wire";
 import type { TurnPayerMode } from "../../../shared/turn-payer";
-import { AnchoredPopover, useAnchoredDismissRoot } from "../AnchoredPopover";
+import { AnchoredPopover, enclosingWindowBounds, useAnchoredDismissRoot } from "../AnchoredPopover";
 import { payerLabel } from "../bot-settings/BotPayerSettings";
 import { EffortRow, ModelPicker } from "../ModelPicker";
 import { DefaultBotSettings } from "../NewBotDialog";
 import { ConfirmDialog } from "../ConfirmDialog";
-import { DialogFrame, DialogLayer, HelpTip, PILL, PRIMARY_PILL, PillSelect, SettingsGroup } from "../SettingsPrimitives";
+import { DialogFrame, DialogLayer, HelpTip, PILL, PRIMARY_PILL, PillSelect, SettingsGroup, TABLE_CELL_CONTROL } from "../SettingsPrimitives";
+
+// One grid for the column headers, the section headers and every row, so
+// the checkbox, Model, Effort, Account and Backup line up down the table.
+// Under 36rem of table width the row stacks: name on top, then the four
+// controls two by two, each with its column name above it.
+// (Class names spelled out whole: Tailwind finds them in the source.)
+const ROW_GRID = "grid grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-x-2.5 px-3 @min-[36rem]:grid-cols-[1.25rem_minmax(6rem,0.9fr)_minmax(10rem,1.8fr)_minmax(6rem,0.8fr)_minmax(6.5rem,0.9fr)_minmax(5.5rem,0.8fr)]";
+const READ_ONLY_CELL = "block h-8 truncate px-2 text-[13px] leading-8 text-ink-secondary";
+
+function Cell({ label, children, ...data }: { label: string; children: ReactNode; [marker: `data-${string}`]: string }) {
+  return (
+    <div {...data} className="flex min-w-0 flex-col gap-0.5">
+      <span aria-hidden="true" className="px-2 text-[11.5px] leading-4 text-ink-secondary @min-[36rem]:hidden">{label}</span>
+      {children}
+    </div>
+  );
+}
 
 function warningText(kind: BotModelWarningKind): string {
   if (kind === "signedOut") return t("botModels.warning.signedOut");
@@ -59,13 +77,14 @@ function BotPayerCell({ bot, disabled }: { bot: Bot; disabled: boolean }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!current || !bot.turnPayerDefault) {
-    return <span className="text-[12px] text-ink-secondary" data-bot-models-payer={bot.id} data-bot-models-payer-empty="">—</span>;
+    return <span className={READ_ONLY_CELL} data-bot-models-payer={bot.id} data-bot-models-payer-empty="">—</span>;
   }
   const fallback = bot.turnPayerDefault;
   const value: TurnPayerMode | "default" = bot.turnPayer ?? "default";
   return (
-    <div data-bot-models-payer={bot.id} className="min-w-0 shrink-0">
+    <div data-bot-models-payer={bot.id} className="min-w-0">
       <PillSelect<TurnPayerMode | "default">
+        fill
         value={value}
         ariaLabel={t("botPayer.title")}
         disabled={disabled || saving}
@@ -124,7 +143,7 @@ function BotBackupCell({ bot, disabled }: { bot: Bot; disabled: boolean }) {
   };
 
   return (
-    <div ref={rootRef} data-bot-models-backup={bot.id} className="relative min-w-0 shrink-0">
+    <div ref={rootRef} data-bot-models-backup={bot.id} className="relative min-w-0">
       <button
         ref={triggerRef}
         type="button"
@@ -136,9 +155,9 @@ function BotBackupCell({ bot, disabled }: { bot: Bot; disabled: boolean }) {
         title={label}
         data-pill-select=""
         onClick={() => setOpen((next) => !next)}
-        className="inline-flex h-7 max-w-[240px] items-center gap-1 rounded-full px-2.5 text-[13px] leading-[18px] text-ink transition-colors hover:bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-not-allowed disabled:opacity-50 aria-expanded:bg-hover"
+        className={TABLE_CELL_CONTROL}
       >
-        <span className="min-w-0 truncate">{label}</span>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
         <ChevronDown size={13} aria-hidden="true" className="shrink-0 text-ink-secondary" />
       </button>
       {open && (
@@ -148,6 +167,7 @@ function BotBackupCell({ bot, disabled }: { bot: Bot; disabled: boolean }) {
           popoverRef={panelRef}
           align="end"
           maxHeight={320}
+          bounds={enclosingWindowBounds}
           id={listId}
           role="dialog"
           aria-label={t("botModels.col.backup")}
@@ -559,16 +579,18 @@ export function BotModelsSettings() {
           <div
             data-bot-models-table=""
             data-bot-models-list=""
-            className="flex min-w-0 flex-col px-1 pb-1 pt-0.5"
+            className="@container flex min-w-0 flex-col"
           >
-            {/* Visually hidden column legend for screen readers / tests. */}
-            <div className="sr-only" data-bot-models-cols="">
-              <span data-bot-models-col="select">{t("botModels.col.select")}</span>
-              <span data-bot-models-col="bot">{t("botModels.col.bot")}</span>
-              <span data-bot-models-col="model">{t("botModels.col.model")}</span>
-              <span data-bot-models-col="effort">{t("botModels.col.effort")}</span>
-              <span data-bot-models-col="payer">{t("botModels.col.payer")}</span>
-              <span data-bot-models-col="backup">{t("botModels.col.backup")}</span>
+            {/* Column headers (wide layout); the stacked layout names each
+                control above it instead. Every column keeps its marker. */}
+            <div data-bot-models-cols="" className={cn(ROW_GRID, "hidden border-b border-hairline/40 pb-2 pt-1 text-[12px] leading-4 text-ink-secondary @min-[36rem]:grid")}>
+              {/* Holds the checkbox column's place; the name is for screen readers. */}
+              <span data-bot-models-col="select"><span className="sr-only">{t("botModels.col.select")}</span></span>
+              <span data-bot-models-col="bot" className="truncate">{t("botModels.col.bot")}</span>
+              <span data-bot-models-col="model" className="truncate px-2" title={t("botModels.col.model")}>{t("botModels.col.modelShort")}</span>
+              <span data-bot-models-col="effort" className="truncate px-2">{t("botModels.col.effort")}</span>
+              <span data-bot-models-col="payer" className="truncate px-2" title={t("botModels.col.payer")}>{t("botModels.col.account")}</span>
+              <span data-bot-models-col="backup" className="truncate px-2">{t("botModels.col.backup")}</span>
             </div>
             {groups.map((group) => {
               const ids = group.bots.map((bot) => bot.id);
@@ -579,20 +601,21 @@ export function BotModelsSettings() {
                 <Fragment key={sectionKey}>
                   <div
                     data-bot-models-section={sectionKey}
-                    className="sticky top-0 z-[1] flex items-center gap-2 border-b border-hairline/40 bg-inset/80 px-2.5 py-2 backdrop-blur"
+                    className={cn(ROW_GRID, "pb-1.5 pt-3.5")}
                   >
                     <input
                       type="checkbox"
-                      className="accent-[var(--color-accent)]"
+                      className="size-3.5 justify-self-center accent-[var(--color-accent)]"
                       checked={allOn}
                       ref={(node) => { if (node) node.indeterminate = someOn && !allOn; }}
                       aria-label={t("botModels.selectSection", { section: sectionTitle(group.section) })}
                       data-bot-models-section-select=""
                       onChange={(event) => setSelected(setSectionSelection(selected, ids, event.target.checked))}
                     />
-                    <h3 className="text-[12px] font-medium text-ink-secondary">
+                    {/* Same type as the Settings group headings. */}
+                    <h3 className="truncate text-[13px] font-normal leading-[18px] text-ink-secondary @min-[36rem]:col-span-5">
                       {sectionTitle(group.section)}
-                      <span className="ml-1.5 font-normal">({group.bots.length})</span>
+                      <span className="ml-1">({group.bots.length})</span>
                     </h3>
                   </div>
                   {group.bots.map((row) => {
@@ -605,78 +628,73 @@ export function BotModelsSettings() {
                     const backups = formatBotBackups(row.fallback, state.instances);
                     const effort = row.modelSelection.effort;
                     const payer = botTurnPayer(full);
+                    const modelName = formatBotModelSelection(row.modelSelection, state.instances);
                     return (
                       <div
                         key={row.id}
                         data-bot-models-row={row.id}
                         data-bot-models-section-of={sectionKey}
                         data-bot-models-warning={warning ?? undefined}
-                        className="flex min-w-0 flex-col gap-2 border-b border-hairline/30 px-2.5 py-3 last:border-0"
+                        className={cn(ROW_GRID, "gap-y-2 border-t border-hairline/30 py-2")}
                       >
-                        <div className="flex min-w-0 items-start gap-2">
-                          <input
-                            type="checkbox"
-                            className="mt-1.5 accent-[var(--color-accent)]"
-                            checked={selected.has(row.id)}
-                            aria-label={t("botModels.selectBot", { name: row.name })}
-                            data-bot-models-select={row.id}
-                            onChange={() => setSelected(toggleBotSelection(selected, row.id))}
-                          />
-                          <BotAvatar bot={full} size={28} animated={false} label="" />
+                        <input
+                          type="checkbox"
+                          className="size-3.5 justify-self-center accent-[var(--color-accent)]"
+                          checked={selected.has(row.id)}
+                          aria-label={t("botModels.selectBot", { name: row.name })}
+                          data-bot-models-select={row.id}
+                          onChange={() => setSelected(toggleBotSelection(selected, row.id))}
+                        />
+                        <div className="flex min-w-0 items-center gap-2" data-bot-models-bot={row.id}>
+                          <BotAvatar bot={full} size={24} animated={false} label="" />
                           <div className="min-w-0 flex-1">
-                            <div className="truncate font-medium text-ink" title={row.name}>{row.name}</div>
+                            <div className="truncate text-[13px] font-medium leading-[18px] text-ink" title={row.name}>{row.name}</div>
                             {warning && (
-                              <p className="mt-0.5 flex items-start gap-1 text-[11.5px] leading-snug text-warning" data-bot-models-warn={warning}>
+                              <p className="flex items-start gap-1 text-[11.5px] leading-4 text-warning" data-bot-models-warn={warning} title={warningText(warning)}>
                                 <TriangleAlert size={12} className="mt-0.5 shrink-0" aria-hidden="true" />
-                                <span>{warningText(warning)}</span>
+                                <span className="min-w-0 truncate">{warningText(warning)}</span>
                               </p>
                             )}
                           </div>
                         </div>
                         <div
                           data-bot-models-controls={row.id}
-                          className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2 pl-[2.125rem]"
+                          className="col-start-2 grid min-w-0 grid-cols-2 gap-x-2 gap-y-2 @min-[36rem]:contents"
                         >
-                          <div data-bot-models-model={row.id} className="min-w-0 max-w-full grow basis-[12rem]">
+                          <Cell label={t("botModels.col.modelShort")} data-bot-models-model={row.id}>
                             {mayEdit ? (
                               <ModelPicker bot={full} listChip />
                             ) : (
-                              <span className="block truncate text-[13px] text-ink-secondary" title={formatBotModelSelection(row.modelSelection, state.instances)}>
-                                {formatBotModelSelection(row.modelSelection, state.instances)}
-                              </span>
+                              <span className={READ_ONLY_CELL} title={modelName}>{modelName}</span>
                             )}
-                          </div>
-                          <div data-bot-models-effort={row.id} className="min-w-0 shrink-0">
+                          </Cell>
+                          <Cell label={t("botModels.col.effort")} data-bot-models-effort={row.id}>
                             {mayEdit ? (
                               <EffortRow bot={full} updateBotDefault menu />
                             ) : (
-                              <span className="block truncate text-[12px] text-ink-secondary" title={effort ? effortLabel(effort) : t("chat.turnRun.effortDefault")}>
+                              <span className={READ_ONLY_CELL} title={effort ? effortLabel(effort) : t("chat.turnRun.effortDefault")}>
                                 {effort ? effortLabel(effort) : t("chat.turnRun.effortDefault")}
                               </span>
                             )}
-                          </div>
-                          {mayPayer ? (
-                            <BotPayerCell bot={full} disabled={Boolean(full.busy)} />
-                          ) : (
-                            <span
-                              data-bot-models-payer={row.id}
-                              className="block max-w-[240px] truncate text-[12px] text-ink-secondary"
-                              title={payer ? payerLabel(payer) : undefined}
-                            >
-                              {payer ? payerLabel(payer) : "—"}
-                            </span>
-                          )}
-                          {mayBackup ? (
-                            <BotBackupCell bot={full} disabled={Boolean(full.busy)} />
-                          ) : (
-                            <span
-                              data-bot-models-backup={row.id}
-                              className="block max-w-[240px] truncate text-[12px] text-ink-secondary"
-                              title={backups || undefined}
-                            >
-                              {backups || t("botModels.backup.none")}
-                            </span>
-                          )}
+                          </Cell>
+                          <Cell label={t("botModels.col.account")} data-bot-models-payer-cell={row.id}>
+                            {mayPayer ? (
+                              <BotPayerCell bot={full} disabled={Boolean(full.busy)} />
+                            ) : (
+                              <span data-bot-models-payer={row.id} className={READ_ONLY_CELL} title={payer ? payerLabel(payer) : undefined}>
+                                {payer ? payerLabel(payer) : "—"}
+                              </span>
+                            )}
+                          </Cell>
+                          <Cell label={t("botModels.col.backup")} data-bot-models-backup-cell={row.id}>
+                            {mayBackup ? (
+                              <BotBackupCell bot={full} disabled={Boolean(full.busy)} />
+                            ) : (
+                              <span data-bot-models-backup={row.id} className={READ_ONLY_CELL} title={backups || undefined}>
+                                {backups || t("botModels.backup.none")}
+                              </span>
+                            )}
+                          </Cell>
                         </div>
                       </div>
                     );
@@ -686,19 +704,32 @@ export function BotModelsSettings() {
             })}
           </div>
         )}
+      </SettingsGroup>
 
-        {selected.size > 0 && (
+      {/* The bulk bar sticks to the bottom of the Settings scroll area while
+          the table is in view; at the end of the table it sits under the
+          last row, never over it. */}
+      {selected.size > 0 && (
+        <div data-bot-models-bulk-dock="" className="sticky bottom-0 z-10 -mt-4 bg-app pb-3 pt-2">
           <div
             data-bot-models-bulk-bar=""
-            className={cn(
-              "sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-2 border-t border-hairline/40 bg-app/95 px-3.5 py-2.5 backdrop-blur",
-            )}
+            role="toolbar"
+            aria-label={t("botModels.bulk.selected", { count: selected.size })}
+            className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border-[0.5px] border-border bg-elevated px-3 py-2 shadow-lg shadow-black/10"
           >
-            <p className="text-[12.5px] text-ink-secondary">{t("botModels.bulk.selected", { count: selected.size })}</p>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className={PILL} data-bot-models-bulk-clear="" onClick={() => setSelected(new Set())}>
+            <p className="flex items-center gap-1.5 text-[13px] text-ink-secondary">
+              <span>{t("botModels.bulk.selected", { count: selected.size })}</span>
+              <span aria-hidden="true">·</span>
+              <button
+                type="button"
+                className="rounded-md px-1 text-ink-secondary underline-offset-2 hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                data-bot-models-bulk-clear=""
+                onClick={() => setSelected(new Set())}
+              >
                 {t("botModels.bulk.clear")}
               </button>
+            </p>
+            <div className="ml-auto flex flex-wrap justify-end gap-2">
               <button
                 type="button"
                 className={PILL}
@@ -722,8 +753,8 @@ export function BotModelsSettings() {
               </button>
             </div>
           </div>
-        )}
-      </SettingsGroup>
+        </div>
+      )}
 
       {picking && !draft && (
         <BulkModelChoice

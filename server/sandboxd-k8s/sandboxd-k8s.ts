@@ -27,6 +27,8 @@ import {
   podIsolationProblems,
   spareReplicas,
   pvcSpec,
+  quantityBytes,
+  quantityToBytes,
   sandboxKeyFromContainerName,
   sandboxEgress,
   sandboxNetworkPolicy,
@@ -537,6 +539,23 @@ export function kubernetesApi(sandbox: SandboxdConfig, k8s: K8sSandboxConfig, cl
       const claim = await read(pvcPath(name));
       if (!claim) return null;
       return { labels: metaOf(claim).labels };
+    },
+    async growVolume(name: string) {
+      const claim = await read(pvcPath(name));
+      if (!claim) return;
+      const asked = quantityToBytes(String(asObj(asObj(asObj(claim.spec).resources).requests).storage ?? ""));
+      const wanted = sandbox.limits.workspaceQuotaBytes;
+      if (asked === null || asked >= wanted) return;
+      let key = "";
+      try { key = sandboxKeyFromContainerName(name.replace(/-workspace$/, "")); } catch { /* audit without a key */ }
+      try {
+        // The StorageClass allows expansion (allowVolumeExpansion); the CSI
+        // driver grows the disk and the filesystem, online or at next attach.
+        await merge(pvcPath(name), { spec: { resources: { requests: { storage: quantityBytes(wanted) } } } });
+        audit.record({ action: "sandbox.pvc.grow", outcome: "ok", ...(key ? { key } : {}), detail: { from: asked, to: wanted } });
+      } catch (error) {
+        audit.record({ action: "sandbox.pvc.grow", outcome: "denied", ...(key ? { key } : {}), detail: { reason: error instanceof Error ? error.message.slice(0, 120) : "failed" } });
+      }
     },
     async createVolume(spec: Record<string, unknown>) {
       const labels = asObj(spec.Labels) as Record<string, string>;

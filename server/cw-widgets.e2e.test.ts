@@ -5,20 +5,20 @@ import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.
 import { FIXTURE_TICKETS, fixtureQueryResult } from "../shared/cw-widgets/fixtures.ts";
 import type { WireMessage } from "../shared/wire.ts";
 
-// Mocked ConnectWise only: the fake engine "calls" cw_psa__query and the
-// Perspicax view tool cw_psa__show_tickets and hands back made-up records.
+// Mocked ConnectWise only: the fake engine "calls" cw_psa_query and the
+// Perspicax view tool cw_psa_show_tickets and hands back made-up records.
 // Nothing reaches a ConnectWise server. Only the view tool draws a widget
 // (vues CW seulement sur demande, 2026-10-20).
 it("turns a ConnectWise query into a widget and a widget change into an approval card", async () => {
   const fixture = await launchVerificationServer({
     ...process.env,
     FAKE_CLAUDE_TOOL_CALLS: JSON.stringify([{
-      name: "mcp__perspicax_x__cw_psa__query",
+      name: "mcp__perspicax_x__cw_psa_query",
       input: { resource: "service/tickets", conditions: "closedFlag=false" },
       output: [{ type: "text", text: fixtureQueryResult(FIXTURE_TICKETS.slice(0, 3), 41) }],
       ok: true,
     }, {
-      name: "mcp__perspicax_x__cw_psa__show_tickets",
+      name: "mcp__perspicax_x__cw_psa_show_tickets",
       input: { resource: "service/tickets", conditions: "closedFlag=false" },
       output: [{ type: "text", text: fixtureQueryResult(FIXTURE_TICKETS.slice(0, 3), 41) }],
       ok: true,
@@ -42,11 +42,11 @@ it("turns a ConnectWise query into a widget and a widget change into an approval
     expect((await control(["wait", "--bot", bot.id, "--timeout", "20"])).status).toBe("settled");
 
     const rows = await messages(threadId);
-    const query = rows.find((row) => row.tool?.name?.endsWith("cw_psa__query"));
+    const query = rows.find((row) => row.tool?.name?.endsWith("cw_psa_query"));
     expect(query).toBeTruthy();
     expect(query?.tool?.widget).toBeUndefined();
     const tool = rows.find((row) => row.tool?.widget);
-    expect(tool?.tool?.name).toMatch(/cw_psa__show_tickets$/);
+    expect(tool?.tool?.name).toMatch(/cw_psa_show_tickets$/);
     const widget = tool?.tool?.widget as any;
     expect(widget).toMatchObject({ family: "ticket", view: "list", total: 41 });
     expect(widget.records.map((row: { id: number }) => row.id)).toEqual([48213, 48197, 48150]);
@@ -61,7 +61,7 @@ it("turns a ConnectWise query into a widget and a widget change into an approval
     });
     expect(asked.status).toBe(201);
     const card = (await messages(threadId)).find((row) => row.card?.requestId === asked.body.requestId)?.card;
-    expect(card).toMatchObject({ requestType: "permission", tool: "cw_psa__write", options: ["Allow", "Deny"] });
+    expect(card).toMatchObject({ requestType: "permission", tool: "cw_psa_write", options: ["Allow", "Deny"] });
     expect(card?.cwActionRequest?.action).toEqual({ kind: "ticket.status", ticketId: 48213, status: "Résolu", from: "En cours" });
 
     const allowed = await api(`/api/threads/${threadId}/respond`, { method: "POST", body: { requestId: asked.body.requestId, behavior: "allow" } });
@@ -69,7 +69,7 @@ it("turns a ConnectWise query into a widget and a widget change into an approval
     expect((await control(["wait", "--bot", bot.id, "--timeout", "20"])).status).toBe("settled");
     const dump = JSON.parse(readFileSync(fixture.fixtureDumpPath, "utf8"));
     expect(JSON.stringify(dump.prompt)).toContain("service/tickets/48213");
-    expect(JSON.stringify(dump.prompt)).toContain("cw_psa__write");
+    expect(JSON.stringify(dump.prompt)).toContain("cw_psa_write");
     const settled = (await messages(threadId)).find((row) => row.card?.requestId === asked.body.requestId)?.card;
     expect(settled?.answered).toBe("allow");
     expect((await api(`/api/threads/${threadId}/respond`, { method: "POST", body: { requestId: asked.body.requestId, behavior: "allow" } })).status).toBe(409);
@@ -95,12 +95,12 @@ it("turns a ConnectWise query into a widget and a widget change into an approval
     });
     const kept = await status(48197);
     const keptCard = (await messages(threadId)).find((row) => row.card?.requestId === kept.body.requestId)?.card;
-    expect(keptCard?.ownerRule).toMatchObject({ tool: "cw_widget:cw_psa__write" });
+    expect(keptCard?.ownerRule).toMatchObject({ tool: "cw_widget:cw_psa_write" });
     expect(keptCard?.ownerRule?.scope).not.toHaveProperty("id");
     expect((await api(`/api/threads/${threadId}/respond`, { method: "POST", body: { requestId: kept.body.requestId, behavior: "allow", rule: "allow" } })).status).toBe(200);
     expect((await control(["wait", "--bot", bot.id, "--timeout", "20"])).status).toBe("settled");
     const rules = (await api("/api/approval-rules")).body.rules as Array<{ id: string; tool: string }>;
-    const rule = rules.find((row) => row.tool === "cw_widget:cw_psa__write");
+    const rule = rules.find((row) => row.tool === "cw_widget:cw_psa_write");
     expect(rule).toBeTruthy();
     const byRule = await status(48150);
     expect(byRule).toMatchObject({ status: 201, body: { allowedByRule: true } });

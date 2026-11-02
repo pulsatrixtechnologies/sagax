@@ -564,7 +564,7 @@ voile), on l'étend aux pages.
   remplace les détails par l'éditeur dans le même panneau ; fermer l'éditeur revient
   aux détails. Supprimer garde sa confirmation (seule fenêtre).
 - Routines en pause : panneau de détail, chaque rangée garde Reprendre et Modifier.
-- Captures : `node scripts/capture-calendar-panels.mjs` (galerie
+- Captures : `node scripts/capture/calendar-panels.mjs` (galerie
   `src/gallery/routines-ux.html?view=calendar`).
 
 ### 2.18 Connecter Tailscale (ordinateur du bot sur le tailnet)
@@ -606,7 +606,7 @@ vigueur. Tag public : `tag:sagax`.
 **Téléphone.** Même flux en page poussée sur la pile Connect apps ; mêmes
 états et mêmes libellés (catalogues en + fr).
 
-**Captures.** `node scripts/capture-connect-apps-tailscale.mjs --out DIR`
+**Captures.** `node scripts/capture/connect-apps-tailscale.mjs --out DIR`
 (galerie `src/gallery/connect-apps.html?view=manage&tailscale=…`).
 
 ### 2.19 Appels téléphoniques dans la conversation

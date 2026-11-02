@@ -67,7 +67,8 @@ describe("Settings nav groups", () => {
     expect(rail).not.toContain("data-settings-automations");
     const app = rail.slice(rail.indexOf('data-settings-nav-group="app"'));
     expect(app.indexOf(">Updates</button>")).toBeLessThan(app.indexOf(">Experimental</button>"));
-    expect(app.indexOf(">Experimental</button>")).toBeLessThan(app.indexOf(">About</button>"));
+    // 2026-11-02 (JC): About is not a row of the Settings menu
+    expect(app).not.toContain(">About</button>");
     // each group is labelled by its heading for assistive tech
     expect(rail).toMatch(/role="group" aria-labelledby="app-settings-nav-you"/);
   });
@@ -130,22 +131,20 @@ describe("Settings nav groups", () => {
     const html = render();
     expect(html).toContain('<optgroup label="Personal"><option value="account" selected="">Account</option>');
     expect(html).toContain('<optgroup label="App"><option value="updates">Updates</option>');
-    expect(html).toContain('<option value="about">About</option>');
-    expect(html.indexOf('<option value="experimental">')).toBeLessThan(html.indexOf('<option value="about">'));
+    expect(html).not.toContain('<option value="about">');
   });
 
-  it("keeps About under App when there is no updater; members still see About", () => {
+  it("keeps the App group without an updater; About is never a row", () => {
     vi.stubGlobal("window", {});
     const rail = nav(render());
     expect(rail).toContain('data-settings-nav-group="app"');
     expect(rail).not.toContain(">Updates</button>");
-    expect(rail).toContain(">About</button>");
-    // a member who cannot edit the installation has no Experimental, still About
+    expect(rail).not.toContain(">About</button>");
+    // a member who cannot edit the installation has no Experimental
     fixture.config = { rooms: { turnTimeoutMinutes: 5 }, viewer: { operator: false, role: "member" } };
     vi.stubGlobal("window", {});
     const member = nav(render());
-    expect(member).toContain('data-settings-nav-group="app"');
-    expect(member).toContain(">About</button>");
+    expect(member).not.toContain(">About</button>");
     expect(member).not.toContain(">Experimental</button>");
   });
 

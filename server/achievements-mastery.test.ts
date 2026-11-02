@@ -61,9 +61,9 @@ describe("what the server's frames mean", () => {
   });
 
   it("reads approvals asked and answered, with whether the tool writes", () => {
-    const asked = masteryFrameFacts({ kind: "message", threadId: "t1", message: { card: { requestId: "q1", requestType: "permission", tool: "mcp__perspicax_example__cw_psa__write" } } }, lookups);
+    const asked = masteryFrameFacts({ kind: "message", threadId: "t1", message: { card: { requestId: "q1", requestType: "permission", tool: "mcp__perspicax_example__cw_psa_write" } } }, lookups);
     expect(asked).toEqual([{ person: ADA, id: "asked:q1", fact: { kind: "approval.requested" } }]);
-    const denied = masteryFrameFacts({ kind: "message.patch", threadId: "t1", message: { card: { requestId: "q1", requestType: "permission", tool: "mcp__perspicax_example__cw_psa__write", answered: "deny" } } }, lookups);
+    const denied = masteryFrameFacts({ kind: "message.patch", threadId: "t1", message: { card: { requestId: "q1", requestType: "permission", tool: "mcp__perspicax_example__cw_psa_write", answered: "deny" } } }, lookups);
     expect(denied).toEqual([{ person: ADA, id: "answered:q1", fact: { kind: "approval.answered", threadId: "t1", allow: false, write: true } }]);
     // settled by someone else (dismissed) or a question: not an answer of theirs
     expect(masteryFrameFacts({ kind: "message.patch", threadId: "t1", message: { card: { requestId: "q2", answered: "allow", dismissed: true } } }, lookups)).toEqual([]);
@@ -122,7 +122,7 @@ describe("what the server's requests mean", () => {
     expect(integrationOfTool("mcp__github__create_issue")).toBe("github");
     expect(skillOfTool("skill_view", { name: "Report" })).toBe("report");
     expect(skillOfTool("Bash", { skill: "x" })).toBeNull();
-    expect(toolWrites("mcp__perspicax_example__cw_psa__query")).toBe(false);
+    expect(toolWrites("mcp__perspicax_example__cw_psa_query")).toBe(false);
     expect(toolWrites("mcp__github__create_issue")).toBe(true);
     expect(toolWrites("Read")).toBe(false);
     expect(modelFamily("grok-4-fast")).toBe("xai");

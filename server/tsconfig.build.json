@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "../dist-server",
+    // the emit layout the bundle and the packaged smoke expect: dist-server/server/...
+    "rootDir": "..",
+    "rewriteRelativeImportExtensions": true,
+    "declaration": false,
+    "sourceMap": false
+  },
+  "exclude": [
+    "**/*.test.ts",
+    "testing",
+    "drivers/pi-mcp-extension.ts"
+  ],
+  "include": [
+    "."
+  ]
+}

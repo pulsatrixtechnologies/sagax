@@ -35,6 +35,23 @@ describe("isOutboundTool", () => {
     }
   });
 
+  it("does not treat in-app Sagax peer tools as outbound (#1905)", () => {
+    for (const name of [
+      "send_to_bot",
+      "agents__send_to_bot",
+      "mcp__agents__send_to_bot",
+      "post_to_room",
+      "agents__post_to_room",
+      "mcp__agents__post_to_room",
+      "coordinate_bots",
+      "agents__coordinate_bots",
+      "ask_bot",
+      "delegate_bot",
+    ]) {
+      expect(isOutboundTool(name), name).toBe(false);
+    }
+  });
+
   it("leaves reading, searching, drafting, and internal record-keeping alone", () => {
     for (const name of [
       "GMAIL_FETCH_EMAILS",

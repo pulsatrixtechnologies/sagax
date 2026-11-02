@@ -193,6 +193,40 @@ describe("BotModelsSettings page", () => {
     expect(container.querySelector('[data-bot-models-controls="bot-scout"]')).not.toBeNull();
   });
 
+  it("draws a table: visible column headers, one-line model chips, bulk bar under the table", async () => {
+    act(() => root.render(createElement(BotModelsSettings)));
+    await flush();
+    const headers = container.querySelector("[data-bot-models-cols]");
+    expect(headers?.textContent).toContain("Model");
+    expect(headers?.textContent).toContain("Effort");
+    expect(headers?.textContent).toContain("Account");
+    expect(headers?.textContent).toContain("Backup");
+    // The select column keeps its grid slot (an sr-only span would leave the flow).
+    expect(headers?.querySelector('[data-bot-models-col="select"]')?.classList.contains("sr-only")).toBe(false);
+    // Section headings use the Settings group heading type, no band.
+    const section = container.querySelector('[data-bot-models-section="Clients"]');
+    expect(section?.querySelector("h3")?.className).toContain("text-[13px]");
+    expect(section?.className).not.toContain("bg-inset");
+    // An editable chip: engine mark plus one left-aligned label, full name in the tooltip.
+    const chip = container.querySelector<HTMLButtonElement>('[data-bot-models-model] [data-model-list-chip]');
+    if (chip) {
+      const label = chip.querySelector("[data-model-list-chip-label]");
+      expect(label?.className).toContain("truncate");
+      expect(label?.className).toContain("text-left");
+      expect(chip.title).toContain(label?.textContent ?? "");
+    }
+    // Selecting shows the bulk bar outside the table card, with one filled action.
+    act(() => {
+      (container.querySelector('[data-bot-models-select="bot-scout"]') as HTMLInputElement).click();
+    });
+    await flush();
+    const bar = container.querySelector("[data-bot-models-bulk-bar]");
+    expect(bar).not.toBeNull();
+    expect(bar?.closest('[data-settings-group="bot-models-table"]')).toBeNull();
+    expect(bar?.querySelectorAll(".ui-button-primary")).toHaveLength(1);
+    expect(bar?.querySelector(".ui-button-primary")?.hasAttribute("data-bot-models-bulk-change")).toBe(true);
+  });
+
   it("warns when a bot's engine is signed out", async () => {
     act(() => root.render(createElement(BotModelsSettings)));
     await flush();

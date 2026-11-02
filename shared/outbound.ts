@@ -96,8 +96,29 @@ export function isReadOnlyTool(name: string): boolean {
   return tokens.length > 0 && READ_VERBS.has(tokens[0]);
 }
 
+/** Sagax agents tools that talk to another bot or room inside the app.
+ * Their names contain SEND/POST, so the verb heuristic would treat them as
+ * outbound; peer contact is gated by approvePeerComms instead (#1905). */
+const IN_APP_AGENTS_PEER_TOOLS = new Set([
+  "send_to_bot",
+  "post_to_room",
+  "coordinate_bots",
+  "ask_bot",
+  "delegate_bot",
+]);
+
+/** Bare agents tool name when `name` is an agents peer tool, else null. */
+function inAppAgentsPeerTool(name: string): string | null {
+  const trimmed = name.trim();
+  const prefixed = /^(?:mcp__)?agents__(.+)$/i.exec(trimmed);
+  const tool = (prefixed ? prefixed[1]! : trimmed).toLowerCase();
+  return IN_APP_AGENTS_PEER_TOOLS.has(tool) ? tool : null;
+}
+
 /** Does this tool send something to someone, or move money? */
 export function isOutboundTool(name: string): boolean {
+  // In-app peer tools stay inside Sagax; approvePeerComms is their card.
+  if (inAppAgentsPeerTool(name)) return false;
   // A raw API call from the workbench can do anything an app tool can, and
   // nothing here can read which; it is treated as a send.
   if (name === "COMPOSIO_PROXY_EXECUTE") return true;

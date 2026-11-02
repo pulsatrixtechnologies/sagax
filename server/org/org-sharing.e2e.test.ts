@@ -781,13 +781,13 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     };
     const respond = (auth: Auth, requestId: string, extra: Record<string, unknown> = {}) =>
       api("POST", `/api/threads/${cora.threadId}/respond`, auth, { requestId, behavior: "allow", ...extra });
-    const CW = "mcp__perspicax_quasar__cw_psa__write";
+    const CW = "mcp__perspicax_quasar__cw_psa_write";
     try {
       // a ConnectWise write through Perspicax (the owner's own tokens): the owner's card
       const first = await ask(CW, { resource: "service/tickets/41", operation: "update", body: { status: "In progress" } });
       expect(first.card, "a card for the owner").toBeTruthy();
       expect(first.card.adminApproval).toBeUndefined();
-      expect(first.card.ownerRule).toMatchObject({ tool: "perspicax_quasar__cw_psa__write", scope: { resource: "service/tickets", operation: "update" } });
+      expect(first.card.ownerRule).toMatchObject({ tool: "perspicax_quasar__cw_psa_write", scope: { resource: "service/tickets", operation: "update" } });
       // never in an admin's queue
       expect(((await api("GET", "/api/org/approvals", alice)).body.approvals as Array<{ requestId: string }>).some((row) => row.requestId === first.id)).toBe(false);
       // an admin cannot answer, or save a rule on, someone else's owner card

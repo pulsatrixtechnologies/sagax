@@ -1,7 +1,7 @@
 /** Isolated gallery for the Edit bot modal and its search box, the real
  * PersonaEditorModal on a stand-in /api. Fictional bot, neutral names. Not
  * shipped in the app. ?section=<page> &skin=<id> &lang=<code>
- * scripts/capture-persona-search.mjs types the query and shoots light and dark. */
+ * scripts/capture/persona-search.mjs types the query and shoots light and dark. */
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { PersonaEditorModal } from "../components/persona/PersonaEditorModal";

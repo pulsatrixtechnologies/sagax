@@ -45,15 +45,15 @@ describe("artifact sources: what runs with nobody there", () => {
 
   it("runs a Perspicax read tool, bare or behind its bridge, in the owner's name", async () => {
     const { run, calls } = deps();
-    expect(await run(artifact({ kind: "tool", tool: "cw_psa__query", args: { resource: "tickets" } }), signal)).toEqual({ ok: true, value: [{ id: 1 }] });
-    expect(await run(artifact({ kind: "tool", tool: "mcp__perspicax-cw__cw_psa__query", args: {} }), signal)).toMatchObject({ ok: true });
-    expect(calls).toEqual(['perspicax cw_psa__query {"resource":"tickets"}', "perspicax cw_psa__query {}"]);
+    expect(await run(artifact({ kind: "tool", tool: "cw_psa_query", args: { resource: "tickets" } }), signal)).toEqual({ ok: true, value: [{ id: 1 }] });
+    expect(await run(artifact({ kind: "tool", tool: "mcp__perspicax-cw__cw_psa_query", args: {} }), signal)).toMatchObject({ ok: true });
+    expect(calls).toEqual(['perspicax cw_psa_query {"resource":"tickets"}', "perspicax cw_psa_query {}"]);
   });
 
   it("never runs a Perspicax write alone", async () => {
     const { run, calls } = deps();
-    expect(await run(artifact({ kind: "tool", tool: "cw_psa__write", args: {} }), signal)).toEqual({ ok: false, blocked: true, error: SOURCE_BLOCKED.unknown });
-    expect(await run(artifact({ kind: "tool", tool: "mcp__perspicax-cw__cw_psa__action", args: {} }), signal)).toMatchObject({ ok: false, blocked: true });
+    expect(await run(artifact({ kind: "tool", tool: "cw_psa_write", args: {} }), signal)).toEqual({ ok: false, blocked: true, error: SOURCE_BLOCKED.unknown });
+    expect(await run(artifact({ kind: "tool", tool: "mcp__perspicax-cw__cw_psa_action", args: {} }), signal)).toMatchObject({ ok: false, blocked: true });
     expect(calls).toEqual([]);
   });
 
@@ -130,7 +130,7 @@ describe("reading what a source answered", () => {
   it("knows the Perspicax reads by their exact name", () => {
     expect(perspicaxReadTool("memory_recall")).toBe("memory_recall");
     expect(perspicaxReadTool("mcp__px__api_search")).toBe("api_search");
-    expect(perspicaxReadTool("mcp__px__cw_psa__write")).toBeNull();
-    expect(perspicaxReadTool("my_cw_psa__query")).toBeNull();
+    expect(perspicaxReadTool("mcp__px__cw_psa_write")).toBeNull();
+    expect(perspicaxReadTool("my_cw_psa_query")).toBeNull();
   });
 });

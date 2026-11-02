@@ -52,6 +52,8 @@ import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tool-
 import { USER_SANDBOX_MCP_NAME } from "../user-sandbox-routing.ts";
 import { UserSandboxUnavailable } from "../user-sandbox-manager.ts";
 import { handleUserSandboxMcp } from "../user-sandbox-tools.ts";
+import { inBotFolder } from "../sandbox-bot-folder.ts";
+import type { SandboxExecInput } from "../sandboxd-core.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 
@@ -167,6 +169,13 @@ export interface InternalEnvironmentsDeps {
   withCommandVariables: typeof withCommandVariables;
   userSandboxExec(ownerId: string, input: unknown, botId: string): Promise<unknown>;
   userSandboxOverQuota(ownerId: string, botId: string): boolean | Promise<boolean>;
+  /** The bot's own folder in the environment (server/sandbox-bot-folder.ts),
+   * or null: its commands then start at /workspace as before. */
+  sandboxBotFolder?(botId: string): string | null;
+  /** The start-of-environment tidy (once per start) and disk check. */
+  sandboxTidy?(ownerId: string, botId: string): Promise<void>;
+  /** A disk-full warning for this person's environment, or null. */
+  sandboxDiskWarning?(ownerId: string, folder: string | null): string | null;
   enginePluginCommandRefusal(command: string): string | null;
   misuseTextRefusal(
     text: string,
@@ -485,12 +494,13 @@ export function createInternalEnvironmentsRoutes(deps: InternalEnvironmentsDeps)
           ?? autoComputerToolRefusal(autoState.selected, USER_SANDBOX_MCP_NAME, String(toolName ?? ""))
         );
         if (autoRefusal) return json(res, 200, { result: { content: [{ type: "text", text: autoRefusal }], isError: true } });
+        const folder = deps.sandboxBotFolder?.(capability.botId) ?? null;
+        if (rpcMethod === "tools/call") await deps.sandboxTidy?.(ownerId, capability.botId);
         const result = await deps.handleUserSandboxMcp(rpcMethod, frame?.params, {
-          exec: (input) => deps.userSandboxExec(
-            ownerId,
-            deps.withCommandVariables(input as never, deps.commandVariablesFor(capability.botId, capability.threadId, ownerId)),
-            capability.botId,
-          ) as never,
+          exec: (input) => {
+            const placed = deps.withCommandVariables(input as never, deps.commandVariablesFor(capability.botId, capability.threadId, ownerId)) as SandboxExecInput;
+            return deps.userSandboxExec(ownerId, folder ? inBotFolder(placed, folder) : placed, capability.botId) as never;
+          },
           overQuota: async () => await deps.userSandboxOverQuota(ownerId, capability.botId),
           commandRefusal: (command) => deps.enginePluginCommandRefusal(command)
             ?? enginePluginCommandRefusal(command)
@@ -529,6 +539,8 @@ export function createInternalEnvironmentsRoutes(deps: InternalEnvironmentsDeps)
           },
         }, {
           hold: (full) => deps.saveToolResult(capability, full, true),
+          folder,
+          diskWarning: () => deps.sandboxDiskWarning?.(ownerId, folder) ?? null,
         });
         deps.requireActive(capability);
         return json(res, 200, { result });

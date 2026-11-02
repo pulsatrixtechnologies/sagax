@@ -57,8 +57,21 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return <section data-gallery={title}><h1 className="mb-3 text-[13px] font-semibold text-ink-secondary">{title}</h1>{children}</section>;
 }
 
+function fakeDesktop(): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1280; canvas.height = 800;
+  const g = canvas.getContext("2d")!;
+  g.fillStyle = "#1a1b1e"; g.fillRect(0, 0, 1280, 800);
+  g.fillStyle = "#2a2d33"; g.fillRect(40, 40, 400, 280);
+  g.fillStyle = "#3a3f48"; g.fillRect(480, 40, 360, 180);
+  g.fillStyle = "#c8ccd4"; g.font = "28px sans-serif"; g.fillText("Workspace", 60, 90);
+  g.fillStyle = "#8b909a"; g.font = "20px sans-serif"; g.fillText("notes.md", 60, 130);
+  return canvas.toDataURL("image/png").split(",")[1]!;
+}
+
 function Gallery() {
-  const modal = params.get("modal") === "browser";
+  const modal = params.get("modal");
+  const picture = modal === "sandbox" ? fakeDesktop() : pagePicture();
   return (
     <div className="min-h-screen bg-app p-5 text-ink">
       <div className="mx-auto flex w-[380px] flex-col gap-8">
@@ -74,8 +87,11 @@ function Gallery() {
         <Section title="Navigateur en direct"><BrowserComputerScreen bot={live} /></Section>
         <Section title="Navigateur fermé"><BrowserComputerScreen bot={closed} /></Section>
       </div>
-      {modal && <SandboxDesktopModal kind="browser" title={t("computer.browserOf", { name: "Assistant" })} state="running" onClose={() => {}}
-        screen={() => <img alt="" className="min-h-0 flex-1 rounded-2xl border border-hairline/40 object-contain" src={`data:image/png;base64,${pagePicture()}`} />} />}
+      {modal === "browser" && <SandboxDesktopModal kind="browser" title={t("computer.browserOf", { name: "Assistant" })} state="running" onClose={() => {}}
+        screen={() => <img alt="" className="h-full w-full rounded-xl object-contain" src={`data:image/png;base64,${picture}`} />} />}
+      {modal === "sandbox" && <SandboxDesktopModal title={t("computer.screenOf", { name: "Assistant" })} state="running"
+        controls={{ play: () => {}, pause: () => {}, stop: () => {} }} onClose={() => {}}
+        screen={() => <img alt="" className="h-full w-full rounded-xl object-contain" src={`data:image/png;base64,${picture}`} />} />}
     </div>
   );
 }

@@ -203,10 +203,10 @@ describe("Take control: the bot computer's window over the live control socket",
     const dialog = $("[data-sandbox-takeover]")!;
     expect(dialog).not.toBeNull();
     expect(dialog.querySelector("[role=dialog]")!.getAttribute("aria-label")).toBe("Écran de POSTE-02");
-    const chip = dialog.querySelector("[data-power]")!.textContent!;
-    expect(chip).toContain(t("computerScreen.state.running"));
-    expect(chip).toContain(t("sandboxDesktop.controlling"));
-    expect($("[data-takeover-control]")!.dataset.takeoverControl).toBe("release");
+    expect(dialog.getAttribute("data-power")).toBe("running");
+    expect(dialog.textContent).toContain(t("sandboxDesktop.controlling"));
+    expect(dialog.textContent).toContain(t("sandboxDesktop.watching"));
+    expect($("[data-takeover-control='release']")).not.toBeNull();
     // the chat card shows no second picture while the window has it
     expect($("[data-remote-takeover-open]")).not.toBeNull();
 
@@ -216,7 +216,7 @@ describe("Take control: the bot computer's window over the live control socket",
     expect(socket.sent).toEqual([JSON.stringify({ t: "grant", on: true })]);
     expect($("[data-remote-live-screen]")!.dataset.remoteInput).toBe("control");
 
-    await click("[data-takeover-control]");
+    await click("[data-takeover-control='release']");
     expect(socket.sent.at(-1)).toBe(JSON.stringify({ t: "grant", on: false }));
     expect($("[data-remote-live-screen]")!.dataset.remoteInput).toBe("none");
     expect(socket.closed).toBe(false);

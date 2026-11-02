@@ -256,6 +256,21 @@ dessous (« écran de » suivi du nom du bot).
   l'écran en grand pour regarder ou reprendre la main. Au toucher, un tap ouvre. *À
   vérifier* contre la référence : position exacte de la pilule et intensité du voile
   (l'état en marche n'est pas dans les captures).
+- **Grande fenêtre d'ordinateur** (environnement serveur, VM, session à distance,
+  même coquille pour le navigateur du bot) : fenêtre sombre, calme, centrée. Chrome
+  seulement en haut : fermer à gauche (feu rouge façon macOS, ou un seul ×), et à
+  droite l'icône qui replie la fenêtre vers le panneau. Pas de barre d'outils pleine
+  (pas d'état « En marche · Vous avez le contrôle », pas de pilule Rendre le contrôle,
+  pas de Play / Pause / Arrêter ni de plein écran dans l'en-tête). L'écran vivant est
+  centré, marges égales, coins arrondis. Sous l'écran, **un seul** contrôle segmenté
+  centré : « Observation » (icône œil, le bot conduit) | « Prendre le contrôle »
+  (vous conduisez) ; le segment actif est mis en évidence. Quand vous avez le
+  contrôle, les segments lisent « Observation » | « Vous avez le contrôle », et
+  choisir Observation rend la main. Play / Pause / Arrêter et le plein écran restent
+  joignables dans un petit menu « … » (jamais dans l'en-tête). Échap et
+  Cmd/Ctrl+Maj+Échap ferment toujours la fenêtre selon les règles clavier existantes ;
+  fermer ou replier rend le contrôle. Pour le navigateur du bot, la coquille est la
+  même sans le contrôle segmenté (sa propre barre dit qui conduit).
 - Réglages de l'ordinateur (Réglages > Ordinateur) : exécution sur cet ordinateur
   (demander, toujours, jamais), routage du trafic par cet ordinateur avec une phrase
   qui dit l'état actuel, liste des appareils (icône, nom, point vert « en ligne

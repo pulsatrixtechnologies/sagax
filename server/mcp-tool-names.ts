@@ -121,35 +121,125 @@ export function toolNameParity(server: string, advertised: readonly string[], re
   return problems;
 }
 
+/** A connector tool name with a second `__` as it appears in text
+ * (`cw_psa__query`, `cw_psa_time__entries_write`): starts with a letter or
+ * digit, and no name character touches it on either side. */
+const DOUBLE_UNDERSCORE_NAME = /(?<![A-Za-z0-9_-])[A-Za-z0-9][A-Za-z0-9-]*(?:_[A-Za-z0-9-]+)*__[A-Za-z0-9-]+(?:_{1,2}[A-Za-z0-9-]+)*(?![A-Za-z0-9_-])/g;
+const NAME_CHAR = "A-Za-z0-9_-";
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Every string value in a JSON value through `map`; keys and other values
+ * are kept. Returns the same object when nothing changed. */
+export function mapJsonStrings(value: unknown, map: (text: string) => string): unknown {
+  if (typeof value === "string") return map(value);
+  if (Array.isArray(value)) {
+    let changed = false;
+    const out = value.map((item) => { const next = mapJsonStrings(item, map); if (next !== item) changed = true; return next; });
+    return changed ? out : value;
+  }
+  if (value !== null && typeof value === "object") {
+    let changed = false;
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      const next = mapJsonStrings(item, map);
+      if (next !== item) changed = true;
+      out[key] = next;
+    }
+    return changed ? out : value;
+  }
+  return value;
+}
+
 /** One gate's live map. `catalog` rewrites a tools/list page, `upstream`
- * resolves a called name through the map (never by splitting). */
+ * resolves a called name through the map (never by splitting).
+ *
+ * 2026-11-02: the bot must never see a connector name Grok cannot call.
+ * Perspicax's instructions, its api_search / api_describe / api_list
+ * results and its error texts name `cw_psa__query`; a Grok bot copied it,
+ * called `<server>__cw_psa__query` and Grok answered "Tool not found"
+ * before the call reached the gate. `toAliases` rewrites those names to the
+ * registered alias (a pure name mapping, nothing else in the text changes)
+ * and `argumentsToUpstream` maps an alias passed as an argument value
+ * (api_describe's `name`, api_plan's steps, flow_action's `tool`) back. */
 export class ToolNameAliases {
   private readonly toRegistered = new Map<string, string>();
   private readonly toUpstream = new Map<string, string>();
+  /** connector name -> alias, only for the tools that were renamed */
+  private readonly renamedNames = new Map<string, string>();
+  private renamedPattern: RegExp | undefined;
+  /** Names rewritten in the instructions before the catalog was known. */
+  private readonly predicted = new Map<string, string>();
   private readonly server: string;
   constructor(server: string) { this.server = server; }
 
-  catalog<T extends { name: string; description?: unknown }>(tools: readonly T[]): { tools: T[]; renamed: ToolRename[]; unregistrable: ToolNamePlan["unregistrable"]; parity: string[] } {
+  catalog<T extends { name: string; description?: unknown; inputSchema?: unknown }>(tools: readonly T[]): { tools: T[]; renamed: ToolRename[]; unregistrable: ToolNamePlan["unregistrable"]; parity: string[]; predictionMismatches: string[] } {
     const names = tools.map((tool) => tool.name);
     const plan = planToolNames(this.server, names, this.toRegistered);
     for (const [upstream, name] of plan.registered) {
       this.toRegistered.set(upstream, name);
       this.toUpstream.set(name, upstream);
+      if (name !== upstream) this.renamedNames.set(upstream, name);
     }
+    this.renamedPattern = undefined;
     const out = tools.map((tool) => {
-      const name = this.toRegistered.get(tool.name);
-      if (name === undefined || name === tool.name) return tool;
-      // The registered name is the only one that runs: Grok answers a call
-      // to `${server}__${upstream}` with "Tool not found" before it reaches
-      // the gate (2026-11-02, routines on Perspicax profiles).
-      const note = `(Call it as ${name}; the connector's own name ${tool.name} cannot be called here.)`;
-      return { ...tool, name, description: typeof tool.description === "string" && tool.description ? `${tool.description} ${note}` : note };
+      const name = this.toRegistered.get(tool.name) ?? tool.name;
+      const description = typeof tool.description === "string" ? this.toAliases(tool.description) : tool.description;
+      const inputSchema = tool.inputSchema === undefined ? undefined : mapJsonStrings(tool.inputSchema, (text) => this.toAliases(text));
+      if (name === tool.name && description === tool.description && inputSchema === tool.inputSchema) return tool;
+      return { ...tool, name, ...(description === undefined ? {} : { description }), ...(inputSchema === undefined ? {} : { inputSchema }) };
     });
     const parity = toolNameParity(this.server, names.filter((name) => !plan.unregistrable.some((entry) => entry.upstream === name)), this.toRegistered);
-    return { tools: out, renamed: plan.renamed, unregistrable: plan.unregistrable, parity };
+    const predictionMismatches: string[] = [];
+    for (const [upstream, alias] of this.predicted) {
+      const actual = this.toRegistered.get(upstream);
+      if (actual !== undefined && actual !== alias) predictionMismatches.push(`${upstream}: instructions say ${alias}, registered as ${actual}`);
+    }
+    return { tools: out, renamed: plan.renamed, unregistrable: plan.unregistrable, parity, predictionMismatches };
   }
 
   upstream(name: string): string {
     return this.toUpstream.get(name) ?? name;
+  }
+
+  /** Text with every renamed connector tool name replaced by its alias.
+   * A name that was not renamed, and any other text, stays as it is. */
+  toAliases(text: string): string {
+    if (!this.renamedNames.size || !text.includes("__")) return text;
+    if (!this.renamedPattern) {
+      const names = [...this.renamedNames.keys()].sort((a, b) => b.length - a.length).map(escapeRegExp);
+      this.renamedPattern = new RegExp(`(?<![${NAME_CHAR}])(?:${names.join("|")})(?![${NAME_CHAR}])`, "g");
+    }
+    return text.replace(this.renamedPattern, (name) => this.renamedNames.get(name) ?? name);
+  }
+
+  /** The server's instructions, which come before any catalog: a connector
+   * name Grok cannot register gets the alias the catalog will give it (the
+   * same deterministic rule, planToolNames); the catalog reports any name it
+   * registered differently. Once a catalog is known, its map is used. */
+  instructionsToAliases(text: string): string {
+    if (this.renamedNames.size) return this.toAliases(text);
+    return text.replace(DOUBLE_UNDERSCORE_NAME, (name) => {
+      if (!grokToolNameProblem(this.server, name.replace(/_{2,}/g, "_")) && grokToolNameProblem(this.server, name) === "double_underscore") {
+        const alias = grokAliasBase(this.server, name);
+        this.predicted.set(name, alias);
+        return alias;
+      }
+      return name;
+    });
+  }
+
+  /** Call arguments with every string value that is exactly a renamed
+   * tool's alias mapped back to the connector name. */
+  argumentsToUpstream(args: unknown): unknown {
+    if (!this.renamedNames.size && !this.predicted.size) return args;
+    return mapJsonStrings(args, (text) => {
+      const upstream = this.toUpstream.get(text);
+      if (upstream !== undefined && upstream !== text) return upstream;
+      for (const [name, alias] of this.predicted) if (alias === text && !this.toUpstream.has(text)) return name;
+      return text;
+    });
   }
 }

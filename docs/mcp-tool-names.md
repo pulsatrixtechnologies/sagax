@@ -23,8 +23,23 @@ The CLI only wrote `Skipping MCP tool` to its own log; the bot saw nothing.
   `SAGAX_GATE_TOOL_NAMES=grok`. The gate registers each tool under an
   admissible name (`server/mcp-tool-names.ts`) and keeps `alias -> upstream
   name`; a `tools/call` is translated through that map before any check.
-  `cw_psa__query` becomes `cw_psa_query` (its description ends with
-  `(Call it as cw_psa_query; the connector's own name cw_psa__query cannot be called here.)`).
+  `cw_psa__query` becomes `cw_psa_query`. Every `__` in a tool name, on
+  any API, collapses to one `_`.
+- **The bot never sees a name it cannot call (2026-11-02).** A Grok bot
+  copied `cw_psa__query` from Perspicax's text, called
+  `<server>__cw_psa__query`, and Grok answered "Tool not found" before the
+  call reached the gate. The gate now rewrites every renamed tool's
+  connector name to its alias in the server's instructions, the tool
+  descriptions and input schemas, the results of the gateway's own tools
+  (the ones without `__` in their name: api_search, api_describe, api_list,
+  api_plan, flow...) and every error text; a product tool's result is
+  vendor data and stays as it came. An argument value that is exactly an
+  alias (api_describe's `name`, an api_plan step's `tool`) is mapped back to
+  the connector name before any check. It is a pure name mapping: nothing
+  else in the text changes, and a name that was not renamed stays. The
+  instructions come before the catalog, so they use the alias the catalog
+  will give (same rule); the gate warns if the catalog registered a
+  different one.
 - **Deterministic, collision-free, never dropping.** Invalid characters become
   `-`, `_` runs one `_`, a leading `_` goes; a name that would collide with
   another tool, or exceed 256 characters, gets an 8-hex sha256 suffix of its

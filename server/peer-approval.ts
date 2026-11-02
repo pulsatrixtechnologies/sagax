@@ -130,6 +130,7 @@ function pushApprovalCard(
   sourceThreadId: string,
 ): Message {
   const subtitle = message.length > 200 ? `${message.slice(0, 200)}…` : message;
+  // behind index.ts peerReviewRequired; full-access: peer-contact
   const note = bus.store.appendMessage(sourceThreadId, {
     role: "bot",
     kind: "options",

@@ -76,6 +76,8 @@ const GUARD_TESTS = [
   "server/drivers/agents-catalog-wire.test.ts",
   "server/drivers/agents-proxy.test.ts",
   "server/drivers/tool-scope-coverage.test.ts",
+  // #1905: every approval or choice card reads the one Full access decision
+  "server/full-access-gate.guard.test.ts",
 ];
 
 const LIGHT_CHECKS = [

@@ -16,6 +16,7 @@ import { outboundMailNeedsDraftCard } from "../shared/email-draft-send.ts";
 import { isOutboundTool } from "../shared/outbound.ts";
 import type { ProviderAdapter, RequestOutcome } from "./contracts.ts";
 import { standingGrantsAllowed } from "./custom-rules-org.ts";
+import { fullAccessDecision } from "./full-access-gate.ts";
 
 /** A failed delivery is a runtime error, not another permission decision.
  * An expired ask must never become a fresh Allow/Deny card. */
@@ -316,9 +317,21 @@ export function autoVerdict(
   if (ASKS_A_PERSON.has(bareToolName(tool))) {
     return { approve: null, source: "no-grant" };
   }
-  // A safety hold is an explicit accept. It is checked before Full, before a
-  // saved Allow rule, and before a gate, so none of those answer it.
-  if (context?.safetyHold) return { approve: null, source: "safety-hold" };
+  // #1905 (2026-11-02): the one Full access decision (full-access-gate.ts).
+  // At Full the person already answered every card the level covers; what
+  // still stands is an organization rule, the person's own Ask or Deny
+  // rule, and nothing else here. The rules are read again below in the
+  // order every level reads them; this verdict decides only whether a hold
+  // of the safety review or a gate still stands.
+  const full = fullAccessDecision(mode, {
+    orgRule: context?.customRule && context.customRule.id.startsWith("orule_") && context.customRule.behavior !== "allow" ? context.customRule.behavior : null,
+    personRule: context?.customRule && !context.customRule.id.startsWith("orule_") && context.customRule.behavior !== "allow" ? context.customRule.behavior : null,
+  });
+  // A safety hold is an explicit accept below Full: it is checked before a
+  // saved Allow rule and before a gate, so neither answers it. At Full the
+  // person's choice is that accept (#1905: a send held under Full); a rule
+  // that keeps the card at Full names itself below instead.
+  if (context?.safetyHold && !full.acts && !full.hold) return { approve: null, source: "safety-hold" };
   // 2026-10-21 (server/custom-rules-org.ts): while the organization turned
   // "Toujours permettre" off, no standing grant answers (a saved Allow rule
   // of a gate, a saved command, an allow rule in the person's words); each
@@ -401,7 +414,9 @@ export function autoVerdict(
   // Full is separately consent-gated by the bot PATCH endpoint, and the
   // request.opened caller invokes this for permissions only, never questions.
   if (context?.sagaxGate && context.ruleAllowed) return { approve: `approved ${tool} (your Allow rule)`, source: "allow-rule" };
-  if (mode === "full" && !(context?.sagaxGate && context.stepUpRequired?.length)) return { approve: `approved ${tool} (full access)`, source: "full-access" };
+  // A gate card in a class the person protects with a security key is the
+  // one personal rule a Full turn still meets here (#648).
+  if (full.acts && !(context?.sagaxGate && context.stepUpRequired?.length)) return { approve: `approved ${tool} (full access)`, source: "full-access" };
   if (context?.sagaxGate) return { approve: null, source: mode === "auto" || mode === "custom" ? "native-approval" : "no-grant" };
   if (context?.requiresExplicitApproval) return { approve: null, source: "explicit-approval-block" };
   // Unrequested outbound mail (routine / proactive / other bot): refuse the

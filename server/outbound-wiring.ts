@@ -181,6 +181,8 @@ export function outboundWiring(deps: OutboundWiringDeps) {
     const approve = fr ? PHONE_CALL_CONSENT_APPROVE[1] : PHONE_CALL_CONSENT_APPROVE[0];
     const decline = fr ? PHONE_CALL_CONSENT_DECLINE[1] : PHONE_CALL_CONSENT_DECLINE[0];
     try {
+      // a one-time consent that turns phone calls on for the person's bots:
+      // a setting, never an approval of one call; full-access: exempt
       deps.store.appendMessage(threadId, {
         role: "bot",
         kind: "options",

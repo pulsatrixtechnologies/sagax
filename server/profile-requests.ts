@@ -339,6 +339,7 @@ export class ProfileRequestService {
     if (persistence && !persistence.ok) {
       throw new ProfileRequestError(persistence.error, persistence.status);
     }
+    // applied without a card at Full (index.ts fullAccessForSource); full-access: proposal
     const messageInput: Parameters<ProfileRequestStore["appendMessage"]>[1] = {
       role: "bot",
       kind: "options",

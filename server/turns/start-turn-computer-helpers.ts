@@ -84,7 +84,7 @@ export function createComputerHelpersStartTurn(host: StartTurnHost) {
     state.namedPlace = state.teamComputer || state.wants === undefined || state.wants === "off" ? undefined : state.wants;
     state.placeSource = !state.namedPlace ? undefined
       : state.opts?.runOn === "cloud" ? "routine"
-      : state.plan.pinned ? (honouredPin(dispatchTask) ? "pin" : "auto-pin")
+      : state.plan.pinned ? (honouredPin(state.dispatchTask) ? "pin" : "auto-pin")
       : "works-on";
     // An engine that cannot use the cloud computer, or a Tool selection
     // that leaves its tools out, is refused here, before anything is
@@ -99,7 +99,14 @@ export function createComputerHelpersStartTurn(host: StartTurnHost) {
     state.computerKind = null;
     state.autoVpsProblem = null;
     /** Whether Auto's VPS check reached SSH and Docker (vpsUnavailableHint). */
-    state.autoVpsReachable = (localVmTarget: LocalVmTarget, claimThreadId: string) => () => {
+    state.autoVpsReachable = undefined;
+    /** The Local VM frame capture for the poller and the settled transcript
+     * screenshot. The shared desktop outlives the turn: once another thread
+     * owns it, a capture still in flight would picture ITS work under this
+     * bot's name — live and in the settled frame, which is taken after the
+     * lease is already released. No owner means the desktop is simply
+     * idle: that final frame is ours to keep. */
+    state.localVmPreviewFor = (localVmTarget: LocalVmTarget, claimThreadId: string) => () => {
       const owner = localVmLeaseFor(localVmTarget).current(localVmOwnerBusy);
       if (owner && owner.threadId !== claimThreadId) {
         throw new Error("the Local VM moved on to another turn");

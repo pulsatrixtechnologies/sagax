@@ -306,16 +306,16 @@ export function createComputerMountStartTurn(host: StartTurnHost) {
     // the engine cannot edit the project until the snapshot has settled.
     // snapshot() absorbs failures, so checkpointing may delay but never fail
     // a turn.
-    if (checkpointCwd) {
+    if (state.checkpointCwd) {
       // Pinned by this dispatch: a sibling thread's snapshot in the same
       // folder must not reclaim this turn's "before" state while it runs.
-      const before = await checkpoints.snapshot(state.bot.id, checkpointCwd, `turn ${state.threadId.slice(0, 8)}`, undefined, { pin: state.dispatchClaimId });
+      const before = await checkpoints.snapshot(state.bot.id, state.checkpointCwd, `turn ${state.threadId.slice(0, 8)}`, undefined, { pin: state.dispatchClaimId });
       if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) {
-        if (before) void checkpoints.release(state.bot.id, checkpointCwd, state.dispatchClaimId);
+        if (before) void checkpoints.release(state.bot.id, state.checkpointCwd, state.dispatchClaimId);
         throw new DirectTurnSetupCancelled("turn stopped during checkpoint");
       }
       forgetTurnCheckpoint(state.threadId);
-      if (before) turnCheckpoints.set(state.threadId, { botId: state.bot.id, cwd: checkpointCwd, hash: before, pin: state.dispatchClaimId });
+      if (before) turnCheckpoints.set(state.threadId, { botId: state.bot.id, cwd: state.checkpointCwd, hash: before, pin: state.dispatchClaimId });
     }
     if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) {
       throw new DirectTurnSetupCancelled("turn stopped before dispatch");

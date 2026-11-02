@@ -66,7 +66,7 @@ export function createComputerWorkspaceStartTurn(host: StartTurnHost) {
     // user's work. Its private Sagax workspace is app-owned and changes
     // on nearly every ordinary chat; snapshotting it would add hidden disk
     // and process overhead without a user project to list changes for.
-    const checkpointCwd = state.cwd && state.cwd !== state.privateWorkspace ? state.cwd : undefined;
+    state.checkpointCwd = state.cwd && state.cwd !== state.privateWorkspace ? state.cwd : undefined;
     // dweb is opt-in: without an explicit daemon URL, do not advertise
     // tools that would fail on every call or spawn an unnecessary proxy.
     const dwebUrl = process.env.DWEB_URL?.trim();
@@ -94,7 +94,7 @@ export function createComputerWorkspaceStartTurn(host: StartTurnHost) {
     // pinned it from the composer, or its first Auto turn recorded where it
     // landed. A team computer or a cloud routine is not this conversation's
     // choice, so those ignore the pin.
-    const dispatchTask = store.taskByThread(state.bot.id, state.threadId);
+    state.dispatchTask = store.taskByThread(state.bot.id, state.threadId);
     // Organization server: the person's computers are reached through
     // turnPlace (their server environment, or their own computer through
     // the desktop app). Auto, Cloud, a cloud routine, Local VM and This

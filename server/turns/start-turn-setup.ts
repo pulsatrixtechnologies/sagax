@@ -1,6 +1,7 @@
 // @ts-nocheck
 // #1388 wave 4 step 3: startTurn setup (context, voice, integrations start).
 // Never imports server/index.ts.
+import { createHash } from "node:crypto";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 

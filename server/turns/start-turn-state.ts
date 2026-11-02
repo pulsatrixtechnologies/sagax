@@ -122,6 +122,8 @@ export type TurnState = {
   namedPlace: any;
   autoVpsProblem: any;
   autoVpsReachable: any;
+  checkpointCwd: any;
+  dispatchTask: any;
   // Try-scoped fields that stream post-dispatch / finish may read.
   warmOk: boolean;
   browser: any;
@@ -279,6 +281,8 @@ export function createTurnState(init: {
     namedPlace: undefined,
     autoVpsProblem: undefined,
     autoVpsReachable: undefined,
+    checkpointCwd: undefined,
+    dispatchTask: undefined,
     warmOk: false,
     browser: undefined,
     browserCapture: undefined,

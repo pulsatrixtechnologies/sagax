@@ -44,7 +44,7 @@ export function IdentitySection({
 }) {
   const [instructionsOpen, setInstructionsOpen] = useState(false);
   const { draft } = useBotEditor();
-  const { state } = useStore();
+  const { state, dispatch } = useStore();
   const main = part !== "more";
   const more = part !== "main";
 
@@ -126,7 +126,17 @@ export function IdentitySection({
         </div>
       </div>}
 
-      {instructionsOpen && <BotInstructionsDialog bot={bot} inline={draft} onClose={() => setInstructionsOpen(false)} />}
+      {instructionsOpen && (
+        <BotInstructionsDialog
+          bot={bot}
+          onClose={() => setInstructionsOpen(false)}
+          onPanelClose={() => {
+            setInstructionsOpen(false);
+            dispatch({ type: "toggleSettings", open: false });
+            dispatch({ type: "toggleComputer", open: false });
+          }}
+        />
+      )}
     </div>
   );
 }

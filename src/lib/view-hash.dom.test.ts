@@ -45,8 +45,22 @@ describe("view hash", () => {
     }
   });
 
+  it("opens the creation view from #new-bot and Edit bot from #edit-bot/:id", () => {
+    const create = vi.fn();
+    const historyApi = { state: null, replaceState: vi.fn() };
+    expect(followViewHash(create, { hash: "#new-bot", pathname: "/app", search: "" }, historyApi)).toBe(true);
+    expect(create).toHaveBeenCalledWith({ type: "openBotWizard" });
+    expect(historyApi.replaceState).toHaveBeenCalledWith(null, "", "/app");
+
+    const edit = vi.fn();
+    const editHistory = { state: { k: 1 }, replaceState: vi.fn() };
+    expect(followViewHash(edit, { hash: "#edit-bot/bot%2F1", pathname: "/app", search: "?x=1" }, editHistory)).toBe(true);
+    expect(edit).toHaveBeenCalledWith({ type: "openPersonaEditor", botId: "bot/1" });
+    expect(editHistory.replaceState).toHaveBeenCalledWith({ k: 1 }, "", "/app?x=1");
+  });
+
   it("leaves other hashes alone", () => {
-    for (const hash of ["#inbox", "#code=abc", "#achievementsx", "#thread=t&bot=b", ""]) {
+    for (const hash of ["#inbox", "#code=abc", "#achievementsx", "#thread=t&bot=b", "#edit-bot/", "#new-bots", ""]) {
       const dispatch = vi.fn();
       const historyApi = { state: null, replaceState: vi.fn() };
       expect(followViewHash(dispatch, { hash, pathname: "/pair", search: "" }, historyApi)).toBe(false);

@@ -13,7 +13,6 @@ export const WORKSPACE_BACKUP_CLIENT_KEYS = [
   "omb-skin-variants",
   "omb-show-threads",
   "omb-show-run-card",
-  "omb-show-unready-providers",
   "omb-send-key",
   "openmausbot.sidebarDensity",
   "openmausbot.sidebarCollapsedSections.v1",

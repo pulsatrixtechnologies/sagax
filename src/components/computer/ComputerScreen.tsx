@@ -1,19 +1,19 @@
 // The bot's screen on an organization server: one large rounded frame with
-// the live view when the computer runs, or the bot's mascot asleep / waking
-// when it does not (Grok Bot calm style, 2026-11-01). "<Bot>'s screen" stays
-// under the frame. Click (or Enter/Space) on an asleep screen wakes it; the
-// next task also starts it. Hover/focus on a running screen shows one
-// centered "Open" pill for the full view. Pause/Stop live on hover while it
-// runs, or under Details. No Off badge, no technical sentence, no transport
-// bar on the default asleep view.
+// the live view when the computer runs, or a generic muted bot glyph asleep /
+// waking when it does not (Grok Bot calm style, 2026-11-01). The person's bot
+// mascot stays in the header, chat and profile. "<Bot>'s screen" stays under
+// the frame. Click (or Enter/Space) on an asleep screen wakes it; the next
+// task also starts it. Hover/focus on a running screen shows one centered
+// "Open" pill for the full view. Pause/Stop live on hover while it runs, or
+// under Details. No Off badge, no technical sentence, no transport bar on the
+// default asleep view.
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { AlertTriangle, Loader2, Maximize2, Monitor, Pause, Play, Square } from "lucide-react";
+import { AlertTriangle, Bot as BotIcon, Loader2, Maximize2, Monitor, Pause, Play, Square } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import type { ScreenState } from "@/lib/desktop-local-vm";
 import { HoverIntent } from "@/lib/hover-intent";
 import { t } from "@/lib/i18n";
-import { BotAvatar } from "../Avatar";
 import type { Bot } from "@/state/store";
 
 export interface ScreenControls {
@@ -65,7 +65,7 @@ function useControlsRevealed(): [boolean, HoverIntent | null] {
   return [revealed, intent.current];
 }
 
-/** Bold "z Z" glyphs beside a sleeping mascot (floating-bots sleep look). */
+/** Bold "z Z" glyphs beside the idle bot on an asleep screen. */
 export function SleepGlyphs() {
   return (
     <span className="computer-sleep-zzz" data-sleep-glyphs="" aria-hidden="true">
@@ -74,9 +74,24 @@ export function SleepGlyphs() {
   );
 }
 
+/** Generic muted robot glyph for calm Computer screens (asleep / waking / off).
+ * Monochrome, reduced opacity, no skin; same in light and dark. The bot's own
+ * mascot stays everywhere else (header, chat, profile). */
+export function ComputerIdleBot({ waking = false, size = 56 }: { waking?: boolean; size?: number }) {
+  return (
+    <BotIcon
+      size={size}
+      strokeWidth={1.5}
+      aria-hidden="true"
+      data-computer-idle-bot={waking ? "waking" : "asleep"}
+      className={cn("text-ink opacity-40", waking && "computer-idle-bot-waking")}
+    />
+  );
+}
+
 export function ComputerScreen({
   state, caption, live, message, hint, actions = [], controls, busy = false, error, source, icon,
-  bot, computerName, onOpen,
+  bot, computerName, onOpen, openAlwaysShown = false,
 }: {
   state: ScreenState;
   caption: string;
@@ -93,18 +108,21 @@ export function ComputerScreen({
   error?: string | undefined;
   /** remote: a Tailcat remote-support session (RemoteScreenCard). */
   source: "server" | "local" | "browser" | "remote";
-  /** The state's icon when nothing is live and no bot mascot is given. */
+  /** The state's icon when nothing is live (error / setup empty states). */
   icon?: typeof Monitor;
-  /** The bot whose mascot sleeps / wakes on this screen. */
+  /** Kept for callers; calm screens use a generic muted bot, not this mascot. */
   bot?: Pick<Bot, "id" | "name" | "color" | "mascotExpression" | "mascotBody" | "mascotSkin" | "mascotLook" | "avatarUrl" | "avatarCrop" | "avatarZoom" | "avatarFocusX" | "avatarFocusY"> | null;
   /** Place name for "<Computer> is asleep" (Cloud, Mac, Browser, host). */
   computerName?: string;
   /** Opens the full computer view (centered Open pill while running). */
   onOpen?: (() => void) | undefined;
+  /** Keep the Open pill visible (not only on hover): the bot waits on the person. */
+  openAlwaysShown?: boolean;
 }) {
+  void bot;
   const showLive = Boolean(live) && (state === "running" || state === "paused");
   // Setup / install primary actions keep the actionable empty state; a plain
-  // off computer uses the calm asleep look (mascot + one line).
+  // off computer uses the calm asleep look (generic muted bot + one line).
   const calmAsleep = state === "off" && actions.length === 0;
   const calmWaking = state === "starting" && actions.length === 0;
   const Icon = state === "starting" ? Loader2 : state === "error" ? AlertTriangle : icon ?? Monitor;
@@ -150,8 +168,9 @@ export function ComputerScreen({
         onClick={(event) => { event.stopPropagation(); onOpen(); }}
         className={cn(
           "pointer-events-auto flex min-h-[44px] items-center gap-2 rounded-full bg-black/65 px-4 py-2 text-[13px] font-medium text-white shadow-md backdrop-blur-sm hover:bg-black/80 md:min-h-0",
-          REVEALED_CONTROL,
+          openAlwaysShown ? "opacity-100" : REVEALED_CONTROL,
         )}
+        data-open-pill={openAlwaysShown ? "shown" : "hover"}
       >
         <Maximize2 size={15} aria-hidden="true" />
         {t("computerScreen.open")}
@@ -172,26 +191,16 @@ export function ComputerScreen({
         wake && "cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
       )}
     >
-      <div className="relative flex items-center justify-center" data-computer-mascot="asleep">
-        {bot ? (
-          <div className="computer-sleep-mascot opacity-80">
-            <BotAvatar bot={bot as Bot} state="sleeping" size={72} animated label={bot.name} />
-          </div>
-        ) : (
-          <Monitor size={28} aria-hidden="true" className="text-ink-secondary opacity-70" />
-        )}
+      <div className="relative flex items-center justify-center" data-computer-idle="asleep">
+        <ComputerIdleBot />
         <SleepGlyphs />
       </div>
       <p role="status" className="text-[13px] font-medium text-ink">{t("computerScreen.asleep", { computer: place })}</p>
     </div>
   ) : calmWaking ? (
     <div data-screen-empty="" data-screen-calm="waking" className="flex min-h-0 max-w-[85%] flex-1 flex-col items-center justify-center gap-3 pb-2 pt-6 text-center text-ink-secondary">
-      <div className="relative flex items-center justify-center" data-computer-mascot="waking">
-        {bot ? (
-          <BotAvatar bot={bot as Bot} state="idle" size={72} animated label={bot.name} />
-        ) : (
-          <Icon size={28} aria-hidden="true" className="animate-spin" />
-        )}
+      <div className="relative flex items-center justify-center" data-computer-idle="waking">
+        <ComputerIdleBot waking />
       </div>
       <p role="status" data-waking-shimmer="" className="computer-waking-text text-[13px] font-medium text-ink">
         {t("computerScreen.waking")}

@@ -53,6 +53,8 @@ describe("the Journal of the person's own bots (2026-10-26)", () => {
       row({ requestId: "e", decision: "auto-approved", source: "owner-auto" }),
       row({ requestId: "f", decision: "expired", source: "timeout" }),
       row({ requestId: "g", decision: "auto-denied", source: "restart" }),
+      // L3: a row that only carries ruleId (canonical) still names the rule
+      row({ requestId: "h", decision: "auto-approved", source: "custom-rule", ruleId: "cr-1" }),
     ]));
     const byKey = Object.fromEntries(rows.map((entry) => [entry.requestId, entry]));
     expect(byKey.a).toMatchObject({ outcome: "allowed", decider: "custom-rule", ruleText: "lire des fichiers dans ~/Projets", ruleBehavior: "allow", ruleId: "cr-1" });
@@ -62,6 +64,7 @@ describe("the Journal of the person's own bots (2026-10-26)", () => {
     expect(byKey.e).toMatchObject({ decider: "level" });
     expect(byKey.f).toMatchObject({ outcome: "expired", decider: "expired" });
     expect(byKey.g).toMatchObject({ outcome: "failed", decider: "error" });
+    expect(byKey.h).toMatchObject({ outcome: "allowed", decider: "custom-rule", ruleText: "lire des fichiers dans ~/Projets", ruleId: "cr-1" });
   });
 
   it("shows only the person's own bots", () => {

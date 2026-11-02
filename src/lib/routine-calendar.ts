@@ -184,11 +184,13 @@ export function scheduleAt(schedule: RoutineSchedule, occurrenceAt: number, next
     };
   }
   if (schedule.type === "webhook" || schedule.type === "event") return schedule;
+  // Limit-reset waits on the engine clock; drag does not move it.
+  if (schedule.type === "limit_reset") return schedule;
   const dayDelta = Math.round((startOfDay(nextAt) - startOfDay(occurrenceAt)) / 86_400_000);
   return {
     type: "daily",
     time: toLocalTimeInput(nextAt),
-    weekdays: schedule.weekdays.map((weekday) => ((weekday + dayDelta) % 7 + 7) % 7).sort(),
+    weekdays: schedule.weekdays.map((weekday: number) => ((weekday + dayDelta) % 7 + 7) % 7).sort(),
     ...(schedule.timing === "flexible"
       ? {
         timing: "flexible" as const,
@@ -323,6 +325,8 @@ export function projectedRoutineItems(
       continue;
     }
     if (routine.schedule.type === "webhook" || routine.schedule.type === "event") continue;
+    // Limit-reset uses nextRunAt from the server clock, not a daily wall time.
+    if (routine.schedule.type === "limit_reset") continue;
     for (let day = startOfDay(from); day < to; day = addDays(day, 1)) {
       if (!routine.schedule.weekdays.includes(new Date(day).getDay())) continue;
       const at = atLocalTime(day, routine.schedule.time);

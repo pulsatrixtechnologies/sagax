@@ -139,7 +139,7 @@ public struct SectionMenuContext: Hashable, Sendable {
 // MARK: - Account, New, places, Settings
 
 public enum AccountMenuItem: String, Hashable, Sendable, CaseIterable {
-    case archivedBots, settings, teamMap, automations, achievements, releaseNotes, about, help
+    case archivedBots, settings, teamMap, automations, memory, achievements, releaseNotes, about, help
 }
 
 public enum NewMenuItem: Hashable, Sendable {
@@ -274,10 +274,11 @@ public enum NavigationMenus {
     }
 
     /// `SidebarProfileMenu` on a phone: Archived bots (housekeeping, when
-    /// there are any), Settings, then Team map and Automations, Achievements,
-    /// then About and Help Center. Team map and Automations sit in this
-    /// popup, under Settings, on iOS only. "Your phone" and Keyboard
-    /// shortcuts are the iPad menu's own extra rows.
+    /// there are any), Settings, then Team map, Automations and Memory,
+    /// Achievements, then About and Help Center. Team map, Automations and
+    /// Memory sit in this popup, under Settings, on iOS only (desktop Tools
+    /// > Memory). "Your phone" and Keyboard shortcuts are the iPad menu's
+    /// own extra rows.
     public static func account(gate: SurfaceGate, hasArchivedBots: Bool, achievementsReady: Bool, connected: Bool) -> [[AccountMenuItem]] {
         var groups: [[AccountMenuItem]] = []
         // An organization member restores the bots they own (2026-10-26):
@@ -291,13 +292,15 @@ public enum NavigationMenus {
         return groups
     }
 
-    /// Team map and Automations, in that order, once a server is paired.
-    /// The iPhone account menu and the iPad avatar popup both read this.
+    /// Team map, Automations and Memory, in that order, once a server is
+    /// paired. The iPhone account menu and the iPad avatar popup both read
+    /// this. Memory is the desktop Tools > Memory manager (2026-11-02).
     public static func accountShortcuts(gate: SurfaceGate, connected: Bool) -> [AccountMenuItem] {
         guard connected else { return [] }
         var items: [AccountMenuItem] = []
         if gate.allows(.teamMap) { items.append(.teamMap) }
         items.append(.automations)
+        items.append(.memory)
         return items
     }
 

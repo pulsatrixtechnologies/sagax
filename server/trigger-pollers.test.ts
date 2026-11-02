@@ -8,7 +8,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { TriggerPollers, caldavCalendarData, checkPollerHost, parseHeaders, PollerError, type PollerHttpRequest } from "./trigger-pollers.ts";
+import { TriggerPollers, POLLER_ERROR_THRESHOLD, caldavCalendarData, checkPollerHost, parseHeaders, PollerError, type PollerHttpRequest } from "./trigger-pollers.ts";
+import { openTriggerSeenStore } from "./trigger-seen-store.ts";
 import { WebhookManager } from "./webhooks.ts";
 
 const PASSWORD = "hunter2-SECRET-pass";
@@ -139,10 +140,17 @@ describe("IMAP poller", () => {
     for (const spy of [log, warn, error]) expect(JSON.stringify(spy.mock.calls)).not.toContain(PASSWORD);
   });
 
-  it("reports a refused sign-in as a code, never the server's text", async () => {
+  it("reports a refused sign-in as a code only after three failed reads, never the server's text", async () => {
     refuseLogin = true;
     const h = harness({ password: PASSWORD });
     const { webhook } = h.manager.create(mailSource());
+    expect(await h.pollers.poll(webhook.id)).toBeNull();
+    expect(h.manager.list()[0]!.automation).toBeUndefined();
+    expect(h.pollers.consecutiveFailureCount(webhook.id)).toBe(1);
+    h.advance(5 * 60_000);
+    expect(await h.pollers.poll(webhook.id)).toBeNull();
+    expect(h.pollers.consecutiveFailureCount(webhook.id)).toBe(2);
+    h.advance(5 * 60_000);
     expect(await h.pollers.poll(webhook.id)).toMatchObject({ state: "error", code: "sign-in-refused" });
     expect(h.manager.list()[0]!.automation).toMatchObject({ kind: "poller", state: "error", code: "sign-in-refused" });
     expect(h.outputs()).not.toContain(PASSWORD);
@@ -152,6 +160,11 @@ describe("IMAP poller", () => {
   it("waits for a password and starts over on another mailbox", async () => {
     const h = harness({});
     const { webhook } = h.manager.create(mailSource());
+    // no-credentials fails every read; error lands on the threshold.
+    for (let i = 0; i < POLLER_ERROR_THRESHOLD - 1; i += 1) {
+      expect(await h.pollers.poll(webhook.id)).toBeNull();
+      h.advance(5 * 60_000);
+    }
     expect(await h.pollers.poll(webhook.id)).toMatchObject({ code: "no-credentials" });
     const withPassword = harness({ password: PASSWORD });
     const second = withPassword.manager.create(mailSource());
@@ -159,6 +172,18 @@ describe("IMAP poller", () => {
     expect(withPassword.manager.automationTargetFor(second.webhook.id)!.pollerCursor).toMatchObject({ uidValidity: "42", lastUid: 0 });
     withPassword.manager.update(second.webhook.id, { source: mailSource({ mailbox: "Projects" }).source });
     expect(withPassword.manager.automationTargetFor(second.webhook.id)!.pollerCursor).toBeUndefined();
+  });
+
+  it("keeps the IMAP cursor when a read fails before any message is stored", async () => {
+    mailbox.push({ uid: 1, from: "Ann <ann@partner.example>", subject: "First" });
+    const h = harness({ password: PASSWORD });
+    const { webhook } = h.manager.create(mailSource());
+    await h.pollers.poll(webhook.id);
+    expect(h.manager.automationTargetFor(webhook.id)!.pollerCursor).toMatchObject({ uidValidity: "42", lastUid: 1 });
+    refuseLogin = true;
+    h.advance(5 * 60_000);
+    await h.pollers.poll(webhook.id);
+    expect(h.manager.automationTargetFor(webhook.id)!.pollerCursor).toMatchObject({ uidValidity: "42", lastUid: 1 });
   });
 });
 
@@ -229,11 +254,109 @@ END:VCALENDAR</cal:calendar-data></d:prop></d:propstat></d:response></d:multista
     expect(h.outputs()).not.toContain(Buffer.from(`me:${PASSWORD}`).toString("base64"));
   });
 
-  it("maps a refused calendar sign-in to a code", async () => {
+  it("maps a refused calendar sign-in to a code after three failed reads", async () => {
     const h = harness({ url: ICS_LINK }, async () => ({ status: 401, text: `denied ${ICS_LINK}` }));
     const { webhook } = h.manager.create({ name: "Cal", prompt: "", botId: "b1", source: { type: "calendar", events: [], filters: {}, poller: { kind: "ics" } } });
+    for (let i = 0; i < POLLER_ERROR_THRESHOLD - 1; i += 1) {
+      expect(await h.pollers.poll(webhook.id)).toBeNull();
+      h.advance(5 * 60_000);
+    }
     expect(await h.pollers.poll(webhook.id)).toMatchObject({ state: "error", code: "sign-in-refused" });
     expect(h.outputs()).not.toContain("private-7f3a9c1e5b");
+  });
+
+  it("clears the failure streak on the first successful read", async () => {
+    let refuse = true;
+    const h = harness({ url: ICS_LINK }, async () => refuse
+      ? { status: 401, text: "no" }
+      : { status: 200, text: ics("20261001T100000") });
+    const { webhook } = h.manager.create({ name: "Cal", prompt: "", botId: "b1", source: { type: "calendar", events: [], filters: {}, poller: { kind: "ics", leadMinutes: 10 } } });
+    await h.pollers.poll(webhook.id);
+    await h.pollers.poll(webhook.id);
+    expect(h.pollers.consecutiveFailureCount(webhook.id)).toBe(2);
+    refuse = false;
+    h.advance(5 * 60_000);
+    expect(await h.pollers.poll(webhook.id)).toMatchObject({ state: "ok", code: "ok" });
+    expect(h.pollers.consecutiveFailureCount(webhook.id)).toBe(0);
+    expect(h.queued).toHaveLength(1);
+  });
+
+  it("skips a malformed calendar instance and keeps counting it", async () => {
+    const bad = [
+      "BEGIN:VCALENDAR", "VERSION:2.0",
+      "BEGIN:VEVENT", "UID:", "DTSTART:20261016T140000Z", "SUMMARY:Broken", "END:VEVENT",
+      "BEGIN:VEVENT", "UID:standup-1", "DTSTART:20261016T140000Z", "SUMMARY:Daily standup", "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    const h = harness({ url: ICS_LINK }, async () => ({ status: 200, text: bad }));
+    const { webhook } = h.manager.create({ name: "Cal", prompt: "", botId: "b1", source: { type: "calendar", events: [], filters: {}, poller: { kind: "ics", leadMinutes: 10 } } });
+    await h.pollers.poll(webhook.id);
+    expect(h.queued).toHaveLength(1);
+    expect(h.queued[0]!.prompt).toContain("Daily standup");
+    expect(h.pollers.malformedCount(webhook.id)).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("persistent seen (DEL-04)", () => {
+  it("does not re-queue a calendar instance after a simulated restart that keeps the seen file", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "omb-seen-poll-"));
+    dirs.push(dir);
+    const seenFile = join(dir, "trigger-seen.db");
+    let now = Date.parse("2026-10-16T13:50:00Z");
+    const make = () => {
+      const queued: Array<{ prompt: string }> = [];
+      const manager = new WebhookManager({
+        file: join(dir, "webhooks.json"),
+        now: () => now,
+        botState: () => "ready",
+        enqueue: (input) => { queued.push(input); return { id: `run-${queued.length}` }; },
+        pendingRuns: () => 0,
+        emit: () => undefined,
+      });
+      const seen = openTriggerSeenStore(seenFile, { now: () => now });
+      const pollers = new TriggerPollers({
+        webhooks: manager,
+        credentials: { get: () => ({ url: ICS_LINK }) },
+        allowPrivate: false,
+        now: () => now,
+        resolver: PUBLIC,
+        seen,
+        http: async () => ({ status: 200, text: ics("20261001T100000") }),
+      });
+      return { manager, pollers, queued, seen };
+    };
+    const first = make();
+    const { webhook } = first.manager.create({ name: "Standup", prompt: "Prepare notes", botId: "b1", source: { type: "calendar", events: ["event.starting"], filters: {}, poller: { kind: "ics", leadMinutes: 10 } } });
+    await first.pollers.poll(webhook.id);
+    expect(first.queued).toHaveLength(1);
+    first.pollers.stop();
+    first.seen.close();
+
+    now += 5 * 60_000;
+    const second = make();
+    // Same trigger id and endpoint live again from webhooks.json.
+    await second.pollers.poll(webhook.id);
+    expect(second.queued).toHaveLength(0);
+    expect(second.manager.listAttempts().some((attempt) => attempt.outcome === "duplicate")).toBe(false);
+    second.pollers.stop();
+    second.seen.close();
+  });
+
+  it("accepting the same delivery twice returns a typed duplicate and one run", async () => {
+    const h = harness({ url: ICS_LINK }, async () => ({ status: 200, text: ics("20261001T100000") }));
+    const { webhook } = h.manager.create({ name: "Standup", prompt: "Prepare notes", botId: "b1", source: { type: "calendar", events: ["event.starting"], filters: {}, poller: { kind: "ics", leadMinutes: 10 } } });
+    await h.pollers.poll(webhook.id);
+    expect(h.queued).toHaveLength(1);
+    const key = `cal:${h.manager.automationTargetFor(webhook.id)!.pollerScope.slice(0, 12)}:standup-1@2026-10-16T14:00:00.000Z`;
+    const again = h.manager.ingest(webhook.id, {
+      source: "calendar",
+      kind: "event.starting",
+      title: "Daily standup",
+      fields: { subject: "Daily standup" },
+      occurredAt: "2026-10-16T14:00:00.000Z",
+    }, key);
+    expect(again).toMatchObject({ duplicate: true, runId: "run-1" });
+    expect(h.queued).toHaveLength(1);
   });
 });
 

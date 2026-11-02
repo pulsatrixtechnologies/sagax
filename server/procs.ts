@@ -19,7 +19,7 @@ import {
   type SpawnOptions,
 } from "node:child_process";
 import { AsyncLocalStorage } from "node:async_hooks";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { sagaxFolder } from "../shared/human-id.ts";
 import type { Readable, Writable } from "node:stream";
 import { join, posix, win32 } from "node:path";
@@ -114,6 +114,90 @@ const cliGroups = new WeakSet<ChildProcess>();
 const CHILD_OOM_SCORE_ADJ = memoryGuardSettings().childOomScoreAdj;
 const stopping = new WeakMap<ChildProcess, Promise<boolean>>();
 
+type LinuxProcess = { pid: number; parent: number; start: string; state: string };
+/** Linux start times of a CLI and the helpers captured while it was still the parent. */
+const linuxTrees = new WeakMap<ChildProcess, Map<number, string>>();
+
+function linuxProcess(pid: number): LinuxProcess | null {
+  let stat: string;
+  try {
+    stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+  } catch (error) {
+    if (["ENOENT", "ESRCH"].includes((error as NodeJS.ErrnoException).code ?? "")) return null;
+    throw error;
+  }
+  const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+  const start = fields[19];
+  const state = fields[0];
+  const parent = Number(fields[1]);
+  if (!start || !state || !Number.isInteger(parent)) throw new Error("Unreadable Linux process identity");
+  return { pid, parent, start, state };
+}
+
+/** Linux sandbox helpers can leave the CLI's process group and reparent during a protocol interrupt.
+ * Snapshot their identities (pid + start time) so Stop can still reap them after reparenting. */
+export function captureCliTree(child: ChildProcess): void {
+  if (process.platform !== "linux" || !cliGroups.has(child) || !child.pid) return;
+  let tree = linuxTrees.get(child);
+  if (!tree) {
+    tree = new Map();
+    linuxTrees.set(child, tree);
+  }
+  const snapshot = new Map<number, LinuxProcess>();
+  let entries: string[];
+  try { entries = readdirSync("/proc"); } catch { return; }
+  for (const entry of entries) {
+    if (!/^\d+$/.test(entry)) continue;
+    const pid = Number(entry);
+    try {
+      const current = linuxProcess(pid);
+      if (current) snapshot.set(pid, current);
+    } catch { /* unreadable pid */ }
+  }
+  const parents = new Set([...tree].filter(([pid, start]) => snapshot.get(pid)?.start === start).map(([pid]) => pid));
+  let discovered: boolean;
+  do {
+    discovered = false;
+    for (const current of snapshot.values()) {
+      if (current.pid === process.pid || !parents.has(current.parent) || tree.get(current.pid) === current.start) continue;
+      tree.set(current.pid, current.start);
+      parents.add(current.pid);
+      discovered = true;
+    }
+  } while (discovered);
+}
+
+function linuxDescendantsStopped(child: ChildProcess): boolean {
+  for (const [pid, start] of linuxTrees.get(child) ?? []) {
+    if (pid === child.pid) continue;
+    try {
+      const current = linuxProcess(pid);
+      if (current?.start === start && current.state !== "Z" && current.state !== "X") return false;
+    } catch { return false; }
+  }
+  return true;
+}
+
+function linuxRootIdentityMatches(child: ChildProcess): boolean | undefined {
+  const start = child.pid && linuxTrees.get(child)?.get(child.pid);
+  if (!child.pid || process.platform !== "linux" || !cliGroups.has(child)) return true;
+  if (!start) return undefined;
+  try {
+    const current = linuxProcess(child.pid);
+    return !current || current.start === start;
+  } catch { return undefined; }
+}
+
+function signalLinuxDescendants(child: ChildProcess, value: NodeJS.Signals): void {
+  for (const [pid, start] of [...(linuxTrees.get(child) ?? [])].reverse()) {
+    if (pid === child.pid || pid <= 1 || pid === process.pid) continue;
+    try {
+      const current = linuxProcess(pid);
+      if (current?.start === start && current.state !== "Z" && current.state !== "X") process.kill(pid, value);
+    } catch { /* already gone or unreadable */ }
+  }
+}
+
 const MAX_ENDED_SESSIONS = 4_096;
 const engineSessions = { live: new Set<number>(), ended: new Set<number>(), bots: new Map<number, string>() };
 /** The bot whose turn is being sent, so the engine it spawns is known as that
@@ -177,6 +261,14 @@ export function spawnCli(
     cliGroups.add(child);
     noteEngineGroupStarted(child.pid);
     reapGroupAfterExit(child);
+  }
+  if (process.platform === "linux" && child.pid) {
+    const tree = new Map<number, string>();
+    try {
+      const root = linuxProcess(child.pid);
+      if (root) tree.set(root.pid, root.start);
+    } catch { /* identity unread; kill will refuse the group */ }
+    linuxTrees.set(child, tree);
   }
   if (process.platform !== "win32" && owner === "bot") rememberEngineSession(child);
   // An engine dies before the server when the container runs out of memory
@@ -316,8 +408,10 @@ export function describeSpawnFailure(err: NodeJS.ErrnoException, cli: string, cw
 }
 
 /** Stop an owned CLI group, including helpers after its root exits. timeoutMs
- * is the TERM grace period; SIGKILL gets one further second to settle. Helpers
- * that deliberately detach into another group are outside this ownership. */
+ * is the TERM grace period; SIGKILL gets one further second to settle. On Linux,
+ * helpers captured before they reparented (sandbox jobs that leave the group
+ * during a protocol interrupt) are signalled individually and must exit before
+ * success. Helpers daemonized before capture remain outside this ownership. */
 export function killCliTree(child: ChildProcess, timeoutMs = 5_000): Promise<boolean> {
   const existing = stopping.get(child);
   if (existing) return existing;
@@ -325,6 +419,7 @@ export function killCliTree(child: ChildProcess, timeoutMs = 5_000): Promise<boo
   if (!pid) return Promise.resolve(true);
   if (!Number.isInteger(pid) || pid <= 1 || pid === process.pid) return Promise.resolve(false);
 
+  captureCliTree(child);
   const run = stopCliTree(child, pid, Number.isFinite(timeoutMs) ? Math.max(0, timeoutMs) : 5_000);
   stopping.set(child, run);
   // A failed attempt may be retried. Remember success so a delayed caller
@@ -338,8 +433,9 @@ async function stopCliTree(child: ChildProcess, pid: number, timeoutMs: number):
   if (process.platform !== "win32") {
     const group = cliGroups.has(child);
     const settled = () => {
-      if (!exited()) return false;
-      if (!group) return true;
+      if (!exited() || !linuxDescendantsStopped(child)) return false;
+      if (!group || linuxRootIdentityMatches(child) === false) return true;
+      if (linuxRootIdentityMatches(child) === undefined) return false;
       try {
         process.kill(-pid, 0);
         return false;
@@ -349,11 +445,18 @@ async function stopCliTree(child: ChildProcess, pid: number, timeoutMs: number):
       }
     };
     const signal = (value: NodeJS.Signals) => {
+      captureCliTree(child);
+      signalLinuxDescendants(child, value);
       try {
-        if (group) process.kill(-pid, value);
-        else child.kill(value);
+        // Signal the live root group even when start identity was never recorded
+        // (f827be010): an exited root with a matching identity, or a still-live
+        // root, still owns its group. A reused pid (identity mismatch) does not.
+        if (group && (!exited() || linuxRootIdentityMatches(child) === true)) process.kill(-pid, value);
+        else if (!group && !exited()) child.kill(value);
       } catch {
-        try { child.kill(value); } catch { /* report uncertainty below */ }
+        if (!exited()) {
+          try { child.kill(value); } catch { /* report uncertainty below */ }
+        }
       }
     };
     const wait = async (ms: number) => {

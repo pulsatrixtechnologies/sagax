@@ -36,8 +36,9 @@ import { useWaitingCards, type WaitingItem, type WaitingSource } from "@/lib/use
 import { AccessCard, type AccessViewer } from "../AccessCard";
 import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 import { cn } from "@/lib/cn";
-import { ActivityWindow, activityChip, useElementWidth } from "./ActivityWindow";
-import { TaskStatusHeader } from "../task/TaskStatusHeader";
+import { activityChip, useElementWidth } from "./ActivityWindow";
+import { PanelPage } from "./PanelPage";
+import { activityJobStage, TaskStatusHeader } from "../task/TaskStatusHeader";
 import { WaitingOnYou, waitingKind, type WaitingNote } from "../task/WaitingOnYou";
 import { ActivityStepGroups } from "../task/ActivityStepGroups";
 import { SubagentList } from "../task/SubagentList";
@@ -161,6 +162,7 @@ export function ActivityDetailBody({ item, detail, error, now, engineName, onSto
     </>
   ) : undefined;
 
+  const waitingFor = waitingKind(waitingItems);
   const header = (
     <TaskStatusHeader
       title={activityTitle(shown)}
@@ -172,7 +174,8 @@ export function ActivityDetailBody({ item, detail, error, now, engineName, onSto
       now={now}
       step={current?.step}
       stepLabel={current?.label ?? shown.currentStep}
-      waitingFor={waitingKind(waitingItems)}
+      waitingFor={waitingFor}
+      stage={activityJobStage(shown.status, waitingFor)}
       parallel={shown.parallel}
       handedBy={shown.kind === "hop" ? shown.startedBy?.name : undefined}
       actions={actions}
@@ -412,10 +415,23 @@ export function ActivityDetailModal({ item, onClose, onChanged }: {
   onClose: () => void;
   onChanged: () => void;
 }) {
-  const [frameRef, width] = useElementWidth<HTMLDivElement>(900);
+  const { dispatch } = useStore();
+  const [frameRef, width] = useElementWidth<HTMLDivElement>(380);
+  const closePanel = () => {
+    dispatch({ type: "toggleSettings", open: false });
+    dispatch({ type: "toggleComputer", open: false });
+  };
   return (
-    <ActivityWindow labelledBy="activity-detail-title" onClose={onClose} frameRef={frameRef} frameProps={{ "data-activity-detail": item.id }}>
-      <ActivityDetailPane item={item} wide={width >= WIDE_PX} onClose={onClose} onChanged={onChanged} />
-    </ActivityWindow>
+    <PanelPage
+      name={item.title || t("botPanel.history.title")}
+      onBack={onClose}
+      onClose={closePanel}
+      data-activity-detail={item.id}
+      bodyClassName="flex min-h-0 flex-col overflow-hidden p-0"
+    >
+      <div ref={frameRef} className="flex min-h-0 flex-1 flex-col">
+        <ActivityDetailPane item={item} wide={width >= WIDE_PX} onClose={onClose} onChanged={onChanged} />
+      </div>
+    </PanelPage>
   );
 }

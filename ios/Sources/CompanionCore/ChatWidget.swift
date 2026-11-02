@@ -228,13 +228,15 @@ public struct ChatWidgetActionEntry: Hashable, Sendable {
     public var payload: WidgetJSON?
     /// "confirm", "cancel" or "submit" when the press settles the widget.
     public var tone: String?
-    /// Handled on the device and never sent (open_url).
+    /// Handled on the device (open_url, and the in-app open_page, open_routine
+    /// and open_run). An open_url press is never sent; an in-app one is sent
+    /// only to be recorded as done, it starts no turn.
     public var client: Bool
     public var kind: String
 
     /// The address an `open_url` press opens, when it is http(s).
     public var url: URL? {
-        guard client, let text = payload?.object?["url"]?.string,
+        guard type == "open_url", let text = payload?.object?["url"]?.string,
               let url = URL(string: text), let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https"
         else { return nil }
@@ -310,7 +312,7 @@ public enum ChatWidgetRules {
         for item in found { counts[item.entry.label, default: 0] += 1 }
         return found.map { item in
             var entry = item.entry
-            entry.client = entry.type == "open_url"
+            entry.client = ChatWidgetDevice.isClientAction(type: entry.type, payload: entry.payload)
             if let row = item.row, !entry.label.isEmpty, item.product || (counts[entry.label] ?? 0) > 1 {
                 entry.label = String("\(entry.label): \(row)".prefix(labelLimit * 2))
             }

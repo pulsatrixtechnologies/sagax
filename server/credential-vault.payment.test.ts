@@ -47,7 +47,8 @@ describe("payment vault", () => {
     const created = store.create(LOCAL_VAULT_PRINCIPAL, card);
     expect(created.card).toEqual({ brand: "visa", last4: "4242", expMonth: 12, expYear: 2030, holder: "Ada Lovelace" });
     expect(JSON.stringify(created)).not.toContain(PAN);
-    expect(JSON.stringify(created)).not.toContain(CVV);
+    // CVV digits can appear inside a random id; the listing must omit the cvv field.
+    expect(JSON.stringify(created)).not.toMatch(/"cvv"/);
     expect(store.reveal(LOCAL_VAULT_PRINCIPAL, created.id, "pan")).toBe(PAN);
     expect(store.reveal(LOCAL_VAULT_PRINCIPAL, created.id, "cvv")).toBe(CVV);
     const raw = readFileSync(join(dirs[0]!, "credential-vault.enc"), "utf8");
@@ -65,7 +66,7 @@ describe("payment vault", () => {
       amount: "12.5", currency: "cad", cardId: saved.id, addressId: home.id,
     });
     expect(asked.already).toBe(false);
-    expect(asked.listing.title).toBe("Pay 12.50 CAD to Example Shop?");
+    expect(asked.listing.title).toBe("Pay 12.50 CAD to Example Shop with visa ···· 4242?");
     expect(asked.note).not.toContain(PAN);
     expect(JSON.stringify(asked.listing)).not.toContain(PAN);
     const blocked = await store.resolveForFill(LOCAL_VAULT_PRINCIPAL, {
@@ -313,5 +314,54 @@ describe("payment vault", () => {
       expect(parsePurchaseCall({ arguments: { credential: "cred_x", amount: "1", currency: "CAD", category: "gems" } })).toMatch(/category must be one of/);
       expect(parsePurchaseCall({ arguments: { credential: "cred_x", amount: "1", currency: "CAD" } })).not.toHaveProperty("category");
     });
+  });
+});
+
+describe("payments settings and allowances", () => {
+  it("uses the default card when request_purchase omits the instrument", () => {
+    const store = vault();
+    const saved = store.create(LOCAL_VAULT_PRINCIPAL, card);
+    store.setPaymentsSettings(LOCAL_VAULT_PRINCIPAL, { defaultMethod: { type: "card", cardId: saved.id } });
+    const asked = store.openPurchase(LOCAL_VAULT_PRINCIPAL, {
+      botId: "bot-a", threadId: "thread-1", merchant: "Example Shop", pageUrl: "https://shop.example.test/pay",
+      amount: "9.99", currency: "CAD",
+    });
+    expect(asked.listing.cardLast4).toBe("4242");
+    expect(asked.listing.title).toContain("with visa ···· 4242");
+  });
+
+  it("refuses a bot the person turned off and a purchase over the per-purchase limit", () => {
+    const store = vault();
+    const saved = store.create(LOCAL_VAULT_PRINCIPAL, card);
+    store.setPaymentsSettings(LOCAL_VAULT_PRINCIPAL, {
+      bots: { "bot-a": { enabled: false }, "bot-b": { perPurchaseLimit: "5.00" } },
+    });
+    expect(() => store.openPurchase(LOCAL_VAULT_PRINCIPAL, {
+      botId: "bot-a", threadId: "thread-1", merchant: "Example Shop", pageUrl: "https://shop.example.test/pay",
+      amount: "1.00", currency: "CAD", cardId: saved.id,
+    })).toThrow(/not allowed to pay/);
+    expect(() => store.openPurchase(LOCAL_VAULT_PRINCIPAL, {
+      botId: "bot-b", threadId: "thread-1", merchant: "Example Shop", pageUrl: "https://shop.example.test/pay",
+      amount: "12.00", currency: "CAD", cardId: saved.id,
+    })).toThrow(/per-purchase limit/);
+  });
+
+  it("lists methods and history without a card number", () => {
+    const store = vault();
+    const saved = store.create(LOCAL_VAULT_PRINCIPAL, card);
+    store.setPaymentsSettings(LOCAL_VAULT_PRINCIPAL, { defaultMethod: { type: "card", cardId: saved.id } });
+    store.chooseWallet(LOCAL_VAULT_PRINCIPAL, "link", true);
+    const methods = store.paymentMethods(LOCAL_VAULT_PRINCIPAL);
+    expect(methods.some((row) => row.isDefault && row.last4 === "4242")).toBe(true);
+    expect(methods.some((row) => row.wallet === "link")).toBe(true);
+    expect(JSON.stringify(methods)).not.toContain(PAN);
+    const asked = store.openPurchase(LOCAL_VAULT_PRINCIPAL, {
+      botId: "bot-a", threadId: "thread-1", merchant: "Example Shop", pageUrl: "https://shop.example.test/pay",
+      amount: "3.00", currency: "CAD", cardId: saved.id,
+    });
+    store.answerPurchase(LOCAL_VAULT_PRINCIPAL, asked.listing.id, "once");
+    const history = store.listPurchases(LOCAL_VAULT_PRINCIPAL);
+    expect(history[0]?.status).toBe("once");
+    expect(JSON.stringify(history)).not.toContain(PAN);
   });
 });

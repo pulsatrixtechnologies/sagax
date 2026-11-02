@@ -112,8 +112,8 @@ export type SkinFamily = {
 };
 
 export const SKIN_FAMILIES: readonly SkinFamily[] = [
-  // Perspicax's own look: Geist, navy chrome, the soft glow from the top. Its
-  // own colour is already blue, so it has no separate Blue variant.
+  // Perspicax's own look: Geist, a neutral dark ground, the blue accent.
+  // Its own colour is already blue, so it has no separate Blue variant.
   { id: "pulsatrix", name: "Pulsatrix", variants: colorVariants("pulsatrix-light", "pulsatrix", ["blue"]) },
   // The reference design's flat neutral look: Inter, monochrome buttons, inverted bubbles in light.
   { id: "studio", name: "Studio", variants: colorVariants("daylight", "midnight") },

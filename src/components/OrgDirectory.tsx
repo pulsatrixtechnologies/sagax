@@ -1,4 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react";
+import { confirmAsync } from "@/components/ConfirmProvider";
 import { copyText } from "@/lib/copy-text";
 import type { OrgRole } from "../../shared/org-role";
 import { t } from "@/lib/i18n";
@@ -217,8 +218,9 @@ export function OrgDirectory({
                               type="button"
                               className={`${DANGER_PILL} min-h-[44px] md:min-h-0`}
                               onClick={() => {
-                                if (!confirmRevoke(invite.email)) return;
-                                void onRevoke(invite.token!);
+                                void confirmRevoke(invite.email).then((ok) => {
+                                  if (ok) void onRevoke(invite.token!);
+                                });
                               }}
                             >
                               {t("org.revoke")}
@@ -242,10 +244,10 @@ export function OrgDirectory({
 }
 
 /** Revoking an invitation asks first: its link stops working at once. */
-function confirmRevoke(email: string): boolean {
-  try {
-    return typeof window === "undefined" || typeof window.confirm !== "function" ? true : window.confirm(t("org.revokeConfirm", { email }));
-  } catch {
-    return true;
-  }
+function confirmRevoke(email: string): Promise<boolean> {
+  return confirmAsync({
+    title: t("org.revokeConfirm", { email }),
+    confirmLabel: t("common.confirm"),
+    tone: "danger",
+  });
 }

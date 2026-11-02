@@ -162,6 +162,36 @@ public struct SkillText: Decodable, Hashable, Sendable {
     public var text: String?
 }
 
+/// `GET /api/bots/:id/skills/:name` editor payload (person UI).
+public struct SkillEditorPayload: Decodable, Hashable, Sendable {
+    public var name: String
+    public var text: String
+    public var description: String
+    public var source: String
+    public var enabled: Bool
+    public var changedAfterReview: Bool
+    public var reviewedText: String?
+    public var warnings: [String]
+    public var editable: Bool
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        text = (try? c.decodeIfPresent(String.self, forKey: .text)) ?? ""
+        description = (try? c.decodeIfPresent(String.self, forKey: .description)) ?? ""
+        source = (try? c.decodeIfPresent(String.self, forKey: .source)) ?? ""
+        enabled = (try? c.decodeIfPresent(Bool.self, forKey: .enabled)) ?? false
+        changedAfterReview = (try? c.decodeIfPresent(Bool.self, forKey: .changedAfterReview)) ?? false
+        reviewedText = try? c.decodeIfPresent(String.self, forKey: .reviewedText)
+        warnings = (try? c.decodeIfPresent([String].self, forKey: .warnings)) ?? []
+        editable = (try? c.decodeIfPresent(Bool.self, forKey: .editable)) ?? true
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case name, text, description, source, enabled, changedAfterReview, reviewedText, warnings, editable
+    }
+}
+
 /// `POST /api/bots/:id/skills {source}`.
 public struct SkillImportResult: Decodable, Hashable, Sendable {
     public var installed: Int

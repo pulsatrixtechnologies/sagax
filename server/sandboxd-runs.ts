@@ -281,14 +281,17 @@ export class RunService {
     });
   }
 
-  /** Stop a run. The Pod goes (and its token with it, by owner). The disk
+  /** Stop a run. The Pod goes at once (grace 0: Stop must not leave the
+   * job's process tree running), and its token with it, by owner. The disk
    * stays when `keepWorkspace`, for a follow-up within the window. */
   async remove(id: string, options: { keepWorkspace: boolean }): Promise<RunStatus | { id: string; phase: "removed" }> {
     if (!RUN_ID_RE.test(id)) throw new RunsError(404, "not_found", "no such run");
     return this.queue.run(async () => {
       const current = await this.status(id);
       const names = runNames(id);
-      if (current.pod) await this.deleteObject(this.path("pods", names.pod), true);
+      // grace 0 matches person-sandbox stop (sandboxd-k8s): a 10s default
+      // left HEL-style work running after API success (OpenMausBot 1d1559fb1).
+      if (current.pod) await this.deleteObject(this.path("pods", names.pod), true, 0);
       if (options.keepWorkspace) {
         if (current.workspace) {
           await this.merge(this.path("persistentvolumeclaims", names.volume), { metadata: { annotations: { [RUN_ENDED_ANNOTATION]: new Date(this.now()).toISOString() } } });

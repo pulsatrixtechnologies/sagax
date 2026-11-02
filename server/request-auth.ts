@@ -554,6 +554,9 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // The person's visit signature (server/routes/web-bot-auth.ts): on unless
   // they turn it off. No admin right. The private key is never answered.
   { methods: ["GET", "PUT"], path: /^\/api\/me\/web-bot-auth$/ },
+  // Connect apps > Tailscale: the person's bot computer joins their tailnet.
+  { methods: ["GET", "DELETE"], path: /^\/api\/me\/tailscale$/ },
+  { methods: ["POST"], path: /^\/api\/me\/tailscale\/(setup|join|refresh|disconnect)$/ },
   // The person's own OpenAPI document (server/routes/openapi-connector.ts).
   // Their bots only. No admin right. Header values are never answered.
   { methods: ["GET", "PUT", "DELETE"], path: /^\/api\/me\/openapi$/ },
@@ -644,13 +647,15 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // (owner or admin, checked in the handler).
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/soul$/ },
   // The bot workspace (server/routes/bot-workspace.ts): the Files list, a
-  // download, RULES.md and docs/<name>.md read, save, delete and rename.
-  // Same gate as the Soul edit, checked in the handler: owner (or edit
-  // grant) or admin; a person who may only use shared bots is refused.
+  // download, RULES.md and docs/<name>.md read, save, delete and rename,
+  // and create / upload / move / delete for any file or folder in the bot
+  // folder. Same gate as the Soul edit, checked in the handler: owner (or
+  // edit grant) or admin; a person who may only use shared bots is refused.
   // MEMORY.md and memory/ are the memory routes below.
-  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/workspace(?:\/download)?$/ },
+  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/workspace(?:\/(?:download|count))?$/ },
   { methods: ["GET", "PUT", "DELETE"], path: /^\/api\/bots\/[\w-]+\/workspace\/file$/ },
-  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/workspace\/docs\/rename$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/workspace\/(?:docs\/rename|mkdir|touch|rename|upload)$/ },
+  { methods: ["DELETE"], path: /^\/api\/bots\/[\w-]+\/workspace\/entry$/ },
   // 2026-10-26: the bot's memory (server/routes/bot-memory.ts):
   // MEMORY.md, memory/ topics, the journal and its revert, upkeep and tidy.
   // Same gate as the Soul edit, checked in the handler: a member keeps the
@@ -813,6 +818,11 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // Several routines of one bot on, off or deleted at once (server/routine-bulk.ts,
   // 2026-10-29): each one with the same rights as its own PATCH or DELETE
   { methods: ["POST"], path: /^\/api\/routines\/bulk$/ },
+  // Limit-reset automations (routes/limit-resets.ts): the person's own engines
+  // and bots. Continue and after-reset go through routine submit / defer; a
+  // member uses them in their sandbox without an admin right.
+  { methods: ["GET"], path: /^\/api\/limit-resets$/ },
+  { methods: ["POST"], path: /^\/api\/limit-resets\/(?:continue|after-reset)$/ },
   // "Only when I'm here" (routes/routine-away.ts): the page's beat, the
   // person's own state, and dismissing their report (the route checks whose)
   // "Create a Team Bot from this conversation" (routes/team-bot-from-thread.ts):
@@ -890,6 +900,10 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // The person's own memory sync token for the desktop's Settings > Memory
   // (server/perspicax-memory-sync-token.ts): the session's own sub only.
   { methods: ["GET", "POST"], path: /^\/api\/me\/memory-sync-token$/, feature: "orgDirectory" },
+  // Memory manager (2026-11-02): sources catalog for every signed-in person;
+  // Perspicax note proxy is session + own identity only (handler).
+  { methods: ["GET"], path: /^\/api\/memory-manager\/sources$/ },
+  { methods: ["GET", "POST", "PUT", "DELETE"], path: /^\/api\/me\/memory(?:\/(?:tree|entry|folder|bulk|tags|archived|trash(?:\/(?:undo|empty))?))?$/, feature: "orgDirectory" },
   { methods: ["POST"], path: /^\/api\/me\/github\/(?:device|token)$/, feature: "orgDirectory" },
   { methods: ["DELETE"], path: /^\/api\/me\/github$/, feature: "orgDirectory" },
   // the one list of GitHub credentials (server/routes/github-credentials.ts):
@@ -906,8 +920,11 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // bot's scope): the handlers let a
   // person who may use the bot read them and its owner or a manager change them.
   { methods: ["GET", "POST"], path: /^\/api\/bots\/[\w-]+\/skills$/, feature: "orgDirectory" },
-  { methods: ["GET", "PATCH", "DELETE"], path: /^\/api\/bots\/[\w-]+\/skills\/[a-z0-9-]+$/, feature: "orgDirectory" },
-  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/skills\/[a-z0-9-]+\/(?:share|unshare)$/, feature: "orgDirectory" },
+  // Person-UI skill editor: GET payload, PUT save (re-signs), POST review
+  // Accept/Revert, GET supporting files. Handlers check owner/manager rights.
+  { methods: ["GET", "PUT", "PATCH", "DELETE"], path: /^\/api\/bots\/[\w-]+\/skills\/[a-z0-9-]+$/, feature: "orgDirectory" },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/skills\/[a-z0-9-]+\/(?:share|unshare|review)$/, feature: "orgDirectory" },
+  { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/skills\/[a-z0-9-]+\/files$/, feature: "orgDirectory" },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/skill-template$/, feature: "orgDirectory" },
   // Skills > Upload (server/routes/bot-skill-upload.ts): same rights as the
   // skills routes, checked in the handler.
@@ -929,6 +946,8 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // a plugin's configuration values (server/plugin-config.ts)
   { methods: ["PUT"], path: /^\/api\/(?:bots\/[\w-]+|me)\/plugins\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}(?:@|%40)[A-Za-z0-9][A-Za-z0-9._-]{0,63}\/config$/, feature: "orgDirectory" },
   { methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], path: /^\/api\/me\/skills-library(?:\/[a-z0-9-]+)?$/, feature: "orgDirectory" },
+  { methods: ["POST"], path: /^\/api\/me\/skills-library\/[a-z0-9-]+\/review$/, feature: "orgDirectory" },
+  { methods: ["GET"], path: /^\/api\/me\/skills-library\/[a-z0-9-]+\/files$/, feature: "orgDirectory" },
   // Slice 5: the Perspicax MCP profiles a bot mounts. server/bot-perspicax.ts
   // decides (use reads, edit changes, adding needs holding the profile).
   { methods: ["GET", "PUT"], path: /^\/api\/bots\/[\w-]+\/perspicax$/, feature: "orgDirectory" },
@@ -1034,8 +1053,10 @@ export const PERMISSION_ROUTES: ReadonlyArray<{ methods: readonly string[]; path
   { methods: ["GET"], path: /^\/api\/admin-activity(?:\.csv)?$/, permission: "people.activityLog" },
   // plugin marketplaces (server/routes/marketplaces.ts)
   { methods: ["GET", "POST", "DELETE"], path: /^\/api\/marketplaces(?:\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}(?:\/(?:refresh|plugins\/[A-Za-z0-9][A-Za-z0-9._-]{0,63}(?:\/update)?))?)?$/, permission: "apps.marketplaces" },
-  // the shared skills library
+  // the shared skills library (person editor: review Accept/Revert, files)
   { methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], path: /^\/api\/skills-library(?:\/[a-z0-9-]+)?$/, permission: "skills.library" },
+  { methods: ["POST"], path: /^\/api\/skills-library\/[a-z0-9-]+\/review$/, permission: "skills.library" },
+  { methods: ["GET"], path: /^\/api\/skills-library\/[a-z0-9-]+\/files$/, permission: "skills.library" },
   // the server's engines: settings, icon, models, install, sign-in, update
   { methods: ["PATCH", "DELETE"], path: /^\/api\/instances\/[\w.-]+$/, permission: "engines.manage" },
   { methods: ["PATCH"], path: /^\/api\/instances\/[\w.-]+\/icon$/, permission: "engines.manage" },
@@ -1146,11 +1167,21 @@ export function capabilitiesForAuth(auth: { scopes: readonly string[] }, options
 }
 
 /** What the computer owner's paired phone (through the companion sidecar)
- * may set on a bot: a member's fields, plus the advanced panel's memory
- * switches (decision D1 of the iOS parity matrix) and whether it may send
- * voice notes (row BA11). Never where the bot runs, what it may reach or how
- * much it may do unasked. */
-const COMPANION_BOT_FIELDS = new Set([...MEMBER_BOT_FIELDS, "memoryEnabled", "memoryUpkeep", "voiceNotes"]);
+ * may set on a bot: a member's fields, the advanced panel's memory switches
+ * (decision D1), voice notes (BA11), and the owner's own Permissions /
+ * Approval / Proactive / Access fields (Lot 1, 2026-11-01). Org-wide and
+ * sharing fields (visibility, hidden, host, browserProfile, peers, …) stay
+ * off the phone. */
+const COMPANION_BOT_FIELDS = new Set([
+  ...MEMBER_BOT_FIELDS,
+  "memoryEnabled", "memoryUpkeep", "voiceNotes",
+  // Permissions / Approval / Proactive (BotPanelPatch)
+  "approvalMode", "autoApprove", "acknowledgeLocalAuto", "proactiveMode", "alwaysAllow",
+  "chiefOfStaff", "approvePeerComms",
+  "confirmFullAccess", "applyToAllThreads",
+  // Access / Works on (BotAccessPatch, BotPanelPatch)
+  "browser", "mcpServers", "mcpAccounts", "computer", "cwd", "cloudBackend",
+]);
 export function companionBotFieldViolation(body: unknown): string | null {
   if (!body || typeof body !== "object" || Array.isArray(body)) return "body";
   for (const key of Object.keys(body)) if (!COMPANION_BOT_FIELDS.has(key)) return key;
@@ -1176,6 +1207,12 @@ export function clientSessionIsComputerOwner(
   const email = auth.session.email?.trim().toLowerCase();
   const operator = context.operatorEmail?.trim().toLowerCase();
   return Boolean(email && operator && email === operator);
+}
+
+/** The signed-in person's principal id, or null for loopback / a session
+ * without one. Shared by the route slices that leave server/index.ts (#1388). */
+export function sessionPrincipal(auth: RequestAuth): string | null {
+  return auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() || null : null;
 }
 
 /** Same for a room: name, reading state, and the roster. humanIds and
@@ -1270,6 +1307,9 @@ function mutatingPublicRoute(method: string, path: string): boolean {
   // machine, so this read needs the desktop owner header. The list and
   // screenshot routes are not this path.
   if (upper === "GET" && /^\/api\/(?:bots\/[\w-]+\/)?local-computer$/.test(path)) return true;
+  // Hand out a stored webhook secret or address (port of upstream 14265e33c).
+  // Sagax reveal is POST today; the GET address form stays gated if added.
+  if (upper === "GET" && /^\/api\/webhooks\/[\w-]+\/(?:address|reveal)$/.test(path)) return true;
   if (["GET", "HEAD", "OPTIONS"].includes(upper)) return false;
   // Agent integrations have their own high-entropy, per-boot authorization
   // and narrower route semantics. Pairing-code exchange is intentionally

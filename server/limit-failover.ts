@@ -34,10 +34,17 @@ export type LimitEngine = { instanceId: string; driverKind: string };
  * rotating accounts to get past a provider's usage limit breaks its terms
  * and can get the accounts closed. Another engine, or a pay-per-use key on
  * the same one, is fine (upstream limitBackupAllowed). */
+/** An engine instance that bills each use (a pay-per-use key, as its access
+ * or in its environment) instead of drawing on a plan's limit. Port of
+ * OpenMausBot 3ed90a037 `billsEachUse`. */
+export function billsEachUse(config?: { environment?: Record<string, string>; access?: string }): boolean {
+  return config?.access === "api" || PAY_PER_USE_KEYS.some((key) => Boolean(config?.environment?.[key]?.trim()));
+}
+
 export function limitBackupAllowed(from: LimitEngine, to: LimitEngine, toConfig?: { environment?: Record<string, string>; access?: string }): boolean {
   if (to.instanceId === from.instanceId) return false;
   if (to.driverKind !== from.driverKind || !SUBSCRIPTION_DRIVERS.has(from.driverKind)) return true;
-  return toConfig?.access === "api" || PAY_PER_USE_KEYS.some((key) => Boolean(toConfig?.environment?.[key]?.trim()));
+  return billsEachUse(toConfig);
 }
 
 /** An engine a turn of this speaker may run on, as the host checked it. */
@@ -49,7 +56,8 @@ export interface LimitCandidate extends LimitEngine {
 
 /** The engine that takes over, or null. `preferred` is the bot's own
  * backups then the organization's default, in order; `candidates` is every
- * allowed engine in catalog order. */
+ * allowed engine in catalog order. A catalog fallthrough never picks a
+ * pay-per-use engine the person did not choose as a backup (3ed90a037). */
 export function pickLimitBackup(input: {
   from: LimitEngine;
   preferred: ReadonlyArray<{ instanceId: string; model?: string }>;
@@ -65,7 +73,7 @@ export function pickLimitBackup(input: {
     const candidate = input.candidates.find((engine) => engine.instanceId === entry.instanceId);
     if (candidate && usable(candidate)) return { instanceId: candidate.instanceId, model: modelOf(candidate, entry.model) };
   }
-  const next = input.candidates.find(usable);
+  const next = input.candidates.find((candidate) => usable(candidate) && !billsEachUse(input.config(candidate.instanceId)));
   return next ? { instanceId: next.instanceId, model: modelOf(next) } : null;
 }
 

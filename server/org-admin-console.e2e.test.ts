@@ -167,9 +167,14 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     writeFileSync(join(data, "backup-status.json"), JSON.stringify({ enabled: true, schedule: "daily 03:00 UTC", lastAt: "2026-10-08T03:00:00Z", ok: true }));
     writeFileSync(join(data, "config.json"), JSON.stringify({
       instances: {
-        claude: { driver: "claudeAgent", environment: { FAKE_CLAUDE_DUMP: join(home, "claude-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
-        hold: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
-        broken: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "api-error", FAKE_CLAUDE_API_ERROR: "429 Too Many Requests: rate limit reached" }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        // The organization's key (SAGAX_ANTHROPIC_API_KEY) serves only an
+        // API-key instance (config.ts injectedEnvironment, #1812): every
+        // fixture engine is one, so a member's turn runs on that key.
+        claude: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP: join(home, "claude-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
+        hold: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
+        broken: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_MODE: "api-error", FAKE_CLAUDE_API_ERROR: "429 Too Many Requests: rate limit reached" }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
+        // A subscription engine: only a person's own sign-in runs it, never the organization's key.
+        own: { driver: "claudeAgent", config: { cli: FAKE_CLAUDE, fullAuto: true } },
       },
     }));
     await start();
@@ -551,11 +556,15 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     const instances = (await api("GET", "/api/instances", alice)).body.instances as Array<{ instanceId: string }>;
     expect(instances.map((row) => row.instanceId)).toEqual(expect.arrayContaining(["claude", "hold"]));
     expect(instances.map((row) => row.instanceId)).not.toContain("broken");
+    expect(instances.map((row) => row.instanceId)).not.toContain("own");
     const mine = await api("GET", "/api/me/engines", alice);
     expect(mine.status, mine.text).toBe(200);
     const access = mine.body.engines as Array<{ instanceId: string; orgNotAllowed?: boolean; myTurns: string }>;
-    expect(access.find((row) => row.instanceId === "claude")).toMatchObject({ myTurns: "subscription" });
+    // #1533 / #1812: an API-key engine runs on a key, never on a sign-in: her
+    // turns there are the organization's key even though she signed in.
+    expect(access.find((row) => row.instanceId === "claude")).toMatchObject({ myTurns: "org-key" });
     expect(access.find((row) => row.instanceId === "broken")).toBeUndefined();
+    expect(access.find((row) => row.instanceId === "own")).toBeUndefined();
     const context = { organization: true, allowedEngines: ["claude", "hold"], mine: access };
     expect(engineOffer(context, "broken")).toBe("notAllowed");
     const offered = offeredEngines(instances, context).map((row) => row.instanceId);
@@ -568,19 +577,22 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     expect(ownOn.body.settings.policies).toMatchObject({ ownAccountsOutsideList: true });
     expect((await api("GET", "/api/config", alice)).body.ownAccountsOutsideList).toBe(true);
     const ownAccess = (await api("GET", "/api/me/engines", alice)).body.engines as Array<{ instanceId: string; orgNotAllowed?: boolean; myTurns: string }>;
-    expect(ownAccess.find((row) => row.instanceId === "broken")).toMatchObject({ orgNotAllowed: true, myTurns: "subscription" });
+    // her own sign-in runs the subscription engine left off the list; the
+    // API-key one off the list stays off (no own account runs it)
+    expect(ownAccess.find((row) => row.instanceId === "own")).toMatchObject({ orgNotAllowed: true, myTurns: "subscription" });
     const ownContext = { organization: true, allowedEngines: ["claude", "hold"], ownAccountsOutsideList: true, mine: ownAccess };
-    expect(engineOffer(ownContext, "broken")).toBe("offered");
-    expect(ownAccountOnly(ownContext, "broken")).toBe(true);
-    expect(((await api("GET", "/api/instances", alice)).body.instances as Array<{ instanceId: string }>).map((row) => row.instanceId)).toContain("broken");
+    expect(engineOffer(ownContext, "own")).toBe("offered");
+    expect(ownAccountOnly(ownContext, "own")).toBe(true);
+    expect(((await api("GET", "/api/instances", alice)).body.instances as Array<{ instanceId: string }>).map((row) => row.instanceId)).toContain("own");
+    // 2026-10-30: a sign-in the provider refused since no longer pays: never
+    // "subscription" (nor Ready on it); no organization key serves this engine
+    writeFileSync(join(aliceClaude, ".pulsabot-login-expired.json"), JSON.stringify({ at: Date.now() }));
+    const expired = ((await api("GET", "/api/me/engines", alice)).body.engines as Array<{ instanceId: string; myTurns: string; subscription: { expired?: boolean } }>).find((row) => row.instanceId === "own");
+    expect(expired).toMatchObject({ myTurns: "expired", subscription: { signedIn: true, expired: true } });
+    rmSync(join(aliceClaude, ".pulsabot-login-expired.json"), { force: true });
     // off again: gone at once, and her own sign-in is put back as it was
     expect((await admin("POST", "settings", ALICE, { ownAccountsOutsideList: false })).body.settings.policies).toMatchObject({ ownAccountsOutsideList: false });
-    expect(((await api("GET", "/api/me/engines", alice)).body.engines as Array<{ instanceId: string }>).map((row) => row.instanceId)).not.toContain("broken");
-    // 2026-10-30: a sign-in the provider refused since no longer pays: the
-    // organization's key serves her turns, never "subscription" (nor Ready on it)
-    writeFileSync(join(aliceClaude, ".pulsabot-login-expired.json"), JSON.stringify({ at: Date.now() }));
-    const expired = ((await api("GET", "/api/me/engines", alice)).body.engines as Array<{ instanceId: string; myTurns: string; subscription: { expired?: boolean } }>).find((row) => row.instanceId === "claude");
-    expect(expired).toMatchObject({ myTurns: "org-key", subscription: { signedIn: true, expired: true } });
+    expect(((await api("GET", "/api/me/engines", alice)).body.engines as Array<{ instanceId: string }>).map((row) => row.instanceId)).not.toContain("own");
     rmSync(aliceClaude, { recursive: true, force: true });
     const moved = (await api("GET", `/api/threads/${bots.brittle!.threadId}/messages?limit=100`, alice)).body.messages as Array<{ kind?: string; tool?: { name: string; engineMove?: { from: string; to: string } } }>;
     const line = moved.find((message) => message.tool?.engineMove);

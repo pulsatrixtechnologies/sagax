@@ -22,6 +22,7 @@ vi.mock("@/state/store", async (importOriginal) => ({
     flushBotPatches: vi.fn(),
   }),
 }));
+import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { ComputerPanel } from "./ComputerPanel";
 import { BrowserPanel } from "./BrowserPanel";
 
@@ -29,7 +30,7 @@ afterAll(() => vi.unstubAllGlobals());
 const bot = { id: "browser-fixture", name: "Browser fixture", modelSelection: { instanceId: "fixture" } } as Bot;
 const render = (config: FeatureFlagConfig & { cloudHome?: boolean }, browser?: boolean) => {
   fixture.config = config;
-  return renderToStaticMarkup(createElement(ComputerPanel, { bot: { ...bot, browser } }));
+  return renderToStaticMarkup(createElement(ConfirmProvider, null, createElement(ComputerPanel, { bot: { ...bot, browser } })));
 };
 
 // Sagax 0.1.0 (8a563e929) dropped the Browser view from the Computer panel;
@@ -87,8 +88,9 @@ describe("Browser panel installation access", () => {
   it("does not offer an install on unsupported hosts and still shows a ready engine", () => {
     expect(renderBrowser({ features: { browser: true }, browserEngine: { kind: "unavailable", installable: false } })).not.toContain("Install the browser engine");
     // A ready engine opens the live screen at once. Watching is not an admin check.
+    // The screen is the calm one from 0.8.24: connecting reads "Waking up…" (BrowserPanel maps connecting to the starting state).
     const ready = renderBrowser({ features: { browser: true }, browserEngine: { kind: "engine" } });
-    expect(ready).toContain("Connecting to the browser…");
+    expect(ready).toContain("Waking up…");
     expect(ready).toContain('data-computer-source="browser"');
     expect(ready).not.toContain("Only admins of this installation");
   });

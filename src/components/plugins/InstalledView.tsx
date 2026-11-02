@@ -73,6 +73,8 @@ export interface InstalledViewProps {
   /** lot 4: the person's own switch of an offered organization capability
    * (their Me state, all their bots). Absent: no switch. */
   onToggleOrganization?: (item: Capability, next: boolean) => void;
+  /** Connect apps > Mac: native apps on this person's Mac (Messages…). */
+  macApps?: ReactNode;
 }
 
 function EmptyLine({ children, action }: { children: ReactNode; action?: ReactNode }) {
@@ -84,10 +86,11 @@ function EmptyLine({ children, action }: { children: ReactNode; action?: ReactNo
   );
 }
 
-export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, onAddServer, onPasteConfig, addDisabled, onNewSkill, forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization }: InstalledViewProps) {
+export function InstalledView({ entries, skills, sourceLabel, onOpenEntry, onOpenSkill, entryActions, onAddServer, onPasteConfig, addDisabled, onNewSkill, forms, loading, onDiscover, providers, organization = [], resolved, resolvedError, onRetryResolved, botName = "", onToggleOrganization, macApps }: InstalledViewProps) {
   const tools = onAddServer || onPasteConfig || onNewSkill;
   return (
     <div data-plugins-installed-tab>
+      {macApps}
       {tools && (
         <div className="mb-3 flex flex-wrap items-center gap-2" data-plugins-installed-tools>
           {onAddServer && (

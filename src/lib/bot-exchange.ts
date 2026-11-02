@@ -235,7 +235,7 @@ export function transcriptDateLabel(
 
 /** True when openThread on that party stays in this 1:1 (same bot). Any other
  * party would select that bot and leave; onGo must then return false so the
- * in-column sheet stays (Close Chat returns here). */
+ * in-column sheet stays (the header close returns here). */
 export function exchangeJumpStays(partyId: string | undefined, currentBotId: string | undefined): boolean {
   return Boolean(partyId && currentBotId && partyId === currentBotId);
 }

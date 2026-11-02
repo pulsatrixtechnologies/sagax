@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { settledChipLabel } from "./waiting-chip.ts";
+import { settledChipLabel, stageLabel, stageOf } from "./waiting-chip.ts";
 
 describe("settledChipLabel", () => {
   it("says approval only when a person allowed it", () => {
@@ -19,5 +19,13 @@ describe("settledChipLabel", () => {
   it("keeps answers as answers and never claims an outcome it was not told", () => {
     expect(settledChipLabel("Sales", "answer", { behavior: "answer", source: "user" })).toBe("@Sales got your answer");
     expect(settledChipLabel("Sales", "approval")).toBe("@Sales's approval request was answered");
+  });
+});
+
+describe("delegation stage labels via waiting-chip", () => {
+  it("re-exports who-waits-for-what labels for the task sheet", () => {
+    expect(stageOf({ status: "needs_input", question: "Go?", result: "", executions: 1 }, [])).toBe("awaiting_reply");
+    expect(stageLabel("held")).toBe("Blocked: needs you");
+    expect(stageLabel("to_review")).toBe("Ready for your review");
   });
 });

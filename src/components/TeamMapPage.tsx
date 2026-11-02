@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { ArrowRight, BookOpen, Box, Loader2, Monitor, Network, Plus, Save, Users, X } from "lucide-react";
 
 import { api, formatTime, openBot, openThread, useStore, type Bot } from "@/state/store";
@@ -21,7 +20,10 @@ import { readSessionState } from "@/lib/session";
 import { TeamCanvas } from "./TeamCanvas";
 import { TeamDialog } from "./TeamDialog";
 import { TeamMemoryDialog } from "./TeamMemoryDialog";
+import { discardConfirmRequest, useConfirm } from "@/components/ConfirmProvider";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { DetailPanel } from "./DetailPanel";
+import { PILL, PRIMARY_PILL } from "./SettingsPrimitives";
 import { t, activeLocale } from "@/lib/i18n";
 import { CanvasComputers } from "./CanvasComputers";
 import { MarkdownEditor } from "./markdown/MarkdownEditor";
@@ -79,6 +81,7 @@ interface SectionContextResponse {
 
 /** Exported for tests. */
 export function SectionContextDialog({ section, label, onClose }: { section: string; label: string; onClose: () => void }) {
+  const confirm = useConfirm();
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   const savingRef = useRef(false);
@@ -98,46 +101,15 @@ export function SectionContextDialog({ section, label, onClose }: { section: str
 
   const requestClose = useCallback(() => {
     if (savingRef.current) return;
-    if (dirtyRef.current && !window.confirm(t("team.instructionsDiscard"))) return;
-    onCloseRef.current();
-  }, []);
+    if (!dirtyRef.current) {
+      onCloseRef.current();
+      return;
+    }
+    void confirm(discardConfirmRequest(t("team.instructionsDiscard"))).then((ok) => {
+      if (ok) onCloseRef.current();
+    });
+  }, [confirm]);
 
-  useEffect(() => {
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    dialogRef.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !savingRef.current) {
-        event.preventDefault();
-        requestClose();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const dialog = dialogRef.current;
-      if (!dialog) return;
-      const focusable = [...dialog.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
-      )];
-      if (focusable.length === 0) {
-        event.preventDefault();
-        dialog.focus();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      previousFocus?.focus();
-    };
-  }, [requestClose]);
 
   useEffect(() => {
     let cancelled = false;
@@ -182,88 +154,77 @@ export function SectionContextDialog({ section, label, onClose }: { section: str
     }
   };
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 sm:p-6"
-      onMouseDown={(event) => event.target === event.currentTarget && requestClose()}
+  const title = t("team.instructionsTitle", { name: label });
+  return (
+    <DetailPanel
+      label={title}
+      title={
+        <span className="flex min-w-0 flex-col gap-1">
+          <span className="flex items-center gap-2">
+            <BookOpen size={16} className="shrink-0 text-accent" aria-hidden="true" />
+            <span className="min-w-0 truncate">{title}</span>
+          </span>
+          <span className="text-[12px] font-normal leading-relaxed text-ink-secondary">{t("team.instructionsHint")}</span>
+        </span>
+      }
+      onClose={requestClose}
+      closeLabel={t("team.instructionsClose")}
+      data-section-context-panel=""
+      footer={
+        <>
+          <button type="button" onClick={requestClose} disabled={saving} className={PILL}>{t("common.cancel")}</button>
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={loading || saving || !dirty || bytes > maxBytes}
+            className={cn(PRIMARY_PILL, "gap-2")}
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Save size={14} aria-hidden="true" />}
+            {t("team.instructionsSave")}
+          </button>
+        </>
+      }
     >
       <div
         ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="section-context-title"
         tabIndex={-1}
-        className="animate-pop-in flex max-h-[min(680px,calc(100dvh-2rem))] w-full max-w-[680px] flex-col overflow-hidden rounded-[14px] border border-border bg-elevated outline-none"
+        className="outline-none"
+        onKeyDown={(event) => {
+          // DetailPanel closes on Escape; claim it first when unsaved so we can ask.
+          if (event.key !== "Escape" || event.defaultPrevented || savingRef.current) return;
+          event.preventDefault();
+          event.stopPropagation();
+          requestClose();
+        }}
       >
-        <header className="flex items-start justify-between gap-4 border-b border-hairline/40 px-6 pb-4 pt-6 sm:px-8 sm:pt-7">
-          <div>
-            <div className="flex items-center gap-2">
-              <BookOpen size={19} className="text-accent" />
-              <h2 id="section-context-title" className="text-[17px] font-semibold leading-6 tracking-[-0.008em] text-ink">
-                {t("team.instructionsTitle", { name: label })}
-              </h2>
-            </div>
-            <p className="mt-1.5 max-w-[520px] text-[12.5px] leading-relaxed text-ink-secondary">
-              {t("team.instructionsHint")}
-            </p>
+        {loading ? (
+          <div className="flex min-h-[260px] items-center justify-center text-ink-secondary">
+            <Loader2 size={20} className="animate-spin" aria-label={t("team.instructionsLoading")} />
           </div>
-          <button
-            onClick={requestClose}
-            disabled={saving}
-            aria-label={t("team.instructionsClose")}
-            className="flex size-8 shrink-0 items-center justify-center rounded-full text-ink-tertiary hover:bg-ink/10 hover:text-ink-secondary disabled:opacity-40"
-          >
-            <X size={18} />
-          </button>
-        </header>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-8">
-          {loading ? (
-            <div className="flex min-h-[260px] items-center justify-center text-ink-secondary">
-              <Loader2 size={20} className="animate-spin" aria-label={t("team.instructionsLoading")} />
-            </div>
-          ) : (
-            <>
-              <MarkdownEditor
-                value={text}
-                onChange={setText}
-                autoFocus
-                minHeight={280}
-                dataField="team-instructions"
-                placeholder={"Goals\n- Ship the Windows onboarding refresh\n\nDecisions\n- Keep customer data local\n\nPreferences\n- Use concise weekly updates"}
-                ariaLabel={t("team.instructionsTitle", { name: label })}
-                invalid={bytes > maxBytes}
-                footer={
-                  <span>
-                    {t("teamMap.memoryFooter")}
-                    {updatedAt ? ` ${t("teamMap.lastSaved", { when: new Date(updatedAt).toLocaleString(activeLocale()) })}` : ""}{" "}
-                    <span className={cn("tabular-nums", bytes > maxBytes && "text-danger")}>
-                      {bytes.toLocaleString()} / {maxBytes.toLocaleString()} bytes
-                    </span>
-                  </span>
-                }
-              />
-            </>
-          )}
-          {error && <div className="mt-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger">{error}</div>}
-        </div>
-
-        <footer className="flex items-center justify-end gap-2 border-t border-hairline/40 px-6 py-4 sm:px-8">
-          <button onClick={requestClose} disabled={saving} className="rounded-lg px-3.5 py-2 text-[13px] text-ink-secondary hover:bg-raised hover:text-ink disabled:opacity-40">
-            Cancel
-          </button>
-          <button
-            onClick={() => void save()}
-            disabled={loading || saving || !dirty || bytes > maxBytes}
-            className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-[13px] font-medium text-accent-ink hover:brightness-110 disabled:opacity-40"
-          >
-            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-            {t("team.instructionsSave")}
-          </button>
-        </footer>
+        ) : (
+          <MarkdownEditor
+            value={text}
+            onChange={setText}
+            autoFocus
+            minHeight={280}
+            dataField="team-instructions"
+            placeholder={"Goals\n- Ship the Windows onboarding refresh\n\nDecisions\n- Keep customer data local\n\nPreferences\n- Use concise weekly updates"}
+            ariaLabel={title}
+            invalid={bytes > maxBytes}
+            footer={
+              <span>
+                {t("teamMap.memoryFooter")}
+                {updatedAt ? ` ${t("teamMap.lastSaved", { when: new Date(updatedAt).toLocaleString(activeLocale()) })}` : ""}{" "}
+                <span className={cn("tabular-nums", bytes > maxBytes && "text-danger")}>
+                  {bytes.toLocaleString()} / {maxBytes.toLocaleString()} bytes
+                </span>
+              </span>
+            }
+          />
+        )}
+        {error && <div className="mt-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger">{error}</div>}
       </div>
-    </div>,
-    document.body,
+    </DetailPanel>
   );
 }
 

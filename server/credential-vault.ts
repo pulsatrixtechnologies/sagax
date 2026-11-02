@@ -1,21 +1,19 @@
 // The credential vault: logins (user name, password, one-time code seed),
-// API keys and notes a person keeps for their bots, with the bots each item
-// is granted to. One encrypted file per person:
+// API keys, notes, cards, addresses and contacts. One sealed file per owner:
 //
 //   solo or desktop       DATA_DIR/credential-vault.enc
-//   organization server   DATA_DIR/principals/<pid>/credential-vault.enc
+//   organization person   DATA_DIR/principals/<pid>/credential-vault.enc
+//   team bot (shared)     DATA_DIR/bots/<botId>/credential-vault.enc
 //
 // AES-256-GCM with a key derived (HKDF) from the server's vault key, the one
 // mcp-oauth.enc uses (server/mcp-oauth.ts resolveVaultKey): on the desktop
 // that key lives in the OS keychain through Electron safeStorage
 // (credentials.bin) and reaches the server as SAGAX_MCP_OAUTH_KEY; a
 // headless server keeps it in a 0600 key file beside its data. The
-// additional data names the person, so a file copied into another person's
-// folder does not open.
-//
-// Nothing here returns a value to a caller other than resolveForFill, which
-// only the browser runtime's fill path calls (server/credential-fill.ts),
-// after the grant and the page's origin are checked. Listings carry booleans.
+// additional data names the owner (person or bot:<id>), so a file copied
+// into another folder does not open. Never a plaintext store: values leave
+// only through resolveForFill / resolveForComputerFill (browser and computer
+// fill paths), after grant checks. Listings carry booleans.
 import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -23,6 +21,8 @@ import { z } from "zod";
 
 import {
   bindingUrl,
+  botIdFromVaultPrincipal,
+  botVaultPrincipal,
   MAX_VAULT_DOMAINS,
   MAX_VAULT_ITEMS,
   VAULT_GRANT_MODES,
@@ -45,6 +45,7 @@ import {
   type VaultItemKind,
   type VaultItemListing,
 } from "../shared/credential-vault.ts";
+
 import {
   cardExpiryText,
   isPaymentFillField,
@@ -68,6 +69,17 @@ import {
 import { isSingleUseWallet, redactCardNumbers, requestSingleUseToken, walletLinkView, walletName, type SingleUseWallet, type WalletLinkView } from "../shared/single-use-card.ts";
 import { mergePatch, planVaultImport, type VaultDuplicateMode, type VaultExportFormat, type VaultTransferItem } from "../shared/credential-vault-transfer.ts";
 import { ORDER_CHECK_HOURS, ORDER_STEPS, trackingLine, type OrderTracking, type TrackingInput } from "../shared/order-tracking.ts";
+import {
+  allowanceRefusal,
+  mergePaymentsSettings,
+  methodEquals,
+  methodKey,
+  sumAmounts,
+  utcMonthKey,
+  type PaymentMethodListing,
+  type PaymentMethodRef,
+  type PaymentsSettings,
+} from "../shared/payments-settings.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import type { VaultKeySource } from "./mcp-oauth.ts";
 import { principalDir } from "./person-connections.ts";
@@ -215,6 +227,23 @@ const itemSchema = z.object({
   lastUsedBy: z.string().regex(BOT_ID).optional(),
 }).strict();
 
+const paymentMethodSchema = z.union([
+  z.object({ type: z.literal("card"), cardId: z.string().regex(/^[a-z0-9]{8,40}$/) }).strict(),
+  z.object({ type: z.literal("wallet"), wallet: z.enum(["shop_pay", "link"]) }).strict(),
+]);
+
+const botAllowanceSchema = z.object({
+  enabled: z.boolean().optional(),
+  perPurchaseLimit: z.string().regex(/^\d{1,6}\.\d{2}$/).optional(),
+  perMonthLimit: z.string().regex(/^\d{1,6}\.\d{2}$/).optional(),
+  merchants: z.array(z.string().min(1).max(253)).max(50).optional(),
+}).strict();
+
+const paymentsSchema = z.object({
+  defaultMethod: paymentMethodSchema.optional(),
+  bots: z.record(z.string(), botAllowanceSchema).optional(),
+}).strict();
+
 const documentSchema = z.object({
   version: z.literal(1),
   items: z.record(z.string(), itemSchema),
@@ -223,6 +252,8 @@ const documentSchema = z.object({
     shop_pay: z.object({ chosen: z.literal(true) }).strict().optional(),
     link: z.object({ chosen: z.literal(true) }).strict().optional(),
   }).strict().optional(),
+  /** Default method and per-bot allowances (shared/payments-settings.ts). */
+  payments: paymentsSchema.optional(),
 }).strict();
 
 export type StoredVaultItem = z.infer<typeof itemSchema>;
@@ -432,7 +463,21 @@ export class CredentialVault {
 
   private file(principalId: string): string {
     if (principalId === LOCAL_VAULT_PRINCIPAL) return join(this.dataDir, FILE);
+    const botId = botIdFromVaultPrincipal(principalId);
+    // Same layout as server/bot-folder.ts, under this vault's dataDir so
+    // tests and a real server stay isolated.
+    if (botId) return join(this.dataDir, "bots", botId, FILE);
     return join(principalDir(this.dataDir, principalId), FILE);
+  }
+
+  /** A login (or card, contact, ...) saved in a team bot's own vault. No
+   * grant is set: the first request_login on a site asks the bot's owner
+   * with a card (once, or always for the bot); managers alone write this
+   * store (server/routes/team-bot-vault.ts). */
+  createForTeamBot(botId: string, input: VaultItemInput, extra: { source?: "local" | "1password"; onePassword?: OnePasswordRef } = {}): VaultItemListing {
+    if (!BOT_ID.test(botId)) throw new CredentialVaultError("invalid bot", "invalid_bot");
+    const principalId = botVaultPrincipal(botId);
+    return this.create(principalId, input, extra);
   }
 
   private key(): Buffer {
@@ -483,7 +528,7 @@ export class CredentialVault {
     const data = Buffer.concat([cipher.update(JSON.stringify(document), "utf8"), cipher.final()]);
     const envelope = { v: 1, iv: iv.toString("base64"), tag: cipher.getAuthTag().toString("base64"), data: data.toString("base64") };
     const file = this.file(principalId);
-    mkdirSync(join(file, ".."), { recursive: true });
+    mkdirSync(join(file, ".."), { recursive: true, mode: 0o700 });
     writeFileAtomic(file, `${JSON.stringify(envelope)}\n`, { mode: 0o600 });
     this.cache.set(principalId, document);
   }
@@ -493,14 +538,32 @@ export class CredentialVault {
     const items = structuredClone(document.items);
     const purchases = structuredClone(document.purchases ?? {});
     const result = change(items, purchases);
-    const wallets = document.wallets ? structuredClone(document.wallets) : undefined;
-    this.write(principalId, {
+    this.write(principalId, this.documentWith(document, { items, purchases }));
+    return result;
+  }
+
+  /** Keep wallets and payments when a mutate only touches items/purchases.
+   * Pass null for wallets or payments to clear that field. */
+  private documentWith(
+    document: VaultDocument,
+    patch: {
+      items?: Record<string, StoredVaultItem>;
+      purchases?: Record<string, StoredPurchase>;
+      wallets?: VaultDocument["wallets"] | null;
+      payments?: PaymentsSettings | null;
+    },
+  ): VaultDocument {
+    const items = patch.items ?? document.items;
+    const purchases = patch.purchases ?? document.purchases ?? {};
+    const wallets = patch.wallets === null ? undefined : (patch.wallets !== undefined ? patch.wallets : document.wallets);
+    const payments = patch.payments === null ? undefined : (patch.payments !== undefined ? patch.payments : document.payments);
+    return {
       version: 1,
       items,
       ...(Object.keys(purchases).length ? { purchases } : {}),
       ...(wallets && Object.keys(wallets).length ? { wallets } : {}),
-    });
-    return result;
+      ...(payments && (payments.defaultMethod || (payments.bots && Object.keys(payments.bots).length)) ? { payments } : {}),
+    };
   }
 
   /** Whether the vault can be opened now, and why not. */
@@ -801,6 +864,32 @@ export class CredentialVault {
     return { ok: true, value, item: listingOf(item, now), field: request.field };
   }
 
+  /** Fill a granted field into the computer's focused form control. No page
+   * origin check: the person already allowed the login for this bot. The
+   * caller types the value (server/computer-credential-fill.ts) and must
+   * never put it in a tool result, transcript, memory or log. */
+  async resolveForComputerFill(
+    principalId: string,
+    request: { handle: unknown; field: VaultFillField; botId: string; threadId: string },
+    readOnePassword?: OnePasswordFieldReader,
+  ): Promise<FillResolution> {
+    // Reuse the browser path with a synthetic https URL that matches the
+    // item's first site when one is bound; unbound notes refuse.
+    let item: StoredVaultItem | undefined;
+    const itemId = itemIdFromHandle(request.handle);
+    try {
+      item = itemId ? this.load(principalId).items[itemId] ?? this.lentItem(principalId, itemId) : undefined;
+    } catch (error) {
+      return { ok: false, code: "unavailable", message: error instanceof Error ? error.message : "The credential vault is unavailable." };
+    }
+    if (!item) return { ok: false, code: "unknown_item", message: "No saved credential has this handle. Call request_login to ask the person for one." };
+    const pageUrl = item.domains[0] ? bindingUrl(item.domains[0]) : "https://computer.local/";
+    if (!item.domains.length && (item.kind === "login" || item.kind === "apiKey")) {
+      return { ok: false, code: "wrong_origin", message: `${botName(item)} has no site bound; nothing was filled on the computer.` };
+    }
+    return this.resolveForFill(principalId, { ...request, pageUrl }, readOnePassword);
+  }
+
   /** 2026-10-26: the API key to send on a bot's HTTP request
    * (server/credential-http.ts), only for an API key the person set to be
    * sent by Sagax, a bot allowed here, and a URL on one of the item's sites
@@ -1016,14 +1105,100 @@ export class CredentialVault {
     const wallets = document.wallets ? { ...document.wallets } : {};
     if (chosen) wallets[wallet] = { chosen: true };
     else delete wallets[wallet];
-    const next: VaultDocument = {
-      version: 1,
-      items: document.items,
-      ...(document.purchases && Object.keys(document.purchases).length ? { purchases: document.purchases } : {}),
-      ...(Object.keys(wallets).length ? { wallets } : {}),
-    };
+    // Drop a default that pointed at a wallet the person just turned off.
+    let payments: PaymentsSettings | null | undefined = document.payments;
+    if (!chosen && payments?.defaultMethod?.type === "wallet" && payments.defaultMethod.wallet === wallet) {
+      const rest: PaymentsSettings = {};
+      if (payments.bots) rest.bots = payments.bots;
+      payments = rest.bots && Object.keys(rest.bots).length ? rest : null;
+    }
+    const next = this.documentWith(document, {
+      wallets: Object.keys(wallets).length ? wallets : null,
+      ...(payments !== undefined ? { payments } : {}),
+    });
     this.write(principalId, next);
     return walletLinkView(next.wallets);
+  }
+
+  /** Default method and per-bot allowances. Never a card number. */
+  paymentsSettings(principalId: string): PaymentsSettings {
+    try {
+      return structuredClone(this.load(principalId).payments ?? {});
+    } catch {
+      return {};
+    }
+  }
+
+  /** Patch payments settings. null defaultMethod clears it; bot id → null removes that row. */
+  setPaymentsSettings(principalId: string, patch: unknown): PaymentsSettings {
+    const document = structuredClone(this.load(principalId));
+    const merged = mergePaymentsSettings(document.payments, patch);
+    if (typeof merged === "string") throw new CredentialVaultError(merged, "invalid_payments");
+    if (merged.defaultMethod) {
+      const ok = this.methodAvailable(document, merged.defaultMethod);
+      if (!ok) throw new CredentialVaultError("That payment method is not available.", "unknown_method", 404);
+    }
+    const next = this.documentWith(document, { payments: merged });
+    this.write(principalId, next);
+    return structuredClone(next.payments ?? {});
+  }
+
+  /** Cards and connected wallets the Payments screen can pick. */
+  paymentMethods(principalId: string): PaymentMethodListing[] {
+    const document = this.load(principalId);
+    const def = document.payments?.defaultMethod;
+    const rows: PaymentMethodListing[] = [];
+    for (const item of Object.values(document.items)) {
+      if (item.kind !== "card" || !item.card) continue;
+      const ref: PaymentMethodRef = { type: "card", cardId: item.id };
+      rows.push({
+        id: methodKey(ref),
+        type: "card",
+        label: item.name,
+        detail: `${item.card.brand} ···· ${item.card.last4}`,
+        brand: item.card.brand,
+        last4: item.card.last4,
+        isDefault: methodEquals(def, ref),
+      });
+    }
+    const wallets = walletLinkView(document.wallets);
+    for (const wallet of ["shop_pay", "link"] as const) {
+      if (!wallets[wallet].chosen) continue;
+      const ref: PaymentMethodRef = { type: "wallet", wallet };
+      rows.push({
+        id: methodKey(ref),
+        type: "wallet",
+        label: walletName(wallet),
+        detail: wallets[wallet].ready ? "Connected" : `Not live yet: ${wallets[wallet].missing}`,
+        brand: "wallet",
+        wallet,
+        isDefault: methodEquals(def, ref),
+        ready: wallets[wallet].ready,
+      });
+    }
+    return rows;
+  }
+
+  /** Approved spend for this bot in the UTC month of `at`, same currency. */
+  monthSpend(principalId: string, botId: string, currency: string, at: number): string {
+    const month = utcMonthKey(at);
+    const document = this.load(principalId);
+    const amounts: string[] = [];
+    for (const row of Object.values(document.purchases ?? {})) {
+      if (row.botId !== botId || row.currency !== currency) continue;
+      if (row.status !== "once" && row.status !== "always") continue;
+      if (utcMonthKey(row.answeredAt ?? row.createdAt) !== month) continue;
+      amounts.push(row.amount);
+    }
+    return sumAmounts(amounts);
+  }
+
+  private methodAvailable(document: VaultDocument, method: PaymentMethodRef): boolean {
+    if (method.type === "card") {
+      const item = document.items[method.cardId];
+      return Boolean(item && item.kind === "card" && item.card);
+    }
+    return Boolean(document.wallets?.[method.wallet]?.chosen);
   }
 
   /** Ask the person to approve a payment. The page's own address is the
@@ -1044,16 +1219,34 @@ export class CredentialVault {
     const currency = parseCurrency(input.currency);
     if (!amount || !currency) throw new CredentialVaultError("amount and currency are required", "invalid_amount");
     if (input.wallet && !isSingleUseWallet(input.wallet)) throw new CredentialVaultError("wallet must be shop_pay or link", "unknown_wallet");
-    if (!input.wallet && !input.cardId) throw new CredentialVaultError("request_purchase needs a card or Shop Pay or Link.", "invalid_item");
-    if (input.wallet && !this.walletLinks(principalId)[input.wallet].chosen) {
+    // When the bot omits the instrument, use the person's default method.
+    let cardId = input.cardId;
+    let wallet = input.wallet;
+    if (!wallet && !cardId) {
+      const def = this.paymentsSettings(principalId).defaultMethod;
+      if (def?.type === "card") cardId = def.cardId;
+      else if (def?.type === "wallet") wallet = def.wallet;
+    }
+    if (!wallet && !cardId) throw new CredentialVaultError("request_purchase needs a card or Shop Pay or Link, or a default method in Settings > Vault > Payments.", "invalid_item");
+    if (wallet && !this.walletLinks(principalId)[wallet].chosen) {
       throw new CredentialVaultError(requestSingleUseToken({
-        wallet: input.wallet, chosen: false, approval: "once", merchant: input.merchant, amount, currency,
+        wallet, chosen: false, approval: "once", merchant: input.merchant, amount, currency,
       }).prompt, "not_connected");
     }
     const now = this.now();
+    const settings = this.paymentsSettings(principalId);
+    const blocked = allowanceRefusal({
+      settings,
+      botId: input.botId,
+      amount,
+      domain,
+      monthSpent: this.monthSpend(principalId, input.botId, currency, now),
+      currency,
+    });
+    if (blocked) throw new CredentialVaultError(blocked, "allowance", 422);
     return this.mutate(principalId, (items, purchases) => {
-      const card = input.wallet ? undefined : items[input.cardId ?? ""];
-      if (!input.wallet && (!card || card.kind !== "card" || !card.card)) throw new CredentialVaultError("No such card", "unknown_item", 404);
+      const card = wallet ? undefined : items[cardId ?? ""];
+      if (!wallet && (!card || card.kind !== "card" || !card.card)) throw new CredentialVaultError("No such card", "unknown_item", 404);
       if (input.addressId) {
         const address = items[input.addressId];
         if (!address || address.kind !== "address") throw new CredentialVaultError("No such address", "unknown_item", 404);
@@ -1062,9 +1255,9 @@ export class CredentialVault {
         const contact = items[input.contactId];
         if (!contact || contact.kind !== "contact") throw new CredentialVaultError("No such contact", "unknown_item", 404);
       }
-      const sameInstrument = (row: StoredPurchase) => input.wallet
-        ? row.wallet === input.wallet && !row.cardId
-        : row.cardId === input.cardId && !row.wallet;
+      const sameInstrument = (row: StoredPurchase) => wallet
+        ? row.wallet === wallet && !row.cardId
+        : row.cardId === cardId && !row.wallet;
       // the same approval only for the same amount, currency and cart (review of #956)
       const cart = cartKey(input.items, input.flights);
       const live = Object.values(purchases).find((row) => purchaseCovers(row, input.botId, input.threadId, domain, now) && sameInstrument(row)
@@ -1080,19 +1273,19 @@ export class CredentialVault {
         if (row.status === "pending" && row.botId === input.botId && row.domain === domain && sameInstrument(row)) delete purchases[row.id];
       }
       let merchant = visibleText(input.merchant ?? "").slice(0, 80) || domain;
-      if (input.wallet) merchant = redactCardNumbers(merchant).replace(/\[card\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || domain;
+      if (wallet) merchant = redactCardNumbers(merchant).replace(/\[card\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || domain;
       const id = newPurchaseId(purchases);
       const row: StoredPurchase = {
         id, botId: input.botId, threadId: input.threadId, merchant, domain, amount, currency,
-        ...(input.wallet ? { wallet: input.wallet } : { cardId: card!.id }),
+        ...(wallet ? { wallet } : { cardId: card!.id }),
         ...(input.addressId ? { addressId: input.addressId } : {}), ...(input.contactId ? { contactId: input.contactId } : {}),
         ...(input.items?.length ? { items: input.items } : {}), ...(input.flights?.length ? { flights: input.flights } : {}),
         status: "pending", createdAt: now,
       };
       purchases[id] = row;
       const listing = this.purchaseListing({ items }, row);
-      const note = input.wallet
-        ? requestSingleUseToken({ wallet: input.wallet, chosen: true, approval: "pending", merchant, amount, currency }).prompt
+      const note = wallet
+        ? requestSingleUseToken({ wallet, chosen: true, approval: "pending", merchant, amount, currency }).prompt
         : `Sagax purchase update: ${listing.title} ${listing.line} Nothing was charged. Wait for the person to allow it, then call fill_credential. You never receive the card number.`;
       return { already: false, listing, note };
     });
@@ -1407,6 +1600,11 @@ export class CredentialVault {
     };
   }
 
+  /** Evict a vault's decrypted copy from memory (a deleted bot); the file is the folder's. */
+  forget(principalId: string): void {
+    this.cache.delete(principalId);
+  }
+
   /** Forget a person's whole vault (their account is deleted). */
   drop(principalId: string): void {
     rmSync(this.file(principalId), { force: true });
@@ -1587,13 +1785,22 @@ export function fillResolverFor(
   recordPurchase(input: { pageUrl: string; orderRef?: string; total?: string; items?: PurchaseItem[]; flights?: PurchaseFlightLeg[]; tracking?: TrackingInput }): { ok: true; message: string } | { ok: false; message: string };
   updateTracking(input: { orderRef?: string; tracking: TrackingInput; checkAgainHours: number }): { ok: true; message: string } | { ok: false; message: string };
 } {
+  const teamPrincipal = botVaultPrincipal(context.botId);
+  const labelOf = (resolved: Extract<FillResolution, { ok: true }>) =>
+    resolved.item.source === "1password" ? "a 1Password login" : resolved.item.name;
   return {
     async resolve(request) {
+      // Team bot vault first (shared logins), then the person's own vault.
+      const fromTeam = await vault.resolveForFill(teamPrincipal, { ...request, botId: context.botId, threadId: context.threadId }, readOnePassword);
+      if (fromTeam.ok) return { ok: true as const, value: fromTeam.value, label: labelOf(fromTeam) };
+      if (fromTeam.code !== "unknown_item" && fromTeam.code !== "unavailable") {
+        return { ok: false as const, message: fromTeam.message, code: fromTeam.code };
+      }
       const resolved = await vault.resolveForFill(context.principalId, { ...request, botId: context.botId, threadId: context.threadId }, readOnePassword);
       // a 1Password item's own title never reaches the bot (review of #954)
-      return resolved.ok ? { ok: true, value: resolved.value, label: resolved.item.source === "1password" ? "a 1Password login" : resolved.item.name } : { ok: false, message: resolved.message, code: resolved.code };
+      return resolved.ok ? { ok: true as const, value: resolved.value, label: labelOf(resolved) } : { ok: false as const, message: resolved.message, code: resolved.code };
     },
-    armed: () => vault.armed(context.principalId, context.botId, context.threadId),
+    armed: () => vault.armed(context.principalId, context.botId, context.threadId) || vault.armed(teamPrincipal, context.botId, context.threadId),
     requestPurchase(input) {
       try {
         const opened = vault.openPurchase(context.principalId, {

@@ -30,7 +30,7 @@ import { useDesktopWorkspace } from "../DesktopWorkspaceSwitcher";
 import type { ServerModeState } from "../ServerModeSettings";
 import { profileInitials, profileLabel } from "../SidebarProfileMenu";
 import { MyLabelField } from "./MyLabelField";
-import { OwnAvatarField, OwnAvatarStatusLine, type OwnAvatarStatus } from "./OwnAvatarField";
+import { OwnAvatarField, OwnAvatarStatusLine, setOwnAvatarNotice, useOwnAvatarNotice } from "./OwnAvatarField";
 import { AnchoredPopover, useAnchoredDismissRoot } from "@/components/AnchoredPopover";
 import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
 
@@ -62,7 +62,7 @@ export function AccountCard({ lockedServer }: { lockedServer: LockedServer | nul
   const operator = !managed && !(viewer && !viewer.operator);
   const organization = (org?.org.name || lockedServer?.name || "").trim();
   const [signOutFailed, setSignOutFailed] = useState(false);
-  const [photoStatus, setPhotoStatus] = useState<OwnAvatarStatus>({ kind: "idle" });
+  const photoStatus = useOwnAvatarNotice();
   // 2026-10-16: on an organization server the signed-in person changes their
   // own photo here; it is written to Perspicax as them (OwnAvatarField).
   const ownPhotoPrincipal = managed && viewer && !viewer.operator ? viewer.principalId?.trim() || null : null;
@@ -94,7 +94,7 @@ export function AccountCard({ lockedServer }: { lockedServer: LockedServer | nul
                 principalId={ownPhotoPrincipal}
                 avatarUrl={managed?.avatarUrl}
                 initials={profileInitials({ name: managed?.name || viewer?.name || "", email: managed?.email || viewer?.email || "" })}
-                onStatus={setPhotoStatus}
+                onStatus={setOwnAvatarNotice}
               />
             ) : undefined}
           >

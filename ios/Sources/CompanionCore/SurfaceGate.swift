@@ -125,11 +125,11 @@ public enum SurfaceFeature: String, CaseIterable, Hashable, Sendable {
     /// session, the owner's sidecar with D1, and an organization member on a
     /// bot they own (`allows(_:bot:)`, #1098).
     case promptPreview
-    /// The advanced panel's Access section with its switches (browser,
-    /// connected apps, MCP servers, always allowed): an admin session, and
-    /// the bot's owner on an organization server for the fields their
-    /// permissions open (`allows(_:bot:)`, `canEditBotField`). The sidecar
-    /// and anyone else read it (BA6).
+    /// The advanced panel's Access and Permissions sections (browser, MCP
+    /// servers, always allowed, approval level, proactive): an admin
+    /// session, the owner's sidecar (Lot 1), and the bot's owner on an
+    /// organization server for the fields their permissions open
+    /// (`allows(_:bot:)`, `canEditBotField`). Anyone else reads them (BA6).
     case botAccessEdit
     /// Who can see it (BA14): `PATCH {visibility}` is an admin's, and only
     /// on a served workspace that is not an organization server (the
@@ -434,7 +434,11 @@ public struct SurfaceGate: Hashable, Sendable {
             }
         case .roomMemory:
             return scope != .sidecar || sidecarRoutes.contains(.roomMemory)
-        case .botAccessEdit, .orgSkillsLibrary:
+        case .botAccessEdit:
+            // Owner's sidecar: Permissions, Approval, Proactive and Access
+            // match the desktop (Lot 1). Org members use allows(_:bot:).
+            return scope == .serverAdmin || scope == .sidecar
+        case .orgSkillsLibrary:
             return scope == .serverAdmin
         case .commandAllowlistAdd:
             return scope == .serverAdmin || (scope == .serverClient && can("host.shell"))

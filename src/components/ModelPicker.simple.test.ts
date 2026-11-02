@@ -9,10 +9,6 @@ const fixture = vi.hoisted(() => {
   return { instances: [] as InstanceInfo[], bots: [] as Bot[], dispatch: vi.fn() as (...args: unknown[]) => void };
 });
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => false, setAdvancedMode: () => {} }));
-vi.mock("@/lib/unready-providers-preference", () => ({
-  useShowUnreadyProviders: () => false,
-  setShowUnreadyProviders: () => {},
-}));
 vi.mock("./MenuMotion", () => ({ useMenuMotion: () => ({ shown: true, closing: false, className: "", exitProps: {} }) }));
 vi.mock("@/state/store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/state/store")>()),
@@ -68,7 +64,7 @@ describe("model picker in Simple mode", () => {
   it("keeps the model list and hides effort, catalog chrome and settings links", () => {
     fixture.instances = [claude(true)];
     const markup = html();
-    expect(markup).toContain('data-model-search-list="window"');
+    expect(markup).toContain('data-model-search-list="popover"');
     expect(markup).toContain('placeholder="Search models"');
     expect(markup).toContain("Opus");
     // Every model of the provider, in one list, in Simple too.
@@ -121,7 +117,8 @@ describe("model picker in Simple mode", () => {
   it("links to Providers for sign-in", () => {
     fixture.instances = [claude(false)];
     const markup = html();
-    expect(markup).toContain("data-model-providers-link");
+    expect(markup).toContain("data-model-edit");
+    expect(markup).toContain("Providers");
     expect(markup).not.toContain("data-claude-sign-in");
     expect(markup).not.toContain("data-model-add-api-keys");
     expect(markup).not.toContain("data-model-engines-link");
@@ -141,10 +138,10 @@ describe("a thread's picker and its bot's model", () => {
   }
   const threadPicker = (forBot: Bot) => renderToStaticMarkup(createElement(ModelPicker, { bot: forBot, threadId: "thread-atlas" }));
 
-  /** The "<bot>'s model" row of the window's list, as markup. */
+  /** The "<bot>'s model" row of the menu's list, as markup. */
   const followRow = (markup: string) => {
-    const window = markup.slice(markup.indexOf("data-model-picker-content"));
-    return /<div[^>]*data-follow-bot-model="true"[^>]*>/.exec(window)?.[0] ?? "";
+    const menu = markup.slice(markup.indexOf("data-model-menu"));
+    return /<div[^>]*data-follow-bot-model="true"[^>]*>/.exec(menu)?.[0] ?? "";
   };
 
   it("offers the bot's model to a thread on its own", () => {

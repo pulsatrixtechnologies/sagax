@@ -50,6 +50,12 @@ export function VaultRequestCard({ botId, threadId, message }: { botId: string; 
   useEffect(() => {
     if (settled || !request) return;
     let live = true;
+    if (request.team && request.teamItems?.length) {
+      // The bot's shared logins: the card lists them, nothing else to load.
+      setItems(request.teamItems.map((row) => ({ ...row, kind: "login", source: "local" }) as unknown as VaultItemListing));
+      setChoice(request.teamItems[0]!.id);
+      return () => { live = false; };
+    }
     loadCredentials()
       .then((state) => {
         if (!live) return;
@@ -144,7 +150,7 @@ export function VaultRequestCard({ botId, threadId, message }: { botId: string; 
   const onePasswordShown = onePasswordItems.filter((item) => !savedNames.has(item.title.toLowerCase()));
   // Only another address of the chosen login's own site, never a look-alike
   // or a shared hosting name (the server checks the same: siteAddable).
-  const canAddSite = Boolean(chosen && siteAddable(chosen.domains, request.domain));
+  const canAddSite = Boolean(!request.team && chosen && siteAddable(chosen.domains, request.domain));
   const startSelf = async () => {
     if (busy) return;
     setBusy(true);
@@ -213,7 +219,7 @@ export function VaultRequestCard({ botId, threadId, message }: { botId: string; 
                 <span className="truncate">{item.name}{item.username ? ` · ${item.username}` : ""}</span>
               </button>
             ))}
-            <button
+            {!request.team && <button
               type="button"
               role="radio"
               aria-checked={choice === NEW}
@@ -221,7 +227,7 @@ export function VaultRequestCard({ botId, threadId, message }: { botId: string; 
               className={cn(ASK_CHIP, choice === NEW ? ASK_CHIP_PICKED : ASK_CHIP_IDLE)}
             >
               {t("vault.card.newLogin")}
-            </button>
+            </button>}
           </div>
           {onePasswordShown.length > 0 && (
             <div className="flex flex-col gap-1.5" data-vault-onepassword>

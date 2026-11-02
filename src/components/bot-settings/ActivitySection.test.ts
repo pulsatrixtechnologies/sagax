@@ -7,6 +7,11 @@ vi.mock("@/state/store", () => ({
   api: vi.fn(),
   useStore: () => ({ state: { instances: [], bots: [], selectedId: "pepper" }, dispatch: vi.fn() }),
 }));
+vi.mock("../DesktopCapabilities", () => ({
+  useDesktopCapabilities: () => ({}),
+  useCaptionChrome: () => ({ padClass: "" }),
+  useMacInsetChrome: () => ({ macInset: false, browser: false }),
+}));
 
 import type { BotActivityDetail, BotActivityItem } from "../../../shared/bot-activity";
 import { ActivityList, ActivitySection, CodeWorkList, PanelSections, panelSections, SectionHeader } from "./ActivitySection";
@@ -142,19 +147,18 @@ describe("activity detail modal", () => {
     expect(body({ item: finished, detail: { ...refused, access: undefined } })).not.toContain("data-activity-access");
   });
 
-  it("opens at exactly the size of Settings, on Settings' layer", () => {
+  it("opens as a pushed page in the bot panel, not a Settings-sized window", () => {
     const window = renderToStaticMarkup(createElement(ActivityDetailModal, { item: running, onClose: () => {}, onChanged: () => {} }));
-    expect(window).toContain(`class="${SETTINGS_WINDOW.backdrop}"`);
-    expect(window).toContain("h-[min(700px,calc(100dvh-96px))] w-[min(900px,calc(100vw-40px))]");
+    expect(window).toContain('data-panel-page=""');
+    expect(window).toContain('data-activity-detail="thread:t1"');
+    expect(window).not.toContain(`class="${SETTINGS_WINDOW.backdrop}"`);
     const history = renderToStaticMarkup(createElement(ActivityListModal, { botId: "pepper", filter: "coding", onFilter: () => {}, onClose: () => {}, onStop: () => {}, stopping: new Set<string>() }));
-    expect(history).toContain("h-[min(700px,calc(100dvh-96px))] w-[min(900px,calc(100vw-40px))]");
-    // never the old 560 px native dialog
+    expect(history).toContain('data-panel-page=""');
+    expect(history).toContain('data-activity-list="coding"');
+    // never a native dialog or the old Settings frame size
     expect(window + history).not.toContain("560px");
     expect(window + history).not.toContain("<dialog");
-    // the very classes Settings draws itself with
-    const settings = readFileSync(new URL("../SettingsModal.tsx", import.meta.url), "utf8");
-    expect(settings).toContain(`className="${SETTINGS_WINDOW.backdrop}"`);
-    expect(settings).toContain(`className="${SETTINGS_WINDOW.frame}"`);
+    expect(window + history).not.toContain("h-[min(700px,calc(100dvh-96px))]");
   });
 
   it("puts the actions in the head, the summary at the left and the steps at the right when wide", () => {
@@ -589,14 +593,16 @@ describe("section headers and history", () => {
     expect(onOpenHistory).toHaveBeenCalledWith("other");
   });
 
-  it("draws the history modal with its status filters and search", () => {
+  it("draws the history page with its status filters and search", () => {
     const html = renderToStaticMarkup(createElement(ActivityListModal, { botId: "pepper", filter: "other", onFilter: () => {}, onClose: () => {}, onStop: () => {}, stopping: new Set<string>() }));
+    expect(html).toContain('data-panel-page=""');
     expect(html).toContain(">History<");
     for (const id of ["all", "running", "finished", "failed"]) expect(html).toContain(`data-history-status="${id}"`);
     expect(html).toContain("data-history-search");
-    // master and detail in one window: the list, and the chosen entry beside it
     expect(html).toContain("data-activity-history-list");
-    expect(html).toContain("Choose a task to see its details and its conversation here.");
+    // Narrow (SSR fallback width): the list fills the page; the pick hint
+    // shows only when the panel is wide enough for master and detail.
+    expect(html).toContain("The last 7 days you may see.");
   });
 
   it("lists the past newest first, by status and words", () => {

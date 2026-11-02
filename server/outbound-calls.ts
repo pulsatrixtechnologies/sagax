@@ -358,6 +358,24 @@ export class OutboundCalls {
     this.save();
     return due;
   }
+
+  /** A conversation call that is placed and not yet settled (live). */
+  liveFor(input: { principalId: string; botId: string; threadId: string; callId?: string }): OutboundCallRecord | undefined {
+    const rows = Object.values(this.load()).filter((row) =>
+      row.principalId === input.principalId
+      && row.botId === input.botId
+      && row.threadId === input.threadId
+      && row.request.mode === "conversation"
+      && row.status === "placed"
+      && !row.result);
+    if (input.callId) return rows.find((row) => row.id === input.callId);
+    return rows.sort((a, b) => b.createdAt - a.createdAt)[0];
+  }
+
+  /** Auto-approve a pending card (person's Auto level, after consent). */
+  autoApprove(principalId: string, id: string): OutboundCallRecord {
+    return this.answer(principalId, id, "call", undefined, this.get(id)?.request.to, true);
+  }
 }
 
 /** m:ss */
@@ -375,7 +393,8 @@ const OUTCOME_WORDS: Record<OutboundCallResult["outcome"], string> = {
 };
 
 /** The card the conversation shows for a call: no id in its words. */
-export function callCard(row: OutboundCallRecord, botName: string, callback?: string): OutboundCard {
+export function callCard(row: OutboundCallRecord, botName: string, callback?: string, live?: Partial<OutboundCard>): OutboundCard {
+  const placedLive = row.request.mode === "conversation" && row.status === "placed" && !row.result;
   return {
     kind: "call",
     id: row.id,
@@ -397,7 +416,17 @@ export function callCard(row: OutboundCallRecord, botName: string, callback?: st
       maxMinutes: row.request.maxMinutes ?? 5,
       ...(row.request.voicemail ? { voicemail: row.request.voicemail } : {}),
       script: conversationDisclosure({ botName, personName: row.personName ?? "", language: row.request.language }),
+      ...(placedLive ? {
+        phase: live?.phase ?? "dialing",
+        liveStartedAt: live?.liveStartedAt ?? row.answeredAt ?? row.createdAt,
+        ...(live?.calleeName ? { calleeName: live.calleeName } : {}),
+        ...(live?.liveTranscript?.length ? { liveTranscript: live.liveTranscript } : {}),
+        ...(live?.liveEvents?.length ? { liveEvents: live.liveEvents } : {}),
+      } : {}),
+      ...(live?.recordingUrl && row.result ? { recordingUrl: live.recordingUrl } : {}),
+      ...(live?.phase === "ended" || row.result ? { phase: live?.phase ?? "ended" } : {}),
     } : {}),
+    ...(live?.calleeName && !placedLive ? { calleeName: live.calleeName } : {}),
   };
 }
 
@@ -442,8 +471,15 @@ export interface PlaceCallDeps {
   names: { botName: string; personName: string };
   language: CallLanguage;
   /** Write the card row, or update it; returns the row's id. */
-  card(row: OutboundCallRecord, existingMessageId?: string): string | undefined;
+  card(row: OutboundCallRecord, existingMessageId?: string, live?: Partial<OutboundCard>): string | undefined;
   log?(line: string): void;
+  /** One-time acceptable-use consent already recorded for this person. */
+  consentAllows?: boolean;
+  /** Stage the one-time consent card; returns the bot-facing note. */
+  stageConsent?: () => string;
+  /** Person's approval level is Auto and org Ask/Deny lets this call skip
+   * the per-call request card (consent still required). */
+  autoPlace?: boolean;
 }
 
 /** A name said on the call: visible characters, cut at 80 on a word, never
@@ -481,6 +517,14 @@ function shortError(value: unknown, fallback: string): string {
 export async function placePhoneCall(deps: PlaceCallDeps, context: { principalId: string; botId: string; threadId: string }, args: unknown): Promise<{ text: string; isError?: boolean }> {
   const request = parseOutboundCall(args, deps.language);
   if (typeof request === "string") return { text: request, isError: true };
+  // one-time acceptable-use consent before any call card or placement
+  if (deps.consentAllows === false) {
+    const note = deps.stageConsent?.();
+    return {
+      text: note
+        ?? "Sagax showed the person a one-time consent card for phone calls. End your turn now; when they Accept, call place_phone_call again with the same arguments.",
+    };
+  }
   // the pilot gate (ÉFVP 2026-10-22), checked again when the call leaves
   const settings = deps.calls.settings();
   if (!settings.enabled) return { text: "Phone calls are off for this organization: an admin turns the pilot on in Settings > Organization > Phone calls. Nothing was placed.", isError: true };
@@ -556,12 +600,13 @@ async function placeConversation(
     const placed = answer.ok && !answer.isError && !/needs_confirmation/.test(shortError(answer.value, ""));
     const sid = placed ? sidOf(answer.value) : undefined;
     const settled = deps.calls.settle(approved.id, placed ? (sid ? { callSid: sid } : {}) : { error: answer.ok ? shortError(answer.value, "Perspicax refused the call") : answer.error })!;
-    deps.card(settled, settled.messageId);
+    const live = conversation && placed ? { phase: "dialing" as const, liveStartedAt: Date.now() } : undefined;
+    deps.card(settled, settled.messageId, live);
     deps.log?.(`outbound ${conversation ? "conversation" : "line"} call ${settled.status} to ${maskPhone(request.to)}`);
     if (!placed) return { text: `The call to ${maskPhone(request.to)} was not placed: ${settled.error ?? "no answer from Perspicax"}. Tell the person; do not retry without a new approval.`, isError: true };
     if (!conversation) return { text: `Call placed to ${maskPhone(request.to)} from the person's own line: it says who calls, your purpose and your message twice, then hangs up. Tell the person it was placed.` };
     return {
-      text: `Conversation call placed to ${maskPhone(request.to)} from the person's line: it opens with the AI disclosure, then you talk with them for at most ${request.maxMinutes ?? 5} minutes. End your turn now. When the call ends, Sagax shows its result card and you get the result (status, duration, summary, commitments, transcript) in a new turn: then give the person the summary they asked for.`,
+      text: `Conversation call placed to ${maskPhone(request.to)} from the person's line: it opens with the AI disclosure, then you talk with them for at most ${request.maxMinutes ?? 5} minutes. End your turn now. The live card shows dialing, ringing and the transcript; when the call ends you get the result (status, duration, summary, commitments, transcript) in a new turn: then give the person the summary they asked for. Use send_dtmf, transfer or hang_up while it is live if you need to.`,
     };
   }
   const waiting = deps.calls.pending(context.principalId).some((row) => row.botId === context.botId && row.threadId === context.threadId && row.digest === digestOf(request, names));
@@ -572,12 +617,36 @@ async function placeConversation(
   if (!dry.ok || dry.isError) return { text: voiceRefusal(dry), isError: true };
   const opened = deps.calls.open({ ...context, request, names });
   for (const old of opened.replaced) deps.card(old, old.messageId);
+  // Auto may skip the per-call request card once consent is on file
+  if (deps.autoPlace && !opened.already) {
+    try {
+      deps.calls.autoApprove(context.principalId, opened.record.id);
+    } catch {
+      // fall through to the card if auto-approve cannot run
+    }
+    const approved = deps.calls.approvedFor({ ...context, request, names });
+    if (approved && deps.calls.claim(approved.id)) {
+      const answer = await deps.voice(voiceCallArgs(request, { botName: names.botName, ref: approved.id, dryRun: false }));
+      const placed = answer.ok && !answer.isError && !/needs_confirmation/.test(shortError(answer.value, ""));
+      const sid = placed ? sidOf(answer.value) : undefined;
+      const settled = deps.calls.settle(approved.id, placed ? (sid ? { callSid: sid } : {}) : { error: answer.ok ? shortError(answer.value, "Perspicax refused the call") : answer.error })!;
+      const live = conversation && placed
+        ? { phase: "dialing" as const, liveStartedAt: (deps as { now?: () => number }).now?.() ?? Date.now() }
+        : undefined;
+      deps.card(settled, settled.messageId, live);
+      if (!placed) return { text: `The call to ${maskPhone(request.to)} was not placed: ${settled.error ?? "no answer from Perspicax"}. Tell the person; do not retry without a new approval.`, isError: true };
+      if (!conversation) return { text: `Call placed to ${maskPhone(request.to)} from the person's own line (Auto). Tell the person it was placed.` };
+      return {
+        text: `Conversation call placed to ${maskPhone(request.to)} (Auto). End your turn now. Watch the live card; when it ends you get the result.`,
+      };
+    }
+  }
   const messageId = deps.card(opened.record, opened.record.messageId);
   if (messageId && !opened.record.messageId) deps.calls.attachMessage(opened.record.id, messageId);
   return {
     text: !conversation
       ? `${opened.already ? "The card is still waiting" : "Sagax showed the person a card"}: call ${formatPhone(request.to)} from their own line, "${request.purpose}". Nothing was placed. End your turn now; when they choose Call you are told, then call place_phone_call again with the same arguments.`
-      : `${opened.already ? "The card is still waiting" : "Sagax showed the person a card"}: a conversation call to ${formatPhone(request.to)}, objective "${request.purpose}", ${request.maxMinutes ?? 5} minutes at most. Nothing was placed. End your turn now; when they choose Call you are told, then call place_phone_call again with the same arguments.`,
+      : `${opened.already ? "The card is still waiting" : "Sagax showed the person a card"}: Call ${formatPhone(request.to)}? Objective "${request.purpose}", ${request.maxMinutes ?? 5} minutes at most. Nothing was placed. End your turn now; when they choose Call you are told, then call place_phone_call again with the same arguments.`,
   };
 }
 

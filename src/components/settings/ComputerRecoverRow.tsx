@@ -14,14 +14,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, RotateCcw } from "lucide-react";
 
+import { confirmAsync, type ConfirmRequest } from "@/components/ConfirmProvider";
 import { t } from "@/lib/i18n";
 import { computerAction, loadComputerStatus, resetComputer, updateComputer, type ComputerStatusView } from "@/lib/computer-recover";
 import { loadWorkingBots, stopWorkingBot, type WorkingBot } from "@/lib/computer-working-bots";
 import { ApiError } from "@/state/store";
 import { DANGER_PILL, DescribedRow, PILL } from "../SettingsPrimitives";
 
-type Confirm = (message: string) => Promise<boolean>;
-const defaultConfirm: Confirm = (message) => window.ogb?.confirm ? window.ogb.confirm(message) : Promise.resolve(window.confirm(message));
+type Confirm = (request: ConfirmRequest | string) => Promise<boolean> | boolean;
+const defaultConfirm: Confirm = (request) =>
+  confirmAsync(typeof request === "string" ? { title: request, confirmLabel: t("common.confirm"), tone: "danger" } : request);
 
 export function ComputerRecoverRow({
   initial = null,
@@ -82,7 +84,11 @@ export function ComputerRecoverRow({
   const busy = watchWorkers && workers.length > 0;
 
   const run = async () => {
-    if (!(await confirm(t(recover ? "computerCare.recover.confirm" : "computerCare.updateNow.confirm")))) return;
+    if (!(await confirm({
+      title: t(recover ? "computerCare.recover.confirm" : "computerCare.updateNow.confirm"),
+      confirmLabel: t("common.confirm"),
+      tone: "danger",
+    }))) return;
     setRunning(true);
     setError("");
     try {
@@ -114,7 +120,11 @@ export function ComputerRecoverRow({
   };
 
   const reset = async () => {
-    if (!(await confirm(t(busy ? "computerCare.reset.confirmBusy" : "computerCare.reset.confirm")))) return;
+    if (!(await confirm({
+      title: t(busy ? "computerCare.reset.confirmBusy" : "computerCare.reset.confirm"),
+      confirmLabel: t("computerCare.reset.button"),
+      tone: "danger",
+    }))) return;
     setResetting(true);
     setError("");
     try {

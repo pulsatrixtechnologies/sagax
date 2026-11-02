@@ -17,8 +17,8 @@ import { FEEDBACK_ADDRESS, feedbackMailto } from "@/lib/feedback";
 import { launchBridges } from "@/lib/launch";
 import { t } from "@/lib/i18n";
 import { canEditConfig } from "@/lib/viewer";
-import { useStore, type ConfigStatus } from "@/state/store";
-import { DescribedRow, PILL, SettingsGroup } from "../SettingsPrimitives";
+import { api, useStore, type ConfigStatus } from "@/state/store";
+import { DescribedRow, PILL, SettingsGroup, Switch } from "../SettingsPrimitives";
 import { ThreadCleanupSettings } from "../ThreadCleanupSettings";
 import { PeopleToolAccessSettings } from "../ToolAccessSettings";
 import { OrganizationBotRows } from "./OrganizationBotRules";
@@ -55,6 +55,9 @@ export function GeneralAdvancedSettings() {
               Model pages). A person's grants stay here. */}
           <PeopleToolAccessSettings />
           <ThreadCleanupSettings />
+          <SettingsGroup title={t("settings.loopGuard.title")} groupId="loopGuard">
+            <LoopGuardRow />
+          </SettingsGroup>
         </>
       )}
       <SettingsGroup title={t("settings.diagnostics.title")} groupId="diagnostics">
@@ -63,6 +66,49 @@ export function GeneralAdvancedSettings() {
         <UsageMeterRow />
         <SendFeedbackRow />
       </SettingsGroup>
+    </div>
+  );
+}
+
+/** Workspace loop guard: on by default; steers then stops a repeating shell failure. */
+export function LoopGuardRow() {
+  const { state, dispatch } = useStore();
+  const enabled = state.config?.loopGuard?.enabled !== false;
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const toggle = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const config: ConfigStatus = await api("/api/config", {
+        method: "PATCH",
+        body: JSON.stringify({ loopGuard: { enabled: !enabled } }),
+      });
+      dispatch({ type: "configStatus", config });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t("settings.loopGuard.error"));
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div data-settings-card="general.loopGuard">
+      <DescribedRow
+        label={t("settings.loopGuard.title")}
+        rowId="loopGuard"
+        description={error
+          ? <span role="alert" className="text-danger">{error}</span>
+          : t("settings.loopGuard.short")}
+      >
+        <Switch
+          checked={enabled}
+          aria-label={t("settings.loopGuard.aria")}
+          disabled={saving}
+          onClick={() => void toggle()}
+          className="disabled:cursor-wait disabled:opacity-50"
+        />
+      </DescribedRow>
     </div>
   );
 }

@@ -59,6 +59,19 @@ describe("a tool step row", () => {
     click(row);
     expect(node.querySelector("[data-step-detail]")).toBeNull();
   });
+
+  it("shows a short runCommand target without UUID or server path; full command in tooltip and detail", () => {
+    const bot = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+    const full = `ls /data/.sagax/bots/${bot}/sagax-plugins`;
+    const node = mount(createElement(ToolActivity, { tool: { name: "Bash", ok: true, input: JSON.stringify({ command: full }), durationMs: 400 } }));
+    const target = node.querySelector("[data-step-target]")!;
+    expect(target.textContent).toBe("ls sagax-plugins");
+    expect(target.textContent).not.toContain(bot);
+    expect(target.textContent).not.toContain("/data/");
+    expect(target.getAttribute("title")).toBe(full);
+    click(node.querySelector("button"));
+    expect(node.querySelector("[data-step-detail]")?.textContent).toContain(full);
+  });
 });
 
 describe("a group of steps", () => {

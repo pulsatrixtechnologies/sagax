@@ -55,7 +55,9 @@ describe("BotExchangeChip sheet", () => {
     expect(sheet).not.toBeNull();
     expect(sheet!.className).toContain("absolute inset-0");
     expect(sheet!.className).not.toContain("fixed");
-    expect(host.textContent).toContain("Close Chat");
+    const close = host.querySelector<HTMLButtonElement>("[data-testid=bot-exchange-close]")!;
+    expect(close.getAttribute("aria-label")).toBe("Close");
+    expect(host.textContent).not.toMatch(/Close Chat/i);
     expect(host.textContent).toContain("Which database?");
   });
 });

@@ -39,8 +39,18 @@ vi.mock("./WizardConversation", () => ({
   WizardConversation: ({ botId, threadId }: { botId: string; threadId: string }) => createElement("div", { "data-stub-chat": `${botId}:${threadId}` }),
 }));
 vi.mock("../Avatar", () => ({ BotAvatar: () => null }));
-vi.mock("../BotZipImport", () => ({ BotZipImportDialog: () => createElement("div", { "data-stub-import": "zip" }) }));
-vi.mock("../AgentImport", () => ({ AgentImportDialog: () => createElement("div", { "data-stub-import": "agent" }) }));
+vi.mock("../BotZipImport", () => ({
+  BotZipImportDialog: () => createElement("div", { "data-stub-import": "zip" }),
+  BotZipImportPanel: () => createElement("div", { "data-stub-import": "zip" }),
+}));
+vi.mock("../AgentImport", () => ({
+  AgentImportDialog: () => createElement("div", { "data-stub-import": "agent" }),
+  AgentImportPanel: () => createElement("div", { "data-stub-import": "agent" }),
+}));
+vi.mock("../NewBotDialog", () => ({
+  NewBotForm: () => createElement("div", { "data-stub-template": "form" }),
+  NewBotDialog: () => null,
+}));
 
 const { BotWizard } = await import("./BotWizard");
 
@@ -173,20 +183,42 @@ describe("the bot creation wizard", () => {
     expect(fixture.lib.createWizardBot).not.toHaveBeenCalled();
   });
 
-  it("keeps every way New bot's old dialog offered, as other ways to start", async () => {
+  it("quick create is the first step; other starts keep template, browse and imports", async () => {
     fixture.state = { bots: [primary], botWizard: { botId: null }, config: { viewer: { canCreateBots: true } } };
     await render();
+    expect(container.querySelector("[data-wizard-quick-create]")).not.toBeNull();
     expect([...container.querySelectorAll("[data-wizard-other]")].map((node) => node.getAttribute("data-wizard-other")))
-      .toEqual(["template", "browse", "import-agent", "import-zip", "quick"]);
+      .toEqual(["template", "browse", "import-agent", "import-zip"]);
     await click('[data-wizard-other="template"]');
-    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "closeBotWizard" });
-    expect(fixture.dispatch).toHaveBeenCalledWith({ type: "toggleNewBot", open: true });
+    expect(container.querySelector('[data-stub-template="form"]')).not.toBeNull();
+    await click("[data-wizard-back-view]");
+    expect(container.querySelector("[data-wizard-quick-create]")).not.toBeNull();
     await click('[data-wizard-other="browse"]');
     expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "openBotCatalog", section: "templates" }));
-    await click('[data-wizard-other="quick"]');
-    expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "newBot", settings: {} }));
     await click('[data-wizard-other="import-agent"]');
     expect(container.querySelector('[data-stub-import="agent"]')).not.toBeNull();
+  });
+
+  it("quick create sends name, colour and shape through newBot", async () => {
+    fixture.state = { bots: [primary], botWizard: { botId: null }, config: { viewer: { canCreateBots: true } } };
+    await render();
+    const name = container.querySelector<HTMLInputElement>("[data-wizard-quick-name]")!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+    await act(async () => {
+      setter.call(name, "Nova");
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await click('[data-wizard-quick-shape="bean"]');
+    await click('[data-wizard-quick-color="blue"]');
+    await click("[data-wizard-quick-submit]");
+    expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: "newBot",
+      settings: expect.objectContaining({
+        name: "Nova",
+        color: "blue",
+        mascotLook: expect.objectContaining({ character: "shape", shape: "bean" }),
+      }),
+    }));
   });
 
   it("resumes an open draft of a bot straight on its step and mode", async () => {

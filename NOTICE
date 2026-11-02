@@ -52,6 +52,11 @@ https://github.com/anomalyco/opencode, Copyright (c) 2025 opencode, used under
 the MIT License. The full license texts are in third_party/models-dev/LICENSE
 and third_party/opencode/LICENSE.
 
+Prompt-cache keep-warm (server/cache-keepwarm.ts and
+server/drivers/claude-keepwarm.ts) ports the design of Cache Tax,
+https://github.com/karanb192/claude-code-mods, Copyright (c) 2026 Karan
+Bansal, used under the MIT License (third_party/cache-tax/LICENSE).
+
 Selected provider icon paths are from Simple Icons, used under CC0 1.0.
 The Cohere provider icon path is from Lobe Icons, Copyright 2023 LobeHub,
 used under the MIT License.

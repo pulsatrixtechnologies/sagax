@@ -35,10 +35,33 @@ const conversation = {
   objective: "Prendre rendez-vous pour l'entretien de la thermopompe la semaine prochaine, idéalement en matinée.",
   script: "Bonjour, ici Rocket, un assistant IA qui appelle au nom d'Alex.",
 };
+const liveStartedAt = 1798000000000 - 67_000;
+// Tiny silent WAV so the recording player has a playable src in the gallery.
+const SILENT_WAV = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+
 const CONVERSATION: { message: Message; transcriptOpen?: boolean }[] = [
-  { message: row(11, { ...conversation, id: "call_0000000000000011", status: "pending", instructions: "Rester bref et poli. Proposer mardi ou mercredi entre 8 h et 11 h. Ne donner aucune information de paiement.", voicemail: "Bonjour, ici Rocket, un assistant IA qui appelle au nom d'Alex au sujet de l'entretien de la thermopompe. Alex vous rappellera." }) },
-  { message: row(12, { ...conversation, id: "call_0000000000000012", status: "done", via: "Chef" }) },
-  { message: row(13, { ...conversation, id: "call_0000000000000013", status: "done", result: {
+  { message: row(11, { ...conversation, id: "call_0000000000000011", status: "pending", calleeName: "Thermopompes Québec", instructions: "Rester bref et poli. Proposer mardi ou mercredi entre 8 h et 11 h. Ne donner aucune information de paiement.", voicemail: "Bonjour, ici Rocket, un assistant IA qui appelle au nom d'Alex au sujet de l'entretien de la thermopompe. Alex vous rappellera." }) },
+  { message: row(12, {
+    ...conversation, id: "call_0000000000000012", status: "done", phase: "dialing", liveStartedAt, calleeName: "Thermopompes Québec", via: "Chef",
+  }) },
+  { message: row(17, {
+    ...conversation, id: "call_0000000000000017", status: "done", phase: "in_call", liveStartedAt, calleeName: "Marie Tremblay",
+    liveTranscript: [
+      { speaker: "bot", text: "Bonjour, ici Rocket, un assistant IA qui appelle au nom d'Alex.", at: liveStartedAt + 5_000 },
+      { speaker: "callee", text: "Oui, bonjour.", at: liveStartedAt + 12_000 },
+    ],
+    liveEvents: [{ kind: "dtmf", detail: "1", at: liveStartedAt + 18_000 }],
+  }) },
+  { message: row(18, {
+    ...conversation, id: "call_0000000000000018", status: "done", phase: "on_hold", liveStartedAt, calleeName: "Marie Tremblay",
+    liveTranscript: [{ speaker: "bot", text: "Je vous mets en attente un instant.", at: liveStartedAt + 20_000 }],
+    liveEvents: [{ kind: "hold", detail: "hold", at: liveStartedAt + 21_000 }],
+  }) },
+  { message: row(19, {
+    ...conversation, id: "call_0000000000000019", status: "done", phase: "transferred", liveStartedAt, calleeName: "Marie Tremblay",
+    liveEvents: [{ kind: "transfer", detail: "+1 514 555 0199", at: liveStartedAt + 40_000 }],
+  }) },
+  { message: row(13, { ...conversation, id: "call_0000000000000013", status: "done", calleeName: "Thermopompes Québec", phase: "ended", recordingUrl: SILENT_WAV, result: {
     outcome: "completed", endedBy: "goal", durationSec: 247, endedAt: 1798000000000,
     points: ["Rendez-vous fixé mardi 4 novembre à 9 h.", "Le technicien prévoit environ une heure sur place.", "Le prix de l'entretien annuel est de 149 $ avant taxes."],
     commitments: ["Laisser l'accès au sous-sol libre le matin du rendez-vous.", "La compagnie envoie une confirmation par texto lundi."],

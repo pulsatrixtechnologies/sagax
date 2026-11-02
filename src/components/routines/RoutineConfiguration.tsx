@@ -18,8 +18,8 @@ import { CronSchedulePreview } from "./CronScheduleFields";
 import { RoutineOwnerBadge } from "./RoutineScopeBar";
 import { RoutineWebhookPanel } from "./RoutineWebhookPanel";
 
-const LABEL = "text-[11px] font-medium uppercase tracking-wider text-ink-secondary";
-const VALUE = "mt-1 text-[12.5px] leading-relaxed text-ink";
+const LABEL = "text-[12px] font-medium text-ink-secondary";
+const VALUE = "mt-1 text-[13px] leading-relaxed text-ink";
 
 function Row({ label, children, ...rest }: { label: string; children: React.ReactNode } & Record<`data-${string}`, string | undefined>) {
   return <div {...rest}><div className={LABEL}>{label}</div><div className={VALUE}>{children}</div></div>;
@@ -51,7 +51,7 @@ export function RoutineConfiguration({ routine, run, bots, groups = [], viewerPr
         {routine?.redacted || run?.redacted
           ? <span className="text-ink-secondary">{t("routines.scope.redacted")}</span>
           : <div className="max-w-[68ch] whitespace-pre-wrap break-words">{prompt || <span className="text-ink-secondary">{t("routines.noOutput")}</span>}</div>}
-        {attachments.length > 0 && <ul className="mt-2 flex flex-wrap gap-1.5">{attachments.map((attachment) => <li key={attachment.id} className="rounded-md bg-inset px-2 py-0.5 text-[11.5px] text-ink">{attachment.name}</li>)}</ul>}
+        {attachments.length > 0 && <ul className="mt-2 flex flex-wrap gap-1.5">{attachments.map((attachment) => <li key={attachment.id} className="rounded-md bg-inset px-2 py-0.5 text-[12px] text-ink">{attachment.name}</li>)}</ul>}
       </Row>
       <div className="space-y-4">
         <Row label={roomGoal ? t("routineCalendar.lead") : t("routineCalendar.assignedBot")} data-routine-config-bot="">
@@ -70,7 +70,7 @@ export function RoutineConfiguration({ routine, run, bots, groups = [], viewerPr
         <Row label={t("routines.drawer.runLimit")}>{limit == null ? t("routineCalendar.noTimeLimit") : t("routineCalendar.stopsAfter", { duration: durationLabel(limit) })}</Row>
         {runOn && <Row label={t("routines.drawer.runsOn")}>{runOn === "cloud" ? t("routines.runsOn.boat") : t("routines.runsOn.local")}</Row>}
         {routine?.runAs && <Row label={t("routines.runAsField.label")} data-routine-config-run-as="">{personLabel(routine.runAs.name, routine.runAs.principalId)}</Row>}
-        {otherOwner && <Row label={t("routines.scope.owner")} data-routine-config-owner=""><RoutineOwnerBadge owner={otherOwner} size={18} className="text-[12.5px] text-ink" />{(routine?.canEdit === false || routine?.redacted) && <div className="mt-1 text-[11.5px] text-ink-secondary">{routine.redacted ? t("routines.scope.redacted") : t("routines.scope.readOnly")}</div>}</Row>}
+        {otherOwner && <Row label={t("routines.scope.owner")} data-routine-config-owner=""><RoutineOwnerBadge owner={otherOwner} size={18} className="text-[13px] text-ink" />{(routine?.canEdit === false || routine?.redacted) && <div className="mt-1 text-[12px] text-ink-secondary">{routine.redacted ? t("routines.scope.redacted") : t("routines.scope.readOnly")}</div>}</Row>}
         {routine && <Row label={t("routineDetail.options")} data-routine-config-options="">
           <ul className="space-y-0.5">
             <li>{t("routines.overlapLabel")}: {routine.overlap === "queue" ? t("routines.overlapQueue") : t("routines.overlapSkip")}</li>

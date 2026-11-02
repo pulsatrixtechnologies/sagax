@@ -724,6 +724,9 @@ describe("agents-proxy MCP surface", () => {
       "sagax_help",
       "sagax_settings",
       "sagax_approvals",
+      "wait_until",
+      "list_waits",
+      "cancel_wait",
       "post_to_room",
       "react_to_message",
       "remove_reaction",
@@ -767,7 +770,7 @@ describe("agents-proxy MCP surface", () => {
       "propose_routine_action",
       "propose_profile",
       "propose_model",
-      "generate_shape_avatar",
+      "propose_rule",
       "propose_team_memory",
       "answer_approval",
       "nudge_person",
@@ -800,6 +803,10 @@ describe("agents-proxy MCP surface", () => {
       "remote_support_close",
       "review_write",
       "place_phone_call",
+      "place_call",
+      "send_dtmf",
+      "transfer",
+      "hang_up",
     ]);
     const ask = list.result.tools.find((tool: { name: string }) => tool.name === "ask_bot");
     const delegate = list.result.tools.find((tool: { name: string }) => tool.name === "delegate_bot");
@@ -868,6 +875,7 @@ describe("agents-proxy MCP surface", () => {
       "list_bots", "list_rooms", "check_delegation", "wait_delegation", "list_threads",
       "list_artifacts",
       "sagax_help",
+      "list_waits",
       "list_team_setup",
       "workspace_read", "workspace_search",
       "session_search", "session_read",
@@ -908,7 +916,7 @@ describe("agents-proxy MCP surface", () => {
     expect(JSON.stringify(create.inputSchema)).not.toMatch(/"oneOf"|"anyOf"|"allOf"|"const"/);
     expect(schedule.type).toBe("object");
     expect(schedule.required).toEqual(["type"]);
-    expect(schedule.properties.type.enum).toEqual(["once", "weekly", "daily", "interval", "cron"]);
+    expect(schedule.properties.type.enum).toEqual(["once", "weekly", "daily", "interval", "cron", "limit_reset"]);
     expect(schedule.properties.expression.description).toContain("0 9 L * *");
     expect(schedule.properties.expression.description).toContain("MON#2");
     expect(schedule.properties.timeZone.description).toContain("IANA");
@@ -1933,6 +1941,16 @@ describe("agents-proxy MCP surface", () => {
     expect(lastRoutineRequestBody).toBeNull();
   });
 
+  it("proposes a limit_reset routine for when an AI usage limit resets", async () => {
+    const res = await callTool("propose_routine", {
+      name: "Continue the report",
+      instructions: "Finish the report where it stopped.",
+      schedule: { type: "limit_reset", engine: "claude", repeat: "once" },
+    });
+    expect(res.result.isError).toBeFalsy();
+    expect(lastRoutineRequestBody.routine.schedule).toEqual({ type: "limit_reset", engine: "claude", repeat: "once" });
+  });
+
   it("proposes a one-time routine with the explicit-offset timestamp intact", async () => {
     await callTool("propose_routine", {
       name: "Send follow-up",
@@ -2699,6 +2717,19 @@ describe("coordinate_bots arguments (room turn)", () => {
     expect(res.result.isError).toBeFalsy();
     expect(lastCoordinateBody).toMatchObject({
       botIds: ["bot-helper"], message: "Reply PASS or FAIL.", doneWhen: "first_line:PASS|FAIL",
+    });
+  });
+
+  it("forwards default_answer for R6 person-no-reply fallback", async () => {
+    const listed = await roomRpc("tools/list");
+    const tool = listed.result.tools.find((entry: { name: string }) => entry.name === "coordinate_bots");
+    expect(tool.inputSchema.properties.default_answer).toBeTruthy();
+    const res = await roomRpc("tools/call", { name: "coordinate_bots", arguments: {
+      bot_ids: ["bot-helper"], message: "Ask the person which colour.", default_answer: "blue",
+    } });
+    expect(res.result.isError).toBeFalsy();
+    expect(lastCoordinateBody).toMatchObject({
+      botIds: ["bot-helper"], message: "Ask the person which colour.", defaultAnswer: "blue",
     });
   });
 });

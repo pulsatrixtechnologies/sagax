@@ -163,6 +163,7 @@ export function PermissionsSection({
   // 2026-10-21 (parité 1C): who it writes to without a card
   const showRecipientsUi = !only && advanced && !draft && canEditBotField(state.config, bot, "allowedRecipients");
   const showDrafts = !only && advanced && !draft && canEditBotField(state.config, bot, "emailDrafts");
+  const showLoopGuard = !only && advanced && !draft && canEditBotField(state.config, bot, "loopGuard");
   const showHooks = !only && !draft && canEditBotField(state.config, bot, "allowedRecipients");
   // the owner always manages their own bot's permission mode and rules
   const showOwnerPermissions = !only && !draft && viewerOwnsBot(state.config, bot);
@@ -171,7 +172,7 @@ export function PermissionsSection({
   // checks the same (server/routes/bot-runtime-settings.ts).
   const showToolAccess = !only && advanced && !draft && canEditBotField(state.config, bot, "toolScope");
   const showParallel = !only && advanced && !draft && canEditBotField(state.config, bot, "maxConcurrentThreads");
-  if (!showPrimaryUi && !showApproval && !showContactUi && !showRecipientsUi && !showDrafts && !showHooks && !showOutboundUi && !showOwnerPermissions && !showToolAccess && !showParallel) return null;
+  if (!showPrimaryUi && !showApproval && !showContactUi && !showRecipientsUi && !showDrafts && !showLoopGuard && !showHooks && !showOutboundUi && !showOwnerPermissions && !showToolAccess && !showParallel) return null;
 
   const approvalSelector = showApproval && (
     <ApprovalModeSelector
@@ -190,7 +191,7 @@ export function PermissionsSection({
       onManageCommandAllowlist={advanced && !draft && ownerOrAdmin === true ? () => setCommandAllowlistTarget({ botId: bot.id, botName: bot.name }) : undefined}
     />
   );
-  const approvalRows = (showApproval || showContactUi || showRecipientsUi || showHooks || showDrafts) ? (
+  const approvalRows = (showApproval || showContactUi || showRecipientsUi || showHooks || showDrafts || showLoopGuard) ? (
     <>
       {showApproval && (
         <DescribedRow
@@ -269,6 +270,20 @@ export function PermissionsSection({
             checked={bot.emailDrafts !== false}
             aria-label={t("botPanel.emailDrafts")}
             onClick={() => patch({ emailDrafts: bot.emailDrafts === false })}
+          />
+        </DescribedRow>
+      )}
+      {showLoopGuard && (
+        <DescribedRow
+          label={t("botPanel.loopGuard")}
+          help={t("botPanel.loopGuard.help")}
+          description={bot.loopGuard === false ? t("botPanel.loopGuard.off") : undefined}
+          rowId="loopGuard"
+        >
+          <Switch
+            checked={bot.loopGuard !== false}
+            aria-label={t("botPanel.loopGuard")}
+            onClick={() => patch({ loopGuard: bot.loopGuard === false })}
           />
         </DescribedRow>
       )}

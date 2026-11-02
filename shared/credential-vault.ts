@@ -98,8 +98,13 @@ export interface VaultRequestCardData {
   itemId?: string;
   itemName?: string;
   mode?: VaultGrantMode;
-  /** The person whose vault answers (organization server). */
+  /** The person whose vault answers (organization server); for a team
+   * login, the bot's owner. */
   principalId: string;
+  /** The bot's shared vault answers: these are its logins for the site
+   * (names and sites only). The owner picks one, once or always. */
+  team?: true;
+  teamItems?: Array<{ id: string; name: string; domains: string[] }>;
   /** The person signed in themselves in the bot's browser instead. */
   signedInSelf?: boolean;
   /** 2026-10-21 (parité R10, ligne 82): the login chosen is a 1Password
@@ -195,6 +200,27 @@ export function isVaultGrantMode(value: unknown): value is VaultGrantMode {
  * item's internal file layout. */
 export function vaultHandle(itemId: string): string {
   return `cred_${itemId}`;
+}
+
+/** A team bot's own vault principal (shared logins managed by its managers).
+ * Bound into the sealed file's AAD so a copy under another bot never opens. */
+export const BOT_VAULT_PREFIX = "bot:" as const;
+const BOT_VAULT_ID = /^[\w-]{1,128}$/;
+
+export function botVaultPrincipal(botId: string): string {
+  if (!BOT_VAULT_ID.test(botId)) throw new Error("invalid bot id for vault");
+  return `${BOT_VAULT_PREFIX}${botId}`;
+}
+
+/** The bot id a team-vault principal names, or null. */
+export function botIdFromVaultPrincipal(principalId: string): string | null {
+  if (!principalId.startsWith(BOT_VAULT_PREFIX)) return null;
+  const botId = principalId.slice(BOT_VAULT_PREFIX.length);
+  return BOT_VAULT_ID.test(botId) ? botId : null;
+}
+
+export function isBotVaultPrincipal(principalId: string): boolean {
+  return botIdFromVaultPrincipal(principalId) !== null;
 }
 
 /** 2026-10-29: the handle of a Shop Pay or Link one-time card, bound to its

@@ -75,8 +75,13 @@ describe("Switch them too", () => {
 
   it("clears exactly the threads on a model of their own, and leaves a running one until it settles", async () => {
     const { store, bot, follower, onCodex, onOpus, running } = fixture();
-    // Its own pick that later became the bot's model: not "different".
+    // Choosing the bot's model clears every thread's own pick (#1810), so the
+    // picks are made after it. A pick equal to the bot's model (a record from
+    // before that rule) is not "different": written straight on the record.
     store.patchBot(bot.id, { modelSelection: opus });
+    store.switchTaskModel(bot.id, onCodex, codex, false);
+    store.switchTaskModel(bot.id, running, codex, false);
+    store.taskByThread(bot.id, onOpus)!.modelSelection = opus;
     const base = await serve(store, { busy: new Set([running]) });
     const response = await post(base, bot.id);
     expect(response.status).toBe(200);

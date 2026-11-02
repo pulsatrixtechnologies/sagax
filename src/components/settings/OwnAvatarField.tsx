@@ -1,16 +1,14 @@
 // The signed-in person's photo on an organization server (2026-10-16): the
 // avatar of the Account row becomes a button. With a photo it opens a small
 // menu (Change photo, Remove photo); without one it opens the file picker.
-// A chosen image opens the crop window (src/lib/avatar-crop.ts, the Perspicax
-// console's geometry: drag inside a circle, zoom), then the 256 px square is
+// A chosen image opens Crop as a sub-page of Settings (src/lib/avatar-crop.ts,
+// the Perspicax console's geometry: drag inside a circle, zoom), then the 256 px square is
 // sent to PUT /api/me/avatar, which writes it to Perspicax as this person
 // (server/routes/me-avatar.ts). Remove asks first. Errors and the outcome
 // show under the row. The new URL lands in the config at once and every
 // other window and person gets it through the `person.avatar` frame.
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Camera } from "lucide-react";
-import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import {
@@ -32,12 +30,50 @@ import {
   uploadOwnAvatar,
   withViewerAvatar,
 } from "@/lib/person-avatars";
-import { useModalDialog } from "@/hooks/use-modal-dialog";
 import { useStore } from "@/state/store";
 import { InitialsAvatar } from "../Avatar";
 import { ConfirmDialog } from "../ConfirmDialog";
-import { DIALOG, DialogCloseButton, PILL, PRIMARY_PILL } from "../SettingsPrimitives";
+import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 import { AnchoredPopover } from "@/components/AnchoredPopover";
+
+export type OwnAvatarStatus = { kind: "idle" } | { kind: "busy" } | { kind: "error"; text: string } | { kind: "done"; text: string };
+
+type CropSession = { url: string; principalId: string };
+
+let cropSession: CropSession | null = null;
+let cropHolders = 0;
+const cropListeners = new Set<() => void>();
+
+function publishCrop(next: CropSession | null) {
+  if (cropSession?.url && cropSession.url !== next?.url) URL.revokeObjectURL(cropSession.url);
+  cropSession = next;
+  for (const listener of cropListeners) listener();
+}
+
+function useCropSession(): CropSession | null {
+  return useSyncExternalStore(
+    (listener) => { cropListeners.add(listener); return () => cropListeners.delete(listener); },
+    () => cropSession,
+    () => null,
+  );
+}
+
+let avatarNotice: OwnAvatarStatus = { kind: "idle" };
+const noticeListeners = new Set<() => void>();
+
+/** Saving, done or what went wrong, shared with the crop sub-page. */
+export function setOwnAvatarNotice(next: OwnAvatarStatus) {
+  avatarNotice = next;
+  for (const listener of noticeListeners) listener();
+}
+
+export function useOwnAvatarNotice(): OwnAvatarStatus {
+  return useSyncExternalStore(
+    (listener) => { noticeListeners.add(listener); return () => noticeListeners.delete(listener); },
+    () => avatarNotice,
+    () => avatarNotice,
+  );
+}
 
 const ERROR_KEYS: Record<string, LocaleKey> = {
   avatar_session_only: "settings.profile.photoError.sessionOnly",
@@ -57,8 +93,6 @@ export function ownAvatarErrorText(error: unknown): string {
   return t(ERROR_KEYS[code] ?? "settings.profile.photoError.unreachable");
 }
 
-export type OwnAvatarStatus = { kind: "idle" } | { kind: "busy" } | { kind: "error"; text: string } | { kind: "done"; text: string };
-
 export function OwnAvatarField({ principalId, avatarUrl, initials, onStatus }: {
   principalId: string;
   avatarUrl?: string;
@@ -71,12 +105,11 @@ export function OwnAvatarField({ principalId, avatarUrl, initials, onStatus }: {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuElRef = useRef<HTMLElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [pending, setPending] = useState<{ url: string } | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
-  const [status, setLocalStatus] = useState<OwnAvatarStatus>({ kind: "idle" });
+  const status = useOwnAvatarNotice();
   const busy = status.kind === "busy";
   const setStatus = (next: OwnAvatarStatus) => {
-    setLocalStatus(next);
+    setOwnAvatarNotice(next);
     onStatus(next);
   };
 
@@ -112,21 +145,8 @@ export function OwnAvatarField({ principalId, avatarUrl, initials, onStatus }: {
       return;
     }
     setStatus({ kind: "idle" });
-    setPending({ url: URL.createObjectURL(file) });
-  };
-
-  const closeCrop = () => {
-    if (pending) URL.revokeObjectURL(pending.url);
-    setPending(null);
-  };
-
-  const upload = (blob: Blob) => {
-    closeCrop();
-    setStatus({ kind: "busy" });
-    void uploadOwnAvatar(blob).then(
-      (url) => applied(url, t("settings.profile.photoSaved")),
-      (error) => setStatus({ kind: "error", text: ownAvatarErrorText(error) }),
-    );
+    publishCrop({ url: URL.createObjectURL(file), principalId });
+    dispatch({ type: "toggleAppSettings", open: true, section: "account", subPage: "account.crop" });
   };
 
   const remove = () => {
@@ -183,7 +203,6 @@ export function OwnAvatarField({ principalId, avatarUrl, initials, onStatus }: {
         aria-label={t("settings.profile.uploadPhoto")}
         onChange={(event) => { choose(event.target.files?.[0]); event.target.value = ""; }}
       />
-      {pending && <CropDialog url={pending.url} onCancel={closeCrop} onApply={upload} />}
       <ConfirmDialog
         open={confirmRemove}
         title={t("settings.profile.photoRemoveTitle")}
@@ -206,15 +225,47 @@ export function OwnAvatarStatusLine({ status }: { status: OwnAvatarStatus }) {
   return <p role="status" className="mt-2 text-[12px] leading-4 text-ink-secondary" data-own-avatar-status="">{text}</p>;
 }
 
-function CropDialog({ url, onCancel, onApply }: { url: string; onCancel: () => void; onApply: (blob: Blob) => void }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
+/** Crop inside Settings > Account, not a second window. */
+export function AvatarCropPage() {
+  const session = useCropSession();
+  const { state, dispatch } = useStore();
+  useEffect(() => {
+    cropHolders += 1;
+    return () => {
+      cropHolders -= 1;
+      queueMicrotask(() => {
+        if (cropHolders === 0) publishCrop(null);
+      });
+    };
+  }, []);
+  const back = () => dispatch({ type: "toggleAppSettings", open: true, section: "account" });
+  const upload = (blob: Blob) => {
+    const principalId = session?.principalId ?? "";
+    const config = state.config;
+    setOwnAvatarNotice({ kind: "busy" });
+    back();
+    void uploadOwnAvatar(blob).then(
+      (url) => {
+        const change = { principalId, avatarUrl: url };
+        const next = config ? withViewerAvatar(config, change) : config;
+        if (next && next !== config) dispatch({ type: "configStatus", config: next });
+        announcePersonAvatar(change);
+        setOwnAvatarNotice({ kind: "done", text: t("settings.profile.photoSaved") });
+      },
+      (error) => setOwnAvatarNotice({ kind: "error", text: ownAvatarErrorText(error) }),
+    );
+  };
+  if (!session) return <p className="text-[13px] leading-relaxed text-ink-secondary">{t("settings.profile.photoCropBody")}</p>;
+  return <CropEditor url={session.url} onCancel={back} onApply={upload} />;
+}
+
+function CropEditor({ url, onCancel, onApply }: { url: string; onCancel: () => void; onApply: (blob: Blob) => void }) {
   const imgRef = useRef<HTMLImageElement>(null);
   const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
   const [natural, setNatural] = useState({ w: 0, h: 0 });
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [failed, setFailed] = useState<string | null>(null);
-  useModalDialog(dialogRef, onCancel);
 
   const move = (x: number, y: number, nextZoom = zoom) => setPan(clampPan(natural.w, natural.h, nextZoom, x, y));
   const layout = cropLayout(natural.w, natural.h, zoom, pan.x, pan.y);
@@ -241,91 +292,73 @@ function CropDialog({ url, onCancel, onApply }: { url: string; onCancel: () => v
     move(pan.x + delta[0], pan.y + delta[1]);
   };
 
-  return createPortal(
-    <div className={DIALOG.backdrop} onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
+  return (
+    <div data-own-avatar-crop="" className="flex max-w-[420px] flex-col gap-3">
+      <p id="own-avatar-crop-body" className="text-[13px] leading-5 text-ink-secondary">{t("settings.profile.photoCropBody")}</p>
       <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="own-avatar-crop-title"
-        aria-describedby="own-avatar-crop-body"
-        tabIndex={-1}
-        data-own-avatar-crop=""
-        className={cn(DIALOG.frame, DIALOG.width.sm)}
+        tabIndex={0}
+        role="img"
+        aria-label={t("settings.profile.photoCropTitle")}
+        onKeyDown={onKeyNudge}
+        className="relative mx-auto overflow-hidden rounded-[10px] bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+        style={{ width: CROP_STAGE, height: CROP_STAGE, cursor: "grab", touchAction: "none" }}
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          drag.current = { x: event.clientX, y: event.clientY, px: pan.x, py: pan.y };
+        }}
+        onPointerMove={(event) => {
+          if (!drag.current) return;
+          move(drag.current.px + (event.clientX - drag.current.x), drag.current.py + (event.clientY - drag.current.y));
+        }}
+        onPointerUp={() => { drag.current = null; }}
+        onPointerCancel={() => { drag.current = null; }}
       >
-        <DialogCloseButton label={t("common.close")} onClick={onCancel} />
-        <div className={DIALOG.header}>
-          <h2 id="own-avatar-crop-title" className={DIALOG.title}>{t("settings.profile.photoCropTitle")}</h2>
-          <p id="own-avatar-crop-body" className={DIALOG.subtitle}>{t("settings.profile.photoCropBody")}</p>
-        </div>
-        <div className={DIALOG.body}>
-          <div
-            tabIndex={0}
-            role="img"
-            aria-label={t("settings.profile.photoCropTitle")}
-            onKeyDown={onKeyNudge}
-            className="relative mx-auto overflow-hidden rounded-[10px] bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-            style={{ width: CROP_STAGE, height: CROP_STAGE, cursor: "grab", touchAction: "none" }}
-            onPointerDown={(event) => {
-              event.currentTarget.setPointerCapture(event.pointerId);
-              drag.current = { x: event.clientX, y: event.clientY, px: pan.x, py: pan.y };
-            }}
-            onPointerMove={(event) => {
-              if (!drag.current) return;
-              move(drag.current.px + (event.clientX - drag.current.x), drag.current.py + (event.clientY - drag.current.y));
-            }}
-            onPointerUp={() => { drag.current = null; }}
-            onPointerCancel={() => { drag.current = null; }}
-          >
-            <img
-              ref={imgRef}
-              src={url}
-              alt=""
-              draggable={false}
-              onLoad={(event) => setNatural({ w: event.currentTarget.naturalWidth, h: event.currentTarget.naturalHeight })}
-              onError={() => setFailed(t("settings.profile.photoError.unreadable"))}
-              className="pointer-events-none absolute max-w-none select-none"
-              style={{ left: layout.left, top: layout.top, width: layout.width, height: layout.height }}
-            />
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute rounded-full"
-              style={{
-                left: CROP_INSET,
-                top: CROP_INSET,
-                width: CROP_CIRCLE,
-                height: CROP_CIRCLE,
-                boxShadow: "0 0 0 999px rgb(0 0 0 / 0.5)",
-                border: "1px solid rgb(255 255 255 / 0.8)",
-              }}
-            />
-          </div>
-          <label className="flex items-center gap-3 text-[13px] text-ink-secondary">
-            <span className="shrink-0">{t("settings.profile.photoZoom")}</span>
-            <input
-              type="range"
-              min={CROP_ZOOM_MIN}
-              max={CROP_ZOOM_MAX}
-              step={0.05}
-              value={zoom}
-              onChange={(event) => {
-                const next = Number(event.target.value);
-                setZoom(next);
-                move(pan.x, pan.y, next);
-              }}
-              className="min-w-0 flex-1 accent-[var(--color-accent)]"
-            />
-          </label>
-          {failed && <p role="alert" className="text-[12px] text-danger">{failed}</p>}
-        </div>
-        <div className={DIALOG.footer}>
-          <button type="button" onClick={onCancel} className={PILL}>{t("common.cancel")}</button>
-          <button type="button" onClick={() => void apply()} disabled={!natural.w} data-own-avatar-apply="" className={PRIMARY_PILL}>
-            {t("settings.profile.photoApply")}
-          </button>
-        </div>
+        <img
+          ref={imgRef}
+          src={url}
+          alt=""
+          draggable={false}
+          onLoad={(event) => setNatural({ w: event.currentTarget.naturalWidth, h: event.currentTarget.naturalHeight })}
+          onError={() => setFailed(t("settings.profile.photoError.unreadable"))}
+          className="pointer-events-none absolute max-w-none select-none"
+          style={{ left: layout.left, top: layout.top, width: layout.width, height: layout.height }}
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute rounded-full"
+          style={{
+            left: CROP_INSET,
+            top: CROP_INSET,
+            width: CROP_CIRCLE,
+            height: CROP_CIRCLE,
+            boxShadow: "0 0 0 999px rgb(0 0 0 / 0.5)",
+            border: "1px solid rgb(255 255 255 / 0.8)",
+          }}
+        />
       </div>
-    </div>,
-    document.body,
+      <label className="flex items-center gap-3 text-[13px] text-ink-secondary">
+        <span className="shrink-0">{t("settings.profile.photoZoom")}</span>
+        <input
+          type="range"
+          min={CROP_ZOOM_MIN}
+          max={CROP_ZOOM_MAX}
+          step={0.05}
+          value={zoom}
+          onChange={(event) => {
+            const next = Number(event.target.value);
+            setZoom(next);
+            move(pan.x, pan.y, next);
+          }}
+          className="min-w-0 flex-1 accent-[var(--color-accent)]"
+        />
+      </label>
+      {failed && <p role="alert" className="text-[12px] text-danger">{failed}</p>}
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={onCancel} className={PILL}>{t("common.cancel")}</button>
+        <button type="button" onClick={() => void apply()} disabled={!natural.w} data-own-avatar-apply="" className={PRIMARY_PILL}>
+          {t("settings.profile.photoApply")}
+        </button>
+      </div>
+    </div>
   );
 }

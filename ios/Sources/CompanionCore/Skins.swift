@@ -396,13 +396,13 @@ public enum DesktopSkins {
 
     public static let table: [String: [String: String]] = [
         "pulsatrix": [
-            "code-scheme": "dark", "app": "#030b17", "panel": "#060f20", "raised": "#16233c",
-            "raised-hover": "#1d2d4c", "card": "#0d192c", "menu": "#0d1729", "inset": "#081225", "control": "#16233c",
-            "hairline": "#223353", "ink": "#eef2fb", "ink-secondary": "#9aa6c2", "ink-tertiary": "#8d99b5",
+            "code-scheme": "dark", "app": "#121212", "panel": "#161616", "raised": "#1f1f1f",
+            "raised-hover": "#2c2c2c", "card": "#1f1f1f", "menu": "#1f1f1f", "inset": "#1b1b1b", "control": "#282828",
+            "hairline": "#353535", "ink": "#f5f5f5", "ink-secondary": "#f5f5f5a8", "ink-tertiary": "#f5f5f58a",
             "accent": "#3c76f4", "accent-border": "#4f86f7", "accent-text": "#c8e4ff", "focus": "#4f86f7",
-            "accent-ink": "#030b17", "bubble-user": "#1e3358", "bubble-user-ink": "#eef2fb", "success": "#38d591",
-            "danger": "#f25a64", "danger-ink": "#030b17", "success-ink": "#072114", "warning": "#ff9800",
-            "composer": "#16233c", "unread": "var(--color-accent)",
+            "accent-ink": "#121212", "bubble-user": "#3b3b3b", "bubble-user-ink": "#f5f5f5", "success": "#38d591",
+            "danger": "#fb6364", "danger-ink": "#121212", "success-ink": "#121212", "warning": "#ff9800",
+            "composer": "#1f1f1f", "unread": "var(--color-accent)",
         ],
         "pulsatrix-light": [
             "code-scheme": "light", "app": "#eef2f8", "panel": "#f6f8fb", "raised": "#ffffff",

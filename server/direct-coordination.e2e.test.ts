@@ -703,8 +703,9 @@ it.each<[string, Record<string, unknown>, string]>([
     { steps: [{ arguments: { bot_ids: [f.lead.id], message: brief } }], reply: "Sent" },
     { steps: [
       { arguments: { bot_ids: [f.lead.id], message: brief }, expectError: true },
-      // An acknowledgement to a teammate that finished is refused in full.
-      ...(how === "finished" ? [{ arguments: { bot_ids: [f.lead.id], message: "Thanks, approved" }, expectError: true }] : []),
+      // An acknowledgement to a teammate that finished is not sent: an intended
+      // refusal, answered without a red error (V4, 882f960bf), that says why.
+      ...(how === "finished" ? [{ arguments: { bot_ids: [f.lead.id], message: "Thanks, approved" } }] : []),
       { arguments: { bot_ids: [f.lead.id], message: brief, rework: true } },
     ], reply: "Sent again" },
     { reply: "The suite is green" },
@@ -720,7 +721,11 @@ it.each<[string, Record<string, unknown>, string]>([
   const rerun = results.at(-1);
   expect(repeated.isError).toBe(true);
   expect(repeated.content[0].text).toContain(refusal);
-  if (how === "finished") expect(results[2].content[0].text).toContain("Only use rework=true for concrete additional work.");
+  if (how === "finished") {
+    expect(results[2].isError).toBeFalsy();
+    expect(results[2].content[0].text).toContain("Only use rework=true for concrete additional work.");
+    expect(JSON.parse(results[2].content[0].text).receipts[0]).toMatchObject({ outcome: "injected" });
+  }
   const [first, again] = [sent, rerun].map((result: any) => JSON.parse(result.content[0].text).receipts[0]);
   expect(again).toMatchObject({ outcome: "queued", threadId: first.threadId });
   expect(again.requestId).not.toBe(first.requestId);

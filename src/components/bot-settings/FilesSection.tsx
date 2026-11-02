@@ -5,8 +5,7 @@
 // roots the message file route uses. Nothing in this tab turns a host path
 // into a request.
 import { copyText } from "@/lib/copy-text";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Check,
   Copy,
@@ -27,7 +26,6 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
-  X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -115,101 +113,18 @@ export async function downloadThreadFile(threadId: string, file: ThreadFile): Pr
   startMessageFileDownload(url, name);
 }
 
-/** One video or audio file streamed from its opaque authorized URL. Native
- * media range requests make seek independent of the full file size. */
+/** One video or audio file through the shared read-only viewer
+ * (AttachmentPreviewDialog). Native media range requests make seek
+ * independent of the full file size. Kept as an overlay (JC 2026-11-01). */
 export function MediaPreviewDialog({ threadId, file, kind, onClose }: { threadId: string; file: ThreadFile; kind: "video" | "audio"; onClose: () => void }) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  useLayoutEffect(() => {
-    closeRef.current = onClose;
-  }, [onClose]);
-
-  useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    dialogRef.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      closeRef.current();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => {
-      window.removeEventListener("keydown", onKey, true);
-      previous?.focus();
-    };
-  }, []);
-
-  return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("botPanel.files.previewAria", { name: file.name })}
-        tabIndex={-1}
-        className="flex max-h-full w-full max-w-[960px] flex-col overflow-hidden rounded-2xl border border-white/15 bg-black/70 shadow-2xl outline-none"
-      >
-        <header className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
-          <span className="min-w-0 truncate text-[13px] font-medium text-white">{file.name}</span>
-          <button type="button" onClick={onClose} aria-label={t("attach.close")} className="flex size-9 shrink-0 items-center justify-center rounded-lg text-white/65 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60">
-            <X size={19} />
-          </button>
-        </header>
-        <div className="flex min-h-[160px] items-center justify-center p-4">
-          {error ? (
-            <div className="flex flex-col items-center gap-3 text-center">
-              <p role="alert" className="text-[13px] text-white/70">{error}</p>
-              <button
-                type="button"
-                onClick={() => void downloadThreadFile(threadId, file).catch((reason: unknown) =>
-                  setError(reason instanceof Error ? reason.message : t("attach.downloadFailed")))}
-                className="flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2 text-[13px] text-white hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-              >
-                <Download size={15} aria-hidden="true" /> {t("attach.download")}
-              </button>
-            </div>
-          ) : kind === "video" ? (
-            <div className="relative flex min-h-[160px] w-full items-center justify-center">
-              <video
-                src={threadFileUrl(threadId, file.id, true)}
-                controls
-                playsInline
-                preload="metadata"
-                className="max-h-[75vh] max-w-full rounded-lg"
-                aria-label={file.name}
-                onLoadedMetadata={() => setLoading(false)}
-                onCanPlay={() => setLoading(false)}
-                onWaiting={() => setLoading(true)}
-                onPlaying={() => setLoading(false)}
-                onError={() => { setLoading(false); setError(t("attach.videoUnavailable")); }}
-              />
-              {loading && <span role="status" className="pointer-events-none absolute flex items-center gap-2 rounded-full bg-black/70 px-3 py-2 text-[13px] text-white/75"><LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" /> {t("botPanel.files.previewLoading")}</span>}
-            </div>
-          ) : (
-            <div className="relative flex min-h-[80px] w-full items-center justify-center">
-              <audio
-                src={threadFileUrl(threadId, file.id, true)}
-                controls
-                preload="metadata"
-                className="w-full max-w-md"
-                aria-label={file.name}
-                onLoadedMetadata={() => setLoading(false)}
-                onCanPlay={() => setLoading(false)}
-                onWaiting={() => setLoading(true)}
-                onPlaying={() => setLoading(false)}
-                onError={() => { setLoading(false); setError(t("attach.audioUnavailable")); }}
-              />
-              {loading && <span role="status" className="pointer-events-none absolute flex items-center gap-2 rounded-full bg-black/70 px-3 py-2 text-[13px] text-white/75"><LoaderCircle size={16} className="animate-spin motion-reduce:animate-none" /> {t("botPanel.files.previewLoading")}</span>}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>,
-    document.body,
-  );
+  const image: PreviewImage = {
+    src: threadFileUrl(threadId, file.id, true),
+    name: file.name,
+    downloadUrl: threadFileUrl(threadId, file.id),
+    downloadName: file.name,
+    media: kind,
+  };
+  return <AttachmentPreviewDialog image={image} onClose={onClose} />;
 }
 
 export function Thumbnail({ threadId, file, kind, className, iconSize = 20 }: { threadId: string; file: ThreadFile; kind: FileKind; className?: string; iconSize?: number }) {
@@ -670,8 +585,8 @@ export function PopoverMenu({ label, icon, buttonClass, menuLabel, children, cla
   }, [open]);
   const close = () => setOpen(false);
   return (
-    <div ref={ref} className={cn("relative", className)} {...data}>
-      <button ref={buttonRef} type="button" aria-label={label} title={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)} className={buttonClass}>
+    <div ref={ref} className={cn("relative", className)}>
+      <button ref={buttonRef} type="button" aria-label={label} title={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((value) => !value)} className={buttonClass} {...data}>
         {icon}
       </button>
       {open && (
@@ -683,9 +598,9 @@ export function PopoverMenu({ label, icon, buttonClass, menuLabel, children, cla
   );
 }
 
-export function MenuItem({ icon, label, ariaLabel, title, disabled, onClick }: { icon: React.ReactNode; label: string; ariaLabel?: string; title?: string; disabled?: boolean; onClick: () => void }) {
+export function MenuItem({ icon, label, ariaLabel, title, disabled, onClick, ...data }: { icon: React.ReactNode; label: string; ariaLabel?: string; title?: string; disabled?: boolean; onClick: () => void } & Record<`data-${string}`, string>) {
   return (
-    <button type="button" role="menuitem" disabled={disabled} aria-label={ariaLabel} title={title} onClick={onClick} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ink hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40">
+    <button type="button" role="menuitem" disabled={disabled} aria-label={ariaLabel} title={title} onClick={onClick} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ink hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40" {...data}>
       <span className="shrink-0 text-ink-secondary">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
     </button>

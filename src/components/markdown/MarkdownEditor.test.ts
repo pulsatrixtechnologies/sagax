@@ -135,4 +135,14 @@ describe("compact and full screen (routine instructions, 2026-10-29)", () => {
     flushSync(() => button.click());
     expect(shell.className).not.toContain("fixed");
   });
+
+  it("hides the word count until the person is editing, and shows it in full screen", async () => {
+    render({ value: "Hello there", onChange: () => {}, compact: true, expandable: true });
+    await mountedEditor(host);
+    expect(host.querySelector("[data-markdown-count]")).toBeNull();
+    flushSync(() => host.querySelector<HTMLButtonElement>('[data-md-tool="bold"]')!.focus());
+    expect(host.querySelector("[data-markdown-count]")?.textContent).toMatch(/2 words/);
+    flushSync(() => host.querySelector<HTMLButtonElement>("[data-md-full]")!.click());
+    expect(host.querySelector("[data-markdown-count]")?.textContent).toMatch(/2 words/);
+  });
 });

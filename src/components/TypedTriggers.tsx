@@ -1,4 +1,4 @@
-// Typed triggers in the Triggers pop-up: a provider (GitHub, Slack, Teams,
+// Typed triggers in Automations > Webhooks: a provider (GitHub, Slack, Teams,
 // Outlook, Sentry, PagerDuty, Linear...) whose events Sagax verifies by the
 // provider's own signature, normalizes, filters and deduplicates before a
 // run is queued (server/trigger-sources.ts). This file holds the builder's
@@ -6,6 +6,7 @@
 // (once) the secret, the secret's state, events and filters, test-fire and
 // the recent events log.
 import { useMemo, useState } from "react";
+import { useConfirm } from "@/components/ConfirmProvider";
 import { ArrowRight, Check, Copy, ExternalLink, KeyRound, Loader2, Pencil, RotateCw, Send, ShieldCheck, Trash2, Webhook } from "lucide-react";
 
 import { BotAvatar } from "@/components/Avatar";
@@ -537,6 +538,7 @@ export function TypedTriggerRow({
   onSetup: (setup: TriggerSourceSetup) => void;
   onOpenChat: (threadId: string) => void;
 }) {
+  const confirm = useConfirm();
   const { state, dispatch } = useStore();
   const source = webhook.source!;
   const definition = TRIGGER_SOURCES[source.type];
@@ -592,7 +594,7 @@ export function TypedTriggerRow({
   });
 
   const rotate = () => run("rotate", async () => {
-    if (!window.confirm(t("triggers.typed.rotateConfirm", { provider: definition.label }))) return;
+    if (!(await confirm({ title: t("triggers.typed.rotateConfirm", { provider: definition.label }), confirmLabel: t("common.confirm"), tone: "danger" }))) return;
     const response = await api(`/api/webhooks/${webhook.id}/rotate`, { method: "POST" });
     dispatch({ type: "webhookPatched", webhook: response.webhook });
     if (response.sourceSetup) onSetup(response.sourceSetup);

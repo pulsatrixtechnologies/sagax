@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { cardScanRequester, createPhoneToolBroker, PHONE_ONLINE_MS, phoneToolTurn, type PhoneToolAuditRow } from "./phone-tools.ts";
+import { cardScanRequester, createPhoneToolBroker, PHONE_ACCESS_CHANGED, PHONE_ONLINE_MS, phoneToolTurn, type PhoneToolAuditRow } from "./phone-tools.ts";
 
 describe("phone tool broker", () => {
   const dirs: string[] = [];
@@ -289,6 +289,38 @@ describe("card scan through the broker (row 84)", () => {
     expect(broker.pendingFor("ann")).toEqual([]);
     await expect(broker.wait(request.id, { botId: "", threadId: "card-scan:ann" }, 10)).resolves.toEqual({ status: "unknown" });
     expect(notified.filter((person) => person === "ann").length).toBe(2);
+  });
+});
+
+describe("session revoke ends phone access (port of upstream 035101e08)", () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("dropDevice removes the session phone and fails pending waits when it was the only one", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "sagax-phone-revoke-"));
+    dirs.push(dataDir);
+    const broker = createPhoneToolBroker({ dataDir, notify: () => {} });
+    const deviceId = "session:sess-1";
+    broker.registerDevice("ann", deviceId, { deviceName: "iPhone", tools: ["location"], transport: "protected" });
+    const request = broker.request({ person: "ann", botId: "bot1", botName: "Wren", threadId: "t1", tool: "location", args: {} });
+    const waiting = broker.wait(request.id, { botId: "bot1", threadId: "t1" }, 5_000);
+    expect(broker.dropDevice(deviceId)).toBe(true);
+    expect(broker.hasDevice("ann", deviceId)).toBe(false);
+    expect(broker.availableTools("ann")).toEqual([]);
+    await expect(waiting).resolves.toEqual({ status: "failed", error: PHONE_ACCESS_CHANGED });
+    expect(broker.dropDevice(deviceId)).toBe(false);
+  });
+
+  it("keeps another phone of the same person when only the session device is dropped", () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "sagax-phone-revoke-keep-"));
+    dirs.push(dataDir);
+    const broker = createPhoneToolBroker({ dataDir, notify: () => {} });
+    broker.registerDevice("ann", "session:sess-1", { deviceName: "iPhone", tools: ["location"], transport: "protected" });
+    broker.registerDevice("ann", "companion:other", { deviceName: "iPad", tools: ["contacts"], transport: "protected" });
+    expect(broker.dropDevice("session:sess-1")).toBe(true);
+    expect(broker.availableTools("ann")).toEqual(["contacts"]);
   });
 });
 

@@ -256,6 +256,14 @@ describe("docs/", () => {
     for (const path of ["../other-bot/MEMORY.md", "docs/../../x", "/etc/passwd", "C:/Windows/win.ini", "docs\\onboarding.md", ".claude/settings.json", "docs/./onboarding.md", "", "docs/missing.md"]) {
       expect(() => readWorkspaceText(BOT, path), path).toThrow();
     }
+    // V4: a missing workspace file throws WorkspacePathError status 404 so the
+    // internal route can answer 200 { exists:false } without isError.
+    try {
+      readWorkspaceText(BOT, "SOUL.md");
+      expect.unreachable("SOUL.md should be missing");
+    } catch (error) {
+      expect(error).toMatchObject({ status: 404, message: expect.stringMatching(/no such file/i) });
+    }
     const outside = join(tmpdir(), `ws-outside-${process.pid}-${counter}`);
     mkdirSync(outside, { recursive: true });
     writeFileSync(join(outside, "secret.md"), "outside");
@@ -377,7 +385,14 @@ describe("the Files list", () => {
     expect((await answer(`/api/bots/${BOT}/workspace/file?path=memory/a.md`)).reply!.status).toBe(400);
     // the Soul's gate: refused for anyone who may not edit the bot
     allowed = false;
-    for (const [path, method] of [[`/api/bots/${BOT}/workspace`, "GET"], [`/api/bots/${BOT}/workspace/file`, "PUT"], [`/api/bots/${BOT}/workspace/download?path=RULES.md`, "GET"], [`/api/bots/${BOT}/workspace/docs/rename`, "POST"]]) {
+    for (const [path, method] of [
+      [`/api/bots/${BOT}/workspace`, "GET"],
+      [`/api/bots/${BOT}/workspace/file`, "PUT"],
+      [`/api/bots/${BOT}/workspace/download?path=RULES.md`, "GET"],
+      [`/api/bots/${BOT}/workspace/docs/rename`, "POST"],
+      [`/api/bots/${BOT}/workspace/mkdir`, "POST"],
+      [`/api/bots/${BOT}/workspace/rename`, "POST"],
+    ]) {
       expect((await answer(path!, method!, { path: "RULES.md", text: "x", from: "docs/a.md", to: "docs/b.md" })).reply!.status, path).toBe(403);
     }
     expect(readFileSync(join(workspaceDir(BOT), "RULES.md"), "utf8")).toBe("- Ask first.\n");

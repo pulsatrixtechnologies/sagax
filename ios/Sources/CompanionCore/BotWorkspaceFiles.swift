@@ -1,7 +1,7 @@
-// Rules (RULES.md) and documents (docs/*.md) of a bot's workspace, the files
-// the desktop's persona editor edits in the markdown editor (#269,
-// src/lib/workspace-files.ts, server/routes/bot-workspace.ts). Open to the
-// bot's owner like the soul; CLIENT_ALLOW, no route on the companion sidecar.
+// Rules (RULES.md) and the bot folder tree (docs/, inbox/, memory/, …), the
+// files the desktop's persona editor manages (WorkspaceFilesSection.tsx,
+// server/routes/bot-workspace.ts). Open to the bot's owner like the soul;
+// CLIENT_ALLOW, no route on the companion sidecar.
 import Foundation
 
 public struct BotWorkspaceEntry: Decodable, Hashable, Identifiable, Sendable {
@@ -11,28 +11,40 @@ public struct BotWorkspaceEntry: Decodable, Hashable, Identifiable, Sendable {
     public var modifiedAt: Double?
     public var editable: Bool?
     public var markdown: Bool?
+    public var load: String?
     public var id: String { path }
 
     public var name: String { path.split(separator: "/").last.map(String.init) ?? path }
+    public var isDirectory: Bool { kind == "dir" }
     /// What /workspace/file serves: RULES.md or docs/<name>.md.
     public var isDoc: Bool { BotWorkspaceFiles.isDoc(path) }
+    public var isCore: Bool { BotWorkspaceFiles.isCore(path) }
 }
 
 public struct BotWorkspaceListing: Decodable, Sendable {
     public struct Budget: Decodable, Sendable { public var maxLines: Int?; public var maxBytes: Int? }
     public struct Budgets: Decodable, Sendable { public var rules: Budget? }
+    public struct Soul: Decodable, Sendable {
+        public var path: String?
+        public var bytes: Int?
+        public var load: String?
+    }
 
     public var entries: [BotWorkspaceEntry]
     public var rulesTemplate: String?
     public var budgets: Budgets?
+    public var uploadMaxBytes: Int?
+    public var soul: Soul?
 
-    enum CodingKeys: String, CodingKey { case entries, rulesTemplate, budgets }
+    enum CodingKeys: String, CodingKey { case entries, rulesTemplate, budgets, uploadMaxBytes, soul }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         entries = (try? c.decodeIfPresent([Lossy<BotWorkspaceEntry>].self, forKey: .entries))??.compactMap(\.value) ?? []
         rulesTemplate = (try? c.decodeIfPresent(String.self, forKey: .rulesTemplate)) ?? nil
         budgets = (try? c.decodeIfPresent(Budgets.self, forKey: .budgets)) ?? nil
+        uploadMaxBytes = (try? c.decodeIfPresent(Int.self, forKey: .uploadMaxBytes)) ?? nil
+        soul = (try? c.decodeIfPresent(Soul.self, forKey: .soul)) ?? nil
     }
 
     /// The documents, by name.
@@ -46,9 +58,12 @@ public enum BotWorkspaceFiles {
     public static let rulesPath = "RULES.md"
     public static let maxRulesLines = 60
     public static let maxRulesBytes = 8_000
+    public static let coreFiles: Set<String> = ["SOUL.md", "MEMORY.md", "RULES.md"]
+
+    public static func isCore(_ path: String) -> Bool { coreFiles.contains(path) }
 
     public static func isDoc(_ path: String) -> Bool {
-        path == rulesPath || path.range(of: #"^docs/[^/]+\.md$"#, options: .regularExpression) != nil
+        path == rulesPath || path.range(of: #"^docs\/[^/]+\.md$"#, options: .regularExpression) != nil
     }
 
     /// RULES.md as it loads: comments removed, blank runs folded, trimmed.
@@ -78,9 +93,17 @@ public enum BotWorkspaceFiles {
         guard !stem.isEmpty, stem.count <= 190 else { return nil }
         return "docs/\(stem).md"
     }
+
+    /// Join a parent folder with a file or folder name.
+    public static func join(parent: String?, name: String) -> String {
+        let clean = name.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let parent, !parent.isEmpty else { return clean }
+        return "\(parent.trimmingCharacters(in: CharacterSet(charactersIn: "/")))/\(clean)"
+    }
 }
 
 struct WorkspaceRenameBody: Encodable { var from: String; var to: String }
+struct WorkspacePathBody: Encodable { var path: String; var text: String? }
 
 public extension CompanionClient {
     /// `GET /api/bots/:id/workspace`.
@@ -117,6 +140,61 @@ public extension CompanionClient {
     func renameWorkspaceDoc(botId: String, from: String, to: String) async throws {
         guard Self.validRouteID(botId), BotWorkspaceFiles.isDoc(from), BotWorkspaceFiles.isDoc(to) else { throw APIError.badURL }
         try await send(makeRequest("POST", "/api/bots/\(botId)/workspace/docs/rename", encodedBody: WorkspaceRenameBody(from: from, to: to)))
+    }
+
+    /// `POST /api/bots/:id/workspace/mkdir {path}`.
+    func createWorkspaceFolder(botId: String, path: String) async throws {
+        guard Self.validRouteID(botId) else { throw APIError.badURL }
+        try await send(makeRequest("POST", "/api/bots/\(botId)/workspace/mkdir", encodedBody: WorkspacePathBody(path: path, text: nil)))
+    }
+
+    /// `POST /api/bots/:id/workspace/touch {path, text?}`.
+    func createWorkspaceFile(botId: String, path: String, text: String = "") async throws {
+        guard Self.validRouteID(botId) else { throw APIError.badURL }
+        try await send(makeRequest("POST", "/api/bots/\(botId)/workspace/touch", encodedBody: WorkspacePathBody(path: path, text: text)))
+    }
+
+    /// `POST /api/bots/:id/workspace/rename {from, to}`.
+    func renameWorkspaceEntry(botId: String, from: String, to: String) async throws {
+        guard Self.validRouteID(botId), !BotWorkspaceFiles.isCore(from), !BotWorkspaceFiles.isCore(to) else { throw APIError.badURL }
+        try await send(makeRequest("POST", "/api/bots/\(botId)/workspace/rename", encodedBody: WorkspaceRenameBody(from: from, to: to)))
+    }
+
+    /// `DELETE /api/bots/:id/workspace/entry?path=&recursive=`.
+    func deleteWorkspaceEntry(botId: String, path: String, recursive: Bool = false) async throws {
+        guard Self.validRouteID(botId), !BotWorkspaceFiles.isCore(path) else { throw APIError.badURL }
+        var query = [URLQueryItem(name: "path", value: path)]
+        if recursive { query.append(URLQueryItem(name: "recursive", value: "1")) }
+        try await send(makeRequest("DELETE", "/api/bots/\(botId)/workspace/entry", query: query))
+    }
+
+    /// `GET /api/bots/:id/workspace/count?path=`.
+    func countWorkspaceFiles(botId: String, path: String) async throws -> Int {
+        guard Self.validRouteID(botId) else { throw APIError.badURL }
+        struct Count: Decodable { var count: Int }
+        let body: Count = try await send(makeRequest("GET", "/api/bots/\(botId)/workspace/count", query: [URLQueryItem(name: "path", value: path)]), as: Count.self)
+        return body.count
+    }
+
+    /// `POST /api/bots/:id/workspace/upload?path=` with raw bytes.
+    func uploadWorkspaceFile(botId: String, path: String, data: Data, overwrite: Bool = false) async throws {
+        guard Self.validRouteID(botId) else { throw APIError.badURL }
+        var query = [URLQueryItem(name: "path", value: path)]
+        if overwrite { query.append(URLQueryItem(name: "overwrite", value: "1")) }
+        var request = try makeRequest("POST", "/api/bots/\(botId)/workspace/upload", query: query)
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        request.httpBody = data
+        let (body, response) = try await perform(request)
+        try Self.check(response, body)
+    }
+
+    /// `GET /api/bots/:id/workspace/download?path=` as bytes.
+    func downloadWorkspaceFile(botId: String, path: String) async throws -> Data {
+        guard Self.validRouteID(botId) else { throw APIError.badURL }
+        let request = try makeRequest("GET", "/api/bots/\(botId)/workspace/download", query: [URLQueryItem(name: "path", value: path)])
+        let (data, response) = try await perform(request)
+        try Self.check(response, data)
+        return data
     }
 
     func workspaceFileRequest(_ method: String, botId: String, path: String) throws -> URLRequest {

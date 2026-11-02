@@ -22,9 +22,10 @@ import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { useMenuMotion } from "./MenuMotion";
 import { AnchoredPopover } from "./AnchoredPopover";
 import { t } from "@/lib/i18n";
+import { keepWarmLine } from "@/lib/cache-keepwarm";
 import { formatTaskTokens, headlineTokens, usageDetail } from "@/lib/usage";
 import { nextRename } from "@/lib/rename";
-import { BotProjectDialog, FolderActions, FolderIcon, NewThreadButton } from "./BotProjects";
+import { FolderActions, FolderIcon, FolderRenameField, NewThreadButton } from "./BotProjects";
 import { useShowThreads, useThreadsMode } from "@/lib/thread-preferences";
 import { threadsOffReturnTarget } from "./thread-home";
 import { formatUpdatedAt, orderedThreadList, threadByline, threadRecency, threadUpdatedLabel, useRelativeNow, useSnoozeExpiry } from "./SidebarThreadRow";
@@ -76,22 +77,23 @@ function TaskUpdatedTime({ task, now }: { task: { updatedAt?: number; createdAt?
   return <time dateTime={new Date(stamp).toISOString()} title={formatUpdatedAt(stamp)}>{threadUpdatedLabel(stamp, now)}</time>;
 }
 
-/** Quiet per-task token tally; the hover title explains the cached share. */
-function TaskUsage({ usage }: { usage: Task["usage"] }) {
-  if (!usage) return null;
-  const label = formatTaskTokens(headlineTokens(usage));
-  if (!label) return null;
+/** Quiet per-task token tally; the hover title explains the cached share
+ * and any prompt-cache keep-warm line for the thread. */
+function TaskUsage({ usage, cacheKeepWarm }: { usage: Task["usage"]; cacheKeepWarm?: Task["cacheKeepWarm"] }) {
+  const warm = keepWarmLine(cacheKeepWarm);
+  const detail = [usage ? usageDetail(usage) : null, warm].filter(Boolean).join(" · ") || undefined;
+  if (!usage && !warm) return null;
+  const label = usage ? formatTaskTokens(headlineTokens(usage)) : null;
+  if (!label && !warm) return null;
   return (
-    <span
-      title={usageDetail(usage)}
-    >
+    <span title={detail}>
       {" · "}
-      {label}
+      {label ?? warm}
     </span>
   );
 }
 
-type PickerTask = Pick<Task, "threadId" | "title" | "createdAt" | "updatedAt" | "pinned" | "busy" | "activity" | "unread" | "projectId" | "openedBy" | "closedBy" | "archivedAt" | "snoozedUntil" | "waitingForTeammates" | "confidential"> & { usage?: Task["usage"] };
+type PickerTask = Pick<Task, "threadId" | "title" | "createdAt" | "updatedAt" | "pinned" | "busy" | "activity" | "unread" | "projectId" | "openedBy" | "closedBy" | "archivedAt" | "snoozedUntil" | "waitingForTeammates" | "confidential" | "cacheKeepWarm"> & { usage?: Task["usage"] };
 
 /** The full picker searches both thread titles and their project names.
  * Legacy/orphaned project IDs remain visible under Ungrouped. */
@@ -119,7 +121,8 @@ export type PickerFolderActions = {
   saving: boolean;
   canMove: (projectId: string, direction: -1 | 1) => boolean;
   canMarkRead: (projectId: string) => boolean;
-  onEdit: (projectId: string) => void;
+  /** Persist a folder name after in-place FolderRenameField saves (lot 7). */
+  onRename: (projectId: string, name: string, onDone: () => void) => void;
   onMove: (projectId: string, direction: -1 | 1, onSaved: () => void) => void;
   onMarkRead: (projectId: string, onSaved: () => void) => void;
 };
@@ -183,7 +186,7 @@ function ConversationTaskPicker({
   onPin?: (threadId: string, pinned: boolean) => void;
   /** The thread actions the sidebar rows used to carry, behind a row's "...". */
   threadActions?: PickerThreadActions;
-  /** Folder header actions: edit (name and icon), mark read, move up/down. */
+  /** Folder header actions: rename in place, mark read, move up/down. */
   folderActions?: PickerFolderActions;
   /** Opens on mount (tests render the open popover this way). */
   initialOpen?: boolean;
@@ -191,6 +194,7 @@ function ConversationTaskPicker({
   const [open, setOpen] = useState(initialOpen);
   const motion = useMenuMotion(open);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
   const [rowMenu, setRowMenu] = useState<{ threadId: string; left: number; top: number } | null>(null);
@@ -378,12 +382,21 @@ function ConversationTaskPicker({
               const heading = grouped?.find((group) => group.tasks[0]?.threadId === task.threadId)?.project;
               return (
                 <Fragment key={task.threadId}>
-                {folders?.length && heading ? <div data-picker-folder={heading.id || undefined} className={cn("group/folder flex items-center gap-1.5 px-3 pb-1 pt-2 text-[11px] font-medium text-popover-ink-secondary", index > 0 && "border-t border-popover-hairline")}>{heading.id && <FolderIcon emoji={heading.emoji} size={12} />}<span className="min-w-0 flex-1 truncate">{heading.name}</span>
-                  {heading.id && folderActions && <FolderActions project={heading} canMoveUp={folderActions.canMove(heading.id, -1)} canMoveDown={folderActions.canMove(heading.id, 1)}
+                {folders?.length && heading ? <div data-picker-folder={heading.id || undefined} className={cn("group/folder flex items-center gap-1.5 px-3 pb-1 pt-2 text-[11px] font-medium text-popover-ink-secondary", index > 0 && "border-t border-popover-hairline")}>{heading.id && <FolderIcon emoji={heading.emoji} size={12} />}
+                  {heading.id && renamingFolder === heading.id ? (
+                    <FolderRenameField
+                      name={heading.name}
+                      onCancel={() => setRenamingFolder(null)}
+                      onSave={(next) => folderActions?.onRename(heading.id, next, () => setRenamingFolder(null))}
+                    />
+                  ) : (
+                    <span className="min-w-0 flex-1 truncate">{heading.name}</span>
+                  )}
+                  {heading.id && folderActions && renamingFolder !== heading.id && <FolderActions project={heading} canMoveUp={folderActions.canMove(heading.id, -1)} canMoveDown={folderActions.canMove(heading.id, 1)}
                     canMarkRead={folderActions.canMarkRead(heading.id)} saving={folderActions.saving}
                     menu={folderMenu?.projectId === heading.id ? folderMenu : null}
                     onMenuChange={(menu) => { clearDismiss(); setFolderMenu(menu ? { ...menu, projectId: heading.id } : null); }}
-                    onEdit={() => folderActions.onEdit(heading.id)} onMove={(direction, onSaved) => folderActions.onMove(heading.id, direction, onSaved)}
+                    onEdit={() => setRenamingFolder(heading.id)} onMove={(direction, onSaved) => folderActions.onMove(heading.id, direction, onSaved)}
                     onMarkRead={(onSaved) => folderActions.onMarkRead(heading.id, onSaved)} />}
                 </div> : null}
                 <div
@@ -445,7 +458,7 @@ function ConversationTaskPicker({
                       <div className="text-[11px] text-popover-ink-secondary">
                         {task.activity === "waiting-on-you" ? `${t("task.waiting")} · ` : task.waitingForTeammates ? `${t("task.waitingOnTeammate")} · ` : task.busy ? `${t("chat.activity.working")} · ` : task.unread ? `${t("task.unread")} · ` : ""}
                         <TaskUpdatedTime task={task} now={now} />
-                        <TaskUsage usage={task.usage} />
+                        <TaskUsage usage={task.usage} cacheKeepWarm={task.cacheKeepWarm} />
                         {opener && ` · ${opener}`}
                       </div>
                     </button>
@@ -571,7 +584,6 @@ export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen
   // bot's threads under its row instead, and one conversation has none.
   const threadsMode = useThreadsMode();
   const [permissionRefresh, setPermissionRefresh] = useState<{ threadId: string; kind: "full" | "local-auto" } | null>(null);
-  const [editingProject, setEditingProject] = useState<string | null>(null);
   const [folderSaving, setFolderSaving] = useState(false);
   const [folderError, setFolderError] = useState<string | null>(null);
   if (threadsMode !== "header") return null;
@@ -607,7 +619,9 @@ export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen
       return index >= 0 && index + direction >= 0 && index + direction < projectIds.length;
     },
     canMarkRead: (projectId) => folderUnreadThreadIds(bot, projectId).length > 0,
-    onEdit: (projectId) => setEditingProject(projectId),
+    onRename: (projectId, name, onDone) => {
+      dispatch({ type: "updateProject", botId: bot.id, projectId, patch: { name }, onSaved: onDone, onError: () => onDone() });
+    },
     onMove: (projectId, direction, onSaved) => {
       const ids = moveFolder(projectIds, projectId, direction);
       if (folderSaving || ids.every((id, index) => id === projectIds[index])) return;
@@ -625,7 +639,6 @@ export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen
         .finally(() => setFolderSaving(false));
     },
   };
-  const projectToEdit = projects.find((project) => project.id === editingProject);
   return (
     <>
     <ConversationTaskPicker
@@ -667,7 +680,6 @@ export function TaskPicker({ bot, initialOpen = false }: { bot: Bot; initialOpen
         if (threadId) dispatch({ type: "refreshTaskPermissions", botId: bot.id, threadId, acknowledgeLocalAuto: true });
       }}
     />
-    {projectToEdit && <BotProjectDialog bot={bot} project={projectToEdit} onClose={() => setEditingProject(null)} />}
     </>
   );
 }
@@ -713,7 +725,6 @@ export function GroupTaskPicker({ group }: { group: Group }) {
 export function PersonThreadPicker({ group, initialOpen = false }: { group: Group; initialOpen?: boolean }) {
   const { dispatch } = useStore();
   const threadsMode = useThreadsMode();
-  const [editingProject, setEditingProject] = useState<string | null>(null);
   const [folderSaving, setFolderSaving] = useState(false);
   const [folderError, setFolderError] = useState<string | null>(null);
   if (!group.peopleDm || threadsMode !== "header") return null;
@@ -732,7 +743,9 @@ export function PersonThreadPicker({ group, initialOpen = false }: { group: Grou
       return index >= 0 && index + direction >= 0 && index + direction < projectIds.length;
     },
     canMarkRead: (projectId) => folderUnreadThreadIds(group, projectId).length > 0,
-    onEdit: (projectId) => setEditingProject(projectId),
+    onRename: (projectId, name, onDone) => {
+      dispatch({ type: "updateProject", botId: group.id, owner: "group", projectId, patch: { name }, onSaved: onDone, onError: () => onDone() });
+    },
     onMove: (projectId, direction, onSaved) => {
       const ids = moveFolder(projectIds, projectId, direction);
       if (folderSaving || ids.every((id, index) => id === projectIds[index])) return;
@@ -750,7 +763,6 @@ export function PersonThreadPicker({ group, initialOpen = false }: { group: Grou
         .finally(() => setFolderSaving(false));
     },
   };
-  const projectToEdit = projects.find((project) => project.id === editingProject);
   return (
     <>
     <ConversationTaskPicker
@@ -770,7 +782,6 @@ export function PersonThreadPicker({ group, initialOpen = false }: { group: Grou
       initialOpen={initialOpen}
     />
     {folderError && <p role="alert" data-thread-overlay className="fixed bottom-4 right-4 z-50 max-w-[320px] rounded-lg border border-hairline/50 bg-card px-3 py-2 text-[12px] text-danger shadow-xl" onClick={() => setFolderError(null)}>{folderError}</p>}
-    {projectToEdit && <BotProjectDialog bot={group} owner="group" project={projectToEdit} onClose={() => setEditingProject(null)} />}
     </>
   );
 }

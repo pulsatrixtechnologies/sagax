@@ -25,17 +25,57 @@ const EXACT: Record<string, number> = {
   // 186: +3 the resumable upload phases (POST /api/attachments and /api/files with ?phase=, one guard
   // and two uses of the path in the handler), kept in index.ts beside the single-request routes they
   // share finalization with. Moving them to server/routes lowers this.
-  'path === "/': 186,
+  // 185: wave 0a removed the dead CLOUD_HOME email-sign-in refusal guard (#1388).
+  // 167: wave 1 I2 moved memory/context internal routes to server/routes/internal-memory.ts (#1388).
+  // 159: wave 1 I3 moved routines / request / team-setup / bot-deletion internal routes (#1388).
+  // 150: wave 1 I4 moved sessions/files internal routes to server/routes/internal-sessions.ts (#1388).
+  // 130: wave 1 I5 moved ask-bot / delegate-bot / rooms / create-* internal routes (#1388).
+  // 89: wave 1 I5 moved delegations path.match to server/routes/internal-bot-chat.ts (#1388).
+  // 144: wave 1 I6 moved mcp-servers / github-connect / request-credential / voice-note / perspicax/mcp (#1388).
+  // 132: wave 1 I1 moved environments internal routes to server/routes/internal-environments.ts (#1388).
+  // 118: I1 + I5 combined on feat/next-integration (#1388).
+  // 104: wave 2 P1 alone moved team-map / teams export-scout-import / team-library / sidebar-sections /
+  // team-memory / section-context / team-computers to server/routes (#1388).
+  // On feat/next-integration without P1: 108 P2 routines/calendar-calls/webhooks, 102 P3
+  // attachments/files/search, 100 P4 groups list/create, 94 P6 local-computer/computers.
+  // 80: P1 + P2 + P3 + P4 + P6 combined on refactor/1388-w2-p1 after merging feat/next-integration (#1388).
+  // 98: wave 2 P5 alone moved instances/config/health/browser-engine/plan-usage/keys/decisions/admin-activity/cli/mcp (#1388).
+  // 60: P1+P2+P3+P4+P5+P6 combined after merging feat/next-integration into refactor/1388-w2-p5 (#1388).
+  // 55: wave 3 B1 moved /api/bots list+create and /api/bot-defaults* (#1388).
+  // 54: wave 3 T1 moved post-gate /api/events (#1388).
+  // 34: wave 4 pre-auth moved healthz/environment/mcp-oauth/email/pair/session/
+  // logout/pairing/custom-domain/shared-computers (#1388).
+  'path === "/': 34,
   // 90: the package preview path moved with the organization library routes.
   // 91: the thread file pin and the bot history routes moved to server/routes (#1099), after the
   // library pin (#1112) and the history owner rule (#1107) had taken it over 93.
   // GET /api/bots/:id/send-state (#1259) lives in server/routes/bot-send-state.ts, so the count stays at 91.
   // 91: +1 POST /api/groups/:id/leave (#1480, PR #1571), kept in index.ts with the group routes.
-  "path.match(": 91,
-  "path.startsWith(": 14,
-  ".exec(path)": 24,
+  // 90: wave 1 I4 moved threads/:id/close path.match to server/routes/internal-sessions.ts (#1388).
+  // 89: wave 1 I5 moved delegations/:id path.match to server/routes/internal-bot-chat.ts (#1388).
+  // 86: wave 2 P1 alone moved team-library/teams, team-memory/:id and team-computers path.match (#1388).
+  // On feat/next-integration without P1: 82 P2, 80 P3, 70 P4, 59 P6.
+  // 56: P1 + P2 + P3 + P4 + P6 combined on refactor/1388-w2-p1 after merging feat/next-integration (#1388).
+  // 89: wave 2 P5 alone had path.match unchanged; combined after merge.
+  // 42: wave 3 B1 moved profile/primary/soul/system-prompt/overview/cards/active-branch/projects/tasks (#1388).
+  // On this base before B2 the live count was 46 (B1 pin was stale after later merges).
+  // 36: wave 3 B2 moved bot skills / skills-library path.match to server/routes/bots-content.ts (#1388).
+  // 27: wave 3 B3 moved messages/queue/edit/respond/interrupt path.match (#1388) on a B2-less base (46→37→27);
+  // with B2 already at 36, B3 then T1 land at 17 after merge into feat/next-integration.
+  // 17: wave 3 T1 moved cw-actions/read/messages/files/export/reactions/events path.match (#1388).
+  // 15: wave 4 moved pairing/:id and sessions/:id path.match (#1388).
+  "path.match(": 15,
+  // 13: wave 2 P5 moved hostedModels path.startsWith(/api/instances/) (#1388).
+  // 12: wave 4 moved shared-computers path.startsWith (#1388).
+  "path.startsWith(": 12,
+  // 14: wave 2 P5 moved instances/mcp .exec(path) guards (#1388).
+  // 13: wave 3 B2 moved the bot-skills gate .exec(path) (#1388).
+  // 12: wave 3 B3 moved bot browser live/action .exec(path) (#1388).
+  // 10: wave 4 moved domain-check and shared-computers .exec(path) (#1388).
+  ".exec(path)": 10,
   ".test(path)": 9,
-  ".includes(path)": 4,
+  // 3: wave 4 moved ENVIRONMENT_PATHS.includes(path) (#1388).
+  ".includes(path)": 3,
 };
 
 const count = (needle: string) => INDEX.split(needle).length - 1;

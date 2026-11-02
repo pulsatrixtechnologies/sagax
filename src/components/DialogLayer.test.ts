@@ -71,10 +71,14 @@ describe("DialogLayer (release notes close button, 2026-10-18)", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("is what the release notes, the update prompt and About use", () => {
-    for (const file of ["ReleaseNotesPrompt.tsx", "UpdateBanner.tsx", "AboutDialog.tsx"]) {
+  it("stays on the update notes and the update check, not on release notes or About", () => {
+    const update = readFileSync(resolve(process.cwd(), "src/components/UpdateBanner.tsx"), "utf8");
+    expect(update).toContain("<DialogLayer");
+    expect(update).not.toContain('role="alertdialog"');
+    expect(update).not.toContain("DIALOG.backdrop");
+    for (const file of ["ReleaseNotesPrompt.tsx", "AboutDialog.tsx"]) {
       const source = readFileSync(resolve(process.cwd(), "src/components", file), "utf8");
-      expect(source, file).toContain("<DialogLayer");
+      expect(source, file).not.toContain("<DialogLayer");
       expect(source, file).not.toContain("DIALOG.backdrop");
     }
   });

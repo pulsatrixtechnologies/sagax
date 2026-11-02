@@ -3,11 +3,11 @@
 // over the same server draft (`/api/bot-wizard`), so a draft started on one
 // device resumes on the other.
 //
-// - First screen ("Create a bot"): "Guided with my bot" and "I'll fill it in
-//   myself", and the drafts left to resume. Choosing one makes the bot and
-//   its draft. 2026-10-27: the "+" menus' Create new Bot opens this screen
-//   directly; what Create New Bot offered stays under "Other ways to start"
-//   (the full form, Browse templates, the two imports, Quick create).
+// - Lot 7 (2026-11-01): the "+" menus' Create new Bot opens Create New Bot
+//   (quick create: name, mascot, Create). Guided / Manual / templates /
+//   imports / drafts live under that sheet's "Other ways to start".
+// - This view's choose screen still serves Redo the wizard and a Guided /
+//   Manual start handed in through `startMode`.
 // - Guided never needs a bot the person lacks: the guide is their Bot
 //   designer, else their Primary Bot, else another bot; with none, choosing
 //   Guided creates the Bot designer (their own bot, no admin step), which
@@ -22,8 +22,10 @@
 import SwiftUI
 import CompanionCore
 
-/// Who opens the wizard: the "+" menu, Create New Bot's Assistant, the bot's
-/// "..." menu. One host at the root presents it (`BotWizardHost`).
+/// Who opens the wizard: Create New Bot's "Other ways", the bot's "..."
+/// Redo the wizard. One host at the root presents it (`BotWizardHost`).
+/// Lot 7 (2026-11-01): the "+" menu opens Create New Bot (quick create)
+/// first; Guided / Manual land here from that sheet's disclosure.
 @MainActor
 final class BotWizardPresenter: ObservableObject {
     static let shared = BotWizardPresenter()
@@ -33,14 +35,16 @@ final class BotWizardPresenter: ObservableObject {
         /// nil: a new bot; a bot's id resumes its draft or redoes it.
         var botId: String?
         var redo = false
+        /// Lot 7: skip the mode-choice screen and start this mode at once.
+        var startMode: WizardMode? = nil
     }
 
     @Published var request: Request?
     /// The bot a finished wizard opens; the home that shows it clears it.
     @Published var finishedBotId: String?
 
-    func open(botId: String? = nil, redo: Bool = false) {
-        request = Request(botId: botId, redo: redo)
+    func open(botId: String? = nil, redo: Bool = false, startMode: WizardMode? = nil) {
+        request = Request(botId: botId, redo: redo, startMode: startMode)
     }
 }
 
@@ -523,9 +527,15 @@ struct BotWizardView: View {
                 return
             }
             phase = .choose
+            // Lot 7: a preferred mode from Create New Bot's Other ways.
+            if let mode = request.startMode { await choose(mode) }
         } else {
             drafts = (try? await client.wizardDrafts()) ?? []
             phase = .choose
+            if let mode = request.startMode {
+                await choose(mode)
+                return
+            }
             #if DEBUG
             if let step = Self.parityStep, step != "choose", step != "choose-bottom" { await parityWalk(step) }
             #endif

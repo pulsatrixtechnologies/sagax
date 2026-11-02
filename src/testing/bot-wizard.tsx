@@ -23,7 +23,7 @@ function Fixture() {
   }, [ready]);
   return <main className="min-h-screen bg-app">
     {state.botWizard && <BotWizard />}
-    {state.pluginsOpen && <PluginsPanel />}
+    {(state.activeView === "apps" || state.pluginsOpen) && <PluginsPanel />}
   </main>;
 }
 

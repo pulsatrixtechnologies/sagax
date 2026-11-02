@@ -31,15 +31,11 @@ const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
 await loadLocale(params.get("lang") ?? "fr");
 
+/** Lot 5: Connect apps fills the content frame (no modal backdrop). */
 function Frame({ children }: { children: React.ReactNode }) {
   return (
-    <div className={CATEGORY_MODAL.backdrop}>
-      <div role="dialog" aria-modal="true" className={CATEGORY_MODAL.frame}>
-        <div className={CATEGORY_MODAL.content}>
-          <button type="button" aria-label="Fermer" className={CATEGORY_MODAL.close}><X size={18} /></button>
-          {children}
-        </div>
-      </div>
+    <div className="flex h-[100dvh] w-full flex-col bg-app text-ink" data-gallery-sample="" data-gallery-frame="">
+      {children}
     </div>
   );
 }
@@ -188,20 +184,119 @@ const MANAGE_API: Record<string, unknown> = {
 MANAGE_API["/api/me/plugins"] = { ...(MANAGE_API["/api/bots/bot-a/plugins"] as object) };
 MANAGE_API["/api/me/skills-library"] = MANAGE_API["/api/skills-library"];
 
+// Connect apps > Tailscale (synthetic gallery). ?tailscale=disconnected|ready|waiting|connected
+// seeds the public view; POSTs mutate it in memory. Secrets never appear in answers.
+const COMPUTERS = [
+  { id: "sandbox:p-1", label: "Bot computer", place: "sandbox" as const },
+];
+type GalleryTailscalePhase = "disconnected" | "ready" | "pending_approval" | "connected" | "error";
+const seedPhase = ((): GalleryTailscalePhase => {
+  const raw = params.get("tailscale") ?? "disconnected";
+  if (raw === "ready" || raw === "waiting" || raw === "connected" || raw === "error") {
+    return raw === "waiting" ? "pending_approval" : raw;
+  }
+  return "disconnected";
+})();
+let galleryTailscale: {
+  phase: GalleryTailscalePhase;
+  credentials: { kind: "authKey" | "oauth"; hint: string; tags: string[] } | null;
+  computer: (typeof COMPUTERS)[number] | null;
+  keyKind: "ephemeral" | "reusable" | null;
+  device: { name: string; addresses: string[]; pendingApproval: boolean; nodeId?: string } | null;
+  error: string | null;
+  computers: typeof COMPUTERS;
+} = {
+  phase: seedPhase,
+  credentials: seedPhase === "disconnected" ? null : { kind: "authKey", hint: "9f2a", tags: ["tag:sagax"] },
+  computer: seedPhase === "disconnected" || seedPhase === "ready" ? null : COMPUTERS[0]!,
+  keyKind: seedPhase === "disconnected" || seedPhase === "ready" ? null : "ephemeral",
+  device: seedPhase === "pending_approval"
+    ? { name: "sagax-bot", addresses: [], pendingApproval: true, nodeId: "n-gallery1" }
+    : seedPhase === "connected"
+      ? { name: "sagax-bot", addresses: ["100.64.0.12", "fd7a:115c:a1e0::12"], pendingApproval: false, nodeId: "n-gallery1" }
+      : null,
+  error: seedPhase === "error" ? "The control plane did not answer. Try again." : null,
+  computers: COMPUTERS,
+};
+
 if (["manage", "org-settings", "settings-subpage"].includes(params.get("view") ?? "manage")) {
   const realFetch = window.fetch.bind(window);
   window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.href);
     if (!url.pathname.startsWith("/api/")) return realFetch(input, init);
+    const method = (init?.method ?? "GET").toUpperCase();
+    if (url.pathname === "/api/me/tailscale" && method === "GET") return json(galleryTailscale);
+    if (url.pathname === "/api/me/tailscale" && method === "DELETE") {
+      galleryTailscale = {
+        phase: "disconnected",
+        credentials: null,
+        computer: null,
+        keyKind: null,
+        device: null,
+        error: null,
+        computers: COMPUTERS,
+      };
+      return json(galleryTailscale);
+    }
+    if (url.pathname === "/api/me/tailscale/setup" && method === "POST") {
+      let body: { mode?: string; authKey?: string; clientId?: string } = {};
+      try { body = JSON.parse(String(init?.body ?? "{}")); } catch { /* ignore */ }
+      const kind = body.mode === "oauth" ? "oauth" as const : "authKey" as const;
+      const hint = kind === "oauth"
+        ? String(body.clientId ?? "client").slice(0, 4)
+        : String(body.authKey ?? "key").slice(-4);
+      galleryTailscale = {
+        ...galleryTailscale,
+        phase: "ready",
+        credentials: { kind, hint: hint || "saved", tags: ["tag:sagax"] },
+        computer: null,
+        keyKind: null,
+        device: null,
+        error: null,
+      };
+      return json(galleryTailscale);
+    }
+    if (url.pathname === "/api/me/tailscale/join" && method === "POST") {
+      let body: { computerId?: string; keyKind?: string } = {};
+      try { body = JSON.parse(String(init?.body ?? "{}")); } catch { /* ignore */ }
+      const computer = COMPUTERS.find((entry) => entry.id === body.computerId) ?? COMPUTERS[0]!;
+      galleryTailscale = {
+        ...galleryTailscale,
+        phase: "pending_approval",
+        computer,
+        keyKind: body.keyKind === "reusable" ? "reusable" : "ephemeral",
+        device: { name: "sagax-bot", addresses: [], pendingApproval: true, nodeId: "n-gallery1" },
+        error: null,
+      };
+      return json(galleryTailscale);
+    }
+    if (url.pathname === "/api/me/tailscale/refresh" && method === "POST") {
+      return json(galleryTailscale);
+    }
+    if (url.pathname === "/api/me/tailscale/disconnect" && method === "POST") {
+      galleryTailscale = {
+        ...galleryTailscale,
+        phase: galleryTailscale.credentials ? "ready" : "disconnected",
+        computer: null,
+        keyKind: null,
+        device: null,
+        error: null,
+      };
+      return json(galleryTailscale);
+    }
     const body = MANAGE_API[url.pathname];
-    if (body !== undefined && (!init?.method || init.method === "GET")) return json(body);
+    if (body !== undefined && method === "GET") return json(body);
     if (url.pathname.startsWith("/api/bots/") && url.pathname.endsWith("/plugins")) return json({ error: "not here" }, 404);
     return json({ error: "gallery" }, 404);
   }) as typeof window.fetch;
 }
 
 function Manage() {
-  return <PluginsPanel />;
+  return (
+    <Frame>
+      <PluginsPanel />
+    </Frame>
+  );
 }
 
 /** A Settings sub-page (General > About me) in Connect apps' window size:

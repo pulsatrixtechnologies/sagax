@@ -59,6 +59,15 @@ describe("pickLimitBackup", () => {
     expect(pickLimitBackup({ ...base, preferred: [{ instanceId: "codex", model: "gpt-hidden" }], candidates, blocked: () => false }))
       .toEqual({ instanceId: "codex", model: "gpt-a" });
   });
+
+  it("skips a pay-per-use catalog fallthrough unless the person chose it as a backup (3ed90a037)", () => {
+    const candidates = [engine("api", "claudeAgent"), engine("grok", "grokAgent")];
+    const config = (id: string) => id === "api" ? { access: "api" as const } : undefined;
+    expect(pickLimitBackup({ from: claude, preferred: [], candidates, blocked: () => false, config }))
+      .toEqual({ instanceId: "grok", model: "m1" });
+    expect(pickLimitBackup({ from: claude, preferred: [{ instanceId: "api" }], candidates, blocked: () => false, config }))
+      .toEqual({ instanceId: "api", model: "m1" });
+  });
 });
 
 describe("LimitFailoverStore", () => {

@@ -1,11 +1,13 @@
-import { createElement, type ReactNode } from "react";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Bot } from "@/state/store";
 
-vi.mock("react-dom", () => ({
-  createPortal: (children: ReactNode) => children,
+vi.mock("./DesktopCapabilities", () => ({
+  useDesktopCapabilities: () => ({}),
+  useCaptionChrome: () => ({ padClass: "" }),
+  useMacInsetChrome: () => ({ macInset: false, browser: false }),
 }));
 
 import { BotInstructionsDialog } from "./BotInstructionsDialog";

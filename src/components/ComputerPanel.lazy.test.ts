@@ -5,6 +5,7 @@
 // conversation that select_computer moved to an existing cloud computer
 // still shows that computer's screen.
 import { createElement } from "react";
+import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -95,7 +96,7 @@ const open = async (bot: Bot) => {
     document.body.append(container);
     root = createRoot(container);
   }
-  flushSync(() => root!.render(createElement(BotEditorStore, { value: value(), children: createElement(ComputerPanel, { bot }) })));
+  flushSync(() => root!.render(createElement(BotEditorStore, { value: value(), children: createElement(ConfirmProvider, null, createElement(ComputerPanel, { bot })) })));
   await settle();
 };
 const text = () => document.body.textContent ?? "";

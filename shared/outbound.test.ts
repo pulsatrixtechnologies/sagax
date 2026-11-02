@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { OUTBOUND_DEFAULT_CAP, isOutboundTool, normalizeOutboundPolicy } from "./outbound.ts";
+import {
+  OUTBOUND_DEFAULT_CAP,
+  connectorCallsIn,
+  isOutboundTool,
+  isReadOnlyTool,
+  normalizeOutboundPolicy,
+  outboundCallsIn,
+} from "./outbound.ts";
 
 describe("isOutboundTool", () => {
   it("flags tools that send, reply, post, publish, invite, share, or move money", () => {
@@ -109,6 +116,27 @@ describe("isOutboundTool, the engines' mail, Teams, calendar and SharePoint conn
   });
 });
 
+describe("isReadOnlyTool", () => {
+  it("recognizes exact MCP reads and known noun-first slugs without treating other non-outbound actions as reads", () => {
+    for (const name of [
+      "mcp__linear__list_issues",
+      "mcp__linear__list_comments",
+      "mcp__linear__get_issue",
+      "GMAIL_SEARCH_MESSAGES",
+      "GOOGLECALENDAR_EVENTS_LIST",
+      "mcp__composio__GMAIL_FETCH_EMAILS",
+    ]) expect(isReadOnlyTool(name), name).toBe(true);
+
+    for (const name of [
+      "mcp__linear__save_issue",
+      "mcp__linear__delete_issue",
+      "mcp__linear__create_comment",
+      "mcp__computer__click",
+      "Bash",
+    ]) expect(isReadOnlyTool(name), name).toBe(false);
+  });
+});
+
 describe("normalizeOutboundPolicy", () => {
   it("accepts ask and allow with a whole-number daily cap", () => {
     expect(normalizeOutboundPolicy({ policy: "ask" })).toEqual({ policy: "ask", dailyCap: OUTBOUND_DEFAULT_CAP });
@@ -122,5 +150,54 @@ describe("normalizeOutboundPolicy", () => {
     expect(normalizeOutboundPolicy({ policy: "allow", dailyCap: 100_000 })).toBeNull();
     expect(normalizeOutboundPolicy("allow")).toBeNull();
     expect(normalizeOutboundPolicy(null)).toBeNull();
+  });
+});
+
+describe("connectorCallsIn", () => {
+  // Connected-apps session meta tools; the app tools run inside them. The
+  // gate has to see through the wrapper or it sees nothing.
+  it("returns a direct app tool as itself", () => {
+    expect(connectorCallsIn("GMAIL_SEND_EMAIL", { to: "a@b.c" })).toEqual([{ slug: "GMAIL_SEND_EMAIL", arguments: { to: "a@b.c" } }]);
+  });
+
+  it("unwraps every tool inside a multi-execute call", () => {
+    const calls = connectorCallsIn("COMPOSIO_MULTI_EXECUTE_TOOL", {
+      tools: [
+        { tool_slug: "GMAIL_FETCH_EMAILS", arguments: { query: "is:unread" } },
+        { tool_slug: "SLACK_SEND_MESSAGE", arguments: { channel: "#ops", text: "hi" } },
+      ],
+      sync_response_to_workbench: false,
+    });
+    expect(calls.map((call) => call.slug)).toEqual(["GMAIL_FETCH_EMAILS", "SLACK_SEND_MESSAGE"]);
+    expect(calls[1].arguments).toEqual({ channel: "#ops", text: "hi" });
+  });
+
+  it("treats all arbitrary code as opaque, not as an enumerable send allowance", () => {
+    const code = 'for id in ids:\n    run_tool("GMAIL_SEND_EMAIL", {"thread_id": id})\nrun_tool("GMAIL_FETCH_EMAILS", {})';
+    expect(connectorCallsIn("COMPOSIO_REMOTE_WORKBENCH", { code_to_execute: code }).map((call) => call.slug)).toEqual([
+      "COMPOSIO_PROXY_EXECUTE",
+    ]);
+    expect(connectorCallsIn("COMPOSIO_REMOTE_WORKBENCH", { code_to_execute: "proxy_execute('POST', 'https://api.x.com')" })
+      .map((call) => call.slug)).toEqual(["COMPOSIO_PROXY_EXECUTE"]);
+  });
+
+  it("ignores discovery but fails closed for malformed execution arguments", () => {
+    expect(connectorCallsIn("COMPOSIO_SEARCH_TOOLS", { queries: [{ use_case: "send an email" }] })).toEqual([]);
+    expect(connectorCallsIn("COMPOSIO_MULTI_EXECUTE_TOOL", { tools: "nope" })[0].slug).toBe("COMPOSIO_PROXY_EXECUTE");
+    expect(connectorCallsIn("COMPOSIO_MULTI_EXECUTE_TOOL", undefined)[0].slug).toBe("COMPOSIO_PROXY_EXECUTE");
+    expect(connectorCallsIn("COMPOSIO_REMOTE_WORKBENCH", { code: 'run_tool("GMAIL_" + "SEND_EMAIL", {})' })[0].slug).toBe("COMPOSIO_PROXY_EXECUTE");
+    expect(connectorCallsIn("COMPOSIO_REMOTE_BASH_TOOL", { command: "curl -X POST https://example.test/send" })[0].slug).toBe("COMPOSIO_PROXY_EXECUTE");
+    expect(connectorCallsIn("COMPOSIO_PROXY_EXECUTE", {})[0].slug).toBe("COMPOSIO_PROXY_EXECUTE");
+  });
+});
+
+describe("outboundCallsIn", () => {
+  it("keeps only the calls that send", () => {
+    const sends = outboundCallsIn("COMPOSIO_MULTI_EXECUTE_TOOL", {
+      tools: [{ tool_slug: "GMAIL_FETCH_EMAILS" }, { tool_slug: "GMAIL_SEND_EMAIL", arguments: { to: "x" } }],
+    });
+    expect(sends.map((call) => call.slug)).toEqual(["GMAIL_SEND_EMAIL"]);
+    expect(outboundCallsIn("GMAIL_FETCH_EMAILS", {})).toEqual([]);
+    expect(isOutboundTool("COMPOSIO_PROXY_EXECUTE")).toBe(true);
   });
 });

@@ -187,8 +187,12 @@ public struct OptionCard: Codable, Hashable, Sendable {
     public var routineRequest: ProposalRequestMarker? = nil
     public var profileRequest: ProposalRequestMarker? = nil
     public var modelRequest: ProposalRequestMarker? = nil
+    public var ruleRequest: ProposalRequestMarker? = nil
     public var tighteningRequest: ProposalRequestMarker? = nil
     public var teamSetupRequest: ProposalRequestMarker? = nil
+    /// One-time acceptable-use consent before a bot may place phone calls
+    /// (`shared/phone-call-consent.ts`). Drawn as its own card, never the dock.
+    public var phoneCallConsent: PhoneCallConsentCardData? = nil
 
     /// A card is actionable while it is unanswered and still has a request
     /// behind it. Everything else is transcript.

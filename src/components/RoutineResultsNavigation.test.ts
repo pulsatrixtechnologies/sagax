@@ -1,6 +1,9 @@
 import { closeSideThread, currentSideThread } from "@/lib/side-thread";
 import { Children, createElement, isValidElement, type ReactNode } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderToStaticMarkup as renderMarkup } from "react-dom/server";
+import { ConfirmProvider } from "@/components/ConfirmProvider";
+
+const renderToStaticMarkup = (node: ReactNode) => renderMarkup(createElement(ConfirmProvider, null, node));
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppState, Bot, Group } from "@/state/store";
 import type { Routine, RoutineRun } from "@/lib/routines";
@@ -57,7 +60,12 @@ const run: RoutineRun = {
   createdAt: 100, finishedAt: 200, status: "completed", manual: false,
 };
 
-const EXPANDED = new Set(["ConnectedRunActivity", "RoutineRunDetail", "RoutineDetail"]);
+// 2026-11-01: a run opens as an exchange sheet in the chat column
+// (RoutineRunExchange): its actions sit in the sheet's footer prop, inside a
+// render prop of ConnectedRunActivity. The routine page sits in the shared
+// right panel (DetailPanel).
+const EXPANDED = new Set(["ConnectedRunActivity", "RoutineRunDetail", "RoutineDetail", "RoutineRunExchange", "RoutineRunExchangeSheet", "DetailPanel"]);
+const NO_ACTIVITY = { detail: null, error: false, reload: async () => {}, waiting: [], conversation: () => null };
 type Button = { children?: ReactNode; onClick?: () => void };
 function textOf(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") return String(node);
@@ -75,7 +83,10 @@ function buttonsFrom(render: () => ReactNode): Map<string, Button> {
       // The run's and the routine's pages (2026-10-29) are components of
       // their own: walk into what they draw.
       if (typeof child.type === "function" && EXPANDED.has(child.type.name)) { visit((child.type as (props: unknown) => ReactNode)(child.props)); return; }
-      visit(child.props.children);
+      const { children, footer } = child.props as { children?: unknown; footer?: ReactNode };
+      if (typeof children === "function") visit((children as (activity: typeof NO_ACTIVITY) => ReactNode)(NO_ACTIVITY));
+      else visit(child.props.children);
+      if (footer) visit(footer);
     });
   }
   function Capture() { visit(render()); return null; }
@@ -134,6 +145,8 @@ describe("routine results navigation", () => {
     fixture.showThreads = false;
     closeSideThread();
     fixture.state!.bots = [{ ...bot, threadId: "new-results", tasks: [...bot.tasks!, { threadId: "legacy-results", title: "Daily report · Results", createdAt: 3, routineResults: true }] }];
+    // The sheet reads the live run from the store, not the receipt passed in.
+    fixture.state!.routineRuns = [{ ...run, resultsThreadId: "legacy-results" }];
     details({ ...run, resultsThreadId: "legacy-results" }).buttons.get("Continue in the conversation")!.onClick!();
     expect(navigationCalls()).toEqual([
       [{ type: "select", id: bot.id }],

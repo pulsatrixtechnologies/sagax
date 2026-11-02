@@ -37,7 +37,7 @@ The `enterprise/` directory of the original project is not part of this
 tree. Its source and its license check were never copied here; with the
 directory absent, the server reports `{"edition":"oss"}`.
 
-Sagax releases 0.4.0 to 0.8.24 were first published with the PolyForm
+Sagax releases 0.4.0 to 0.8.27 were first published with the PolyForm
 Noncommercial License 1.0.0 on the changes made by Pulsatrix Technologies inc.
 Pulsatrix Technologies inc. now also makes those releases available under the
 Apache License 2.0. All of Sagax is under the Apache License 2.0.

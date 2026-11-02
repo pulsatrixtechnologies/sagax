@@ -181,15 +181,15 @@ final class NavigationMenusTests: XCTestCase {
 
     func testTheAccountMenu() {
         XCTAssertEqual(NavigationMenus.account(gate: admin, hasArchivedBots: true, achievementsReady: true, connected: true),
-                       [[.archivedBots], [.settings, .teamMap, .automations, .achievements], [.releaseNotes, .about, .help]])
+                       [[.archivedBots], [.settings, .teamMap, .automations, .memory, .achievements], [.releaseNotes, .about, .help]])
         XCTAssertEqual(NavigationMenus.account(gate: admin, hasArchivedBots: false, achievementsReady: false, connected: true),
-                       [[.settings, .teamMap, .automations], [.releaseNotes, .about, .help]])
-        // offline: Team map and Automations stay out of the popup
+                       [[.settings, .teamMap, .automations, .memory], [.releaseNotes, .about, .help]])
+        // offline: Team map, Automations and Memory stay out of the popup
         XCTAssertEqual(NavigationMenus.account(gate: admin, hasArchivedBots: false, achievementsReady: false, connected: false),
                        [[.settings], [.releaseNotes, .about, .help]])
         // archived bots are an admin's housekeeping: the remote client hides them
         XCTAssertEqual(NavigationMenus.account(gate: sidecar, hasArchivedBots: true, achievementsReady: true, connected: true),
-                       [[.settings, .teamMap, .automations, .achievements], [.releaseNotes, .about, .help]])
+                       [[.settings, .teamMap, .automations, .memory, .achievements], [.releaseNotes, .about, .help]])
     }
 
     func testNewListsCreateThenBotsThenPeople() throws {
@@ -210,7 +210,7 @@ final class NavigationMenusTests: XCTestCase {
         XCTAssertEqual(NavigationMenus.places(gate: sidecar, connected: true, features: on), [])
         XCTAssertEqual(NavigationMenus.places(gate: client, connected: true, features: on), [.templates])
         XCTAssertEqual(NavigationMenus.places(gate: admin, connected: false, features: on), [])
-        XCTAssertEqual(NavigationMenus.accountShortcuts(gate: admin, connected: true), [.teamMap, .automations])
+        XCTAssertEqual(NavigationMenus.accountShortcuts(gate: admin, connected: true), [.teamMap, .automations, .memory])
         XCTAssertEqual(NavigationMenus.accountShortcuts(gate: admin, connected: false), [])
     }
 

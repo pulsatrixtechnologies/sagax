@@ -49,16 +49,24 @@ describe("upcoming routines", () => {
 });
 
 describe("the upcoming rows", () => {
-  it("reuse the list's row with the bot, the next run in words and a state, no switch", () => {
+  it("reuse the list's row with the bot and the next run in words, no Active pill and no switch", () => {
     vi.useFakeTimers({ now: NOW });
     const markup = renderToStaticMarkup(createElement(RoutineList, { variant: "upcoming", routines: [base], runs: [], bots: [bot], onOpen: vi.fn() }));
     expect(markup).toContain("data-routine-row");
     expect(markup).toContain("Morning brief");
     expect(markup).toMatch(/data-routine-bot[^>]*>Scout</);
     expect(markup).toMatch(/data-routine-when="Today at 9:00/);
-    expect(markup).toMatch(/data-routine-state[^>]*>Active</);
+    expect(markup).not.toContain("data-routine-state");
+    expect(markup).not.toContain(">Active<");
     expect(markup).not.toContain('role="switch"');
     expect(markup).toContain('aria-label="Upcoming routines"');
+  });
+
+  it("still shows Running while a run is in flight", () => {
+    vi.useFakeTimers({ now: NOW });
+    const running = [{ routineId: "brief", status: "running" }] as RoutineRun[];
+    const markup = renderToStaticMarkup(createElement(RoutineList, { variant: "upcoming", routines: [base], runs: running, bots: [bot], onOpen: vi.fn() }));
+    expect(markup).toMatch(/data-routine-state[^>]*>Running</);
   });
 
   it("leave the list view's rows as they were", () => {

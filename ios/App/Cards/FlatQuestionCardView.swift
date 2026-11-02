@@ -26,7 +26,7 @@ struct FlatQuestionCardView: View {
         // a proactive proposal (2026-10-30): its two choices, no Other row
         if ProactiveProposalRules.isProposal(card) { return true }
         return card.requestId != nil && card.tool == nil && card.questions.isEmpty && card.skillRequest == nil && card.routineRequest == nil
-            && card.profileRequest == nil && card.modelRequest == nil && card.teamSetupRequest == nil
+            && card.profileRequest == nil && card.modelRequest == nil && card.ruleRequest == nil && card.teamSetupRequest == nil
             && card.tighteningRequest == nil && card.held == nil && card.adminApproval != true
     }
 

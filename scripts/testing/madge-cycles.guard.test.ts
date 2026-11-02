@@ -19,7 +19,7 @@ const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 /** Cycles left inside each tree after #1381. Lower when one goes away. */
 const MAX = {
   shared: 0,
-  src: 4,
+  src: 1,
   server: 23,
 } as const;
 

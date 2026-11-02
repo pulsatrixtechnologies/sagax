@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, KeyRound, Loader2 } from "lucide-react";
 
+import { useConfirm } from "@/components/ConfirmProvider";
 import { cn } from "@/lib/cn";
 import { claudeUserMcpEnabled } from "@/lib/feature-flags";
 import { t } from "@/lib/i18n";
@@ -59,6 +60,8 @@ export type McpServerListing = (StdioMcpListing | RemoteMcpListing) & {
   /** reads the person's GitHub account (the GitHub plugin's token
    * placeholder, server/github-mcp-token.ts): whether it is connected */
   github?: "connected" | "missing";
+  /** Lot B: installation = shared config; person = only-me (never send header values into shared). */
+  scope?: "installation" | "person";
 };
 
 /** A saved server whose name Sagax now reserves (`mcp`, `__`, `sagax-`...):
@@ -231,6 +234,7 @@ function draftFor(server: McpServerListing): McpDraft {
  * does with them: add, edit, paste a config, test, sign in and out, switch a
  * server or one of its tools, remove, and Whop's own connect flow. */
 export function useMcpServers() {
+  const confirm = useConfirm();
   const { state: store, dispatch } = useStore();
   // While enrolled with custom servers off, only approved servers can be added.
   const policy = store.config?.managedPolicy;
@@ -489,7 +493,13 @@ export function useMcpServers() {
       if (!name || !/^https?:\/\//i.test(url)) return { ok: false, error: { key: "mcp.err.nameAndUrl" } };
       const parsed = parseMcpHeaders(draft.headers, existing && isRemoteMcpListing(existing) ? existing.headerKeys : []);
       if (!parsed.ok) return parsed;
-      return { ok: true, body: { type: draft.type, url, headers: parsed.headers } };
+      // Lot B: person-scoped rows keep header names in shared config with
+      // blank values; the key lives under Settings > Connections. The server
+      // refuses non-empty or ambiguous personal headers if any slip through.
+      const headers = existing?.scope === "person"
+        ? Object.fromEntries(Object.keys(parsed.headers).map((key) => [key, ""]))
+        : parsed.headers;
+      return { ok: true, body: { type: draft.type, url, headers } };
     }
     const command = draft.command.trim();
     if (!name || !command) return { ok: false, error: { key: "mcp.err.nameAndCommand" } };
@@ -649,7 +659,7 @@ export function useMcpServers() {
   };
 
   const remove = async (server: Pick<McpServerListing, "name">) => {
-    if (!window.confirm(t("mcp.removeConfirm", { name: server.name }))) return;
+    if (!(await confirm({ title: t("mcp.removeConfirm", { name: server.name }), confirmLabel: t("common.confirmRemove"), tone: "danger" }))) return;
     setBusy(`delete:${server.name}`);
     loadGeneration.current += 1;
     setError(null);

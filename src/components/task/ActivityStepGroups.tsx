@@ -5,6 +5,9 @@
 // ran only when that changes, and one disclosure per group with every
 // call inside. A sub-agent's step opens on what it was asked, its own
 // grouped calls and what it reported.
+//
+// V10: groups come from mergeSteps (via groupActivitySteps), the same fold
+// ActivityRun uses for repeated tool searches.
 import { Bot, Laptop, Server } from "lucide-react";
 
 import { cn } from "@/lib/cn";
@@ -39,7 +42,7 @@ function GroupDetail({ group }: { group: ActivityStepGroup }) {
             <div className="flex min-w-0 items-center gap-2">
               <span className="shrink-0 tabular-nums text-ink-tertiary">{timeOf(step.at)}</span>
               {step.ok === false && <span className="shrink-0 text-danger">{t("step.turn.failed.one")}</span>}
-              {step.summary && <span className="min-w-0 truncate text-ink">{step.summary}</span>}
+              {step.summary && <span className="min-w-0 truncate text-ink" title={group.title ?? step.summary}>{step.summary}</span>}
             </div>
             {step.input && <pre className="max-h-24 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-ink-secondary">{step.input}</pre>}
             {step.files && step.files.length > 0 && <div className="truncate font-mono text-[11px] text-ink-secondary">{step.files.join(", ")}</div>}
@@ -89,6 +92,7 @@ function GroupList({ groups, nested = false }: { groups: readonly ActivityStepGr
             <StepRow
               label={group.label}
               target={group.count === 1 ? group.summary : undefined}
+              title={group.title}
               phase={group.phase}
               icon={group.subagent ? <Bot size={13} aria-hidden="true" className="text-accent-text" /> : undefined}
               extra={(countMark || (group.whereChanged && group.where)) ? (
@@ -111,6 +115,8 @@ function GroupList({ groups, nested = false }: { groups: readonly ActivityStepGr
 }
 
 export function ActivityStepGroups({ steps, truncated = false }: { steps: readonly BotActivityStep[]; truncated?: boolean }) {
+  // groupActivitySteps calls mergeSteps the same way ActivityRun does, so
+  // finished tool searches fold and the calls between them merge.
   const groups = groupActivitySteps(steps);
   return (
     <div className="flex flex-col gap-1">

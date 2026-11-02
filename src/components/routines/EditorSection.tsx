@@ -1,17 +1,19 @@
-// One section of "Edit routine" (2026-10-29): When, What, Where results go.
-// A heading with its icon, then the fields, so the important settings are
-// found at a glance instead of in one flat stack.
+// One section of "Edit routine" (2026-10-29, polish 2026-11-01): When, What,
+// Where results go. Sentence-case label (never all-caps), quiet icon, then the
+// fields. Matches the Grok Bot form density in docs/design/ux-reference-grokbot-cursor.md.
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
-export function EditorSection({ icon: Icon, title, children, ...rest }: {
+export function EditorSection({ icon: Icon, title, children, className, ...rest }: {
   icon: LucideIcon;
   title: string;
   children: ReactNode;
+  className?: string;
 } & Record<`data-${string}`, string>) {
-  return <section {...rest} className="space-y-3">
-    <h3 className="flex items-center gap-2 text-[11.5px] font-semibold uppercase tracking-wider text-ink-secondary">
-      <Icon size={14} aria-hidden="true" />{title}
+  return <section {...rest} className={["space-y-2", className].filter(Boolean).join(" ")}>
+    <h3 className="flex items-center gap-1.5 text-[12px] font-medium leading-4 text-ink-secondary">
+      <Icon size={13} strokeWidth={1.75} aria-hidden="true" className="text-ink-tertiary" />
+      {title}
     </h3>
     <div className="min-w-0 space-y-3">{children}</div>
   </section>;

@@ -8346,7 +8346,7 @@ describe("harness HTTP API", () => {
     try {
       const created = await api("POST", "/api/mcp/servers", { name: "docs", url: fake.url, headers: { Authorization: secret } });
       expect(created.status).toBe(201);
-      expect(created.body.servers).toEqual([{ name: "docs", type: "http", url: fake.url, headerKeys: ["Authorization"], enabled: false, auth: "none" }]);
+      expect(created.body.servers).toEqual([{ name: "docs", type: "http", url: fake.url, headerKeys: ["Authorization"], enabled: false, auth: "none", scope: "installation" }]);
       expect(JSON.stringify(created.body)).not.toContain(secret);
 
       const tested = await api("POST", "/api/mcp/servers/docs/test");
@@ -8880,7 +8880,7 @@ describe("harness HTTP API", () => {
   it("keeps skill authoring on by default and persists an explicit opt-out", async () => {
     const before = await api("GET", "/api/config");
     expect(before.status).toBe(200);
-    expect(before.body.features).toEqual({ browser: false, skillAuthoring: true, skillsLibrary: true, showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, sharedComputers: false, claudeUserMcp: true, autoRecall: true, llmThreadTitles: true, meetingNotetaker: false });
+    expect(before.body.features).toEqual({ browser: false, skillAuthoring: true, skillsLibrary: true, showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, sharedComputers: false, claudeUserMcp: true, autoRecall: true, llmThreadTitles: true, meetingNotetaker: false, savedSteps: true, savedStepsHere: process.platform === "darwin" });
     // the default is the absence of the key: nothing is written until the toggle is used
     const untouched = JSON.parse(readFileSync(join(home, ".sagax", "config.json"), "utf8"));
     expect(untouched.features?.skillAuthoring).toBeUndefined();
@@ -8893,7 +8893,7 @@ describe("harness HTTP API", () => {
         features: { skillAuthoring: false },
       });
       expect(saved.status).toBe(200);
-      expect(saved.body.features).toEqual({ browser: false, skillAuthoring: false, skillsLibrary: true, showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, sharedComputers: false, claudeUserMcp: true, autoRecall: true, llmThreadTitles: true, meetingNotetaker: false });
+      expect(saved.body.features).toEqual({ browser: false, skillAuthoring: false, skillsLibrary: true, showToolCalls: false, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, sharedComputers: false, claudeUserMcp: true, autoRecall: true, llmThreadTitles: true, meetingNotetaker: false, savedSteps: true, savedStepsHere: process.platform === "darwin" });
 
       const disk = JSON.parse(readFileSync(join(home, ".sagax", "config.json"), "utf8"));
       // Earlier browser coverage may have persisted its own toggle. Opting out
@@ -8903,7 +8903,7 @@ describe("harness HTTP API", () => {
       // the opt-out survives patches to sibling flags
       const tools = await api("PATCH", "/api/config", { features: { showToolCalls: true } });
       expect(tools.status).toBe(200);
-      expect(tools.body.features).toEqual({ browser: false, skillAuthoring: false, skillsLibrary: true, showToolCalls: true, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, sharedComputers: false, claudeUserMcp: true, autoRecall: true, llmThreadTitles: true, meetingNotetaker: false });
+      expect(tools.body.features).toEqual({ browser: false, skillAuthoring: false, skillsLibrary: true, showToolCalls: true, routinesInConversation: false, templates: false, vpsComputer: false, boatComputer: false, decisionModel: false, dataWindow: false, routineGroupSettings: false, sharedComputers: false, claudeUserMcp: true, autoRecall: true, llmThreadTitles: true, meetingNotetaker: false, savedSteps: true, savedStepsHere: process.platform === "darwin" });
 
       // Templates is an experimental opt-in, persisted like its siblings
       const templates = await api("PATCH", "/api/config", { features: { templates: true } });

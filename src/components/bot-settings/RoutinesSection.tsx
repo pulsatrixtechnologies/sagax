@@ -1,42 +1,21 @@
 // Shared by bot settings and the bot's side panel. The list keeps one action
 // (New schedule); a row opens the routine's page, which holds Run now, Pause
 // or Resume, Edit, the run logs and Delete.
-import { CalendarClock, ChevronLeft, CirclePlay, Copy as CopyIcon, History, MoreHorizontal, PanelRight, Pause, Pencil, Plus, Trash2 } from "lucide-react";
+import { CalendarClock, CirclePlay, Copy as CopyIcon, History, MoreHorizontal, Pause, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useServerFeature } from "@/lib/server-features";
 import { api, useStore, type Bot } from "@/state/store";
 import type { Routine, RoutineRun, RoutineRunOn } from "@/lib/routines";
 import { t } from "@/lib/i18n";
-import { cn } from "@/lib/cn";
-import { CIRCLE_BUTTON } from "@/lib/circle-button";
-import { useCaptionChrome, useMacInsetChrome } from "../DesktopCapabilities";
 import { RoutineEditor } from "../RoutinesPage";
 import { canManageRoutineFolders, RoutineFolderList, type RoutineFolderControl } from "../routines/RoutineFolders";
-import { RoutineTitle } from "../routines/RoutineRowMenu";
 import { ACTION_LABEL_MAIN, ActionBar, ActionButton, actionButtonClass } from "../ActionBar";
 import { canRunRoutineNow, routineRunInFlight, RunNowButton } from "../routines/RunNowButton";
 import { RoutineDetail } from "../routines/RoutineDetail";
 import { RoutineRunExchange } from "../routines/RoutineRunExchange";
+import { PanelPageHeader as RoutineDetailHeader } from "./PanelPage";
 
-// The routine page covers the whole panel, so it draws its own top bar the way
-// the panel's does (BotSettingsDialog): a .content-topbar row, whose buttons
-// the stylesheet makes no-drag (they were dead under the panel's drag strip
-// before), the shared round CIRCLE_BUTTON back control on the left, the panel
-// close control on the right, and the name centered.
-export function RoutineDetailHeader({ name, onBack, onClose, onRename }: { name: string; onBack: () => void; onClose: () => void; /** Double-click the title to rename (2026-10-29). */ onRename?: (name: string) => void }) {
-  const { padClass } = useCaptionChrome();
-  const { macInset, browser } = useMacInsetChrome();
-  return <>
-    {(macInset || browser) && <div className="content-topbar-strip" />}
-    <div data-routine-detail-header className={cn("content-topbar relative flex h-12 shrink-0 items-center justify-between px-3", padClass)}>
-      <button type="button" aria-label={t("botPanel.routines.back")} onClick={onBack} className={CIRCLE_BUTTON}><ChevronLeft size={18} strokeWidth={1.75} /></button>
-      {onRename
-        ? <span className="absolute inset-x-14 flex justify-center"><RoutineTitle name={name} editable onRename={onRename} className="truncate text-center text-[14px] font-semibold text-ink" /></span>
-        : <span className="pointer-events-none absolute inset-x-14 truncate text-center text-[14px] font-semibold text-ink">{name}</span>}
-      <button type="button" aria-label={t("botPanel.routines.close")} title={t("botPanel.routines.close")} onClick={onClose} className={CIRCLE_BUTTON}><PanelRight size={18} strokeWidth={1.75} /></button>
-    </div>
-  </>;
-}
+export { RoutineDetailHeader };
 
 export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = false }: { bot: Bot; routines: Routine[]; runs: RoutineRun[]; defaultRunOn?: RoutineRunOn; grouped?: boolean }) {
   const { state, dispatch } = useStore();

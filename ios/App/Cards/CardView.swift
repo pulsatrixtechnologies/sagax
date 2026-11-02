@@ -273,6 +273,7 @@ struct CardView: View {
         case .skillEnabled: String(localized: "Skill enabled")
         case .skillUpdated: String(localized: "Skill updated")
         case .profileUpdated: String(localized: "Profile updated")
+        case .ruleUpdated: String(localized: "Approval rule saved")
         case .teamSetupApplied: String(localized: "Team setup applied")
         case .botDeleted: String(localized: "Bot deleted")
         }

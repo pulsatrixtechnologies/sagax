@@ -94,16 +94,14 @@ enum BotAdvancedWording {
         return head.prefix(1).uppercased() + head.dropFirst()
     }
 
-    /// The history row's line: "3 min ago · You via phone · Renamed".
-    static func historyLine(_ row: BotHistoryRow) -> String {
-        "\(when(row.at)) · " + String(localized: "\(row.actor) via \(row.via)") + " · \(row.summary)"
+    /// The history row's line a person reads (lot 8): no UUID, no byte
+    /// sizes. Pass the bot's name so a bot actor shows as "Katarina".
+    static func historyLine(_ row: BotHistoryRow, botName: String = "") -> String {
+        DisplayHygiene.historyPhrase(row, botName: botName)
     }
 
     /// `whenLabel`: the time today, the day otherwise.
     static func when(_ at: Double) -> String {
-        let date = Date(timeIntervalSince1970: at / 1000)
-        return Calendar.current.isDateInToday(date)
-            ? date.formatted(date: .omitted, time: .shortened)
-            : date.formatted(.dateTime.month(.abbreviated).day())
+        DisplayHygiene.historyWhen(at)
     }
 }

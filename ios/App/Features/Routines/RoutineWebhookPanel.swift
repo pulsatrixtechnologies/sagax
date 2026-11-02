@@ -19,6 +19,8 @@ struct RoutineWebhookPanel: View {
     @State private var webhooks: [WebhookListing] = []
     @State private var ingress: WebhookIngress?
     @State private var loaded = false
+    /// Lot 5: list load failed (Grok Bot shows Try again + this phrase).
+    @State private var loadError: String?
     @State private var token: String?
     @State private var shown = false
     @State private var working: Working?
@@ -42,6 +44,25 @@ struct RoutineWebhookPanel: View {
             if routine == nil {
                 note(String(localized: "The address and the key appear once the routine is saved."))
                     .accessibilityIdentifier("routine-webhook-new")
+            } else if let loadError = loadError {
+                // Lot 5 / Grok Bot: error + Try again when the webhook list
+                // cannot be read.
+                VStack(alignment: .leading, spacing: 10) {
+                    Button {
+                        Task { await load() }
+                    } label: {
+                        Text("Try again")
+                            .font(Theme.Font.bodyMedium)
+                            .foregroundStyle(Theme.accentText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("routine-webhook-try-again")
+                    Text(verbatim: loadError)
+                        .font(.footnote)
+                        .foregroundStyle(Theme.danger)
+                        .accessibilityIdentifier("routine-webhook-load-error")
+                }
             } else if let webhook {
                 panel(webhook)
             } else if loaded {
@@ -251,11 +272,15 @@ struct RoutineWebhookPanel: View {
 
     private func load() async {
         guard routine != nil else { return }
+        loadError = nil
         if let list = await session.loadWebhooks() {
             webhooks = list.webhooks
             ingress = list.ingress
+            loaded = true
+        } else {
+            loaded = true
+            loadError = String(localized: "Couldn't load the webhook details.")
         }
-        loaded = true
     }
 
     private func fetchKey(_ action: RoutineWebhook.KeyAction) async {

@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { HardDrive, Loader2, RefreshCw, Trash2 } from "lucide-react";
 
+import { useConfirm } from "@/components/ConfirmProvider";
 import { activeLocale, t } from "@/lib/i18n";
 import { formatBytes } from "@/lib/server-environment";
 import type { LocaleKey } from "@/locales";
@@ -113,6 +114,7 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 export function ComputerCareSettings() {
+  const confirm = useConfirm();
   const [view, setView] = useState<MaintenanceView | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -172,9 +174,12 @@ export function ComputerCareSettings() {
   const clean = async () => {
     if (!preview || selected.size === 0) return;
     const userFiles = preview.items.some((item) => item.userFiles && selected.has(item.id));
-    const confirm = (message: string) => window.ogb?.confirm ? window.ogb.confirm(message) : Promise.resolve(window.confirm(message));
     const bytes = preview.items.filter((item) => selected.has(item.id)).reduce((sum, item) => sum + item.bytes, 0);
-    if (!(await confirm(t(userFiles ? "computerCare.disk.confirmTrash" : "computerCare.disk.confirm", { size: formatBytes(bytes) })))) return;
+    if (!(await confirm({
+      title: t(userFiles ? "computerCare.disk.confirmTrash" : "computerCare.disk.confirm", { size: formatBytes(bytes) }),
+      confirmLabel: t("common.delete"),
+      tone: "danger",
+    }))) return;
     setCleaning(true);
     setError(null);
     try {

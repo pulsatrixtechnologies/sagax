@@ -100,7 +100,7 @@ export function summaryOf(target: ActTarget): string {
 type CommandSpec = { write: boolean; fields: Record<string, string> };
 
 const COMMANDS: Record<string, CommandSpec> = {
-  showRoutines: { write: false, fields: { section: "e?:schedule|logs", view: "e?:calendar|list", botId: "s?", routineId: "s?", runStatus: "e?:all|problems|queued|running|waiting|completed|failed|cancelled|missed" } },
+  showRoutines: { write: false, fields: { section: "e?:schedule|logs", view: "e?:calendar|list", botId: "s?", routineId: "s?", runStatus: "e?:all|problems|queued|running|waiting|completed|failed|blocked|cancelled|missed" } },
   showTeamMap: { write: false, fields: {} },
   showChat: { write: false, fields: {} },
   select: { write: false, fields: { id: "s" } },

@@ -46,8 +46,19 @@ describe("autoVerdict", () => {
       expect(autoVerdict(mode, "other", { toolName: "outlook__search", connectorRead: true, safetyHold: true }).approve).toBeNull();
       if (mode !== "full") expect(autoVerdict(mode, "other", { toolName: "outlook__search", connectorRead: true, stepUpRequired: ["mail"] }).approve).toBeNull();
       // an outward call is never a read, whatever the flag says
-      expect(autoVerdict(mode, "other", { toolName: "outlook__send_message", connectorRead: true, outbound: true }).source).toBe(mode === "full" ? "full-access" : "outbound-guard");
+      expect(autoVerdict(mode, "other", { toolName: "outlook__send_message", connectorRead: true, outbound: true }).source).toBe(mode === "full" ? "full-access" : "email-draft-required");
     }
+  });
+
+  it("forces a draft card for unrequested mail sends and lets person-asked mail follow the level", () => {
+    for (const mode of ["ask", "edits", "auto", "custom"] as const) {
+      expect(autoVerdict(mode, "outlook__send_email", { outbound: true }).source).toBe("email-draft-required");
+      expect(autoVerdict(mode, "outlook__send_email", { outbound: true, personAskedMail: true, ownerTurn: true }).source).toBe(
+        mode === "auto" || mode === "custom" ? "native-approval" : "no-grant",
+      );
+    }
+    expect(autoVerdict("full", "outlook__send_email", { outbound: true, personAskedMail: true, ownerTurn: true }).source).toBe("full-access");
+    expect(approvalHeldNote({ source: "email-draft-required", permission: true })).toBe("approval.held.emailDraft");
   });
   it("answers a read-only command on the person's own computer at every level (Owner 2026-10-20)", () => {
     const tool = "mcp__sagax-environment__run_command";
@@ -175,7 +186,7 @@ describe("allowed recipients (parité 1C)", () => {
     expect(autoVerdict("auto", tool, { recipientsAllowed: true, stepUpRequired: ["external-send"] }).approve).toBeNull();
     expect(autoVerdict("auto", tool, { recipientsAllowed: true, safetyHold: true }).approve).toBeNull();
     expect(autoVerdict("auto", tool, { recipientsAllowed: true, customRule: { behavior: "ask", id: "r1" } }).approve).toBeNull();
-    expect(autoVerdict("auto", tool, { recipientsAllowed: false })).toEqual({ approve: null, source: "outbound-guard" });
+    expect(autoVerdict("auto", tool, { recipientsAllowed: false })).toEqual({ approve: null, source: "email-draft-required" });
   });
 });
 

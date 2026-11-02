@@ -4850,6 +4850,8 @@ ipcMain.handle("perm:open-settings", localOnly("perm:open-settings", (_event, pa
     screen: "Privacy_ScreenCapture",
     speech: "Privacy_SpeechRecognition",
     accessibility: "Privacy_Accessibility",
+    fullDisk: "Privacy_AllFiles",
+    automation: "Privacy_Automation",
   };
   // own-property lookup only — a renderer-supplied "__proto__"/"constructor"
   // would otherwise resolve up the prototype chain to a truthy object

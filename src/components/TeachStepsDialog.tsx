@@ -1,17 +1,23 @@
 // Teach by demonstration, after the recording: the steps as an editable
 // list, then saved as a skill of the bot (added turned off, through the same
 // upload route as Skills > Upload, so the person turns it on after reading
-// it). The list lives only in this window: closing it without saving drops
+// it). The list lives only in this panel: closing it without saving drops
 // it, and the raw recording is downloaded only when the person asks to keep
 // it. Also the small chooser the composer's "Teach a task" opens when the
 // bot has a browser: show it there, or describe it in words (/learn).
-import { useEffect, useRef, useState } from "react";
+// 2026-11-01 lot 7: steps in DetailPanel beside the thread; chooser as an
+// anchored popover on the composer +.
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { ArrowDown, ArrowUp, Globe, MousePointerClick, MessageSquareText, Plus, Trash2, X } from "lucide-react";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { api } from "@/state/store";
 import { TEACH_TEXT_MAX, type TeachReplay, type TeachStep } from "../../shared/teach-recording";
 import { readableError } from "@/lib/plain-error";
+import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
+import { AnchoredPopover, useAnchoredDismissRoot } from "./AnchoredPopover";
+import { DetailPanel } from "./DetailPanel";
+import { PILL, PRIMARY_PILL } from "./SettingsPrimitives";
 
 const input = "min-w-0 flex-1 rounded-md bg-inset px-2 py-1 text-[12px] outline-none focus:ring-1 focus:ring-accent";
 const iconButton = "rounded-md p-1 text-ink-secondary hover:bg-inset hover:text-ink disabled:opacity-30";
@@ -47,7 +53,6 @@ function StepFields({ step, onChange }: { step: TeachStep; onChange: (next: Teac
     return <input className={input} aria-label={t("teach.field.url")} value={step.url ?? ""} spellCheck={false} onChange={(e) => onChange({ ...step, url: e.target.value })} />;
   }
   if (step.kind === "click" && step.screen) {
-    // a click on the computer's screen: name what is there, the window and position stay
     return <span className="flex min-w-0 flex-1 flex-col gap-1">
       <WindowField step={step} onChange={onChange} />
       <input className={input} aria-label={t("teach.field.element")} value={step.target?.name ?? ""} placeholder={t("teach.field.screenSpot")}
@@ -85,7 +90,6 @@ export function TeachStepsDialog({ botId, botName, steps: recorded, recordedAt, 
   onClose: () => void;
 }) {
   const [replay, setReplay] = useState<TeachReplay | undefined>(recordedReplay);
-  const dialog = useRef<HTMLDialogElement>(null);
   const [steps, setSteps] = useState<TeachStep[]>(recorded);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -94,7 +98,6 @@ export function TeachStepsDialog({ botId, botName, steps: recorded, recordedAt, 
   const [error, setError] = useState("");
   const [savedName, setSavedName] = useState("");
   const [confirmReplace, setConfirmReplace] = useState(false);
-  useEffect(() => { dialog.current?.showModal(); }, []);
 
   const move = (index: number, by: number) => setSteps((list) => {
     const next = [...list];
@@ -119,7 +122,6 @@ export function TeachStepsDialog({ botId, botName, steps: recorded, recordedAt, 
         return;
       }
       const name = result.installed || result.name || "";
-      // the raw recording leaves this window only when the person asked
       if (keepRaw) download(`${name}-recording.json`, JSON.stringify({ recordedAt, steps }, null, 2));
       setSavedName(name);
       setConfirmReplace(false);
@@ -130,73 +132,85 @@ export function TeachStepsDialog({ botId, botName, steps: recorded, recordedAt, 
     }
   };
   const refuse = () => {
+    if (phase === "saving") return;
     void api(`/api/bots/${encodeURIComponent(botId)}/shown-path`, {
       method: "POST",
       body: JSON.stringify({ mode: "refuse", title, description, steps, recordedAt }),
     }).catch(() => undefined);
-    dialog.current?.close();
+    onClose();
   };
 
-  return <dialog ref={dialog} data-teach-steps="" onClose={onClose} onCancel={(e) => { if (phase === "saving") e.preventDefault(); }}
-    className="m-auto flex w-[min(640px,calc(100%-32px))] max-h-[85vh] flex-col rounded-2xl border border-hairline/50 bg-card p-0 text-ink shadow-2xl backdrop:bg-black/40">
-    <div className="flex items-center justify-between border-b border-hairline/40 px-5 py-3">
-      <h2 className="text-[15px] font-medium">{t("teach.title")}</h2>
-      <button type="button" className={iconButton} aria-label={t("teach.close")} disabled={phase === "saving"} onClick={() => dialog.current?.close()}><X size={16} /></button>
-    </div>
-    {phase === "saved" ? <div className="flex flex-col gap-3 px-5 py-5 text-[13px]" role="status">
-      <p>{t("teach.saved", { name: savedName, bot: botName })}</p>
-      <button type="button" className="self-end rounded-lg bg-accent px-4 py-2 text-[12px] font-medium text-accent-ink" onClick={() => dialog.current?.close()}>{t("teach.done")}</button>
-    </div> : <>
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-4">
-        <p className="text-[12px] leading-relaxed text-ink-secondary">{t(steps.some((step) => step.screen) ? "teach.introScreen" : "teach.intro", { bot: botName })}</p>
-        <label className="flex flex-col gap-1 text-[12px]"><span className="font-medium">{t("teach.name")}</span>
-          <input className={input} value={title} maxLength={80} placeholder={t("teach.namePlaceholder")} onChange={(e) => setTitle(e.target.value)} /></label>
-        <label className="flex flex-col gap-1 text-[12px]"><span className="font-medium">{t("teach.description")}</span>
-          <input className={input} value={description} maxLength={300} placeholder={t("teach.descriptionPlaceholder")} onChange={(e) => setDescription(e.target.value)} /></label>
-        <ol className="flex flex-col gap-1.5" aria-label={t("teach.steps")}>
-          {steps.map((step, index) => <li key={step.id} data-teach-step={step.kind} className="flex items-center gap-2 rounded-lg border border-hairline/40 px-2 py-1.5">
-            <span className="w-5 shrink-0 text-right text-[11px] tabular-nums text-ink-secondary">{index + 1}</span>
-            <span className="w-24 shrink-0 text-[12px] font-medium">{t(KIND_LABEL[step.kind])}</span>
-            <StepFields step={step} onChange={(next) => setSteps((list) => list.map((item) => item.id === step.id ? next : item))} />
-            <button type="button" className={iconButton} aria-label={t("teach.moveUp")} disabled={index === 0} onClick={() => move(index, -1)}><ArrowUp size={14} /></button>
-            <button type="button" className={iconButton} aria-label={t("teach.moveDown")} disabled={index === steps.length - 1} onClick={() => move(index, 1)}><ArrowDown size={14} /></button>
-            <button type="button" className={iconButton} aria-label={t("teach.remove")} onClick={() => setSteps((list) => list.filter((item) => item.id !== step.id))}><Trash2 size={14} /></button>
-          </li>)}
-        </ol>
-        {!steps.length && <p className="text-[12px] text-ink-secondary">{t("teach.empty")}</p>}
-        <button type="button" className="flex items-center gap-1.5 self-start rounded-md px-2 py-1 text-[12px] text-ink-secondary hover:bg-inset hover:text-ink"
-          onClick={() => setSteps((list) => [...list, { id: crypto.randomUUID(), kind: "note", text: "" }])}><Plus size={13} />{t("teach.addNote")}</button>
-        {replay && <fieldset className="flex flex-col gap-1.5 text-[12px]" data-teach-replay={replay}>
-          <legend className="mb-1 font-medium">{t("teach.replay.title", { bot: botName })}</legend>
-          {(["background", "my-chrome"] as const).map((where) => <label key={where} className="flex items-start gap-2">
-            <input type="radio" name="teach-replay" className="mt-0.5" checked={replay === where} onChange={() => setReplay(where)} />
-            <span className="flex flex-col"><span>{t(where === "background" ? "teach.replay.background" : "teach.replay.myChrome")}</span>
-              <span className="text-[11px] text-ink-secondary">{t(where === "background" ? "teach.replay.backgroundHint" : "teach.replay.myChromeHint")}</span></span>
-          </label>)}
-        </fieldset>}
-        <label className="flex items-start gap-2 text-[12px] text-ink-secondary">
-          <input type="checkbox" className="mt-0.5" checked={keepRaw} onChange={(e) => setKeepRaw(e.target.checked)} />
-          <span>{t("teach.keepRaw")}</span>
-        </label>
-        <p className="text-[11px] leading-relaxed text-ink-secondary">{t("teach.privacy")}</p>
-      </div>
-      {confirmReplace && <p role="status" className="px-5 pb-2 text-[12px] text-ink-secondary">{t("teach.replaceAsk", { name: savedName })}</p>}
-      {error && <p role="alert" className="px-5 pb-2 text-[12px] text-danger">{error}</p>}
-      <div className="flex justify-end gap-2 border-t border-hairline/40 px-5 py-3">
-        <button type="button" className="rounded-lg px-4 py-2 text-[12px] hover:bg-inset" disabled={phase === "saving"} onClick={refuse}>{t("teach.discard")}</button>
-        {confirmReplace && <button type="button" data-teach-replace="" className="rounded-lg px-4 py-2 text-[12px] font-medium hover:bg-inset" disabled={phase === "saving"} onClick={() => void save(true)}>{t("teach.replace")}</button>}
-        <button type="button" data-teach-save="" className="rounded-lg bg-accent px-4 py-2 text-[12px] font-medium text-accent-ink disabled:opacity-50" disabled={phase === "saving"} onClick={() => void save(false)}>
-          {phase === "saving" ? t("teach.saving") : t("teach.save")}
-        </button>
-      </div>
-    </>}
-  </dialog>;
+  return (
+    <DetailPanel
+      label={t("teach.title")}
+      title={t("teach.title")}
+      closeLabel={t("teach.close")}
+      onClose={() => { if (phase !== "saving") onClose(); }}
+      data-teach-steps=""
+      footer={phase === "saved" ? (
+        <button type="button" className={PRIMARY_PILL} onClick={onClose}>{t("teach.done")}</button>
+      ) : (
+        <>
+          <button type="button" className={PILL} disabled={phase === "saving"} onClick={refuse}>{t("teach.discard")}</button>
+          {confirmReplace && <button type="button" data-teach-replace="" className={PILL} disabled={phase === "saving"} onClick={() => void save(true)}>{t("teach.replace")}</button>}
+          <button type="button" data-teach-save="" className={`${PRIMARY_PILL} ml-auto`} disabled={phase === "saving"} onClick={() => void save(false)}>
+            {phase === "saving" ? t("teach.saving") : t("teach.save")}
+          </button>
+        </>
+      )}
+    >
+      {phase === "saved" ? (
+        <div className="flex flex-col gap-3 px-4 py-5 text-[13px]" role="status">
+          <p>{t("teach.saved", { name: savedName, bot: botName })}</p>
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+          <p className="text-[12px] leading-relaxed text-ink-secondary">{t(steps.some((step) => step.screen) ? "teach.introScreen" : "teach.intro", { bot: botName })}</p>
+          <label className="flex flex-col gap-1 text-[12px]"><span className="font-medium">{t("teach.name")}</span>
+            <input className={input} value={title} maxLength={80} placeholder={t("teach.namePlaceholder")} onChange={(e) => setTitle(e.target.value)} /></label>
+          <label className="flex flex-col gap-1 text-[12px]"><span className="font-medium">{t("teach.description")}</span>
+            <input className={input} value={description} maxLength={300} placeholder={t("teach.descriptionPlaceholder")} onChange={(e) => setDescription(e.target.value)} /></label>
+          <ol className="flex flex-col gap-1.5" aria-label={t("teach.steps")}>
+            {steps.map((step, index) => <li key={step.id} data-teach-step={step.kind} className="flex items-center gap-2 rounded-lg border border-hairline/40 px-2 py-1.5">
+              <span className="w-5 shrink-0 text-right text-[11px] tabular-nums text-ink-secondary">{index + 1}</span>
+              <span className="w-24 shrink-0 text-[12px] font-medium">{t(KIND_LABEL[step.kind])}</span>
+              <StepFields step={step} onChange={(next) => setSteps((list) => list.map((item) => item.id === step.id ? next : item))} />
+              <button type="button" className={iconButton} aria-label={t("teach.moveUp")} disabled={index === 0} onClick={() => move(index, -1)}><ArrowUp size={14} /></button>
+              <button type="button" className={iconButton} aria-label={t("teach.moveDown")} disabled={index === steps.length - 1} onClick={() => move(index, 1)}><ArrowDown size={14} /></button>
+              <button type="button" className={iconButton} aria-label={t("teach.remove")} onClick={() => setSteps((list) => list.filter((item) => item.id !== step.id))}><Trash2 size={14} /></button>
+            </li>)}
+          </ol>
+          {!steps.length && <p className="text-[12px] text-ink-secondary">{t("teach.empty")}</p>}
+          <button type="button" className="flex items-center gap-1.5 self-start rounded-md px-2 py-1 text-[12px] text-ink-secondary hover:bg-inset hover:text-ink"
+            onClick={() => setSteps((list) => [...list, { id: crypto.randomUUID(), kind: "note", text: "" }])}><Plus size={13} />{t("teach.addNote")}</button>
+          {replay && <fieldset className="flex flex-col gap-1.5 text-[12px]" data-teach-replay={replay}>
+            <legend className="mb-1 font-medium">{t("teach.replay.title", { bot: botName })}</legend>
+            {(["background", "my-chrome"] as const).map((where) => <label key={where} className="flex items-start gap-2">
+              <input type="radio" name="teach-replay" className="mt-0.5" checked={replay === where} onChange={() => setReplay(where)} />
+              <span className="flex flex-col"><span>{t(where === "background" ? "teach.replay.background" : "teach.replay.myChrome")}</span>
+                <span className="text-[11px] text-ink-secondary">{t(where === "background" ? "teach.replay.backgroundHint" : "teach.replay.myChromeHint")}</span></span>
+            </label>)}
+          </fieldset>}
+          <label className="flex items-start gap-2 text-[12px] text-ink-secondary">
+            <input type="checkbox" className="mt-0.5" checked={keepRaw} onChange={(e) => setKeepRaw(e.target.checked)} />
+            <span>{t("teach.keepRaw")}</span>
+          </label>
+          <p className="text-[11px] leading-relaxed text-ink-secondary">{t("teach.privacy")}</p>
+          {confirmReplace && <p role="status" className="text-[12px] text-ink-secondary">{t("teach.replaceAsk", { name: savedName })}</p>}
+          {error && <p role="alert" className="text-[12px] text-danger">{error}</p>}
+        </div>
+      )}
+    </DetailPanel>
+  );
 }
 
 /** The composer's "Teach a task" when the bot has a browser: show the task
- * there (a recording), or describe it in words (/learn, as before). */
-export function TeachChooserDialog({ botName, onShow, onShowInMyChrome, onDescribe, onClose }: {
+ * there (a recording), or describe it in words (/learn, as before).
+ * 2026-11-01 lot 7: anchored popover on the + (at most a choice list). */
+export function TeachChooserDialog({ botName, anchorRef, onShow, onShowInMyChrome, onDescribe, onClose }: {
   botName: string;
+  /** The + (or Teach row) that opened this choice. */
+  anchorRef: RefObject<HTMLElement | null>;
   /** Show it in the bot's browser; absent when this bot has none. */
   onShow?: () => void;
   /** Show it in the person's own Chrome (My Chrome's recorder). */
@@ -204,29 +218,51 @@ export function TeachChooserDialog({ botName, onShow, onShowInMyChrome, onDescri
   onDescribe?: () => void;
   onClose: () => void;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => { dialog.current?.showModal(); }, []);
-  const choice = "flex w-full items-start gap-3 rounded-xl border border-hairline/50 px-3 py-3 text-left hover:bg-inset";
-  return <dialog ref={dialog} data-teach-chooser="" onClose={onClose} onClick={(e) => { if (e.target === e.currentTarget) dialog.current?.close(); }}
-    className="m-auto w-[min(420px,calc(100%-32px))] rounded-2xl border border-hairline/50 bg-card p-5 text-ink shadow-2xl backdrop:bg-black/40">
-    <div className="mb-3 flex items-center justify-between"><h2 className="text-[15px] font-medium">{t("teach.chooser.title")}</h2>
-      <button type="button" className={iconButton} aria-label={t("teach.close")} onClick={() => dialog.current?.close()}><X size={16} /></button></div>
-    <div className="flex flex-col gap-2">
-      {onShow && <button type="button" data-teach-show="" className={choice} onClick={() => { dialog.current?.close(); onShow(); }}>
-        <Globe size={18} className="mt-0.5 shrink-0 text-accent-text" aria-hidden="true" />
-        <span className="flex flex-col gap-0.5"><span className="text-[13px] font-medium">{t("teach.chooser.show")}</span>
-          <span className="text-[12px] text-ink-secondary">{t("teach.chooser.showHint", { bot: botName })}</span></span>
-      </button>}
-      {onShowInMyChrome && <button type="button" data-teach-my-chrome="" className={choice} onClick={() => { dialog.current?.close(); onShowInMyChrome(); }}>
-        <MousePointerClick size={18} className="mt-0.5 shrink-0 text-accent-text" aria-hidden="true" />
-        <span className="flex flex-col gap-0.5"><span className="text-[13px] font-medium">{t("teach.chooser.myChrome")}</span>
-          <span className="text-[12px] text-ink-secondary">{t("teach.chooser.myChromeHint", { bot: botName })}</span></span>
-      </button>}
-      {onDescribe && <button type="button" data-teach-describe="" className={choice} onClick={() => { dialog.current?.close(); onDescribe(); }}>
-        <MessageSquareText size={18} className="mt-0.5 shrink-0 text-ink-secondary" aria-hidden="true" />
-        <span className="flex flex-col gap-0.5"><span className="text-[13px] font-medium">{t("teach.chooser.describe")}</span>
-          <span className="text-[12px] text-ink-secondary">{t("teach.chooser.describeHint")}</span></span>
-      </button>}
-    </div>
-  </dialog>;
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const triggerRoot = useRef<HTMLElement | null>(null);
+  triggerRoot.current = anchorRef.current;
+  const dismissRoot = useAnchoredDismissRoot(triggerRoot, popoverRef);
+  usePopoverDismiss(true, dismissRoot, onClose);
+  useEffect(() => {
+    popoverRef.current?.querySelector<HTMLButtonElement>("button[data-teach-show], button[data-teach-my-chrome], button[data-teach-describe]")?.focus();
+  }, []);
+
+  const choice = "flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-hover";
+  return (
+    <AnchoredPopover
+      anchorRef={anchorRef}
+      popoverRef={popoverRef}
+      side="top"
+      align="start"
+      role="dialog"
+      aria-labelledby="teach-chooser-title"
+      data-teach-chooser=""
+      className="w-[min(360px,calc(100vw-24px))] rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-3 text-ink shadow-xl"
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+      }}
+    >
+      <h2 id="teach-chooser-title" className="px-1 pb-2 text-[14px] font-medium">{t("teach.chooser.title")}</h2>
+      <div className="flex flex-col gap-0.5">
+        {onShow && <button type="button" data-teach-show="" className={choice} onClick={() => { onClose(); onShow(); }}>
+          <Globe size={18} className="mt-0.5 shrink-0 text-accent-text" aria-hidden="true" />
+          <span className="flex flex-col gap-0.5"><span className="text-[13px] font-medium">{t("teach.chooser.show")}</span>
+            <span className="text-[12px] text-ink-secondary">{t("teach.chooser.showHint", { bot: botName })}</span></span>
+        </button>}
+        {onShowInMyChrome && <button type="button" data-teach-my-chrome="" className={choice} onClick={() => { onClose(); onShowInMyChrome(); }}>
+          <MousePointerClick size={18} className="mt-0.5 shrink-0 text-accent-text" aria-hidden="true" />
+          <span className="flex flex-col gap-0.5"><span className="text-[13px] font-medium">{t("teach.chooser.myChrome")}</span>
+            <span className="text-[12px] text-ink-secondary">{t("teach.chooser.myChromeHint", { bot: botName })}</span></span>
+        </button>}
+        {onDescribe && <button type="button" data-teach-describe="" className={choice} onClick={() => { onClose(); onDescribe(); }}>
+          <MessageSquareText size={18} className="mt-0.5 shrink-0 text-ink-secondary" aria-hidden="true" />
+          <span className="flex flex-col gap-0.5"><span className="text-[13px] font-medium">{t("teach.chooser.describe")}</span>
+            <span className="text-[12px] text-ink-secondary">{t("teach.chooser.describeHint")}</span></span>
+        </button>}
+      </div>
+    </AnchoredPopover>
+  );
 }

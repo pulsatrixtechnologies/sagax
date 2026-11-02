@@ -10,6 +10,14 @@
 // read as "not now"; a request that cannot be honoured gets a typed refusal.
 import { randomUUID } from "node:crypto";
 
+import {
+  attemptOutcomeFor,
+  byOldestFirst,
+  nextAttemptNumber,
+  openAttempt,
+  shouldResumeAfterReport,
+  type Attempt,
+} from "./attempts.ts";
 import { requiresDecisionCard, unmetCompletion } from "./done-when.ts";
 import { composeEnvelope } from "./envelope.ts";
 import { assignmentLevel } from "./level.ts";
@@ -18,6 +26,11 @@ import { asking, awaited, childrenSince, clip, CUT_TWICE, duration, isTerminal, 
 import { DEFAULT_LIMITS, INPUT_REMIND_REPEAT_MS, type Assignment, type Assignee, type Clock, type EnqueueRequest, type EnqueueResult, type EnvelopeNames,
   type EventKind, type InboxItem, type InboxKind, type Level, type Limits, type LiveEdge, type Origin, type Outcome, type Owner,
   type Reply, type Requester, type RunInput, type RunResult, type StatusView, type TurnEvidence, type TurnRunner } from "./types.ts";
+
+export type { Attempt } from "./attempts.ts";
+export type RetryResult =
+  | { ok: true; assignment: Assignment; attempt: Attempt }
+  | { ok: false; reason: string };
 
 export interface RuntimeOptions {
   /** Default: Date.now and performance.now. */
@@ -72,7 +85,7 @@ const defaultClock: Clock = { now: () => Date.now(), monotonic: () => performanc
  * node owes another resume. */
 interface LiveTurn { controller: AbortController; rootId: string; activeAt: number; interruption: boolean; carried: ReadonlySet<string> }
 
-type TerminalStatus = "completed" | "failed" | "cancelled";
+type TerminalStatus = "completed" | "failed" | "cancelled" | "expired";
 
 /** How many times one requester may rework the same brief for the same
  * teammate in the same place, after its first run. */
@@ -145,7 +158,7 @@ export class Runtime {
           const stale = this.parkedStale(n, now);
           if (stale) {
             this.store.update(n, { kind: "restart_reconciled", at: now, detail: `needs_input: closed (${stale})` });
-            this.cancelTree(n, stale, "failed", "expired");
+            if (!this.applyDefaultAnswer(n)) this.cancelTree(n, stale, "expired", "expired");
             continue;
           }
           this.store.update(n, { kind: "restart_reconciled", at: now, detail: "needs_input: parked again" });
@@ -177,6 +190,26 @@ export class Runtime {
       }
       // A crash between a settlement and its report leaves the report owed.
       for (const n of this.store.all()) if (isTerminal(n) && n.reportedAt === undefined) this.reportDue.add(n.id);
+      // A job that already reported stays finished unless an undelivered
+      // entry arrived on its lane after that report (DEL-03). Oldest first.
+      for (const snapshot of this.store.all().slice().sort(byOldestFirst)) {
+        const n = this.store.get(snapshot.id);
+        if (!n || !isTerminal(n) || n.reportedAt === undefined || n.reply === "none") continue;
+        if (n.outcome === "stopped") continue;
+        const childIds = new Set(this.store.children(n.id).map(c => c.id));
+        if (childIds.size === 0) continue;
+        const undelivered = this.store.inbox({ threadId: n.assignee.destination.threadId }, true)
+          .filter(i => childIds.has(i.assignmentId));
+        if (!shouldResumeAfterReport(n.reportedAt, undelivered)) continue;
+        this.store.transaction(() => {
+          this.finishOpenAttempt(n.id, now, "superseded");
+          n.status = "resume"; n.lastActivityAt = now;
+          delete n.outcome; delete n.outcomeDetail; delete n.finishedAt; delete n.reportedAt;
+          this.store.update(n, { kind: "reopened", at: now, detail: "resume: entry arrived after report" });
+          this.startAttempt(n.id, now);
+        });
+        this.touch(n);
+      }
     });
   }
 
@@ -195,6 +228,7 @@ export class Runtime {
     this.store.transaction(() => {
       this.store.insert(root, { kind: "enqueued", at: now, detail: "queued: root" });
       this.store.update(root, { kind: "started", at: now, detail: `running: turn 1 (host), level ${root.level}` });
+      this.startAttempt(root.id, now);
     });
     this.touch(root);
     return root;
@@ -247,6 +281,61 @@ export class Runtime {
       this.touch(n);
     });
     return "continued";
+  }
+
+  /**
+   * Retry a blocked or failed assignment in place (DEL-02): end the open
+   * attempt, start a new one on the same destination, drop prior wakes about
+   * this job, and leave undelivered inbox rows (`delivered_at IS NULL`) for
+   * the new attempt to read. Same assignment id, session and branch.
+   */
+  retry(id: string): RetryResult {
+    try {
+      return this.withBatch(() => this.retryBody(id));
+    } catch (error) {
+      this.log(`retry(${id}) failed: ${String(error)}`);
+      return { ok: false, reason: `The retry could not be recorded: ${String(error)}` };
+    }
+  }
+
+  private retryBody(id: string): RetryResult {
+    const n = this.store.get(id);
+    if (!n) return { ok: false, reason: "The assignment no longer exists" };
+    if (n.status !== "failed") {
+      return { ok: false, reason: "Only a failed assignment can be retried in place" };
+    }
+    if (this.closing) return { ok: false, reason: "The runtime is closing" };
+    const now = this.clock.now();
+    // Read undelivered results before mutating the row.
+    const owed = this.resultsOwedAfterRetry(n);
+    const attempt = this.buildAttempt(n.id, now);
+    n.status = owed ? "resume" : "queued";
+    n.lastActivityAt = now;
+    delete n.outcome; delete n.outcomeDetail; delete n.finishedAt; delete n.reportedAt;
+    delete n.question; delete n.answer; delete n.carrying; delete n.restart;
+    this.store.transaction(() => {
+      this.finishOpenAttempt(n.id, now, "superseded");
+      // Prior wakes about this job would violate I9 once it is live again; the
+      // new attempt wakes once when it settles. Undelivered inputs on this
+      // job's own lane stay for redelivery.
+      this.store.removeInboxForAssignment(n.id);
+      this.store.update(n, { kind: "retried", at: now, detail: `${n.status}: attempt ${attempt.number}` });
+      this.store.addAttempt(attempt);
+    });
+    this.reportDue.delete(n.id);
+    this.touch(n);
+    return { ok: true, assignment: n, attempt };
+  }
+
+  /** Undelivered settled results of children still owed after a retry. */
+  private resultsOwedAfterRetry(n: Assignment): boolean {
+    const kids = awaited(this.store.children(n.id));
+    if (kids.length === 0) return false;
+    if (!kids.every(c => isTerminal(c) && c.reportedAt !== undefined)) return false;
+    if (!n.parentId && n.reply === "poll") return false;
+    const ids = new Set(kids.map(c => c.id));
+    return this.store.inbox({ threadId: n.assignee.destination.threadId }, true)
+      .some(i => ids.has(i.assignmentId) && i.kind !== "needs_input");
   }
 
   /** That requesting turn ended. */
@@ -325,6 +414,7 @@ export class Runtime {
       // The origin is written once at the root and copied down.
       origin: root ? root.origin : req.origin, requester: req.requester, assignee: target, mode,
       reply: req.reply ?? (mode === "notify" ? "none" : "resume"), brief, ...(req.doneWhen ? { doneWhen: req.doneWhen } : {}),
+      ...(req.defaultAnswer ? { defaultAnswer: clip(req.defaultAnswer, BRIEF_MAX) } : {}),
       status: "queued", level, levelSource: source, executions: 0, restarts: 0, createdAt: now, lastActivityAt: now, result: "",
       rework: Boolean(req.rework), ...(req.approved !== undefined ? { approved: req.approved } : {}),
       ...(req.batchKey !== undefined ? { batchKey: req.batchKey } : {}), ...(req.relay ? { relay: true } : {}),
@@ -418,16 +508,16 @@ export class Runtime {
           const why = requiresDecisionCard(n.doneWhen)
             ? (n.executions > 0 ? "decision card not resumed while hub was busy" : "decision card never started while hub was busy")
             : (n.executions > 0 ? "not resumed" : "never started");
-          this.cancelTree(n, why, "failed", "expired");
+          this.cancelTree(n, why, "expired", "expired");
         }
       } else if (n.status === "needs_input" && now - this.since(n.lastActivityAt) > this.limits.inputWaitMs) {
         this.reminded.delete(n.id);
-        this.cancelTree(n, "the person did not answer", "failed", "expired");
+        if (!this.applyDefaultAnswer(n)) this.cancelTree(n, "the person did not answer", "expired", "expired");
       } else if (n.status === "needs_input") {
         const stale = this.parkedStale(n, now);
         if (stale) {
           this.reminded.delete(n.id);
-          this.cancelTree(n, stale, "failed", "expired");
+          if (!this.applyDefaultAnswer(n)) this.cancelTree(n, stale, "expired", "expired");
         } else this.remindIfDue(n, now);
       } else if (n.status === "running") {
         const turn = this.turns.get(n.id);
@@ -485,9 +575,8 @@ export class Runtime {
   }
 
   private dispatchDue(): void {
-    // Priority-now work is admitted first (send_to_bot priority now: the
-    // front of the queue); otherwise the store's order.
-    const live = this.store.all({ nonTerminal: true }).sort((a, b) => Number(b.priority === "now") - Number(a.priority === "now"));
+    // Priority-now first, then oldest createdAt (DEL-03 startup / admission).
+    const live = this.store.all({ nonTerminal: true }).sort(byOldestFirst);
     const busyThreads = new Set(live.filter(n => n.status === "running").map(n => n.assignee.destination.threadId));
     for (const snapshot of live) {
       if (snapshot.status !== "queued" && snapshot.status !== "resume") continue;
@@ -592,6 +681,8 @@ export class Runtime {
         this.store.update(n, { kind: "started", at: now, detail: `running: turn ${n.executions}${resumed ? " (resume)" : ""}, level ${n.level}` });
         if (root.id !== n.id) this.store.update(root);
         this.store.markDelivered(delivered, now);
+        // First launch of an attempt (or a resume that somehow has none).
+        this.startAttempt(n.id, now);
       });
     } catch (error) {
       this.log(`dispatch(${n.id}) not written, nothing started: ${String(error)}`);
@@ -821,7 +912,7 @@ export class Runtime {
   // ── settlement and the wake lane ─────────────────────────────────────
 
   /** Cancel or fail the subtree, deepest first, then the node. */
-  private cancelTree(n: Assignment, reason: string, status: "failed" | "cancelled", outcome: Outcome): void {
+  private cancelTree(n: Assignment, reason: string, status: "failed" | "cancelled" | "expired", outcome: Outcome): void {
     for (const child of this.store.children(n.id)) {
       if (isTerminal(child)) continue;
       const fresh = this.store.get(child.id);
@@ -846,8 +937,10 @@ export class Runtime {
     delete n.question; delete n.answer; delete n.carrying;
     const kind: EventKind = status === "cancelled" ? "cancelled" : outcome === "refused" ? "refused" : "settled";
     const root = n.parentId ? this.store.get(n.rootId) : n;
+    const attemptEnd = attemptOutcomeFor(status, outcome);
     this.store.transaction(() => {
       this.store.update(n, { kind, at: now, detail: `${status}: ${outcome}${detail ? ` — ${clip(detail, DETAIL_MAX)}` : ""}` });
+      this.finishOpenAttempt(n.id, now, attemptEnd);
       // A settlement is the tree's progress: its budgets start over.
       if (root && root.id !== n.id && !isTerminal(root)) { this.renew(root, now); this.store.update(root); }
     });
@@ -909,14 +1002,49 @@ export class Runtime {
     if (root.budgets) root.budgets = { since: now, requests: 0, executions: 0, wakes: 0 };
   }
 
+  /** Open a new attempt when none is running (each launch, DEL-02). */
+  private startAttempt(assignmentId: string, at: number): Attempt | undefined {
+    if (openAttempt(this.store.attempts(assignmentId))) return undefined;
+    const attempt = this.buildAttempt(assignmentId, at);
+    this.store.addAttempt(attempt);
+    return attempt;
+  }
+
+  private buildAttempt(assignmentId: string, at: number): Attempt {
+    return {
+      id: randomUUID(),
+      assignmentId,
+      number: nextAttemptNumber(this.store.attempts(assignmentId)),
+      startedAt: at,
+      outcome: "running",
+    };
+  }
+
+  /** Close the open attempt, if any. */
+  private finishOpenAttempt(
+    assignmentId: string,
+    at: number,
+    outcome: Exclude<Attempt["outcome"], "running">,
+  ): void {
+    const current = openAttempt(this.store.attempts(assignmentId));
+    if (!current) return;
+    current.outcome = outcome;
+    current.finishedAt = at;
+    this.store.updateAttempt(current);
+  }
+
+  /** A child outside a room: its person-wait uses delegationInputWaitMs. */
+  private isDelegation(n: Assignment): boolean {
+    return n.parentId !== undefined && n.assignee.destination.groupId === undefined;
+  }
+
   /** Why a parked assignment is closed before inputWaitMs, if it is: a
    * delegation (a child outside a room) parked longer than
    * delegationInputWaitMs on the wall clock, or a park with no place left
    * to answer it (runner.parkedGone). */
   private parkedStale(n: Assignment, now: number): string | undefined {
     if (n.status !== "needs_input") return undefined;
-    const delegation = n.parentId !== undefined && n.assignee.destination.groupId === undefined;
-    if (delegation && now - n.lastActivityAt > this.limits.delegationInputWaitMs) {
+    if (this.isDelegation(n) && now - n.lastActivityAt > this.limits.delegationInputWaitMs) {
       return `the person did not answer within ${duration(this.limits.delegationInputWaitMs)}`;
     }
     if (this.runner.parkedGone && this.safe("parkedGone", () => this.runner.parkedGone!(n)) === true) {
@@ -925,12 +1053,26 @@ export class Runtime {
     return undefined;
   }
 
-  /** A parked question still unanswered: remind the person after
-   * inputRemindMs, then once a day. The work keeps waiting. */
+  /** R6: when the requester declared a default answer, apply it as the
+   * person's reply and resume instead of expiring. False when none. */
+  private applyDefaultAnswer(n: Assignment): boolean {
+    const raw = n.defaultAnswer?.trim();
+    if (!raw || n.status !== "needs_input") return false;
+    const note = "[Sagax: the requester's declared default answer, used because the person did not answer in time]";
+    return this.answer(n.id, `${note}\n${raw}`);
+  }
+
+  /** A parked question still unanswered: remind the person. First remind at
+   * inputRemindMs (30 m), or for a delegation at half of
+   * delegationInputWaitMs (R6: 120 of 240 min), then once a day until it is
+   * answered or expires. Host remind already pushes (postInputRequest). */
   private remindIfDue(n: Assignment, now: number): void {
     const waited = now - this.since(n.lastActivityAt);
     const sent = this.reminded.get(n.id) ?? 0;
-    if (waited <= this.limits.inputRemindMs + sent * INPUT_REMIND_REPEAT_MS) return;
+    const firstAt = this.isDelegation(n)
+      ? Math.floor(this.limits.delegationInputWaitMs / 2)
+      : this.limits.inputRemindMs;
+    if (waited <= firstAt + sent * INPUT_REMIND_REPEAT_MS) return;
     this.reminded.set(n.id, sent + 1);
     if (this.reminded.size > 5_000) this.reminded.delete(this.reminded.keys().next().value!);
     if (this.runner.remind) this.safe("remind", () => this.runner.remind!(n, n.question ?? "", waited));

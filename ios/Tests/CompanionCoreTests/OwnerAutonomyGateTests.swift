@@ -64,9 +64,19 @@ final class OwnerAutonomyGateTests: XCTestCase {
         let gate = member()
         XCTAssertTrue(gate.allows(.botAccessEdit, bot: try mine()))
         XCTAssertFalse(gate.allows(.botAccessEdit, bot: try theirs()))
-        for field in ["approvalMode", "chiefOfStaff", "approvePeerComms", "computer", "browser", "mcpServers"] {
+        for field in ["approvalMode", "proactiveMode", "chiefOfStaff", "approvePeerComms", "computer", "browser", "mcpServers", "alwaysAllow"] {
             XCTAssertTrue(gate.canEditBotField(try mine(), field), field)
             XCTAssertFalse(gate.canEditBotField(try theirs(), field), field)
+        }
+    }
+
+    /// Lot 1: the owner's sidecar edits Permissions / Approval / Proactive / Access.
+    func testTheOwnersSidecarEditsPermissionsAndAccess() throws {
+        let sidecar = SurfaceGate(scope: .sidecar)
+        XCTAssertTrue(sidecar.allows(.botAccessEdit))
+        XCTAssertTrue(sidecar.allows(.botAccessEdit, bot: try mine()))
+        for field in ["approvalMode", "proactiveMode", "chiefOfStaff", "browser", "mcpServers", "computer", "cwd", "alwaysAllow"] {
+            XCTAssertTrue(sidecar.canEditBotField(try mine(), field), field)
         }
     }
 
@@ -145,8 +155,12 @@ final class OwnerAutonomyGateTests: XCTestCase {
 
         let ownPlan = BotActionsMenuPlan(gate: gate, bot: try mine(), viewerId: alice, editable: true, zipExport: true, inspector: true, activeBotCount: 3)
         XCTAssertTrue(ownPlan.items.contains(.archive))
+        XCTAssertTrue(ownPlan.items.contains(.delete), "lot 6: Delete lives on the profile menu")
+        XCTAssertFalse(ownPlan.items.contains(.editBot))
+        XCTAssertFalse(ownPlan.items.contains(.rename))
         let otherPlan = BotActionsMenuPlan(gate: gate, bot: try theirs(), viewerId: alice, editable: false, zipExport: false, inspector: true, activeBotCount: 3)
         XCTAssertFalse(otherPlan.items.contains(.archive))
+        XCTAssertFalse(otherPlan.items.contains(.delete))
     }
 
     func testAMemberRestoresTheirOwnArchivedBotsOnly() throws {

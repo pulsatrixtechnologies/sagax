@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { filePreviewKind } from "./TableFilePreview";
 
-vi.mock("./AttachmentPreview", () => ({
+vi.mock("@/lib/message-file", () => ({
   requestMessageFile: async () => new Response('{"name":"Sagax","items":[1,{"deep":true}],"empty":{}}'),
   saveFailureText: () => "",
   useLocalFileSave: () => ({ state: "idle", save: async () => {}, savedTo: null }),

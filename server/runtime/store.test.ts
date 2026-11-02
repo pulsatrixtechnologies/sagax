@@ -160,13 +160,33 @@ describe("runtime store", () => {
     expect(store.inbox({ threadId: "chief-chat" }).map(i => i.deliveredAt)).toEqual([10, undefined]);
     expect(store.inbox({ threadId: "chief-chat" }, true).map(i => i.id)).toEqual(["i2"]);
     store.markDelivered([], 30);
+    expect(store.removeInboxForAssignment("a")).toBe(1);
+    expect(store.inbox({ threadId: "chief-chat" }).map(i => i.id)).toEqual(["i2"]);
+  });
+
+  it("stores successive attempts per assignment and prunes them with the tree", () => {
+    const store = open();
+    const root = assignment("root", { status: "completed", outcome: "done", finishedAt: 100 });
+    store.insert(root, { kind: "enqueued" });
+    store.addAttempt({ id: "att-1", assignmentId: "root", number: 1, startedAt: 10, outcome: "running" });
+    store.updateAttempt({ id: "att-1", assignmentId: "root", number: 1, startedAt: 10, finishedAt: 50, outcome: "failed" });
+    store.addAttempt({ id: "att-2", assignmentId: "root", number: 2, startedAt: 60, outcome: "running" });
+    expect(store.attempts("root")).toEqual([
+      { id: "att-1", assignmentId: "root", number: 1, startedAt: 10, finishedAt: 50, outcome: "failed" },
+      { id: "att-2", assignmentId: "root", number: 2, startedAt: 60, outcome: "running" },
+    ]);
+    expect(store.attempts("missing")).toEqual([]);
+    expect(() => store.updateAttempt({ id: "ghost", assignmentId: "root", number: 9, startedAt: 1, outcome: "failed" }))
+      .toThrow(/does not exist/);
+    expect(store.prune(500)).toBe(1);
+    expect(store.attempts("root")).toEqual([]);
   });
 
   it("prunes only whole trees that settled before the cutoff", () => {
     const store = open();
     const old = assignment("old", { status: "completed", outcome: "done", finishedAt: 100 });
     const live = assignment("live", { status: "completed", outcome: "done", finishedAt: 100 });
-    const recent = assignment("recent", { status: "failed", outcome: "expired", finishedAt: 900 });
+    const recent = assignment("recent", { status: "expired", outcome: "expired", finishedAt: 900 });
     store.insert(old, { kind: "enqueued" });
     store.insert(child("old1", old, { status: "cancelled", outcome: "stopped", finishedAt: 90 }), { kind: "enqueued" });
     store.insert(live, { kind: "enqueued" });

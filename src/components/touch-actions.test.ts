@@ -25,7 +25,7 @@ const notActions: Array<{ file: string; snippet: string; why: string }> = [
   { file: "components/AttachmentPreview.tsx", snippet: "group-hover/image:opacity-100", why: "zoom hint; the whole image is the tap target" },
   { file: "components/remote-desktop-panel.tsx", snippet: "bg-black/65 py-2", why: "caption; the whole preview is the tap target" },
   { file: "components/RoutineCalendarPage.tsx", snippet: "cursor-ns-resize", why: "mouse drag-resize handle for call events" },
-  { file: "components/ComputerPanel.tsx", snippet: "opacity-80", why: "already visible at 80% without hover" },
+  { file: "components/ComputerPanel.tsx-parts/DeviceBody.tsx", snippet: "opacity-80", why: "already visible at 80% without hover" },
   { file: "components/NudgeButton.tsx", snippet: "bottom-[calc(100%+6px)]", why: "tooltip of an always-visible button (aria-describedby); the bell itself is the tap target, nudge #239" },
   { file: "components/SeenBy.tsx", snippet: "group-hover/seen:opacity-100", why: "aria-hidden name tooltip; the seen-by avatars are always visible and carry the same words as their aria-label" },
   { file: "components/bot-settings/ActivitySection.tsx", snippet: "group-focus-visible:opacity-100", why: "aria-hidden chevron hint; the whole heading button is the tap target" },

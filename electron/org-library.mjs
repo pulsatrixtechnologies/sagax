@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
 
-import { parseOrgLibraryCatalog as parseSharedOrgLibraryCatalog } from "../shared/org-library-catalog.ts";
+import { parseOrgLibraryCatalog as parseSharedOrgLibraryCatalog } from "./org-library-catalog.mjs";
 
 // The organization library channel in Electron main (contract 60 §5). Admin
 // advertises capabilities.library; the session carries a small pointer; the

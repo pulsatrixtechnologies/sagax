@@ -57,6 +57,7 @@ export function ToolActivity({ tool, place = null, nameOf, defaultOpen = false }
       phase={phase}
       defaultOpen={defaultOpen}
       duration={phase === "running" ? undefined : stepDuration(tool.durationMs)}
+      title={reading.title}
       ariaLabel={t("toolDetail.label", { name: reading.label, status })}
       icon={place ? <PlaceIcon place={place} size={13} className="shrink-0" role="img" aria-label={t(placeLabelKey(place))} data-testid="tool-place" /> : undefined}
       extra={target ? (

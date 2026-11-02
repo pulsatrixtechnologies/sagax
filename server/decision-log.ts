@@ -78,6 +78,8 @@ export type DecisionSource =
   | "routine"
   | "skill"
   | "profile"
+  /** a bot proposed an approval rule from chat (propose_rule); the card waits */
+  | "rule"
   | "model"
   | "user"
   | "connector-scope"
@@ -118,8 +120,15 @@ export interface DecisionRow {
   summary?: string;
   decision: DecisionKind;
   source: DecisionSource;
-  /** which rule decided: a guard's regex source, or the granted key */
+  /** which rule decided: a guard's regex source, a grant key, or (legacy)
+   * the same value as `ruleId` when a CustomRule / OwnerRule / admin rule
+   * matched. Prefer `ruleId` for the stable id of a saved rule. */
   rule?: string;
+  /** Stable id of the matched CustomRule, OwnerRule or admin rule, when
+   * one decided this row. Distinct from `rule`, which may still hold a
+   * grant key or a regex. Never shown raw in the UI (Journal looks the
+   * rule up and shows its words). */
+  ruleId?: string;
   /** `auto-review` rows: the model reviewer's reason, one short sentence */
   reason?: string;
   /** the turn ran with nobody at the keyboard when this was decided */
@@ -198,8 +207,32 @@ export function bindConfidentialDecisions(isConfidential: (threadId: string) => 
 /** A row without anything a person or a bot wrote: the summary of the call,
  * the rule that matched it, how the ask reached the fold. */
 export function metadataOnly<T extends Partial<DecisionRow>>(row: T): T {
-  const { summary: _summary, rule: _rule, reason: _reason, origin: _origin, call: _call, ...rest } = row;
+  const { summary: _summary, rule: _rule, ruleId: _ruleId, reason: _reason, origin: _origin, call: _call, ...rest } = row;
   return rest as T;
+}
+
+/** Sources that put a saved rule's stable id in `rule` (or `ruleId`). A
+ * grant key, a regex or a routine label on another source stays in `rule`
+ * only. */
+const RULE_ID_SOURCES = new Set<DecisionSource>([
+  "custom-rule",
+  "custom-rule-ask",
+  "custom-rule-deny",
+  "owner-rule",
+  "owner-rule-ask",
+  "owner-rule-deny",
+  "admin-rule",
+  "allow-rule",
+  "command-allowlist",
+  "auto-review",
+]);
+
+/** Fill `ruleId` from a legacy `rule` id (and keep `rule` when only
+ * `ruleId` was written) so every reader sees both. */
+export function withMatchedRuleId<T extends Partial<DecisionRow> & Pick<DecisionRow, "source">>(row: T): T {
+  if (row.ruleId && !row.rule) return { ...row, rule: row.ruleId };
+  if (!row.ruleId && row.rule && RULE_ID_SOURCES.has(row.source)) return { ...row, ruleId: row.rule };
+  return row;
 }
 
 /** Strip every row of a thread down to its metadata (metadataOnly), in
@@ -228,7 +261,7 @@ export function scrubThreadDecisions(dataDir: string, threadId: string): Promise
           if (!line) return line;
           let value: Partial<DecisionRow> | null | undefined;
           try { value = reader.at(raw, index) as Partial<DecisionRow> | null | undefined; } catch { return null; }
-          if (!value || value.threadId !== threadId || (value.summary === undefined && value.rule === undefined && value.origin === undefined && value.call === undefined)) return null;
+          if (!value || value.threadId !== threadId || (value.summary === undefined && value.rule === undefined && value.ruleId === undefined && value.origin === undefined && value.call === undefined)) return null;
           touched = true;
           changed += 1;
           return JSON.stringify(metadataOnly(value));
@@ -390,6 +423,7 @@ async function writeDecision(dataDir: string, record: DecisionRow): Promise<void
 export function appendDecision(dataDir: string, row: Omit<DecisionRow, "at">): void {
   // A confidential thread's row keeps what the audit needs (ids, time,
   // tool name, decision, who) and never what was asked: no summary, no rule.
+  row = withMatchedRuleId(row);
   if (confidentialThread(row.threadId)) row = metadataOnly(row);
   const scope = row.source === "user" ? actorScope.getStore() : undefined;
   const actor = row.actor ?? scope?.actor;
@@ -547,7 +581,7 @@ export function actorLabel(actor: DecisionActor | undefined): string {
  * CSV's formula neutralising, and every row through redaction again, so an
  * export never carries more than the log itself may. */
 export function decisionsCsv(rows: DecisionRow[]): string {
-  const header = ["time", "decision", "source", "bot", "tool", "summary", "rule", "unattended", "answered_by", "thread", "request"];
+  const header = ["time", "decision", "source", "bot", "tool", "summary", "rule", "rule_id", "unattended", "answered_by", "thread", "request"];
   const lines = [header.join(",")];
   for (const raw of rows) {
     const row = redactSecrets(raw) as DecisionRow;
@@ -559,6 +593,7 @@ export function decisionsCsv(rows: DecisionRow[]): string {
       row.tool ?? "",
       row.summary ?? "",
       row.rule ?? "",
+      row.ruleId ?? "",
       row.unattended ? "yes" : "",
       row.via === "call" ? `${actorLabel(row.actor)} (by voice)` : actorLabel(row.actor),
       row.threadId,

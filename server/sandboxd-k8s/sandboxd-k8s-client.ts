@@ -26,8 +26,9 @@ export interface K8sExecResult {
 export interface K8sClient {
   request(method: "GET" | "POST" | "DELETE" | "PATCH", path: string, body?: unknown, contentType?: string): Promise<K8sResponse>;
   /** Run a command to completion. stdout and stderr are collected here, so a
-   * caller cannot miss bytes that arrive as the socket opens. */
-  exec(namespace: string, pod: string, command: string[], stdin?: Buffer): Promise<K8sExecResult>;
+   * caller cannot miss bytes that arrive as the socket opens. Abort closes the
+   * exec websocket so Stop does not leave the job's process tree running. */
+  exec(namespace: string, pod: string, command: string[], stdin?: Buffer, signal?: AbortSignal): Promise<K8sExecResult>;
   /** stdin and stdout stay open (the desktop relay). stderr is dropped.
    * `prelude` is written to stdin first, before the stream's own bytes. */
   execStream(namespace: string, pod: string, command: string[], prelude?: Buffer): Promise<Duplex>;
@@ -206,12 +207,31 @@ export function kubernetesClient(auth: K8sAuth): K8sClient {
 
   return {
     request: (method, path, body, contentType) => call(method, path, body, contentType),
-    async exec(namespace, pod, command, stdin) {
+    async exec(namespace, pod, command, stdin, signal) {
+      if (signal?.aborted) throw Object.assign(new Error("the exec was cancelled"), { code: "ABORT_ERR", name: "AbortError" });
       const socket = await openExec(namespace, pod, command, stdin !== undefined);
       const stdout: Buffer[] = [];
       const stderr: Buffer[] = [];
       let exitCode: number | null = null;
       const exitCodeDone = await new Promise<number | null>((resolve, reject) => {
+        let settled = false;
+        let cancelled = false;
+        const finish = (value: number | null | Error) => {
+          if (settled) return;
+          settled = true;
+          signal?.removeEventListener("abort", onAbort);
+          if (value instanceof Error) reject(value);
+          else resolve(value);
+        };
+        const onAbort = () => {
+          cancelled = true;
+          try { socket.terminate(); } catch { /* already closed */ }
+          finish(Object.assign(new Error("the exec was cancelled"), { code: "ABORT_ERR", name: "AbortError" }));
+        };
+        if (signal) {
+          if (signal.aborted) { onAbort(); return; }
+          signal.addEventListener("abort", onAbort, { once: true });
+        }
         socket.on("message", (data) => {
           const frame = frameData(data);
           if (frame.length === 0) return;
@@ -220,8 +240,14 @@ export function kubernetesClient(auth: K8sAuth): K8sClient {
           else if (frame[0] === 2) stderr.push(Buffer.from(payload));
           else if (frame[0] === 3) exitCode = parseExecStatus(payload.toString("utf8"));
         });
-        socket.on("error", reject);
-        socket.on("close", () => resolve(exitCode));
+        socket.on("error", (error) => {
+          if (cancelled) return;
+          finish(error);
+        });
+        socket.on("close", () => {
+          if (cancelled) return;
+          finish(exitCode);
+        });
         // The v4 protocol cannot close stdin: the reader takes exactly the
         // bytes it was told to expect (sandboxd-k8s.ts withExecEnv). A
         // command that ends before reading them all closes the socket: its

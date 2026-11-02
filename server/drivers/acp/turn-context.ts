@@ -1,0 +1,70 @@
+/** Mutable per-turn bag shared by ACP sendTurn phases. */
+import type { SendTurnInput } from "../../contracts.ts";
+import type { PromptSplitReceipt } from "../prompt-split.ts";
+import type { TurnLatency } from "./turn-latency.ts";
+import type { AcpAskFinish, AcpConfig, AcpSession, AcpSupport, AcpTurn } from "./types.ts";
+import type { ModelCatalog } from "../../contracts.ts";
+
+export type AcpTurnCtx = {
+  support: AcpSupport;
+  DRIVER_KIND: string;
+  turn: SendTurnInput;
+  turnId: string;
+  threadId: string;
+  turnConfig: AcpConfig;
+  cwd: string;
+  spawnEnv: Record<string, string | undefined>;
+  mcpServers: any[];
+  sessionKey: string;
+  cursor: string | null;
+  renewedFromChat: boolean;
+  launchedThisTurn: boolean;
+  reused: boolean;
+  latency: TurnLatency;
+  controlsHost: boolean;
+  callAgentsEnv: Record<string, string> | null | undefined;
+  session: AcpSession;
+  /** Shared with request/initialize so an establish respawn reaches the live child. */
+  sessionRef: { current: AcpSession };
+  current: AcpTurn;
+  state: AcpTurn["state"];
+  asks: Map<string, AcpAskFinish>;
+  cliTurn: SendTurnInput;
+  promptTurn: SendTurnInput;
+  reportedModel: string | undefined;
+  variant: string | undefined;
+  staleProcess: boolean;
+  approvalUnconfirmed: boolean;
+  accountModels: ReadonlySet<string> | null;
+  models: ModelCatalog;
+  pendingSplitReceipt: { key: string; receipt: PromptSplitReceipt; previous: PromptSplitReceipt | null } | null;
+  runtimeAcceptsImages: boolean;
+  init: any;
+  selectedModel: string | null;
+  /** Native session id after establish. */
+  sessionId: string;
+  rebuiltFromReplay: boolean;
+  acknowledge: () => void;
+  rejectStartup: (error: any) => void;
+  startupAck: Promise<{ turnId: string; reused?: boolean }> | null;
+  started: { turnId: string; reused?: boolean };
+  // deps / helpers from the instance
+  sessions: Map<string, AcpSession>;
+  active: Map<string, any>;
+  freshNextTurn: Set<string>;
+  sessionAllows: Map<string, Set<string>>;
+  threadNotices: Map<string, string>;
+  retiring: Map<string, Set<any>>;
+  retireChild: (threadId: string, child: any) => Promise<boolean>;
+  closeSession: (threadId: string, why: string) => void;
+  settle: (threadId: string, session: AcpSession, ok: boolean, stopReason: string | null) => void;
+  emit: (event: any) => void;
+  base: (threadId: string, turnId: string) => Record<string, unknown>;
+  startQuietWatch: (threadId: string, session: AcpSession, current: AcpTurn) => { lastState: () => any };
+  request: (...args: any[]) => Promise<any>;
+  initialize: () => Promise<any>;
+  authenticateOnce: () => Promise<void>;
+  sessionInputs: (init: any) => { sessionServers: any[]; selectionParams: Record<string, unknown> };
+  launchSession: () => AcpSession;
+  setAccountModels: (models: ReadonlySet<string> | null) => void;
+};

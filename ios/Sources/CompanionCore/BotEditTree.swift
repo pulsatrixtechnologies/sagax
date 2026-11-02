@@ -1,15 +1,15 @@
-// Edit bot as one tree (2026-10-27, the Grok Bot layout, on the iPhone and
-// the iPad): the bot's header (avatar, name, role), then one card of the
-// main sections in the bot wizard's order (Identity, Personality, Model,
-// Approvals, Tools and apps, Routines, Sharing), then Advanced, then Archive
-// and Delete on their own, in red. The detail is one level in: a row opens
-// a page of its own (Identity, Personality, Tools and apps, Sharing,
-// Advanced) or a section's page (Model, Approvals, Routines).
+// Edit bot as one Grok-style page (lots 2 and 3, 2026-11-01): name, role,
+// description, appearance and voice calls sit on the root; Instructions,
+// Skills, Memory, Model, Approvals, Tools and apps, Routines, Sharing and
+// Advanced are one tap away. The Identity and Personality intermediate
+// pages are gone from the walk. Tools and apps opens Access directly.
+// Voice & alerts is a disclosure under Voice calls (not a second page);
+// Notifications lives only on the bot profile.
 //
 // Which rows show comes from `DesktopPanelSection.visible` (SurfaceGate,
-// the bot's owner included) and the bot's own gates for Archive and
-// Delete: nothing here adds an admin check. A test checks that every field
-// and action Edit bot had before this layout still has a place.
+// the bot's owner included) and the bot's own Archive gate: nothing here
+// adds an admin check. A test checks that every field and action Edit bot
+// had before this layout still has a place.
 import Foundation
 
 /// A page of the tree that lists rows.
@@ -20,17 +20,17 @@ public enum BotEditPageID: String, CaseIterable, Hashable, Sendable {
 /// A row of the tree. Rows that open a tree page name it in `opens`; rows
 /// that open a section's page name it in `section`.
 public enum BotEditItem: String, CaseIterable, Hashable, Sendable {
-    // Root
+    // Root (and former Identity fields drawn on the root)
     case header
     case identity, personality, model, approvals, toolsApps, routines, sharing
     case advanced
     case archive, delete
-    // Identity
+    // Identity fields (on the root after lot 2)
     case name, role, botDescription, avatar
     case callVoice, callSpeed, callLanguage, voiceAlerts
-    // Personality
+    // Personality (on the root after lot 2)
     case soul, skills, memory
-    // Tools and apps
+    // Tools and apps (Access is opened by toolsApps; computer / profiles / Slack stay as rows)
     case computer, access, perspicaxProfiles, slack
     // Sharing
     case sharedWith, whoCanSee
@@ -40,9 +40,8 @@ public enum BotEditItem: String, CaseIterable, Hashable, Sendable {
     /// The tree page this row opens, if it opens one.
     public var opens: BotEditPageID? {
         switch self {
-        case .header, .identity: .identity
-        case .personality: .personality
-        case .toolsApps: .toolsApps
+        // Identity and Personality are drawn on the root (lot 2); their
+        // pages stay in the enum for deep-link compatibility only.
         case .sharing: .sharing
         case .advanced: .advanced
         default: nil
@@ -54,12 +53,14 @@ public enum BotEditItem: String, CaseIterable, Hashable, Sendable {
         switch self {
         case .model: .model
         case .approvals: .permissions
+        // Tools and apps opens Access directly (lot 2); the intermediate
+        // Tools page is no longer in the walk.
+        case .toolsApps, .access: .access
         case .voiceAlerts: .voice
         case .soul: .soul
         case .skills: .skills
         case .memory: .memory
         case .computer: .worksOn
-        case .access: .access
         case .perspicaxProfiles: .perspicax
         case .slack: .slack
         case .sharedWith: .sharing
@@ -108,14 +109,21 @@ public enum BotEditTree {
         let all: [[BotEditItem]]
         switch page {
         case .root:
+            // Grok-style Edit (lots 2 and 3): fields and voice on the root,
+            // then Sagax rows at one tap. Delete moved to the profile menu (lot 6).
             all = [
-                [.header],
-                [.identity, .personality, .model, .approvals, .toolsApps, .routines, .sharing],
+                [.name, .role, .botDescription],
+                [.avatar],
+                [.callVoice, .callSpeed, .callLanguage],
+                [.voiceAlerts],
+                [.soul, .skills, .memory, .model, .approvals, .toolsApps, .computer, .perspicaxProfiles, .slack, .routines, .sharing],
                 [.advanced],
                 [.archive],
-                [.delete],
             ]
         case .identity:
+            // Kept for deep links and the iPad editor that still pushes this
+            // page; the phone root already draws these cards and does not
+            // walk here.
             all = [
                 [.name, .role, .botDescription],
                 [.avatar],
@@ -123,9 +131,12 @@ public enum BotEditTree {
                 [.voiceAlerts],
             ]
         case .personality:
+            // Kept for deep links; soul / skills / memory sit on the root.
             all = [[.soul], [.skills, .memory]]
         case .toolsApps:
-            all = [[.computer, .access], [.perspicaxProfiles, .slack]]
+            // Intermediate page retired (lot 2): Access opens from the root
+            // Tools and apps row; computer / profiles / Slack are root rows.
+            all = []
         case .sharing:
             all = [[.sharedWith, .whoCanSee]]
         case .advanced:
@@ -139,11 +150,15 @@ public enum BotEditTree {
     public static func shows(_ item: BotEditItem, _ c: BotEditContext) -> Bool {
         if let page = item.opens, item != .header { return !cards(page, c).isEmpty }
         // Computer is its own row when Works on is its own section; Access
-        // holds it otherwise
+        // (via Tools and apps) holds it otherwise. The Access leaf row is
+        // not drawn: Tools and apps opens that page.
+        if item == .access { return false }
+        if item == .computer { return c.sections.contains(.worksOn) }
         if let section = item.section { return c.sections.contains(section) }
         switch item {
         case .archive: return c.archive
-        case .delete: return c.delete
+        case .delete: return false // profile menu (lot 6); kept in the enum
+        case .header, .identity, .personality: return false // retired from the root walk
         default: return true
         }
     }
@@ -152,11 +167,12 @@ public enum BotEditTree {
     /// that lead to it (root excluded), in drawing order.
     public static func reachable(_ c: BotEditContext) -> [(item: BotEditItem, path: [BotEditPageID])] {
         var out: [(BotEditItem, [BotEditPageID])] = []
+        var seen = Set<BotEditItem>()
         func walk(_ page: BotEditPageID, _ path: [BotEditPageID]) {
             for item in cards(page, c).joined() {
+                if !seen.insert(item).inserted { continue }
                 out.append((item, path))
-                // the header and the Identity row open the same page: walk it once
-                if let next = item.opens, item != .header, !path.contains(next) { walk(next, path + [next]) }
+                if let next = item.opens, !path.contains(next) { walk(next, path + [next]) }
             }
         }
         walk(.root, [])
@@ -176,7 +192,9 @@ public enum BotEditTree {
 
     /// The row a section's page belongs to.
     public static func item(for section: DesktopPanelSection) -> BotEditItem? {
-        BotEditItem.allCases.first { $0.section == section }
+        // Prefer the root Tools and apps row over the retired Access leaf.
+        if section == .access { return .toolsApps }
+        return BotEditItem.allCases.first { $0.section == section && $0 != .access }
     }
 }
 
@@ -224,5 +242,27 @@ public enum BotEditSummary {
     /// Routines: the bot's own, by name, in the list's order.
     public static func routineNames(botId: String, in routines: [Routine]) -> [String] {
         DesktopRoutineList.of(botId: botId, in: routines).map(\.name)
+    }
+
+    /// A readable model name for a recap line. Uses a catalog label when
+    /// one is offered; otherwise turns `grok-4.5` into `Grok 4.5`.
+    public static func modelName(_ selection: ModelSelection, label: String? = nil) -> String {
+        if let label {
+            let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+        let id = selection.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        if id.isEmpty { return String(localized: "Default") }
+        return friendlyModelId(id)
+    }
+
+    /// `grok-4.5` -> `Grok 4.5`, `claude-sonnet-4` -> `Claude Sonnet 4`.
+    public static func friendlyModelId(_ id: String) -> String {
+        id.split(separator: "-").map { part in
+            let s = String(part)
+            if s.isEmpty { return s }
+            if s.allSatisfy({ $0.isNumber || $0 == "." }) { return s }
+            return s.prefix(1).uppercased() + s.dropFirst()
+        }.joined(separator: " ")
     }
 }

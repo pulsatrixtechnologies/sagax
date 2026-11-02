@@ -29,10 +29,12 @@ import { ComputerPanel } from "./ComputerPanel";
 import { BotProfileAvatarCard } from "./BotProfileAvatarCard";
 import { useCaptionChrome, useMacInsetChrome } from "./DesktopCapabilities";
 import { t } from "@/lib/i18n";
-import { canEditBotField } from "@/lib/bot-capabilities";
+import { canEditBotField, canSetBotHost, viewerOwnsBot } from "@/lib/bot-capabilities";
+import { TeamBotVaultSection } from "./bot-settings/TeamBotVaultSection";
 import { viewerBotsReadOnly } from "@/lib/viewer";
 import { useBotSectionAvailability, useBotSectionContent } from "./bot-settings/useBotSectionContent";
 import { botsReadOnlyText } from "@/lib/permissions";
+import { RemoteSessionsSection } from "./remote-session/RemoteSessionsSection";
 
 export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   bot: Bot;
@@ -120,9 +122,9 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
       // the settings panel's own dismiss path.
       const nested = dialog?.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]');
       if (nested && nested.getClientRects().length > 0) return;
-      // BotInstructionsDialog portals to document.body, so it is not in this
-      // subtree: a key pressed with focus outside this dialog belongs to
-      // whatever holds focus, never to us.
+      // A pushed page (PanelPage) inside this panel owns Escape: it is a
+      // nested [role=dialog] and the check above leaves it alone. A key
+      // pressed with focus outside this panel belongs to whoever holds it.
       if (dialog && event.target instanceof Node && !dialog.contains(event.target)) return;
       if (event.key === "Escape") {
         event.preventDefault();
@@ -257,6 +259,12 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
               <SuggestionsSection bot={bot} routineCount={derived.botRoutines.length} />
               <BotTaskSection botId={bot.id} />
               <ActivitySection bot={bot} />
+              {(bot.grants?.length || bot.directGrants?.length) && (viewerOwnsBot(state.config, bot) || canSetBotHost(state.config, bot)) && (
+                <TeamBotVaultSection botId={bot.id} botName={bot.name} />
+              )}
+              {/* Temporary attended remote sessions: only while active, above Routines.
+                  Unattended hosts live in the Computer place picker. */}
+              <RemoteSessionsSection bot={bot} />
               <section data-bot-settings-section="routines" className="flex flex-col gap-2">
                 <RoutinesSection bot={bot} routines={derived.botRoutines} runs={state.routineRuns} grouped />
               </section>

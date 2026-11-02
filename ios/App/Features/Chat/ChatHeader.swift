@@ -143,11 +143,19 @@ extension ChatView {
 
     @ViewBuilder
     var chatMoreItems: some View {
+        // Lot 6: View profile, Find in chat, Watch computer, then threads;
+        // Share transcript, Share as Template, Copy ID, Delete.
         if case .bot = current {
             Button { openProfile() } label: {
                 Label(String(localized: "View profile"), systemImage: "person.crop.circle")
             }
             .accessibilityIdentifier("chat-more.profile")
+            if session.surfaceGate.allows(.findInConversation) {
+                Button { openFind() } label: {
+                    Label(String(localized: "Find in chat"), systemImage: "magnifyingglass")
+                }
+                .accessibilityIdentifier("chat-more.find")
+            }
             Button { openPanel(.computerButton) } label: {
                 Label(String(localized: "Watch computer"), systemImage: "display")
             }
@@ -177,6 +185,13 @@ extension ChatView {
                 Label(String(localized: "Copy ID"), systemImage: "doc.on.clipboard")
             }
             .accessibilityIdentifier("chat-more.copy-id")
+            if session.surfaceGate.allows(.botOwnerExtras, bot: bot) {
+                Divider()
+                Button(role: .destructive) { confirmingDeleteBot = true } label: {
+                    Label(String(localized: "Delete bot…"), systemImage: "trash")
+                }
+                .accessibilityIdentifier("chat-more.delete")
+            }
         }
     }
 
@@ -234,6 +249,22 @@ extension ChatView {
         }
     }
 
+    /// Lot 6: title of the chat-menu Delete confirmation.
+    var deleteBotConfirmTitle: String {
+        if case let .bot(bot) = current {
+            return String(localized: "Delete \(bot.name)?")
+        }
+        return String(localized: "Delete bot?")
+    }
+
+    /// Lot 6: Delete from the chat "..." menu; leave the chat after success.
+    func deleteBotFromChat() async {
+        guard case let .bot(bot) = current else { return }
+        if await session.deleteBot(bot) {
+            dismiss()
+        }
+    }
+
     /// The name capsule opens the profile (rooms: their threads or the +
     /// sheet). `ChatProfileRoute` decides what the profile is and how it is
     /// presented.
@@ -272,6 +303,13 @@ extension ChatView {
         }
         panelTab = door.tab
         showingPanel = true
+    }
+
+    /// Widget `code` / `remote_sessions`: open Computer once this chat is up.
+    func takePendingPanelDoor(_ door: BotPanelDoor?) {
+        guard let door, case .bot = current else { return }
+        session.consumePendingPanelDoor()
+        openPanel(door)
     }
 
     /// Voice mode: a live call with this bot or room (the desktop's call

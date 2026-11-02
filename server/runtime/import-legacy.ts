@@ -7,7 +7,7 @@ import { existsSync, readFileSync, renameSync } from "node:fs";
 import { z } from "zod";
 
 import type { RuntimeStore } from "./store.ts";
-import type { Assignment, Origin, Status } from "./types.ts";
+import { TERMINAL, type Assignment, type Origin, type Status } from "./types.ts";
 
 const legacyNode = z.object({
   id: z.string(), rootId: z.string(), parentId: z.string().optional(),
@@ -56,7 +56,7 @@ export function importLegacyHandoffs(store: RuntimeStore, file: string, now: num
       const parent = n.parentId ? byId.get(n.parentId) : undefined;
       const root = byId.get(n.rootId) ?? n;
       const status = STATUS[n.status];
-      const terminal = status === "completed" || status === "failed" || status === "cancelled";
+      const terminal = (TERMINAL as readonly Status[]).includes(status);
       const row: Assignment = {
         id: n.id, rootId: n.rootId, depth: depth(n),
         origin: origin(root),

@@ -17,6 +17,11 @@
 // - IMAP is read only (EXAMINE, BODY.PEEK): nothing is marked read. The
 //   first read only notes where the mailbox is; messages that were already
 //   there never start a run.
+// - Seen keys for handed-over items live in trigger-seen-store (SQLite,
+//   30-day purge) so a restart does not re-log the same calendar instance
+//   (DEL-04). Source cursor (uid) moves only after storage; a poller
+//   reports error only after three failed reads in a row; a malformed
+//   VEVENT skipped by parseIcs is counted (SEC-02).
 import { lookup as dnsLookup } from "node:dns/promises";
 import https from "node:https";
 import { isIP } from "node:net";
@@ -32,14 +37,16 @@ import {
 import { instancesBetween, parseIcs } from "./ics.ts";
 import { blockedAddressReason } from "./media-proxy-guard.ts";
 import type { PollerCredential } from "./trigger-poller-credentials.ts";
+import { openTriggerSeenStore, type TriggerSeenStore } from "./trigger-seen-store.ts";
 import type { AutomationPatch, AutomationTarget, WebhookReceiveResult } from "./webhooks.ts";
 
 const COMMAND_TIMEOUT_MS = 20_000;
 const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 const MAX_MESSAGES_PER_POLL = 25;
-const SEEN_KEYS = 4_000;
 const TICK_MS = 60_000;
 const MAX_CONCURRENT = 4;
+/** A poller reports error only after this many failed reads in a row (SEC-02). */
+export const POLLER_ERROR_THRESHOLD = 3;
 
 /** A failure the editor can show: a code, never a server's own words. */
 export class PollerError extends Error {
@@ -428,6 +435,8 @@ export interface TriggerPollersOptions {
   credentials: { get(id: string): PollerCredential | undefined };
   /** Loopback and private addresses are allowed (a personal server). */
   allowPrivate: boolean;
+  /** Durable seen keys (DEL-04). Absent: an in-memory SQLite file for tests. */
+  seen?: TriggerSeenStore;
   now?: () => number;
   resolver?: HostResolver;
   /** Opens the IMAP connection (TLS); tests pass a plain socket. */
@@ -448,10 +457,13 @@ export class TriggerPollers {
   private readonly options: TriggerPollersOptions;
   private readonly now: () => number;
   private readonly http: PollerHttp;
+  private readonly seen: TriggerSeenStore;
+  private readonly ownsSeen: boolean;
   private readonly inFlight = new Set<string>();
-  /** Calendar keys already handed to ingest (skips re-logging an ignored
-   *  instance on every read while it stays in the window). */
-  private readonly seen = new Set<string>();
+  /** Failed reads in a row per trigger; cleared by a successful read (SEC-02). */
+  private readonly consecutiveFailures = new Map<string, number>();
+  /** Malformed items skipped since the process started, per trigger (SEC-02). */
+  private readonly malformed = new Map<string, number>();
   private timer: NodeJS.Timeout | null = null;
   private readonly lastStatus = new Map<string, TriggerAutomationStatus>();
 
@@ -459,6 +471,13 @@ export class TriggerPollers {
     this.options = options;
     this.now = options.now ?? Date.now;
     this.http = options.http ?? guardedHttp(options.allowPrivate, options.resolver);
+    if (options.seen) {
+      this.seen = options.seen;
+      this.ownsSeen = false;
+    } else {
+      this.seen = openTriggerSeenStore(":memory:", { now: this.now });
+      this.ownsSeen = true;
+    }
   }
 
   start(): void {
@@ -470,6 +489,17 @@ export class TriggerPollers {
   stop(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    if (this.ownsSeen) this.seen.close();
+  }
+
+  /** How many malformed items this trigger skipped since start (tests / health). */
+  malformedCount(id: string): number {
+    return this.malformed.get(id) ?? 0;
+  }
+
+  /** Failed polls in a row for this trigger (tests). */
+  consecutiveFailureCount(id: string): number {
+    return this.consecutiveFailures.get(id) ?? 0;
   }
 
   /** Polls every enabled poller whose interval has passed. */
@@ -496,8 +526,15 @@ export class TriggerPollers {
     if (!target || !poller) return null;
     this.inFlight.add(id);
     const previous = target.pollerCursor?.scope === target.pollerScope ? target.pollerCursor : undefined;
-    let cursor = { scope: target.pollerScope, ...(previous ? { uidValidity: previous.uidValidity, lastUid: previous.lastUid } : {}), lastPolledAt: this.now() };
-    let status: TriggerAutomationStatus;
+    // Source cursor (uid) only moves after items are stored. lastPolledAt
+    // advances on every finished round so the interval paces retries.
+    let cursor = {
+      scope: target.pollerScope,
+      ...(previous ? { uidValidity: previous.uidValidity, lastUid: previous.lastUid } : {}),
+      lastPolledAt: this.now(),
+    };
+    let status: TriggerAutomationStatus | undefined;
+    let roundOk = false;
     try {
       const credential = this.options.credentials.get(id);
       if (poller.kind === "imap") {
@@ -509,8 +546,16 @@ export class TriggerPollers {
         // The position moves past each message once it is handed over.
         let lastUid = read.messages.length ? previous?.lastUid ?? 0 : read.lastUid;
         for (const message of read.messages) {
+          let event: NormalizedTriggerEvent;
+          try {
+            event = emailEvent(message);
+          } catch {
+            this.noteMalformed(id);
+            lastUid = message.uid;
+            continue;
+          }
           // Over the trigger's rate limit: stop here, the rest waits for the next read.
-          if (!this.deliver(id, emailEvent(message), `imap:${target.pollerScope.slice(0, 12)}:${read.uidValidity}:${message.uid}`)) break;
+          if (!this.deliver(id, event, `imap:${target.pollerScope.slice(0, 12)}:${read.uidValidity}:${message.uid}`)) break;
           lastUid = message.uid;
         }
         if (read.messages.length && lastUid === read.messages[read.messages.length - 1]!.uid) lastUid = read.lastUid;
@@ -540,43 +585,80 @@ export class TriggerPollers {
           text = caldavCalendarData(response.text);
         }
         if (!/BEGIN:VCALENDAR|BEGIN:VEVENT/i.test(text) && poller.kind === "ics") throw new PollerError("protocol");
-        for (const instance of instancesBetween(parseIcs(text), from, to)) {
+        const veventCount = (text.match(/BEGIN:VEVENT\b/gi) ?? []).length;
+        const events = parseIcs(text);
+        // parseIcs drops a VEVENT with no UID or no start; count those here (SEC-02).
+        const dropped = Math.max(0, veventCount - events.length);
+        if (dropped) this.malformed.set(id, (this.malformed.get(id) ?? 0) + dropped);
+        for (const instance of instancesBetween(events, from, to)) {
           // Fires once the start is within the lead time, until shortly after it.
           if (instance.start - lead > now) continue;
-          this.deliver(id, calendarEvent(instance), `cal:${target.pollerScope.slice(0, 12)}:${instance.event.uid}@${new Date(instance.start).toISOString()}`);
+          if (!instance.event.uid || !Number.isFinite(instance.start)) {
+            this.noteMalformed(id);
+            continue;
+          }
+          try {
+            this.deliver(id, calendarEvent(instance), `cal:${target.pollerScope.slice(0, 12)}:${instance.event.uid}@${new Date(instance.start).toISOString()}`);
+          } catch {
+            this.noteMalformed(id);
+          }
         }
       }
+      this.consecutiveFailures.set(id, 0);
+      roundOk = true;
       status = { kind: "poller", state: "ok", code: "ok", at: this.now() };
     } catch (error) {
-      status = { kind: "poller", state: "error", code: error instanceof PollerError ? error.code : "protocol", at: this.now() };
+      const failures = (this.consecutiveFailures.get(id) ?? 0) + 1;
+      this.consecutiveFailures.set(id, failures);
+      const code = error instanceof PollerError ? error.code : "protocol";
+      // Source cursor stays where it was: only lastPolledAt moved above.
+      if (!roundOk) {
+        cursor = {
+          scope: target.pollerScope,
+          ...(previous ? { uidValidity: previous.uidValidity, lastUid: previous.lastUid } : {}),
+          lastPolledAt: this.now(),
+        };
+      }
+      // Error only after the threshold; earlier failures keep the last status.
+      if (failures >= POLLER_ERROR_THRESHOLD) {
+        status = { kind: "poller", state: "error", code, at: this.now() };
+      }
     } finally {
       this.inFlight.delete(id);
     }
-    // The status is sent to the editor only when it changes.
-    const last = this.lastStatus.get(id);
-    const changed = !last || last.state !== status.state || last.code !== status.code;
-    this.lastStatus.set(id, status);
-    this.options.webhooks.setAutomation(id, { pollerCursor: cursor, ...(changed ? { automation: status } : {}) });
-    return status;
+    const patch: AutomationPatch = { pollerCursor: cursor };
+    if (status) {
+      const last = this.lastStatus.get(id);
+      const changed = !last || last.state !== status.state || last.code !== status.code;
+      this.lastStatus.set(id, status);
+      if (changed) patch.automation = status;
+    }
+    this.options.webhooks.setAutomation(id, patch);
+    return status ?? this.lastStatus.get(id) ?? null;
   }
 
   /** False when the trigger refused for now (rate limit, run cap). */
   private deliver(id: string, event: NormalizedTriggerEvent, key: string): boolean {
-    if (this.seen.has(`${id}|${key}`)) return true;
+    if (this.seen.has(id, key)) return true;
     try {
       this.options.webhooks.ingest(id, event, key);
     } catch (error) {
       // Paused or gone: nothing to retry. Too many: retried on the next read.
       if ((error as { status?: number }).status === 429) return false;
     }
-    this.seen.add(`${id}|${key}`);
-    if (this.seen.size > SEEN_KEYS) this.seen.delete(this.seen.values().next().value!);
+    this.seen.add(id, key, this.now());
     return true;
+  }
+
+  private noteMalformed(id: string): void {
+    this.malformed.set(id, (this.malformed.get(id) ?? 0) + 1);
   }
 
   /** The trigger is gone or its poller removed. */
   forget(id: string): void {
     this.lastStatus.delete(id);
-    for (const key of this.seen) if (key.startsWith(`${id}|`)) this.seen.delete(key);
+    this.consecutiveFailures.delete(id);
+    this.malformed.delete(id);
+    this.seen.forget(id);
   }
 }

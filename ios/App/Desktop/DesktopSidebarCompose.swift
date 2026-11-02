@@ -314,10 +314,9 @@ struct DesktopComposePicker: View {
     private func activate(_ row: DesktopComposeTo.Row) {
         switch row {
         case .createBot:
-            // 2026-10-27: Create a bot, the wizard's first screen (the full
-            // form stays under its Other ways to start)
+            // Lot 7: Create New Bot (quick create) first.
             model.menu = nil
-            BotWizardPresenter.shared.open()
+            model.modal = .newBot
         case .createGroup:
             if mode == .browse {
                 mode = .group

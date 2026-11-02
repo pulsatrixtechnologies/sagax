@@ -7,11 +7,12 @@
  * connects. Not shipped in the app.
  * ?view=list|calendar|logs|run|routine|panel&case=completed|waiting|failed|running
  * &width=<px>&height=<px>&lang=<code>&skin=<id> (pulsatrix: dark, pulsatrix-light: light) */
-import { StrictMode, useEffect } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import { EventDetails, RoutinesPage } from "../components/RoutineCalendarPage";
 import { RoutinesSection } from "../components/bot-settings/RoutinesSection";
+import { PanelSlotProvider } from "../components/panel-slot";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { BotEditorStore, initialState, StoreProvider, useStore, type AppState, type Bot } from "../state/store";
@@ -29,6 +30,7 @@ const height = Number(params.get("height") ?? 760);
 
 const NOW = Date.now();
 const H = 3_600_000;
+const startOfToday = new Date(new Date(NOW).setHours(0, 0, 0, 0)).getTime();
 const bot = (id: string, name: string, color: string): Bot => ({
   id, threadId: `${id}-thread`, mainThreadId: `${id}-thread`, name, title: "", description: "", color, notifications: true, unread: false, busy: false, messages: [],
   modelSelection: { instanceId: "test", model: "test" },
@@ -116,7 +118,11 @@ const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-  if (url.includes("/api/calendar-calls")) return json({ calls: [] });
+  // One neutral calendar call so the call details have something to show.
+  if (url.includes("/api/calendar-calls")) return json({ calls: [{
+    id: "c1", name: "Weekly sync with the team", description: "Review the open items of the week, then pick the three priorities for next week. Each bot brings its own list.",
+    botIds: ["atlas", "boreas"], schedule: { type: "once", at: startOfToday + 14 * H }, durationMinutes: 45, attachments: [], nextRunAt: startOfToday + 14 * H, createdAt: 1, updatedAt: 1,
+  }] });
   if (url.includes("/activity/item")) {
     const runId = new URL(url, location.href).searchParams.get("runId");
     const found = runs.find((entry) => entry.id === runId);
@@ -163,11 +169,20 @@ function PanelReady({ children }: { children: React.ReactNode }) {
 }
 
 const atlasRoutines = routines.filter((routine) => routine.botId === "atlas");
-const frame = (children: React.ReactNode) => (
-  <div data-gallery-sample={view} className="flex overflow-hidden bg-app text-ink" style={{ width, height }}>
-    <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col">{children}</div>
-  </div>
-);
+/** App's row: the content frame, then the right-edge panel slot that a
+ * page's detail panel portals into (DetailPanel.tsx, panel-slot.tsx). */
+function Frame({ children }: { children: React.ReactNode }) {
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+  return (
+    <PanelSlotProvider slot={slot}>
+      <div data-gallery-sample={view} className="app-shell-row relative flex overflow-hidden bg-app text-ink" style={{ width, height }}>
+        <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col">{children}</div>
+        <div ref={setSlot} data-split-panel-slot="" className="contents" />
+      </div>
+    </PanelSlotProvider>
+  );
+}
+const frame = (children: React.ReactNode) => <Frame>{children}</Frame>;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

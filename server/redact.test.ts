@@ -165,6 +165,8 @@ describe("redactSecretsInText", () => {
       [`stripe ${"sk_" + "live_"}${alpha}`, /sk_live_[a-z]/],
       [`stripe test ${"sk_" + "test_"}${alpha}`, /sk_test_[a-z]/],
       [`stripe restricted ${"rk_" + "live_"}${alpha}`, /rk_live_[a-z]/],
+      [`gitlab ${"glp" + "at-"}${alpha.slice(0, 20)}`, /glpat-[a-z]/],
+      [`webhook secret ${"whsec" + "_"}${alpha}`, /whsec_[a-z]/],
     ];
     for (const [input, leak] of cases) {
       const out = redactSecretsInText(input);
@@ -309,5 +311,67 @@ describe("redactSecrets: GitLab tokens and Basic credentials (upstream #3926, #3
   it("masks Basic credentials after an Authorization header only", () => {
     expect(redactSecrets("Authorization: Basic dXNlcjpwYXNzd29yZA==")).not.toContain("dXNlcjpwYXNzd29yZA==");
     expect(redactSecrets("Basic configuration of the router")).toBe("Basic configuration of the router");
+  });
+});
+
+import {
+  addHeldSecretScrubber,
+  holdsCredential,
+  HELD_SECRET_MASK,
+  redactCutSecrets,
+} from "./redact.ts";
+
+describe("redactSecrets: webhook secrets and cut key starts (Lot A0)", () => {
+  it("masks whsec_ webhook secrets alone or in an automation address", () => {
+    const alpha = "abcdefghijklmnopqrstuvwxyz012345";
+    const secret = `${"whsec" + "_"}${alpha}`;
+    expect(redactSecretsInText(`webhook secret ${secret}`)).not.toMatch(/whsec_[a-z]/);
+    expect(redactSecretsInText(`http://127.0.0.1:8800/hooks/wh_abc/${secret}-_x`)).not.toMatch(/whsec_[a-z]/);
+  });
+
+  it("masks cut key starts for xapp- and glpat- before an ellipsis", () => {
+    const xapp = `${"xa" + "pp-"}1-A0123456789`;
+    const glpat = `${"glp" + "at-"}0123456789ab`;
+    const whsec = `${"whsec" + "_"}${ "abcd".repeat(5)}`;
+    expect(redactCutSecrets(`slack ${xapp}…`)).not.toContain(xapp);
+    expect(redactCutSecrets(`gitlab ${glpat}…`)).not.toContain(glpat);
+    expect(redactCutSecrets(`hook ${whsec}…`)).not.toContain(whsec);
+    expect(redactCutSecrets(`slack ${xapp}…`)).toMatch(/«redacted \d+ chars»…/);
+  });
+});
+
+describe("holdsCredential (Lot A0 / upstream tip)", () => {
+  it("knows a provider key or a private key block, never a name, a placeholder or code that reads one", () => {
+    for (const text of [
+      '{"apiKey": "sk-ant-api03-0123456789abcdefABCD"}',
+      "GITHUB_TOKEN=ghp_0123456789abcdefghij0123",
+      "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n",
+      "aws_access_key_id = AKIAABCDEFGHIJKLMNOP",
+      `git clone https://oauth2:${"glp" + "at-"}0123456789abcdefABCD@gitlab.example.com/x.git`,
+      `SLACK_APP_TOKEN: ${"xa" + "pp-"}1-A0123456789-1234567890123-abcdef0123456789`,
+      `stripe.secret = "${"sk_" + "live_"}0123456789abcdefABCD"`,
+      `webhook ${"whsec" + "_"}${"abcdefghijklmnopqrst"}`,
+    ]) expect(holdsCredential(text), text).toBe(true);
+    for (const text of [
+      "token = os.environ['GITHUB_TOKEN']",
+      "API_KEY=your-key-here",
+      "Authorization: Bearer YOUR_TOKEN_HERE",
+      "Keep credentials out of the repo.",
+      "-----BEGIN PUBLIC KEY-----",
+      "GITLAB_TOKEN=glpat-your-token-here",
+    ]) expect(holdsCredential(text), text).toBe(false);
+  });
+});
+
+describe("held secret scrubber API (Lot A0)", () => {
+  it("runs registered scrubbers before pattern redaction, including short values", () => {
+    const leaked = "pw99";
+    const remove = addHeldSecretScrubber((text) => text.split(leaked).join(HELD_SECRET_MASK));
+    try {
+      expect(redactSecretsInText(`login ${leaked}`)).toBe(`login ${HELD_SECRET_MASK}`);
+      expect(redactSecretsInText(leaked)).toBe(HELD_SECRET_MASK);
+    } finally {
+      remove();
+    }
   });
 });

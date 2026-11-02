@@ -37,6 +37,7 @@ vi.mock("@/state/store", async (importOriginal) => {
 });
 
 import { SettingsModal } from "./SettingsModal";
+import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { ComputerPanel } from "./ComputerPanel";
 import { WorksOnSetting } from "./computer/WorksOnSetting";
 import { AccessSection } from "./bot-settings/AccessSection";
@@ -54,7 +55,7 @@ const switchTag = (markup: string, label: string) => {
 };
 const settings = () => renderToStaticMarkup(createElement(SettingsModal));
 const access = () => renderToStaticMarkup(createElement(BotAccess, { bot }));
-const panel = (browser: boolean) => renderToStaticMarkup(createElement(ComputerPanel, { bot: { ...bot, browser } }));
+const panel = (browser: boolean) => renderToStaticMarkup(createElement(ConfirmProvider, null, createElement(ComputerPanel, { bot: { ...bot, browser } })));
 
 beforeEach(() => {
   fixture.config = { features: { browser: false }, browserEngine: { kind: "unavailable", installable: true } };

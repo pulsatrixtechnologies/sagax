@@ -84,7 +84,7 @@ export const TELEPHONY_SEEN_MAX = 2_000;
 export const TELEPHONY_SEEN_MS = 24 * 60 * 60_000;
 const MAX_TOKEN_CHARS = 8_192;
 
-export const TELEPHONY_EVENTS = ["sms", "call_started", "call_request", "call_summary", "pin_locked", "call_rejected", "call_result"] as const;
+export const TELEPHONY_EVENTS = ["sms", "call_started", "call_request", "call_summary", "pin_locked", "call_rejected", "call_result", "call_progress"] as const;
 export type TelephonyEventType = (typeof TELEPHONY_EVENTS)[number];
 /** The events that wake the bot, and the trigger kind each one becomes. */
 export const TELEPHONY_WAKE_KINDS: Readonly<Partial<Record<TelephonyEventType, string>>> = {
@@ -126,6 +126,26 @@ const callResultSchema = z.object({
 
 export type CallResultBody = z.output<typeof callResultSchema>;
 
+/** Mid-call live updates for a conversation outbound call. */
+const callProgressSchema = z.object({
+  ref: z.string().regex(/^call_[0-9a-f]{16}$/),
+  callSid: z.string().regex(/^CA[0-9a-f]{32}$/).optional(),
+  phase: z.enum(["dialing", "ringing", "on_hold", "in_call", "transferred", "ended"]).optional(),
+  calleeName: oneLine(1, 80).optional(),
+  lines: z.array(z.object({
+    speaker: z.enum(["bot", "callee", "system"]),
+    text: resultText(4_000),
+    at: z.number().int().positive().optional(),
+  })).max(50).optional(),
+  events: z.array(z.object({
+    kind: z.enum(["hold", "dtmf", "transfer", "resume"]),
+    detail: oneLine(1, 120),
+    at: z.number().int().positive(),
+  })).max(20).optional(),
+});
+
+export type CallProgressBody = z.output<typeof callProgressSchema>;
+
 const telephonySchema = z.object({
   contract: z.literal(TELEPHONY_CONTRACT),
   event: z.enum(TELEPHONY_EVENTS),
@@ -157,9 +177,11 @@ const telephonySchema = z.object({
     ),
   }),
   result: callResultSchema.optional(),
+  progress: callProgressSchema.optional(),
 }).superRefine((value, ctx) => {
   // a call_result, and only a call_result, carries its result
   if ((value.event === "call_result") !== (value.result !== undefined)) ctx.addIssue({ code: "custom", path: ["result"], message: "result goes with call_result only" });
+  if ((value.event === "call_progress") !== (value.progress !== undefined)) ctx.addIssue({ code: "custom", path: ["progress"], message: "progress goes with call_progress only" });
   if (!value.eventId.startsWith(`${value.event}:`)) ctx.addIssue({ code: "custom", path: ["eventId"], message: "eventId must start with the event" });
   // pin_locked and call_rejected carry a masked number (`***1234`), the others the real one.
   const pattern = MASKED_FROM.has(value.event) ? MASKED : E164;
@@ -242,6 +264,8 @@ export interface TelephonyRouteDeps {
   /** A conversation call's result (event call_result) for the person
    * `sub`. Absent: the event is refused like an unknown one. */
   callResult?(input: { sub: string; result: CallResultBody }): "applied" | "unknown" | "not_yours" | "already";
+  /** Mid-call live progress (event call_progress) for the line owner. */
+  callProgress?(input: { sub: string; progress: CallProgressBody }): "applied" | "unknown" | "not_yours";
   /** The line owner texting their bot from their own verified number: a
    * turn of their conversation, answered by text. False: it could not
    * start, the text goes to the phone triggers as before. Absent: always
@@ -364,6 +388,21 @@ export function createBotInboundTelephonyRoute(deps: TelephonyRouteDeps): (req: 
     if (!owner.active) return send(res, 403, { error: "owner_inactive" });
 
     const seenKey = `${bot.id}\n${event.eventId}`;
+    // Mid-call live progress: patch the card, never wake a trigger.
+    if (event.event === "call_progress") {
+      if (!deps.callProgress || !event.progress) return send(res, 400, { error: "invalid" });
+      // Progress is idempotent per eventId but also safe to re-apply: keep dedupe.
+      if (seen.has(seenKey, now())) return send(res, 202, { event: event.event, applied: false, reason: "duplicate" });
+      const outcome = deps.callProgress({ sub: assertion.sub, progress: event.progress });
+      if (outcome === "not_yours") return send(res, 403, { error: "not_owner" });
+      if (outcome === "unknown") return send(res, 404, { error: "no_call" });
+      seen.add(seenKey, now());
+      deps.record({
+        botId: bot.id, botName: bot.name, ownerPrincipalId: owner.principalId, event: event.event, notice: true,
+        caller: maskedCaller(event.from), authenticated: event.authenticated, triggers: 0, delivered: 1, duplicate: 0, ignored: 0,
+      });
+      return send(res, 202, { event: event.event, applied: true });
+    }
     // A conversation call's result: its card and conversation, never the
     // phone triggers (and never a notice row of its own).
     if (event.event === "call_result") {

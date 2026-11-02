@@ -107,8 +107,8 @@ describe("routines", () => {
   });
 
   it("run statuses", () => {
-    expect(["queued", "running", "waiting", "completed", "failed", "cancelled", "missed", "nothing_to_report"].map((status) => runStatus(status as RoutineRun["status"])))
-      .toEqual(["running", "running", "running", "ok", "failed", "skipped", "skipped", "skipped"]);
+    expect(["queued", "running", "waiting", "completed", "failed", "blocked", "cancelled", "missed", "nothing_to_report"].map((status) => runStatus(status as RoutineRun["status"])))
+      .toEqual(["running", "running", "running", "ok", "failed", "failed", "skipped", "skipped", "skipped"]);
     expect(runReason({ status: "nothing_to_report" }, "en")).toEqual({ reason: "nothing_to_report", label: "Nothing to report" });
     expect(runReason({ status: "nothing_to_report" }, "fr")).toEqual({ reason: "nothing_to_report", label: "Rien à signaler" });
   });

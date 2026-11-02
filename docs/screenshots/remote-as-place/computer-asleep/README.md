@@ -17,9 +17,10 @@ dropdown.
 `src/gallery/remote-as-place.html?view=calm|rename`, captured with
 `node scripts/capture-remote-as-place.mjs`.
 
-- [after-asleep.png](after-asleep.png): bot mascot sleep pose (closed eyes),
+- [after-asleep.png](after-asleep.png): generic muted monochrome bot glyph,
   z Z glyphs, one line "Cloud is asleep", no badge, no transport bar.
-- [after-waking.png](after-waking.png): awake mascot, "Waking up…", no z.
+- [after-waking.png](after-waking.png): same muted bot glyph (soft pulse),
+  "Waking up…", no z.
 - [after-running-open.png](after-running-open.png): live frame edge to edge,
   centered "Open" pill, "Melonie's screen" caption, no badge overlay.
 - [after-place-rename.png](after-place-rename.png): inline rename in the place

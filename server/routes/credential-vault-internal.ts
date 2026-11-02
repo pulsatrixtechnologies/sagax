@@ -11,7 +11,7 @@
 //
 // The answer names handles, sites and which fields exist, never a value. A
 // card is the person's to answer (server/routes/credential-vault.ts).
-import { normalizeVaultDomain, vaultHandle, type VaultItemListing } from "../../shared/credential-vault.ts";
+import { botVaultPrincipal, normalizeVaultDomain, vaultHandle, type VaultItemListing } from "../../shared/credential-vault.ts";
 import type { SecretRequestCardData } from "../../shared/wire.ts";
 import { outcomeText, sendWithInjectedKey, type CredentialHttpOptions } from "../credential-http.ts";
 import type { CredentialVault, OnePasswordFieldReader } from "../credential-vault.ts";
@@ -27,6 +27,8 @@ export interface CredentialVaultInternalDeps {
   /** The bot's display name, when the conversation is the bot's own. */
   botName(botId: string, threadId: string): string | null;
   postCard(botId: string, threadId: string, secret: SecretRequestCardData): string;
+  /** Who answers a card for the bot's shared logins (its owner); null: the speaker. */
+  botOwner?(botId: string): string | null;
   /** A new card replaces the open one: a person's own sign-in begun from it
    * ends (server/browser-runtime.ts endPersonSignIn). */
   endPersonSignIn?(botId: string, threadId: string): Promise<void>;
@@ -57,7 +59,12 @@ export function createCredentialVaultInternalRoutes(deps: CredentialVaultInterna
       if (!principalId) return json(res, 403, { error: "This turn does not act for a person whose vault could answer." });
       const requestMethod = typeof body.method === "string" ? body.method.toUpperCase().slice(0, 10) : "GET";
       const host = hostOf(body.url);
-      const resolved = await deps.vault.resolveForRequest(principalId, { handle: body.handle, botId: capability.botId, threadId: capability.threadId, url: typeof body.url === "string" ? body.url : "" }, deps.readOnePassword?.(capability.threadId));
+      const req = { handle: body.handle, botId: capability.botId, threadId: capability.threadId, url: typeof body.url === "string" ? body.url : "" };
+      const reader = deps.readOnePassword?.(capability.threadId);
+      let resolved = await deps.vault.resolveForRequest(botVaultPrincipal(capability.botId), req, reader);
+      if (!resolved.ok && (resolved.code === "unknown_item" || resolved.code === "unavailable")) {
+        resolved = await deps.vault.resolveForRequest(principalId, req, reader);
+      }
       if (!resolved.ok) {
         deps.audit?.({ botId: capability.botId, host, method: requestMethod, refused: resolved.code });
         return json(res, 200, { text: resolved.message, isError: true });
@@ -85,17 +92,32 @@ export function createCredentialVaultInternalRoutes(deps: CredentialVaultInterna
     const principalId = deps.principalForThread(capability.threadId);
     if (!principalId) return json(res, 403, { error: "This turn does not act for a person whose vault could answer." });
     let granted: VaultItemListing[] = [];
+    const query = { ...(domain ? { domain } : {}), ...(name ? { name } : {}) };
+    const usable = (owner: string, item: VaultItemListing) =>
+      (item.kind === "login" || item.kind === "apiKey") && deps.vault.granted(owner, item.id, capability.botId, capability.threadId);
     try {
-      granted = deps.vault.find(principalId, { ...(domain ? { domain } : {}), ...(name ? { name } : {}) })
-        .filter((item) => (item.kind === "login" || item.kind === "apiKey") && deps.vault.granted(principalId, item.id, capability.botId, capability.threadId));
+      // Team bot shared vault first, then the person's own.
+      const teamPrincipal = botVaultPrincipal(capability.botId);
+      granted = deps.vault.find(teamPrincipal, query).filter((item) => usable(teamPrincipal, item));
+      if (!granted.length) {
+        granted = deps.vault.find(principalId, query).filter((item) => usable(principalId, item));
+      }
     } catch {
       // A vault that cannot be opened now still lets the person answer a card.
     }
     if (granted.length) {
       return json(res, 200, { granted: granted.slice(0, 5).map((item) => ({ handle: vaultHandle(item.id), name: item.name, domains: item.domains, fields: fieldsOf(item), ...(item.kind === "apiKey" && item.injection ? { sentBySagax: true } : {}) })) });
     }
+    // The bot's shared logins for this site need the owner's card first.
+    let teamItems: Array<{ id: string; name: string; domains: string[] }> = [];
+    try {
+      teamItems = deps.vault.find(botVaultPrincipal(capability.botId), query)
+        .filter((item) => item.kind === "login" || item.kind === "apiKey")
+        .slice(0, 5).map((item) => ({ id: item.id, name: item.name, domains: item.domains }));
+    } catch {}
     const messageId = deps.postCard(capability.botId, capability.threadId, vaultRequestCard({
-      principalId, botName, ...(name ? { name } : {}), ...(domain ? { domain } : {}), ...(reason ? { reason } : {}),
+      principalId: teamItems.length ? (deps.botOwner?.(capability.botId) ?? principalId) : principalId, botName,
+      ...(teamItems.length ? { teamItems } : {}), ...(name ? { name } : {}), ...(domain ? { domain } : {}), ...(reason ? { reason } : {}),
     }));
     await deps.endPersonSignIn?.(capability.botId, capability.threadId);
     return json(res, 201, { messageId });

@@ -100,11 +100,29 @@ describe("which files are read", () => {
     expect(claudeCodeWantedPath(".claude/skills/a/helper.py")).toBe(false);
     expect(claudeCodeWantedPath(".claude/agents/nested/x.md")).toBe(true);
     expect(claudeCodeWantedPath("src/CLAUDE.md")).toBe(false);
-    for (const secret of [".env", ".env.local", ".claude/settings.local.json", "certs/server.pem", ".claude/.credentials.json", "id_ed25519", "auth.json"]) {
+    for (const secret of [
+      ".env", ".env.local", ".claude/settings.local.json", "certs/server.pem", ".claude/.credentials.json", "id_ed25519", "auth.json",
+      // Lot C / upstream d2caaef1a: data files named after credentials
+      "token.json", "session.json", "password.txt", "cookies.txt", "service-account.json", "api_key.txt", "storage_state.json",
+      ".claude/skills/x/secrets/token.json",
+    ]) {
       expect(claudeCodeSecretPath(secret), secret).toBe(true);
       expect(claudeCodeWantedPath(secret), secret).toBe(false);
     }
+    // Instructions may be named after a credential; they stay readable.
+    expect(claudeCodeSecretPath("references/credentials.md")).toBe(false);
     expect(claudeCodeSecretPath("CLAUDE.md")).toBe(false);
+  });
+
+  it("leaves out a SKILL.md that embeds a provider key (holdsCredential)", () => {
+    const key = `sk-ant-api03-${"0123456789abcdefABCD"}`;
+    const { document, leftOut } = claudeCodeToPackage([
+      { path: "CLAUDE.md", text: "Help with tickets." },
+      { path: ".claude/skills/leak/SKILL.md", text: `---\nname: leak\ndescription: Bad\n---\n\nUse ${key} always.` },
+      { path: ".claude/skills/ok/SKILL.md", text: "---\nname: ok\ndescription: Fine\n---\n\nBe careful." },
+    ], { folderName: "acme" });
+    expect(document.package.skills?.entries.map((entry) => entry.name)).toEqual(["ok"]);
+    expect(leftOut.some((item) => item.reasonKey === "leftOut.reason.secretFile" && String(item.name).includes("leak"))).toBe(true);
   });
 
   it("normalises paths", () => {

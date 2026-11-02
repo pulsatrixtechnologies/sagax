@@ -448,7 +448,6 @@ routines.logsFor
 routines.neverRun
 routines.newRoutine
 routines.newWebhook
-routines.pause
 routines.repeat.once
 routines.repeat.weekly
 routines.results.back

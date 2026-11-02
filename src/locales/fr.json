@@ -4090,6 +4090,7 @@
   "rich.table.noMatch": "Aucune ligne ne correspond au filtre.",
   "rich.table.region": "Tableau",
   "rich.table.rows": "{count} lignes",
+  "rich.table.rowsOne": "{count} ligne",
   "rich.table.showAll": "Tout afficher",
   "rich.table.sort": "Trier par {column}",
   "rich.viewSource": "Voir la source",

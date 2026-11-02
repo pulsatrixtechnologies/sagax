@@ -8,13 +8,13 @@
 // (GridTable): search, wrap, copy, download and an expanded dialog.
 // RichTable picks one from its props: a `model` is a message table, `columns`
 // and `rows` are a file preview.
-import { Children, isValidElement, useDeferredValue, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { Children, isValidElement, useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp, ArrowUpDown, Check, Copy, Download, Expand, Maximize2, Search, Table2, WrapText, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
-import { t } from "@/lib/i18n";
+import { activeLocale, t } from "@/lib/i18n";
 import { copyText } from "@/lib/copy-text";
 import { isTableNumber, tableCsv, tableRowOrder, type TableSort } from "@/lib/table-data";
 import {
@@ -29,6 +29,42 @@ import {
 } from "@/lib/rich-blocks";
 import { useCopyFeedback } from "./rich-ui";
 import { ViewerDialog } from "./ViewerDialog";
+
+/** "1 row" / "N rows" by the active language's plural rule (French: 0 and 1
+ * use the singular form). */
+export function tableRowLabel(count: number): string {
+  let one = count === 1;
+  try {
+    one = new Intl.PluralRules(activeLocale()).select(count) === "one";
+  } catch {
+    /* an unknown locale keeps the English rule */
+  }
+  return one ? t("rich.table.rowsOne", { count }) : t("rich.table.rows", { count });
+}
+
+/** Horizontal edge fade while a table scrolls inside a bubble: left once
+ * scrolled, right while more columns remain. */
+function useTableScrollFade() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const measure = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const left = el.scrollLeft > 1;
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+    setEdges((prev) => (prev.left === left && prev.right === right ? prev : { left, right }));
+  }, []);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    for (const child of Array.from(el.children)) observer.observe(child);
+    return () => observer.disconnect();
+  }, [measure]);
+  return { ref, onScroll: measure, edges };
+}
 
 export interface TableModel {
   header: Array<{ content: ReactNode; text: string }>;
@@ -113,8 +149,8 @@ export function ExpandableCell({ content, text, column }: { content: ReactNode; 
   const [opener, setOpener] = useState<HTMLElement | null>(null);
   const { copied, copy } = useCopyFeedback();
   return (
-    <div className="group/cell relative min-w-[10rem] max-w-[32rem]">
-      <div className="line-clamp-4 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{content}</div>
+    <div className="group/cell relative min-w-[10rem] max-w-[20rem]">
+      <div className="line-clamp-4 whitespace-pre-wrap break-words [overflow-wrap:break-word] [word-break:normal]">{content}</div>
       <button
         type="button"
         onClick={(event) => setOpener(event.currentTarget)}
@@ -138,7 +174,7 @@ export function ExpandableCell({ content, text, column }: { content: ReactNode; 
             </button>
           }
         >
-          <div dir="auto" className="whitespace-pre-wrap break-words p-4 text-[13.5px] leading-relaxed [overflow-wrap:anywhere]">{content}</div>
+          <div dir="auto" className="whitespace-pre-wrap break-words p-4 text-[13.5px] leading-relaxed [overflow-wrap:break-word] [word-break:normal]">{content}</div>
         </ViewerDialog>
       )}
     </div>
@@ -155,6 +191,7 @@ function ModelTable({ model, dir, caption, large = false }: ModelTableProps & { 
   const [fullscreen, setFullscreen] = useState<HTMLElement | null>(null);
   const [query, setQuery] = useState("");
   const { copied, copy } = useCopyFeedback();
+  const scroll = useTableScrollFade();
   const width = model.header.length;
   const texts = useMemo(() => model.rows.map((row) => row.text), [model]);
   const numeric = useMemo(() => numericColumns(texts, width), [texts, width]);
@@ -163,15 +200,17 @@ function ModelTable({ model, dir, caption, large = false }: ModelTableProps & { 
   const headerText = model.header.map((cell) => cell.text);
   const shownText = order.map((index) => texts[index]!);
   const filterable = model.rows.length > FILTER_THRESHOLD;
+  // Re-measure the fade after sort/filter changes the grid width.
+  useEffect(() => { scroll.onScroll(); }, [order, sort, query, scroll.onScroll]);
 
   return (
-    <div className="group/table my-2 min-w-0 overflow-hidden rounded-lg border border-hairline/40">
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-hairline/30 bg-raised/25 px-2 py-1 text-[11px] text-ink-secondary">
+    <div data-testid="rich-table" className="group/table rich-table my-2 min-w-0 overflow-hidden rounded-lg border border-hairline/50 bg-panel text-ink">
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-hairline/40 bg-inset px-2.5 py-1.5 text-[11px] text-ink-secondary">
         <Table2 size={12} aria-hidden="true" className="shrink-0" />
-        <span className="me-auto tabular-nums" aria-live="polite">
+        <span className="me-auto tabular-nums text-ink" aria-live="polite" data-testid="rich-table-rows">
           {query && order.length !== model.rows.length
             ? t("rich.table.filtered", { shown: order.length, count: model.rows.length })
-            : t("rich.table.rows", { count: model.rows.length })}
+            : tableRowLabel(model.rows.length)}
         </span>
         {filterable && (
           <label className="flex min-w-0 items-center gap-1 rounded border border-hairline/40 bg-panel px-1.5 py-0.5 focus-within:ring-2 focus-within:ring-accent/50">
@@ -189,7 +228,7 @@ function ModelTable({ model, dir, caption, large = false }: ModelTableProps & { 
         <button
           type="button"
           onClick={() => void copy("csv", tableToCsv(headerText, shownText))}
-          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-ink-secondary hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
           aria-label={copied === "csv" ? t("rich.copied") : t("rich.table.copyCsv")}
           title={t("rich.table.copyCsv")}
         >
@@ -199,7 +238,7 @@ function ModelTable({ model, dir, caption, large = false }: ModelTableProps & { 
         <button
           type="button"
           onClick={() => void copy("md", tableToMarkdown(headerText, shownText, model.align))}
-          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-ink-secondary hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
           aria-label={copied === "md" ? t("rich.copied") : t("rich.table.copyMarkdown")}
           title={t("rich.table.copyMarkdown")}
         >
@@ -210,7 +249,7 @@ function ModelTable({ model, dir, caption, large = false }: ModelTableProps & { 
           <button
             type="button"
             onClick={(event) => setFullscreen(event.currentTarget)}
-            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-ink-secondary hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
             aria-label={t("rich.table.fullscreen")}
             title={t("rich.table.fullscreen")}
           >
@@ -223,8 +262,19 @@ function ModelTable({ model, dir, caption, large = false }: ModelTableProps & { 
           <ModelTable model={model} dir={dir} caption={caption} large />
         </TableDialog>
       )}
-      <div className={cn("overflow-auto overscroll-x-contain", large ? "max-h-[calc(94dvh-10rem)]" : "max-h-[min(70vh,34rem)]")} tabIndex={0} role="region" aria-label={caption ?? t("rich.table.region")}>
-        <table dir={dir} className="w-full border-collapse text-[12.5px]">
+      <div className="relative min-w-0">
+        <div
+          ref={scroll.ref}
+          data-table-scroll=""
+          data-overflow-left={scroll.edges.left ? "" : undefined}
+          data-overflow-right={scroll.edges.right ? "" : undefined}
+          onScroll={scroll.onScroll}
+          className={cn("overflow-auto overscroll-x-contain", large ? "max-h-[calc(94dvh-10rem)]" : "max-h-[min(70vh,34rem)]")}
+          tabIndex={0}
+          role="region"
+          aria-label={caption ?? t("rich.table.region")}
+        >
+        <table dir={dir} className="w-max min-w-full border-collapse text-[12.5px] text-ink">
           <thead>
             <tr>
               {model.header.map((cell, column) => {
@@ -236,7 +286,7 @@ function ModelTable({ model, dir, caption, large = false }: ModelTableProps & { 
                     scope="col"
                     aria-sort={active === "asc" ? "ascending" : active === "desc" ? "descending" : undefined}
                     className={cn(
-                      "sticky top-0 z-[1] border-b border-hairline/50 bg-card p-0 font-semibold whitespace-nowrap",
+                      "sticky top-0 z-[1] border-b border-hairline bg-raised p-0 font-semibold text-ink whitespace-nowrap",
                       align === "right" ? "text-end" : align === "center" ? "text-center" : "text-start",
                     )}
                   >
@@ -245,7 +295,7 @@ function ModelTable({ model, dir, caption, large = false }: ModelTableProps & { 
                       onClick={() => setSort((current) => nextSort(current, column))}
                       title={t("rich.table.sort", { column: cell.text || String(column + 1) })}
                       className={cn(
-                        "group/sort inline-flex w-full items-center gap-1 px-2.5 py-1.5 hover:bg-raised/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60",
+                        "group/sort inline-flex min-h-[2rem] w-full items-center gap-1 px-2.5 py-2 hover:bg-raised-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60",
                         align === "right" ? "flex-row-reverse text-end" : align === "center" ? "justify-center" : "text-start",
                       )}
                     >
@@ -267,15 +317,17 @@ function ModelTable({ model, dir, caption, large = false }: ModelTableProps & { 
             {order.map((index) => {
               const row = model.rows[index]!;
               return (
-                <tr key={index} className="border-b border-hairline/20 last:border-b-0 hover:bg-raised/25">
+                <tr key={index} className="border-b border-hairline/30 last:border-b-0 hover:bg-raised/40">
                   {Array.from({ length: width }, (_unused, column) => {
                     const align = alignOf(column);
                     return (
                       <td
                         key={column}
                         className={cn(
-                          "px-2.5 py-1.5 align-top",
-                          numeric[column] && "tabular-nums whitespace-nowrap",
+                          "px-2.5 py-2 align-top text-ink",
+                          numeric[column]
+                            ? "min-w-[4.5rem] tabular-nums whitespace-nowrap"
+                            : "min-w-[7.5rem] max-w-[18rem] break-words [overflow-wrap:break-word] [word-break:normal]",
                           align === "right" ? "text-end" : align === "center" ? "text-center" : "text-start",
                         )}
                       >
@@ -297,6 +349,21 @@ function ModelTable({ model, dir, caption, large = false }: ModelTableProps & { 
             )}
           </tbody>
         </table>
+        </div>
+        {scroll.edges.left && (
+          <div
+            aria-hidden="true"
+            data-table-fade="left"
+            className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-panel to-transparent"
+          />
+        )}
+        {scroll.edges.right && (
+          <div
+            aria-hidden="true"
+            data-table-fade="right"
+            className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-panel to-transparent"
+          />
+        )}
       </div>
     </div>
   );
@@ -443,7 +510,7 @@ function TableViewport({ columns, rows, order, name, wrap, large, sort, onSort, 
             return <td key={index} className="border-b border-hairline/20 px-3 py-2.5 align-top tabular-nums" style={{ textAlign: cell?.align ?? alignment(column, index), verticalAlign: cell?.vAlign }}>
               {cell && cellNeedsExpand(cell.text)
                 ? <ExpandableCell content={cell.content ?? cell.text} text={cell.text} column={column.text} />
-                : <div dir="auto" title={!wrap ? cell?.text : undefined} className={wrap ? "whitespace-pre-wrap break-words [overflow-wrap:anywhere]" : "truncate"}>{cell?.content ?? cell?.text}</div>}
+                : <div dir="auto" title={!wrap ? cell?.text : undefined} className={wrap ? "whitespace-pre-wrap break-words [overflow-wrap:break-word] [word-break:normal]" : "truncate"}>{cell?.content ?? cell?.text}</div>}
             </td>;
           })}
         </tr>)}

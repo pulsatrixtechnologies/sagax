@@ -5355,6 +5355,7 @@
   "rich.table.noMatch": "No rows match the filter.",
   "rich.table.region": "Table",
   "rich.table.rows": "{count} rows",
+  "rich.table.rowsOne": "{count} row",
   "rich.table.showAll": "Show all",
   "rich.table.sort": "Sort by {column}",
   "rich.viewSource": "View source",

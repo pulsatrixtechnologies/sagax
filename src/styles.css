@@ -1757,18 +1757,22 @@ body {
     font-weight: 500;
     line-height: 1rem;
   }
-  /* Inline code inside prose. Sized off the surrounding text so it reads at
-     the same optical size in a 15px bubble or a 13px note. It stays an
-     inline box, not inline-flex, so a long path can still wrap mid-line;
+  /* Inline code inside prose (and table cells). Sized off the surrounding
+     text so it reads at the same optical size in a 15px bubble or a 13px
+     note. It stays an inline box, not inline-flex, so a long path can still
+     wrap mid-line at separators (zero-width spaces from code-wrap.ts);
      an inline background already centers on the glyphs, and `clone` keeps
-     the padding on every wrapped piece. */
+     the padding on every wrapped piece. Never break one glyph per line. */
   .ui-code-chip {
     padding: 0.125em 0.3em;
     border-radius: 0.25rem;
     background: var(--color-inset);
+    color: var(--color-ink);
     font-family: var(--font-mono);
     font-size: 0.92em;
-    line-height: 1;
+    line-height: 1.25;
+    word-break: normal;
+    overflow-wrap: break-word;
     -webkit-box-decoration-break: clone;
     box-decoration-break: clone;
   }

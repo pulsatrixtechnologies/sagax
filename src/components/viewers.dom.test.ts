@@ -151,6 +151,25 @@ describe("markdown tables", () => {
     await act(async () => button("Copy as CSV")!.click());
     expect(writeText).toHaveBeenCalledWith('Item,Price\r\n"Bolt, small",\'=1+1\r\nNut,2');
   });
+
+  it("exposes an overflow scroll region with contrast surface tokens", async () => {
+    const model = tableModelFromDelimited("A,B,C,D\none,two,three,four")!;
+    await act(async () => root.render(createElement(RichTable, { model })));
+    const scroll = host.querySelector("[data-table-scroll]");
+    expect(scroll).not.toBeNull();
+    expect(scroll!.className).toMatch(/overflow-auto/);
+    const shell = host.querySelector('[data-testid="rich-table"]');
+    expect(shell!.className).toMatch(/\bbg-panel\b/);
+    expect(shell!.className).toMatch(/\btext-ink\b/);
+    expect(host.querySelector('[data-testid="rich-table-rows"]')!.textContent).toBe("1 row");
+    // Force a narrow host so the fade cue appears when columns overflow.
+    host.style.width = "120px";
+    await act(async () => {
+      scroll!.dispatchEvent(new Event("scroll"));
+      // ResizeObserver from the hook also fires on the next frame.
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+    });
+  });
 });
 
 describe("file previews", () => {

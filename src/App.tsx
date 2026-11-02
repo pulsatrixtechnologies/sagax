@@ -468,7 +468,7 @@ function Shell() {
 
   return (
     <div className="flex h-full flex-col" data-app-shell="">
-      {/* What's new sits above the update dialog. Both are outside the layout flow. */}
+      {/* What's new is a centred window above the update dialog. Both sit outside the layout flow. */}
       <ReleaseNotesPrompt />
       {/* The terms of use, once per account (App Store 1.2). */}
       <TermsGate />

@@ -187,7 +187,7 @@ until lot 3 moved it onto the runtime, 0.8.24). Never name a peer from a
 record read before an await. Tests: `server/routes/internal-bot-chat.test.ts`,
 `server/peer-delivery.test.ts`, `server/peer-approval.e2e.test.ts`,
 `server/direct-coordination.e2e.test.ts` (withheld report) and
-`server/org-sharing.e2e.test.ts` S3-13 (two people).
+`server/org/org-sharing.e2e.test.ts` S3-13 (two people).
 
 ## Peer completion: done_when and no ack-as-done (2026-10-30, #1818)
 

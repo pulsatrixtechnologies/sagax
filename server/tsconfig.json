@@ -23,14 +23,14 @@
     ]
   },
   "include": [
-    "server",
-    "companion",
-    "shared/profil-fiche.ts",
-    "shared/profil-fiche.test.ts",
+    ".",
+    "../companion",
+    "../shared/profil-fiche.ts",
+    "../shared/profil-fiche.test.ts",
     // pure IT tools model: typechecked under the server's no-DOM lib so it stays usable on both sides
-    "shared/net-tools"
+    "../shared/net-tools"
   ],
   "exclude": [
-    "server/drivers/pi-mcp-extension.ts"
+    "drivers/pi-mcp-extension.ts"
   ]
 }

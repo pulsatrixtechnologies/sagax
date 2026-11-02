@@ -1,14 +1,14 @@
 {
-  "extends": "./tsconfig.server.json",
+  "extends": "../server/tsconfig.json",
   "compilerOptions": {
     "noEmit": false,
-    "outDir": "dist-companion",
-    "rootDir": "companion/src",
+    "outDir": "../dist-companion",
+    "rootDir": "src",
     "rewriteRelativeImportExtensions": true,
     "declaration": false,
     "sourceMap": false
   },
   "include": [
-    "companion/src"
+    "src"
   ]
 }

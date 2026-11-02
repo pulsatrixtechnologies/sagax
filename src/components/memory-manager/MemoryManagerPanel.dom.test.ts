@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../DesktopCapabilities", () => ({
-  useDesktopCapabilities: () => ({}),
+  useDesktopCapabilities: () => ({ capabilities: { windowChrome: "default", host: { label: "Test" } } }),
   useCaptionChrome: () => ({ dragProps: {}, controlsShiftStyle: undefined, padClass: "" }),
   useMacInsetChrome: () => ({ macInset: false, browser: false }),
 }));
@@ -104,6 +104,51 @@ describe("MemoryManagerPanel page", () => {
     expect(host.textContent).toContain("Atlas");
   });
 
+  it("lays out the left column like the Perspicax explorer, with real counts only", async () => {
+    await act(async () => {
+      root.render(createElement(MemoryManagerPanel));
+    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    // The Automations header row: icon and title, no subtitle stacked in the header.
+    expect(host.querySelector("[data-memory-header] h1")?.textContent).toBe("Memory");
+    expect(host.querySelector("[data-memory-search]")?.getAttribute("placeholder")).toBe("Open a note");
+    const navIds = Array.from(host.querySelectorAll("[data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"));
+    // No team source, no proposal, no pin: only the views with data show.
+    expect(navIds).toEqual(["all", "trash"]);
+    expect(host.querySelector('[data-memory-nav="all"]')?.textContent).toContain("4");
+    expect(host.textContent).toContain("Tiers");
+    const mine = host.querySelector('[data-memory-tier="mine"]') as HTMLElement;
+    expect(mine.textContent).toContain("My memory");
+    expect(mine.textContent).toContain("4");
+    // The bot is a folder of My memory, not a "Bot memory" card.
+    expect(host.querySelector('[data-memory-source="bot:atlas"]')?.textContent).toContain("Atlas");
+    expect(host.querySelector('[data-memory-source="bot:atlas"]')?.textContent).not.toContain("Bot memory");
+    // A Perspicax folder offers its real actions.
+    const folder = host.querySelector('[data-memory-folder="me/notes"]')!.closest("div")!;
+    const actions = Array.from(folder.querySelectorAll("[data-memory-row-action]")).map((node) => node.getAttribute("data-memory-row-action"));
+    expect(actions).toEqual(["new", "rename", "delete"]);
+    // All notes lists every source's notes in the body column.
+    expect(host.querySelectorAll('[data-memory-nav-view="all"] [data-memory-note-row]').length).toBe(4);
+    // No identifier is shown.
+    expect(host.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/);
+  });
+
+  it("filters the notes from the Open a note field", async () => {
+    await act(async () => {
+      root.render(createElement(MemoryManagerPanel));
+    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+    const input = host.querySelector("[data-memory-search]") as HTMLInputElement;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(input, "brief");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const rows = host.querySelectorAll('[data-memory-nav-view="all"] [data-memory-note-row]');
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.textContent).toContain("Brief");
+  });
+
   it("lists notes then opens a note from the list", async () => {
     await act(async () => {
       root.render(createElement(MemoryManagerPanel));
@@ -114,7 +159,7 @@ describe("MemoryManagerPanel page", () => {
     await act(async () => { source.click(); });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(host.querySelector("[data-memory-browse]")).not.toBeNull();
-    const row = host.querySelector('[data-memory-note-row]') as HTMLElement;
+    const row = host.querySelector('[data-memory-browse] [data-memory-note-row]') as HTMLElement;
     expect(row).not.toBeNull();
     const open = row.querySelector("button") as HTMLButtonElement;
     await act(async () => { open.click(); });

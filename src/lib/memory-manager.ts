@@ -43,6 +43,8 @@ export interface MemoryNoteRow {
   /** Team memory kind. */
   kind?: string;
   scope?: string;
+  /** Team memory: "proposed" waits for a review. */
+  status?: string;
 }
 
 export interface MemoryFolderRow {
@@ -51,12 +53,26 @@ export interface MemoryFolderRow {
   count: number;
 }
 
+/** One Perspicax tier (personal, a team, the organization) with its folders. */
+export interface MemoryTierRow {
+  scope: string;
+  kind: string;
+  name: string;
+  count: number;
+  trashed: number;
+  mayWrite: boolean;
+  mayManage: boolean;
+  folders: MemoryFolderRow[];
+}
+
 export interface MemoryBrowse {
   folders: MemoryFolderRow[];
   notes: MemoryNoteRow[];
   trashCount?: number;
   mayWrite: boolean;
   mayManage?: boolean;
+  /** Perspicax only: the tiers this browse read, each with its folders. */
+  tiers?: MemoryTierRow[];
 }
 
 export interface MemoryNoteDetail {
@@ -194,6 +210,7 @@ export async function browseTeamSource(section: string): Promise<MemoryBrowse> {
     kind: entry.kind,
     excerpt: entry.detail.slice(0, 160),
     updatedAt: entry.updatedAt,
+    status: entry.status,
   }));
   const counts = new Map<string, number>();
   for (const note of notes) counts.set(note.folder || "term", (counts.get(note.folder || "term") ?? 0) + 1);
@@ -236,11 +253,23 @@ export async function browsePerspicax(folder?: string, scope?: string): Promise<
   let mayWrite = false;
   let mayManage = false;
   let trashCount = 0;
+  const tiers: MemoryTierRow[] = [];
   for (const tier of tree.tiers) {
     if (scope && tier.scope !== scope && !(scope === "me" && tier.kind === "me")) continue;
     mayWrite = mayWrite || tier.may_write;
     mayManage = mayManage || Boolean(tier.may_manage);
     trashCount += tier.trashed ?? 0;
+    const tierFolders = tier.topics.map((topic) => ({ id: `${tier.scope}/${topic.topic}`, name: topic.topic, count: topic.count }));
+    tiers.push({
+      scope: tier.scope,
+      kind: tier.kind,
+      name: tier.name,
+      count: tier.topics.reduce((sum, topic) => sum + topic.count, 0),
+      trashed: tier.trashed ?? 0,
+      mayWrite: tier.may_write,
+      mayManage: Boolean(tier.may_manage),
+      folders: tierFolders,
+    });
     for (const topic of tier.topics) {
       folders.push({ id: `${tier.scope}/${topic.topic}`, name: topic.topic, count: topic.count });
       for (const entry of topic.entries) {
@@ -257,7 +286,7 @@ export async function browsePerspicax(folder?: string, scope?: string): Promise<
       }
     }
   }
-  return { folders, notes, trashCount, mayWrite, mayManage };
+  return { folders, notes, trashCount, mayWrite, mayManage, tiers };
 }
 
 export async function openPerspicaxNote(scope: string, id: string): Promise<MemoryNoteDetail> {

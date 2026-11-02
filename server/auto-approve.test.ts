@@ -372,3 +372,22 @@ describe("an engine connector's outward call (review of #943)", () => {
     expect(autoVerdict("full", "other", { outbound: true }).source).toBe("full-access");
   });
 });
+
+describe("in-app peer tools (#1905)", () => {
+  it("Approve for me answers send_to_bot as a Sagax tool once it is not outbound", () => {
+    for (const tool of ["send_to_bot", "agents__send_to_bot", "mcp__agents__send_to_bot"]) {
+      expect(autoVerdict("auto", tool, { sagaxInternal: true, toolName: tool }).source, tool).toBe("sagax-internal");
+      expect(autoVerdict("ask", tool, { sagaxInternal: true, toolName: tool }).source, tool).toBe("sagax-internal");
+    }
+  });
+  it("Approve for me answers post_to_room the same way", () => {
+    expect(autoVerdict("auto", "agents__post_to_room", { sagaxInternal: true, toolName: "agents__post_to_room" }).source).toBe("sagax-internal");
+  });
+  it("Full access still answers them", () => {
+    expect(autoVerdict("full", "agents__send_to_bot").source).toBe("full-access");
+    expect(autoVerdict("full", "agents__post_to_room").source).toBe("full-access");
+  });
+  it("a real outbound send still holds under Approve for me", () => {
+    expect(autoVerdict("auto", "GMAIL_SEND_EMAIL").source).toBe("outbound-guard");
+  });
+});

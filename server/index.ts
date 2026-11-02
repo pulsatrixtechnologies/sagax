@@ -3799,6 +3799,10 @@ function externalRuntimeCapability(header: string | string[] | undefined): Inter
   };
 }
 
+/** Roots the test capability route began for a thread with no live turn:
+ * no turn end ever comes for them, so the revoke of their generation ends
+ * them (upstream OpenMausBot, after 34cbd59b). */
+const standInRoots = new Set<string>();
 function beginInternalCapabilityGeneration(threadId: string, generation = randomUUID()): string {
   const previous = activeInternalGenerationByThread.get(threadId);
   if (previous) revokeInternalCapabilityGeneration(threadId, previous);
@@ -3877,6 +3881,7 @@ function revokeInternalCapabilityGeneration(threadId: string, generation: string
   // A call warm awaits it so the tokens are in the warm map before the
   // first spoken turn looks for them.
   const retired = perspicaxMcp?.endGeneration(threadId, generation) ?? Promise.resolve();
+  if (standInRoots.delete(generation)) coordinator.endTurn(generation, { ok: true, text: "" });
   endForeignTurns(threadId, generation);
   if (guestDrivenTurns.get(threadId) === generation) guestDrivenTurns.delete(threadId);
   for (const [token, capability] of internalCapabilities) {
@@ -37665,12 +37670,19 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
       if (!parsed.success || !store.bot(parsed.data.botId)) {
         return json(res, 400, { error: "invalid test capability" });
       }
-      const generation = beginInternalCapabilityGeneration(parsed.data.threadId);
-      // The capability stands in for a turn of that bot in that thread, so
+      // A turn running in that thread lends the capability its own
+      // generation and root: what the capability does belongs to that turn,
+      // whose end settles it (a card it leaves parks that root). Otherwise
+      // the capability stands in for a turn of that bot in that thread, so
       // the hand-offs it makes need what any turn's have: the turn's root,
-      // begun as a person's turn there would begin it (never ended: the
-      // stand-in has no turn end).
-      {
+      // begun as a person's turn there would begin it, and ended when a
+      // newer generation revokes it (standInRoots).
+      const live = activeInternalGenerationByThread.get(parsed.data.threadId);
+      const liveRoot = live ? coordinator.node(live) : undefined;
+      const generation = live && liveRoot && !ENDED.has(liveRoot.status) && !standInRoots.has(live)
+        ? live : beginInternalCapabilityGeneration(parsed.data.threadId);
+      if (generation !== live) {
+        standInRoots.add(generation);
         const minted = store.bot(parsed.data.botId)!;
         const threadId = parsed.data.threadId;
         const owner = connectorThread(minted.id, threadId);
@@ -45025,13 +45037,17 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
           if (currentAtStart.busy) {
             const instance = runningTurnInstance(currentAtStart, threadId);
             let steered: SteerOutcome = "refused";
-            // A live text steer has no image side channel. Keep an attachment
-            // message intact for the next ordinary turn, where central image
-            // admission can hand it to the provider natively.
-            const carriesImages = extractTurnImages(text).images.length > 0;
+            // Attachments steer only into an engine that takes images
+            // mid-turn (steerImages), as the same native blocks a new turn
+            // would carry. Elsewhere an attachment message stays intact for
+            // the next ordinary turn, where central image admission hands it
+            // to the provider natively.
+            const steerInput = extractTurnImages(text);
+            const carriesImages = steerInput.images.length > 0;
             const steerTarget = handoffs.current(threadId);
             const busyAdmission = admit("direct-busy", {
               carriesImages,
+              engineCanSteerImages: engineSteersImages(instance),
               pendingComputerSelection: Boolean(computerSelectionTurns.get(threadId)?.selected),
               engineCanSteer: Boolean(instance?.adapter.capabilities.queueing && instance.adapter.steer)
                 // someone else's words never join a running turn on an
@@ -45055,10 +45071,11 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
               principalId: auth.kind === "session" ? personKey(auth.session) : undefined, auth,
             };
             if (busyAdmission.action === "steer" && instance?.adapter.steer) {
-              const words = promptWithReply(promptWithDataContext(text, dataContext), replyTo, cfg.profile?.name?.trim() || "User");
+              const words = promptWithReply(promptWithDataContext(steerInput.text, dataContext), replyTo, cfg.profile?.name?.trim() || "User");
               if (routable) routableSteers.open(steerId, { botId: bot.id, threadId, text, context: routeContext });
               steered = await instance.adapter
-                .steer(threadId, voiceCallSteerPrompt(routable ? orchestratedSteerText(steerId, words) : words, voiceCall), { steerId })
+                .steer(threadId, voiceCallSteerPrompt(routable ? orchestratedSteerText(steerId, words) : words, voiceCall),
+                  { steerId, ...(steerInput.images.length > 0 ? { images: steerInput.images } : {}) })
                 .catch((): SteerOutcome => "indeterminate");
             }
             // steer() is awaited adapter work. The turn can settle, the task can

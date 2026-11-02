@@ -64,7 +64,7 @@ it("boots and reports an interrupted routine back to its source room", async () 
 
 // A routine still running at a restart keeps its teammates' work when the
 // runtime still carries it (docs/runtime-contract.md §5): the cut teammate
-// turn runs again once, in place; the run stays waiting instead of failing;
+// turn runs again once, in place; the run goes on instead of failing;
 // its resume says what the restart did, and the run completes with it. The
 // tree here is one the server before the job runtime left behind, imported
 // once at boot (server/runtime/import-legacy.ts).
@@ -101,9 +101,12 @@ it("keeps a routine waiting through a restart, reruns its cut teammate once, and
     }, { timeout: 10_000, interval: 150 }).toBe(true);
     const run = async () => ((await request("/api/routines", {}, url) as any).runs as any[]).find((r) => r.id === "cut-run");
     const nodes = () => readHandoffs(dataDir);
-    expect(existsSync(join(dataDir, "room-handoffs.json.migrated"))).toBe(true);
-    // The run is not failed: the runtime carries its tree, so it waits.
-    expect(await run()).toMatchObject({ status: "waiting" });
+    // The runtime opens (and imports the legacy file) on its first use, a
+    // moment after the server answers its health check.
+    await expect.poll(() => existsSync(join(dataDir, "room-handoffs.json.migrated")), { timeout: 10_000 }).toBe(true);
+    // The run is not failed: a bot run cut once goes on (main's restart
+    // resume, routines.ts restartResumes), and the runtime carries its tree.
+    expect(await run()).toMatchObject({ status: "running", restartResumes: 1 });
     expect((await run()).error).toBeUndefined();
     // The cut teammate turn runs again once, told so, and settles.
     await expect.poll(() => nodes().find((n: any) => n.id === "cut-work")?.status, { timeout: 20_000 }).toBe("completed");

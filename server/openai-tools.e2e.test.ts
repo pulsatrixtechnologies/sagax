@@ -141,7 +141,7 @@ it.each(["openaiCompat", "groq", "meta"] as const)("%s runs structured MCP calls
         await api("PATCH", "/api/instances/claude", { tools: false }, 400);
         const changed = await api("PATCH", `/api/instances/${instanceId}`, { tools: false });
         const instance = changed.instances.find((item: any) => item.instanceId === instanceId);
-        expect(instance.capabilities).toMatchObject({ agentsMcp: false, composioMcp: false });
+        expect(instance.capabilities).toMatchObject({ agentsMcp: false }); // Composio removed (main): no composioMcp
       }
       await api("PATCH", `/api/mcp/servers/${mode}`, { enabled: true });
       const { bot } = await control(["new-bot", "--name", `API tool ${mode}`]);

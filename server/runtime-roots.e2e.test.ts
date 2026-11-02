@@ -32,7 +32,6 @@ const RERUN_NOTE = "Sagax restarted while your previous turn here was running";
 const RERUN_CHIP = "Resuming after a restart";
 /** The lane lines a root's answered execution opens with (index.ts). */
 const SECRET_PROVIDED = "Sagax credential update: the user securely provided";
-const CONNECTED = "Sagax connection update: the user securely connected";
 const DECISION = "Sagax team setup decision";
 /** The continuation a step cap opens with (index.ts STEP_CAP_NOTE + envelope.ts). */
 const STEP_CAP_CONTINUES = "stopped at the step limit";
@@ -115,34 +114,6 @@ async function loopbackModel() {
   };
 }
 
-/** A loopback Composio backend (the unit suite's stub, reduced): a project
- * session, the toolkits a session sees (connected once the test says so),
- * no connected-account reads, no catalog. */
-async function composioStub() {
-  const connected = new Set<string>();
-  const stub = createServer(async (req, res) => {
-    const url = req.url ?? "";
-    let raw = "";
-    for await (const chunk of req) raw += chunk;
-    const reply = (status: number, body: unknown) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(body)); };
-    if (url.startsWith("/api/v3.1/connected_accounts") || url.startsWith("/api/v3/toolkits")) return reply(200, { items: [] });
-    if (url.startsWith("/api/v3.1/tool_router/session")) {
-      if (req.headers["x-api-key"] !== "ak_good") return reply(401, { error: { message: "invalid project key" } });
-      if (url.includes("/toolkits")) return reply(200, { items: [...connected].map((slug) => ({ slug, connected_account: { id: `ca_${slug}`, status: "ACTIVE" } })) });
-      const body = raw ? JSON.parse(raw) : {};
-      return reply(201, { session_id: "trs_roots_test", mcp: { type: "http", url: "https://app.composio.dev/tool_router/v3/trs_roots_test/mcp" }, config: { user_id: body.user_id } });
-    }
-    return reply(404, { error: "unknown" });
-  });
-  await new Promise<void>((resolve) => stub.listen(0, "127.0.0.1", resolve));
-  const origin = `http://127.0.0.1:${(stub.address() as AddressInfo).port}`;
-  return {
-    env: { SAGAX_COMPOSIO_API: `${origin}/api/v3.1`, SAGAX_COMPOSIO_TOOLKITS_API: `${origin}/api/v3` },
-    connect: (slug: string) => connected.add(slug),
-    close: async () => { stub.closeAllConnections(); await new Promise<void>((resolve) => stub.close(() => resolve())); },
-  };
-}
-
 /** `env`: extra environment for the fixture server, given on a restart (the
  * launcher's own is hermetic). `fake`: the fake engine's knobs
  * (FAKE_CLAUDE_*), the one thing the launcher lets cross from the parent,
@@ -207,8 +178,12 @@ async function scenario(test: (f: any) => Promise<void>, options: { env?: Record
     const turn = (key: string) => turns().find((candidate) => candidate.planKey === key);
     /** What a turn itself was asked, after any replayed history. */
     const own = (record: any): string => ownTurnText(record?.prompt);
-    /** The same, after the harness's own time line that opens every turn. */
-    const body = (record: any): string => own(record).replace(/^\s*Current time when this message was sent:[^\n]*\n+/, "");
+    /** The same, after the instruction notes the Claude driver puts ahead of
+     * the words when the volatile half changed (drivers/claude.ts
+     * withReminder) and the harness's own time line that opens every turn. */
+    const body = (record: any): string => own(record)
+      .replace(/^(?:\s*<system-reminder>[\s\S]*?<\/system-reminder>)+/, "")
+      .replace(/^\s*Current time when this message was sent:[^\n]*\n+/, "");
     const messages = async (threadId: string): Promise<any[]> => (await api("GET", `/api/threads/${threadId}/messages?limit=300`)).body.messages ?? [];
     const chips = async (threadId: string, text: string) => (await messages(threadId)).filter((message) => chipText(message).includes(text));
     const said = async (threadId: string, text: string) => (await messages(threadId))
@@ -226,11 +201,14 @@ async function scenario(test: (f: any) => Promise<void>, options: { env?: Record
     const ready = (name: string) => join(dataDir, `${name}.ready`);
     const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
     /** A turn capability of the fake Claude turn running now, from the
-     * launch files the fixture dumps: the agents server's own token, or the
-     * connected-apps bridge's (connector-scoped). */
-    const token = (server: "agents" | "composio" = "agents") => {
-      const env = JSON.parse(readFileSync(session.fixtureDumpPath, "utf8")).mcpConfig.mcpServers[server].env;
-      return (server === "agents" ? env.SAGAX_COMMS_TOKEN : env.SAGAX_CONNECTOR_TOKEN) as string;
+     * launch files the fixture dumps: the agents server's own token. The
+     * Claude process is kept from turn to turn, so the current turn's token
+     * is the file its env names (spawn-contract.ts warmCommsEnv), not the
+     * launch value. */
+    const token = () => {
+      const env = JSON.parse(readFileSync(session.fixtureDumpPath, "utf8")).mcpConfig.mcpServers.agents.env;
+      return (env.SAGAX_COMMS_TOKEN_FILE && existsSync(env.SAGAX_COMMS_TOKEN_FILE)
+        ? readFileSync(env.SAGAX_COMMS_TOKEN_FILE, "utf8").trim() : env.SAGAX_COMMS_TOKEN) as string;
     };
     const internal = async (path: string, body: unknown, bearer: string) => {
       const response = await fetch(`${url}${path}`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${bearer}` },
@@ -340,59 +318,8 @@ it("T2 parks the root on a credential card and runs it again with the provided l
   expect(f.roots()[0].executions).toBe(2);
 }), hostTimeout(60_000));
 
-// T3. The turn asks for two connections and ends: the root parks on both
-// cards. Each connects in turn; only once both are connected does the root
-// run again, once, opening with the connection line naming both.
-it("T3 parks the root on connector cards and runs it again once when both connect", async () => {
-  const composio = await composioStub();
-  try {
-    await scenario(async (f) => {
-      expect((await f.api("PUT", "/api/config", { composio: { apiKey: "ak_good" } })).status).toBe(200);
-      f.script(f.clive.id,
-        { key: "C1", match: [CONNECTED, "Gmail", "Slack"], reply: "T3-DONE: mail and chat are wired." },
-        { key: "C0", match: ["T3-JOB"], readyFile: f.ready("c0"), gateFile: f.gate("c0"), reply: "T3-ASKED: connect the apps." });
-      const job = f.clive.activeTaskId;
-      await f.say(f.clive.id, job, "T3-JOB: wire up my mail and chat.");
-      await expect.poll(() => existsSync(f.ready("c0")), { timeout: 30_000 }).toBe(true);
-      const requested = await f.internal("/api/internal/connectors/request", { botId: f.clive.id, threadId: job, resumeKey: "t3-resume-key-0001", items: ["gmail", "slack"] }, f.token("composio"));
-      expect(requested.status, JSON.stringify(requested.body)).toBe(200);
-      const [gmail, slack] = requested.body.messageIds as string[];
-      f.open("c0");
-      await f.final(job, "T3-ASKED");
-      await expect.poll(() => f.roots()[0]?.status, { timeout: 15_000 }).toBe("needs_input");
-      const parked = f.roots()[0];
-      expect(parked.cards).toEqual([gmail, slack]);
-      // A park holds nothing: the thread is idle while the cards wait.
-      expect(await f.task(f.clive.id, job)).toMatchObject({ busy: false, activity: "idle" });
-      // Gmail connects: not enough; the root stays parked.
-      composio.connect("gmail");
-      const first = await f.api("GET", `/api/bots/${f.clive.id}/connector-cards/${gmail}/status?threadId=${job}`);
-      expect(first.body).toMatchObject({ connected: true });
-      await f.settle(500);
-      expect(f.roots()[0].status).toBe("needs_input");
-      expect(f.turns(f.clive.id).map((record: any) => record.planKey)).toEqual(["C0"]);
-      // Slack connects: both cards resumed, one answered execution.
-      composio.connect("slack");
-      const second = await f.api("GET", `/api/bots/${f.clive.id}/connector-cards/${slack}/status?threadId=${job}`);
-      expect(second.body).toMatchObject({ connected: true });
-      await f.final(job, "T3-DONE");
-      await expect.poll(() => f.roots()[0]?.status, { timeout: 15_000 }).toBe("completed");
-      expect(f.roots()).toHaveLength(1);
-      expect(f.roots()[0]).toMatchObject({ id: parked.id, executions: 2, outcome: "done" });
-      expect(f.turns(f.clive.id).map((record: any) => record.planKey)).toEqual(["C0", "C1"]);
-      const answered = f.body(f.turn("C1")).trimStart();
-      expect(answered.startsWith(`${CONNECTED} Gmail, Slack.`), answered.slice(0, 200)).toBe(true);
-      const cards = (await f.messages(job)).filter((message: any) => message.kind === "connector");
-      expect(cards.map((message: any) => message.connector.resumed)).toEqual([true, true]);
-      // Resuming again is idempotent.
-      expect((await f.api("POST", `/api/bots/${f.clive.id}/connector-cards/${gmail}/resume`, { threadId: job })).body).toEqual({ resumed: true });
-      await f.settle(500);
-      expect(f.roots()[0].executions).toBe(2);
-    }, { env: composio.env });
-  } finally {
-    await composio.close();
-  }
-}, hostTimeout(90_000));
+// T3 (connector cards answered by Composio connections) is not here:
+// Composio was removed from Sagax (main), so no connector card exists.
 
 // T4. The Chief proposes a team setup and ends: the root parks on the
 // review card. The decision runs the root again with the decision line. A
@@ -677,6 +604,10 @@ const failedLines = async (f: any, threadId: string) => (await f.messages(thread
   .filter((message: any) => message.kind === "activity" && String(message.tool?.name ?? "").startsWith("error:"));
 
 /** A bot that works in its built-in browser: where a sign-in request can be made. */
+/** Sagax reads a requested place as Auto (AGENTS.md "Workspace: always
+ * Auto"); the sign-in scenarios name the browser through the test seam
+ * that keeps a fixed Works on. */
+const FIXED_PLACE = { fake: { SAGAX_TEST_FIXED_WORKSPACE: "1" } };
 const browserPlace = async (f: any) => {
   expect((await f.api("PATCH", "/api/config", { features: { browser: true } })).status).toBe(200);
   expect((await f.api("PATCH", `/api/bots/${f.clive.id}`, { computer: "browser" })).status).toBe(200);
@@ -718,45 +649,6 @@ it("T8 Stop while parked on a credential card cancels the root and stops the car
   expect(await f.task(f.clive.id, job)).toMatchObject({ busy: false, activity: "idle" });
 }), hostTimeout(60_000));
 
-it("T8 Stop while parked on connector cards cancels the root and stops the cards; connecting afterwards is kept but starts nothing", async () => {
-  const composio = await composioStub();
-  try {
-    await scenario(async (f) => {
-      expect((await f.api("PUT", "/api/config", { composio: { apiKey: "ak_good" } })).status).toBe(200);
-      f.script(f.clive.id, { key: "C0", match: ["T8C-JOB"], readyFile: f.ready("c0"), gateFile: f.gate("c0"), reply: "T8C-ASKED: connect the apps." });
-      const job = f.clive.activeTaskId;
-      await f.say(f.clive.id, job, "T8C-JOB: wire up my mail and chat.");
-      await expect.poll(() => existsSync(f.ready("c0")), { timeout: 30_000 }).toBe(true);
-      const requested = await f.internal("/api/internal/connectors/request", { botId: f.clive.id, threadId: job, resumeKey: "t8-resume-key-0001", items: ["gmail", "slack"] }, f.token("composio"));
-      expect(requested.status, JSON.stringify(requested.body)).toBe(200);
-      const [gmail, slack] = requested.body.messageIds as string[];
-      f.open("c0");
-      await f.final(job, "T8C-ASKED");
-      await expect.poll(() => f.roots()[0]?.status, { timeout: 15_000 }).toBe("needs_input");
-      expect(f.roots()[0].cards).toEqual([gmail, slack]);
-      expect((await f.api("POST", `/api/bots/${f.clive.id}/interrupt`, { threadId: job })).status).toBe(200);
-      await expect.poll(() => f.roots()[0]?.status, { timeout: 15_000 }).toBe("cancelled");
-      const cards = async () => (await f.messages(job)).filter((message: any) => message.kind === "connector").map((message: any) => message.connector);
-      expect((await cards()).map((connector: any) => connector.stopped)).toEqual([true, true]);
-      // Both connect afterwards: the connections are kept (status), the
-      // cards never say resumed, no execution runs.
-      composio.connect("gmail");
-      expect((await f.api("GET", `/api/bots/${f.clive.id}/connector-cards/${gmail}/status?threadId=${job}`)).body).toMatchObject({ connected: true });
-      composio.connect("slack");
-      expect((await f.api("GET", `/api/bots/${f.clive.id}/connector-cards/${slack}/status?threadId=${job}`)).body).toMatchObject({ connected: true });
-      expect((await f.api("POST", `/api/bots/${f.clive.id}/connector-cards/${gmail}/resume`, { threadId: job })).status).toBeLessThan(500);
-      await f.settle(1_500);
-      expect((await cards()).map((connector: any) => [connector.status, connector.stopped, connector.resumed])).toEqual([["connected", true, undefined], ["connected", true, undefined]]);
-      expect(f.roots()).toHaveLength(1);
-      expect(f.roots()[0]).toMatchObject({ status: "cancelled", outcome: "stopped", executions: 1 });
-      expect(f.turns(f.clive.id).map((record: any) => record.planKey)).toEqual(["C0"]);
-      expect(await failedLines(f, job)).toEqual([]);
-    }, { env: composio.env });
-  } finally {
-    await composio.close();
-  }
-}, hostTimeout(90_000));
-
 it("T8 Stop while parked on a sign-in card cancels the root and stops the card; Cancel afterwards is saved but starts nothing", () => scenario(async (f) => {
   await browserPlace(f);
   f.script(f.clive.id, { key: "C0", match: ["T8S-JOB"], steps: [{ tool: "request_sign_in", arguments: { site: "https://example.com/dashboard", reason: "The dashboard is behind a login." } }], reply: "T8S-ASKED: sign in to example.com." });
@@ -782,7 +674,7 @@ it("T8 Stop while parked on a sign-in card cancels the root and stops the card; 
   expect(f.roots()[0]).toMatchObject({ status: "cancelled", outcome: "stopped", executions: 1 });
   expect(f.turns(f.clive.id).map((record: any) => record.planKey)).toEqual(["C0"]);
   expect(await failedLines(f, job)).toEqual([]);
-}), hostTimeout(60_000));
+}, FIXED_PLACE), hostTimeout(60_000));
 
 // T9. The sign-in card (#2707) is a resumable card: request_sign_in parks
 // the root; Done runs it again, opening with the sign-in line.
@@ -816,7 +708,7 @@ it("T9 parks the root on a sign-in card and runs it again with the signed-in lin
   expect((await f.api("POST", `/api/bots/${f.clive.id}/sign-in-cards/${card.id}/done`, { threadId: job })).body).toEqual({ done: true, resumed: true });
   await f.settle(500);
   expect(f.turns(f.clive.id).map((record: any) => record.planKey)).toEqual(["C0", "C1"]);
-}), hostTimeout(60_000));
+}, FIXED_PLACE), hostTimeout(60_000));
 
 // T10. Children park on cards too (decision 2): a teammate's turn that
 // leaves a credential card open parks the child, the Chief hears "needs

@@ -5708,7 +5708,9 @@ describe("harness HTTP API", () => {
       const keptCustom = (await isolatedApi("GET", "/api/bots?messages=0")).body.bots.find(
         (candidate: { id: string }) => candidate.id === customThread.id,
       );
-      expect(keptCustom.approvalMode).toBe("ask");
+      // The first start moved the Ask bot onto Approve for me (main's
+      // approval-default-auto.v1); the refused requests changed nothing since.
+      expect(keptCustom.approvalMode).toBe("auto");
       expect(keptCustom.tasks.find((task: { threadId: string }) => task.threadId === "custom-thread-own").approvalMode).toBe("custom");
     } finally {
       await waitForExit(isolatedChild, { signal: "SIGTERM" });
@@ -7662,7 +7664,9 @@ describe("harness HTTP API", () => {
         expect(team.body.bot.alwaysAllow, mode).toEqual(["Read"]);
         const saved = (await api("GET", "/api/bots?messages=0")).body.bots.find((entry: { id: string }) => entry.id === bot.id);
         expect(levels(saved), mode).toEqual([mode, mode, mode]);
-        if (mode === "auto") expect(await permissionModeOf(bot.id, opened[0]!)).toBe("auto");
+        // Approve for me runs Claude on acceptEdits plus Sagax's own allow
+        // list, never the CLI's auto mode (main 2026-10-19, drivers/claude.ts).
+        if (mode === "auto") expect(await permissionModeOf(bot.id, opened[0]!)).toBe("acceptEdits");
       }
       // Full stays the packaged desktop's private channel (solo server): a
       // team-wide Full over HTTP is refused and changes no thread.
@@ -8688,9 +8692,8 @@ describe("harness HTTP API", () => {
   });
 
   it("cards asks when Claude's reviewer never started and remembers an exact configured MCP read", async () => {
-    // A bot on Approve for me with Haiku 4.5: the CLI takes `auto`, runs
-    // Manual, and asks about everything. Sagax passes that through —
-    // no rule of its own answers — and says why, once.
+    // A bot on Approve for me with Haiku 4.5: every ask Claude raises
+    // reaches Sagax's broker as a card; no rule of its own answers it.
     const bot = (await api("POST", "/api/bots", { name: "Quill" })).body.bot;
     const conns: Socket[] = [];
     try {
@@ -8750,12 +8753,10 @@ describe("harness HTTP API", () => {
       expect(card.allowKey).toBeUndefined();
       expect(card.allowSession).toBe(true);
       expect((await messages()).some((m) => m.tool?.name.startsWith("auto-approved"))).toBe(false);
-      // the person is told once who is asking and why, naming the model
-      await expect.poll(async () => (await messages()).filter((m) => m.tool?.name.startsWith("Approve for me: Claude's automatic reviewer is not available")).length, windowsPoll).toBe(1);
-      const notices = (await messages()).filter((m) => m.tool?.name.startsWith("Approve for me: Claude's automatic reviewer is not available"));
-      expect(notices).toHaveLength(1);
-      expect(notices[0].tool!.name).toContain("claude-haiku-4-5");
-      expect(notices[0].tool!.name).toContain("asks before each action");
+      // Approve for me no longer starts Claude's own auto mode (main
+      // 2026-10-19, drivers/claude.ts): the ask is a plain card and no
+      // "automatic reviewer is not available" notice is written.
+      expect((await messages()).filter((m) => m.tool?.name.startsWith("Approve for me: Claude's automatic reviewer"))).toHaveLength(0);
 
       // "Always allow this session" rides to Claude as `always`
       expect((await api("POST", `/api/bots/${bot.id}/respond`, { requestId: card.requestId, behavior: "allow", always: true })).status).toBe(200);
@@ -8763,7 +8764,7 @@ describe("harness HTTP API", () => {
 
       const second = raise("ask-ls", "ls memory");
       await expect.poll(async () => (await messages()).find((m) => m.card?.subtitle === "ls memory")?.card?.title, windowsPoll).toBe("Approval needed");
-      expect((await messages()).filter((m) => m.tool?.name.startsWith("Approve for me: Claude's automatic reviewer"))).toHaveLength(1);
+      expect((await messages()).filter((m) => m.tool?.name.startsWith("Approve for me: Claude's automatic reviewer"))).toHaveLength(0);
       const secondCard = (await messages()).find((m) => m.card?.subtitle === "ls memory")!.card!;
       expect((await api("POST", `/api/bots/${bot.id}/respond`, { requestId: secondCard.requestId, behavior: "allow" })).status).toBe(200);
       const plain = await second;
@@ -9011,41 +9012,8 @@ describe("harness HTTP API", () => {
     }
   });
 
-  it("tells a /setup turn to connect an app itself when its connected-apps tools are mounted, and names the switch when they are off", async () => {
-    // This suite's server has the managed connected-apps service (the stub
-    // broker), so connected apps are set up for the workspace.
-    type Dump = { systemPrompt: string; mcpConfig: { mcpServers: Record<string, unknown> } };
-    const setupTurn = async (botId: string) => {
-      rmSync(fakeClaudeDump, { force: true });
-      expect((await api("POST", `/api/bots/${botId}/messages`, { text: "/setup set up my Gmail" })).status).toBe(202);
-      return readJsonFileWhenReady<Dump>(fakeClaudeDump, 15_000);
-    };
-    const on = (await api("POST", "/api/bots", { name: "Inbox" })).body.bot;
-    const off = (await api("POST", "/api/bots", { name: "Quiet inbox" })).body.bot;
-    try {
-      for (const bot of [on, off]) {
-        expect((await api("PATCH", `/api/bots/${bot.id}`, {
-          modelSelection: { instanceId: "claude", model: "claude-sonnet-5" },
-        })).status).toBe(200);
-      }
-      const mounted = await setupTurn(on.id);
-      expect(mounted.mcpConfig.mcpServers.composio).toBeDefined();
-      expect(mounted.systemPrompt).toContain("make COMPOSIO_MANAGE_CONNECTIONS for its toolkit (for example gmail) your last tool call");
-      expect(mounted.systemPrompt).toContain("The user gets a Connect card in this chat");
-      expect(mounted.systemPrompt).not.toContain("point them to the Access section");
-
-      expect((await api("PATCH", `/api/bots/${off.id}`, { composio: false })).status).toBe(200);
-      const switchedOff = await setupTurn(off.id);
-      expect(switchedOff.mcpConfig.mcpServers.composio).toBeUndefined();
-      expect(switchedOff.systemPrompt).toContain("ask the user to turn on Connected apps in your settings under Access");
-      expect(switchedOff.systemPrompt).not.toContain("COMPOSIO_MANAGE_CONNECTIONS");
-    } finally {
-      for (const bot of [on, off]) {
-        await api("POST", `/api/bots/${bot.id}/interrupt`);
-        await api("DELETE", `/api/bots/${bot.id}`);
-      }
-    }
-  });
+  // Upstream's "/setup turn connects an app itself" (Composio's
+  // COMPOSIO_MANAGE_CONNECTIONS) is not here: Sagax removed Composio.
 
   it("never lets an out-of-band SOUL.md edit reach the prompt, and surfaces it as drift instead", async () => {
     const bot = (await api("POST", "/api/bots", { name: "Kiwi", title: "Tracker" })).body.bot;

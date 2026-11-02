@@ -172,6 +172,10 @@ beforeAll(async () => {
       // a hidden conversation's approval expires; seconds here, not minutes
       SAGAX_HIDDEN_APPROVAL_TTL_MS: "4000",
       SAGAX_TEST_INTERNAL_CAPABILITY_KEY: TEST_CAPABILITY_KEY,
+      // The sign-in case names the bot's browser as its place; Works on is
+      // read as Auto otherwise (AGENTS.md "Workspace: always Auto").
+      SAGAX_TEST_FIXED_WORKSPACE: "1",
+      SAGAX_TEST_SEAMS: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -366,8 +370,10 @@ describe("bot-to-bot coordination is recorded, not announced", () => {
       await expect.poll(async () => ((await botState(asker.id))?.messages ?? []).some(
         (message: { text?: string }) => message.text === "woke after delegation: saw the result",
       ), { timeout: 40_000 }).toBe(true);
-      await expect.poll(() => handoffs().map((node) => node.status), { timeout: 20_000 }).toEqual(["completed", "completed"]);
-      const consult = handoffs().find((node) => node.parentId)!;
+      // This test's rows only: earlier cases (a room turn's root) share runtime.db.
+      const ours = () => handoffs().filter((node) => node.botId === asker.id || node.botId === peer.id);
+      await expect.poll(() => ours().map((node) => node.status), { timeout: 20_000 }).toEqual(["completed", "completed"]);
+      const consult = ours().find((node) => node.parentId)!;
       expect(consult).toMatchObject({ botId: peer.id, mode: "consult", reply: "resume", result: expect.stringContaining("hello from fake claude") });
 
       const current = await state(40);
@@ -461,8 +467,9 @@ describe("bot-to-bot coordination is recorded, not announced", () => {
     const peer = await createBot("Folio", "quick");
     const stream = await openSse(`${base}/api/events`);
     try {
-      // Park the peer on an engine that is not there: the consultation is
-      // accepted into the runtime, and its turn cannot start.
+      // Park the peer on an engine that is not there: the hop never starts.
+      // Sagax refuses it before any work is sent (engineEligibility), so the
+      // asker hears why at once and nothing is queued for the peer.
       expect((await api("PATCH", `/api/bots/${peer.id}`, {
         modelSelection: { instanceId: "ghost", model: "ghost-1" },
       })).status).toBe(200);
@@ -472,10 +479,9 @@ describe("bot-to-bot coordination is recorded, not announced", () => {
         { botIds: [peer.id], message: "Folio, still there?", consult: true },
         await capability(asker.id, asker.threadId),
       );
-      expect(asked.status, JSON.stringify(asked.body)).toBe(200);
-      expect(asked.body.receipts[0]).toMatchObject({ botId: peer.id, outcome: "queued" });
-      const consult = await consultation(asked.body.receipts[0].requestId);
-      expect(consult.threadId).not.toBe(peer.threadId);
+      expect(asked.status, JSON.stringify(asked.body)).toBe(403);
+      expect(asked.body.error).toContain("Folio ne peut pas travailler");
+      expect(handoffs().filter((node) => node.botId === peer.id)).toEqual([]);
       expect((await botState(peer.id))?.unread).toBeFalsy();
 
       expect((await api("PATCH", `/api/bots/${peer.id}`, {

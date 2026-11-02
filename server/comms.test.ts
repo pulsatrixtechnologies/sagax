@@ -1196,10 +1196,13 @@ describe("routine comms e2e on the job runtime (fake ACP fleet)", () => {
   );
 
   it(
-    "reports a hand-off whose turn could not start as a failed chip",
+    "refuses a hand-off to a teammate whose engine cannot run before any work is sent",
     async () => {
       await hideAll();
-      // no such instance — startTurn rejects, so B's turn never starts
+      // No such instance: main checks a teammate's engine before sending it
+      // anything (engineEligibility), so the asker hears it at once instead
+      // of waiting on a turn that could never start. A started turn that
+      // fails is the crashed-teammate case above.
       const helper = await named("Helper", { modelSelection: { instanceId: "missing-instance", model: "fake-model" } });
       const asker = await named("Asker", { modelSelection: DELEGATOR });
 
@@ -1207,11 +1210,11 @@ describe("routine comms e2e on the job runtime (fake ACP fleet)", () => {
       let askerBot: any;
       await waitUntil(async () => {
         askerBot = await bot(asker.id);
-        return askerBot.messages.some((m: any) => m.kind === "activity" && m.tool?.ok === false && m.tool?.name?.startsWith("Helper — failed:"))
-          && lastText(askerBot.messages)?.text === WOKE_WITH_FAILURE && !askerBot.busy;
-      }, 30_000, "could-not-start was not reported");
-      expect(assignments(helper.id, asker.id)[0]).toMatchObject({ status: "failed" });
+        return Boolean(lastText(askerBot.messages)?.text?.includes("Helper ne peut pas travailler")) && !askerBot.busy;
+      }, 30_000, "the refusal did not reach the asker");
+      expect(assignments(helper.id, asker.id)).toEqual([]);
       expect((await bot(helper.id)).busy).toBeFalsy();
+      expect((await bot(helper.id)).messages.some((m: any) => m.role === "user" || m.from?.botId === asker.id)).toBe(false);
     },
     45_000,
   );

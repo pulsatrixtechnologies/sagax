@@ -40,16 +40,15 @@ afterAll(async () => { await fixture?.close(); });
 
 describe("live browser route authorization", () => {
   // The Computer tab's preview (live?preview=1) sits behind the same gate.
-  it.each([["GET", "live"], ["GET", "live?preview=1"], ["POST", "action"]])("opens %s %s to the bot's people, never to strangers or another origin", async (method, suffix) => {
+  it.each([["GET", "live"], ["GET", "live?preview=1"], ["POST", "action"]])("keeps %s %s owner-only", async (method, suffix) => {
     const path = `/api/bots/${botId}/browser/${suffix}`;
     const body = method === "POST" ? { viewerId: "forged", type: "take" } : undefined;
     expect((await call(method, path, body, remote)).status).toBe(403);
-    // A client session the bot is shown to is the person it asks to sign
-    // in: it gets past authorization to the same feature gates as the owner.
-    expect((await call("PATCH", "/api/config", { features: { browser: true } })).status).toBe(200);
-    const client = await call(method, path, body, { ...remote, authorization: `Bearer ${clientToken}` });
-    expect(client.status).toBe(503);
-    expect(client.body.error).toContain("Install the browser engine");
+    // The bot's browser stays admin scope (upstream's opening to the bot's
+    // people was not taken): a client session is refused before any gate.
+    const denied = await call(method, path, body, { ...remote, authorization: `Bearer ${clientToken}` });
+    expect(denied.status).toBe(403);
+    expect(denied.body.error).toContain("admin");
     const crossOrigin = await call(method, path, body, { ...remote, cookie: ownerCookie, origin: "https://attacker.invalid" });
     expect(crossOrigin.status).toBe(403);
     expect(crossOrigin.body.error).toContain("cross-origin");

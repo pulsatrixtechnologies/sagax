@@ -329,7 +329,7 @@ describe("peer comms from a room turn", () => {
     // the asker's room turn ends (room-coordination.e2e.test.ts drives that
     // with real turns); the synthetic capability here has no turn to end, so
     // the room stays working and the row stays queued.
-    const rows = readHandoffs(join(home, ".openmausbot"));
+    const rows = readHandoffs(join(home, ".sagax"));
     expect(rows.find((node) => node.id === requestId)).toMatchObject({
       botId: helper.id, groupId: room.id, threadId: room.threadId, mode: "consult", reply: "resume", text: "what is the status?", status: "queued",
     });
@@ -479,8 +479,8 @@ describe("list_rooms discovery", () => {
     // conversation): let it settle before the next case clears the shared
     // engine dump.
     const requestId = str(field((Array.isArray(asked.body.receipts) ? asked.body.receipts : [])[0] as Record<string, unknown>, "requestId"));
-    await expect.poll(() => readHandoffs(join(home, ".openmausbot")).find((node) => node.id === requestId)?.status, { timeout: 15_000 }).toBe("completed");
-    expect(readHandoffs(join(home, ".openmausbot")).find((node) => node.id === requestId)?.threadId).not.toBe(b.threadId);
+    await expect.poll(() => readHandoffs(join(home, ".sagax")).find((node) => node.id === requestId)?.status, { timeout: 15_000 }).toBe("completed");
+    expect(readHandoffs(join(home, ".sagax")).find((node) => node.id === requestId)?.threadId).not.toBe(b.threadId);
 
     const listed = await internal("GET", `/api/internal/rooms?fromBotId=${a.id}&fromThreadId=${a.threadId}`);
     const rooms = Array.isArray(listed.body.rooms) ? listed.body.rooms : [];

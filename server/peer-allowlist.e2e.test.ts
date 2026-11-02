@@ -211,6 +211,13 @@ describe("peer allow-list", () => {
       expect(changed.status).toBe(200);
       expect((await state()).managedSections).toEqual([]);
       expect((await api("POST", "/api/sidebar-sections", { name: team, botIds: [engineer.id] })).status).toBe(200);
+      // The recreated team does not bring the old grant back.
+      expect((await state()).managedSections).toEqual([]);
+      // A Primary Bot covers every bot on a solo server, whatever the team
+      // (main 2026-10-20, peer-roster.ts primaryCovers): it reaches Engineer
+      // by that, not by a grant. Once it is no longer Primary nothing reaches.
+      expect(await peerNames(clive.id, token)).toEqual([`Engineer ${mode}`]);
+      await api("PATCH", `/api/bots/${clive.id}`, { chiefOfStaff: false });
       expect(await peerNames(clive.id, token)).toEqual([]);
       const refused = await api("POST", "/api/internal/coordinate-bots", { botIds: [engineer.id], message: "Old grants must not return", consult: true }, { authorization: `Bearer ${token}` });
       expect(refused.status).toBe(403);
@@ -222,7 +229,7 @@ describe("peer allow-list", () => {
     }
   }, 45_000);
 
-  it("requires an explicit Chief grant for a consultation and revokes it on demotion", async () => {
+  it("takes a managed-team grant only from an acknowledged Primary Bot and revokes it on demotion", async () => {
     await hideSeededBot();
     const clive = await createBot("Clive", "plain");
     const specialist = await createBot("Engineer", "plain");
@@ -242,10 +249,14 @@ describe("peer allow-list", () => {
       // a consultation on the runtime: accepted now, answered in a later turn
       expect(outcome.body.receipts).toEqual([expect.objectContaining({ botId: specialist.id, outcome: "queued" })]);
       await api("PATCH", `/api/bots/${clive.id}`, { chiefOfStaff: false });
-      await api("PATCH", `/api/bots/${clive.id}`, { chiefOfStaff: true });
+      // Demoted: the grant is gone and a bot of another team is out of reach.
       expect(await peerNames(clive.id, token)).toEqual([]);
+      await api("PATCH", `/api/bots/${clive.id}`, { chiefOfStaff: true });
       const state = (await api("GET", "/api/bots?messages=0")).body.bots.find((bot: any) => bot.id === clive.id);
       expect(state.managedSections ?? []).toEqual([]);
+      // Primary again it covers every bot on a solo server (main 2026-10-20,
+      // peer-roster.ts primaryCovers), with no grant restored.
+      expect(await peerNames(clive.id, token)).toEqual(["Engineer"]);
     } finally {
       for (const bot of [clive, specialist]) {
         await api("POST", `/api/bots/${bot.id}/interrupt`, {}).catch(() => undefined);

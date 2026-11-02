@@ -217,7 +217,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
           environment: {
             FAKE_CLAUDE_DUMP: dump,
             FAKE_CLAUDE_MCP_CALLS: JSON.stringify([
-              { server: "agents", tool: "ask_bot", arguments: { bot_id: "Xavier", message: "ping from Rita" }, when: "ASK-XAVIER" },
+              { server: "agents", tool: "coordinate_bots", arguments: { bot_ids: ["Xavier"], message: "ping from Rita", consult: true }, when: "ASK-XAVIER" },
               { server: "agents", tool: "start_thread", arguments: { title: "Own job", message: "ping own job" }, when: "OPEN-OWN" },
               { server: "agents", tool: "coordinate_bots", arguments: { bot_ids: ["Xavier"], message: "check the board for the person", request_key: "bob-hop" }, when: "COORD-XAVIER" },
               { server: "perspicax_*", tool: "api_list", arguments: {} },
@@ -457,7 +457,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     await allIdle(bob);
     await allIdle(alice);
     const exchanges = idp.exchanges.slice(exchangesBefore);
-    expect(exchanges.map((e) => ({ sub: e.sub, profile: e.profile, ok: e.ok }))).toEqual([{ sub: BOB.sub, profile: PROFILE.id, ok: true }]);
+    expect(exchanges.map((e) => ({ sub: e.sub, profile: e.profile, ok: e.ok })), JSON.stringify(exchanges.map((e) => ({ sub: e.sub, ok: e.ok })))).toEqual([{ sub: BOB.sub, profile: PROFILE.id, ok: true }]);
     const calls = idp.mcpRequests.slice(callsBefore).filter((r) => r.method === "POST");
     expect(calls.length).toBeGreaterThan(0);
     expect(calls.every((r) => r.sub === BOB.sub && r.profile === PROFILE.id)).toBe(true);

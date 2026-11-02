@@ -219,18 +219,23 @@ function settledStatus(messages: readonly ActivityMessage[]): BotActivityStatus 
   return "finished";
 }
 
+/** What tells a line that asks for work: its role and its request mark. */
+type RequestLine = Pick<ActivityMessage, "role" | "roomRequest">;
+
 /** A line that asks for work: the person's, or the request line another
  * bot's coordinate_bots puts in this bot's work thread (`roomRequest`;
  * those turns append no person's line). */
-function asksForWork(message: ActivityMessage): boolean {
+function asksForWork(message: RequestLine): boolean {
   return message.role === "user" || message.roomRequest?.phase === "request";
 }
 
 /** Where a thread's newest turn starts in a page of its messages: the
  * newest request, the person's line (a Regenerate appends its fork last)
  * or, in work another bot handed over, that bot's request line. -1 when the
- * page holds none (the turn is longer than the page, or nobody asked). */
-export function turnStartIndex(messages: readonly ActivityMessage[]): number {
+ * page holds none (the turn is longer than the page, or nobody asked).
+ * Launched agents read their newest prompt the same way
+ * (server/launched-agents.ts). */
+export function turnStartIndex(messages: readonly RequestLine[]): number {
   for (let index = messages.length - 1; index >= 0; index--) if (asksForWork(messages[index]!)) return index;
   return -1;
 }

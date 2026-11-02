@@ -52,9 +52,17 @@ describe("the steps of a group, opened", () => {
       ["Same call repeated 5 times. It may be stuck", 1, "github__issue_read"],
       ["Same call repeated 10 times. It may be stuck", 1, "github__issue_read"],
     ]);
-    // two notices for different calls are two steps
+    // notices for different calls stay two steps, each with the call it names
     const two = mergeSteps([notice(5, "tool: git status", "-"), notice(5, "tool: npm test", "-")]);
-    expect(two.map((entry) => entry.kind === "steps" && [entry.messages.length, entry.target])).toEqual([[2, undefined]]);
+    expect(two.map((entry) => entry.kind === "steps" && [entry.messages.length, entry.target])).toEqual([[1, "git status"], [1, "npm test"]]);
+    // a call the guard quoted on several lines up to 0.8.28 (an ACP or Codex
+    // title), written twice: one step, its call on one line
+    const lines = "tool: cd /work/app\npnpm lint\npnpm test";
+    const multi = mergeSteps([notice(5, lines, dash), notice(5, lines, "-"), notice(5, "tool: git status", "-")]);
+    expect(multi.map((entry) => entry.kind === "steps" && [entry.label, entry.messages.length, entry.target])).toEqual([
+      ["Same call repeated 5 times. It may be stuck", 1, "cd /work/app pnpm lint pnpm test"],
+      ["Same call repeated 5 times. It may be stuck", 1, "git status"],
+    ]);
   });
 
   it("never merges a failed step with a finished one, nor a running one at all", () => {

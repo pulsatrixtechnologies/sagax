@@ -132,3 +132,7 @@ deploy/fly
 # Removed 2026-11-02 (repo tidy): an upstream icon render page nothing loads
 # (scripts/generate-app-icon.mjs renders from a data: URL).
 build/icon.html
+
+# Moved 2026-11-02 (repo tidy) to deploy/local/maus.ps1, beside the README that
+# documents it.
+maus.ps1

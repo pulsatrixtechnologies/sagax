@@ -1,3 +1,5 @@
+# Windows entry point for the root compose.yaml with Docker Desktop (deploy/local/README.md).
+# Arguments go to docker compose verbatim; no arguments runs ps.
 [string[]]$ComposeArgs = @(if ($args.Count) { $args } else { 'ps' })
 $ErrorActionPreference = 'Stop'
 $dockerCommand = Get-Command docker.exe -ErrorAction SilentlyContinue
@@ -8,5 +10,6 @@ if (-not (Test-Path -LiteralPath $dockerPath)) {
 if (-not (Test-Path -LiteralPath $dockerPath)) {
     throw 'Docker CLI was not found. Install Docker Desktop and add docker to PATH.'
 }
-& $dockerPath compose --project-directory $PSScriptRoot -f (Join-Path $PSScriptRoot 'compose.yaml') @ComposeArgs
+$repository = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
+& $dockerPath compose --project-directory $repository -f (Join-Path $repository 'compose.yaml') @ComposeArgs
 exit $LASTEXITCODE

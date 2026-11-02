@@ -31637,6 +31637,28 @@ ROUTES.push(createDesktopAppearanceRoutes({ store: createDesktopAppearanceStore(
 // The bot-memory panel's routes (MEMORY.md, memory/ topics, journal); the
 // store lookups — the 404 precheck and journal thread titles — stay explicit.
 // Memory manager catalog (local bots + team + Perspicax availability).
+/** The memory routes' own gate (createBotMemoryRoutes below): the Soul
+ * edit's gate, as for the Files category. */
+function botMemoryMayEdit(auth: RequestAuth, botId: string): boolean {
+  const bot = store.bot(botId);
+  return Boolean(bot) && ownerOrAdminOf(auth, bot!) && !callerBotsReadOnly(auth);
+}
+/** Whether GET /api/bots/<id>/memory answers this caller: the request
+ * gate's bot visibility and channel checks (the "Bot visibility" and
+ * "private threads" blocks of the request handler), then the memory
+ * routes' gate. The Memory page lists only these bots: an organization
+ * admin used to see every bot there and got "no such bot" on opening one
+ * whose Direct is someone else's (2026-11-02). */
+function botMemoryReachable(auth: RequestAuth, botId: string): boolean {
+  if (!store.bot(botId)) return false;
+  const path = `/api/bots/${botId}/memory`;
+  const subject: PathSubject = { kind: "bot", id: botId };
+  const visible = visibleTo(viewerFor(auth, path));
+  if (!visible.everything && !subjectVisible(subject, visible)) return false;
+  const scopedViewerId = serviceThreadViewer(serviceViewerClosed(auth, path, privateThreads()), channelFilterViewerId(auth));
+  if (scopedViewerId && !subjectSeesChannel(subject, scopedViewerId)) return false;
+  return botMemoryMayEdit(auth, botId);
+}
 ROUTES.push(createMemoryManagerRoutes({
   bots: (auth) => store.bots.filter((bot) => !bot.hidden).filter((bot) => {
     if (IDENTITY.kind !== "perspicax") return true;
@@ -31644,8 +31666,9 @@ ROUTES.push(createMemoryManagerRoutes({
   }).map((bot) => ({
     id: bot.id,
     name: bot.name,
-    mayWrite: ownerOrAdminOf(auth, bot) && !callerBotsReadOnly(auth),
+    mayWrite: botMemoryMayEdit(auth, bot.id),
   })),
+  botReachable: botMemoryReachable,
   teamSections: (auth) => {
     const may = auth.kind === "loopback"
       ? auth.trust !== "service"
@@ -31672,10 +31695,7 @@ ROUTES.push(createMemoryManagerRoutes({
 ROUTES.push(createBotMemoryRoutes({
   bot: (id) => store.bot(id),
   // the Soul edit's gate, as for the Files category below
-  mayEdit: (auth, botId) => {
-    const bot = store.bot(botId);
-    return Boolean(bot) && ownerOrAdminOf(auth, bot!) && !callerBotsReadOnly(auth);
-  },
+  mayEdit: botMemoryMayEdit,
   taskByThread: (botId, threadId) => store.taskByThread(botId, threadId),
   upkeep: memoryUpkeep,
   // the bot's Memory settings: recall by meaning, over its memory and its own chats

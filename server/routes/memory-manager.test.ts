@@ -29,6 +29,7 @@ describe("GET /api/memory-manager/sources", () => {
   it("lists local bots and team sections, and marks Perspicax when available", async () => {
     const invoke = setup({
       bots: () => [{ id: "atlas", name: "Atlas", mayWrite: true }],
+      botReachable: () => true,
       teamSections: () => [{ section: "", label: "General", mayWrite: true, count: 2 }],
       perspicax: () => ({ available: true }),
     });
@@ -47,6 +48,7 @@ describe("GET /api/memory-manager/sources", () => {
   it("omits Perspicax when the install is solo and passes other paths", async () => {
     const invoke = setup({
       bots: () => [],
+      botReachable: () => true,
       teamSections: () => [],
       perspicax: () => ({ available: false, reason: "solo" }),
     });
@@ -56,5 +58,24 @@ describe("GET /api/memory-manager/sources", () => {
     });
     expect((await invoke(loopback, { path: "/api/bots" })).passed).toBe(true);
     expect(await invoke(loopback, { method: "POST" })).toMatchObject({ status: 405 });
+  });
+
+  // 2026-11-02: an organization admin saw every bot on the Memory page and
+  // got "no such bot" on opening one the request gate hides from them.
+  it("lists only the bots whose memory routes answer the caller", async () => {
+    const asked: string[] = [];
+    const invoke = setup({
+      bots: () => [
+        { id: "atlas", name: "Atlas", mayWrite: true },
+        { id: "alubar", name: "Alubar", mayWrite: true },
+      ],
+      botReachable: (_auth, botId) => { asked.push(botId); return botId !== "alubar"; },
+      teamSections: () => [],
+      perspicax: () => ({ available: true }),
+    });
+    const out = await invoke();
+    expect(asked).toEqual(["atlas", "alubar"]);
+    const ids = (out.body as { sources: Array<{ id: string }> }).sources.map((source) => source.id);
+    expect(ids).toEqual(["bot:atlas", "perspicax"]);
   });
 });

@@ -984,7 +984,7 @@ export interface WireMessage extends WaitLineField {
   pagePublish?: { pageId: string; version: number; title: string };
   /** An outward action that costs money or reaches a real person, on its
    * approval card (parité the reference design V4, 59, 83): a phone call
-   * (server/outbound-calls.ts) or a purchase (server/credential-vault.ts).
+   * (server/outbound-calls.ts) or a purchase (server/vault/credential-vault.ts).
    * `text` is the fallback line. */
   outbound?: OutboundCard;
   /** A published Data result, linked to its bot's main viewer. */

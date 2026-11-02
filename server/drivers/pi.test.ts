@@ -524,7 +524,7 @@ describe("PiDriver turns (fake CLI)", () => {
     await instance?.dispose();
   });
 
-  // Command variables (server/credential-command-env.ts): pi's bash tool runs
+  // Command variables (server/vault/credential-command-env.ts): pi's bash tool runs
   // in pi's own process environment, started for every turn.
   it("hands command variables to pi's environment only when the turn carries them", async () => {
     const dir = mkdtempSync(join(tmpdir(), "omb-pi-cmdvar-"));

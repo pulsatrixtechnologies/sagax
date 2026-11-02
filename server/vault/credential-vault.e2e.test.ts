@@ -6,8 +6,8 @@ import { mkdtempSync, readdirSync, readFileSync, statSync, unlinkSync, writeFile
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
 import { variants } from "./credential-fill.ts";
 
 /** Every file of the server's data folder but the sealed vault itself

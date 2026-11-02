@@ -10,8 +10,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 
-import { exportVaultItems, parseVaultImportFile } from "../shared/credential-vault-transfer.ts";
-import { launchVerificationServer } from "../scripts/control-omb.ts";
+import { exportVaultItems, parseVaultImportFile } from "../../shared/credential-vault-transfer.ts";
+import { launchVerificationServer } from "../../scripts/control-omb.ts";
 
 const FIXTURE = fileURLToPath(new URL("../shared/fixtures/credential-vault-import/bitwarden.json", import.meta.url));
 

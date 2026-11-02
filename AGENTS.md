@@ -1501,7 +1501,7 @@ bot's approval level is the only barrier (no "a human must click" case).
   cancelled before it bills, daily), `unused-subscriptions` (weekly) and
   `renewal-prices` (weekly). The bot cancels once the person says so.
 - Tests: `shared/widget.test.ts` (products), `shared/order-tracking.test.ts`,
-  `server/order-follow-ups.test.ts`, `server/credential-vault.orders.test.ts`,
+  `server/order-follow-ups.test.ts`, `server/vault/credential-vault.orders.test.ts`,
   iOS `ChatWidgetTests` (fixtures). Gallery: `src/gallery/chat-widgets.html?only=shopping`,
   `src/gallery/outbound-cards.html?only=purchase`.
 
@@ -2563,7 +2563,7 @@ Settings > Security (`MyApprovalRules`, also `rules.owner` and
   `@stripe/link-cli` 0.30 (README); Shop Pay's CLI is assumed to take the
   same commands. Tests (fake CLI only, nothing charged):
   `shared/single-use-card.test.ts`, `server/wallet-issuer.test.ts`,
-  `server/credential-vault.coffre.test.ts`, `server/credential-vault.payment.test.ts`.
+  `server/vault/credential-vault.coffre.test.ts`, `server/vault/credential-vault.payment.test.ts`.
 - **Show a password or key** (2026-10-29): Settings > Vault shows a local
   item's password or API key to its owner (desktop "Show password"/"Show
   key", iOS behind `VaultRevealGate`), so a secret a bot made with
@@ -2575,7 +2575,7 @@ Settings > Security (`MyApprovalRules`, also `rules.owner` and
   from the bus) forgets it at the end (`turn.completed`, ok or not, or
   `session.exited`) of the first turn that started after it was lent, or
   after VAULT_TURN_LEND_MS (15 min) at most. The bot is told "for this turn
-  only". Tests: `server/credential-vault.coffre.test.ts`,
+  only". Tests: `server/vault/credential-vault.coffre.test.ts`,
   `server/routes/credential-vault.test.ts`.
 - Not done: a device tool on the phone (row 81): Sagax has no phone tools.
 - Tests: `shared/computer-app.test.ts`, `server/computer-app.test.ts`,
@@ -8891,7 +8891,7 @@ Settings > Credentials (`src/components/settings/CredentialsSettings.tsx`)
 keeps a person's logins (user name, password, one-time code seed), API keys,
 notes, cards, addresses and contacts, each bound to sites, with the bots
 allowed to use it and when one last did. Storage is
-`server/credential-vault.ts`: one AES-256-GCM file per owner
+`server/vault/credential-vault.ts`: one AES-256-GCM file per owner
 (`credential-vault.enc`), key derived by HKDF from the vault key of
 `mcp-oauth.enc` (desktop: OS keychain via safeStorage, `SAGAX_MCP_OAUTH_KEY`;
 server: 0600 key file). Layout: solo or desktop at the data root; a person on
@@ -8902,7 +8902,7 @@ admin) CRUD via `POST/PATCH/DELETE /api/bots/:id/credentials*`
 (`server/routes/team-bot-vault.ts`, Edit bot > Details > Shared vault;
 iOS bot panel > Permissions > Shared vault). A file that does not open is
 never overwritten. Never a plaintext store. Filled values are remembered only
-in process memory for redaction (`server/filled-secret-guard.ts`) and never
+in process memory for redaction (`server/vault/filled-secret-guard.ts`) and never
 enter transcripts, memory, logs or tool results. Fills happen in the bot's
 browser only; the computer surface has no fill tool. A team bot's login is
 allowed by a card to the bot's owner (once, or always for that bot), never
@@ -8914,7 +8914,7 @@ card with `target: "vaultLogin"` (`src/components/VaultRequestCard.tsx`)
 where the person picks or saves a login and allows it this time (the
 conversation, 15 minutes) or always for that bot; the bot resumes with the
 handle (`server/routes/credential-vault.ts`, `grantedNote`). The browser's
-harness tool `fill_credential` (`server/credential-fill.ts`, run by
+harness tool `fill_credential` (`server/vault/credential-fill.ts`, run by
 `server/browser-runtime.ts`) holds the session alone (`holdExclusive`: other
 agent actions are refused, running ones drain), reads the page's URL through
 the engine (`agent_browser_get_url`, `location.href`), focuses the ref,
@@ -9001,7 +9001,7 @@ refused login, another site; what the bot sees and what the process prints
 hold no value nor encoding), the card blocks of
 `server/routes/credential-vault.test.ts` and
 `src/components/VaultRequestCard.test.ts`, and the data-folder sweep of
-`server/credential-vault.e2e.test.ts`.
+`server/vault/credential-vault.e2e.test.ts`.
 
 Reads of the vault are POSTs (`/api/me/credentials/list`, `/notes`, the
 1Password picker): a packaged desktop answers loopback GETs from any local
@@ -9010,7 +9010,7 @@ process. The agent tool policy keeps `/api/me/credentials*` and
 and read-only: Connect (`OP_CONNECT_HOST`, `OP_CONNECT_TOKEN`) or the `op`
 CLI with the desktop app integration or a service account, never on an
 organization server; a picked item is a reference read at fill time. Tests:
-`server/credential-vault.test.ts`, `server/credential-fill.test.ts` (a
+`server/vault/credential-vault.test.ts`, `server/vault/credential-fill.test.ts` (a
 happy-dom page behind a fake engine), `server/routes/credential-vault.test.ts`,
 `server/onepassword.test.ts`, `server/totp.test.ts`,
 `src/components/VaultRequestCard.test.ts`.
@@ -9047,10 +9047,10 @@ headless server's loopback never does. Import refuses the same callers. The
 200. Both routes write an admin-activity row (category security)
 with counts only. No organization policy blocks an export yet; iOS has no
 vault. Tests: `shared/credential-vault-transfer.test.ts`, the import and
-export blocks of `server/credential-vault.test.ts` and
+export blocks of `server/vault/credential-vault.test.ts` and
 `server/routes/credential-vault.test.ts`,
 `src/components/settings/CredentialsTransfer.test.ts`, and
-`server/credential-vault-transfer.e2e.test.ts` (a real desktop-mode server:
+`server/vault/credential-vault-transfer.e2e.test.ts` (a real desktop-mode server:
 the launcher forwards a throwaway `SAGAX_MCP_OAUTH_KEY` and sends the owner
 capability on its own starter rename).
 
@@ -9060,7 +9060,7 @@ An API key of the vault can be sent by Sagax on a bot's request: the item's
 `injection` (Bearer, named header, Basic, query parameter, optional base path)
 and its Sites are the binding; the bot calls `vault_http_request` (listed only
 with `SAGAX_VAULT_HTTP=1`, `CredentialVault.injectable`) with the handle and
-never sees the key. `server/credential-http.ts`: https only, public addresses
+never sees the key. `server/vault/credential-http.ts`: https only, public addresses
 only (`addressClass`, pinned connection), same-origin redirects only, 30 s,
 1 MB, every echo of the key and its encodings removed from body, headers and
 errors; audit has host, method, status only. `commandVariable` (off by
@@ -9072,9 +9072,9 @@ env, never an engine's own credential name: `engineCommandVariables`; Codex
 in the thread's `shell_environment_policy.set`, names only in the native
 log); `vm_exec` on stdin (`commandVariablesScript`); the desktop bridge's
 `run_command`/`vm_run_command` `env`. Not the cloud computer's `exec`.
-Do not log a resolved value; do not touch `server/credential-fill.ts` for it.
-Doc: `docs/api-key-injection.md`. Tests: `server/credential-http.test.ts`,
-`server/credential-command-env.test.ts`.
+Do not log a resolved value; do not touch `server/vault/credential-fill.ts` for it.
+Doc: `docs/api-key-injection.md`. Tests: `server/vault/credential-http.test.ts`,
+`server/vault/credential-command-env.test.ts`.
 
 ## My Chrome: a bot drives the person's own Chrome (2026-10-19)
 

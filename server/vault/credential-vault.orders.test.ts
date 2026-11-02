@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL, type PurchaseListing } from "./credential-vault.ts";
-import { purchaseCardFallback, purchaseOutboundCard } from "./outbound-wiring.ts";
-import type { VaultKeySource } from "./mcp-oauth.ts";
+import { purchaseCardFallback, purchaseOutboundCard } from "../outbound-wiring.ts";
+import type { VaultKeySource } from "../mcp-oauth.ts";
 
 // 4242... is the well-known test number, not a real card.
 const KEY: VaultKeySource = { kind: "key", key: Buffer.alloc(32, 7) };

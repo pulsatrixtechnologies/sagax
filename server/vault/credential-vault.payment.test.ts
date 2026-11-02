@@ -3,11 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { vaultHandle } from "../shared/credential-vault.ts";
-import { inAppDigitalPurchaseRefusal, luhnOk, parsePurchaseCall, parseReceiptCall, purchaseCardText } from "../shared/payment-vault.ts";
+import { vaultHandle } from "../../shared/credential-vault.ts";
+import { inAppDigitalPurchaseRefusal, luhnOk, parsePurchaseCall, parseReceiptCall, purchaseCardText } from "../../shared/payment-vault.ts";
 import { fillResolverFor } from "./credential-vault.ts";
 import { CredentialVault, LOCAL_VAULT_PRINCIPAL } from "./credential-vault.ts";
-import type { VaultKeySource } from "./mcp-oauth.ts";
+import type { VaultKeySource } from "../mcp-oauth.ts";
 
 // Fictional payment values. 4242... is the well-known test number, not a real card.
 const PAN = "4242424242424242";

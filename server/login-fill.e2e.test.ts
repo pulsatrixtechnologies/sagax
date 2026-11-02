@@ -16,8 +16,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { vaultHandle } from "../shared/credential-vault.ts";
 import { BrowserRuntime, type BrowserSpawnSpec, type CredentialFillAccess } from "./browser-runtime.ts";
-import { variants } from "./credential-fill.ts";
-import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL } from "./credential-vault.ts";
+import { variants } from "./vault/credential-fill.ts";
+import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL } from "./vault/credential-vault.ts";
 
 const FAKE_USER = "e2e.fake.user@example.test";
 const FAKE_PASSWORD = "fake-E2E-Pa55-site-login";

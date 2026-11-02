@@ -31,7 +31,7 @@ export type SelectableComputer = {
   canCreate: boolean;
   reason?: string;
 };
-import { withCommandVariables } from "../credential-command-env.ts";
+import { withCommandVariables } from "../vault/credential-command-env.ts";
 import type { DesktopBridgeOperation } from "../desktop-bridge.ts";
 import { handleDesktopBridgeMcp } from "../desktop-bridge-tools.ts";
 import { handleMessagesMcp } from "../imessage-mcp.ts";

@@ -230,7 +230,7 @@ import { markDeadThreadChip } from "./dead-thread-chips.ts";
 import { credentialResumeOutcome, credentialIsConfigured, isCredentialTargetId } from "../shared/credential-request.ts";
 import { VAULT_LOGIN_TARGET, ONE_PASSWORD_WAITING } from "../shared/credential-vault.ts";
 import { HOST_COMPUTER_RESOURCE, HOST_CONTROL_NOTICE } from "../shared/host-control.ts";
-import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL } from "./credential-vault.ts";
+import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL } from "./vault/credential-vault.ts";
 import { cliWalletIssuer } from "./wallet-issuer.ts";
 import { outboundWiring, primaryOutboundDecision, primaryPurchaseCard } from "./outbound-wiring.ts";
 import { followUpNote, OrderFollowUps } from "./order-follow-ups.ts";
@@ -238,7 +238,7 @@ import { OnePassword } from "./onepassword.ts";
 import { createCredentialVaultRoutes, vaultPrincipalFor } from "./routes/credential-vault.ts";
 import { createCredentialVaultInternalRoutes } from "./routes/credential-vault-internal.ts";
 import { createTeamBotVaultRoutes, soloMayManage } from "./routes/team-bot-vault.ts";
-import { withCommandVariables } from "./credential-command-env.ts";
+import { withCommandVariables } from "./vault/credential-command-env.ts";
 
 import { createRoomTurnLevels } from "./room-turn-level.ts";
 import {
@@ -5497,7 +5497,7 @@ function agentsIntegration(
       // (their own phone, on their bot or one shared with them, 2026-10-28),
       // and a phone of theirs offers tools now. The route re-checks.
       // vault_http_request: this bot may send an API key of the person here
-      // (server/credential-http.ts). The route re-checks every call.
+      // (server/vault/credential-http.ts). The route re-checks every call.
       SAGAX_VAULT_HTTP: vaultHttpMounted(botId, threadId) ? "1" : "0",
       SAGAX_PHONE_TOOLS: (() => {
         const bot = store.bot(botId);
@@ -8662,7 +8662,7 @@ function vaultKeySource(): VaultKeySource {
 }
 const personConnections = new PersonConnections(DATA_DIR, vaultKeySource);
 const personalSkills = new PersonalSkills(DATA_DIR, personConnections);
-// The credential vault (server/credential-vault.ts): each person's logins,
+// The credential vault (server/vault/credential-vault.ts): each person's logins,
 // API keys and notes, encrypted with a key derived from the same vault key
 // (the OS keychain on a desktop, a 0600 key file on a server). Bots fill a
 // login by reference through the browser (fill_credential); they never get
@@ -8786,7 +8786,7 @@ function vaultHttpMounted(botId: string, threadId: string): boolean {
   return Boolean(principalId) && credentialVault.injectable(principalId!, botId, threadId);
 }
 /** 2026-10-26: the API keys the person exposed to this bot's commands
- * (server/credential-command-env.ts), read again for every turn and command. */
+ * (server/vault/credential-command-env.ts), read again for every turn and command. */
 function commandVariablesFor(botId: string, threadId: string, principalId: string | null = vaultPrincipalForThread(threadId)): Record<string, string> {
   return principalId ? credentialVault.commandVariables(principalId, botId, threadId) : {};
 }

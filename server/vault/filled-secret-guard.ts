@@ -6,7 +6,7 @@
 // Wired into shared/redact.ts via addHeldSecretScrubber (Lot A0 / upstream tip)
 // so every redactSecretsInText pass scrubs filled values without a second
 // parallel list of scrubbers.
-import { addHeldSecretScrubber } from "../shared/redact.ts";
+import { addHeldSecretScrubber } from "../../shared/redact.ts";
 import { REDACTED_CREDENTIAL, variants } from "./credential-fill.ts";
 
 // A value is kept while it was used within the last day, whoever filled it:

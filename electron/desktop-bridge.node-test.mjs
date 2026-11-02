@@ -200,7 +200,7 @@ test("Local VM: only labelled Sagax containers", async () => {
   await assert.rejects(vm.exec("some-other-container", "id"), /does not exist/);
 });
 
-// Command variables (server/credential-command-env.ts): the server sends the
+// Command variables (server/vault/credential-command-env.ts): the server sends the
 // API keys the person exposed to this bot with run_command and
 // vm_run_command; they join the command's environment, never its argv.
 test("command variables: checked for shape, in the shell's environment, never on the command line", async () => {

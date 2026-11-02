@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { REDACTED_CREDENTIAL } from "./credential-fill.ts";
 import { noteFilledSecret, redactFilledSecrets, resetFilledSecrets, setFilledSecretClock } from "./filled-secret-guard.ts";
-import { redactSecretsInText } from "./redact.ts";
+import { redactSecretsInText } from "../redact.ts";
 
 const SECRET = "p@ss-w0rd-sample";
 

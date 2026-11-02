@@ -9,7 +9,7 @@ import {
   isCredentialTargetId,
   type CredentialConfig,
   type CredentialTargetId,
-} from "../shared/credential-request.ts";
+} from "../../shared/credential-request.ts";
 
 const MAPPINGS: Array<[CredentialTargetId, CredentialConfig]> = [
   ["xaiApiKey", { xai: { key: "secret" } }],

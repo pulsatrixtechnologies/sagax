@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
-import type { VaultKeySource } from "./vault-key-source.ts";
+import type { VaultKeySource } from "./vault/vault-key-source.ts";
 import { INSTALLATION_CAPABILITIES_AAD, INSTALLATION_CAPABILITIES_FILE } from "../shared/capability-stores.ts";
 
 const AAD = Buffer.from(INSTALLATION_CAPABILITIES_AAD);

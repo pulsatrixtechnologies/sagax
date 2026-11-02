@@ -1,6 +1,6 @@
 // R13 wiring (parité the reference design V4, 59, 83), kept out of server/index.ts: the
 // phone call cards (server/outbound-calls.ts) and the purchase cards of the
-// payment vault (server/credential-vault.ts) in the conversation, the
+// payment vault (server/vault/credential-vault.ts) in the conversation, the
 // person's answer routes, the Primary Bot's pending list, and the wake-up
 // that tells the bot what the person answered.
 //
@@ -15,7 +15,7 @@ import { purchaseContents } from "../shared/payment-vault.ts";
 import { walletName } from "../shared/single-use-card.ts";
 import { trackingLine } from "../shared/order-tracking.ts";
 import type { OutboundCallResult, OutboundCard } from "../shared/wire.ts";
-import type { PurchaseListing } from "./credential-vault.ts";
+import type { PurchaseListing } from "./vault/credential-vault.ts";
 import {
   applyResult, callAnswerNote, callCard, callCardText, callResultNote, OutboundCalls, placePhoneCall,
   type IncomingCallResult, type OutboundCallRecord, type PlaceCallDeps,

@@ -3,7 +3,7 @@
 // step (user name, Next, password, then a one-time code) is filled the same
 // way. Port of OpenMausBot #2929 ("logins fill anywhere", server/login-fill.ts
 // upstream), adapted to Sagax's vault and fill path: every field still goes
-// through the runtime's own single-field fill (server/credential-fill.ts:
+// through the runtime's own single-field fill (server/vault/credential-fill.ts:
 // origin guard, top frame, POST forms on the page's own origin, the vault's
 // grant and site check, a strict-mode write over stdin, the redactor).
 //

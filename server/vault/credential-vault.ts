@@ -44,7 +44,7 @@ import {
   type VaultGrantMode,
   type VaultItemKind,
   type VaultItemListing,
-} from "../shared/credential-vault.ts";
+} from "../../shared/credential-vault.ts";
 
 import {
   cardExpiryText,
@@ -65,10 +65,10 @@ import {
   type StoredAddress,
   type StoredCard,
   type StoredContact,
-} from "../shared/payment-vault.ts";
-import { isSingleUseWallet, redactCardNumbers, requestSingleUseToken, walletLinkView, walletName, type SingleUseWallet, type WalletLinkView } from "../shared/single-use-card.ts";
-import { mergePatch, planVaultImport, type VaultDuplicateMode, type VaultExportFormat, type VaultTransferItem } from "../shared/credential-vault-transfer.ts";
-import { ORDER_CHECK_HOURS, ORDER_STEPS, trackingLine, type OrderTracking, type TrackingInput } from "../shared/order-tracking.ts";
+} from "../../shared/payment-vault.ts";
+import { isSingleUseWallet, redactCardNumbers, requestSingleUseToken, walletLinkView, walletName, type SingleUseWallet, type WalletLinkView } from "../../shared/single-use-card.ts";
+import { mergePatch, planVaultImport, type VaultDuplicateMode, type VaultExportFormat, type VaultTransferItem } from "../../shared/credential-vault-transfer.ts";
+import { ORDER_CHECK_HOURS, ORDER_STEPS, trackingLine, type OrderTracking, type TrackingInput } from "../../shared/order-tracking.ts";
 import {
   allowanceRefusal,
   mergePaymentsSettings,
@@ -79,12 +79,12 @@ import {
   type PaymentMethodListing,
   type PaymentMethodRef,
   type PaymentsSettings,
-} from "../shared/payments-settings.ts";
-import { writeFileAtomic } from "./atomic.ts";
-import type { VaultKeySource } from "./mcp-oauth.ts";
-import { principalDir } from "./person-connections.ts";
-import { parseTotpSeed, totp } from "./totp.ts";
-import type { IssuedCard, WalletIssuer } from "./wallet-issuer.ts";
+} from "../../shared/payments-settings.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import type { VaultKeySource } from "../mcp-oauth.ts";
+import { principalDir } from "../person-connections.ts";
+import { parseTotpSeed, totp } from "../totp.ts";
+import type { IssuedCard, WalletIssuer } from "../wallet-issuer.ts";
 
 export const LOCAL_VAULT_PRINCIPAL = "local";
 const FILE = "credential-vault.enc";
@@ -217,7 +217,7 @@ const itemSchema = z.object({
   source: z.enum(["local", "1password"]),
   onePassword: onePasswordRefSchema.optional(),
   /** 2026-10-26: an API key Sagax sends itself to the item's sites
-   * (server/credential-http.ts), and the command variable the person chose. */
+   * (server/vault/credential-http.ts), and the command variable the person chose. */
   injection: injectionSchema.optional(),
   commandVariable: z.string().regex(/^[A-Z_][A-Z0-9_]{0,63}$/).optional(),
   grants: z.array(grantSchema).max(200),
@@ -891,7 +891,7 @@ export class CredentialVault {
   }
 
   /** 2026-10-26: the API key to send on a bot's HTTP request
-   * (server/credential-http.ts), only for an API key the person set to be
+   * (server/vault/credential-http.ts), only for an API key the person set to be
    * sent by Sagax, a bot allowed here, and a URL on one of the item's sites
    * (and under its base path). Marks the item used. The caller must never
    * put the value in a tool result, a message, an error or a log. */

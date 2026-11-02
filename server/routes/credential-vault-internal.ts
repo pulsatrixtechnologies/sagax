@@ -7,14 +7,14 @@
 //
 //   POST /api/internal/credentials/http { handle, method?, url, headers?, body? }
 //     200 { text, isError? }   vault_http_request (2026-10-26): the server
-//     adds the API key to the request (server/credential-http.ts)
+//     adds the API key to the request (server/vault/credential-http.ts)
 //
 // The answer names handles, sites and which fields exist, never a value. A
 // card is the person's to answer (server/routes/credential-vault.ts).
 import { botVaultPrincipal, normalizeVaultDomain, vaultHandle, type VaultItemListing } from "../../shared/credential-vault.ts";
 import type { SecretRequestCardData } from "../../shared/wire.ts";
-import { outcomeText, sendWithInjectedKey, type CredentialHttpOptions } from "../credential-http.ts";
-import type { CredentialVault, OnePasswordFieldReader } from "../credential-vault.ts";
+import { outcomeText, sendWithInjectedKey, type CredentialHttpOptions } from "../vault/credential-http.ts";
+import type { CredentialVault, OnePasswordFieldReader } from "../vault/credential-vault.ts";
 import type { InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 import { vaultRequestCard } from "./credential-vault.ts";

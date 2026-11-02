@@ -1,5 +1,5 @@
 // vault_http_request: the server adds the key, the bot never sees it
-// (server/credential-http.ts, the internal route of
+// (server/vault/credential-http.ts, the internal route of
 // server/routes/credential-vault-internal.ts, CredentialVault.resolveForRequest).
 // A local HTTP server stands for the API; the resolver and the address
 // classes are injected, so the address rules stay testable without DNS.
@@ -10,12 +10,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import { vaultHandle } from "../shared/credential-vault.ts";
+import { vaultHandle } from "../../shared/credential-vault.ts";
 import { secretVariants, sendWithInjectedKey, type CredentialHttpOptions, type InjectedSecret } from "./credential-http.ts";
 import { CredentialVault, LOCAL_VAULT_PRINCIPAL } from "./credential-vault.ts";
-import type { VaultKeySource } from "./mcp-oauth.ts";
-import { createCredentialVaultInternalRoutes } from "./routes/credential-vault-internal.ts";
-import { PASS } from "./routes/table.ts";
+import type { VaultKeySource } from "../mcp-oauth.ts";
+import { createCredentialVaultInternalRoutes } from "../routes/credential-vault-internal.ts";
+import { PASS } from "../routes/table.ts";
 
 // Every value below is fake test data.
 const FAKE_KEY = "fake-api-key-0123456789-for-tests";

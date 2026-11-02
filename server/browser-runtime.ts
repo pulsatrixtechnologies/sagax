@@ -1,8 +1,8 @@
 import { killCliTree, spawnCli } from "./procs.ts";
 import { DEFAULT_BROWSER_RESULT_BUDGET, describePageChange, OBSERVE_PAGE_SCRIPT, parsePageState, READ_OPEN_PAGE_ONLY, readsAroundBrowser, shapeBrowserToolResult, slimBrowserToolList, stripHarnessOwnedArguments, type PageState } from "./browser-tool-shape.ts";
 import { randomBytes } from "node:crypto";
-import { aimOf, FILL_CREDENTIAL_TOOL, FILL_CREDENTIAL_TOOL_SPEC, formPostsOnly, formStaysOnOrigin, LOGIN_MODE, parseEvalArray, parseEvalObject, parseFillArguments, parseProbe, parseWrite, probeScript, problemText, SecretRedactor, writeScript, type FillRequest, type LoginRequest } from "./credential-fill.ts";
-import { noteFilledSecret } from "./filled-secret-guard.ts";
+import { aimOf, FILL_CREDENTIAL_TOOL, FILL_CREDENTIAL_TOOL_SPEC, formPostsOnly, formStaysOnOrigin, LOGIN_MODE, parseEvalArray, parseEvalObject, parseFillArguments, parseProbe, parseWrite, probeScript, problemText, SecretRedactor, writeScript, type FillRequest, type LoginRequest } from "./vault/credential-fill.ts";
+import { noteFilledSecret } from "./vault/filled-secret-guard.ts";
 import { itemIdFromHandle } from "../shared/credential-vault.ts";
 import { MASK_SENSITIVE_SCRIPT, NO_PAGE_TEXT_TOOLS, parseSensitiveValues, SENSITIVE_VALUES_SCRIPT, UNMASK_SENSITIVE_SCRIPT, withSensitiveValues } from "../shared/sensitive-fields.ts";
 import {
@@ -78,7 +78,7 @@ export function ownsBrowserViewport(env: NodeJS.ProcessEnv): boolean {
 
 export class TransportError extends Error {}
 
-/** The vault as one turn's browser sees it (server/credential-vault.ts
+/** The vault as one turn's browser sees it (server/vault/credential-vault.ts
  * fillResolverFor), built per call by the caller, which knows the bot, the
  * conversation and whose vault it is. */
 export interface CredentialFillAccess {
@@ -933,7 +933,7 @@ export class BrowserRuntime {
     return true;
   }
 
-  /** fill_credential (server/credential-fill.ts), holding the session alone
+  /** fill_credential (server/vault/credential-fill.ts), holding the session alone
    * so no other action (a tab switch, a script) lands between its steps.
    * The page's address comes from the engine; a probe with no secret marks
    * the target in the top document; the vault answers only for a granted bot

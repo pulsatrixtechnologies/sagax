@@ -10,7 +10,7 @@
 //   3. probes with a script that carries no secret and starts with an
 //      origin and top-frame guard: a fillable input of the top document,
 //      where its form posts; it marks the target with a one-time attribute,
-//   4. asks the vault for the value (server/credential-vault.ts): only for a
+//   4. asks the vault for the value (server/vault/credential-vault.ts): only for a
 //      granted bot and a URL on one of the item's sites,
 //   5. writes with a strict-mode script whose first statement is the same
 //      guard, then the marked element, focused, gets the value. The script
@@ -24,8 +24,8 @@ import {
   VAULT_FILL_FIELDS,
   isVaultFillField,
   type VaultFillField,
-} from "../shared/credential-vault.ts";
-import { SENSITIVE_FIELD_MARKER } from "../shared/sensitive-fields.ts";
+} from "../../shared/credential-vault.ts";
+import { SENSITIVE_FIELD_MARKER } from "../../shared/sensitive-fields.ts";
 
 export const FILL_CREDENTIAL_TOOL = "fill_credential";
 /** field "login": a whole sign-in, step by step (server/login-fill.ts). */

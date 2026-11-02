@@ -78,7 +78,7 @@ const ACTIONS = new Set(["run_command", "read_file", "write_file", "list_files",
 const KEYS = new Set(["action", "path", "content", "encoding", "offset", "max_bytes", "command", "cwd", "timeout_seconds", "pattern", "glob", "url", "screenshot", "tool_name", "arguments", "container", "name", "final", "endpoint", "http_method", "http_path", "json", "env"]);
 /** Command variables (run_command, vm_run_command): API keys the person
  * exposed to this bot, by the names they chose. Names a shell or Sagax
- * needs never come from the server (server/credential-command-env.ts). */
+ * needs never come from the server (server/vault/credential-command-env.ts). */
 const COMMAND_VARIABLE = /^[A-Z_][A-Z0-9_]{0,63}$/;
 const RESERVED_VARIABLES = new Set(["PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "PWD", "OLDPWD", "TERM", "LANG", "TZ", "IFS", "ENV", "BASH_ENV", "NODE_OPTIONS", "NODE_PATH", "PYTHONPATH", "PYTHONHOME", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"]);
 const RESERVED_PREFIXES = ["LD_", "DYLD_", "SAGAX_", "ANTHROPIC_", "CLAUDE_", "CODEX_", "ELECTRON_", "GIT_", "NPM_CONFIG_", "BASH_FUNC_"];

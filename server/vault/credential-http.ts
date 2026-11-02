@@ -1,13 +1,13 @@
 // A bot's HTTP request with an API key Sagax adds itself (2026-10-26,
 // agents tool vault_http_request). The bot names the vault handle and the
-// URL; the server decrypts the key (server/credential-vault.ts
+// URL; the server decrypts the key (server/vault/credential-vault.ts
 // resolveForRequest: the grant, the item's sites and base path), adds it as
 // the person chose (Bearer, a named header, Basic, a query parameter), sends
 // the request and returns the answer with every echo of the key removed.
 //
 // The model never sees the value: not in the result, not in the headers
 // returned, not in an error, not in a log. Rules, each tested
-// (server/credential-http.test.ts):
+// (server/vault/credential-http.test.ts):
 //   - https only, to the item's own sites; the bot cannot set the header the
 //     key rides in, nor the transport's own headers;
 //   - every address the host resolves to must be public (no loopback, private
@@ -25,8 +25,8 @@ import { request as httpRequest, type IncomingHttpHeaders, type RequestOptions }
 import { request as httpsRequest } from "node:https";
 import { isIP, type LookupFunction } from "node:net";
 
-import { injectionHeader, vaultDomainMatches, type VaultApiInjection } from "../shared/credential-vault.ts";
-import { addressClass, REFUSAL_TEXT, type AddressClass, type Refusal } from "./browser/egress/policy.ts";
+import { injectionHeader, vaultDomainMatches, type VaultApiInjection } from "../../shared/credential-vault.ts";
+import { addressClass, REFUSAL_TEXT, type AddressClass, type Refusal } from "../browser/egress/policy.ts";
 import { variants } from "./credential-fill.ts";
 
 export const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] as const;

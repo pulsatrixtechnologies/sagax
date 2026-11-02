@@ -25,8 +25,8 @@
 //     environment on the desktop.
 import { createHash } from "node:crypto";
 
-import { parseCommandVariable } from "../shared/credential-vault.ts";
-import { PROVIDER_CREDENTIAL_ENV, WORKSPACE_CREDENTIAL_ENV } from "./config.ts";
+import { parseCommandVariable } from "../../shared/credential-vault.ts";
+import { PROVIDER_CREDENTIAL_ENV, WORKSPACE_CREDENTIAL_ENV } from "../config.ts";
 
 export interface SandboxExecLike {
   argv: string[];

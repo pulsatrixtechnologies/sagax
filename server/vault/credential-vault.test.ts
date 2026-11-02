@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { normalizeVaultDomain, vaultDomainMatches, vaultHandle, VAULT_ONCE_GRANT_MS } from "../shared/credential-vault.ts";
+import { normalizeVaultDomain, vaultDomainMatches, vaultHandle, VAULT_ONCE_GRANT_MS } from "../../shared/credential-vault.ts";
 import { CredentialVault, LOCAL_VAULT_PRINCIPAL } from "./credential-vault.ts";
-import type { VaultKeySource } from "./mcp-oauth.ts";
+import type { VaultKeySource } from "../mcp-oauth.ts";
 
 // Every value below is fake test data.
 const KEY: VaultKeySource = { kind: "key", key: Buffer.alloc(32, 7) };

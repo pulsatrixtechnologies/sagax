@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { botVaultPrincipal, vaultHandle } from "../../shared/credential-vault.ts";
 import type { SecretRequestCardData } from "../../shared/wire.ts";
-import { CredentialVault, LOCAL_VAULT_PRINCIPAL } from "../credential-vault.ts";
+import { CredentialVault, LOCAL_VAULT_PRINCIPAL } from "../vault/credential-vault.ts";
 import { json, readBody } from "../harness/http.ts";
 import { OnePassword } from "../onepassword.ts";
 import { requiredScope, type RequestAuth } from "../request-auth.ts";

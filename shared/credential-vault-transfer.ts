@@ -47,7 +47,7 @@ export type VaultExportFormat = (typeof VAULT_EXPORT_FORMATS)[number];
 export const VAULT_DUPLICATE_MODES = ["merge", "skip"] as const;
 export type VaultDuplicateMode = (typeof VAULT_DUPLICATE_MODES)[number];
 
-/** The vault's own field limits (server/credential-vault.ts itemSchema). */
+/** The vault's own field limits (server/vault/credential-vault.ts itemSchema). */
 export const VAULT_FIELD_LIMITS = { name: 120, username: 512, password: 4_096, totpSeed: 1_024, apiKey: 16_384, notes: 16_384 } as const;
 
 /** The largest file the app reads (a 1PUX zip with no attachments, or a CSV). */

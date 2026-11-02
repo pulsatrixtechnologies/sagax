@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { browserProcessesRunning, browserProcessTree, orphanedBrowsers, releaseBrowserProfile, stopBrowserProcesses } from "./browser-processes.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
 
 // The real tools, except where a test stands in for Windows' tasklist and taskkill.
 vi.mock("node:child_process", async (original) => {

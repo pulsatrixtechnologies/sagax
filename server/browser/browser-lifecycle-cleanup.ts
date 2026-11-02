@@ -3,11 +3,11 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { z } from "zod";
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 import { browserDaemonPidPath, browserProfilesRoot, closeBrowserSession, runningBrowserSessionNames } from "./browser-engine.ts";
 import { orphanedBrowsers, stopBrowserProcesses } from "./browser-processes.ts";
 import { browserRuntimeEnv } from "./browser-runtime.ts";
-import type { EngineBrowsers } from "./engine-memory-guard.ts";
+import type { EngineBrowsers } from "../engine-memory-guard.ts";
 
 const BOT_ID = /^[A-Za-z0-9_-]{1,120}$/;
 const PROFILE_ID = /^[a-z0-9_-]{1,40}$/;

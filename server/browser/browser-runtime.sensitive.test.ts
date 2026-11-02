@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { SENSITIVE_FIELD_MARKER } from "../shared/sensitive-fields.ts";
+import { SENSITIVE_FIELD_MARKER } from "../../shared/sensitive-fields.ts";
 import { BROWSER_CONTROL_REFUSAL, BrowserRuntime, type BrowserSpawnSpec } from "./browser-runtime.ts";
-import { SecretRedactor } from "./vault/credential-fill.ts";
+import { SecretRedactor } from "../vault/credential-fill.ts";
 
 // Every value below is fake test data.
 const TYPED_PASSWORD = "fake-Person-Typed-Pa55";

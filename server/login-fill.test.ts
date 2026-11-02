@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { vaultHandle } from "../shared/credential-vault.ts";
-import { BrowserRuntime, browserProfileChangeRefusal, PERSON_SIGN_IN_MS, type BrowserSpawnSpec, type CredentialFillAccess } from "./browser-runtime.ts";
+import { BrowserRuntime, browserProfileChangeRefusal, PERSON_SIGN_IN_MS, type BrowserSpawnSpec, type CredentialFillAccess } from "./browser/browser-runtime.ts";
 import { parseFillArguments, variants } from "./vault/credential-fill.ts";
 import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL } from "./vault/credential-vault.ts";
 import { fieldList, loginOutcomeText, parseLoginState, stepFields } from "./login-fill.ts";

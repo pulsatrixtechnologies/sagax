@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { credentialStoreFlags } from "./browser/egress/gate.ts";
+import { credentialStoreFlags } from "./egress/gate.ts";
 import {
   agentBrowserFrame,
   agentBrowserIntegration,
@@ -34,7 +34,7 @@ import {
 } from "./browser-engine.ts";
 import { AGENT_BROWSER_VERSION, agentBrowserReleaseUrl, agentBrowserReleaseVersion, resolveAgentBrowserReleaseAsset } from "./browser-engine-release.ts";
 import { browserBundlePaths, browserBundleSpec, SUPPORTED_BROWSER_TARGETS } from "./browser-bundle-release.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
 
 const posix = process.platform !== "win32";
 const scratch: string[] = [];
@@ -860,7 +860,7 @@ describe("what a bot gets", () => {
     const withoutAttach = agentBrowserIntegration({ binaryPath: "/x/agent-browser", session: "bot-1", encryptionKey: "session-key", env: { PATH: "/usr/bin" } });
     expect(withoutAttach.env).not.toHaveProperty("AGENT_BROWSER_CDP");
     // Ambient process env must not leak in either: the source env passed here plays
-    // the same role vi.stubEnv plays in server/browser-live.test.ts's guarantee test.
+    // the same role vi.stubEnv plays in server/browser/browser-live.test.ts's guarantee test.
     const ambientAttempt = agentBrowserIntegration({
       binaryPath: "/x/agent-browser", session: "bot-1", encryptionKey: "session-key",
       env: { PATH: "/usr/bin", AGENT_BROWSER_CDP: "https://unrelated-browser.invalid" },

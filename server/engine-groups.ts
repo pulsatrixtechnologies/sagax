@@ -16,7 +16,7 @@
 // group whose leader is gone cannot have been reused (the system never gives
 // a live group's id to a new process), so its remaining members are ours.
 import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { processStarted, processTable, type ListedProcess } from "./browser-processes.ts";
+import { processStarted, processTable, type ListedProcess } from "./browser/browser-processes.ts";
 
 interface RecordedGroup {
   pgid: number;

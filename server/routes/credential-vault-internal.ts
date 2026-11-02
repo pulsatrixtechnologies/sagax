@@ -30,7 +30,7 @@ export interface CredentialVaultInternalDeps {
   /** Who answers a card for the bot's shared logins (its owner); null: the speaker. */
   botOwner?(botId: string): string | null;
   /** A new card replaces the open one: a person's own sign-in begun from it
-   * ends (server/browser-runtime.ts endPersonSignIn). */
+   * ends (server/browser/browser-runtime.ts endPersonSignIn). */
   endPersonSignIn?(botId: string, threadId: string): Promise<void>;
   /** vault_http_request: the resolver and address checks (tests inject them). */
   http?: CredentialHttpOptions;

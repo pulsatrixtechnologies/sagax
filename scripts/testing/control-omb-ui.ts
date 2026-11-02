@@ -1,6 +1,6 @@
 // `control-omb ui`: drive the real React renderer headlessly against the
 // isolated fake-engine fixture, through the agent-browser binary the harness
-// already pins (server/browser-engine-release.ts). One launch owns a fixture
+// already pins (server/browser/browser-engine-release.ts). One launch owns a fixture
 // server, a Vite preview of the full <App/>, and one headless browser session
 // whose HOME is the fixture's disposable data directory; every other verb
 // attaches to that session through the handle file the launch printed.
@@ -26,7 +26,7 @@ import {
   ensureChrome,
   installAgentBrowserBinary,
   resolveAgentBrowserBinary,
-} from "../../server/browser-engine.ts";
+} from "../../server/browser/browser-engine.ts";
 import { fixtureApi, mountPreview, type MountedPreview } from "./preview-fixture.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));

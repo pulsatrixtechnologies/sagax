@@ -5,7 +5,7 @@ import { Window } from "happy-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { vaultHandle } from "../../shared/credential-vault.ts";
-import { BrowserRuntime, type BrowserSpawnSpec, type CredentialFillAccess } from "../browser-runtime.ts";
+import { BrowserRuntime, type BrowserSpawnSpec, type CredentialFillAccess } from "../browser/browser-runtime.ts";
 import { aimOf, formPostsOnly, formStaysOnOrigin, parseProbe, urlEncodings, parseFillArguments, probeScript, REDACTED_CREDENTIAL, SecretRedactor, variants, writeScript } from "./credential-fill.ts";
 import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL } from "./credential-vault.ts";
 

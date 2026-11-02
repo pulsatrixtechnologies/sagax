@@ -1,4 +1,4 @@
-// The person's network debugger of the bot's browser (server/browser-network-debug.ts).
+// The person's network debugger of the bot's browser (server/browser/browser-network-debug.ts).
 //
 //   POST /api/bots/:id/browser/network  { action: "start" | "refresh" | "export" | "stop", includeHeaders? }
 //
@@ -7,7 +7,7 @@
 // any local process). Not an internal route, not a tool: no bot reaches it.
 import type { IncomingMessage } from "node:http";
 
-import { NetworkDebugError, parseNetworkDebugBody, type BrowserNetworkDebug, type NetworkDebugSpec } from "../browser-network-debug.ts";
+import { NetworkDebugError, parseNetworkDebugBody, type BrowserNetworkDebug, type NetworkDebugSpec } from "../browser/browser-network-debug.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

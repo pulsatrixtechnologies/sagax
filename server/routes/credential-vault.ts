@@ -49,7 +49,7 @@ export interface CredentialVaultRouteDeps {
   principal(auth: RequestAuth): string | null;
   botExists(botId: string): boolean;
   /** The bot's own browser for this conversation, for a person who signs in
-   * there themselves: null to go on, else why not (server/browser-runtime.ts
+   * there themselves: null to go on, else why not (server/browser/browser-runtime.ts
    * armForPerson, clearAfterPerson). Absent refuses that answer. */
   browser?: {
     armForPerson(botId: string, threadId: string): Promise<string | null>;

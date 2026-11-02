@@ -4,7 +4,7 @@
 
 import { isIP } from "node:net";
 
-import { isPublicDomainAddress } from "./custom-domain.ts";
+import { isPublicDomainAddress } from "../custom-domain.ts";
 
 const BLOCKED_NAMES = new Set(["localhost", "metadata.google.internal"]);
 

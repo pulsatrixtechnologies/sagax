@@ -2138,12 +2138,12 @@ SearXNG (base URL, optional key).
 
 A saved session (a bot's own browser, a shared profile) runs Chrome on
 `<data dir>/agent-browser-profiles/<sha256(session)>` (`AGENT_BROWSER_PROFILE`,
-`server/browser-engine.ts` `browserProfileDirectory`), so localStorage and
+`server/browser/browser-engine.ts` `browserProfileDirectory`), so localStorage and
 IndexedDB sign-ins survive restart, idle close, app restart and a crash; the
 restore file still carries cookies. Never for the temporary browser,
 confidential threads, meetings, or My Chrome / a CDP attach (no profile, no
 gate bypass; My Chrome rules of #838/#859 unchanged). The disk cache is capped
-at 64 MB. `releaseBrowserProfile` (`server/browser-processes.ts`) stops a Chrome
+at 64 MB. `releaseBrowserProfile` (`server/browser/browser-processes.ts`) stops a Chrome
 orphaned on the profile and drops a stale SingletonLock before a launch; the
 orphan sweep finds Chromes on kept profiles but only ever removes temporary
 ones. Deleting a bot or profile deletes its kept profile
@@ -8868,7 +8868,7 @@ select whose `autocomplete` has `current-password`, `new-password`,
 (any value but `"false"`, which never makes a password ordinary); and a
 field already seen sensitive (`data-sagax-sensitive`, so a "show password"
 toggle keeps it hidden). Teach by demonstration uses the same rule
-(`isSecretField`). `server/browser-runtime.ts` reads what those fields hold
+(`isSecretField`). `server/browser/browser-runtime.ts` reads what those fields hold
 (`SENSITIVE_VALUES_SCRIPT`, in the page, its open shadow roots and
 same-origin frames) after every tool whose answer can carry page text
 (snapshot, read, get_text, eval, open and any unknown tool; not
@@ -8883,7 +8883,7 @@ Nothing writes a field's value: the page and its forms keep the real one.
 Out of reach: a cross-origin frame (a payment widget's own frame), pixels
 of a desktop computer, and the live view and preview frames, which only the
 person sees. Tests: `shared/sensitive-fields.test.ts`,
-`server/browser-runtime.sensitive.test.ts`.
+`server/browser/browser-runtime.sensitive.test.ts`.
 
 ## Credential vault and secure form fill (2026-10-16)
 
@@ -8915,7 +8915,7 @@ where the person picks or saves a login and allows it this time (the
 conversation, 15 minutes) or always for that bot; the bot resumes with the
 handle (`server/routes/credential-vault.ts`, `grantedNote`). The browser's
 harness tool `fill_credential` (`server/vault/credential-fill.ts`, run by
-`server/browser-runtime.ts`) holds the session alone (`holdExclusive`: other
+`server/browser/browser-runtime.ts`) holds the session alone (`holdExclusive`: other
 agent actions are refused, running ones drain), reads the page's URL through
 the engine (`agent_browser_get_url`, `location.href`), focuses the ref,
 probes with a script that has no secret (origin guard first; top frame; a
@@ -9702,11 +9702,11 @@ in the browser" beside "Describe it in words" (`/learn`, unchanged). Showing
 opens the bot's browser window (Computer tab) and starts a recording; the
 browser menu has the same Teach by demonstration / Stop recording entry.
 Pieces: `shared/teach-recording.ts` (masking rules, SKILL.md builder),
-`server/browser-teach.ts` (recorder), the `record-start`, `record-stop` and
-`record-discard` actions of `server/browser-live.ts`,
+`server/browser/browser-teach.ts` (recorder), the `record-start`, `record-stop` and
+`record-discard` actions of `server/browser/browser-live.ts`,
 `src/components/TeachStepsDialog.tsx` (editor and chooser),
 `src/lib/teach-request.ts`. Rules, covered by `shared/teach-recording.test.ts`
-and `server/browser-teach.test.ts`:
+and `server/browser/browser-teach.test.ts`:
 
 - Only the person's own input through the live view is recorded (clicks,
   typed text, Enter/Tab/Escape, toolbar commands), never the bot's tool

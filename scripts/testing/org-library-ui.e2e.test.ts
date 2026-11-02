@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
-import { resolveAgentBrowserBinary } from "../../server/browser-engine.ts";
+import { resolveAgentBrowserBinary } from "../../server/browser/browser-engine.ts";
 import { waitForExit } from "../../server/testing/cleanup.ts";
 import { canonicalJson, parsePackageDocument } from "../../shared/package-format.ts";
 import { runControlOmb } from "../control-omb.ts";

@@ -17,7 +17,7 @@ import {
   type AutoComputerState,
 } from "../auto-computer.ts";
 import { MY_CHROME_PROFILE, runMyChromeTool, toolName as browserToolName } from "../browser/my-chrome/pilot.ts";
-import { browserNavigationRefusal } from "../browser-navigation.ts";
+import { browserNavigationRefusal } from "../browser/browser-navigation.ts";
 import { pickComputer } from "../computer-selection.ts";
 import type { Surface } from "../surface.ts";
 

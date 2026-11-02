@@ -169,7 +169,7 @@ export function parseBrowserLiveAction(value: unknown): Action {
   const invalid = () => new BrowserLiveError("Invalid browser action.");
   if (!body) throw invalid();
   if (body.type === "take" || body.type === "release" || body.type === "restart") return { type: body.type };
-  // Teach by demonstration: the person's own recording (server/browser-teach.ts).
+  // Teach by demonstration: the person's own recording (server/browser/browser-teach.ts).
   if (body.type === "record-start" || body.type === "record-stop" || body.type === "record-discard") return { type: body.type };
   if (body.type === "ack" && integer(body.seq, 1, Number.MAX_SAFE_INTEGER)) return { type: "ack", seq: body.seq };
   if (body.type === "back" || body.type === "forward" || body.type === "reload") return { type: "command", args: [body.type] };

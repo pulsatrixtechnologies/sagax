@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { vaultHandle } from "../shared/credential-vault.ts";
-import { BrowserRuntime, type BrowserSpawnSpec, type CredentialFillAccess } from "./browser-runtime.ts";
+import { BrowserRuntime, type BrowserSpawnSpec, type CredentialFillAccess } from "./browser/browser-runtime.ts";
 import { variants } from "./vault/credential-fill.ts";
 import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL } from "./vault/credential-vault.ts";
 

@@ -64,9 +64,9 @@ UI and harness, then removes its temporary data; the server log remains.
 Focused automated coverage:
 
 ```sh
-pnpm exec vitest run server/browser-engine.test.ts server/browser-runtime.test.ts \
-  server/harness-mcp-proxy.test.ts server/browser-live.test.ts \
-  server/browser-live-routes.test.ts server/browser-codex-path.integration.test.ts \
+pnpm exec vitest run server/browser/browser-engine.test.ts server/browser/browser-runtime.test.ts \
+  server/harness-mcp-proxy.test.ts server/browser/browser-live.test.ts \
+  server/browser/browser-live-routes.test.ts server/browser/browser-codex-path.integration.test.ts \
   src/lib/browser-input-queue.test.ts src/lib/browser-control.test.ts src/lib/browser-profiles.test.ts \
   src/components/BrowserProfilesManager.test.ts src/components/BrowserViewport.test.ts \
   src/components/BrowserPanel.test.ts

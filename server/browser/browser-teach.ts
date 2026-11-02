@@ -1,6 +1,6 @@
 // The recorder behind Teach by demonstration (shared/teach-recording.ts).
 // It sees only what the person does through the live browser view
-// (server/browser-live.ts): their clicks, keys and toolbar commands, never
+// (server/browser/browser-live.ts): their clicks, keys and toolbar commands, never
 // the bot's own tool calls. It lives in memory only, belongs to one person
 // and one browser session, and is dropped when it is stopped, discarded,
 // left idle, or the person signs out. Nothing here is logged or written.
@@ -16,7 +16,7 @@ import {
   type TeachFieldInfo,
   type TeachStep,
   type TeachTarget,
-} from "../shared/teach-recording.ts";
+} from "../../shared/teach-recording.ts";
 
 /** A recording no one touched for this long is dropped. */
 export const TEACH_IDLE_MS = 30 * 60_000;

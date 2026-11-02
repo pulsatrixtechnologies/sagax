@@ -99,7 +99,7 @@ Network-safety helpers already in the tree:
 - `server/public-fetch.ts`: `guardedFetch` re-checks every redirect and pins the resolved address. Note that its
   **first** request is not guarded, so callers must guard hop 0 themselves.
 - `server/person-connections.ts`: the "all resolved addresses must be public" rule.
-- `server/browser-navigation.ts`: blocks `localhost`, `metadata.google.internal` and non-public IP literals.
+- `server/browser/browser-navigation.ts`: blocks `localhost`, `metadata.google.internal` and non-public IP literals.
 
 Environment facts:
 

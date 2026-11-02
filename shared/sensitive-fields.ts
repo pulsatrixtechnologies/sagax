@@ -3,7 +3,7 @@
 //
 // One rule, used everywhere a field's value could leave the page toward a
 // bot: the browser runtime's snapshots, page reads, eval answers and
-// screenshots (server/browser-runtime.ts), and Teach by demonstration
+// screenshots (server/browser/browser-runtime.ts), and Teach by demonstration
 // (shared/teach-recording.ts, isSecretField). A field is sensitive when it is
 //   - an <input type="password">;
 //   - an input, textarea or select whose autocomplete has the token

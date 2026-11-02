@@ -2,7 +2,7 @@
 //
 // The bot calls fill_credential with an opaque handle (cred_...), a field
 // and, optionally, the input's @eN ref or a CSS selector. The browser runtime
-// (server/browser-runtime.ts) then, holding the browser session alone:
+// (server/browser/browser-runtime.ts) then, holding the browser session alone:
 //
 //   1. reads the page's URL through the engine (location.href, which a page
 //      cannot redefine), never from a page script's own answer,

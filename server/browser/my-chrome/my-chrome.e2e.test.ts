@@ -15,8 +15,8 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { removeTempDir } from "../../testing/cleanup.ts";
-import { agentBrowserIntegration, closeBrowserSession, prepareBrowserSessionState } from "../../browser-engine.ts";
-import { BrowserRuntime, browserRuntimeEnv } from "../../browser-runtime.ts";
+import { agentBrowserIntegration, closeBrowserSession, prepareBrowserSessionState } from "../browser-engine.ts";
+import { BrowserRuntime, browserRuntimeEnv } from "../browser-runtime.ts";
 import { MyChromeGate, PILOT_BANNER_ID } from "./gate.ts";
 import { MyChromeMemory, runMyChromeTool } from "./pilot.ts";
 import { MyChromeService } from "./service.ts";

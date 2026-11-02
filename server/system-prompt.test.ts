@@ -8,7 +8,7 @@ import { CW_FAMILIES, CW_REQUIRED_FIELDS, CW_VIEWS, cwOrList } from "../shared/c
 import { parseCwWidgetText } from "../shared/cw-widgets/validate.ts";
 import { MISUSE_POLICY_PROMPT } from "../shared/misuse-guardrails.ts";
 import { soulSystemPrompt } from "./bot-folder.ts";
-import { BUILT_IN_BROWSER_SYSTEM_PROMPT } from "./browser-engine.ts";
+import { BUILT_IN_BROWSER_SYSTEM_PROMPT } from "./browser/browser-engine.ts";
 import {
   longCommandsPrompt,
   buildSystemPrompt,

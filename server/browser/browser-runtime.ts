@@ -1,18 +1,18 @@
-import { killCliTree, spawnCli } from "./procs.ts";
+import { killCliTree, spawnCli } from "../procs.ts";
 import { DEFAULT_BROWSER_RESULT_BUDGET, describePageChange, OBSERVE_PAGE_SCRIPT, parsePageState, READ_OPEN_PAGE_ONLY, readsAroundBrowser, shapeBrowserToolResult, slimBrowserToolList, stripHarnessOwnedArguments, type PageState } from "./browser-tool-shape.ts";
 import { randomBytes } from "node:crypto";
-import { aimOf, FILL_CREDENTIAL_TOOL, FILL_CREDENTIAL_TOOL_SPEC, formPostsOnly, formStaysOnOrigin, LOGIN_MODE, parseEvalArray, parseEvalObject, parseFillArguments, parseProbe, parseWrite, probeScript, problemText, SecretRedactor, writeScript, type FillRequest, type LoginRequest } from "./vault/credential-fill.ts";
-import { noteFilledSecret } from "./vault/filled-secret-guard.ts";
-import { itemIdFromHandle } from "../shared/credential-vault.ts";
-import { MASK_SENSITIVE_SCRIPT, NO_PAGE_TEXT_TOOLS, parseSensitiveValues, SENSITIVE_VALUES_SCRIPT, UNMASK_SENSITIVE_SCRIPT, withSensitiveValues } from "../shared/sensitive-fields.ts";
+import { aimOf, FILL_CREDENTIAL_TOOL, FILL_CREDENTIAL_TOOL_SPEC, formPostsOnly, formStaysOnOrigin, LOGIN_MODE, parseEvalArray, parseEvalObject, parseFillArguments, parseProbe, parseWrite, probeScript, problemText, SecretRedactor, writeScript, type FillRequest, type LoginRequest } from "../vault/credential-fill.ts";
+import { noteFilledSecret } from "../vault/filled-secret-guard.ts";
+import { itemIdFromHandle } from "../../shared/credential-vault.ts";
+import { MASK_SENSITIVE_SCRIPT, NO_PAGE_TEXT_TOOLS, parseSensitiveValues, SENSITIVE_VALUES_SCRIPT, UNMASK_SENSITIVE_SCRIPT, withSensitiveValues } from "../../shared/sensitive-fields.ts";
 import {
   parsePurchaseCall, parseReceiptCall, RECORD_PURCHASE_TOOL, RECORD_PURCHASE_TOOL_SPEC, REQUEST_PURCHASE_TOOL, REQUEST_PURCHASE_TOOL_SPEC,
   type PurchaseCategory, type PurchaseFlightLeg, type PurchaseItem,
-} from "../shared/payment-vault.ts";
-import { redactCardNumbers, type SingleUseWallet } from "../shared/single-use-card.ts";
-import { parseUpdateTrackingCall, UPDATE_ORDER_TRACKING_TOOL, UPDATE_ORDER_TRACKING_TOOL_SPEC, type TrackingInput } from "../shared/order-tracking.ts";
-import { clearScript, loginOutcomeText, loginStateScript, markerScript, MAX_LOGIN_STEPS, parseLoginState, stepFields, submitScript, type LoginField, type LoginOutcome, type LoginPageState } from "./login-fill.ts";
-import type { VaultFillField } from "../shared/credential-vault.ts";
+} from "../../shared/payment-vault.ts";
+import { redactCardNumbers, type SingleUseWallet } from "../../shared/single-use-card.ts";
+import { parseUpdateTrackingCall, UPDATE_ORDER_TRACKING_TOOL, UPDATE_ORDER_TRACKING_TOOL_SPEC, type TrackingInput } from "../../shared/order-tracking.ts";
+import { clearScript, loginOutcomeText, loginStateScript, markerScript, MAX_LOGIN_STEPS, parseLoginState, stepFields, submitScript, type LoginField, type LoginOutcome, type LoginPageState } from "../login-fill.ts";
+import type { VaultFillField } from "../../shared/credential-vault.ts";
 
 export interface BrowserSpawnSpec {
   command: string;

@@ -778,7 +778,7 @@ export class CredentialVault {
   }
 
   /** Whether this bot may use any item in this conversation now: its own
-   * page scripts are then off in its browser (server/browser-runtime.ts). A
+   * page scripts are then off in its browser (server/browser/browser-runtime.ts). A
    * vault that cannot be opened counts as armed, the safe side. */
   armed(principalId: string, botId: string, threadId: string): boolean {
     let items: Record<string, StoredVaultItem>;
@@ -1761,7 +1761,7 @@ function paymentField(item: StoredVaultItem, field: PaymentFillField): string | 
 }
 
 /** The browser runtime's view of the vault for one turn
- * (server/browser-runtime.ts CredentialFillAccess): this person's vault, this
+ * (server/browser/browser-runtime.ts CredentialFillAccess): this person's vault, this
  * bot, this conversation. */
 export function fillResolverFor(
   vault: CredentialVault,

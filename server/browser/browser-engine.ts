@@ -14,13 +14,13 @@ import { chmodSync, constants, copyFileSync, existsSync, mkdirSync, readFileSync
 import { homedir, tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { DATA_DIR } from "./config.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { DATA_DIR } from "../config.ts";
 import { browserBundlePaths } from "./browser-bundle-release.ts";
 import { browserProcessesRunning, browserProcessTree, releaseBrowserProfile, stopBrowserProcesses } from "./browser-processes.ts";
 import { BROWSER_VIEWPORT_ARGS, browserRuntimeEnv, ownsBrowserViewport } from "./browser-runtime.ts";
-import { SIGN_IN_PROMPT } from "./system-prompt.ts";
-import { gateChromeSettings } from "./browser/egress/gate.ts";
+import { SIGN_IN_PROMPT } from "../system-prompt.ts";
+import { gateChromeSettings } from "./egress/gate.ts";
 import {
   AGENT_BROWSER_VERSION,
   agentBrowserReleaseUrl,

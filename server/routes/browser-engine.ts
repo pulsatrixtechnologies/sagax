@@ -14,7 +14,7 @@ import {
   ensureChrome,
   installAgentBrowserBinary,
   resolveAgentBrowserBinary,
-} from "../browser-engine.ts";
+} from "../browser/browser-engine.ts";
 import { editionForMembers, editionStatus } from "../enterprise.ts";
 import { healthzUnreadyBody } from "../healthz.ts";
 import { healthDetail } from "../request-auth.ts";

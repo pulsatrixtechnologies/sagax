@@ -262,7 +262,7 @@ import {
   requireBrowserCleanupAcknowledged,
   type BrowserCleanupRequest,
   type BrowserCleanupWireRequest
-} from "./browser-lifecycle-cleanup.ts";
+} from "./browser/browser-lifecycle-cleanup.ts";
 import * as checkpoints from "./checkpoints.ts";
 import { commandReceipt } from "./commands.ts";
 import {
@@ -1238,11 +1238,11 @@ import {
 } from "./routines/routines.ts";
 import { RoutineConsents, routineRenewMs, type RoutineConsentEnd } from "./org/org-routine-consent.ts";
 import { CalendarCallManager, type CalendarCall } from "./calendar-calls.ts";
-import { BUILT_IN_BROWSER_SYSTEM_PROMPT, pauseBrowserStream } from "./browser-engine.ts";
-import { BrowserRuntime, browserProfileChangeRefusal, browserRuntimeEnv } from "./browser-runtime.ts";
+import { BUILT_IN_BROWSER_SYSTEM_PROMPT, pauseBrowserStream } from "./browser/browser-engine.ts";
+import { BrowserRuntime, browserProfileChangeRefusal, browserRuntimeEnv } from "./browser/browser-runtime.ts";
 import { browserEgress, sameOwnerBots as sameOwnerBrowserBots } from "./browser/egress/registry.ts";
-import { BrowserLive } from "./browser-live.ts";
-import { BrowserNetworkDebug } from "./browser-network-debug.ts";
+import { BrowserLive } from "./browser/browser-live.ts";
+import { BrowserNetworkDebug } from "./browser/browser-network-debug.ts";
 import {
   agentBrowserFrame,
   agentBrowserIntegration,
@@ -1256,7 +1256,7 @@ import {
   isTemporaryBrowserSession,
   describeBrowserEngine,
   setBrowserViewport
-} from "./browser-engine.ts";
+} from "./browser/browser-engine.ts";
 import { createScreenFrameSource, type ScreenCapture } from "./screen-frame-source.ts";
 import {
   screenFrameHash,
@@ -1782,7 +1782,7 @@ import {
   type Viewer
 } from "./bot-visibility.ts";
 import { serviceThreadViewer, serviceViewerClosed } from "./service-viewer.ts";
-import { browserNavigationRefusal } from "./browser-navigation.ts";
+import { browserNavigationRefusal } from "./browser/browser-navigation.ts";
 import { describeBrand, loadBrand } from "./brand.ts";
 import { deliverSseFrame } from "./sse-fanout.ts";
 import {
@@ -6360,13 +6360,13 @@ const browserRuntime = new BrowserRuntime({
 });
 const browserLive = new BrowserLive({ runtime: browserRuntime });
 // The person's network debugger of a bot's browser (never the bot's: no tool
-// reaches it, see server/browser-network-debug.ts).
+// reaches it, see server/browser/browser-network-debug.ts).
 const browserNetworkDebug = new BrowserNetworkDebug();
 // Every browser session this server has used, with its launch settings.
 const usedBrowserSessions = new Map<string, { command: string; env: Record<string, string> }>();
 // The agent-browser daemon outlives its MCP transport and this server: the
 // sweep closes this data dir's browsers at boot, once idle, and at shutdown
-// (server/browser-lifecycle-cleanup.ts). A Chrome attached over CDP is the
+// (server/browser/browser-lifecycle-cleanup.ts). A Chrome attached over CDP is the
 // person's own and is never closed.
 const browserSweep = new BrowserSweep({
   // With a Chrome address configured every browser is attached to the person's own Chrome: none is ours to close.
@@ -17987,7 +17987,7 @@ const memoryWatch = new MemoryWatch({
   childOomScoreAdj: memoryGuard.childOomScoreAdj,
   liveEngines: () => runningTurnEngines.size
 });
-// The bots' browsers count too (server/browser-lifecycle-cleanup.ts engineBrowsers).
+// The bots' browsers count too (server/browser/browser-lifecycle-cleanup.ts engineBrowsers).
 memoryWatch.useBrowsers(engineBrowsers({
   threadBrowser: (threadId) => {
     const bot = store.botByThread(threadId);

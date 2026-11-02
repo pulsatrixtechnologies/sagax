@@ -108,7 +108,7 @@ const vpsConfigSchema = z.object({
  * instead of agent-browser spawning its own (#1396). Deliberately a
  * server-owned config field, not an env-var passthrough: the ambient
  * process environment must never redirect a bot's browser
- * (server/browser-live.test.ts pins this guarantee down). */
+ * (server/browser/browser-live.test.ts pins this guarantee down). */
 const browserEngineConfigSchema = z.object({
   attachCdpUrl: z.string().trim().max(2048).refine((value) => value === "" || isValidCdpTarget(value), {
     message: "browserEngine.attachCdpUrl must be a CDP port (1-65535) or an http(s)/ws(s) URL",

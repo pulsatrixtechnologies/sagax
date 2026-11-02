@@ -139,7 +139,10 @@ export class ToolNameAliases {
     const out = tools.map((tool) => {
       const name = this.toRegistered.get(tool.name);
       if (name === undefined || name === tool.name) return tool;
-      const note = `(Connector tool name: ${tool.name}.)`;
+      // The registered name is the only one that runs: Grok answers a call
+      // to `${server}__${upstream}` with "Tool not found" before it reaches
+      // the gate (2026-11-02, routines on Perspicax profiles).
+      const note = `(Call it as ${name}; the connector's own name ${tool.name} cannot be called here.)`;
       return { ...tool, name, description: typeof tool.description === "string" && tool.description ? `${tool.description} ${note}` : note };
     });
     const parity = toolNameParity(this.server, names.filter((name) => !plan.unregistrable.some((entry) => entry.upstream === name)), this.toRegistered);

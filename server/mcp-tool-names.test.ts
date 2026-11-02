@@ -99,7 +99,7 @@ describe("ToolNameAliases", () => {
     const aliases = new ToolNameAliases(PERSPICAX);
     const out = aliases.catalog([{ name: "cw_psa__query", description: "Read ConnectWise." }, { name: "memory_search" }]);
     expect(out.tools.map((tool) => tool.name)).toEqual(["cw_psa_query", "memory_search"]);
-    expect(out.tools[0]!.description).toBe("Read ConnectWise. (Connector tool name: cw_psa__query.)");
+    expect(out.tools[0]!.description).toBe("Read ConnectWise. (Call it as cw_psa_query; the connector's own name cw_psa__query cannot be called here.)");
     expect(out.renamed).toEqual([{ upstream: "cw_psa__query", registered: "cw_psa_query", reason: "double_underscore" }]);
     expect(out.parity).toEqual([]);
     expect(aliases.upstream("cw_psa_query")).toBe("cw_psa__query");

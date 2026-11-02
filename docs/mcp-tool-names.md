@@ -24,7 +24,7 @@ The CLI only wrote `Skipping MCP tool` to its own log; the bot saw nothing.
   admissible name (`server/mcp-tool-names.ts`) and keeps `alias -> upstream
   name`; a `tools/call` is translated through that map before any check.
   `cw_psa__query` becomes `cw_psa_query` (its description ends with
-  `(Connector tool name: cw_psa__query.)`).
+  `(Call it as cw_psa_query; the connector's own name cw_psa__query cannot be called here.)`).
 - **Deterministic, collision-free, never dropping.** Invalid characters become
   `-`, `_` runs one `_`, a leading `_` goes; a name that would collide with
   another tool, or exceed 256 characters, gets an 8-hex sha256 suffix of its

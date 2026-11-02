@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { codeWork, remoteRepo, repositoryInfo, shellCommands, type CodeWorkToolCall } from "./activity-code-work.ts";
+import { codeWork, remoteRepo, repositoryInfo, type CodeWorkToolCall } from "./activity-code-work.ts";
+import { shellCommands } from "./activity-coding.ts";
 
 const bash = (command: string, output: string, ok: boolean | "running" = true): CodeWorkToolCall => ({ name: "Bash", input: JSON.stringify({ command }), output, ...(ok === "running" ? {} : { ok }) });
 const at = (tools: CodeWorkToolCall[]) => tools.map((tool, index) => ({ at: 1_000 + index, tool }));

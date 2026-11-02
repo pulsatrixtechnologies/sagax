@@ -461,3 +461,137 @@ describe("a conversation's entry is its newest turn", () => {
     expect(list.body.subagents!.every((item) => !item.threadId)).toBe(true);
   });
 });
+
+// 2026-11-02: work another bot handed over showed under Details > Coding
+// (« Running · from Echo ») while it only read an issue and its pull
+// requests, asked who was around, coordinated, commented on the issue and
+// picked a computer. A work thread keeps every request one conversation
+// sends this bot (server/store.ts workThread), and each request lands as
+// the requesting bot's line (`roomRequest`), never a person's: the newest
+// turn started nowhere, so an earlier request's commit made this one Coding.
+describe("work another bot hands over is Coding only for its own request's code work", () => {
+  const work: ActivityTask = {
+    threadId: "t-work", title: "@Echo · work", createdAt: NOW - 3 * 3_600_000, updatedAt: NOW - 1_000, busy: true, activity: "working",
+    turnStartedAt: NOW - 40_000, ownerPrincipalId: "alice", openedBy: { botId: "echo", name: "Echo", kind: "work", at: NOW - 3 * 3_600_000 },
+  };
+  const earlier = NOW - 2 * 3_600_000;
+  const request = (id: string, at: number, text: string): ActivityMessage =>
+    ({ id, role: "bot", kind: "text", at, text: `@Pepper ${text}`, roomRequest: { id: `req-${id}`, phase: "request" }, sender: null });
+  const call = (id: string, at: number, tool: NonNullable<ActivityMessage["tool"]>): ActivityMessage => ({ id, role: "bot", kind: "activity", at, tool });
+  const command = (text: string) => JSON.stringify({ command: text });
+  // The first request: real code work, a commit, a push and a pull request.
+  const first: ActivityMessage[] = [
+    request("r1", earlier, "Fix the parser and open a pull request"),
+    call("w1", earlier + 10_000, { name: "Edit", ok: true, files: ["/srv/app/src/parser.ts"] }),
+    call("w2", earlier + 20_000, { name: "Bash", ok: true, input: command("git commit -am 'Fix the parser' && git push -u origin fix/parser") }),
+    call("w3", earlier + 30_000, { name: "Bash", ok: true, input: command("gh pr create --title \"Fix the parser\""), output: "https://github.com/acme/parser/pull/42" }),
+    { id: "w4", role: "bot", kind: "text", at: earlier + 40_000, text: "Opened #42.", turnSucceeded: true },
+  ];
+  // The request running now reads, coordinates and comments: no code work.
+  const reading: ActivityMessage[] = [
+    request("r2", NOW - 40_000, "Look at the approval card issue and say what you find on it"),
+    call("x1", NOW - 35_000, { name: "sagax-environment__run_command", ok: true, input: command("cd /work/app && gh issue view 1905 && gh pr list --search 1905") }),
+    call("x2", NOW - 30_000, { name: "github__issue_read", ok: true, input: JSON.stringify({ owner: "acme", repo: "app", issue_number: 1905 }) }),
+    call("x3", NOW - 28_000, { name: "github__pull_request_read", ok: true, input: JSON.stringify({ owner: "acme", repo: "app", pull_number: 1907 }) }),
+    call("x4", NOW - 25_000, { name: "mcp__agents__whos_around", ok: true }),
+    call("x5", NOW - 20_000, { name: "mcp__agents__coordinate_bots", ok: true, input: JSON.stringify({ bot_ids: ["echo"], message: "Found it.\ngit push was never the problem." }) }),
+    // the teammate's reply and the resume it starts: the same request goes on
+    { id: "x5r", role: "bot", kind: "activity", at: NOW - 18_000, roomRequest: { id: "req-ask-echo", phase: "result" }, tool: { name: "Echo replied", ok: true } },
+    call("x5s", NOW - 17_000, { name: "Resumed with Echo results, reviewing", ok: true }),
+    call("x6", NOW - 15_000, { name: "sagax-environment__run_command", ok: true, input: command("gh issue comment 1905 --body \"Repro:\ngit checkout -b check\ngit push origin check\"") }),
+    call("x6b", NOW - 12_000, { name: "github__add_issue_comment", ok: true, input: JSON.stringify({ owner: "acme", repo: "app", issue_number: 1905, body: "Steps:\ngit checkout -b check\ngit push origin check" }) }),
+    call("x7", NOW - 10_000, { name: "sagax-environment__run_command", ok: true, input: command("git diff $(git merge-base origin/main HEAD) --stat") }),
+    call("x8", NOW - 5_000, { name: "computer_select", ok: true, input: JSON.stringify({ computer: "this-mac" }) }),
+  ];
+  const workDeps = (thread: ActivityMessage[], overrides: Partial<BotActivityRouteDeps> = {}) => deps({
+    tasks: (botId) => (botId === "pepper" ? [work] : []),
+    threadReadable: (botId, threadId, viewerId) => !viewerId || (botId === "pepper" && threadId === "t-work"),
+    threadWritable: (_botId, threadId, viewerId) => !viewerId || threadId === "t-work",
+    runs: () => [],
+    messages: (threadId, limit) => ({ messages: (threadId === "t-work" ? thread : []).slice(-limit), hasMore: false }),
+    children: () => [],
+    inRepository: () => false,
+    ...overrides,
+  });
+  const entryOf = async (base: string) => (await get(base, "/api/bots/pepper/activity", "alice")).body.items!.find((item) => item.id === "thread:t-work")!;
+
+  it("is not Coding when its request only reads, coordinates and comments, and keeps the earlier request's code work", async () => {
+    const base = await serve(workDeps([...first, ...reading]));
+    const entry = await entryOf(base);
+    expect(entry).toMatchObject({ kind: "hop", status: "running", startedBy: { kind: "bot", name: "Echo" } });
+    expect(entry).not.toHaveProperty("coding");
+    expect(entry.code!.pullRequests.map((pull) => pull.number)).toEqual([42]);
+    expect((await get(base, "/api/bots/pepper/activity?filter=coding", "alice")).body.items).toEqual([]);
+    expect((await get(base, "/api/bots/pepper/activity?filter=other", "alice")).body.items!.map((item) => item.id)).toEqual(["thread:t-work"]);
+  });
+
+  it("lists only its own request's steps in the sheet", async () => {
+    const base = await serve(workDeps([...first, ...reading]));
+    const { body } = await get(base, "/api/bots/pepper/activity/item?threadId=t-work", "alice");
+    expect(body.item!.steps.map((step) => step.id)).toEqual(["x1", "x2", "x3", "x4", "x5", "x5r", "x5s", "x6", "x6b", "x7", "x8"]);
+    expect(body.item!.stepsTruncated).toBe(true);
+    expect(body.item!.files).toEqual([]);
+    expect(body.item).not.toHaveProperty("coding");
+  });
+
+  it("does not inherit Coding from an earlier request when its folder is a repository", async () => {
+    const base = await serve(workDeps([...first, ...reading], {
+      tasks: (botId) => (botId === "pepper" ? [{ ...work, cwd: "/srv/app" }] : []),
+      inRepository: (cwd) => cwd === "/srv/app",
+    }));
+    expect(await entryOf(base)).not.toHaveProperty("coding");
+  });
+
+  it("reads a person's own line in a work thread like their conversation: a repository's job as a whole", async () => {
+    const asked: ActivityMessage[] = [
+      ...first,
+      { id: "p1", role: "user", kind: "text", at: NOW - 20_000, text: "What did you change?", parentId: "w4" },
+      call("p2", NOW - 10_000, { name: "Read", ok: true, files: ["/srv/app/src/parser.ts"] }),
+    ];
+    const inRepository = await serve(workDeps(asked, {
+      tasks: (botId) => (botId === "pepper" ? [{ ...work, cwd: "/srv/app" }] : []),
+      inRepository: (cwd) => cwd === "/srv/app",
+    }));
+    expect(await entryOf(inRepository)).toMatchObject({ coding: true });
+    expect(await entryOf(await serve(workDeps(asked)))).not.toHaveProperty("coding");
+  });
+
+  it("is Coding once its own request changes code, and stays Coding while it goes on reading", async () => {
+    const coding = [
+      ...first,
+      ...reading.slice(0, 3),
+      call("y1", NOW - 27_000, { name: "Edit", ok: true, files: ["/srv/app/src/approval-card.tsx"] }),
+      ...reading.slice(3),
+    ];
+    const base = await serve(workDeps(coding));
+    expect(await entryOf(base)).toMatchObject({ coding: true });
+    const pushed = [...first, ...reading, call("y2", NOW - 2_000, { name: "Bash", ok: true, input: command("cd /srv/app && git push origin fix/approval-card") })];
+    expect(await entryOf(await serve(workDeps(pushed)))).toMatchObject({ coding: true });
+  });
+
+  it("reads a request longer than the page as the turn it was, so a coding job does not drop out of Coding", async () => {
+    // a page of 8: the request and its edit scroll out while the panel polls
+    // and the job goes on reading
+    const edited = [...first, request("r3", NOW - 60_000, "Fix the approval card"), call("z1", NOW - 50_000, { name: "Edit", ok: true, files: ["/srv/app/src/approval-card.tsx"] })];
+    const read = (index: number) => call(`z${index + 2}`, NOW - 40_000 + index * 100, { name: "github__issue_read", ok: true, input: JSON.stringify({ issue_number: 1900 + index }) });
+    let thread = edited;
+    let clock = NOW;
+    const base = await serve(workDeps(edited, {
+      now: () => clock,
+      messages: (threadId, limit) => {
+        const all = threadId === "t-work" ? thread : [];
+        return { messages: all.slice(-Math.min(limit, 8)), hasMore: all.length > 8 };
+      },
+    }));
+    expect(await entryOf(base)).toMatchObject({ coding: true });
+    for (let poll = 0; poll < 6; poll++) {
+      thread = [...thread, read(poll * 3), read(poll * 3 + 1), read(poll * 3 + 2)];
+      clock += 5_000;
+      expect(await entryOf(base)).toMatchObject({ coding: true });
+    }
+    // a new request whose line scrolled out before any scan saw it is not that turn
+    thread = [...thread, request("r4", NOW - 10_000, "Say who is around"), ...Array.from({ length: 9 }, (_, index) => read(100 + index))];
+    clock += 5_000;
+    expect(await entryOf(base)).not.toHaveProperty("coding");
+  });
+});

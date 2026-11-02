@@ -90,6 +90,22 @@ describe("step labels in plain words", () => {
     expect(stepLabel({ name: "frobnicate", ok: true })).toBe("A utilisé frobnicate");
   });
 
+  it("reads the loop guard's notice in the person's language, without a dash, the call after it", () => {
+    const notice = { name: "Same call repeated 5× - tool: git status - it may be stuck", ok: false };
+    expect(readStep(notice)).toEqual({ label: "Same call repeated 5 times. It may be stuck", target: "git status", title: "git status" });
+    // the same notice as rows written before 2026-11-02 carry it, with long dashes
+    const dash = "\u2014";
+    expect(readStep({ name: `Same call repeated 5× ${dash} tool: git status ${dash} it may be stuck`, ok: false })).toEqual(readStep(notice));
+    // an ACP agent's kind is no word for a person; a tool's own name stays
+    expect(readStep({ name: "Same call repeated 10× - other: sagax-environment__run_command - it may be stuck", ok: false }))
+      .toMatchObject({ label: "Same call repeated 10 times. It may be stuck", target: "sagax-environment__run_command" });
+    expect(readStep({ name: "Same call repeated 20× - Bash: npm test - it may be stuck", ok: false }).target).toBe("Bash: npm test");
+    setLocale("fr");
+    const french = readStep(notice);
+    expect(french).toEqual({ label: "Même appel répété 5 fois. Il est peut-être bloqué", target: "git status", title: "git status" });
+    expect(french.label).not.toMatch(/[\u2013\u2014]/);
+  });
+
   it("does not show opaque teammate ids as names", () => {
     expect(stepLabel({ name: "coordinate_bots", ok: true, input: JSON.stringify({ bot_ids: ["0f9a8b7c-6d5e-4f3a-2b1c-0d9e8f7a6b5c"] }) })).toBe("Coordinated teammates");
   });

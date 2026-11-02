@@ -1572,6 +1572,30 @@ A bot repeated itself and answered late. The rules that keep it from doing so:
   past either, enqueue is a typed `budget` refusal telling it to report
   (server/runtime/runtime.ts). The window budgets still renew on progress.
 
+## One stuck notice per count, for one call (2026-11-02)
+
+"Same call repeated 5× - tool: git status - it may be stuck" (at 5, 10 and
+20 in a turn) is written by the loop guard only (`server/host/loop-guard.ts`);
+a second copy in index.ts, with long dashes, doubled every notice from 0.8.26
+on. A call is its tool and its arguments: a permission ask counts with its
+summary, `input` and `command` (with its folder), and one that names the tool
+alone (an ACP agent's MCP ask: kind "other", the tool's name as summary;
+Codex's 'Allow the <server> MCP server to run tool "<tool>"?') is
+not counted, so reads of different issues or different commands are never
+"the same call"; when the summary is only that name, the notice quotes the
+ask's `input` after it. A call an engine reports twice (ACP and Codex title a
+shell call with its command, then ask for it below Full access) counts once:
+a counted start and a counted ask that share a text (title, command, input)
+pair up, whichever comes first. The stall watchdog settles the guard's counts
+(`shellLoopGuard.settle`). The app reads the notice, older dashed rows
+included, as `step.stuck` in the person's language with the call quiet
+after it (`src/lib/step-label.ts`), and the copy an older server wrote right
+after the same notice is dropped (`stuckNoticeKey` in `mergeSteps`), so it
+reads once with its call, never "×2". Tests: `server/host/loop-guard.test.ts`
+(the guard is the only writer, one call counts once),
+`src/lib/step-label.test.ts`, `src/lib/step-group.test.ts`,
+`src/lib/activity-step-groups.test.ts`, `server/turn-watchdog.test.ts`.
+
 ## The person can always write (2026-10-29)
 
 The composer's box is never disabled by a pending approval: the card waits
@@ -7362,7 +7386,22 @@ tool calls and folder (`server/activity-coding.ts`: source edits, git
 commit/push/worktree, pull requests, file changes inside a repository;
 never the title, never the bot's own SOUL.md/MEMORY.md or its folder, never
 a sub-agent's request or a heredoc's text quoting git; a sub-agent's own
-calls count like any other). A coding entry carries `code`
+calls count like any other). Commands are read as shell words
+(`shellCommands`), so a read (`git merge-base`, `git merge-tree`, a
+`--dry-run`) or a quoted text that lists git commands (an issue comment)
+is not version control; a shell's own script (`bash -lc '...'`, how Codex
+reports a command) is read as commands. A pull request opened, updated or
+merged counts, by gh or by a GitHub tool (`update_pull_request` included);
+reading issues or pull requests, or commenting on them, does not, nor does
+coordinating bots. Work another bot handed over (a work thread,
+`kind: "hop"`) is read request by request (2026-11-02): each request lands
+as that bot's line (`roomRequest`), which starts the turn as a person's
+line does, and an earlier request's code work never makes a later one
+Coding, folder a repository or not; the code work it produced stays in
+`code`. A person's own line there reads like their conversation (in a
+repository, their turns stay Coding as a whole). A turn longer than the
+scanned page keeps what the last scan read of it while the page still
+holds that scan's newest message. A coding entry carries `code`
 (`server/activity-code-work.ts`): its folder's repository root, checked-out
 branch and origin (read from `.git` on the server, credentials stripped;
 a folder on the person's computer is not read), and the pull requests,

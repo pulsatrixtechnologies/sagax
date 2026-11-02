@@ -35,6 +35,28 @@ describe("the steps of a group, opened", () => {
     expect(first.kind === "steps" && first.durationMs).toBe(3_500);
   });
 
+  // 2026-11-02: servers before then wrote each stuck notice twice, once with
+  // long dashes; the steps showed every count twice in red.
+  it("reads a stuck notice an older server wrote twice as one step, with its call", () => {
+    const dash = "\u2014";
+    const notice = (count: number, call: string, mark: string) => step(`Same call repeated ${count}× ${mark} ${call} ${mark} it may be stuck`, false);
+    const entries = mergeSteps([
+      notice(5, "other: sagax-environment__run_command", dash), notice(5, "other: sagax-environment__run_command", "-"),
+      step("Bash", true, { command: "ls" }),
+      notice(5, "other: github__issue_read", dash), notice(5, "other: github__issue_read", "-"),
+      notice(10, "other: github__issue_read", dash), notice(10, "other: github__issue_read", "-"),
+    ]);
+    expect(entries.map((entry) => entry.kind === "steps" && [entry.label, entry.messages.length, entry.target])).toEqual([
+      ["Same call repeated 5 times. It may be stuck", 1, "sagax-environment__run_command"],
+      ["Ran a command", 1, "ls"],
+      ["Same call repeated 5 times. It may be stuck", 1, "github__issue_read"],
+      ["Same call repeated 10 times. It may be stuck", 1, "github__issue_read"],
+    ]);
+    // two notices for different calls are two steps
+    const two = mergeSteps([notice(5, "tool: git status", "-"), notice(5, "tool: npm test", "-")]);
+    expect(two.map((entry) => entry.kind === "steps" && [entry.messages.length, entry.target])).toEqual([[2, undefined]]);
+  });
+
   it("never merges a failed step with a finished one, nor a running one at all", () => {
     const entries = mergeSteps([
       step("mcp", true, tickets), step("mcp", false, tickets), step("mcp", false, tickets),

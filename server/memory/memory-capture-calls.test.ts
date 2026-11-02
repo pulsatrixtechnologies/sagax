@@ -7,13 +7,13 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DATA_DIR } from "./config.ts";
+import { DATA_DIR } from "../config.ts";
 import { CaptureBuffer, captureItemLimit, capturePrompt, MAX_CANDIDATES, parseCandidates, TRIVIAL_BYTES, worthCapturing, type CaptureTurn } from "./memory-capture.ts";
 import { flushMemoryJournal, readMemoryJournal } from "./memory-journal.ts";
 import { ORGANIZE_MARKER } from "./memory-organize.ts";
 import { CAPTURE_MAX_TURNS, createMemoryUpkeep, MODEL_TIMEOUT_MS, type UpkeepBot } from "./memory-upkeep.ts";
-import { closeMessageDb } from "./message-db.ts";
-import { readMemoryTopic, workspaceDir, WORKSPACES_DIR } from "./workspace.ts";
+import { closeMessageDb } from "../message-db.ts";
+import { readMemoryTopic, workspaceDir, WORKSPACES_DIR } from "../workspace.ts";
 
 const TODAY = "2026-09-25";
 const ACK = "Got it, I'll keep that in mind.";

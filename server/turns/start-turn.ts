@@ -2495,7 +2495,7 @@ export function createStartTurn(host: StartTurnHost) {
       // (server/engine-start-gate.ts): the runs that came due during a
       // restart start two at a time instead of every engine at once.
       // After boot, routine turns keep a steady limit (SAGAX_ROUTINE_ENGINE_SLOTS)
-      // and wait while memory is critical (server/engine-memory-guard.ts).
+      // and wait while memory is critical (server/memory/engine-memory-guard.ts).
       // A card continuation of a routine is not held by the steady gate: it
       // may be the peer a slot holder waits on (no deadlock).
       if (opts?.automationSource && !warmOnly && !onCall && (engineStartGate.booting || !opts?.cardContinuation)) {

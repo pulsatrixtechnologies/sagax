@@ -20,7 +20,7 @@ import { randomUUID } from "node:crypto";
 import { closeSync, fstatSync, mkdirSync, openSync, readSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 
-import { DATA_DIR } from "./config.ts";
+import { DATA_DIR } from "../config.ts";
 import {
   MEMORY_INDEX,
   MemoryStoreError,
@@ -33,11 +33,11 @@ import {
   workspaceDocPaths,
   writeMemoryDoc,
 } from "./memory-store.ts";
-import { redactSecretsInText } from "./redact.ts";
-import { appendLog, LogReader, registerSealedLog, sealLogLine } from "./content-at-rest.ts";
+import { redactSecretsInText } from "../redact.ts";
+import { appendLog, LogReader, registerSealedLog, sealLogLine } from "../content-at-rest.ts";
 
 /** "upkeep" is the harness itself: background capture and the tidy-up
- * (server/memory-upkeep.ts) for a bot with Memory upkeep switched on. */
+ * (server/memory/memory-upkeep.ts) for a bot with Memory upkeep switched on. */
 export type MemoryActor = "bot" | "person" | "import" | "upkeep";
 export type MemoryChangeKind = "created" | "edited" | "deleted";
 

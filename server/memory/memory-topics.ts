@@ -5,8 +5,8 @@
 // is word matching, not meaning. Only the head of each file is read.
 import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 
-import { readAtRestSync } from "./content-at-rest.ts";
-import { looksSealed } from "./content-file-crypto.ts";
+import { readAtRestSync } from "../content-at-rest.ts";
+import { looksSealed } from "../content-file-crypto.ts";
 
 /** How much of a topic file is read to find its frontmatter. */
 const HEAD_BYTES = 2_048;

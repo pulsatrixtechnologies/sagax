@@ -447,7 +447,7 @@ export interface RoutineRunProactive {
 }
 
 /** Similar work the organization memory knew of before a run (organization
- * server, server/perspicax-memory.ts). Pointers and readable facts only. */
+ * server, server/memory/perspicax-memory.ts). Pointers and readable facts only. */
 export interface RoutineMemoryHint {
   turn: string;
   checkedAt: number;

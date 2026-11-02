@@ -898,7 +898,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // A bot's login request card: the handler checks the card is the caller's.
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/vault-cards\/[\w-]+\/(?:grant|dismiss|onepassword)$/ },
   // The person's own memory sync token for the desktop's Settings > Memory
-  // (server/perspicax-memory-sync-token.ts): the session's own sub only.
+  // (server/memory/perspicax-memory-sync-token.ts): the session's own sub only.
   { methods: ["GET", "POST"], path: /^\/api\/me\/memory-sync-token$/, feature: "orgDirectory" },
   // Memory manager (2026-11-02): sources catalog for every signed-in person;
   // Perspicax note proxy is session + own identity only (handler).

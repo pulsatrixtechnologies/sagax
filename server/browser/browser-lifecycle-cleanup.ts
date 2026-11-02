@@ -7,7 +7,7 @@ import { writeFileAtomic } from "../atomic.ts";
 import { browserDaemonPidPath, browserProfilesRoot, closeBrowserSession, runningBrowserSessionNames } from "./browser-engine.ts";
 import { orphanedBrowsers, stopBrowserProcesses } from "./browser-processes.ts";
 import { browserRuntimeEnv } from "./browser-runtime.ts";
-import type { EngineBrowsers } from "../engine-memory-guard.ts";
+import type { EngineBrowsers } from "../memory/engine-memory-guard.ts";
 
 const BOT_ID = /^[A-Za-z0-9_-]{1,120}$/;
 const PROFILE_ID = /^[a-z0-9_-]{1,40}$/;
@@ -543,7 +543,7 @@ export function browserDaemonRuns(session: string, spec: LaunchSpec | undefined)
 
 /**
  * The bots' browsers as the engine memory guard sees them
- * (server/engine-memory-guard.ts). A bot's browser and its Chrome (270 to
+ * (server/memory/engine-memory-guard.ts). A bot's browser and its Chrome (270 to
  * 390 MB) start during a turn, outside the engine: the guard asks whether a
  * thread's turn will start one, and tells when a thread's engine was closed
  * for memory so its browser closes too once nothing uses it. Closing saves

@@ -8,7 +8,7 @@ import { pathToFileURL } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { launchVerificationServer, runControlOmb, type VerificationServer } from "../scripts/control-omb.ts";
+import { launchVerificationServer, runControlOmb, type VerificationServer } from "../../scripts/control-omb.ts";
 import { hashMemoryText } from "./memory-store.ts";
 
 interface Reply {

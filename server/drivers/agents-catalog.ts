@@ -93,7 +93,7 @@ export interface CatalogProfile {
    * of the person's and no Local VM to offer. */
   cloudHome: boolean;
   memoryEnabled?: boolean;
-  /** A room turn in a group whose shared memory is on (server/group-memory.ts). */
+  /** A room turn in a group whose shared memory is on (server/memory/group-memory.ts). */
   groupMemory?: boolean;
   /** The bot is its person's Primary Bot (bot.chiefOfStaff). Only then
    * are the Primary-Bot-only tools and parameters shown; the server refuses them

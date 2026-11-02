@@ -3,7 +3,7 @@
 // never into another group's turn or into the bot's own memory.
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
 
 it("loads the group's memory into its room turns only", async () => {
   const fixture = await launchVerificationServer();

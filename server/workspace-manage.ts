@@ -21,8 +21,8 @@ import { dirname, join, sep } from "node:path";
 import { writeFileAtomic } from "./atomic.ts";
 import { FILE_MAX_BYTES } from "./attachments.ts";
 import { noteAtRestWrite } from "./content-at-rest.ts";
-import { journalMemoryDelete, journalMemoryWrite } from "./memory-journal.ts";
-import { MemoryStoreError, parseMemoryPath, readMemoryDoc } from "./memory-store.ts";
+import { journalMemoryDelete, journalMemoryWrite } from "./memory/memory-journal.ts";
+import { MemoryStoreError, parseMemoryPath, readMemoryDoc } from "./memory/memory-store.ts";
 import { ensureWorkspace } from "./workspace.ts";
 import { WorkspacePathError, normaliseWorkspacePath } from "./workspace-files.ts";
 

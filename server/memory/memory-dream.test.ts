@@ -4,15 +4,15 @@
 import { rmSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { DATA_DIR } from "./config.ts";
+import { DATA_DIR } from "../config.ts";
 import { companyTextForBots } from "./memory-company.ts";
 import { memoryAudience, planDream } from "./memory-dream.ts";
 import { flushMemoryJournal, readMemoryJournal, resetMemoryJournalState, revertMemoryChange } from "./memory-journal.ts";
 import { procedureLine, procedureSignal, recordProcedure, resetProcedureSignals } from "./memory-procedures.ts";
 import { readMemoryDoc } from "./memory-store.ts";
 import { createMemoryUpkeep, type UpkeepBot } from "./memory-upkeep.ts";
-import { closeMessageDb } from "./message-db.ts";
-import { loadMemory, readMemoryFile, readMemoryTopic, writeMemoryFile, writeMemoryTopic, WORKSPACES_DIR } from "./workspace.ts";
+import { closeMessageDb } from "../message-db.ts";
+import { loadMemory, readMemoryFile, readMemoryTopic, writeMemoryFile, writeMemoryTopic, WORKSPACES_DIR } from "../workspace.ts";
 
 const TODAY = "2026-10-27";
 const BOT: UpkeepBot = { id: "bot-dream-pass", name: "Note", memoryUpkeep: true };

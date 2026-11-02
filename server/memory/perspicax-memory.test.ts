@@ -1,5 +1,5 @@
 // Memory signals to a fake Perspicax over real HTTP (2026-10-11,
-// server/perspicax-memory.ts): the work feed in batches of 50, the duplicate
+// server/memory/perspicax-memory.ts): the work feed in batches of 50, the duplicate
 // check before a routine run, the feedback, and failing open.
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { PerspicaxDirectory } from "./perspicax-link.ts";
+import { PerspicaxDirectory } from "../perspicax-link.ts";
 import {
   checkedWorkRow,
   DUPLICATES_PATH,
@@ -19,7 +19,7 @@ import {
   WORK_PATH,
   type WorkRow,
 } from "./perspicax-memory.ts";
-import { PrincipalRegistry } from "./principals.ts";
+import { PrincipalRegistry } from "../principals.ts";
 
 const ISSUER = "https://px.example.test";
 const ORIGIN = "https://bot.example.test";

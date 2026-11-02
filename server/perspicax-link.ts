@@ -1021,7 +1021,7 @@ export class PerspicaxDirectory {
   }
 
   /** 2026-10-11: POST a JSON body to a Perspicax route that takes the link
-   * token (the memory signals, server/perspicax-memory.ts). A 401 re-reads
+   * token (the memory signals, server/memory/perspicax-memory.ts). A 401 re-reads
    * the link file once. Bounded by `timeoutMs` and `maxBytes`; never throws,
    * never logs the token or the body. With `subject`, the person's token
    * (options.subjectToken) rides along in SUBJECT_TOKEN_HEADER when there is

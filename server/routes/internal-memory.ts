@@ -13,7 +13,7 @@ import { deliverableNotification } from "../notify.ts";
 import { pageOwnerFor } from "../published-pages.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { sectionContextKey } from "../section-context.ts";
-import { TEAM_MEMORY_KINDS, type TeamMemoryKind } from "../team-memory.ts";
+import { TEAM_MEMORY_KINDS, type TeamMemoryKind } from "../memory/team-memory.ts";
 import { TOOL_RESULT_MAX_CHARS } from "../tool-results.ts";
 import { workspaceDir } from "../workspace.ts";
 import { WorkspacePathError } from "../workspace-files.ts";

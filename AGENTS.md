@@ -4089,7 +4089,7 @@ organization server signed in with Perspicax, `useOrgMemoryAuto` (App.tsx)
 calls `org-memory:auto` at load and every 15 minutes. Main asks the active
 organization server (`currentBundledOrigin`, the person's own session
 cookie) `GET /api/me/memory-sync-token` (who is signed in, no token) then,
-when needed, `POST` (their token: `server/perspicax-memory-sync-token.ts`,
+when needed, `POST` (their token: `server/memory/perspicax-memory-sync-token.ts`,
 which asks Perspicax through the link `POST
 /api/v1/pulsabot/people/{sub}/memory-sync-token`, Perspicax 1.8.27+, for the
 session's own `idp.sub` only, `no-store`, never logged). The token goes from
@@ -4106,7 +4106,7 @@ connection made by hand before as it was and says the update is needed.
 Tests: `electron/org-memory-cache.node-test.mjs` (real git on bare
 repositories, the whole lifecycle, auto included), `src/lib/org-memory.test.ts`,
 `src/components/OrgMemorySettings.test.ts`,
-`server/perspicax-memory-sync-token.test.ts`. Not done yet: a file watcher
+`server/memory/perspicax-memory-sync-token.test.ts`. Not done yet: a file watcher
 (the sync runs on its timer).
 
 ## Perspicax GO requests as approval cards (2026-10-26)
@@ -4199,9 +4199,9 @@ resolved list lives in Plugins > Installed (JC, 2026-11-01). Form mirror:
 
 Perspicax keeps the organization's work log and a duplicate detector over
 it (its `docs/memory.md` "Work log" and "Duplicate detector"). Sagax feeds
-them with the link token (`server/perspicax-memory.ts`, `linkPostJson` in
+them with the link token (`server/memory/perspicax-memory.ts`, `linkPostJson` in
 `server/perspicax-link.ts`). Keep these rules, covered by
-`server/perspicax-memory.test.ts` (a fake Perspicax over HTTP) and
+`server/memory/perspicax-memory.test.ts` (a fake Perspicax over HTTP) and
 `server/routines/routines.test.ts` ("the organization memory before a run"):
 
 - A turn that mounts Perspicax profiles (`perspicaxTurnIntegration`, not a
@@ -5048,10 +5048,10 @@ short guide with an outline, and the block bots read
 
 ## Group memory and direct messages between people
 
-A user-created group keeps one shared memory (`server/group-memory.ts`,
+A user-created group keeps one shared memory (`server/memory/group-memory.ts`,
 `DATA_DIR/group-memory/<groupId>/MEMORY.md`), separate from every bot's own
-workspace. Keep these rules, each covered by `server/group-memory.test.ts`,
-`server/group-memory.e2e.test.ts` or `server/people-dms.e2e.test.ts`:
+workspace. Keep these rules, each covered by `server/memory/group-memory.test.ts`,
+`server/memory/group-memory.e2e.test.ts` or `server/people-dms.e2e.test.ts`:
 
 - Every bot of the group reads it in each room turn there (the
   `group-memory` prompt section); a bot writes it only with
@@ -8636,7 +8636,7 @@ A production organization server (5 GiB container) was OOM-killed four times on 
 the kernel's task lists showed 11 to 15 `claude` CLIs (~125 MiB each) and
 133 to 174 Node MCP proxies (~21 MiB each, ~13 per Claude session), so about
 400 MiB per live session, kept ten minutes after each turn with no bound;
-the kernel then killed the server itself. `server/engine-memory-guard.ts`:
+the kernel then killed the server itself. `server/memory/engine-memory-guard.ts`:
 
 - `IdleEnginePool`: at most `SAGAX_MAX_IDLE_ENGINE_SESSIONS` finished
   sessions stay warm (default 4 on a Linux server, unbounded on desktop);
@@ -9405,7 +9405,7 @@ Parity with the reference design (audit items 10, 11, 14 and the emoji picker). 
   starts from the source bot's persona (the drafted text one click away),
   copies its rule sets, copies each ticked plugin's saved configuration
   (never a secret field) and joins its team, whose shared memory
-  (`server/team-memory.ts`) then follows; it never takes a conversation or
+  (`server/memory/team-memory.ts`) then follows; it never takes a conversation or
   the bot's own memory: `POST /api/bots/:id/team-bot-carry` answers 410
   `private_memory_never` and writes nothing, and the draft lists no notes.
   The bot is created by

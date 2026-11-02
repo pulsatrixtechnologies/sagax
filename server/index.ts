@@ -419,16 +419,16 @@ import {
 import { prepareSemanticRecall, setSemanticIndex } from "./semantic-recall.ts";
 import { prepareEveryClaudeRetirement, retireEveryClaudeBot } from "./retire-every-claude.ts";
 import { LocalSemanticIndex, semanticIndexFile } from "./semantic-index.ts";
-import { withoutWiderAudience, type MemoryDestination } from "./memory-audience.ts";
+import { withoutWiderAudience, type MemoryDestination } from "./memory/memory-audience.ts";
 import { BriefStore, type BriefAppCall } from "./background-brief.ts";
 import { listBriefApps, readBriefTool } from "./background-brief-apps.ts";
 import { createBackgroundBriefRoutes } from "./routes/background-brief.ts";
 import { briefMessageText, briefNoticeLines, startBriefTimer } from "./background-brief-schedule.ts";
-import { createMemoryUpkeep, upkeepEnabled } from "./memory-upkeep.ts";
-import { CompanyMemoryCache, companyTextForBots } from "./memory-company.ts";
-import { COMPANY_TOPIC } from "./memory-dream.ts";
-import { procedureSignal, recordProcedure } from "./memory-procedures.ts";
-import type { CaptureTurn } from "./memory-capture.ts";
+import { createMemoryUpkeep, upkeepEnabled } from "./memory/memory-upkeep.ts";
+import { CompanyMemoryCache, companyTextForBots } from "./memory/memory-company.ts";
+import { COMPANY_TOPIC } from "./memory/memory-dream.ts";
+import { procedureSignal, recordProcedure } from "./memory/memory-procedures.ts";
+import type { CaptureTurn } from "./memory/memory-capture.ts";
 import { appendAboutMe, commitLearned, planLearned } from "./profile-learned.ts";
 import {
   archivedAgent,
@@ -559,7 +559,7 @@ import {
   markOomVictim,
   MemoryWatch,
   memoryGuardSettings
-} from "./engine-memory-guard.ts";
+} from "./memory/engine-memory-guard.ts";
 import { checkWidgetForTurn, WidgetCheckAttempts, WidgetRenderer } from "./widget-check.ts";
 import { bundledKnowledgeIndex } from "./self-knowledge.ts";
 import { createSelfKnowledgeInternalRoutes } from "./routes/self-knowledge-internal.ts";
@@ -1100,7 +1100,7 @@ import {
   flushAllMemoryJournals,
   journalMemoryWrite,
   type MemoryJournalEntry
-} from "./memory-journal.ts";
+} from "./memory/memory-journal.ts";
 import {
   readSectionContext,
   readSections,
@@ -1276,9 +1276,9 @@ import type { TeamSetupRequest } from "../shared/team-setup.ts";
 import { profileRevision, profileSnapshot } from "./profile-revision.ts";
 import { flushAllProfileHistory, flushProfileHistory, readHistory, recordProfileChange } from "./profile-versions.ts";
 import { BOT_PACKAGE_MAX_SKILLS, isBotPackage, packageSummary, parsePackageDocument, type PackageDocument } from "./bot-package.ts";
-import { TeamMemory } from "./team-memory.ts";
-import { teamMemoryReviewRefusal } from "./team-memory-review.ts";
-import { teamMemoryCardSettled, teamMemoryLateAnswer } from "./team-memory-cards.ts";
+import { TeamMemory } from "./memory/team-memory.ts";
+import { teamMemoryReviewRefusal } from "./memory/team-memory-review.ts";
+import { teamMemoryCardSettled, teamMemoryLateAnswer } from "./memory/team-memory-cards.ts";
 import {
   isTeamMemorySharing,
   storedTeamMemorySharing,
@@ -1945,8 +1945,8 @@ import {
   writeBotZip,
   type BotZipHost
 } from "./bot-zip.ts";
-import { MEMORY_INDEX, memoryOverview, readMemoryDoc } from "./memory-store.ts";
-import { isExpired as memoryEntryExpired, parseMemoryEntries } from "./memory-entries.ts";
+import { MEMORY_INDEX, memoryOverview, readMemoryDoc } from "./memory/memory-store.ts";
+import { isExpired as memoryEntryExpired, parseMemoryEntries } from "./memory/memory-entries.ts";
 import { createBotLibraryRoutes } from "./routes/bot-library.ts";
 import { createBotSettingsRoutes } from "./routes/bot-settings.ts";
 import { createAutoReviewRuleRoutes } from "./routes/auto-review-rules.ts";
@@ -2335,7 +2335,7 @@ import {
 import { NudgeCooldown, nudgeFrameAllowed, recordNudgeLine } from "./nudge.ts";
 import { createUnfinishedTurnGuard, decideUnfinishedTurn, unfinishedTurnPrompt, type UnfinishedKind } from "./unfinished-turn.ts";
 import { findPeopleDm, isPeopleDmParticipant, otherPerson, PEOPLE_DM_THREADS_HEADER, PeopleDmSelections, peopleDmForViewer, peopleDmRouteRefusal, peopleDmThreadUnreadPatch } from "./people-dms.ts";
-import { groupMemoryEnabled, groupMemorySystemPrompt, updateGroupMemory } from "./group-memory.ts";
+import { groupMemoryEnabled, groupMemorySystemPrompt, updateGroupMemory } from "./memory/group-memory.ts";
 import type { OrgRecord } from "./org/org-record.ts";
 import {
   createOidcLoginRoutes,
@@ -2434,7 +2434,7 @@ import {
 } from "./org/org-routes.ts";
 import { createDirectGrantRoutes } from "./direct-grants.ts";
 import { directoryIntervalMs, PerspicaxDirectory, type ModelProvider } from "./perspicax-link.ts";
-import { duplicateNote, PerspicaxMemory } from "./perspicax-memory.ts";
+import { duplicateNote, PerspicaxMemory } from "./memory/perspicax-memory.ts";
 import { knownAgentToolName, PERSPICAX_TOOL_NAMES } from "./drivers/agents-catalog.ts";
 import { measureContextBuckets, toolDefinitionBytes } from "./context-buckets.ts";
 import {
@@ -2452,8 +2452,8 @@ import { createPerspicaxToolInternalRoutes } from "./routes/perspicax-tool-inter
 import { createMcpAuditInternalRoutes } from "./routes/mcp-audit-internal.ts";
 import { createRoutineRunInternalRoutes, routineRunNowAllowed } from "./routes/routine-run-internal.ts";
 import { createPerspicaxOrgRoutes, orgDirectoryEntries, type OrgSettings, type PendingAdminApproval } from "./perspicax-org-routes.ts";
-import { createMemorySyncTokenRoute } from "./perspicax-memory-sync-token.ts";
-import { PerspicaxMemoryNotesClient } from "./perspicax-memory-notes.ts";
+import { createMemorySyncTokenRoute } from "./memory/perspicax-memory-sync-token.ts";
+import { PerspicaxMemoryNotesClient } from "./memory/perspicax-memory-notes.ts";
 import { createMeMemoryNotesRoutes } from "./routes/me-memory-notes.ts";
 import { createMemoryManagerRoutes } from "./routes/memory-manager.ts";
 import {
@@ -5102,7 +5102,7 @@ const internalCapabilities = new Map<string, InternalCapability>();
  * reach it. */
 let perspicaxMcp: PerspicaxMcp | null = null;
 /** 2026-10-11: the work rows and duplicate checks sent to Perspicax's
- * organization memory (server/perspicax-memory.ts); null without a link. */
+ * organization memory (server/memory/perspicax-memory.ts); null without a link. */
 let perspicaxMemory: PerspicaxMemory | null = null;
 /** The revocations started by the last revokeAllInternalCapabilities (shutdown waits for them). */
 let perspicaxEnding: Promise<void> = Promise.resolve();
@@ -5463,7 +5463,7 @@ function agentsIntegration(
       SAGAX_AGENT_API: !store.groupByThread(threadId) && store.bot(botId) && agentApiMounted(store.bot(botId)!) ? "1" : "0",
       SAGAX_MEMORY_ENABLED: store.bot(botId)?.memoryEnabled === false ? "0" : "1",
       // A room turn in a group whose shared memory is on gets
-      // group_memory_update (server/group-memory.ts); the route re-checks.
+      // group_memory_update (server/memory/group-memory.ts); the route re-checks.
       SAGAX_GROUP_MEMORY: groupMemoryWritable(store.groupByThread(threadId), botId) ? "1" : "0",
       // The shared-computer tools are advertised only while the workspace
       // gate is on; the routes behind them refuse regardless.
@@ -16711,7 +16711,7 @@ bus.subscribe(makeCapContinuationSubscriber({ store, reportsToRequester,
     coordinator.tick();
   } }));
 
-// Memory journal turn boundary (server/memory-journal.ts). A bot's own
+// Memory journal turn boundary (server/memory/memory-journal.ts). A bot's own
 // file-tool writes to MEMORY.md and memory/ have no hook to tap, so the
 // diff against the baseline taken at dispatch is made when the turn
 // settles — session.exited too, because a turn that died may still have
@@ -16734,7 +16734,7 @@ async function holdBootEngineSlot(threadId: string, label: string, instance: Pro
   watchdog.setWaitingOnComputer(threadId, true);
   try {
     // A container near its memory limit starts no routine engine until
-    // usage falls back (server/engine-memory-guard.ts); a person's own
+    // usage falls back (server/memory/engine-memory-guard.ts); a person's own
     // turn never waits here.
     if (memoryWatch.current() === "critical") console.log(`[memory] routine ${label} waits: memory critical`);
     // A bot that will start its browser also waits for room for it.
@@ -16789,7 +16789,7 @@ bus.subscribe((event: RuntimeEvent) => {
   }
 });
 
-// Memory upkeep (server/memory-upkeep.ts): background capture, About me
+// Memory upkeep (server/memory/memory-upkeep.ts): background capture, About me
 // suggestions and the nightly tidy-up, for bots with the switch on.
 const memoryUpkeep = createMemoryUpkeep({
   bots: () => store.bots,
@@ -17966,7 +17966,7 @@ function continueComputerSelection(threadId: string, generation: string | undefi
 /** The engine that dispatched each live turn. A bot's settings may change
  * mid-turn; an interrupt or steer must reach the engine actually running. */
 const runningTurnEngines = new Map<string, NonNullable<ReturnType<typeof registry.get>>>();
-/** Engine memory guard (server/engine-memory-guard.ts): bounds the finished
+/** Engine memory guard (server/memory/engine-memory-guard.ts): bounds the finished
  * sessions kept warm, closes them under memory pressure, holds routine
  * starts at the critical mark, and makes engines the kernel's OOM victims
  * instead of the server. */
@@ -38308,7 +38308,7 @@ if (IDENTITY.kind === "perspicax") {
   }));
   // 2026-10-14: the desktop's Settings > Memory sets itself up with the
   // person's own memory sync token, asked through the link
-  // (server/perspicax-memory-sync-token.ts). Never logged.
+  // (server/memory/perspicax-memory-sync-token.ts). Never logged.
   ROUTES.push(createMemorySyncTokenRoute({
     issuer,
     linkPost: (path, body, limits) => (perspicaxDirectory

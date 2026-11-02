@@ -5,8 +5,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "vitest";
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
-import type { WireBot } from "../shared/wire.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
+import type { WireBot } from "../../shared/wire.ts";
 
 it("deletes the memory journal and memory index with the bot", async () => {
   const fixture = await launchVerificationServer();

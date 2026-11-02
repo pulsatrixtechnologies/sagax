@@ -43,8 +43,8 @@ import {
   writeWorkspaceBytes,
   type WorkspaceManageResult,
 } from "../workspace-manage.ts";
-import { MemoryStoreError, RULES_PATH, parseMemoryPath, readMemoryDoc } from "../memory-store.ts";
-import { journalMemoryDelete, journalMemoryWrite } from "../memory-journal.ts";
+import { MemoryStoreError, RULES_PATH, parseMemoryPath, readMemoryDoc } from "../memory/memory-store.ts";
+import { journalMemoryDelete, journalMemoryWrite } from "../memory/memory-journal.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { renameDoc } from "../workspace-tools.ts";
 import { workspaceUsage } from "../workspace-usage.ts";

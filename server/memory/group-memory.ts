@@ -14,13 +14,13 @@
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { readAtRestTextSync, registerAtRestRoot } from "./content-at-rest.ts";
-import { WORKSPACE_OWNER } from "./content-keys.ts";
-import { DATA_DIR } from "./config.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { readAtRestTextSync, registerAtRestRoot } from "../content-at-rest.ts";
+import { WORKSPACE_OWNER } from "../content-keys.ts";
+import { DATA_DIR } from "../config.ts";
 import { withoutExpired } from "./memory-entries.ts";
 import { hashMemoryText, memoryCapacity, type MemoryCapacity } from "./memory-store.ts";
-import { redactSecretsInText } from "./redact.ts";
+import { redactSecretsInText } from "../redact.ts";
 import {
   MEMORY_FILE_MAX_BYTES,
   MEMORY_MAX_BYTES,
@@ -31,7 +31,7 @@ import {
   memoryOverBudget,
   type MemoryUpdate,
   type MemoryUpdateOptions,
-} from "./workspace.ts";
+} from "../workspace.ts";
 
 /** How many of the newest entries ride back with a budget refusal: enough
  * to see what could be merged, few enough that the refusal itself does not

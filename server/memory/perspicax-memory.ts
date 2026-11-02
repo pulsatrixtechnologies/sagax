@@ -29,7 +29,7 @@
 //     nothing; each call carries that person's own token next to the link
 //     token when there is one (`subject`, PerspicaxDirectory.linkPostJson);
 //   - no token, prompt or answer body is ever logged.
-import type { LinkPostLimits, LinkPostResult } from "./perspicax-link.ts";
+import type { LinkPostLimits, LinkPostResult } from "../perspicax-link.ts";
 
 export const WORK_PATH = "/api/v1/memory/work";
 export const DUPLICATES_PATH = "/api/v1/memory/duplicates";

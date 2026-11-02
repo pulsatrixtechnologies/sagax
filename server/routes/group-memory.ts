@@ -1,4 +1,4 @@
-// A group's shared memory as its people see it (server/group-memory.ts):
+// A group's shared memory as its people see it (server/memory/group-memory.ts):
 //
 //   GET /api/groups/<id>/memory   every person of the group reads it
 //   PUT /api/groups/<id>/memory   the group's owner edits it or switches it
@@ -16,7 +16,7 @@ import {
   groupMemorySupported,
   saveGroupMemory,
   type GroupMemoryGroup,
-} from "../group-memory.ts";
+} from "../memory/group-memory.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

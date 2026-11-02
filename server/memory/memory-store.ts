@@ -20,9 +20,9 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, unlinkSync } from "node:fs";
 import { dirname, join, sep } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { plainSizeFor, readAtRestTextSync } from "./content-at-rest.ts";
-import { redactSecretsInText } from "./redact.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { plainSizeFor, readAtRestTextSync } from "../content-at-rest.ts";
+import { redactSecretsInText } from "../redact.ts";
 import {
   DOCS_DIR,
   MEMORY_FILE_MAX_BYTES,
@@ -31,7 +31,7 @@ import {
   ensureWorkspace,
   isMemoryTopicName,
   workspaceDir,
-} from "./workspace.ts";
+} from "../workspace.ts";
 
 export const MEMORY_INDEX = "MEMORY.md";
 /** RULES.md and docs/<name>.md (server/workspace-files.ts) go through this

@@ -1395,7 +1395,7 @@ export interface WireGroup {
   /** A room: @all tags every person in it (a notification each). Absent:
    * off, @all tags nobody. Its owner's setting. */
   mentionAll?: boolean;
-  /** The group's shared memory (server/group-memory.ts); absent = on. */
+  /** The group's shared memory (server/memory/group-memory.ts); absent = on. */
   memoryEnabled?: boolean;
   /** #1137, organization server: per bot of this group, who pays for its
    * replies here, overriding the bot's own choice (shared/turn-payer.ts).

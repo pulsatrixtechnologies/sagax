@@ -9,7 +9,7 @@
 // later. What the prompt gets is bounded like MEMORY.md.
 import { factIdentity } from "./memory-entries.ts";
 import { COMPANY_TOPIC, memoryAudience } from "./memory-dream.ts";
-import { MEMORY_MAX_BYTES, MEMORY_MAX_LINES } from "./workspace.ts";
+import { MEMORY_MAX_BYTES, MEMORY_MAX_LINES } from "../workspace.ts";
 
 /** The company block's own budget, the same as MEMORY.md's. */
 export const COMPANY_MAX_LINES = MEMORY_MAX_LINES;

@@ -4,7 +4,7 @@
 // two different places, and only the assembled bytes prove they agree.
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
 
 it("gives a room turn the memory_update guidance, not the file-tools one", async () => {
   const fixture = await launchVerificationServer();

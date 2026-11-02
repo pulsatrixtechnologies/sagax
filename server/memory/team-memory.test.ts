@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { TeamMemory, TEAM_MEMORY_PROMPT_MAX_BYTES } from "./team-memory.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
 
 let dir: string;
 let memory: TeamMemory;

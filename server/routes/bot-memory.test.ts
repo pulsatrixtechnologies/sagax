@@ -5,14 +5,14 @@
 // still transforms these routes' bodies, the 404 precheck still consults the
 // store seam, and journal rows still name the chat through the
 // taskByThread seam. The behavior itself (containment, conflicts, revert)
-// stays covered by server/memory-routes.test.ts over the same HTTP surface.
+// stays covered by server/memory/memory-routes.test.ts over the same HTTP surface.
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { json, onJsonBody, readBody } from "../harness/http.ts";
-import { recordMemoryChange } from "../memory-journal.ts";
+import { recordMemoryChange } from "../memory/memory-journal.ts";
 import { commitLearned, planLearned } from "../profile-learned.ts";
 import { requiredScope } from "../request-auth.ts";
 import { launchVerificationServer, type VerificationServer } from "../../scripts/control-omb.ts";

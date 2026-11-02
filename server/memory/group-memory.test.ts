@@ -7,7 +7,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { json, readBody } from "./harness/http.ts";
+import { json, readBody } from "../harness/http.ts";
 import {
   deleteGroupMemory,
   groupMemoryDoc,
@@ -18,10 +18,10 @@ import {
   saveGroupMemory,
   updateGroupMemory,
 } from "./group-memory.ts";
-import type { RequestAuth } from "./request-auth.ts";
-import { createGroupMemoryRoutes, type GroupMemoryRouteDeps } from "./routes/group-memory.ts";
-import { dispatchRoutes } from "./routes/table.ts";
-import { readMemoryFile, updateMemory, workspaceDir } from "./workspace.ts";
+import type { RequestAuth } from "../request-auth.ts";
+import { createGroupMemoryRoutes, type GroupMemoryRouteDeps } from "../routes/group-memory.ts";
+import { dispatchRoutes } from "../routes/table.ts";
+import { readMemoryFile, updateMemory, workspaceDir } from "../workspace.ts";
 
 let n = 0;
 const fresh = () => `gm-test-${process.pid}-${++n}`;
@@ -148,7 +148,7 @@ describe("group memory routes", () => {
 
 describe("group_memory_update in the agents catalog", () => {
   it("is offered only to a room turn whose group memory is on", async () => {
-    const { availableTools, catalogProfileFromEnv } = await import("./drivers/agents-catalog.ts");
+    const { availableTools, catalogProfileFromEnv } = await import("../drivers/agents-catalog.ts");
     const names = (env: NodeJS.ProcessEnv) => availableTools(catalogProfileFromEnv({ SAGAX_BOT_ID: "b1", SAGAX_ROOM_TURN: "1", ...env })).map((tool) => tool.name);
     expect(names({ SAGAX_GROUP_MEMORY: "1" })).toContain("group_memory_update");
     expect(names({})).not.toContain("group_memory_update");

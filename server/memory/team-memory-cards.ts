@@ -7,7 +7,7 @@
 // a card that is already settled gets that outcome back (409), never a fresh
 // "allowed".
 
-import type { CardAnswerer } from "../shared/wire.ts";
+import type { CardAnswerer } from "../../shared/wire.ts";
 
 export type TeamMemoryCardOutcome = "allowed-once" | "rejected" | "unavailable";
 

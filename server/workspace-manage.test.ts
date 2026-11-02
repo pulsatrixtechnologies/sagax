@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { DATA_DIR } from "./config.ts";
 import { closeMessageDb } from "./message-db.ts";
-import { flushMemoryJournal, readMemoryJournal, resetMemoryJournalState } from "./memory-journal.ts";
+import { flushMemoryJournal, readMemoryJournal, resetMemoryJournalState } from "./memory/memory-journal.ts";
 import {
   CORE_WORKSPACE_FILES,
   WORKSPACE_UPLOAD_MAX_BYTES,

@@ -2,11 +2,11 @@
 // asked through the link (Settings > Memory sets itself up, 2026-10-14).
 import { describe, expect, it, vi } from "vitest";
 
-import type { LinkPostResult } from "./perspicax-link.ts";
+import type { LinkPostResult } from "../perspicax-link.ts";
 import { createMemorySyncTokenRoute, MEMORY_SYNC_TOKEN_ROUTE, MINT_PER_MINUTE, ownSubject } from "./perspicax-memory-sync-token.ts";
-import type { RequestAuth } from "./request-auth.ts";
-import { PASS, type RouteContext } from "./routes/table.ts";
-import type { SessionRecord } from "./sessions.ts";
+import type { RequestAuth } from "../request-auth.ts";
+import { PASS, type RouteContext } from "../routes/table.ts";
+import type { SessionRecord } from "../sessions.ts";
 
 const ISSUER = "https://px.example.test/";
 const TOKEN = "pxat1.abcdefghijklmnopqrstuvwxyz012345";

@@ -4,7 +4,7 @@
 // without it choosing:
 //   - capture: finished 1:1 turns are read after the chat goes quiet; core
 //     facts go to MEMORY.md, detail to a topic file per subject that upkeep
-//     creates and names, with other words for it (server/memory-capture.ts);
+//     creates and names, with other words for it (server/memory/memory-capture.ts);
 //     turns still waiting at shutdown are saved as ids and captured after
 //     the next start;
 //   - About me: a durable fact about the person, from their own words, is
@@ -12,11 +12,11 @@
 //     (server/profile-learned.ts);
 //   - tidy-up: nightly, and on demand, expired entries are archived, exact
 //     duplicates merged (MEMORY.md and topic files) and contradictions in
-//     MEMORY.md struck (server/memory-tidy.ts).
+//     MEMORY.md struck (server/memory/memory-tidy.ts).
 //   - dream: the same nightly and on-demand pass re-reads topics and the
 //     journal, merges topic files that say the same thing, promotes a
 //     repeated fact into MEMORY.md, and moves a contradicted or expired
-//     fact into the archive (server/memory-dream.ts). Notes stay in files.
+//     fact into the archive (server/memory/memory-dream.ts). Notes stay in files.
 //     No model is trained.
 // Every memory write is a journal row with actor "upkeep", so the Memory
 // panel shows it and Undo works. The model steps need a one-shot text call
@@ -26,8 +26,8 @@
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { DATA_DIR } from "./config.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { DATA_DIR } from "../config.ts";
 import { CaptureBuffer, captureItemLimit, capturePrompt, captureSize, parseCandidates, splitCandidates, worthCapturing, type Candidate, type CaptureBatch, type CaptureTurn } from "./memory-capture.ts";
 import { factIdentity, lineFactIdentity, notebookIdentities } from "./memory-entries.ts";
 import { mergeTopicText } from "./memory-topics.ts";
@@ -35,7 +35,7 @@ import { applyMoves, MAX_MOVES, organizeCandidates, organizePrompt, parseMoves }
 import { dreamTouched, planDream, type DreamPlan } from "./memory-dream.ts";
 import { journalMemoryDelete, journalMemoryWrite, readMemoryJournal, recordMemoryChange } from "./memory-journal.ts";
 import { applyTidy, contradictionCandidates, contradictionPrompt, parseContradictions, planChanges, planTidy, type Contradiction } from "./memory-tidy.ts";
-import { appendMemoryArchive, ARCHIVE_TOPIC, ensureWorkspace, listMemoryTopics, memoryDate, memoryEntry, memoryTopicIndex, readMemoryText, updateMemory, workspaceDir, writeMemoryFile, writeMemoryTopic } from "./workspace.ts";
+import { appendMemoryArchive, ARCHIVE_TOPIC, ensureWorkspace, listMemoryTopics, memoryDate, memoryEntry, memoryTopicIndex, readMemoryText, updateMemory, workspaceDir, writeMemoryFile, writeMemoryTopic } from "../workspace.ts";
 
 export const CAPTURE_MAX_TURNS = 6;
 /** One capture call reads at most this much of one bot's waiting threads;

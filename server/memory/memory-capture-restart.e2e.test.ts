@@ -10,10 +10,10 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
-import { launchVerificationServer, runControlOmb, verificationServerEnvironment } from "../scripts/control-omb.ts";
-import type { WireBot } from "../shared/wire.ts";
+import { launchVerificationServer, runControlOmb, verificationServerEnvironment } from "../../scripts/control-omb.ts";
+import type { WireBot } from "../../shared/wire.ts";
 import { CAPTURE_MARKER } from "./memory-capture.ts";
-import { waitForExit } from "./testing/cleanup.ts";
+import { waitForExit } from "../testing/cleanup.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 

@@ -24,7 +24,7 @@ import { sagaxFolder } from "../shared/human-id.ts";
 import type { Readable, Writable } from "node:stream";
 import { join, posix, win32 } from "node:path";
 import { engineStartGate } from "./engine-start-gate.ts";
-import { markOomVictim, memoryGuardSettings } from "./engine-memory-guard.ts";
+import { markOomVictim, memoryGuardSettings } from "./memory/engine-memory-guard.ts";
 import { resolveCliSpawn, splitCliString, type ResolvedSpawn } from "./env-path.ts";
 import { noteEngineGroupEnded, noteEngineGroupStarted } from "./engine-groups.ts";
 
@@ -272,7 +272,7 @@ export function spawnCli(
   }
   if (process.platform !== "win32" && owner === "bot") rememberEngineSession(child);
   // An engine dies before the server when the container runs out of memory
-  // (server/engine-memory-guard.ts); its MCP proxies inherit the score.
+  // (server/memory/engine-memory-guard.ts); its MCP proxies inherit the score.
   markOomVictim(child.pid, CHILD_OOM_SCORE_ADJ);
 
   // A write to a dying child's stdin fails differently per platform, and one

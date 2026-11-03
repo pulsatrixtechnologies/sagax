@@ -11,7 +11,7 @@
 //   - every POST writes one admin activity row (actor: the console person);
 //   - a refusal is `{code, message, reason}`, never a stack or a secret.
 import type { AdminActivityCategory } from "../activity/admin-activity.ts";
-import type { AdminBotReach, ConsoleRole, OrgAdminViewer } from "./org-admin-routes.ts";
+import type { AdminBotReach, ConsoleRole, OrgAdminViewer } from "./org-admin-types.ts";
 
 export const CONSOLE_LIST_DEFAULT = 50;
 export const CONSOLE_LIST_MAX = 200;

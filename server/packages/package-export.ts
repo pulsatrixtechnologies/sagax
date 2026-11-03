@@ -1,4 +1,6 @@
-import { parseBotPackage, type BotPackageDefinition, type BotPackagePlaybook, type BotPackageSkill, type ParsedBotPackage } from "../bots/bot-package.ts";
+import type { ExportablePackageSkill, TeamExportSkip } from "./package-export-types.ts";
+export type { ExportablePackageSkill, TeamExportSkip, TeamExportSkipReason } from "./package-export-types.ts";
+import { parseBotPackage, type BotPackageDefinition, type BotPackagePlaybook, type ParsedBotPackage } from "../bots/bot-package.ts";
 import type { DefaultsPreset, PublishedLibrary } from "../presets.ts";
 import type { PublishedTeam } from "../pages/published-teams.ts";
 import { nextPatchRelease } from "../pages/published-teams.ts";
@@ -66,13 +68,6 @@ function packageRoomResponder(
 function samePlaybook(a: InstalledPlaybook, b: BotPackagePlaybook): boolean {
   return a.name === b.name && a.summary === b.summary && a.instructions === b.instructions &&
     a.triggers.join("\n") === b.triggers.join("\n");
-}
-
-export interface ExportablePackageSkill extends Omit<BotPackageSkill, "name" | "description"> {
-  name: string;
-  description: string;
-  /** Whether the bot has it switched on. Only ranks what fits; never written to the file. */
-  enabled?: boolean;
 }
 
 function sameSkill(a: ExportablePackageSkill, b: ExportablePackageSkill): boolean {
@@ -274,28 +269,6 @@ export function createBotPackageExport(input: {
     package: definition,
   });
 }
-
-// ── v2: one whole team ──────────────────────────────────────────────────────
-
-/** Why a part of the team stayed out of the file. Shown to the person as a
- * list after export; nothing here is an error. */
-export type TeamExportSkipReason =
-  | "picture_too_large"
-  | "picture_invalid"
-  | "stdio_server"
-  | "insecure_address"
-  | "files_not_shared"
-  | "lead_not_in_group_chat"
-  | "notes_too_large"
-  | "skill_changed"
-  | "skill_conflict"
-  | "bot_skill_limit"
-  | "team_skill_limit"
-  | "preset_empty"
-  | "preset_skill_conflict"
-  | "trigger_not_portable";
-
-export interface TeamExportSkip { part: string; reason: TeamExportSkipReason }
 
 /** A plain sentence the Share dialog shows as it is. */
 export class TeamExportError extends Error {

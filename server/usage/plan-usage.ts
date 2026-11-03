@@ -25,7 +25,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { InstanceConfigMap } from "../contracts.ts";
-import { resolveClaudeConfigDir } from "../drivers/claude.ts";
+import { resolveClaudeConfigDir } from "../drivers/claude/config.ts";
 import { codexHome } from "../drivers/codex-identity.ts";
 import { harnessHome } from "../env-path.ts";
 

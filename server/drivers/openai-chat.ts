@@ -1,3 +1,5 @@
+import type { OpenAIChatMessage } from "./openai-chat-message.ts";
+export type { OpenAIChatMessage } from "./openai-chat-message.ts";
 import { createHash } from "node:crypto";
 import type {
   DriverCreateInput,
@@ -31,16 +33,6 @@ import { KEY_REJECTED_REASON, keyRejected, noteKeyAccepted, noteKeyRejected, rej
 import { fullAccessActs } from "../approvals/full-access-gate.ts";
 import type { EffortLevel } from "../../shared/model-selection.ts";
 import { refusedResponsesOption, refusesModel, refusesResponsesEndpoint, responsesEffort, responsesInput, ResponsesReader, responsesTools } from "./openai-responses.ts";
-
-export interface OpenAIChatMessage {
-  role: "system" | "user" | "assistant" | "tool";
-  content: string | ChatContentPart[] | null;
-  tool_calls?: ChatToolCall[];
-  tool_call_id?: string;
-  reasoning_content?: string;
-  reasoning?: string;
-  reasoning_details?: Record<string, unknown>[];
-}
 
 interface Usage {
   input: number;

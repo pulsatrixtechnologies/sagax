@@ -11,7 +11,7 @@
 // as "not now" by the Runtime, so nothing here wraps it again.
 import { join } from "node:path";
 
-import type { Coordinator, CoordinatorHost, CoordinatorOptions, HandedOutOutcome, HandoffView, LiveHandoffEdge, RoomAddress } from "./coordinator.ts";
+import type { Coordinator, CoordinatorHost, CoordinatorOptions, HandedOutOutcome, HandoffView, LiveHandoffEdge, RoomAddress } from "./runtime/coordinator-types.ts";
 import type { WorkOrigin } from "./peers/peer-provenance.ts";
 import { composeEnvelope, composeQuestion, composeReport, composeResume, envelopeNote } from "./runtime/envelope.ts";
 import { Runtime } from "./runtime/runtime.ts";
@@ -545,7 +545,6 @@ export class RuntimeCoordinator implements Coordinator {
       (n.status === "running" && (n.restart !== "rerun" || childrenSince(this.store, n).length > 0)) ||
       ((n.status === "queued" || n.status === "resume") && n.restart === "rerun")));
   }
-
 
   // ── the host's schedule ──────────────────────────────────────────────
 

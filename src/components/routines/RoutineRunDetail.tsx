@@ -1,3 +1,5 @@
+import { RunActivityState } from "./RunActivityState";
+export { useRunActivity } from "./RunActivityState";
 // One routine run, the way a person reads it (2026-10-29): a state header
 // (running, completed, failed, waiting for them), how long it took and what
 // it cost; what waits on them first, answerable in place; then the result
@@ -12,29 +14,27 @@
 // Narrow: one column, Steps and Configuration folded under the result.
 // The steps and the conversation come from the run's activity entry
 // (GET /api/bots/:id/activity/item?runId=, the same one History shows).
-import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { CalendarClock, ChevronDown, ChevronRight, CircleAlert, CirclePlay, FileText, History, Loader2, MessageSquareText, RotateCcw, Square } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { api, type Bot, type Group } from "@/state/store";
+import { type Bot, type Group } from "@/state/store";
 import type { Routine, RoutineRun } from "@/lib/routines";
-import { loadBotActivityDetail, type BotActivityDetail, type BotActivityStatus } from "@/lib/bot-activity";
+import { type BotActivityDetail, type BotActivityStatus } from "@/lib/bot-activity";
 import { routineAutoPausedText, routineDateTime, routineQueuePosition, routineResultText, routineRunBlockedLine, routineRunError, routineRunLabel, routineRunProblems, routineRunTone } from "@/lib/routine-display";
 import { RunResultDetails, TeammateThreadLinks } from "../RoutineRunCard";
 import { formatUsd } from "@/lib/usage";
 import { ChatMarkdown } from "../ChatMarkdown";
-import { waitingSources } from "../bot-settings/ActivityDetailModal";
 import { ActivityStepGroups } from "../task/ActivityStepGroups";
 import { TaskComposer } from "../task/TaskComposer";
 import { activityJobStage, TaskStatusHeader } from "../task/TaskStatusHeader";
 import { WaitingOnYou, waitingKind, type WaitingNote } from "../task/WaitingOnYou";
-import { useWaitingCards, type WaitingItem } from "@/lib/use-waiting-cards";
+import { type WaitingItem } from "@/lib/use-waiting-cards";
 import { activityChip } from "../bot-settings/ActivityWindow";
 import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
 import { RoutineConfiguration } from "./RoutineConfiguration";
 
 const ActivityConversation = lazy(() => import("../bot-settings/ActivityConversation"));
-const POLL_MS = 3_000;
 /** From this width the run shows its result and its steps side by side. */
 export const RUN_WIDE_PX = 720;
 
@@ -53,27 +53,6 @@ export function runActivityStatus(run: Pick<RoutineRun, "status">): BotActivityS
 }
 
 export type RunView = "result" | "steps" | "conversation" | "configuration";
-
-/** The activity entry of a run (its steps, files, thread), followed while
- * it goes. `load` is the fetch; tests pass their own. */
-const loadLive = (botId: string, itemId: string): Promise<BotActivityDetail> => loadBotActivityDetail(api, botId, itemId);
-
-export function useRunActivity(run: Pick<RoutineRun, "id" | "botId" | "status" | "redacted">, load: (botId: string, itemId: string) => Promise<BotActivityDetail> = loadLive) {
-  const [detail, setDetail] = useState<BotActivityDetail | null>(null);
-  const [error, setError] = useState(false);
-  const live = ["queued", "running", "waiting"].includes(run.status);
-  const fetchDetail = useCallback(() => {
-    if (run.redacted) return Promise.resolve();
-    return load(run.botId, `run:${run.id}`).then((next) => { setDetail(next); setError(false); }).catch(() => setError(true));
-  }, [load, run.botId, run.id, run.redacted]);
-  useEffect(() => { setDetail(null); void fetchDetail(); }, [fetchDetail]);
-  useEffect(() => {
-    if (!live) return;
-    const timer = window.setInterval(() => void fetchDetail(), POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [live, fetchDetail]);
-  return { detail, error, reload: fetchDetail };
-}
 
 function Fold({ id, label, count, defaultOpen = false, children }: { id: string; label: string; count?: number; defaultOpen?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -300,14 +279,10 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
   );
 }
 
-/** Steps and conversation wired to the live server: the run detail as the
- * Automations page and the bot panel open it. */
+/** Steps and conversation wired to the live server. */
 export function ConnectedRunActivity({ run, children }: { run: RoutineRun; children: (activity: { detail: BotActivityDetail | null; error: boolean; reload: () => Promise<void>; waiting: WaitingItem[]; conversation: (target: { botId: string; threadId: string; title: string }, onOpenInMain: () => void) => ReactNode }) => ReactNode }) {
-  const activity = useRunActivity(run);
-  // Read the waiting thread's cards again on each poll of the activity.
-  const waiting = useWaitingCards(run.status === "waiting" ? waitingSources(activity.detail) : [], `${activity.detail?.updatedAt ?? ""}:${run.status}`);
   const conversation = (target: { botId: string; threadId: string; title: string }, onOpenInMain: () => void) => (
     <ActivityConversation key={target.threadId} {...target} onOpenInMain={onOpenInMain} />
   );
-  return <>{children({ ...activity, waiting, conversation })}</>;
+  return <RunActivityState run={run}>{(activity) => children({ ...activity, conversation })}</RunActivityState>;
 }

@@ -109,7 +109,7 @@ const MESSAGE_EXEMPT: ReadonlySet<MisuseCategory> = new Set(["destruction", "res
 
 // `own: true` marks a rule whose impact stays inside the person's own
 // environment: it is not applied in the `own_environment` scope.
-const BLOCK_RULES: ReadonlyArray<{ category: MisuseCategory; pattern: RegExp; own?: true }> = [
+const BLOCK_RULES: ReadonlyArray<{ category: MisuseCategory; pattern: RegExp | { test(text: string): boolean; lastIndex?: number }; own?: true }> = [
   { category: "privilege_escalation", pattern: /\b(sudo|pkexec|doas|visudo|usermod|useradd|adduser)\b/, own: true },
   // Capabilities reach past the sandbox user: blocked everywhere.
   { category: "privilege_escalation", pattern: /\bcapsh\b/ },
@@ -138,9 +138,12 @@ const BLOCK_RULES: ReadonlyArray<{ category: MisuseCategory; pattern: RegExp; ow
   { category: "offensive_hacking", pattern: /reverse shell|bind shell|coquille invers[ée]e|\/dev\/tcp\// },
   { category: "offensive_hacking", pattern: /port scan|scan de ports|balayage de ports|force brute|attaque par force/ },
   { category: "offensive_hacking", pattern: /\bhydra\b[^\n]{0,40}\b(ssh|ftp|http|password|mot de passe)/ },
-  { category: "malware", pattern: /\b(ransomware|ran[çc]ongiciel|keylogger|botnet|xmrig|meterpreter|rootkit|wannacry|lockbit)\b/ },
-  { category: "malware", pattern: /enregistreur de frappe|crypto-?miner|mineur de crypto/ },
-  { category: "malware", pattern: /(programme|logiciel) malveillant/ },
+  // 2026-11-03: a malware name counts only with the intent to make or run
+  // it (`malwareCreation`). Detecting, reporting or answering an incident
+  // ("signale un rançongiciel", "incident de ransomware") is defensive.
+  { category: "malware", pattern: { test: (text) => malwareCreation(text) } },
+  // A miner started as a command, with no verb around it.
+  { category: "malware", pattern: /(?:^|[;&|`(]\s*|\/|\b(?:sudo|nohup|exec|start)\s+)xmrig\b|\bxmrig(?:\.exe)?\s+--?[a-z]/m },
   { category: "platform_exfiltration", pattern: /\b(bots\.json|messages\.db|idp_key|idp-key|mcp-oauth\.key|webhooks\.json)\b/ },
   { category: "platform_exfiltration", pattern: /\/proc\/(self|1)\/environ\b/ },
   { category: "platform_exfiltration", pattern: /\bprintenv\b/ },
@@ -162,6 +165,81 @@ const BLOCK_RULES: ReadonlyArray<{ category: MisuseCategory; pattern: RegExp; ow
   { category: "resource_abuse", pattern: /cat\s+\/dev\/zero\s*>|yes\s*>\s*\/dev\/sd/ },
   { category: "resource_abuse", pattern: /remplis le disque|remplir le disque|épuise(r)? (la|les) (mémoire|ressources)/ },
 ];
+
+// Letters around a word: `\b` is ASCII only and misses "écris".
+const L = "[\\p{L}\\p{N}_]";
+const word = (body: string, flags = "gu") => new RegExp(`(?<!${L})(?:${body})(?!${L})`, flags);
+
+/** What a malware request names. */
+const MALWARE_NAME = word([
+  "ransomwares?", "ran[çc]ongiciels?", "keyloggers?", "enregistreurs? de frappe",
+  "botnets?", "rootkits?", "wannacry", "lockbit", "meterpreter", "xmrig",
+  "crypto-?miners?", "mineurs? de crypto(?:monnaie)?",
+  "(?:programmes?|logiciels?|codes?) malveillants?", "malwares?",
+  "trojans?", "chevaux de troie", "cheval de troie",
+  "(?:credential|password|info|cookie)[- ]?stealers?", "infostealers?",
+  "voleurs? d['’]identifiants", "voleurs? de mots de passe",
+].join("|"));
+
+/** Making or running it, in French and English. */
+const MALWARE_MAKE = word([
+  "[ée]cri(?:s|re|t|vez|vons)", "r[ée]dige(?:r|z)?", "cr[ée](?:e|er|ez|ons)",
+  // "code" and "programme" alone are nouns ("le code du rançongiciel")
+  "code(?:r|z|-moi)", "code (?:a|an|me|up|un|une)", "programme(?:r|z)",
+  "d[ée]veloppe(?:r|z)?", "constru(?:is|ire|it|isez)", "g[ée]n[èeé]re(?:r|z)?",
+  "fabrique(?:r|z)?", "compile(?:r|z)?", "con[çc]oi(?:s|t)|concevoir|concevez", "assemble(?:r|z)?",
+  "d[ée]ploie(?:r|z)?|d[ée]ploy(?:er|ez)", "lance(?:r|z)?", "ex[ée]cute(?:r|z)?", "installe(?:r|z)?",
+  "propage(?:r|z)?", "diffuse(?:r|z)?", "infecte(?:r|z)?", "fais|faites|donne", "veux|voudrais|besoin",
+  "write|create|build|develop|generate|make|craft|compile|design|implement",
+  "deploy|launch|run|execute|install|spread|distribute|infect|need|want|give",
+].join("|"));
+
+/** Between the verb and the name, a word that makes the request defensive
+ * ("lance la détection de rançongiciel", "écris un rapport sur le
+ * rançongiciel", "installe l'anti-ransomware"). */
+const MALWARE_DEFENSIVE = word([
+  "d[ée]tect\\p{L}*", "detect\\p{L}*", "signal\\p{L}*", "report\\p{L}*", "rapports?", "alert\\p{L}*",
+  "incidents?", "r[ée]pon\\p{L}*", "respon\\p{L}*", "triage", "tri", "analy\\p{L}*", "investig\\p{L}*",
+  "enqu[êe]te\\p{L}*", "surveill\\p{L}*", "monitor\\p{L}*", "quarantaine|quarantin\\p{L}*", "isol\\p{L}*",
+  "rem[ée]di\\p{L}*", "nettoy\\p{L}*", "clean\\p{L}*", "supprim\\p{L}*", "remov\\p{L}*", "[ée]radi\\p{L}*",
+  "eradic\\p{L}*", "restaur\\p{L}*", "restor\\p{L}*", "recover\\p{L}*", "r[ée]cup[ée]r\\p{L}*",
+  "prot[èeé]g\\p{L}*", "protect\\p{L}*", "pr[ée]v[ei]\\p{L}*", "prevent\\p{L}*", "bloqu\\p{L}*", "block\\p{L}*",
+  "aide", "help\\p{L}*", "assist\\p{L}*", "soutien", "support\\p{L}*",
+  "contre", "against", "anti", "d[ée]fen\\p{L}*", "defen\\p{L}*", "chasse", "hunt\\p{L}*", "indicateurs?", "iocs?",
+  "sensibilis\\p{L}*", "awareness", "formations?", "training", "proc[ée]dures?", "playbooks?", "runbooks?",
+  "politiques?", "polic(?:y|ies)", "guides?", "plans?", "billets?", "tickets?", "courriels?", "e-?mails?", "notes?",
+  "r[ée]sum[ée]s?", "summar\\p{L}*", "documentation", "r[èe]gles?", "rules?", "signatures?", "yara", "sigma",
+  "scan\\p{L}*", "suivi", "suivre", "follow\\p{L}*", "escalad\\p{L}*", "escalat\\p{L}*", "avis", "communiqu[ée]s?",
+].join("|"));
+
+/** After the name, a word that makes it the subject of defensive work
+ * ("ransomware report", "ransomware detection"). */
+const MALWARE_SUBJECT = new RegExp(`^[\\s'’-]*(?:${[
+  "reports?", "incidents?", "alerts?", "detection", "response", "playbooks?", "runbooks?", "polic(?:y|ies)",
+  "protection", "defen[cs]e", "scanner", "scan", "indicators?", "iocs?", "tickets?", "analysis", "recovery",
+  "signatures?", "rules?", "awareness", "training",
+].join("|")})(?!${L})`, "u");
+
+/** A malware name with the intent to make or run it, in the same clause:
+ * a creation verb at most 80 characters before the name, with nothing
+ * defensive in between and nothing defensive right after. */
+function malwareCreation(text: string): boolean {
+  for (const clause of text.split(/[.!?\n]+/)) {
+    MALWARE_NAME.lastIndex = 0;
+    for (const name of clause.matchAll(MALWARE_NAME)) {
+      const at = name.index ?? 0;
+      if (MALWARE_SUBJECT.test(clause.slice(at + name[0].length))) continue;
+      const before = clause.slice(Math.max(0, at - 80), at);
+      let verbEnd = -1;
+      for (const verb of before.matchAll(MALWARE_MAKE)) verbEnd = (verb.index ?? 0) + verb[0].length;
+      if (verbEnd < 0) continue;
+      const between = before.slice(verbEnd);
+      MALWARE_DEFENSIVE.lastIndex = 0;
+      if (!MALWARE_DEFENSIVE.test(between)) return true;
+    }
+  }
+  return false;
+}
 
 const DEFENSIVE_RULES: ReadonlyArray<RegExp> = [
   // an endpoint agent's own control command (protection off, quarantine)

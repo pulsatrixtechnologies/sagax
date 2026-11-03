@@ -70,8 +70,13 @@ describe("the sidebar snap", () => {
 
   it("the sidebar no longer transitions its width", () => {
     const source = readFileSync(new URL("../components/Sidebar.tsx", import.meta.url), "utf8");
+    const hook = readFileSync(new URL("../components/Sidebar.tsx-parts/useSidebarWidth.ts", import.meta.url), "utf8");
     expect(source).not.toContain("transition-[width]");
-    expect(source).toContain("animateSidebarSnap(");
+    // 0db3d586d moved the animation into the sidebar's width hook.
+    expect(source).toContain('import { useSidebarWidth } from "./Sidebar.tsx-parts/useSidebarWidth"');
+    expect(source).toContain("useSidebarWidth({ sidebarRef })");
+    expect(hook).not.toContain("transition-[width]");
+    expect(hook).toContain("animateSidebarSnap(");
   });
 });
 

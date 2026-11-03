@@ -13,6 +13,8 @@ import en from "./en.json";
 const root = fileURLToPath(new URL("..", import.meta.url));
 // Message keys are also named in shared/ (the organization capability form).
 const sharedRoot = fileURLToPath(new URL("../../shared", import.meta.url));
+// The server also translates keys, including Perspicax identity failures.
+const serverRoot = fileURLToPath(new URL("../../server", import.meta.url));
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
@@ -31,7 +33,7 @@ const read = (() => {
     if (cached) return cached;
     const literals = new Set<string>();
     const prefixes = new Set<string>();
-    for (const code of [...sources(root), ...sources(sharedRoot)]) {
+    for (const code of [...sources(root), ...sources(sharedRoot), ...sources(serverRoot)]) {
       for (const match of code.matchAll(/["'`](?=([\w][\w.-]{0,199})["'`])/g)) literals.add(match[1]!);
       for (const match of code.matchAll(/`([\w.-]+\.)\$\{/g)) prefixes.add(match[1]!);
     }

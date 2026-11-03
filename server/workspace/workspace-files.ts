@@ -2,7 +2,7 @@
 // persona editor's Files category shows it (docs/bot-workspace.md).
 //
 // The rules (RULES.md and the rule sets in rules/) hold hard constraints the
-// bot checks every turn; server/rule-sets.ts loads them right after the soul
+// bot checks every turn; server/rules/rule-sets.ts loads them right after the soul
 // and before memory, under their own budgets.
 //
 // docs/ holds reference markdown (procedures, templates, lists). Nothing in
@@ -18,7 +18,7 @@ import { dirname, join, sep } from "node:path";
 import { readAtRestSync } from "../encryption/content-at-rest.ts";
 import { READABLE_HIDDEN_SEGMENTS } from "../../shared/readable-hidden.ts";
 
-import { RULE_SETS_DIR, RULES_FILE, RULES_MAX_BYTES, RULES_MAX_LINES, effectiveRulesText, listRuleSets } from "../rule-sets.ts";
+import { RULE_SETS_DIR, RULES_FILE, RULES_MAX_BYTES, RULES_MAX_LINES, effectiveRulesText, listRuleSets } from "../rules/rule-sets.ts";
 import {
   DOCS_DIR,
   MEMORY_MAX_BYTES,
@@ -31,7 +31,7 @@ import {
 } from "./workspace.ts";
 
 export { DOCS_DIR };
-// The rules (RULES.md and the rule sets) live in server/rule-sets.ts; their
+// The rules (RULES.md and the rule sets) live in server/rules/rule-sets.ts; their
 // historical names are re-exported here.
 export {
   RULE_MAX_CHARS,
@@ -46,7 +46,7 @@ export {
   rulesOverBudget,
   rulesSystemPrompt,
   type LoadedRules,
-} from "../rule-sets.ts";
+} from "../rules/rule-sets.ts";
 /** How many documents the per-turn index names; the rest are counted. */
 export const DOCS_INDEX_MAX = 20;
 const DOC_SUMMARY_MAX = 120;
@@ -266,7 +266,7 @@ const EDITABLE = [/^MEMORY\.md$/, /^RULES\.md$/, /^rules\/[^/]+\.md$/, /^memory\
 /** Where a path sits in the load order. MEMORY.md loads every turn only
  * while memory is on. */
 export function workspaceLoad(path: string, opts: { memoryEnabled?: boolean; ruleFiles?: ReadonlyMap<string, boolean> } = {}): WorkspaceLoad {
-  // a rules file loads every turn while its set is on (server/rule-sets.ts)
+  // a rules file loads every turn while its set is on (server/rules/rule-sets.ts)
   if (path === RULES_FILE || /^rules\/[^/]+\.md$/.test(path)) {
     const enabled = opts.ruleFiles?.get(path);
     return enabled === false ? "never" : path === RULES_FILE || enabled ? "every-turn" : "never";

@@ -696,7 +696,7 @@ import {
   type OwnerRule
 } from "./approvals/owner-approval.ts";
 import { OwnerApprovalStore } from "./approvals/owner-approval-store.ts";
-import { CustomRuleStore } from "./custom-rules-store.ts";
+import { CustomRuleStore } from "./rules/custom-rules-store.ts";
 import {
   customRuleCandidate,
   customRuleNotice,
@@ -705,8 +705,8 @@ import {
   serverHome,
   type CustomRuleCall,
   type RuleProductContext
-} from "./custom-rules-review.ts";
-import { createCustomRulesModelReviewer } from "./custom-rules-model.ts";
+} from "./rules/custom-rules-review.ts";
+import { createCustomRulesModelReviewer } from "./rules/custom-rules-model.ts";
 import {
   compileRule,
   modelReviewCardEligible,
@@ -1284,7 +1284,7 @@ import { createAgentCard } from "./chat-widgets.ts";
 import { buildBotOverview, type BotOverview } from "./bots/bot-overview.ts";
 import { ProfileRequestService } from "./profile-requests.ts";
 import { ModelRequestService } from "./models/model-requests.ts";
-import { RuleRequestService } from "./rule-requests.ts";
+import { RuleRequestService } from "./rules/rule-requests.ts";
 import { TeamSetupError, TeamSetupRequestService, teamSetupDirectApply } from "./team/team-setup-requests.ts";
 import type { TeamSetupRequest } from "../shared/team-setup.ts";
 import { profileRevision, profileSnapshot } from "./profile-revision.ts";
@@ -1330,7 +1330,7 @@ import { OutboundCounts } from "./outbound/outbound-counts.ts";
 import { OutboundRequestService } from "./outbound/outbound-requests.ts";
 import { DEFAULT_OUTBOUND_POLICY, isOutboundTool, normalizeOutboundPolicy } from "../shared/outbound.ts";
 import { normalizeAllowedRecipients, sendRecipientsAllowed } from "../shared/allowed-recipients.ts";
-import { standingGrantsAllowed } from "./custom-rules-org.ts";
+import { standingGrantsAllowed } from "./rules/custom-rules-org.ts";
 import { bindThreadLogCapProvider } from "./threads/thread-log-rotation.ts";
 import { listenWebhookIngress, resolveWebhookPublicUrl, type WebhookIngress } from "./triggers/webhook-ingress.ts";
 import { assertModelVariantSupported, memberTurnSelection } from "./turns/member-turn.ts";
@@ -3323,7 +3323,7 @@ const botTaskStore = createBotTaskStore({ file: join(DATA_DIR, "bot-tasks.json")
 // The files pinned in a conversation's Library tab (server/threads/thread-file-pins.ts).
 const threadFilePins = createThreadFilePins({ file: join(DATA_DIR, "thread-file-pins.json") });
 // 2026-10-16: people's custom auto-review rules, in their own words
-// (shared/custom-rules.ts, server/custom-rules-review.ts).
+// (shared/custom-rules.ts, server/rules/custom-rules-review.ts).
 const customRules = new CustomRuleStore(join(DATA_DIR, "custom-approval-rules.json"));
 const botSettings = createBotSettingsStore(DATA_DIR);
 const SESSION_COOKIE = sessionCookieName(PORT, ENVIRONMENT_ID);
@@ -22699,7 +22699,7 @@ function safetyReviewer(botId: string): ((prompt: string, signal?: AbortSignal) 
 }
 
 /** 2026-10-21 (the reference design parity A1): the model reviewer of custom rules
- * (server/custom-rules-model.ts). It answers a card like the person would,
+ * (server/rules/custom-rules-model.ts). It answers a card like the person would,
  * through the engine that asked, and says so on the card and in the
  * decision log (`source: auto-review`, the rule, the reason). */
 const customRulesModel = createCustomRulesModelReviewer({
@@ -31889,7 +31889,7 @@ ROUTES.push(createBotWorkspaceRoutes({
   }
 }));
 // The persona editor's Rules section as rule sets (server/routes/bot-rules.ts,
-// server/rule-sets.ts): the Soul edit's gate, like the Files category.
+// server/rules/rule-sets.ts): the Soul edit's gate, like the Files category.
 ROUTES.push(createBotRulesRoutes({
   bot: (id) => store.bot(id),
   mayEdit: (auth, botId) => {

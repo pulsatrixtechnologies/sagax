@@ -4831,7 +4831,7 @@ rules, covered by `server/approvals/owner-approval.test.ts`,
 
 Custom rules are a person's approval rules in their own words
 (`shared/custom-rules.ts`, store `custom-approval-rules.json` 0600 in
-`server/custom-rules-store.ts`, routes `server/routes/custom-rules.ts`,
+`server/rules/custom-rules-store.ts`, routes `server/routes/custom-rules.ts`,
 editor `src/components/bot-settings/CustomRulesCard.tsx`). Keep these rules,
 covered by `shared/custom-rules.test.ts`, `server/approvals/auto-approve.custom-rules.test.ts`,
 `server/routes/custom-rules.test.ts` and `src/components/CustomRuleNotice.test.ts`:
@@ -4898,7 +4898,7 @@ covered by `shared/custom-rules.test.ts`, `server/approvals/auto-approve.custom-
   server included; products match known server ids (or a Perspicax
   gateway's tool prefix).
 - Model reviewer (examen automatique, 2026-10-21, the reference design parity A1, Decision:
-  "OUI, comme Grok"; `server/custom-rules-model.ts`, contract
+  "OUI, comme Grok"; `server/rules/custom-rules-model.ts`, contract
   `customRulesJudgePrompt` / `modelCustomDecision` in shared/custom-rules.ts):
   a card the matcher left to the person (`none`, no risk-blocked allow) is
   judged after it opens by the bot engine's isolated `reviewPermission`
@@ -4920,11 +4920,11 @@ covered by `shared/custom-rules.test.ts`, `server/approvals/auto-approve.custom-
   auto-review` and `customRule` (`reviewer: model`, `reason`), the journal
   `source: auto-review` with the rule and the reason (dropped in a
   confidential thread). Cache: one call per prompt in flight, 10 minutes.
-  Tests: `shared/custom-rules.test.ts`, `server/custom-rules-model.test.ts`,
-  `server/custom-rules-model.e2e.test.ts`. `tightenCustomDecision` and
+  Tests: `shared/custom-rules.test.ts`, `server/rules/custom-rules-model.test.ts`,
+  `server/rules/custom-rules-model.e2e.test.ts`. `tightenCustomDecision` and
   `safetyReviewPrompt(call, policy)` stay the tighten-only contract of the
   safety review.
-- Tests: `server/custom-rules.security.test.ts` holds every probe input of
+- Tests: `server/rules/custom-rules.security.test.ts` holds every probe input of
   the four reviews; add each new bypass there.
 
 Email drafts (`src/components/EmailCard.tsx`, `shared/email-draft-send.ts`,

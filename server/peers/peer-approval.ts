@@ -16,7 +16,7 @@
 
 import { botRecipientAllowed } from "../../shared/allowed-recipients.ts";
 import { newId } from "../contracts.ts";
-import { standingGrantsAllowed } from "../custom-rules-org.ts";
+import { standingGrantsAllowed } from "../rules/custom-rules-org.ts";
 import { deliverableNotification, type Notification } from "../notify.ts";
 import { peerAllowKey, type PeerAction } from "./peer-approval-key.ts";
 import type { BotRecord, Message, Store } from "../store.ts";

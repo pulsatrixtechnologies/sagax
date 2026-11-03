@@ -1,4 +1,4 @@
-// The organization's approval policy (server/custom-rules-org.ts): admin
+// The organization's approval policy (server/rules/custom-rules-org.ts): admin
 // rules every member meets and cannot change, and "Toujours permettre" off
 // for everyone (the reference design parity lot 1A, 2026-10-21).
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -8,19 +8,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { autoVerdict } from "./approvals/auto-approve.ts";
+import { autoVerdict } from "../approvals/auto-approve.ts";
 import { setOrgApprovalPolicySource, standingGrantsAllowed } from "./custom-rules-org.ts";
 import { customRuleNotice, reviewCustomRules } from "./custom-rules-review.ts";
 import { CustomRuleStore, registeredCustomRuleStore } from "./custom-rules-store.ts";
-import { json, readBody } from "./harness/http.ts";
-import { opsRoutes, type OpsDeps } from "./org/org-admin-ops.ts";
-import { matchOwnerRule, ruleCoversExactScope, type OwnerRule } from "./approvals/owner-approval.ts";
-import type { RequestAuth } from "./auth/request-auth.ts";
-import { createCustomRuleRoutes } from "./routes/custom-rules.ts";
-import { dispatchRoutes } from "./routes/table.ts";
-import { alwaysAllowStepUp, approvalStepUp } from "./auth/step-up-gate.ts";
-import { fakeConsole } from "./testing/console-context.ts";
-import { ruleTextDiff } from "../shared/custom-rules.ts";
+import { json, readBody } from "../harness/http.ts";
+import { opsRoutes, type OpsDeps } from "../org/org-admin-ops.ts";
+import { matchOwnerRule, ruleCoversExactScope, type OwnerRule } from "../approvals/owner-approval.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { createCustomRuleRoutes } from "../routes/custom-rules.ts";
+import { dispatchRoutes } from "../routes/table.ts";
+import { alwaysAllowStepUp, approvalStepUp } from "../auth/step-up-gate.ts";
+import { fakeConsole } from "../testing/console-context.ts";
+import { ruleTextDiff } from "../../shared/custom-rules.ts";
 
 const dirs: string[] = [];
 const servers: Server[] = [];

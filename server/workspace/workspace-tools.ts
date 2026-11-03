@@ -19,7 +19,7 @@ import {
   rulesOverBudget,
   totalOverBudget,
   writeRuleSets,
-} from "../rule-sets.ts";
+} from "../rules/rule-sets.ts";
 import { DOCS_DIR } from "./workspace-files.ts";
 import { MEMORY_FILE_MAX_BYTES, isMemoryTopicName, memoryLineCount } from "./workspace.ts";
 import { markWorkspaceUse } from "./workspace-usage.ts";

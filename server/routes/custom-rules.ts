@@ -11,7 +11,7 @@
 //   PATCH  /api/custom-rules/:id      { when?, behavior?, botId?, riskScope?, enabled?, startedBy? }
 //   DELETE /api/custom-rules/:id
 //   GET    /api/custom-rules/policy   -> { alwaysAllow, orgRules }: the organization's
-//                                        approval policy (server/custom-rules-org.ts)
+//                                        approval policy (server/rules/custom-rules-org.ts)
 //
 // 2026-10-21: the list also carries the organization's rules (`org: true`),
 // which nobody changes here (403 org_rule_locked), and `orgPolicy`. While
@@ -26,7 +26,7 @@
 // card the rule was made from; the server checks the rule really covers
 // that card's call and marks the card.
 import type { RequestAuth } from "../auth/request-auth.ts";
-import type { CustomRuleStore } from "../custom-rules-store.ts";
+import type { CustomRuleStore } from "../rules/custom-rules-store.ts";
 import {
   compileRule,
   compileSavedRule,
@@ -41,7 +41,7 @@ import {
   type RuleProduct,
   type TurnStart,
 } from "../../shared/custom-rules.ts";
-import { ORG_ALWAYS_ALLOW_OFF, ORG_RULE_LOCKED } from "../custom-rules-org.ts";
+import { ORG_ALWAYS_ALLOW_OFF, ORG_RULE_LOCKED } from "../rules/custom-rules-org.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface CustomRuleRouteDeps {

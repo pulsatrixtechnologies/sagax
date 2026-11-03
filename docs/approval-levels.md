@@ -149,7 +149,7 @@ admin removes in the bot's Approval rules: `docs/member-admin-audit.md`).
 An organization admin can, in the Perspicax console (`org-approvals`,
 `docs/org-admin-api.md`), write rules in plain words for every person and
 bot of the server, and turn "Always allow" off for everyone
-(`server/custom-rules-org.ts`). An organization rule asks first or refuses,
+(`server/rules/custom-rules-org.ts`). An organization rule asks first or refuses,
 never allows; it wins over a person's own rule of the same behavior, shows
 in each bot's Rules card and on the card it decides as "Required by your
 administrator", and nobody else can change or remove it. With "Always

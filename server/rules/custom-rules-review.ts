@@ -12,7 +12,7 @@ import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
-import { safetyClassKey } from "../shared/safety-review.ts";
+import { safetyClassKey } from "../../shared/safety-review.ts";
 import {
   callFacts,
   candidateWhen,
@@ -27,7 +27,7 @@ import {
   type CustomRuleNotice,
   type RuleProduct,
   type TurnStart,
-} from "../shared/custom-rules.ts";
+} from "../../shared/custom-rules.ts";
 
 export type { CustomRuleCandidate, CustomRuleNotice };
 

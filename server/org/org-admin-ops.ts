@@ -6,7 +6,7 @@
 import { MAX_DISABLED_MODELS, cleanDisabledModels, parseModelKey } from "../../shared/offered-models.ts";
 import type { AdminPerson } from "./org-admin-routes.ts";
 import { compileRule, type CustomRule } from "../../shared/custom-rules.ts";
-import { isOrgRuleBehavior, registeredCustomRuleStore, type CustomRuleStore, type OrgRulePatch } from "../custom-rules-store.ts";
+import { isOrgRuleBehavior, registeredCustomRuleStore, type CustomRuleStore, type OrgRulePatch } from "../rules/custom-rules-store.ts";
 import {
   badRequest,
   enumParam,
@@ -68,7 +68,7 @@ export interface OpsDeps {
    * ConsoleRefusal for a value it refuses. */
   saveSettings(changes: SettingsChanges, adminPrincipalId: string): void;
   now(): number;
-  /** 2026-10-21 (server/custom-rules-org.ts): the organization's approval
+  /** 2026-10-21 (server/rules/custom-rules-org.ts): the organization's approval
    * rules and its Always allow switch. Default: the server's custom rule
    * store. */
   orgApprovals?: Pick<CustomRuleStore, "orgPolicy" | "orgRules" | "setOrgAlwaysAllow" | "addOrgRule" | "updateOrgRule" | "removeOrgRule">;
@@ -183,7 +183,7 @@ export function opsRoutes(deps: OpsDeps): ConsoleRoute[] {
     // 2026-10-21 (the reference design parity lot 1A): the organization's approvals.
     // Rules ask first or refuse, for every person and bot, and members can
     // neither change nor remove them; alwaysAllow false keeps every approval
-    // to one card at a time (server/custom-rules-org.ts).
+    // to one card at a time (server/rules/custom-rules-org.ts).
     {
       method: "GET",
       path: "org-approvals",

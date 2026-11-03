@@ -5,7 +5,7 @@ import { z } from "zod";
 import { resolveRoutineById } from "../../shared/routine-by-id.ts";
 import { pageRoutines } from "../../shared/routine-listing.ts";
 import { routineAutoPauseAfter } from "../../shared/routine-auto-pause.ts";
-import { RuleRequestError } from "../rule-requests.ts";
+import { RuleRequestError } from "../rules/rule-requests.ts";
 import { redactSecretsInText } from "../redact.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";

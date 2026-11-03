@@ -38,7 +38,7 @@ export const MEMORY_INDEX = "MEMORY.md";
  * store too, so the editor, the journal and its revert treat them exactly
  * like memory files: same containment, scrub, modes and conflict check. */
 export const RULES_PATH = "RULES.md";
-/** The folder of the extra rule sets (server/rule-sets.ts): one markdown
+/** The folder of the extra rule sets (server/rules/rule-sets.ts): one markdown
  * file per set, `rules/<id>.md`. RULES.md stays the first set's file. */
 export const RULE_SETS_DIR = "rules";
 

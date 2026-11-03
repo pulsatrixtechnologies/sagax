@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { approvalHeldNote, autoVerdict } from "./auto-approve.ts";
-import { customRuleCandidate, customRuleNotice, reviewCustomRules, ruleCoversCard } from "../custom-rules-review.ts";
+import { customRuleCandidate, customRuleNotice, reviewCustomRules, ruleCoversCard } from "../rules/custom-rules-review.ts";
 import type { CustomRule } from "../../shared/custom-rules.ts";
 
 const HOME = "/Users/example";
@@ -45,7 +45,7 @@ describe("autoVerdict with a custom rule", () => {
 
 // reviewCustomRules resolves each path on this disk: on Windows
 // /Users/example/... becomes D:\Users\example\..., which no folder rule reads, so a
-// folder allow fails closed there (server/custom-rules.security.test.ts,
+// folder allow fails closed there (server/rules/custom-rules.security.test.ts,
 // "Windows paths fail closed") and no candidate is offered.
 const windows = process.platform === "win32";
 

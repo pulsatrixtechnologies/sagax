@@ -4,7 +4,7 @@
 //
 // - Organization rules: "Demander d'abord" or "Refuser" in plain words
 //   (shared/custom-rules.ts), kept in custom-approval-rules.json beside the
-//   people's own rules (server/custom-rules-store.ts). They apply to every
+//   people's own rules (server/rules/custom-rules-store.ts). They apply to every
 //   person and every bot, win over a person's own rule of the same behavior,
 //   and a member can neither change nor remove them ("Exigé par votre
 //   administrateur"). They only restrict: an organization rule never allows.

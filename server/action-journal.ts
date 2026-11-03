@@ -10,7 +10,7 @@
 // in the admin activity log) carry the tool guard's verdict. This module
 // folds them into one row per action, the same way the bot's activity log
 // does (server/activity.ts), and replays a rule over them ("Tester cette
-// règle") with the real matcher (server/custom-rules-review.ts).
+// règle") with the real matcher (server/rules/custom-rules-review.ts).
 //
 // Pure: the server passes what the person may read (their bots, their
 // confidential threads) and how to name things; this never reads a file.

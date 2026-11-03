@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { callFacts, type CustomRule } from "../shared/custom-rules.ts";
+import { callFacts, type CustomRule } from "../../shared/custom-rules.ts";
 import { createCustomRulesModelReviewer, type ModelReviewCard, type ModelReviewDeps } from "./custom-rules-model.ts";
 
 let seq = 0;

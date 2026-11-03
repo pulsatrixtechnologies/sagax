@@ -1,4 +1,4 @@
-// Rule sets (server/rule-sets.ts, server/routes/bot-rules.ts): an existing
+// Rule sets (server/rules/rule-sets.ts, server/routes/bot-rules.ts): an existing
 // RULES.md becomes the first set without loss; sets are added, renamed,
 // switched, reordered and deleted; the ones that are on load in order under
 // a budget per set and in all; the routes keep the Soul's gate and audit
@@ -8,9 +8,9 @@ import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { DATA_DIR } from "./config.ts";
-import { flushMemoryJournal, readMemoryJournal, resetMemoryJournalState } from "./memory/memory-journal.ts";
-import { closeMessageDb } from "./messages/message-db.ts";
+import { DATA_DIR } from "../config.ts";
+import { flushMemoryJournal, readMemoryJournal, resetMemoryJournalState } from "../memory/memory-journal.ts";
+import { closeMessageDb } from "../messages/message-db.ts";
 import {
   RULES_MAX_LINES,
   RULES_TOTAL_MAX_LINES,
@@ -22,12 +22,12 @@ import {
   rulesSystemPrompt,
   writeRuleSets,
 } from "./rule-sets.ts";
-import { createBotRulesRoutes, type BotRulesAuditRow } from "./routes/bot-rules.ts";
-import { PASS } from "./routes/table.ts";
-import { updateRules } from "./workspace/workspace-tools.ts";
-import { promptSectionPaths, resetWorkspaceUsageCache, USAGE_DIR } from "./workspace/workspace-usage.ts";
-import { workspaceTree } from "./workspace/workspace-files.ts";
-import { ensureWorkspace, workspaceDir } from "./workspace/workspace.ts";
+import { createBotRulesRoutes, type BotRulesAuditRow } from "../routes/bot-rules.ts";
+import { PASS } from "../routes/table.ts";
+import { updateRules } from "../workspace/workspace-tools.ts";
+import { promptSectionPaths, resetWorkspaceUsageCache, USAGE_DIR } from "../workspace/workspace-usage.ts";
+import { workspaceTree } from "../workspace/workspace-files.ts";
+import { ensureWorkspace, workspaceDir } from "../workspace/workspace.ts";
 
 let counter = 0;
 let BOT = "";

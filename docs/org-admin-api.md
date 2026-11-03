@@ -812,7 +812,7 @@ refused with 403 `org_always_allow_off`, no allow rule is saved or turned
 on, and the standing grants people already saved stop answering while it is
 off (they answer again when it is back on). Each change is an `approval`
 row of the admin activity (`org.approvals.*`). Kept in
-`custom-approval-rules.json` under `org`; `server/custom-rules-org.ts`.
+`custom-approval-rules.json` under `org`; `server/rules/custom-rules-org.ts`.
 
 ## Connections
 

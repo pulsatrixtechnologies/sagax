@@ -12,7 +12,7 @@ import { join } from "node:path";
 
 import { expect, it } from "vitest";
 
-import { launchVerificationServer, type VerificationServer } from "../scripts/control-omb.ts";
+import { launchVerificationServer, type VerificationServer } from "../../scripts/control-omb.ts";
 
 function client(fixture: VerificationServer) {
   const { url } = fixture.info;

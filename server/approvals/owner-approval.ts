@@ -38,7 +38,7 @@ import { isOutboundTool } from "../../shared/outbound.ts";
 import { decodeGrokGatewayName, grokGatewayToolConnector } from "../../shared/grok-cloud-connectors.ts";
 import { connectorWriteKind } from "../../shared/engine-connectors.ts";
 import { screenAppTarget, type ScreenAppIdentity } from "../../shared/computer-app.ts";
-import { standingGrantsAllowed } from "../custom-rules-org.ts";
+import { standingGrantsAllowed } from "../rules/custom-rules-org.ts";
 import { sensitiveReadPath } from "../safety/sensitive-path.ts";
 
 export const BOT_PERMISSION_MODES = ["approval", "auto", "bypass"] as const;
@@ -483,7 +483,7 @@ export function ruleMatches(rule: OwnerRule, call: RuleCall, callScope: RuleScop
 /** The rule that decides a call: deny first, then ask, then allow; within
  * one behavior, the narrowest (most scope keys, one bot over all). While
  * the organization turned "Toujours permettre" off
- * (server/custom-rules-org.ts), no allow rule answers. */
+ * (server/rules/custom-rules-org.ts), no allow rule answers. */
 export function matchOwnerRule(rules: readonly OwnerRule[], call: RuleCall): OwnerRule | undefined {
   const scope = callScopeFor(call);
   const destructive = destructiveKindOf(call);
@@ -627,7 +627,7 @@ export function ruleCoversSituation(rule: Pick<OwnerRule, "from">, situation: Ru
  * tool call (an act or a setting change, a widget's change, a proposal)
  * covers this one: same tool and the very same scope, key for key. Never
  * while the organization turned "Toujours permettre" off
- * (server/custom-rules-org.ts). */
+ * (server/rules/custom-rules-org.ts). */
 export function ruleCoversExactScope(rule: OwnerRule, tool: string, scope: RuleScope): boolean {
   if (rule.behavior !== "allow" || rule.tool !== tool || !standingGrantsAllowed()) return false;
   const keys = Object.keys(rule.scope);

@@ -338,7 +338,7 @@ describe("shell commands the rules cannot read", () => {
   it("leaves a plain read alone", () => {
     // On Windows the server's realpath turns /etc/hosts into D:\etc\hosts, a
     // path the rules cannot read: the line is then not a pure read and asks
-    // for the key (fails closed, server/custom-rules.security.test.ts).
+    // for the key (fails closed, server/rules/custom-rules.security.test.ts).
     if (process.platform === "win32") expect(shell("cat /etc/hosts")).toContain("destructive");
     else expect(shell("cat /etc/hosts")).not.toContain("destructive");
   });

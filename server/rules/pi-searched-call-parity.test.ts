@@ -11,10 +11,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { reviewCustomRules } from "./custom-rules-review.ts";
-import extension from "./drivers/pi-mcp-extension.ts";
-import { buildMcpServers, piGatedMcpInput, piGatedMcpTool, piSearchedCall, piSearchedServers } from "./drivers/pi.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
-import type { CustomRule } from "../shared/custom-rules.ts";
+import extension from "../drivers/pi-mcp-extension.ts";
+import { buildMcpServers, piGatedMcpInput, piGatedMcpTool, piSearchedCall, piSearchedServers } from "../drivers/pi.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
+import type { CustomRule } from "../../shared/custom-rules.ts";
 
 type ExtensionApi = Parameters<typeof extension>[0];
 type RegisteredTool = Parameters<ExtensionApi["registerTool"]>[0];

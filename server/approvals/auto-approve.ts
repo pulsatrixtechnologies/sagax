@@ -15,7 +15,7 @@ import { supportsApprovalMode, type ApprovalMode } from "../../shared/approval-m
 import { outboundMailNeedsDraftCard } from "../../shared/email-draft-send.ts";
 import { isOutboundTool } from "../../shared/outbound.ts";
 import type { ProviderAdapter, RequestOutcome } from "../contracts.ts";
-import { standingGrantsAllowed } from "../custom-rules-org.ts";
+import { standingGrantsAllowed } from "../rules/custom-rules-org.ts";
 import { fullAccessDecision } from "./full-access-gate.ts";
 
 /** A failed delivery is a runtime error, not another permission decision.
@@ -346,7 +346,7 @@ export function autoVerdict(
   // person's choice is that accept (#1905: a send held under Full); a rule
   // that keeps the card at Full names itself below instead.
   if (context?.safetyHold && !full.acts && !full.hold) return { approve: null, source: "safety-hold" };
-  // 2026-10-21 (server/custom-rules-org.ts): while the organization turned
+  // 2026-10-21 (server/rules/custom-rules-org.ts): while the organization turned
   // "Toujours permettre" off, no standing grant answers (a saved Allow rule
   // of a gate, a saved command, an allow rule in the person's words); each
   // call is approved on its card.
@@ -359,7 +359,7 @@ export function autoVerdict(
       ...(context.customRule?.behavior === "allow" ? { customRule: undefined } : {}),
     };
   }
-  // An organization admin's Refuse rule (server/custom-rules-org.ts) is
+  // An organization admin's Refuse rule (server/rules/custom-rules-org.ts) is
   // mandatory: even a draft the person approved is refused.
   if (context?.customRule?.behavior === "deny" && context.customRule.id.startsWith("orule_")) return { approve: null, source: "custom-rule-deny" };
   // A send the person approved on the draft's own card is that person's

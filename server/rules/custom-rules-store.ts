@@ -6,7 +6,7 @@
 // process could not read is never overwritten: rules are ignored (no rule
 // allows anything) until it is repaired.
 //
-// 2026-10-21 (the reference design parity lot 1A, server/custom-rules-org.ts): the
+// 2026-10-21 (the reference design parity lot 1A, server/rules/custom-rules-org.ts): the
 // organization's rules (ask or deny, by an admin, for everyone) and its
 // "Toujours permettre" switch live in the same file under `org`. `rulesOf`
 // is what the reviewer applies: the person's own rules (their allow rules
@@ -17,7 +17,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
 
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 import { setOrgApprovalPolicySource, type OrgApprovalPolicy } from "./custom-rules-org.ts";
 import {
   CUSTOM_RULE_BEHAVIORS,
@@ -29,7 +29,7 @@ import {
   type CustomRuleBinding,
   type RiskClass,
   type TurnStart,
-} from "../shared/custom-rules.ts";
+} from "../../shared/custom-rules.ts";
 
 export const MAX_CUSTOM_RULES_PER_OWNER = 200;
 export const MAX_ORG_RULES = 100;

@@ -23,8 +23,8 @@ import {
   type StepUpTarget,
 } from "../../shared/step-up.ts";
 import type { OptionCardData } from "../../shared/wire.ts";
-import { ORG_ALWAYS_ALLOW_OFF, answerWidens, standingGrantsAllowed } from "../custom-rules-org.ts";
-import { factsForCall } from "../custom-rules-review.ts";
+import { ORG_ALWAYS_ALLOW_OFF, answerWidens, standingGrantsAllowed } from "../rules/custom-rules-org.ts";
+import { factsForCall } from "../rules/custom-rules-review.ts";
 import { grantDigest, type SecurityKeys } from "./security-keys.ts";
 
 /** The grant an Allow on this card, with this answer, is authorized by:
@@ -46,7 +46,7 @@ const UNREADABLE = "Saved security keys could not be read, so this approval cann
 
 export type StepUpDecision = { status: number; body: StepUpRefusal | OrgAlwaysAllowRefusal } | null;
 
-/** 2026-10-21 (server/custom-rules-org.ts): the organization turned
+/** 2026-10-21 (server/rules/custom-rules-org.ts): the organization turned
  * "Toujours permettre" off, so an answer that would save a standing grant is
  * refused on every answer path (this gate is asked by each of them). */
 export type OrgAlwaysAllowRefusal = typeof ORG_ALWAYS_ALLOW_OFF & { classes: []; reason?: undefined; target?: undefined };

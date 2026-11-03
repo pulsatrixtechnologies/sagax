@@ -119,7 +119,7 @@ export function promptSectionPaths(sections: ReadonlyArray<{ id: string; text: s
   for (const section of sections) {
     if (!section.text) continue;
     if (section.id === "soul") paths.push("SOUL.md");
-    // each rule set's block names its file (server/rule-sets.ts)
+    // each rule set's block names its file (server/rules/rule-sets.ts)
     else if (section.id === "rules") {
       const files = [...section.text.matchAll(/^--- BEGIN RULES(?: "(?:[^"\\]|\\.)*")? \(((?:RULES\.md|rules\/[^/,\s]+\.md)), \d+ bytes\) ---$/gm)].map((match) => match[1]!);
       paths.push(...(files.length ? files : ["RULES.md"]));

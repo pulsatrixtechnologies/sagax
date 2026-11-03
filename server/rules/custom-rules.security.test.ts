@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { customRuleCandidate, factsForCall, realPath } from "./custom-rules-review.ts";
-import { callFacts, candidateWhen, compileRule, evaluateCustomRules, normalizePath, ruleCoversCall, shellProgram, type CustomRule } from "../shared/custom-rules.ts";
+import { callFacts, candidateWhen, compileRule, evaluateCustomRules, normalizePath, ruleCoversCall, shellProgram, type CustomRule } from "../../shared/custom-rules.ts";
 
 const home = "/Users/example";
 /** A product as the platform declares it (api_list: its id and name). */

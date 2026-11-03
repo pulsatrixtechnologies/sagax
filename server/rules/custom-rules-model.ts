@@ -1,6 +1,6 @@
 // The model reviewer of custom rules (examen automatique, 2026-10-21, reference
 // design parity A1; Decision: "OUI, comme Grok"). A card the deterministic matcher
-// left to the person (server/custom-rules-review.ts) is judged by a light,
+// left to the person (server/rules/custom-rules-review.ts) is judged by a light,
 // isolated, tool-free model (the bot's own engine's reviewPermission: Haiku
 // on Claude) against the person's rules and the organization's. It answers
 // in the person's place:
@@ -35,7 +35,7 @@ import {
   type CustomRuleNotice,
   type ModelRuleVerdict,
   type TurnStart,
-} from "../shared/custom-rules.ts";
+} from "../../shared/custom-rules.ts";
 
 export const MODEL_REVIEW_TIMEOUT_MS = 30_000;
 export const MODEL_REVIEW_CACHE_MS = 10 * 60_000;

@@ -1,4 +1,4 @@
-// The persona editor's Rules section as rule sets (server/rule-sets.ts,
+// The persona editor's Rules section as rule sets (server/rules/rule-sets.ts,
 // docs/bot-workspace.md): list them with their text and their size against
 // the budgets, add one, rename it, switch it on or off, reorder them, save a
 // set's text, delete one.
@@ -36,7 +36,7 @@ import {
   totalOverBudget,
   writeRuleSets,
   type RuleSet,
-} from "../rule-sets.ts";
+} from "../rules/rule-sets.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface BotRulesAuditRow {

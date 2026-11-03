@@ -58,7 +58,7 @@ With more than one set (or a renamed one), each set gets its own block, named:
 
 ## Rule sets (2026-10-15)
 
-`server/rule-sets.ts` keeps several named sets per bot. `RULES.md` is the first set (id
+`server/rules/rule-sets.ts` keeps several named sets per bot. `RULES.md` is the first set (id
 `rules`, shown as "Rules" until it is renamed), so a bot that had a `RULES.md` keeps it, its
 prompt block and its journal history unchanged: nothing is moved. Every other set is
 `rules/<id>.md`; `rules/.sets.json` holds the order, the names and the switches. Without that

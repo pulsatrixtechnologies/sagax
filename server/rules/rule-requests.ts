@@ -12,16 +12,16 @@ import {
   type CustomRule,
   type CustomRuleBehavior,
   type RiskClass,
-} from "../shared/custom-rules.ts";
+} from "../../shared/custom-rules.ts";
 import {
   ruleCardCopy,
   type RuleRequestAction,
   type RuleRequestCardData,
   type RuleRequestOperation,
-} from "../shared/rule-request.ts";
-import { newId } from "./contracts.ts";
-import type { DirectApply, DirectApplyCheck } from "./direct-apply.ts";
-import { redactSecretsInText } from "./redact.ts";
+} from "../../shared/rule-request.ts";
+import { newId } from "../contracts.ts";
+import type { DirectApply, DirectApplyCheck } from "../direct-apply.ts";
+import { redactSecretsInText } from "../redact.ts";
 import type { CustomRulePatch, CustomRuleStore, NewCustomRule } from "./custom-rules-store.ts";
 import { ORG_ALWAYS_ALLOW_OFF, ORG_RULE_LOCKED } from "./custom-rules-org.ts";
 

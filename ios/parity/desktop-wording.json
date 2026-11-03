@@ -256,5 +256,18 @@
   "Nothing to chart yet.": "memoryManager.quality.chartEmpty",
   "%@ notes, %@ links": "memoryManager.map.count",
   "Drag to move, scroll or pinch to zoom, press a note to open it.": "memoryManager.map.help",
-  "No note on the map yet. Write the first one.": "memoryManager.map.first"
+  "No note on the map yet. Write the first one.": "memoryManager.map.first",
+  "Clear the run logs of “%@”?": "routineDetail.clearRunsConfirm",
+  "Your saved runs of this routine are deleted for good. Runs in progress are kept.": "routineDetail.clearRunsBody",
+  "Clear run logs": "routineDetail.clearRuns",
+  "%@ of %@ runs OK this week": "routines.weekRuns",
+  "%@ of 1 run OK this week": "routines.weekRunsOne",
+  "Disable": "routines.disable",
+  "Format with AI": "routineEditor.formatAi",
+  "Instruction": "routineEditor.instruction",
+  "Show more": "routineEditor.showMore",
+  "Show less": "routineEditor.showLess",
+  "No runs yet.": "routines.drawer.noRuns",
+  "Active": "routineDetail.active",
+  "Please reformat the instruction of my routine “%@” (id %@) so it is better structured and easier to read: headings, numbered steps, short sentences. Keep every rule, fact, date and decision exactly as it is and change no meaning. Then update routine “%@” (id %@) with the result through your routine edit tool (propose_routine_action, action update, changes.instructions), and show me the before and after.": "routineEditor.formatAiPrompt"
 }

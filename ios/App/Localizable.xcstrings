@@ -1228,6 +1228,26 @@
         }
       }
     },
+    "%@ of %@ runs OK this week": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ exécutions sur %@ réussies cette semaine"
+          }
+        }
+      }
+    },
+    "%@ of 1 run OK this week": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ exécution sur 1 réussie cette semaine"
+          }
+        }
+      }
+    },
     "%@ out of 5": {
       "localizations": {
         "en": {
@@ -16644,6 +16664,22 @@
         }
       }
     },
+    "Clear run logs": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer l'historique des exécutions"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limpar o histórico de execuções"
+          }
+        }
+      }
+    },
     "Clear run logs?": {
       "localizations": {
         "fr": {
@@ -16678,6 +16714,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Limpar seleção"
+          }
+        }
+      }
+    },
+    "Clear the run logs of “%@”?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer l'historique des exécutions de « %@ » ?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limpar o histórico de execuções de “%@”?"
           }
         }
       }
@@ -23929,6 +23981,12 @@
             "state": "translated",
             "value": "Désactiver"
           }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desativar"
+          }
         }
       }
     },
@@ -29526,6 +29584,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mettre en forme avec l'IA"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formatar com IA"
           }
         }
       }
@@ -44954,6 +45018,16 @@
         }
       }
     },
+    "No runs yet.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune exécution pour l'instant."
+          }
+        }
+      }
+    },
     "No saved login for this site. Add one on your computer, or sign in there yourself.": {
       "localizations": {
         "en": {
@@ -53950,6 +54024,22 @@
         }
       }
     },
+    "Please reformat the instruction of my routine “%@” (id %@) so it is better structured and easier to read: headings, numbered steps, short sentences. Keep every rule, fact, date and decision exactly as it is and change no meaning. Then update routine “%@” (id %@) with the result through your routine edit tool (propose_routine_action, action update, changes.instructions), and show me the before and after.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mets en forme l'instruction de ma routine « %@ » (id %@) pour qu'elle soit mieux structurée et plus facile à lire : titres, étapes numérotées, phrases courtes. Garde exactement chaque règle, fait, date et décision, et n'en change pas le sens. Ensuite, mets à jour la routine « %@ » (id %@) avec le résultat au moyen de ton outil de modification de routine (propose_routine_action, action update, changes.instructions), et montre-moi l'avant et l'après."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reformate a instrução da minha rotina “%@” (id %@) para que fique mais bem estruturada e fácil de ler: títulos, passos numerados, frases curtas. Mantenha exatamente cada regra, fato, data e decisão, sem mudar o sentido. Depois, atualize a rotina “%@” (id %@) com o resultado pela sua ferramenta de edição de rotinas (propose_routine_action, action update, changes.instructions) e mostre o antes e o depois."
+          }
+        }
+      }
+    },
     "Plugin": {
       "localizations": {
         "en": {
@@ -57158,16 +57248,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reduzida"
-          }
-        }
-      }
-    },
-    "Reformat the instruction of the routine \"%@\" so it reads clearly, keeping what it asks. Here it is:\n\n%@": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reformule l'instruction de la routine « %1$@ » pour qu'elle se lise clairement, en gardant ce qu'elle demande. La voici :\n\n%2$@"
           }
         }
       }
@@ -87364,6 +87444,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Votre règle : %@"
+          }
+        }
+      }
+    },
+    "Your saved runs of this routine are deleted for good. Runs in progress are kept.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos exécutions enregistrées de cette routine sont supprimées définitivement. Les exécutions en cours sont conservées."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suas execuções salvas desta rotina são excluídas de vez. As execuções em andamento são mantidas."
           }
         }
       }

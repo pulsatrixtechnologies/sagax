@@ -45,7 +45,7 @@ struct DesktopRoutinePanel: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     rows
-                    instruction
+                    if editing { instruction }
                     if routine.schedule.type == .webhook {
                         section(Text("Webhook")) {
                             RoutineWebhookPanel(routine: routine, bot: bot)
@@ -54,9 +54,9 @@ struct DesktopRoutinePanel: View {
                     if editing { advanced }
                     runsList
                 }
-                .padding(16)
+                .padding(.horizontal, 16).padding(.vertical, 12)
             }
-            Rectangle().fill(Theme.hairline).frame(height: 0.5)
+            Rectangle().fill(Theme.hairline.opacity(0.4)).frame(height: 0.5)
             bottomBar
         }
         .background(Theme.bg)
@@ -72,15 +72,15 @@ struct DesktopRoutinePanel: View {
             Text("Past run receipts remain available.")
         }
         // RoutineLogs.tsx: Clear logs, confirmed, for this routine only
-        .confirmationDialog(String(localized: "Clear run logs?"), isPresented: $confirmingClear, titleVisibility: .visible) {
-            Button(String(localized: "Clear logs"), role: .destructive) {
+        .confirmationDialog(String(localized: "Clear the run logs of “\(routine.name)”?"), isPresented: $confirmingClear, titleVisibility: .visible) {
+            Button(String(localized: "Clear run logs"), role: .destructive) {
                 Task {
                     if let client = session.settingsClient { _ = try? await client.clearRoutineRuns(routineId: routine.id) }
                     await changed()
                 }
             }
         } message: {
-            Text("This permanently deletes all the saved runs you can see. Runs in progress are kept.")
+            Text("Your saved runs of this routine are deleted for good. Runs in progress are kept.")
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("desktop-routine-panel")
@@ -93,42 +93,45 @@ struct DesktopRoutinePanel: View {
 
     // MARK: Header
 
+    /// RoutineCalendarPage's panel header: the bot's colour square, the
+    /// name 14 medium (a field while editing), the round × that closes.
     private var header: some View {
         HStack(spacing: 8) {
-            Button(action: close) {
-                Image(systemName: "chevron.left").font(.system(size: 14, weight: .medium)).frame(width: 32, height: 32)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Theme.textSecondary)
-            .accessibilityLabel(Text("Back"))
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(MausPalette.color(bot?.color ?? ""))
+                .frame(width: 10, height: 10)
             if editing {
                 TextField(String(localized: "Name"), text: $name)
-                    .font(Theme.font(16, .semibold))
+                    .font(Theme.font(14, .medium))
                     .accessibilityIdentifier("desktop-routine-panel.name")
             } else {
-                Text(verbatim: routine.name).font(Theme.font(16, .semibold)).foregroundStyle(Theme.textPrimary).lineLimit(1)
+                Text(verbatim: routine.name).font(Theme.font(14, .medium)).foregroundStyle(Theme.textPrimary).lineLimit(1)
             }
             Spacer(minLength: 0)
             Button(action: close) {
-                Image(systemName: "sidebar.right").font(.system(size: 14)).frame(width: 32, height: 32)
+                Image(systemName: "xmark").font(.system(size: 12, weight: .medium)).frame(width: 30, height: 30)
+                    .overlay(Circle().strokeBorder(Theme.hairline.opacity(0.6), lineWidth: 1))
             }
             .buttonStyle(.plain)
             .foregroundStyle(Theme.textSecondary)
-            .accessibilityLabel(Text("Hide the panel"))
+            .hoverEffect(.highlight)
+            .accessibilityLabel(Text("Close"))
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 14)
         .frame(minHeight: 52)
     }
 
     // MARK: Rows
 
+    /// PanelRows: label 13 secondary at the left, the value 13 at the
+    /// right, one hairline between rows, no card.
     private var rows: some View {
         VStack(spacing: 0) {
             Button { openEditor(routine) } label: {
                 row(Text("Trigger")) {
-                    HStack(spacing: 6) {
-                        Text(verbatim: RoutineWording.desktop(routine.schedule)).lineLimit(1)
-                        Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold))
+                    HStack(spacing: 4) {
+                        Text(verbatim: triggerText).lineLimit(1)
+                        Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.textTertiary)
                     }
                     .foregroundStyle(Theme.textPrimary)
                 }
@@ -137,35 +140,34 @@ struct DesktopRoutinePanel: View {
             .disabled(!routine.mayEdit)
             .accessibilityIdentifier("desktop-routine-panel.trigger")
             if !editing {
-                divider
-                row(Text("Runs as")) {
-                    HStack(spacing: 6) {
-                        if let bot { BotMascotView(bot: bot, size: 20).frame(width: 20, height: 20) }
-                        Text(verbatim: bot?.name ?? String(localized: "Deleted agent")).foregroundStyle(Theme.textPrimary)
-                    }
+                if let runAs = routine.runAs {
+                    divider
+                    row(Text("Runs as")) { Text(verbatim: runAs.name).foregroundStyle(Theme.textPrimary) }
                 }
                 divider
                 row(Text("Active")) {
-                    Toggle("", isOn: Binding(get: { routine.enabled }, set: { _ in Task { await toggle() } }))
-                        .labelsHidden()
-                        .tint(Theme.accent)
-                        .disabled(!(routine.mayEdit && routine.canToggle()))
-                        .accessibilityIdentifier("desktop-routine-panel.active")
+                    PanelSwitch(label: "Active", isOn: routine.enabled, disabled: !(routine.mayEdit && routine.canToggle()),
+                                onColor: BubbleColors.user(botColor: bot?.color)?.fill.color) { _ in
+                        Task { await toggle() }
+                    }
+                    .accessibilityIdentifier("desktop-routine-panel.active")
                 }
             }
             divider
             row(Text("Next run")) {
-                Text(verbatim: nextRun).foregroundStyle(Theme.textSecondary)
+                Text(verbatim: nextRun).foregroundStyle(Theme.textPrimary)
             }
-            divider
-            row(Text("This week")) {
-                Text(verbatim: thisWeek).foregroundStyle(Theme.textSecondary)
+            if let week = routine.weekRuns {
+                divider
+                row(Text("This week")) {
+                    Text(week.total == 1 ? String(localized: "\(String(week.ok)) of 1 run OK this week") : String(localized: "\(String(week.ok)) of \(String(week.total)) runs OK this week"))
+                        .foregroundStyle(Theme.textPrimary)
+                }
             }
         }
-        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.card))
     }
 
-    private var divider: some View { Rectangle().fill(Theme.hairline.opacity(0.6)).frame(height: 0.5).padding(.leading, 12) }
+    private var divider: some View { Rectangle().fill(Theme.hairline.opacity(0.3)).frame(height: 0.5) }
 
     private func row<Trailing: View>(_ label: Text, @ViewBuilder trailing: () -> Trailing) -> some View {
         HStack(spacing: 12) {
@@ -173,9 +175,15 @@ struct DesktopRoutinePanel: View {
             Spacer(minLength: 8)
             trailing().font(Theme.font(13))
         }
-        .padding(.horizontal, 12)
-        .frame(minHeight: 44)
+        .frame(minHeight: 48)
         .contentShape(Rectangle())
+    }
+
+    /// `scheduleLabel` and its zone, as the list row says it.
+    private var triggerText: String {
+        var parts = [RoutineWording.desktop(routine.schedule)]
+        if let zone = routine.schedule.timeZone, !zone.isEmpty { parts.append(zone) }
+        return parts.joined(separator: " · ")
     }
 
     private var nextRun: String {
@@ -201,7 +209,7 @@ struct DesktopRoutinePanel: View {
         section(Text("Instruction"), trailing: {
             if !editing, let bot {
                 Button {
-                    ComposerPrefill.shared.set(String(localized: "Reformat the instruction of the routine \"\(routine.name)\" so it reads clearly, keeping what it asks. Here it is:\n\n\(routine.prompt)"), threadId: bot.threadId)
+                    ComposerPrefill.shared.set(String(localized: "Please reformat the instruction of my routine “\(routine.name)” (id \(routine.id)) so it is better structured and easier to read: headings, numbered steps, short sentences. Keep every rule, fact, date and decision exactly as it is and change no meaning. Then update routine “\(routine.name)” (id \(routine.id)) with the result through your routine edit tool (propose_routine_action, action update, changes.instructions), and show me the before and after."), threadId: bot.threadId)
                     shell.open(.bot(bot))
                 } label: {
                     Label("Format with AI", systemImage: "sparkles").font(Theme.font(12))
@@ -262,22 +270,33 @@ struct DesktopRoutinePanel: View {
 
     // MARK: Runs
 
+    /// "Runs" 12 medium secondary with its count in a pill, the eraser
+    /// (Clear run logs) at the right; no runs: the dashed box.
     private var runsList: some View {
-        section(Text("Runs (\(String(mine.count)))"), trailing: {
-            Button { confirmingClear = true } label: {
-                Image(systemName: "trash").font(.system(size: 12)).foregroundStyle(Theme.textSecondary).frame(width: 28, height: 28)
-            }
-            .buttonStyle(.plain)
-            .disabled(mine.isEmpty)
-            .hoverEffect(.highlight)
-            .accessibilityLabel(Text("Clear logs"))
-            .accessibilityIdentifier("desktop-routine-panel.clear-runs")
-        }) {
-            VStack(spacing: 0) {
-                if mine.isEmpty {
-                    Text("No runs yet.").font(Theme.font(13)).foregroundStyle(Theme.textSecondary)
-                        .frame(maxWidth: .infinity, minHeight: 60)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text("Runs").font(Theme.font(12, .medium)).foregroundStyle(Theme.textSecondary)
+                if !mine.isEmpty {
+                    Text(verbatim: "\(mine.count)").font(Theme.font(10.5)).foregroundStyle(Theme.textSecondary)
+                        .padding(.horizontal, 6).background(Capsule().fill(Theme.card))
                 }
+                Spacer(minLength: 0)
+                if !mine.isEmpty {
+                    Button { confirmingClear = true } label: {
+                        Image(systemName: "eraser").font(.system(size: 13)).foregroundStyle(Theme.textTertiary).frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .hoverEffect(.highlight)
+                    .accessibilityLabel(Text("Clear run logs"))
+                    .accessibilityIdentifier("desktop-routine-panel.clear-runs")
+                }
+            }
+            if mine.isEmpty {
+                Text("No runs yet.").font(Theme.font(12.5)).foregroundStyle(Theme.textSecondary)
+                    .frame(maxWidth: .infinity, minHeight: 60)
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.hairline.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+            }
+            VStack(spacing: 2) {
                 ForEach(mine.prefix(20)) { run in
                     Button { openRun(run) } label: {
                         HStack(spacing: 8) {
@@ -287,14 +306,14 @@ struct DesktopRoutinePanel: View {
                             Spacer(minLength: 0)
                             Text(verbatim: run.status.capitalized).font(Theme.font(12)).foregroundStyle(Theme.textSecondary)
                         }
-                        .padding(.horizontal, 12)
-                        .frame(minHeight: 40)
+                        .padding(.horizontal, 8)
+                        .frame(minHeight: 36)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .hoverEffect(.highlight)
                 }
             }
-            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.card))
         }
     }
 
@@ -309,44 +328,56 @@ struct DesktopRoutinePanel: View {
 
     // MARK: Bottom bar
 
+    /// The action row: Run now (the primary pill), Edit, Disable or
+    /// Enable, and the round trash at the far right; editing: Cancel, Save.
     private var bottomBar: some View {
         HStack(spacing: 8) {
             if editing {
-                Button("Cancel") { editing = false; seed() }
-                    .buttonStyle(.bordered)
-                Button("Save") { Task { await save() } }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Theme.accent)
+                pill(Text("Cancel"), icon: nil) { editing = false; seed() }
+                pill(Text("Save"), icon: nil, primary: true) { Task { await save() } }
                     .disabled(busy || name.trimmingCharacters(in: .whitespaces).isEmpty)
                     .accessibilityIdentifier("desktop-routine-panel.save")
             } else {
-                Button { Task { _ = await session.runRoutine(routine); await changed() } } label: {
-                    Label("Run now", systemImage: "play.fill")
+                if routine.mayRun {
+                    pill(Text("Run now"), icon: "play.fill", primary: true) { Task { _ = await session.runRoutine(routine); await changed() } }
+                        .accessibilityIdentifier("desktop-routine-panel.run")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.accent)
-                .disabled(!routine.mayRun)
-                .accessibilityIdentifier("desktop-routine-panel.run")
-                Button { editing = true } label: { Label("Edit", systemImage: "pencil") }
-                    .buttonStyle(.bordered)
-                    .disabled(!routine.mayEdit)
-                    .accessibilityIdentifier("desktop-routine-panel.edit")
-                Button(routine.enabled ? String(localized: "Disable") : String(localized: "Enable")) { Task { await toggle() } }
-                    .buttonStyle(.bordered)
-                    .disabled(!(routine.mayEdit && routine.canToggle()))
+                if routine.mayEdit {
+                    pill(Text("Edit"), icon: "pencil") { editing = true }
+                        .accessibilityIdentifier("desktop-routine-panel.edit")
+                    pill(routine.enabled ? Text("Disable") : Text("Enable"), icon: routine.enabled ? "pause" : "play.circle") { Task { await toggle() } }
+                        .disabled(!routine.canToggle())
+                }
             }
             Spacer(minLength: 0)
-            Button(role: .destructive) { confirmingDelete = true } label: {
-                Image(systemName: "trash").frame(width: 32, height: 32)
+            if routine.mayEdit {
+                Button { confirmingDelete = true } label: {
+                    Image(systemName: "trash").font(.system(size: 14)).foregroundStyle(Theme.textSecondary).frame(width: 36, height: 36)
+                        .overlay(Circle().strokeBorder(Theme.hairline.opacity(0.5), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .hoverEffect(.highlight)
+                .accessibilityLabel(Text("Delete"))
+                .accessibilityIdentifier("desktop-routine-panel.delete")
             }
-            .buttonStyle(.bordered)
-            .disabled(!routine.mayEdit)
-            .accessibilityLabel(Text("Delete"))
-            .accessibilityIdentifier("desktop-routine-panel.delete")
         }
-        .controlSize(.small)
-        .font(Theme.font(12.5, .medium))
-        .padding(12)
+        .padding(.horizontal, 16).padding(.vertical, 12)
+    }
+
+    /// `PILL` / `PRIMARY_PILL` (ui-button): 13 medium, 32 tall; the
+    /// primary one is the ink fill with the panel's colour for its text.
+    private func pill(_ label: Text, icon: String?, primary: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if let icon { Image(systemName: icon).font(.system(size: 11, weight: .semibold)) }
+                label.font(Theme.font(13, .medium))
+            }
+            .foregroundStyle(primary ? Theme.bg : Theme.textPrimary)
+            .padding(.horizontal, 12).frame(height: 32)
+            .background(Capsule().fill(primary ? Theme.textPrimary : Theme.card))
+        }
+        .buttonStyle(.plain)
+        .hoverEffect(.highlight)
     }
 
     // MARK: Pieces

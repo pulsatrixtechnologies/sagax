@@ -107,12 +107,14 @@ struct PanelSwitch: View {
     let label: LocalizedStringKey
     let isOn: Bool
     var disabled = false
+    /// The track when on; nil: the skin's (a routine's switch wears its bot's colour).
+    var onColor: Color? = nil
     let set: (Bool) -> Void
 
     var body: some View {
         Button { set(!isOn) } label: {
             ZStack(alignment: isOn ? .trailing : .leading) {
-                Capsule().fill(isOn ? theme.switchOn : DesktopSwitchColors.of(theme.skin).off)
+                Capsule().fill(isOn ? (onColor ?? theme.switchOn) : DesktopSwitchColors.of(theme.skin).off)
                 Capsule().fill(Color.white).frame(width: 26, height: 16).padding(2)
             }
             .frame(width: 44, height: 20)

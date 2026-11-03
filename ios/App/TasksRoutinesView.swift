@@ -337,7 +337,7 @@ struct TasksRoutinesView: View {
                     openEditor: { editor = .edit($0) },
                     duplicate: { duplicating = $0 }
                 )
-                .frame(width: 400)
+                .frame(width: 476)
                 .transition(.move(edge: .trailing))
             }
         }

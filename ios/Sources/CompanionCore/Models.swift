@@ -2192,6 +2192,13 @@ public struct Routine: Codable, Hashable, Identifiable, Sendable {
     /// 2026-10-28 (RoutineFolders.swift): the folder of its bot it sits in.
     /// Absent: no folder (and on an older server).
     public var folder: String? = nil
+    /// `shared/routines.ts` weekRuns: this week's runs that went well, of all.
+    public var weekRuns: RoutineWeekRuns? = nil
+}
+
+public struct RoutineWeekRuns: Codable, Hashable, Sendable {
+    public var ok: Int
+    public var total: Int
 }
 
 public struct RoutineRun: Codable, Hashable, Identifiable, Sendable {

@@ -1,5 +1,5 @@
-// The local semantic index behind automatic recall (server/recall.ts,
-// server/semantic-recall.ts). FTS5 finds a note by its words; this index
+// The local semantic index behind automatic recall (server/recall/recall.ts,
+// server/recall/semantic-recall.ts). FTS5 finds a note by its words; this index
 // finds it by its pieces of words, and by its meaning when the person
 // runs an embedding model, so "my dentst apointment" still meets "the
 // dentist appointment is on Thursday".
@@ -26,18 +26,18 @@ import { chmodSync, closeSync, existsSync, mkdirSync, openSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { fieldAad, open as openSealed, seal } from "./encryption/content-crypto.ts";
-import type { LiveKey } from "./encryption/content-keys.ts";
-import { withoutExpired } from "./memory/memory-entries.ts";
-import { withoutWiderAudience } from "./memory/memory-audience.ts";
-import { topicBody } from "./memory/memory-topics.ts";
-import { contentEncryptionOn, contentKeyById, contentKeyForBot, contentKeyForThread, messageThreadIds, onMessageChange, readMessageText, textMessagesAfter, type IndexableMessage } from "./messages/message-db.ts";
+import { fieldAad, open as openSealed, seal } from "../encryption/content-crypto.ts";
+import type { LiveKey } from "../encryption/content-keys.ts";
+import { withoutExpired } from "../memory/memory-entries.ts";
+import { withoutWiderAudience } from "../memory/memory-audience.ts";
+import { topicBody } from "../memory/memory-topics.ts";
+import { contentEncryptionOn, contentKeyById, contentKeyForBot, contentKeyForThread, messageThreadIds, onMessageChange, readMessageText, textMessagesAfter, type IndexableMessage } from "../messages/message-db.ts";
 import {
   contentWords, EMBEDDING_MIN_SCORE, embedTexts, fingerprint, HASHED_MIN_SCORE, hashedVector, quantize, quantizedCosine,
   type EmbeddingEndpoint, type QuantizedVector,
 } from "./semantic-encoder.ts";
 import type { SemanticHit, SemanticIndex, SemanticScope } from "./semantic-recall.ts";
-import { listMemoryTopics, memoryDate, readMemoryTopic, workspaceDir } from "./workspace/workspace.ts";
+import { listMemoryTopics, memoryDate, readMemoryTopic, workspaceDir } from "../workspace/workspace.ts";
 
 /** Characters of a message one passage holds. */
 export const MESSAGE_PASSAGE_CHARS = 480;

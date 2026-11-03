@@ -14,8 +14,8 @@ import { recallMessages, recentMessages, readMessageText } from "../messages/mes
 import type { MemoryDestination } from "../memory/memory-audience.ts";
 import { webhookPostText } from "../peers/peer-provenance.ts";
 import { peerStatus, peerStatusWords, reachablePeers } from "../peers/peer-roster.ts";
-import { claimRecallCrossings, recallCrossingLabel } from "../recall-disclosure.ts";
-import { sessionMemoryHitFor } from "../recall.ts";
+import { claimRecallCrossings, recallCrossingLabel } from "../recall/recall-disclosure.ts";
+import { sessionMemoryHitFor } from "../recall/recall.ts";
 import { parseSince, parseUntil } from "../recent-work.ts";
 import { learnSource } from "../skills/skill-learn.ts";
 import { skillDiscoveryPage } from "../skills/skill-discovery.ts";

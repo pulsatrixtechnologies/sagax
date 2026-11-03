@@ -425,10 +425,10 @@ import {
   LOCAL_RECALL_BUDGET,
   recallQuery,
   type RecallBudget
-} from "./recall.ts";
-import { prepareSemanticRecall, setSemanticIndex } from "./semantic-recall.ts";
+} from "./recall/recall.ts";
+import { prepareSemanticRecall, setSemanticIndex } from "./recall/semantic-recall.ts";
 import { prepareEveryClaudeRetirement, retireEveryClaudeBot } from "./engines/retire-every-claude.ts";
-import { LocalSemanticIndex, semanticIndexFile } from "./semantic-index.ts";
+import { LocalSemanticIndex, semanticIndexFile } from "./recall/semantic-index.ts";
 import { withoutWiderAudience, type MemoryDestination } from "./memory/memory-audience.ts";
 import { BriefStore, type BriefAppCall } from "./proactive/background-brief.ts";
 import { listBriefApps, readBriefTool } from "./proactive/background-brief-apps.ts";
@@ -838,7 +838,7 @@ import { getOrCreateChannel, mirrorActivity, mirrorReply, type CommsBus } from "
 import { openApprovalCardMessages, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
 import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
 import { contentEncryptionFromEnv } from "./encryption/content-encryption-env.ts";
-import { briefCrossingLabel, claimRecallCrossings } from "./recall-disclosure.ts";
+import { briefCrossingLabel, claimRecallCrossings } from "./recall/recall-disclosure.ts";
 import {
   LOCAL_RECENT_WORK_LINES,
   recentWork,
@@ -4354,7 +4354,7 @@ function recentWorkSources(bot: BotRecord) {
   };
 }
 
-/** The automatic-recall block for a turn (server/recall.ts), or "". Notes
+/** The automatic-recall block for a turn (server/recall/recall.ts), or "". Notes
  * always; the bot's other conversations only when `conversations` — a 1:1
  * turn the person started — because a message from another bot, a webhook
  * or a room must not be able to pull a private chat into its reply. The
@@ -4392,7 +4392,7 @@ function autoRecallPrompt(bot: BotRecord, threadId: string, message: string, opt
       author: (hit) => (hit.role === "user" ? hit.peer ?? opts.userName : hit.from ?? bot.name),
       ...(opts.budget ? { budget: opts.budget } : {}),
       ...(opts.audience ? { audience: opts.audience } : {}),
-      // the local semantic index (server/semantic-index.ts): on unless
+      // the local semantic index (server/recall/semantic-index.ts): on unless
       // switched off; FTS5 still fills the block first
       semantic: semanticRecallEnabled(cfg)
     });
@@ -8249,7 +8249,7 @@ setAtRestThreadFiles((threadId) => {
   return [...paths];
 });
 await unlockContentKeys();
-// Recall by meaning (server/semantic-index.ts): registered at start, on
+// Recall by meaning (server/recall/semantic-index.ts): registered at start, on
 // unless memory.semanticRecall is false or SAGAX_SEMANTIC_RECALL=0. It
 // follows message writes and catches up with older conversations in the
 // background; its vectors are sealed like the transcripts.
@@ -28366,7 +28366,7 @@ function configStatus() {
     billing: { currency: cfg.billing?.currency ?? "USD", prices: cfg.billing?.prices ?? {} },
     // how long the approval decision log is kept, after env and default
     decisions: { retentionDays: decisionRetentionDays(cfg.decisions?.retentionDays) },
-    // recall by meaning (server/semantic-index.ts); the endpoint is an address, not a secret
+    // recall by meaning (server/recall/semantic-index.ts); the endpoint is an address, not a secret
     memory: { semanticRecall: semanticRecallEnabled(cfg), embeddingsUrl: cfg.memory?.embeddingsUrl ?? "", embeddingsModel: cfg.memory?.embeddingsModel ?? "" },
     // the base URL is a setting, not a secret; the key stays write-only
     openaiCompat: { configured: Boolean(cfg.openaiCompat?.key), url: cfg.openaiCompat?.url ?? "", model: cfg.openaiCompat?.model ?? "" },

@@ -9,11 +9,11 @@
 // Shape rules: the rule that this is reference material comes BEFORE the
 // content; passages are numbered and dated; fence markers inside a passage
 // are neutralised so a note cannot close the block; the block is capped.
-import { recallMessages, recallTerms, type MemoryHit, type RecallHit } from "./messages/message-db.ts";
-import { parseTopicHeader, readTopicHead, topicBody, topicWords } from "./memory/memory-topics.ts";
-import { listMemoryTopics, memoryDate, readMemoryFile, readMemoryLog, readMemoryTopic, searchMemoryFiles, workspaceDir } from "./workspace/workspace.ts";
-import { withoutExpired } from "./memory/memory-entries.ts";
-import { memoryHitMayShow, memoryMayShow, memoryReadersOf, withoutWiderAudience, type MemoryDestination } from "./memory/memory-audience.ts";
+import { recallMessages, recallTerms, type MemoryHit, type RecallHit } from "../messages/message-db.ts";
+import { parseTopicHeader, readTopicHead, topicBody, topicWords } from "../memory/memory-topics.ts";
+import { listMemoryTopics, memoryDate, readMemoryFile, readMemoryLog, readMemoryTopic, searchMemoryFiles, workspaceDir } from "../workspace/workspace.ts";
+import { withoutExpired } from "../memory/memory-entries.ts";
+import { memoryHitMayShow, memoryMayShow, memoryReadersOf, withoutWiderAudience, type MemoryDestination } from "../memory/memory-audience.ts";
 import { fusePassages, semanticPassages } from "./semantic-recall.ts";
 import { join } from "node:path";
 
@@ -142,7 +142,7 @@ export interface RecallInput {
   /** Where this recall would be shown. A wider place does not receive a
    * captured fact stamped for somewhere narrower. Absent: the person. */
   audience?: MemoryDestination;
-  /** When true, passages of the local semantic index (server/semantic-index.ts)
+  /** When true, passages of the local semantic index (server/recall/semantic-index.ts)
    * may take the slots FTS5 left free. The server passes it unless semantic
    * recall is switched off. No model is downloaded. */
   semantic?: boolean;

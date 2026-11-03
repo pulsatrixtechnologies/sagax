@@ -1,4 +1,4 @@
-// Text to vectors for the local semantic recall (server/semantic-index.ts).
+// Text to vectors for the local semantic recall (server/recall/semantic-index.ts).
 //
 // The built-in encoder needs no model and no download: it hashes words,
 // word pairs and the 3- and 4-letter pieces of every word into a fixed

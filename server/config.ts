@@ -729,7 +729,7 @@ const appConfigSchema = z.object({
     captureQuietMs: z.number().int().min(1_000).max(24 * 60 * 60_000).optional(),
     /** Local hour (0-23) after which the nightly tidy-up runs. */
     tidyHour: z.number().int().min(0).max(23).optional(),
-    /** Recall by meaning beside FTS5 (server/semantic-index.ts). On unless
+    /** Recall by meaning beside FTS5 (server/recall/semantic-index.ts). On unless
      * false, or SAGAX_SEMANTIC_RECALL=0. */
     semanticRecall: z.boolean().optional(),
     /** An OpenAI-compatible embeddings endpoint the person runs (Ollama,
@@ -1162,7 +1162,7 @@ export function autoRecallEnabled(cfg: AppConfig): boolean {
   return cfg.features?.autoRecall !== false;
 }
 
-/** Recall by meaning (server/semantic-index.ts): on unless the config says
+/** Recall by meaning (server/recall/semantic-index.ts): on unless the config says
  * false or the process was started with SAGAX_SEMANTIC_RECALL=0. */
 export function semanticRecallEnabled(cfg: AppConfig, env: NodeJS.ProcessEnv = process.env): boolean {
   if (/^(0|off|false|no)$/i.test(env.SAGAX_SEMANTIC_RECALL?.trim() ?? "")) return false;

@@ -555,7 +555,7 @@ function writeRow(threadId: string, message: Message): void {
 
 /** Told after a message is written or changed (its id), or after a whole
  * thread is deleted (null). The local semantic index follows the
- * transcripts this way (server/semantic-index.ts). A listener never fails
+ * transcripts this way (server/recall/semantic-index.ts). A listener never fails
  * the write that already happened. */
 type MessageListener = (threadId: string, messageId: string | null) => void;
 const messageListeners = new Set<MessageListener>();

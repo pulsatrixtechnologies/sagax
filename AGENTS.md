@@ -1094,9 +1094,9 @@ contextWindowExceeded). Three halves:
 ## Recall by meaning, on by default (#1327, 2026-10-29)
 
 Automatic recall also finds a note or a message by meaning, not only by its
-words: a local semantic index (server/semantic-index.ts) is registered at
+words: a local semantic index (server/recall/semantic-index.ts) is registered at
 start (`setSemanticIndex`) and its passages take the slots FTS5 left free
-(`fusePassages`, server/recall.ts). On unless `memory.semanticRecall` is
+(`fusePassages`, server/recall/recall.ts). On unless `memory.semanticRecall` is
 false or `SAGAX_SEMANTIC_RECALL=0`. It indexes each bot's topic files (one
 line a passage, expiry and audience filtered at search) and the text
 messages of every conversation; a search only reads the threads the caller
@@ -1106,14 +1106,14 @@ bot owner's content key; a destroyed key drops them, a locked key keeps them
 in memory only. Message writes reach it through `onMessageChange`
 (message-db.ts), memory files are compared at each search, older threads
 are caught up in the background. Vectors: hashed words and letter pieces
-(server/semantic-encoder.ts, no download), plus an optional OpenAI-compatible
+(server/recall/semantic-encoder.ts, no download), plus an optional OpenAI-compatible
 `/v1/embeddings` endpoint (`memory.embeddingsUrl`, `memory.embeddingsModel`)
 with the built-in vectors as fallback; the query is embedded before the
 dispatch claim is revalidated (`prepareSemanticRecall`, at most 1.5 s, only
 when an endpoint is set). Bot Memory settings, Advanced: the switch, the
 endpoint and `GET /api/bots/:id/memory/semantic`. Tests:
-`server/semantic-index.test.ts`, `server/semantic-recall.test.ts`,
-`server/semantic-recall.e2e.test.ts`.
+`server/recall/semantic-index.test.ts`, `server/recall/semantic-recall.test.ts`,
+`server/recall/semantic-recall.e2e.test.ts`.
 
 ## Split view: several conversations in one window (#1504, 2026-10-28)
 

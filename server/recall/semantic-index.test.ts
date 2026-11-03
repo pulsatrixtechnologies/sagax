@@ -5,15 +5,15 @@ import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { DATA_DIR } from "./config.ts";
-import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
-import { closeMessageDb, configureContentEncryption, deleteThread, eraseContentOwner, insertMessage, updateMessage, type ContentOwnerResolver } from "./messages/message-db.ts";
+import { DATA_DIR } from "../config.ts";
+import { WORKSPACE_OWNER } from "../encryption/content-keys.ts";
+import { closeMessageDb, configureContentEncryption, deleteThread, eraseContentOwner, insertMessage, updateMessage, type ContentOwnerResolver } from "../messages/message-db.ts";
 import { buildRecall } from "./recall.ts";
 import { cosine, embeddingsAddress, HASHED_MIN_SCORE, hashedVector } from "./semantic-encoder.ts";
 import { LocalSemanticIndex, MESSAGE_PASSAGE_CHARS, MESSAGE_PASSAGES, memoryLines, messagePassages, semanticIndexFile } from "./semantic-index.ts";
 import { setSemanticIndex } from "./semantic-recall.ts";
-import type { Message } from "./store.ts";
-import { WORKSPACES_DIR, writeMemoryTopic } from "./workspace/workspace.ts";
+import type { Message } from "../store.ts";
+import { WORKSPACES_DIR, writeMemoryTopic } from "../workspace/workspace.ts";
 
 const BOT = "bot-semantic-test";
 const msg = (id: string, text: string, at = 1_000): Message => ({ id, role: "user", kind: "text", text, at });

@@ -121,7 +121,7 @@ never a display name (Loi 25).
 
 ### Recall by meaning (2026-10-29)
 
-Beside the word search, a local semantic index (`server/semantic-index.ts`)
+Beside the word search, a local semantic index (`server/recall/semantic-index.ts`)
 finds a note or a message that says the same thing in other words: a typo
 ("dentst apointment"), another ending ("allergie", "allergique"), and, with
 an embedding model, a synonym. It is on by default; `memory.semanticRecall:

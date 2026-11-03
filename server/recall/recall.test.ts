@@ -3,10 +3,10 @@
 import { rmSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DATA_DIR } from "./config.ts";
-import { closeMessageDb, recallMatchTerm, recallTerms } from "./messages/message-db.ts";
+import { DATA_DIR } from "../config.ts";
+import { closeMessageDb, recallMatchTerm, recallTerms } from "../messages/message-db.ts";
 import { buildRecall, CALL_RECALL_BUDGET, enoughMatches, LOCAL_RECALL_BUDGET, memoryPassages, RECALL_CLOSE, RECALL_OPEN, recallQuery, renderRecall, sessionMemoryHitFor, sessionMemoryHitMayShow, topicPassages } from "./recall.ts";
-import { appendMemoryLog, searchMemoryFiles, writeMemoryFile, writeMemoryTopic, WORKSPACES_DIR } from "./workspace/workspace.ts";
+import { appendMemoryLog, searchMemoryFiles, writeMemoryFile, writeMemoryTopic, WORKSPACES_DIR } from "../workspace/workspace.ts";
 
 const BOT = "bot-recall-test";
 

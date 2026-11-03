@@ -78,7 +78,7 @@ capped at 40 topics / 2,000 characters, by name, the archive last. Aliases alrea
 `session_search` because frontmatter is part of the indexed text; the guidance
 asks the bot to write them. Rooms get the same list.
 
-### Recall (`server/recall.ts`)
+### Recall (`server/recall/recall.ts`)
 
 Before each turn, the user's message (≥ 8 characters, first 500) searches the
 bot's topic files (not MEMORY.md, the archive or daily logs) and — in a 1:1

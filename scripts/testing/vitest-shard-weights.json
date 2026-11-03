@@ -212,7 +212,7 @@
   "server/provider-key-flow.test.ts": 13,
   "server/reactions.e2e.test.ts": 1,
   "server/messages/read-receipts.e2e.test.ts": 1,
-  "server/recall.test.ts": 7,
+  "server/recall/recall.test.ts": 7,
   "server/recent-work.e2e.test.ts": 6,
   "server/auth/request-auth.test.ts": 9,
   "server/respond-replay.e2e.test.ts": 1,

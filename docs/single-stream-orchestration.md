@@ -97,7 +97,7 @@ mode.
   `server/context/compaction-summary.ts`): two latest exchanges verbatim, the rest
   summarized by the engine's tool-free `generateText` with a deterministic,
   extractive fallback, stored on the task (`contextSummaries`, server-private).
-  Every 1:1 turn also carries automatic recall (`server/recall.ts`, FTS
+  Every 1:1 turn also carries automatic recall (`server/recall/recall.ts`, FTS
   passages from memory and the person's other conversations, 6,000 chars),
   a recent-work brief (`server/recent-work.ts`, one line per other
   conversation over 48 h, 1,400 chars) and `session_search` /

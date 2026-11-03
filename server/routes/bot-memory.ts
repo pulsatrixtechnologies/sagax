@@ -43,7 +43,7 @@ export interface BotMemoryRouteDeps {
   /** The task a thread belongs to; its title names the chat in a journal row. */
   taskByThread(botId: string, threadId: string): { title?: string } | undefined;
   upkeep: Pick<MemoryUpkeep, "status" | "tidy">;
-  /** Recall by meaning for this bot (server/semantic-index.ts): the
+  /** Recall by meaning for this bot (server/recall/semantic-index.ts): the
    * encoder and how many passages are indexed. Absent: not offered. */
   semantic?(botId: string): unknown;
   aboutMe(): string;

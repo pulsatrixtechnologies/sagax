@@ -1,5 +1,5 @@
-// Local vectors beside the FTS5 recall in server/recall.ts. The index is
-// server/semantic-index.ts, registered at start (setSemanticIndex) and on
+// Local vectors beside the FTS5 recall in server/recall/recall.ts. The index is
+// server/recall/semantic-index.ts, registered at start (setSemanticIndex) and on
 // unless switched off (memory.semanticRecall false in config.json, or
 // SAGAX_SEMANTIC_RECALL=0). Nothing here downloads a model: the built-in
 // encoder hashes pieces of words, and an embedding endpoint the person
@@ -7,7 +7,7 @@
 //
 // FTS5 passages always come first; a vector passage only takes a free slot.
 
-import type { MemoryDestination } from "./memory/memory-audience.ts";
+import type { MemoryDestination } from "../memory/memory-audience.ts";
 import type { RecallPassage } from "./recall.ts";
 
 

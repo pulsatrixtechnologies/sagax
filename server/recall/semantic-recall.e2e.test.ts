@@ -7,8 +7,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
-import type { WireBot } from "../shared/wire.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
+import type { WireBot } from "../../shared/wire.ts";
 
 it("brings a fact said with other words into the turn, and stops when switched off", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "omb-semantic-recall-"));

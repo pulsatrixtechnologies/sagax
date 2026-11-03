@@ -10,7 +10,7 @@
 //
 // and hands the person's name, address, avatar version and bytes to the
 // local server over the private utility-parent port
-// (`openmausbot:owner-identity`, server/owner-identity.ts). The cookie and
+// (`openmausbot:owner-identity`, server/people/owner-identity.ts). The cookie and
 // Perspicax never reach the local server or the phone. Signed out (401, or no
 // organization server saved) sends `identity: null`; an unreachable server
 // changes nothing, so the last identity stays. Refreshed when the local

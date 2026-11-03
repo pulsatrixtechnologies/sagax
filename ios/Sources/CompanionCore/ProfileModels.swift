@@ -10,7 +10,7 @@ import Foundation
 /// One profile edit through the generic bot route. Only the fields set are
 /// sent. A member may change the look and the picture framing of any bot;
 /// the name, instructions, notifications and picture belong to the owner or
-/// an admin (`server/request-auth.ts` `memberBotFieldViolation`).
+/// an admin (`server/auth/request-auth.ts` `memberBotFieldViolation`).
 public struct BotProfileEdit: Encodable, Equatable, Sendable {
     public enum AvatarURL: Equatable, Sendable {
         case set(String)

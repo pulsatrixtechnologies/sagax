@@ -64,8 +64,8 @@ const SKIP_EXACT = new Set([
   // deployed paths (OMB_DATA_DIR=/data/.openmausbot, /etc/openmausbot, ...):
   // existing volumes and hosts keep them; rename with a migration of their own
   "Dockerfile",
-  "server/fleet.ts",
-  "server/fleet.test.ts",
+  "server/fleet/fleet.ts",
+  "server/fleet/fleet.test.ts",
   // the upstream block list and its checker name the old hosts on purpose
   "electron/upstream-hosts.mjs",
   "electron/upstream-hosts.d.mts",
@@ -75,10 +75,10 @@ const SKIP_EXACT = new Set([
   // compose .env names and the old hook switch, kept by hand
   "docs/verification/podman-self-hosting.md",
   "scripts/git-hooks/pre-push",
-  "server/fleet-cli.ts",
-  "server/fleet-cli.test.ts",
-  "server/fleet-cli-filesystem.test.ts",
-  "server/fleet-agent.test.ts",
+  "server/fleet/fleet-cli.ts",
+  "server/fleet/fleet-cli.test.ts",
+  "server/fleet/fleet-cli-filesystem.test.ts",
+  "server/fleet/fleet-agent.test.ts",
   // compose files read an operator's own .env (OMB_* interpolation)
   "compose.yaml",
   ".env.example",

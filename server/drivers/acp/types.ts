@@ -386,7 +386,7 @@ export interface AcpSupport {
   /** The agent skips MCP tool names it cannot qualify as `server__tool`
    * (Grok: a second `__`, a dot, a key over 256). Every MCP server is then
    * mounted through the gate, which registers each tool under an admissible
-   * alias and maps calls back (server/mcp-tool-names.ts). */
+   * alias and maps calls back (server/mcp/mcp-tool-names.ts). */
   mcpToolNames?: "grok";
   /** A context section added to the volatile half each turn. The section
    * split (prompt-split.ts) re-sends it only when its text changes. */

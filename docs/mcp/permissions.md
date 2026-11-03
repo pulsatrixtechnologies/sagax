@@ -2,7 +2,7 @@
 
 One permission per action, named `resource:verb` (`memory:save`,
 `claims:acquire`, `routines:propose.action`). The registry is
-`server/mcp-permissions.ts`; the inventory is `coverage.md`.
+`server/mcp/mcp-permissions.ts`; the inventory is `coverage.md`.
 
 ## Rules
 

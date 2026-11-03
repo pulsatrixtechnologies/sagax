@@ -24,9 +24,9 @@ import {
   BOTMAIL_CONFINED_PEER_REFUSED,
   type BotMailRouteDeps,
 } from "./bot-inbound-mail.ts";
-import type { ConsoleAssertion } from "../oidc-rp.ts";
-import { matchSourceFilters, verifySource } from "../trigger-sources.ts";
-import { WebhookManager } from "../webhooks.ts";
+import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
+import { matchSourceFilters, verifySource } from "../triggers/trigger-sources.ts";
+import { WebhookManager } from "../triggers/webhooks.ts";
 
 const ORIGIN = "https://sagax.example";
 const ISS = "https://perspicax.example";

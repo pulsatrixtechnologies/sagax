@@ -8,17 +8,17 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DATA_DIR } from "./config.ts";
-import { azureKeyVaultProvider, parseKeyUrl } from "./content-key-azure.ts";
-import { WORKSPACE_OWNER, type KekProvider } from "./content-keys.ts";
+import { azureKeyVaultProvider, parseKeyUrl } from "./encryption/content-key-azure.ts";
+import { WORKSPACE_OWNER, type KekProvider } from "./encryption/content-keys.ts";
 import { contentKeysForExport, unsealDatabaseCopy } from "./content-export.ts";
-import { contentEncryptionFromEnv } from "./content-encryption-env.ts";
+import { contentEncryptionFromEnv } from "./encryption/content-encryption-env.ts";
 import {
   vacuumAfterSealing,
   chatFollowups, closeMessageDb, closeMessageSearch, configureContentEncryption, contentEncryptionModeFromEnv, contentEncryptionStatus,
   contentKeyChanged, deleteThread, eraseContentOwner, flushContentIndex, insertMessage, latestSaidByBot, openApprovalCardMessages,
   readCommandReceipt, readMessageText, readThread, readThreadTail, recallMessages, recentMessages, runContentMigration, saveChatFollowup,
   searchMessages, searchMessagesAsync, setMigrationFaultForTests, threadsReferencing, unlockContentKeys, updateMessage, withCommandReceipt, type ContentOwnerResolver,
-} from "./message-db.ts";
+} from "./messages/message-db.ts";
 import type { Message } from "./store.ts";
 
 const msg = (id: string, text: string, extra: Partial<Message> = {}): Message => ({ id, role: "user", kind: "text", text, at: 1_000, ...extra });

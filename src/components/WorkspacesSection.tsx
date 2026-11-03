@@ -1,5 +1,5 @@
 // App settings → Installations: the operator's view of the client workspaces on
-// this server, through the fleet agent (server/fleet-agent.ts). Create one,
+// this server, through the fleet agent (server/fleet/fleet-agent.ts). Create one,
 // add or remove a person, suspend, resume, delete, upgrade all. Shown where an
 // agent exists and the server reports the `admin` feature, which the
 // open-source edition always does (only an enterprise layer can withhold it).

@@ -1,6 +1,6 @@
 // Voice mode (the floating voice bar): what a person picks for the voice
 // that reads a bot's answers and the language they speak, shared by the
-// renderer (src/lib/voice-mode/) and the server (server/voice-mode.ts).
+// renderer (src/lib/voice-mode/) and the server (server/voice/voice-mode.ts).
 //
 // xAI does the voice: speech to text (POST /v1/stt) and text to speech
 // (POST /v1/tts). The bot stays the brain: what the person says is sent to
@@ -226,7 +226,7 @@ export const FISH_VOICE_SERVER_ENGINE = "fishVoice";
  * server's key. */
 export type VoiceModeVia = "speaker-key" | "org-key" | "server";
 
-/** Where a key comes from (server/voice-keys.ts, 2026-10-28): the person's
+/** Where a key comes from (server/voice/voice-keys.ts, 2026-10-28): the person's
  * own voice key saved in Sagax (My voice keys), their own xAI key in
  * Perspicax, the organization's key, or a solo server's key. */
 export type VoiceKeySource = "voice-key" | "perspicax-key" | "org-key" | "server";

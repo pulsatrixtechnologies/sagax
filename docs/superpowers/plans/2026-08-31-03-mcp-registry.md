@@ -4,7 +4,7 @@
 
 **Goal:** Let a person add their own MCP server — local stdio or remote HTTP — test it before enabling it, see the tools it exposes, and grant individual tools to individual bots. Composio becomes one connection method rather than the only one.
 
-**Architecture:** Every user-added server, stdio or remote, is reached through one harness-owned stdio bridge process. That is not incidental: `server/contracts.ts:162` already gives the reason for the Composio bridge — a harness-controlled bridge turns connection behaviour into something consistent across provider CLIs. The same bridge is where the per-tool allowlist is enforced, by extending `createGateInterceptor` (`server/mcp-bridge.ts:171`), which already intercepts `tools/call` frames.
+**Architecture:** Every user-added server, stdio or remote, is reached through one harness-owned stdio bridge process. That is not incidental: `server/contracts.ts:162` already gives the reason for the Composio bridge — a harness-controlled bridge turns connection behaviour into something consistent across provider CLIs. The same bridge is where the per-tool allowlist is enforced, by extending `createGateInterceptor` (`server/mcp/mcp-bridge.ts:171`), which already intercepts `tools/call` frames.
 
 **Tech Stack:** TypeScript, Node 24, Vitest, JSON-RPC over stdio, React, zod.
 
@@ -28,7 +28,7 @@ See [the roadmap](2026-08-31-00-control-plane-roadmap.md#global-constraints). Lo
 MCP is already everywhere in this codebase — and nowhere a user can reach.
 `server/drivers/claude.ts:562-631` assembles `mcpServers` from six harness-owned
 integrations (composio, computer, agents, phone, dweb, and the `ogb` permission proxy),
-writes them to a temp config, and passes it to the CLI. `server/mcp-bridge.ts` is a
+writes them to a temp config, and passes it to the CLI. `server/mcp/mcp-bridge.ts` is a
 complete, tested stdio bridge with a liveness watchdog and a policy gate.
 `server/container-mcp.ts` and `server/vps-container-mcp.ts` are two entry points onto it.
 
@@ -41,14 +41,14 @@ merges but does not manage.
 
 ## File map
 
-- Create `server/mcp-registry.ts`: validate, store, list, and redact user MCP server definitions.
-- Create `server/mcp-registry.test.ts`.
-- Create `server/mcp-probe.ts`: connect to a server, run `initialize` + `tools/list`, return the tool list or a typed failure. Bounded and cancellable.
-- Create `server/mcp-probe.test.ts`.
+- Create `server/mcp/mcp-registry.ts`: validate, store, list, and redact user MCP server definitions.
+- Create `server/mcp/mcp-registry.test.ts`.
+- Create `server/mcp/mcp-probe.ts`: connect to a server, run `initialize` + `tools/list`, return the tool list or a typed failure. Bounded and cancellable.
+- Create `server/mcp/mcp-probe.test.ts`.
 - Create `server/mcp-user-entry.ts`: the bridge entry point a driver spawns — stdio child or HTTP relay, with the tool allowlist gate in front.
 - Create `server/mcp-user-entry.test.ts`.
-- Modify `server/mcp-bridge.ts:171`: generalize `createGateInterceptor` to take a per-call verdict function.
-- Modify `server/mcp-bridge.test.ts`.
+- Modify `server/mcp/mcp-bridge.ts:171`: generalize `createGateInterceptor` to take a per-call verdict function.
+- Modify `server/mcp/mcp-bridge.test.ts`.
 - Modify `server/config.ts`: `mcpServers` in `AppConfig`, redacted on read.
 - Modify `server/store.ts`: `BotRecord.mcpGrants`.
 - Modify `server/contracts.ts`: `integrations.custom`, `capabilities.customMcp`.
@@ -62,7 +62,7 @@ merges but does not manage.
 ### Task 1: The registry shape
 
 **Files:**
-- Create: `server/mcp-registry.ts`, `server/mcp-registry.test.ts`
+- Create: `server/mcp/mcp-registry.ts`, `server/mcp/mcp-registry.test.ts`
 - Modify: `server/config.ts`
 
 **Interfaces:**
@@ -83,12 +83,12 @@ merges but does not manage.
   export function isMcpServerName(name: string): boolean;
   export function redactServer(name: string, cfg: McpServerConfig, probe?: McpProbeRecord): McpServerListing;
   ```
-- `isMcpServerName` uses the same rule as `isSkillName` (`server/skills.ts:41`): lowercase alphanumerics with single hyphens, 1–64 chars. That regex is the traversal gate — the name becomes a filename for the probe cache.
+- `isMcpServerName` uses the same rule as `isSkillName` (`server/skills/skills.ts:41`): lowercase alphanumerics with single hyphens, 1–64 chars. That regex is the traversal gate — the name becomes a filename for the probe cache.
 
 - [ ] Write failing tests: a valid stdio entry parses; a valid http entry parses; an `http://` URL that is not loopback is **rejected** (a remote MCP server reached without TLS would carry its bearer header in clear text); a `file://` or other scheme is rejected; an empty `command` is rejected; a name with a dot, slash, or uppercase is rejected.
 - [ ] Write a failing test that `redactServer` returns `secretKeys: ["GITHUB_TOKEN"]` for `env: { GITHUB_TOKEN: "ghp_real" }` and that the serialized listing does not contain `ghp_real`. Same for HTTP `headers`.
 - [ ] Write a failing test that an entry carrying an unknown extra key round-trips through parse and store rather than throwing.
-- [ ] Run `pnpm vitest run server/mcp-registry.test.ts`; expect FAIL.
+- [ ] Run `pnpm vitest run server/mcp/mcp-registry.test.ts`; expect FAIL.
 - [ ] Implement the module. Add `mcpServers: z.record(z.string(), mcpServerSchema).optional()` to `appConfigSchema` in `server/config.ts` and to `AppConfig`. Note the asymmetry: `appConfigPatchSchema` omits only `instances`, so `mcpServers` becomes **writable** automatically, while `GET /api/config` returns a hand-built `configStatus()` (`server/index.ts:4831`) and exposes nothing it is not explicitly told to. So the write path needs no wiring and the read path needs deliberate wiring — add `mcpServers` to `configStatus()` only as `redactServer` listings, never as `cfg.mcpServers`.
 - [ ] Run; expect PASS.
 - [ ] Commit `feat(mcp): user MCP server registry with redacted reads`.
@@ -98,7 +98,7 @@ merges but does not manage.
 ### Task 2: Probe a server before trusting it
 
 **Files:**
-- Create: `server/mcp-probe.ts`, `server/mcp-probe.test.ts`
+- Create: `server/mcp/mcp-probe.ts`, `server/mcp/mcp-probe.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -123,8 +123,8 @@ merges but does not manage.
 ### Task 3: Generalize the policy gate
 
 **Files:**
-- Modify: `server/mcp-bridge.ts:171-205` (`createGateInterceptor`)
-- Modify: `server/mcp-bridge.test.ts`
+- Modify: `server/mcp/mcp-bridge.ts:171-205` (`createGateInterceptor`)
+- Modify: `server/mcp/mcp-bridge.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -141,7 +141,7 @@ merges but does not manage.
 - [ ] Write a failing test: a `tools/call` for a tool the verdict function denies is answered with a JSON-RPC error result carrying the verdict's text, and is **not** forwarded to the child.
 - [ ] Write a failing test that the existing who-is-driving behaviour is unchanged — the migrated callers still refuse every call while the hold is held.
 - [ ] Write a failing test that non-`tools/call` frames and unparseable lines are forwarded untouched, and that ordering is preserved across an async verdict (the existing `queue` chain must survive the refactor). This is the property most likely to break: two rapid calls where the first verdict resolves slower than the second must still reach the child in order.
-- [ ] Run `pnpm vitest run server/mcp-bridge.test.ts`; expect FAIL.
+- [ ] Run `pnpm vitest run server/mcp/mcp-bridge.test.ts`; expect FAIL.
 - [ ] Refactor `createGateInterceptor` to the verdict signature, keeping the serialized `queue` exactly as it is. Migrate both existing callers in the same commit — a partial migration leaves two gate shapes in the tree.
 - [ ] Run `pnpm vitest run server/`; expect PASS including the container and VPS suites.
 - [ ] Commit `refactor(mcp): gate interceptor takes a per-tool verdict`.
@@ -154,7 +154,7 @@ merges but does not manage.
 - Create: `server/mcp-user-entry.ts`, `server/mcp-user-entry.test.ts`
 
 **Interfaces:**
-- Consumes: `McpServerConfig` (Task 1), `createGateInterceptor` (Task 3), `runMcpBridge` (`server/mcp-bridge.ts:208`).
+- Consumes: `McpServerConfig` (Task 1), `createGateInterceptor` (Task 3), `runMcpBridge` (`server/mcp/mcp-bridge.ts:208`).
 - Produces: a process spawned as `node mcp-user-entry.ts <serverName>`, reading its definition and its allowlist from env — `SAGAX_MCP_SERVER` (JSON definition) and `SAGAX_MCP_ALLOW` (comma-separated tool names, or `*`).
 
 - [ ] Write a failing test: with `SAGAX_MCP_ALLOW="read_file"`, a `tools/call` for `read_file` reaches the fake child and a call for `write_file` is refused with a message naming the tool and saying it is not granted to this bot.
@@ -162,7 +162,7 @@ merges but does not manage.
 - [ ] Write a failing test that the definition rides in **env, not argv** — assert the spawn arguments contain no token. `server/container-mcp.ts:20` already establishes this rule: argv is world-readable through `ps`.
 - [ ] Write a failing test that an HTTP server's responses are relayed to stdout unchanged and that its `headers` never appear in the bridge's own stderr.
 - [ ] Run; expect FAIL.
-- [ ] Implement: parse and validate the env definition (reject rather than run on a malformed one), build the verdict function from the allowlist, and hand off to `runMcpBridge` for stdio or a small `fetch` relay loop for http. Reuse `createLineSplitter` (`server/mcp-bridge.ts:141`) for the http path rather than writing a second splitter.
+- [ ] Implement: parse and validate the env definition (reject rather than run on a malformed one), build the verdict function from the allowlist, and hand off to `runMcpBridge` for stdio or a small `fetch` relay loop for http. Reuse `createLineSplitter` (`server/mcp/mcp-bridge.ts:141`) for the http path rather than writing a second splitter.
 - [ ] Run; expect PASS.
 - [ ] Commit `feat(mcp): harness-owned bridge for user MCP servers`.
 

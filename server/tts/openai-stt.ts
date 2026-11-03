@@ -3,7 +3,7 @@
 // wss://api.openai.com/v1/realtime?intent=transcription, gpt-live-transcribe)
 // and a whole recording (POST /v1/audio/transcriptions, gpt-transcribe).
 // The same TranscriptionStream xAI's socket gives (server/tts/grok.ts), so
-// server/voice-listen-session.ts drives either alike. The page sends 16 kHz
+// server/voice/voice-listen-session.ts drives either alike. The page sends 16 kHz
 // PCM; OpenAI takes 24 kHz, so the frames are resampled here. The page's
 // own detector ends a turn (`finalize`, a commit here): OpenAI's turn
 // detection stays off. Never a key or OpenAI's words in a message.

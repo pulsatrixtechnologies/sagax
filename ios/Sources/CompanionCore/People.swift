@@ -1,6 +1,6 @@
 // People of an organization server (matrix RM21, RM22): who wrote a room's
 // line (src/lib/room-authors.ts), the direct conversation between two
-// people (src/lib/people-dm.ts, server/people-dms.ts), the person sheet
+// people (src/lib/people-dm.ts, server/people/people-dms.ts), the person sheet
 // (src/lib/person-panel.ts) and the people the compose-to list offers
 // (ComposeToPicker.tsx `composePeople`). Only the directory's fields show:
 // nothing from a private thread.

@@ -1,8 +1,8 @@
 // Team memory HTTP: the section's shared people, places, decisions, terms
 // (#1388 slice P1). The person's view and their edits. Same section rule as
 // the brief: the query parameter is required even for General.
-import type { RequestAuth } from "../request-auth.ts";
-import { sectionContextKey, sectionContextLabel } from "../section-context.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { sectionContextKey, sectionContextLabel } from "../rooms/section-context.ts";
 import {
   TEAM_MEMORY_KINDS,
   type TeamMemoryEntry,

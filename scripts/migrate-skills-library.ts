@@ -26,7 +26,7 @@ const dataDir = dataDirFlag !== -1 ? resolve(args[dataDirFlag + 1]!) : undefined
 if (dataDir) process.env.SAGAX_DATA_DIR = dataDir;
 
 const { botIdsWithSkillState, migrateBotSkillsToLibrary, readPendingAssignments, writePendingAssignments } =
-  await import("../server/skills-library-migration.ts");
+  await import("../server/skills/skills-library-migration.ts");
 const { DATA_DIR } = await import("../server/config.ts");
 
 const pending = readPendingAssignments();

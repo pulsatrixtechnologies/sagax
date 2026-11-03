@@ -37,7 +37,7 @@ interface SpeakOptions {
   botId?: string;
   messageId?: string;
   /** Voice mode (the floating voice bar): read through xAI with the
-   * person's Voice, Speed and Language (server/voice-mode.ts), on the
+   * person's Voice, Speed and Language (server/voice/voice-mode.ts), on the
    * speaker's or the organization's key. Needs botId. */
   voiceMode?: { settings: VoiceModeSettings; threadId?: string };
 }

@@ -3,7 +3,7 @@ import Foundation
 // Client calls for the bot profile (parity screens 03 to 10) and its routine
 // screens (05, 06). The routes and their payloads are in docs/ios-companion.md,
 // "Visual parity routes"; which of them a paired phone may reach is the
-// server's call (`server/request-auth.ts`, `companion/src/routes.ts`).
+// server's call (`server/auth/request-auth.ts`, `companion/src/routes.ts`).
 public extension CompanionClient {
     /// The first page sizes the reference shows (08, 09, 10) before "Show more".
     enum ProfilePage {

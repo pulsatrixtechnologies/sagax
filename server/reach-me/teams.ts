@@ -25,7 +25,7 @@
 //   and the reach-me service answers the card exactly as for any channel.
 //   An answer later than 40 minutes waits for the app or another channel.
 import { connectorCallReads, connectorWriteKind, isEngineConnectorServer } from "../../shared/engine-connectors.ts";
-import { defang } from "../webhooks.ts";
+import { defang } from "../triggers/webhooks.ts";
 import { composeReachText, type ReachChannel, type ReachOutbound, type ReachSendResult } from "./channel.ts";
 import type { ReachReplyOutcome } from "./service.ts";
 import type { ReachCode, ReachCodeStore } from "./store.ts";

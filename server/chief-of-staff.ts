@@ -1,4 +1,4 @@
-import { peerName, renderRoster, reachablePeers, type RosterMember } from "./peer-roster.ts";
+import { peerName, renderRoster, reachablePeers, type RosterMember } from "./peers/peer-roster.ts";
 
 export type ChiefTeamMember = RosterMember;
 

@@ -180,6 +180,15 @@ async function putConfig(fixture, patch) {
   if (!res.ok) throw new Error(`PUT /api/config -> ${res.status}: ${(await res.text()).slice(0, 300)}`);
 }
 
+async function acceptTerms(fixture) {
+  const server = fixture.server;
+  await fetch(`${server}/api/me/terms`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...serverHeaders(fixture, server) },
+    body: "{}",
+  }).catch(() => undefined);
+}
+
 /** On an organization server a person's preferences live on the server and
  * win over the page's (src/lib/user-preferences-sync.ts): make the server's
  * record the capture's preset, so the skin and density are the preset's. */
@@ -338,7 +347,11 @@ async function loadApp(page, base, viewport, preset, fixture) {
   const loaded = page.once("Page.loadEventFired", 60_000);
   await page.send("Page.navigate", { url: `${base}/` });
   await loaded;
-  await page.waitFor(`Boolean(document.querySelector("[data-app-shell]") && window.__parity.store())`, { timeoutMs: 30_000, label: "app shell" });
+  await page.waitFor(`Boolean(document.querySelector("[data-app-shell]") && window.__parity.store())`, { timeoutMs: 30_000, label: "app shell" }).catch(async (error) => {
+    const seen = await page.eval(`(document.body?.innerText ?? "").slice(0, 300)`).catch(() => "?");
+    log(`no app shell; page text: ${JSON.stringify(seen)}; console: ${JSON.stringify(page.console.slice(-5))}`);
+    throw error;
+  });
 }
 
 /** Fonts, images and network quiet, then animations settled and caret hidden. */
@@ -358,7 +371,8 @@ async function settle(page, extraMs = 0) {
     if (!style) {
       style = document.createElement("style");
       style.id = "__parity_caret";
-      style.textContent = "*, *::before, *::after { caret-color: transparent !important; }";
+      // the caret, and the achievement unlock toasts (timed, they land at random)
+      style.textContent = "*, *::before, *::after { caret-color: transparent !important; } [data-achievement-toast] { display: none !important; }";
       document.head.appendChild(style);
     }
     return true;
@@ -413,6 +427,9 @@ async function main() {
       currentPhase = item.phase;
       log(`phase: ${currentPhase.id}`);
       if (currentPhase.config) await putConfig(fixture, currentPhase.config);
+      // The terms of use (asked once per account, 2026-10-26) are accepted
+      // past the first run, as by a person who already uses the app.
+      if (currentPhase.id !== "welcome") await acceptTerms(fixture);
     }
     for (const viewport of viewports) {
       const file = `desktop-${viewport.id}-${item.name}`;

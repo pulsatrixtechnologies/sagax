@@ -51,7 +51,7 @@ Driver contract tests cover the three shared adapters, protocol errors,
 non-streaming responses, tool errors, and lifecycle edge cases:
 
 ```sh
-pnpm exec vitest run server/drivers/openai-chat-tools.test.ts server/workspace.test.ts
+pnpm exec vitest run server/drivers/openai-chat-tools.test.ts server/workspace/workspace.test.ts
 ```
 
 One turn stops after 64 model steps, or 200 tool calls in total (each reply
@@ -101,7 +101,7 @@ inference, and do not establish vision/tool support for every provider model.
 
 ### Boat cloud computer
 
-`pnpm exec vitest run server/cloud-computer-tools.test.ts server/harness-mcp-proxy.test.ts server/openai-boat.e2e.test.ts server/hosted-desktop.e2e.test.ts`
+`pnpm exec vitest run server/computer/cloud-computer-tools.test.ts server/harness-mcp-proxy.test.ts server/openai-boat.e2e.test.ts server/hosted-desktop.e2e.test.ts`
 tests an owned loopback Boat/API fixture. It covers direct chats, group member
 turns and cloud routines retaining the selected model, screenshots arriving as
 image parts, and human control blocking an approved action. The tool tests
@@ -111,7 +111,7 @@ capabilities and in-flight cancellation without replay. The hosted-desktop
 fixture runs the same tools for a Claude bot and proves Boat's own runner is
 never asked.
 
-`pnpm exec vitest run server/cloud-computer-lazy.e2e.test.ts server/cloud-computer-slow-start.e2e.test.ts server/computer-selection.test.ts server/room-turn-end.test.ts server/boat-wait-ready.test.ts src/components/ComputerPanel.lazy.test.ts`
+`pnpm exec vitest run server/cloud-computer-lazy.e2e.test.ts server/cloud-computer-slow-start.e2e.test.ts server/computer/computer-selection.test.ts server/rooms/room-turn-end.test.ts server/computer/boat-wait-ready.test.ts src/components/ComputerPanel.lazy.test.ts`
 proves a cloud computer starts only when the bot uses it. Against a loopback
 relay that counts every request, a plain chat ("hi") on Works on: Cloud
 computer, in a bot's chat or a room, makes no relay call; choosing Cloud

@@ -40,7 +40,7 @@ export function isComputerPlace(place: EffectivePlace): place is "cloud" | "vm" 
 }
 
 /** On an organization server Cloud is the server environment and Auto
- * picks the place per task (server/auto-computer.ts), and their names say so. */
+ * picks the place per task (server/computer/auto-computer.ts), and their names say so. */
 export function placeLabelKey(place: EffectivePlace, organization = false): LocaleKey {
   if (organization && place === "cloud") return "place.cloudOrg";
   if (organization && place === "auto") return "place.autoOrg";

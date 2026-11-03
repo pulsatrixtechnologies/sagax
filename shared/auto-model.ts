@@ -1,5 +1,5 @@
 // Auto model (docs/plans/2026-10-08-auto-model.md): the shapes the server
-// records of a pick and the renderer draws. The choosing is server/model-auto.ts.
+// records of a pick and the renderer draws. The choosing is server/models/model-auto.ts.
 
 /** What kind of work a task is. */
 export type AutoTaskClass =

@@ -4,7 +4,7 @@
 // 2026-10-02-ipad-desktop-parity-design.md, "Rule for the iPad"): paired
 // through a desktop's sidecar, the app shows what the remote-client renderer
 // shows; paired with a server, what the served renderer shows for the
-// session's scope (client: `CLIENT_ALLOW` in server/request-auth.ts; admin:
+// session's scope (client: `CLIENT_ALLOW` in server/auth/request-auth.ts; admin:
 // everything). Owner's decisions of 2026-10-03 (matrix, "Owner's answers") add to
 // that: D1 the advanced bot panel on a sidecar for the owner, D2 message pin
 // everywhere, D3 room memory on the sidecar, D4 the phone's own extras (pin

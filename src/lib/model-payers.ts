@@ -1,5 +1,5 @@
 // Who pays for a person's turns on an organization server, as the model
-// picker shows it. The server decides (server/engine-credentials.ts, the
+// picker shows it. The server decides (server/engines/engine-credentials.ts, the
 // person who speaks pays, 2026-10-01) and answers it per engine as
 // `myTurns` on GET /api/me/engines; this module only lays out the rows in
 // that order and never recomputes the choice. A routine pays as the bot's
@@ -28,7 +28,7 @@ export interface PayerOrder {
 type EngineFacts = Pick<MyEngine, "installed" | "notAvailable" | "subscription" | "myKey" | "orgKey" | "myTurns"> & { driver: string };
 
 /** Drivers whose provider key a person can keep in Perspicax
- * (server/engine-credentials.ts providersOfDriver). */
+ * (server/engines/engine-credentials.ts providersOfDriver). */
 export function keyProviderDriver(driver: string): boolean {
   return PERSONAL_KEY_DRIVERS.includes(driver);
 }

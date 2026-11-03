@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { recordEvents } from "../testing/events.ts";
-import { writeFileEngineKey } from "../engine-api-keys.ts";
+import { writeFileEngineKey } from "../engines/engine-api-keys.ts";
 import { decodeMinimaxConfig, loadLocalMiniMaxConfig, MinimaxDriver } from "./minimax.ts";
 
 describe("MinimaxDriver", () => {

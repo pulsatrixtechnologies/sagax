@@ -11,7 +11,7 @@
 import type {
   BackendRequest, BackendResult, ChoiceAnswer, DeciderAnswer, DeciderBackend, DeciderQuestion, ScoreAnswer, YesNoAnswer,
 } from "./types.ts";
-import { isLoopback } from "../provider-key-check.ts";
+import { isLoopback } from "../engines/provider-key-check.ts";
 
 export const JEV_DEFAULT_BASE_URL = "https://api.typesafe.ai";
 export const JEV_MODEL = "jev-latest";

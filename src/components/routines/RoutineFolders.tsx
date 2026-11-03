@@ -20,7 +20,7 @@
 // the prefix offer and dragging stay away, and a call that still meets "no
 // route" says the neutral "Available after the server update.", never a red
 // error.
-import { ArrowDown, ArrowUp, Check, ChevronRight, FolderInput, FolderPlus, MoreHorizontal, Pause, Pencil, Play, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronRight, Folder, FolderInput, FolderPlus, MoreHorizontal, Pause, Pencil, Play, Plus, Trash2, X } from "lucide-react";
 import { Fragment, useEffect, useImperativeHandle, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
@@ -79,7 +79,7 @@ export function canManageRoutineFolders(routines: Routine[], supported: boolean)
 
 const MENU_ITEM = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:opacity-50";
 
-export function RoutineFolderList({ bot, routines, runs, grouped, loading, error, viewerPrincipalId, onOpen, onCreateIn, onDuplicate, controlRef }: {
+export function RoutineFolderList({ bot, routines, runs, grouped, loading, error, viewerPrincipalId, onOpen, onCreateIn, onDuplicate, controlRef, folderIcon = false }: {
   bot: Bot;
   routines: Routine[];
   runs: RoutineRun[];
@@ -93,6 +93,9 @@ export function RoutineFolderList({ bot, routines, runs, grouped, loading, error
   /** The row menu's Duplicate: the editor on a copy. */
   onDuplicate?: (routine: Routine) => void;
   controlRef?: RefObject<RoutineFolderControl | null>;
+  /** The Automations list (grouped by bot, 2026-11-03): a folder icon before
+   * each folder's name, as sub-groups of the bot's section. */
+  folderIcon?: boolean;
 }) {
   const { state, dispatch } = useStore();
   const order = state.routineFolders?.[bot.id] ?? EMPTY;
@@ -380,6 +383,7 @@ export function RoutineFolderList({ bot, routines, runs, grouped, loading, error
             count={group.routines.length}
             paused={group.routines.length > 0 && !anyOn}
             collapsed={isCollapsed}
+            icon={folderIcon}
             editable={editable && supported}
             onToggle={() => toggleFolder(folder)}
             onMove={(direction) => reorder(folder, direction)}
@@ -425,11 +429,13 @@ export function RoutineFolderList({ bot, routines, runs, grouped, loading, error
 
 /** A folder's header, the sidebar section's: 30px high, the name at 12px
  * in the secondary ink, the chevron in the gutter before it, then a count. */
-export function RoutineFolderHeader({ name, count, paused, collapsed, editable, onToggle, onMove, onMenu, onCreate }: {
+export function RoutineFolderHeader({ name, count, paused, collapsed, icon = false, editable, onToggle, onMove, onMenu, onCreate }: {
   name: string;
   count: number;
   paused: boolean;
   collapsed: boolean;
+  /** A folder icon after the chevron (the Automations list). */
+  icon?: boolean;
   editable: boolean;
   onToggle: () => void;
   onMove: (direction: -1 | 1) => void;
@@ -454,6 +460,7 @@ export function RoutineFolderHeader({ name, count, paused, collapsed, editable, 
       }}
       className="flex h-full min-w-0 flex-1 items-center gap-1 rounded-md pb-1.5 pl-0.5 pr-2 pt-2 text-left text-ink-secondary outline-none hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/60">
       <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center"><ChevronRight size={12} className={cn("transition-transform", !collapsed && "rotate-90")} /></span>
+      {icon && <Folder size={13} aria-hidden="true" data-routine-folder-icon="" className="shrink-0 text-ink-tertiary" />}
       <span className="truncate text-[12px] font-normal leading-4">{name}</span>
       <span data-routine-folder-count={count} className="shrink-0 text-[11px] leading-4 tabular-nums text-ink-tertiary">{count}</span>
       {paused && <span data-routine-folder-paused="" className="shrink-0 text-[11px] leading-4 text-ink-tertiary">· {t("routineFolders.allPaused")}</span>}

@@ -199,7 +199,7 @@ function fromBundledPage(request, bundled) {
 }
 
 /** Headers for a pass-through to the organization server. The server checks
- * Origin on cookie writes (server/request-auth.ts isSameOrigin), so a write
+ * Origin on cookie writes (server/auth/request-auth.ts isSameOrigin), so a write
  * sent by the bundled page carries that origin again. Any other request gets
  * none, and no cookie either (see createBundledUiHandler). */
 function passThroughHeaders(request, bundled, options = {}) {

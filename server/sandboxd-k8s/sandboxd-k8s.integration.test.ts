@@ -6,12 +6,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { createSandboxAudit } from "../sandbox-audit.ts";
-import { SandboxService } from "../sandboxd-core.ts";
+import { createSandboxAudit } from "../sandbox/sandbox-audit.ts";
+import { SandboxService } from "../sandbox/sandboxd-core.ts";
 import { kubernetesClientFromEnv } from "./sandboxd-k8s-client.ts";
 import { kubernetesApi } from "./sandboxd-k8s.ts";
 import { kubernetesSandboxConfigFromEnv } from "./sandboxd-k8s-spec.ts";
-import { sandboxKeyForPrincipal, sandboxNames, sandboxdConfigFromEnv } from "../user-sandbox-spec.ts";
+import { sandboxKeyForPrincipal, sandboxNames, sandboxdConfigFromEnv } from "../sandbox/user-sandbox-spec.ts";
 
 const enabled = process.env.SAGAX_SANDBOX_K8S_INTEGRATION === "1";
 

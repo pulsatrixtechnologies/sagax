@@ -4,7 +4,7 @@
 // sidebar room menu (Sidebar.tsx RoomContextMenu) decide, as pure logic the
 // phone's Room info sheet and room row menu draw from.
 //
-// Who may do what mirrors src/lib/group-owner.ts and server/group-ownership.ts:
+// Who may do what mirrors src/lib/group-owner.ts and server/groups/group-ownership.ts:
 // on an organization server only a room's owner changes its settings (an
 // organization admin owns a room nobody created, and may delete any room
 // for moderation); anyone listed may leave it and bring their own bots in
@@ -76,7 +76,7 @@ public enum RoomOwnership {
         (room.humanIds ?? []).contains { isViewer($0, viewer) }
     }
 
-    /// Listed in their own name, or the recorded owner (server/group-leave.ts).
+    /// Listed in their own name, or the recorded owner (server/groups/group-leave.ts).
     public static func mayLeave(_ room: Room, viewer: RoomViewer) -> Bool {
         if isListed(room, viewer: viewer) { return true }
         guard let raw = room.ownerId, let owner = RoomViewer.norm(raw), !owner.isEmpty else { return false }

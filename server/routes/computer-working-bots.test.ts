@@ -3,8 +3,8 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import type { RequestAuth } from "../request-auth.ts";
-import type { WorkingBot } from "../computer-working-bots.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import type { WorkingBot } from "../computer/computer-working-bots.ts";
 import { createComputerWorkingBotsRoutes, type ComputerWorkingBotsRouteDeps } from "./computer-working-bots.ts";
 import { dispatchRoutes } from "./table.ts";
 

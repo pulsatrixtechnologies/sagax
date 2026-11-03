@@ -4,7 +4,7 @@ import Foundation
 //
 // On an organization server that is the person's Perspicax avatar, served by
 // the Sagax server itself at a versioned route
-// (`/api/people/<principal>/avatar?v=<version>`, server/viewer-identity.ts):
+// (`/api/people/<principal>/avatar?v=<version>`, server/people/viewer-identity.ts):
 // the server reads the image through its Perspicax link, so the phone only
 // ever asks its own server, with the bearer it already holds. No Perspicax
 // token, address or `picture` claim is used here. The version changes with

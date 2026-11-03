@@ -1,7 +1,7 @@
 // GET /api/bots/:id/slack-management: where, in the organisation's Admin, this
 // bot's Slack app is managed. A deep link only: this server holds no Slack
 // logic, contacts nobody, and the link carries identifiers, never a credential.
-// Client-scoped in server/request-auth.ts, so a member reading Bot Settings
+// Client-scoped in server/auth/request-auth.ts, so a member reading Bot Settings
 // gets the same link; Admin authorizes whoever opens it.
 import { hostedSlackManagement } from "../hosted-slack.ts";
 import { PASS, type RouteHandler } from "./table.ts";

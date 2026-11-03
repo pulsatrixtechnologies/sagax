@@ -3,7 +3,7 @@ import { captureCliTree, killCliTree, waitForExit } from "../../procs.ts";
 import { appendNative } from "../native.ts";
 import { computeBackoff, interruptibleDelay } from "../retry.ts";
 import { codexRpcTimeoutMs, keepStopping, RELAUNCH_EXIT_WAIT_MS } from "../codex-process.ts";
-import { contextFullMessage } from "../../context-renewal.ts";
+import { contextFullMessage } from "../../context/context-renewal.ts";
 import { codexNativeLogMessage } from "./native-log.ts";
 import type { CodexSession } from "./session-types.ts";
 import type { SteerOutcome } from "../../contracts.ts";
@@ -180,7 +180,7 @@ s.relaunch = async (reason: string, failure: string, failedStop: string) => {
 
 // Context filled mid-turn: close this app-server and continue the same
 // logical turn on a fresh Codex thread with the chat rebuild and the
-// steps already taken (server/context-renewal.ts). No turn.retrying row:
+// steps already taken (server/context/context-renewal.ts). No turn.retrying row:
 // the person sees nothing; Events gets contextRenewedNotice on start.
 s.renewContext = async () => {
   s.abandoned = true;

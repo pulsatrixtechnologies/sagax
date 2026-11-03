@@ -9,11 +9,11 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { TurnFacts } from "../shared/bot-act.ts";
-import { createBotActService } from "./bot-act.ts";
-import { BotPluginError, type GitRunner } from "./bot-plugins.ts";
+import { createBotActService } from "./bots/bot-act.ts";
+import { BotPluginError, type GitRunner } from "./bots/bot-plugins.ts";
 import { botPluginsWithMarketplaces } from "./testing/plugin-stores.ts";
 import { json, readBody } from "./harness/http.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import { createBotPluginRoutes } from "./routes/bot-plugins.ts";
 import { dispatchRoutes } from "./routes/table.ts";
 

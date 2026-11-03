@@ -5,7 +5,7 @@
 // its server environment, which run on another machine.
 //
 // The sections that name files say how the bot reaches each thing instead
-// (server/workspace.ts serverFilesUnreachablePrompt, the memory and skills
+// (server/workspace/workspace.ts serverFilesUnreachablePrompt, the memory and skills
 // sections). This is the net under them: whatever section still spells a
 // server path gets it rewritten, so no new section can bring the confusion
 // back. A file of the bot's own Sagax workspace becomes its relative path,

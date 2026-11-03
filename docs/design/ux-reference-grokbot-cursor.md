@@ -643,7 +643,7 @@ d'appel conversationnel et le consentement d'usage acceptable. Captures : galeri
 
 Composants : `src/components/OutboundCard.tsx`, `src/components/PhoneCallConsentCard.tsx`.
 Helpers purs : `shared/phone-call-live.ts`, `shared/phone-call-consent.ts`. Serveur :
-`server/outbound-calls.ts`, contrôles mid-call, `server/routes/phone-call-consent.ts`.
+`server/outbound/outbound-calls.ts`, contrôles mid-call, `server/routes/phone-call-consent.ts`.
 
 ### 2.20 Boutons de carte qui mènent quelque part, et fin de tour
 
@@ -661,7 +661,7 @@ sur l'app au prochain audit.
   (`deviceAction`), sans lancer de tour : le modèle le lit au tour suivant comme déjà
   fait et n'essaie jamais d'ouvrir une page qu'il ne peut pas atteindre.
 - Code : `shared/widget.ts` (`widgetAppAction`), `src/components/widget/widget-device.ts`,
-  `server/routes/bots-messages.ts`, `server/replies.ts` (`transcriptText`).
+  `server/routes/bots-messages.ts`, `server/messages/replies.ts` (`transcriptText`).
 
 **Fin de tour.**
 - Un tour pour la personne se termine toujours par une réponse. Un tour qui finit sur
@@ -671,7 +671,7 @@ sur l'app au prochain audit.
 - Jamais après une question à la personne, une carte ou un widget à répondre, un arrêt,
   un échec, une routine, un tour entre bots, un appel vocal, une boucle que le garde de
   boucle traite, ni sur le tour déjà repris. Inscrit au journal des étapes
-  (`sagax.unfinished_turn`). Code : `server/unfinished-turn.ts`.
+  (`sagax.unfinished_turn`). Code : `server/turns/unfinished-turn.ts`.
 
 ### 2.21 Mémoire (page principale)
 
@@ -713,7 +713,7 @@ besoin d'elle.
   désactivé : rien ne se réveille.
 - **Les rangées « Aller à la conversation ».** Les pointeurs vers les fils d'avis se
   regroupent visuellement ailleurs (travail séparé) ; ils ne remplacent pas le réveil.
-- Code : `server/proactive-wake.ts` (`peerNoticeEvent`, `PeerNoticeHops`,
+- Code : `server/proactive/proactive-wake.ts` (`peerNoticeEvent`, `PeerNoticeHops`,
   `PEER_WAKE_RULES`), `server/index.ts` (`offerPeerNotice`, rapport d'un avis à sens unique,
   `postInputRequest`).
 

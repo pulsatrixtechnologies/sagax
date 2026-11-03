@@ -4,7 +4,7 @@
 // A confined DuckDB database has no network at all (engine.ts
 // confinementStatements): an https source is fetched here by the server and
 // read back from the scope's own folder. The URL comes from a model, so it
-// takes the media proxy's destination guard (server/media-proxy-guard.ts)
+// takes the media proxy's destination guard (server/media/media-proxy-guard.ts)
 // with an EMPTY allow policy: the operator's SAGAX_MEDIA_PROXY_ALLOW_HOSTS
 // never widens Data. Every hop is checked (every address its name resolves
 // to must be public), the socket connects to the address that was checked
@@ -29,7 +29,7 @@ import {
   type BlockReason,
   type MediaProxyResolver,
   type ResolvedAddress,
-} from "../media-proxy-guard.ts";
+} from "../media/media-proxy-guard.ts";
 import { DataFailure } from "./types.ts";
 
 /** The largest body a confined load downloads. */

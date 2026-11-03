@@ -64,7 +64,7 @@ struct PrivacyPresenceCard: View {
 
 /// "Send read receipts" (Settings > Privacy, `sagax.readReceipts.v1`): off,
 /// nobody sees where this person read a conversation between people, and
-/// they see nobody's (server/read-receipts.ts). Rooms and bots always show.
+/// they see nobody's (server/messages/read-receipts.ts). Rooms and bots always show.
 struct ReadReceiptsCard: View {
     @Environment(\.themePalette) var themePalette
     @EnvironmentObject private var session: Session

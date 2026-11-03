@@ -396,7 +396,7 @@ posixOnly("Perspicax organization, slice 4: rights, teams, owner keys, sections"
     // He cannot pay for Codex, so (#1154) the bot answers him on the model
     // of the same tier on an engine he can pay for (Claude, his own key),
     // and the reply names the pick it left. No card: one is shown only when
-    // nothing he can pay for runs (server/turn-model-routing.test.ts).
+    // nothing he can pay for runs (server/turns/turn-model-routing.test.ts).
     expect((await api("PATCH", `/api/bots/${w.id}/runtime-settings`, erin, { turnPayer: "speaker" })).status).toBe(200);
     const textReplies = async () => ((await botOf(bob, w.id))?.messages ?? []).filter((m) => m.role === "bot" && m.kind === "text" && m.text);
     const firstReplies = (await textReplies()).length;

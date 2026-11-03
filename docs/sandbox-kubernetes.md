@@ -182,7 +182,7 @@ An operator may stop the cluster when no sandbox Pod has run for a while
 (for example a scheduled runbook that stops the cluster after 30 to 45
 minutes with no Pod) and start it again through a webhook: one HTTPS
 `POST` to a secret URL. Set that URL in `SAGAX_SANDBOX_K8S_WAKE_URL` on the
-Sagax server and Sagax starts the cluster itself (`server/sandbox-k8s-wake.ts`):
+Sagax server and Sagax starts the cluster itself (`server/sandbox/sandbox-k8s-wake.ts`):
 
 - A call routed to Kubernetes first checks the provisioner's unsigned
   `GET /healthz` (5 seconds; a provisioner seen healthy in the last minute
@@ -271,7 +271,7 @@ node only while it is useful:
    when the person writes a message (`POST /api/bots/:id/warm` with
    `typing: true`); the server then pre-wakes their cloud computer
    (`UserSandboxManager.prewake`, once per person and bot every 2 minutes,
-   `server/sandbox-typing-prewake.ts`), only on Kubernetes with the cluster
+   `server/sandbox/sandbox-typing-prewake.ts`), only on Kubernetes with the cluster
    wake and only for a bot that used it in the last 7 days. The cluster and
    the node start while the message is being written. Opening a
    conversation or the Computer tab never wakes anything. Scheduled
@@ -338,7 +338,7 @@ minutes.
 A cloud agent run (Perspicax spec `2026-10-18-cloud-agents-design.md`, lot
 P1.3) gets its own Pod, never a person's sandbox. The same provisioner
 serves it, on a second listener that only knows `/v1/runs`
-(`server/sandboxd-runs.ts`, pure objects in `server/sandboxd-runs-spec.ts`).
+(`server/sandbox/sandboxd-runs.ts`, pure objects in `server/sandbox/sandboxd-runs-spec.ts`).
 Off unless `SAGAX_RUNS_ENABLED=1`; nothing else changes when it is off.
 
 Who may call it: Perspicax only. Three locks, all required:
@@ -492,7 +492,7 @@ keeps no variable (`TERM` stays the pod's).
 
 ## Audit
 
-`server/sandbox-audit.ts` opens the log with `O_APPEND | O_CREAT | O_WRONLY |
+`server/sandbox/sandbox-audit.ts` opens the log with `O_APPEND | O_CREAT | O_WRONLY |
 O_NOFOLLOW`, mode `0640`, and `fsync`s each line. It never truncates. A line
 is `{v, ts, action, outcome, key?, detail?}`. Exec records the program name
 and the exit code, not the arguments, the environment or a secret. An
@@ -522,14 +522,14 @@ workflow are not evidence.
 | Registry prefix plus digest pin; tag `latest` refused | CC6.8 unauthorized software | `imageAdmissionProblems` | A digest is not a signature. This change does not sign an image. |
 | Local multi-arch build that cannot push; trivy script fails closed; cosign script refuses to skip quietly | CC6.8 | `scripts/build-sandbox-image.sh`, `scripts/scan-sandbox-image.sh`, `scripts/verify/release/verify-sandbox-image-signature.sh`, `sandbox-image.yml` | No image was published, scanned or signed by landing this change. A workflow that has not been run produced no report. The workflow's signature step records that it did not verify one. |
 | StorageClass encryption check; Secret encryption required as an attestation | C1.1 confidentiality, encryption at rest | `storageClassEncrypts`; startup fails without `SAGAX_SANDBOX_K8S_SECRETS_ENCRYPTED=true` | The API cannot show etcd `EncryptionConfiguration`. An annotation can be set on a class that does not encrypt. kind `local-path` is not encryption, and the integration test turns the check off. |
-| Append-only audit file, fsync, no-follow, https ship, Events create-only | CC7.1, CC7.2 monitoring; CC4.1 the record used to evaluate the control | `server/sandbox-audit.ts`; Role verb `create` on Events | The Deployment's audit volume is emptyDir unless the operator replaces it. Ship failures are logged and do not block. Events expire. A collector has to be operated. |
+| Append-only audit file, fsync, no-follow, https ship, Events create-only | CC7.1, CC7.2 monitoring; CC4.1 the record used to evaluate the control | `server/sandbox/sandbox-audit.ts`; Role verb `create` on Events | The Deployment's audit volume is emptyDir unless the operator replaces it. Ship failures are logged and do not block. Events expire. A collector has to be operated. |
 | Per-Pod requests and limits; ResourceQuota read-only to the provisioner; readiness requires caps on pods, cpu, memory and storage | A1.2 capacity | `quotaProblems`, `podFromDockerSpec` resources, Role verbs `get` and `list` on quotas | The sample numbers in `resourcequota.yaml` are not sized for a given cluster. Pause releases memory, so a paused slot does not consume the Pod's memory the way `docker pause` does. Pid and file-size rlimits are not enforced by core Kubernetes. |
 
 ## Tests
 
 Unit tests do not need a cluster: `server/sandboxd-k8s/sandboxd-k8s-spec.test.ts`,
-`server/sandboxd-k8s/sandboxd-k8s.test.ts`, `server/sandboxd-runs-spec.test.ts` and
-`server/sandboxd-runs.test.ts` (the run listener over real mutual TLS). The kind script
+`server/sandboxd-k8s/sandboxd-k8s.test.ts`, `server/sandbox/sandboxd-runs-spec.test.ts` and
+`server/sandbox/sandboxd-runs.test.ts` (the run listener over real mutual TLS). The kind script
 `scripts/sandbox-k8s-kind.sh` runs `server/sandboxd-k8s/sandboxd-k8s.integration.test.ts`
 only when `SAGAX_SANDBOX_K8S_INTEGRATION=1`, then deletes the cluster. It is
 not part of `pnpm test:unit`.
@@ -539,7 +539,7 @@ not part of `pnpm test:unit`.
 The provisioner and Sagax share one HMAC key (`SAGAX_SANDBOXD_KEY_FILE`).
 The file may hold two keys, one per line, during a rotation: the first line
 signs, every line verifies, and both sides reread the file within 5 seconds
-of a change (`sandboxdKeySource` in `server/sandboxd-auth.ts`), so no service
+of a change (`sandboxdKeySource` in `server/sandbox/sandboxd-auth.ts`), so no service
 restarts and no request fails. A file that turns unreadable or malformed
 keeps the last good keys. Three moves, each verified before the next:
 

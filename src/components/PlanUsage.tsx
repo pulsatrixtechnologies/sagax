@@ -1,7 +1,7 @@
 // Settings → Usage: remaining subscription allowance. This is not the token
 // ledger below it — each provider reports its own 5-hour and weekly windows.
 //
-// One row per provider (server/plan-usage.ts): its windows, "No plan
+// One row per provider (server/usage/plan-usage.ts): its windows, "No plan
 // windows", "Not signed in" with Connect, or the real error with Try again
 // (#1774: an expired token stays listed; it must not vanish so only the
 // last used engine shows). Since 2026-10-16 the card is always drawn: with
@@ -9,7 +9,7 @@
 // of vanishing. On an organization server the card ends with the link to
 // the person's keys in Perspicax.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { ExternalLink, Loader2, RefreshCw, Star } from "lucide-react";
 import { api, useStore } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -17,6 +17,7 @@ import { openSettings } from "@/lib/settings-link";
 import { perspicaxKeysUrl, reloadMyEngines, useMyEngines, usePerspicaxOrg, type MyEngine } from "@/lib/perspicax-org";
 import { formatResetDistance, planRows, type PlanRow, type PlanUsageReport, type PlanWindow } from "@/lib/plan-usage";
 import { usageLocale } from "@/lib/usage-personal";
+import { toggleUsageFavorite, useUsageFavorite } from "@/lib/usage-favorite";
 import { CompactRow, PILL, SettingsGroup } from "./SettingsPrimitives";
 import { EngineConnect } from "./EngineConnect";
 
@@ -135,6 +136,35 @@ export interface PlanUsageViewProps {
   /** This account cannot read plan windows here (a solo server's windows
    * are an admin read): the card says so instead of asking. */
   unavailable?: boolean;
+  /** The starred plan (its percent is the one the account menu's Usage row
+   * shows) and how a star is toggled; absent: no stars. */
+  favorite?: { id: string | null; onToggle: (planId: string) => void };
+}
+
+/** A plan's star: on hover or focus, and always while it is on. Offered on
+ * a plan that reports windows (the ones the menu can show), and on the
+ * starred one whatever its state, so it can be cleared. */
+function FavoriteStar({ provider, favorite }: { provider: PlanRow; favorite: NonNullable<PlanUsageViewProps["favorite"]> }) {
+  const on = favorite.id === provider.id;
+  if (!on && provider.state !== "windows") return null;
+  const name = provider.plan ? `${provider.name} ${provider.plan}` : provider.name;
+  const label = t(on ? "usage.favorite.remove" : "usage.favorite.add", { name });
+  return (
+    <button
+      type="button"
+      data-usage-favorite={on ? "on" : "off"}
+      aria-pressed={on}
+      aria-label={label}
+      title={label}
+      onClick={() => favorite.onToggle(provider.id)}
+      className={cn(
+        "ml-auto flex size-6 shrink-0 items-center justify-center self-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-accent/70",
+        on ? "text-accent" : "text-ink-tertiary opacity-0 hover:text-ink group-hover/plan:opacity-100 focus-visible:opacity-100 touch:opacity-100",
+      )}
+    >
+      <Star size={13} aria-hidden="true" fill={on ? "currentColor" : "none"} />
+    </button>
+  );
 }
 
 function SignedOut({ provider, myEngines, issuer, onOpenEngines, onRefresh }: { provider: PlanRow } & Pick<PlanUsageViewProps, "myEngines" | "issuer" | "onOpenEngines" | "onRefresh">) {
@@ -266,7 +296,7 @@ function planStatus({ report, loading, failed, unavailable }: Pick<PlanUsageView
  * says why in one line (loading, unavailable, or connect a subscription).
  * 2026-10-30 (#1774): signed-out and error rows stay listed with Connect
  * or Try again (an expired token must not vanish). */
-export function PlanUsageView({ report, loading, now, onRefresh, myEngines, issuer, onOpenEngines, failed = false, unavailable = false }: PlanUsageViewProps) {
+export function PlanUsageView({ report, loading, now, onRefresh, myEngines, issuer, onOpenEngines, failed = false, unavailable = false, favorite }: PlanUsageViewProps) {
   const rows = unavailable ? [] : planRows(report);
   const status = rows.length === 0 ? planStatus({ report, loading, failed, unavailable }) : null;
   // 0.5.6: the reference design's usage meters, a grey heading outside one rounded card,
@@ -297,10 +327,11 @@ export function PlanUsageView({ report, loading, now, onRefresh, myEngines, issu
           </div>
         )}
         {rows.map((provider) => (
-          <div key={provider.id} data-plan-row={provider.id} className="px-3.5 py-2.5">
+          <div key={provider.id} data-plan-row={provider.id} className="group/plan px-3.5 py-2.5">
             <div className="mb-2 flex min-w-0 items-baseline gap-2">
               <span className="truncate text-[13px] leading-[18px] text-ink">{provider.name}</span>
               {provider.plan && <span className="truncate text-[12px] text-ink-secondary">{provider.plan}</span>}
+              {favorite && <FavoriteStar provider={provider} favorite={favorite} />}
             </div>
             {provider.state === "windows" && <PlanSummary provider={provider} now={now} />}
             {provider.state === "no-windows" && (
@@ -355,6 +386,7 @@ export function PlanUsage({ enabled = true }: { enabled?: boolean }) {
   const [failed, setFailed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const refreshedDeadlines = useRef(new Set<string>());
+  const favorite = useUsageFavorite();
 
   const load = useCallback(async (refresh = false) => {
     setLoading(true);
@@ -401,6 +433,7 @@ export function PlanUsage({ enabled = true }: { enabled?: boolean }) {
       onOpenEngines={() => openSettings(dispatch, "providers")}
       failed={failed}
       unavailable={!enabled}
+      favorite={{ id: favorite, onToggle: toggleUsageFavorite }}
     />
   );
 }

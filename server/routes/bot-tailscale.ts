@@ -17,8 +17,8 @@ import {
   botTailscaleScope,
   type BotTailscaleScope,
   type BotTailscaleService,
-} from "../bot-tailscale.ts";
-import type { RequestAuth } from "../request-auth.ts";
+} from "../bots/bot-tailscale.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const BOT_TAILSCALE_PATH = "/api/me/tailscale";

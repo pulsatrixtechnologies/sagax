@@ -14,7 +14,7 @@ import { MAUS_COLORS } from "@/lib/mascot";
 import { contrastRatio, eyeInkOn, MASCOT_COLOR_GROUPS, MASCOT_COLOR_HEX, MASCOT_COLOR_NAMES, MASCOT_COLOR_PALETTES, mascotColorGroup, mascotColorsIn } from "../../../shared/mascot-colors";
 import { botMascotLook, CRAB_SKIN_TIER, CRAB_SKINS, MASCOT_SHAPES, SHAPE_SKIN_TIER, SHAPE_SKINS, TROMBI_SKIN_TIER, TROMBI_SKINS } from "../../../shared/mascot-look";
 import { botMascotSkin, LEGACY_OWL_SKINS, MASCOT_SKIN_IDS, mascotSkinSchema, OWL_SKIN_TIER } from "../../../shared/mascot-skins";
-import { parseBotProfilePatch } from "../../../server/bot-profile";
+import { parseBotProfilePatch } from "../../../server/bots/bot-profile";
 import MascotLookEditor, { EDITOR_TABS, COLOR_GROUP_LABEL, OWL_SKIN_LABEL } from "./MascotLookEditor";
 import { colorTabFor, colorTabs, nextTab, SKIN_TIERS, skinTabFor, skinTierTabs } from "./editor-tabs";
 

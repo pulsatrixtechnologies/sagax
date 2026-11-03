@@ -1,5 +1,5 @@
 // A small ZIP writer and a defensive ZIP reader, for the bot package
-// (`<bot>.sagaxbot.zip`, server/bot-zip.ts). No dependency: node:zlib does
+// (`<bot>.sagaxbot.zip`, server/bots/bot-zip.ts). No dependency: node:zlib does
 // the deflate and the CRC-32.
 //
 // Writer: entries are written one after the other to a sink (an HTTP

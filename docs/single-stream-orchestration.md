@@ -85,7 +85,7 @@ mode.
   threads are off; ⌘N opens the compose picker. Threads still get created
   behind the scenes (an older build, another device, a teammate, a bot's
   `start_thread`, a routine, an AI client's hidden conversation). The app
-  opens the bot's main thread (`server/main-thread.ts`, the open thread the
+  opens the bot's main thread (`server/threads/main-thread.ts`, the open thread the
   person last wrote in) and, when a deep link or notification lands on
   another one, shows "Back to conversation" (`ThreadsOffReturnLink`,
   `src/components/thread-home.ts`). That is the "where did it go" problem.
@@ -93,11 +93,11 @@ mode.
   (Sagax: hidden AI-client conversations, #291; parallel tasks) stays out of
   the chat and reports back into it.
 - **Context today**: Sagax folds a long thread itself
-  (`compactConversation`, `server/context-budget.ts`,
-  `server/compaction-summary.ts`): two latest exchanges verbatim, the rest
+  (`compactConversation`, `server/context/context-budget.ts`,
+  `server/context/compaction-summary.ts`): two latest exchanges verbatim, the rest
   summarized by the engine's tool-free `generateText` with a deterministic,
   extractive fallback, stored on the task (`contextSummaries`, server-private).
-  Every 1:1 turn also carries automatic recall (`server/recall.ts`, FTS
+  Every 1:1 turn also carries automatic recall (`server/recall/recall.ts`, FTS
   passages from memory and the person's other conversations, 6,000 chars),
   a recent-work brief (`server/recent-work.ts`, one line per other
   conversation over 48 h, 1,400 chars) and `session_search` /
@@ -125,7 +125,7 @@ stream in chronological order with no data written, fully reversible.
 a fresh engine context. The person sees a divider ("Nouveau sujet" / "New
 topic") in the same stream, never a new place.
 
-### Server orchestration (`server/single-stream.ts`)
+### Server orchestration (`server/streams/single-stream.ts`)
 
 - **Marker.** A send from a client with threads off carries `singleStream:
   true` (`singleStreamTurnField`); the server marks the thread
@@ -285,11 +285,11 @@ Release note text:
 ## Tests
 
 - `shared/single-stream.test.ts`: segment rule and order, exclusions.
-- `server/single-stream.test.ts`: digest extraction and caps, model digest
+- `server/streams/single-stream.test.ts`: digest extraction and caps, model digest
   fallback and timeout, composed block budget, recall pages, candidates.
 - `server/drivers/agents-catalog-single-stream.test.ts`: the tool appears
   only in a stream turn and is a read.
-- `server/single-stream.e2e.test.ts`: marker, new topic, digest in the
+- `server/streams/single-stream.e2e.test.ts`: marker, new topic, digest in the
   prompt, background model digest, `recall_topic` list and read, refusal of
   a confidential topic, hidden and confidential exclusions, thread mode on
   unchanged, a topic made confidential later.

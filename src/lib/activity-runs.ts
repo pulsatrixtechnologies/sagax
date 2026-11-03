@@ -57,7 +57,7 @@ export function statusActivity(message: Message): { kind: "recovery" | "notice" 
   if (finish) return { kind: "notice", text: finishUntilLineLocalized(finish) };
   if (name?.startsWith("recovery:")) return { kind: "recovery", text: name.slice("recovery:".length).trim() };
   // The Kubernetes cluster of the server environments is starting
-  // (server/sandbox-k8s-wake.ts): the server's fixed rows, in the person's language.
+  // (server/sandbox/sandbox-k8s-wake.ts): the server's fixed rows, in the person's language.
   if (name === SANDBOX_WAKE_NOTICE) return { kind: "notice", text: t("chat.sandboxWakingAsleep") };
   if (name === SANDBOX_WAKE_TIMEOUT_NOTICE) return { kind: "notice", text: t("chat.sandboxWakeTimeout") };
   // A fill reads 1Password, which may ask the person first (parité R10).

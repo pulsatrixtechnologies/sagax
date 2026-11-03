@@ -4,9 +4,9 @@
 //   PUT /api/bots/:id/lifecycle-hooks  { enabled: boolean }
 //
 // Turning it on does not run anything on the Sagax server. The dispatcher
-// (server/lifecycle-hooks.ts) sends the commands to the bot's computer.
-import type { BotPlugins } from "../bot-plugins.ts";
-import type { RequestAuth } from "../request-auth.ts";
+// (server/hooks/lifecycle-hooks.ts) sends the commands to the bot's computer.
+import type { BotPlugins } from "../bots/bot-plugins.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 const ROUTE = new RegExp("^/api/bots/([\\w-]+)/lifecycle-hooks$");

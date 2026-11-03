@@ -33,7 +33,7 @@ Stop the launcher with Ctrl-C; it owns and removes only its disposable home.
 ## Providers connected after first launch
 
 ```sh
-pnpm exec vitest run server/onboarding-model-default.e2e.test.ts server/default-model-selection.test.ts src/components/NewBotDialog.test.ts
+pnpm exec vitest run server/onboarding-model-default.e2e.test.ts server/models/default-model-selection.test.ts src/components/NewBotDialog.test.ts
 ```
 
 The server tests launch only disposable homes and repository-owned fake engines.

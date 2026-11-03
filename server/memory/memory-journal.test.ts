@@ -24,7 +24,7 @@ import {
   unifiedDiff,
 } from "./memory-journal.ts";
 import { MEMORY_INDEX, hashMemoryText, readMemoryDoc } from "./memory-store.ts";
-import { WORKSPACES_DIR, ensureWorkspace, workspaceDir } from "../workspace.ts";
+import { WORKSPACES_DIR, ensureWorkspace, workspaceDir } from "../workspace/workspace.ts";
 
 let counter = 0;
 const freshBot = () => `journal-bot-${process.pid}-${counter++}`;

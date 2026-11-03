@@ -9,8 +9,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "./harness/http.ts";
-import { PublishedPages } from "./published-pages.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import { PublishedPages } from "./pages/published-pages.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import { createPublishedPageRoutes, type PublishedPageRouteDeps } from "./routes/published-pages.ts";
 import { pageMayEnter } from "../shared/page-audience.ts";
 

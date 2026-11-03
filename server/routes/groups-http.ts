@@ -9,9 +9,9 @@ import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 
 import { admit } from "../admission.ts";
-import type { ApprovalViewer } from "../approval-audience.ts";
-import { memberGroup } from "../bot-visibility.ts";
-import { validateBotCwd } from "../bot-cwd.ts";
+import type { ApprovalViewer } from "../approvals/approval-audience.ts";
+import { memberGroup } from "../bots/bot-visibility.ts";
+import { validateBotCwd } from "../bots/bot-cwd.ts";
 import {
   cancelChannelMessage,
   headChannelGroup,
@@ -21,49 +21,49 @@ import {
   resolveHeldReplyTarget,
   restoreHeldChannelQueue,
   settleHeldChannelQueueHead,
-} from "../channel-queue.ts";
-import { channelViewerId } from "../channel-visibility.ts";
+} from "../rooms/channel-queue.ts";
+import { channelViewerId } from "../rooms/channel-visibility.ts";
 import { cloudThreadRefusal } from "../cloud-thread-refusal.ts";
 import type { SteerOutcome } from "../contracts.ts";
-import { groupLeftLine, planGroupLeave } from "../group-leave.ts";
+import { groupLeftLine, planGroupLeave } from "../groups/group-leave.ts";
 import {
   groupPatchOwnerRefusal,
   mayDeleteGroup,
   type GroupActor,
-} from "../group-ownership.ts";
+} from "../groups/group-ownership.ts";
 import { deleteGroupMemory } from "../memory/group-memory.ts";
 import type { HarnessCommandCatalog, HarnessCommandSource } from "../harness-commands.ts";
 import { typedCommandForTurn, unavailableCommandError } from "../harness-commands.ts";
-import { cancelledChatFollowup } from "../message-db.ts";
-import { misuseRefusal } from "../misuse-guardrails.ts";
+import { cancelledChatFollowup } from "../messages/message-db.ts";
+import { misuseRefusal } from "../safety/misuse-guardrails.ts";
 import {
   peopleDmForViewer,
   peopleDmPatchRefusal,
   peopleDmThreadUnreadPatch,
   peopleDmUnreadPatch,
-} from "../people-dms.ts";
-import { promptWithReply } from "../replies.ts";
-import type { RequestAuth } from "../request-auth.ts";
-import { clientGroupPatchViolation, requestSource } from "../request-auth.ts";
-import type { TurnSpeaker } from "../engine-access.ts";
+} from "../people/people-dms.ts";
+import { promptWithReply } from "../messages/replies.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { clientGroupPatchViolation, requestSource } from "../auth/request-auth.ts";
+import type { TurnSpeaker } from "../engines/engine-access.ts";
 import { speakerFor } from "../request-speaker.ts";
-import { roomMentionReadPatch } from "../room-mentions.ts";
-import { parseConversationTurnTimeout } from "../room-turn-timeout.ts";
-import { safetyHttpRefusal } from "../safety-review.ts";
+import { roomMentionReadPatch } from "../rooms/room-mentions.ts";
+import { parseConversationTurnTimeout } from "../rooms/room-turn-timeout.ts";
+import { safetyHttpRefusal } from "../safety/safety-review.ts";
 import {
   acceptedSendMatch,
   parseSendId,
   sendFingerprint,
-} from "../send-idempotency.ts";
+} from "../messages/send-idempotency.ts";
 import type { BotRecord, GroupRecord, Message } from "../store.ts";
 import { sectionKey } from "../store.ts";
-import { parseThreadOrganization } from "../thread-folders.ts";
-import { extractTurnImages } from "../turn-images.ts";
-import { personDisplayName } from "../viewer-identity.ts";
+import { parseThreadOrganization } from "../threads/thread-folders.ts";
+import { extractTurnImages } from "../turns/turn-images.ts";
+import { personDisplayName } from "../people/viewer-identity.ts";
 import { permissionRefusal } from "../../shared/permissions.ts";
 import type { GroupCommandRoute } from "../../shared/harness-commands.ts";
 import { isStopIntent } from "../../shared/stop-intent.ts";
-import type { UsageTrigger } from "../usage-ledger.ts";
+import type { UsageTrigger } from "../usage/usage-ledger.ts";
 import type { ResolvedSender } from "../../shared/wire.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -393,7 +393,7 @@ export function createGroupsHttpRoutes(deps: GroupsHttpDeps): RouteHandler {
       if (!body || typeof body !== "object" || Array.isArray(body)) {
         return json(res, 400, { error: "body must be a JSON object" });
       }
-      // Archive, snooze and folder are a bot thread's too (server/thread-folders.ts).
+      // Archive, snooze and folder are a bot thread's too (server/threads/thread-folders.ts).
       const allowed = new Set(["title", "pinned", "turnTimeoutMinutes", "archivedAt", "snoozedUntil", "projectId"]);
       if (Object.keys(body).some((key) => !allowed.has(key))) return json(res, 400, { error: "unsupported channel thread setting" });
       // A person conversation has no turns, so no turn limit.
@@ -501,7 +501,7 @@ export function createGroupsHttpRoutes(deps: GroupsHttpDeps): RouteHandler {
         if (placed) return json(res, 403, { error: placed, code: "bot_place_owner_only" });
       }
       // Organization server: only the group's owner changes its settings;
-      // anyone listed may still leave it (server/group-ownership.ts).
+      // anyone listed may still leave it (server/groups/group-ownership.ts).
       const ownerRule = Boolean(existingGroup && !existingGroup.dm && groupOwnerRuleApplies(auth));
       if (existingGroup && ownerRule) {
         const refusal = groupPatchOwnerRefusal(existingGroup, body, groupActor(auth), (botId) => {
@@ -543,7 +543,7 @@ export function createGroupsHttpRoutes(deps: GroupsHttpDeps): RouteHandler {
       }
       let group = updateChannel(m[1], body);
       if (movesSection) recordRoomMove(group.id, fromSection, sectionKey(group.section));
-      // A room marked read by a person reads their @ tag too (server/room-mentions.ts).
+      // A room marked read by a person reads their @ tag too (server/rooms/room-mentions.ts).
       const reader = groupReaderId(auth);
       if ((body as { unread?: unknown } | null)?.unread === false) {
         const mentionRead = roomMentionReadPatch(group, reader);
@@ -595,7 +595,7 @@ export function createGroupsHttpRoutes(deps: GroupsHttpDeps): RouteHandler {
     m = path.match(/^\/api\/groups\/([\w-]+)\/read$/);
     if (m && method === "POST") {
       // A conversation between two people is read by the person reading it,
-      // never for the other one (server/people-dms.ts).
+      // never for the other one (server/people/people-dms.ts).
       const existing = store.group(m[1]);
       const reader = groupReaderId(auth);
       // A person conversation: `{ threadId }` reads that thread for the

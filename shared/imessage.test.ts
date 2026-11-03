@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DESKTOP_BRIDGE_ACTIONS } from "../server/desktop-bridge.ts";
+import { DESKTOP_BRIDGE_ACTIONS } from "../server/desktop/desktop-bridge.ts";
 import {
   handleFromChatGuid,
   messagesOnBotMac,

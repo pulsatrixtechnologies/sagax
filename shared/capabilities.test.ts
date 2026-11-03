@@ -10,7 +10,7 @@ describe("engineReceipt: what each engine receives", () => {
     expect(engineReceipt("claudeAgent", "plugin", { customMcp: true, ...plugin })).toEqual({ skills: "native", commands: "native", agents: "native", nothing: false });
   });
 
-  it("another engine with files reads a plugin's skills, commands and agents from the prompt (server/plugin-turn.ts)", () => {
+  it("another engine with files reads a plugin's skills, commands and agents from the prompt (server/turns/plugin-turn.ts)", () => {
     for (const kind of ["codex", "piAgent", "grokAgent"]) {
       expect(engineReceipt(kind, "plugin", { customMcp: true, ...plugin }), kind).toEqual({ skills: "prompt", commands: "prompt", agents: "prompt", nothing: false });
     }

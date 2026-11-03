@@ -23,8 +23,8 @@
 // server lists its own bots and refuses a listing. Member scope
 // (request-auth.ts CLIENT_ALLOW); every rule is checked here. Publishing,
 // withdrawing, featuring and importing are rows of the admin activity log.
-import type { Level } from "../authz.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { Level } from "../auth/authz.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   normalizeCatalogCategory,
   type BotCatalogDetail,
@@ -74,7 +74,7 @@ export interface BotCatalogRouteDeps {
   bots(): CatalogBot[];
   /** Null: no person behind the request (a local service). */
   viewer(auth: RequestAuth): CatalogViewer | null;
-  /** The viewer's level on a bot (server/authz.ts botLevel). */
+  /** The viewer's level on a bot (server/auth/authz.ts botLevel). */
   level(auth: RequestAuth, botId: string): Level | "owner" | null;
   personName(principalId: string): string;
   detail(botId: string, options: { memories: boolean }): Omit<BotCatalogDetail, "entry"> | null;

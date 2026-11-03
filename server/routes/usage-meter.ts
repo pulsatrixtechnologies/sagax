@@ -4,9 +4,9 @@
 //
 // No admin right. Nothing is sent anywhere but this server, and an event
 // has no person name (shared/usage-meter.ts).
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { usageEvent } from "../../shared/usage-meter.ts";
-import type { UsageMeter, UsageMeterScope } from "../usage-meter.ts";
+import type { UsageMeter, UsageMeterScope } from "../usage/usage-meter.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 const PATH = "/api/me/usage-meter";

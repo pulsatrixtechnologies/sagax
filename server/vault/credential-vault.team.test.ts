@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { botVaultPrincipal, vaultHandle } from "../../shared/credential-vault.ts";
 import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL } from "./credential-vault.ts";
-import type { VaultKeySource } from "../mcp-oauth.ts";
+import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
 
 const KEY: VaultKeySource = { kind: "key", key: Buffer.alloc(32, 7) };
 const OTHER: VaultKeySource = { kind: "key", key: Buffer.alloc(32, 9) };

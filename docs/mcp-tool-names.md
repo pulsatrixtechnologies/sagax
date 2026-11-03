@@ -21,7 +21,7 @@ The CLI only wrote `Skipping MCP tool` to its own log; the bot saw nothing.
   `mcpToolNames: "grok"`; every connector server (Perspicax profiles, URL
   and stdio servers) is mounted through `server/mcp-gate.ts` with
   `SAGAX_GATE_TOOL_NAMES=grok`. The gate registers each tool under an
-  admissible name (`server/mcp-tool-names.ts`) and keeps `alias -> upstream
+  admissible name (`server/mcp/mcp-tool-names.ts`) and keeps `alias -> upstream
   name`; a `tools/call` is translated through that map before any check.
   `cw_psa__query` becomes `cw_psa_query`. Every `__` in a tool name, on
   any API, collapses to one `_`.

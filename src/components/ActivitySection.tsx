@@ -2,7 +2,7 @@
 // who changed settings, people, sessions, webhooks, MCP servers, engines,
 // bots, budgets and bot visibility, beside who answered approval cards —
 // filtered by who, what and when, and exported as CSV. Read-only: the log is
-// GET /api/admin-activity (server/admin-activity.ts), kept on this server.
+// GET /api/admin-activity (server/activity/admin-activity.ts), kept on this server.
 import { useCallback, useEffect, useState } from "react";
 import { ChevronRight, Download, Loader2, RefreshCw } from "lucide-react";
 

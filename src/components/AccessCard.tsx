@@ -2,7 +2,7 @@
 // engine is not installed, no credentials serve the turn, or the provider
 // refused the key. Since 2026-10-01 the person who speaks pays (the bot's
 // owner for its routines), and the server sends the card to that person only
-// (accessCardAudience in server/engine-access.ts): it speaks to them ("you"),
+// (accessCardAudience in server/engines/engine-access.ts): it speaks to them ("you"),
 // with what to do (sign in with their own subscription, add their key in
 // Perspicax) and, for an admin only, where the organization's key lives. The
 // third-person lines remain for a viewer the card is not about (a card the

@@ -4,7 +4,7 @@
 // Sharing in the organization (OrgSharing.tsx), Allow full access
 // (OrgFullAccessPolicy.tsx) and the commands waiting for an admin.
 //
-// Routes (server/perspicax-org-routes.ts, server/index.ts):
+// Routes (server/perspicax/perspicax-org-routes.ts, server/index.ts):
 // - GET /api/org: any signed-in person (CLIENT_ALLOW).
 // - GET/POST /api/org/routine-delegation: the caller's own session.
 // - GET /api/org/bots: any session, filtered per caller.

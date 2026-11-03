@@ -15,7 +15,8 @@ import { cn } from "@/lib/cn";
 import type { RoutineWatchCondition, RoutineWatchOp, RoutineWatchPrecheck, RoutineWatchSourceType } from "../../../shared/routine-watch";
 import { ROUTINE_WATCH_LIMITS, ROUTINE_WATCH_OPS } from "../../../shared/routine-watch";
 import { readableError } from "@/lib/plain-error";
-import { SwitchRow } from "@/components/SettingsPrimitives";
+import { PillSelect, Switch } from "@/components/SettingsPrimitives";
+import { PanelToggle } from "./PanelRows";
 
 export type WatchConditionChoice = "none" | "json_path" | "contains" | "exit_code";
 
@@ -139,7 +140,9 @@ type CheckAnswer =
 const INPUT = "rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] leading-[18px] text-ink outline-none focus:border-border-strong";
 const OPS_LABEL: Record<RoutineWatchOp, string> = { eq: "=", ne: "≠", gt: ">", gte: "≥", lt: "<", lte: "≤", contains: "∋", exists: "∃" };
 
-export function WatchFields({ draft, onChange, botId, routineId, runOn }: {
+export function WatchFields({ draft, onChange, botId, routineId, runOn, viewing = false }: {
+  /** View mode: the switch reads On or Off and the details stay closed. */
+  viewing?: boolean;
   draft: WatchDraft;
   onChange: (draft: WatchDraft) => void;
   botId: string;
@@ -166,9 +169,10 @@ export function WatchFields({ draft, onChange, botId, routineId, runOn }: {
   };
   return (
     <div data-testid="routine-watch">
-      {/* 2026-11-02: one row, the explanation behind "?" (Edit routine's Advanced). */}
-      <SwitchRow label={t("routineWatch.title")} help={t("routineWatch.help", { minutes: ROUTINE_WATCH_LIMITS.minIntervalMinutes })} checked={draft.on} onChange={(on) => set({ on })} />
-      {draft.on && <div className="mt-3 space-y-3 border-t border-hairline/35 pt-3">
+      {/* 2026-11-03: one row of the routine panel, a short hint, the long
+          explanation on the label's tooltip; the app's pill menus. */}
+      <PanelToggle label={t("routineWatch.title")} hint={t("routineEditor.hint.watch")} help={t("routineWatch.help", { minutes: ROUTINE_WATCH_LIMITS.minIntervalMinutes })} checked={draft.on} viewing={viewing} onChange={(on) => set({ on })} />
+      {draft.on && !viewing && <div className="mb-2 space-y-3">
         <div role="radiogroup" aria-label={t("routineWatch.sourceLabel")} className="grid gap-2 sm:grid-cols-3">
           {(["files", "command", "tool"] as const).map((type) => (
             <button key={type} type="button" role="radio" aria-checked={draft.type === type} onClick={() => set({ type, ...(type !== "command" && draft.condition === "exit_code" ? { condition: "none" as const } : {}) })}
@@ -183,10 +187,10 @@ export function WatchFields({ draft, onChange, botId, routineId, runOn }: {
             <span>{t("routineWatch.path")}</span>
             <input aria-label={t("routineWatch.path")} value={draft.path} onChange={(event) => set({ path: event.target.value })} placeholder={t("routineWatch.pathPlaceholder")} className={cn(INPUT, "min-w-0 flex-1")} />
           </label>
-          <label className="flex items-center gap-2 text-[12px] text-ink">
-            <input type="checkbox" checked={draft.recursive} onChange={(event) => set({ recursive: event.target.checked })} />
+          <div className="flex items-center justify-between gap-3 text-[12px] text-ink">
             <span>{t("routineWatch.recursive", { depth: ROUTINE_WATCH_LIMITS.maxDepth })}</span>
-          </label>
+            <Switch checked={draft.recursive} aria-label={t("routineWatch.recursive", { depth: ROUTINE_WATCH_LIMITS.maxDepth })} onClick={() => set({ recursive: !draft.recursive })} />
+          </div>
         </div>}
         {draft.type === "command" && <label className="block text-[12px] text-ink">
           <span className="mb-1 block">{t("routineWatch.command")}</span>
@@ -205,43 +209,32 @@ export function WatchFields({ draft, onChange, botId, routineId, runOn }: {
         <p className="text-[10.5px] leading-relaxed text-ink-secondary">{t(`routineWatch.where.${draft.type}` as LocaleKey, { kb: Math.round(ROUTINE_WATCH_LIMITS.maxOutputBytes / 1024), files: ROUTINE_WATCH_LIMITS.maxFiles, seconds: Math.round(ROUTINE_WATCH_LIMITS.timeoutMs / 1000) })}</p>
 
         <div className="space-y-2">
-          <label className="flex flex-wrap items-center gap-2 text-[12px] text-ink">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-ink">
             <span>{t("routineWatch.condition")}</span>
-            <select aria-label={t("routineWatch.condition")} value={draft.condition} onChange={(event) => set({ condition: event.target.value as WatchConditionChoice })} className={INPUT}>
-              <option value="none">{t("routineWatch.condition.none")}</option>
-              <option value="json_path">{t(draft.type === "files" ? "routineWatch.condition.filesValue" : "routineWatch.condition.jsonPath")}</option>
-              {draft.type !== "files" && <option value="contains">{t("routineWatch.condition.contains")}</option>}
-              {draft.type === "command" && <option value="exit_code">{t("routineWatch.condition.exitCode")}</option>}
-            </select>
-          </label>
+            <PillSelect<WatchConditionChoice> ariaLabel={t("routineWatch.condition")} value={draft.condition} onChange={(condition) => set({ condition })} options={[
+              { value: "none", label: t("routineWatch.condition.none") },
+              { value: "json_path", label: t(draft.type === "files" ? "routineWatch.condition.filesValue" : "routineWatch.condition.jsonPath") },
+              ...(draft.type !== "files" ? [{ value: "contains" as const, label: t("routineWatch.condition.contains") }] : []),
+              ...(draft.type === "command" ? [{ value: "exit_code" as const, label: t("routineWatch.condition.exitCode") }] : []),
+            ]} />
+          </div>
           {draft.condition === "json_path" && <div className="flex flex-wrap items-center gap-2">
             <input aria-label={t("routineWatch.conditionPath")} value={draft.conditionPath} onChange={(event) => set({ conditionPath: event.target.value })} placeholder={draft.type === "files" ? "count" : "$.items.length"} className={cn(INPUT, "w-44 font-mono")} />
-            <select aria-label={t("routineWatch.conditionOp")} value={draft.conditionOp} onChange={(event) => set({ conditionOp: event.target.value as RoutineWatchOp })} className={INPUT}>
-              {ROUTINE_WATCH_OPS.map((op) => <option key={op} value={op}>{OPS_LABEL[op]} {t(`routineWatch.op.${op}` as LocaleKey)}</option>)}
-            </select>
+            <PillSelect<RoutineWatchOp> ariaLabel={t("routineWatch.conditionOp")} value={draft.conditionOp} onChange={(conditionOp) => set({ conditionOp })} options={ROUTINE_WATCH_OPS.map((op) => ({ value: op, label: `${OPS_LABEL[op]} ${t(`routineWatch.op.${op}` as LocaleKey)}` }))} />
             {draft.conditionOp !== "exists" && <input aria-label={t("routineWatch.conditionValue")} value={draft.conditionValue} onChange={(event) => set({ conditionValue: event.target.value })} className={cn(INPUT, "w-32")} />}
           </div>}
           {draft.condition === "contains" && <div className="flex flex-wrap items-center gap-2">
-            <select aria-label={t("routineWatch.containsMode")} value={draft.containsNegate ? "lacks" : "has"} onChange={(event) => set({ containsNegate: event.target.value === "lacks" })} className={INPUT}>
-              <option value="has">{t("routineWatch.contains.has")}</option>
-              <option value="lacks">{t("routineWatch.contains.lacks")}</option>
-            </select>
+            <PillSelect ariaLabel={t("routineWatch.containsMode")} value={draft.containsNegate ? "lacks" : "has"} onChange={(mode) => set({ containsNegate: mode === "lacks" })} options={[{ value: "has", label: t("routineWatch.contains.has") }, { value: "lacks", label: t("routineWatch.contains.lacks") }]} />
             <input aria-label={t("routineWatch.containsText")} value={draft.containsText} onChange={(event) => set({ containsText: event.target.value })} className={cn(INPUT, "min-w-0 flex-1")} />
           </div>}
           {draft.condition === "exit_code" && <div className="flex flex-wrap items-center gap-2 text-[12px] text-ink">
-            <select aria-label={t("routineWatch.conditionOp")} value={draft.exitOp} onChange={(event) => set({ exitOp: event.target.value === "eq" ? "eq" : "ne" })} className={INPUT}>
-              <option value="ne">{t("routineWatch.exit.ne")}</option>
-              <option value="eq">{t("routineWatch.exit.eq")}</option>
-            </select>
+            <PillSelect ariaLabel={t("routineWatch.conditionOp")} value={draft.exitOp} onChange={(exitOp) => set({ exitOp: exitOp === "eq" ? "eq" : "ne" })} options={[{ value: "ne", label: t("routineWatch.exit.ne") }, { value: "eq", label: t("routineWatch.exit.eq") }]} />
             <input aria-label={t("routineWatch.conditionValue")} inputMode="numeric" value={draft.exitValue} onChange={(event) => set({ exitValue: event.target.value })} className={cn(INPUT, "w-16")} />
           </div>}
-          {draft.condition !== "none" && <label className="flex flex-wrap items-center gap-2 text-[12px] text-ink">
+          {draft.condition !== "none" && <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-ink">
             <span>{t("routineWatch.wakeOn")}</span>
-            <select aria-label={t("routineWatch.wakeOn")} value={draft.wakeOn} onChange={(event) => set({ wakeOn: event.target.value === "match" ? "match" : "change" })} className={INPUT}>
-              <option value="change">{t("routineWatch.wakeOn.change")}</option>
-              <option value="match">{t("routineWatch.wakeOn.match")}</option>
-            </select>
-          </label>}
+            <PillSelect ariaLabel={t("routineWatch.wakeOn")} value={draft.wakeOn} onChange={(wakeOn) => set({ wakeOn: wakeOn === "match" ? "match" : "change" })} options={[{ value: "change", label: t("routineWatch.wakeOn.change") }, { value: "match", label: t("routineWatch.wakeOn.match") }]} />
+          </div>}
         </div>
 
         {draft.type !== "files" && <details className="text-[12px] text-ink" open={Boolean(draft.trackItems || draft.trackKey || draft.trackFields)}>
@@ -254,21 +247,15 @@ export function WatchFields({ draft, onChange, botId, routineId, runOn }: {
           </div>
         </details>}
 
-        <div className={cn("grid gap-2", draft.type !== "tool" && "sm:grid-cols-2")}>
-          <label className="block text-[12px] text-ink">
-            <span className="mb-1 block">{t("routineWatch.firstRun")}</span>
-            <select aria-label={t("routineWatch.firstRun")} value={draft.firstRun} onChange={(event) => set({ firstRun: event.target.value === "wake" ? "wake" : "baseline" })} className={cn(INPUT, "w-full")}>
-              <option value="baseline">{t("routineWatch.firstRun.baseline")}</option>
-              <option value="wake">{t("routineWatch.firstRun.wake")}</option>
-            </select>
-          </label>
-          {draft.type !== "tool" && <label className="block text-[12px] text-ink">
-            <span className="mb-1 block">{t("routineWatch.whenAsleep")}</span>
-            <select aria-label={t("routineWatch.whenAsleep")} value={draft.whenAsleep} onChange={(event) => set({ whenAsleep: event.target.value === "wake" ? "wake" : "skip" })} className={cn(INPUT, "w-full")}>
-              <option value="skip">{t("routineWatch.whenAsleep.skip")}</option>
-              <option value="wake">{t("routineWatch.whenAsleep.wake")}</option>
-            </select>
-          </label>}
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-ink">
+            <span>{t("routineWatch.firstRun")}</span>
+            <PillSelect ariaLabel={t("routineWatch.firstRun")} value={draft.firstRun} onChange={(firstRun) => set({ firstRun: firstRun === "wake" ? "wake" : "baseline" })} options={[{ value: "baseline", label: t("routineWatch.firstRun.baseline") }, { value: "wake", label: t("routineWatch.firstRun.wake") }]} />
+          </div>
+          {draft.type !== "tool" && <div className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-ink">
+            <span>{t("routineWatch.whenAsleep")}</span>
+            <PillSelect ariaLabel={t("routineWatch.whenAsleep")} value={draft.whenAsleep} onChange={(whenAsleep) => set({ whenAsleep: whenAsleep === "wake" ? "wake" : "skip" })} options={[{ value: "skip", label: t("routineWatch.whenAsleep.skip") }, { value: "wake", label: t("routineWatch.whenAsleep.wake") }]} />
+          </div>}
         </div>
         {draft.type !== "tool" && draft.whenAsleep === "wake" && <p className="text-[10.5px] leading-relaxed text-warning">{t("routineWatch.whenAsleep.wakeCost")}</p>}
 

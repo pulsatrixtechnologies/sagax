@@ -2,7 +2,7 @@
 # section 4.3). The person's sandbox image (deploy/sandbox/Dockerfile: tools,
 # Xvnc, browser) plus the engine CLIs pinned by engines.lock.json (Claude Code
 # and Codex) plus the runner (server/sagax-runner.ts), which is the Pod's only
-# process. The provisioner (server/sandboxd-runs-spec.ts) runs it as uid 1000,
+# process. The provisioner (server/sandbox/sandboxd-runs-spec.ts) runs it as uid 1000,
 # read-only root, no capabilities, with /workspace (volume), /tmp and
 # /dev/shm writable, and names no command: the entrypoint below is the run.
 #

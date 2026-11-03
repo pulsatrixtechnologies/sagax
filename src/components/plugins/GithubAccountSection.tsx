@@ -2,7 +2,7 @@
 // connection, the one in Connect apps"). The person's GitHub account is the
 // one GitHub source of every use: private marketplaces, gh and git in their
 // bots, and the GitHub plugin's MCP server (its token placeholder is that
-// account, server/github-mcp-token.ts). Sources lists marketplaces only.
+// account, server/github/github-mcp-token.ts). Sources lists marketplaces only.
 //
 //   - Connection: Connect GitHub (the device flow when the server has a
 //     GitHub OAuth App, else a token), the account connected and what it is

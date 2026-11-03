@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import type { ModelCatalog } from "../contracts.ts";
-import { desktopModelApiKey } from "../desktop-model-grant.ts";
+import { desktopModelApiKey } from "../desktop/desktop-model-grant.ts";
 import { isDesktopHostId } from "../../shared/desktop-local-models.ts";
 import { localModelLabels, withServerHints } from "../../shared/local-model-engines.ts";
 

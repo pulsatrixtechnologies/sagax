@@ -1,5 +1,5 @@
 // The organization's approval policy as the app shows it (2026-10-21,
-// server/custom-rules-org.ts): whether "Toujours permettre" is on, and how
+// server/rules/custom-rules-org.ts): whether "Toujours permettre" is on, and how
 // many organization rules apply. Asked once a minute at most; until the
 // answer comes (or when it fails) the cards keep Always allow, and the
 // server refuses it anyway when the organization turned it off.

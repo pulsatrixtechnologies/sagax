@@ -13,7 +13,7 @@ import { BrowserRuntime, browserProfileChangeRefusal, PERSON_SIGN_IN_MS, type Br
 import { parseFillArguments, variants } from "./vault/credential-fill.ts";
 import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL } from "./vault/credential-vault.ts";
 import { fieldList, loginOutcomeText, parseLoginState, stepFields } from "./login-fill.ts";
-import { parseTotpSeed, totp } from "./totp.ts";
+import { parseTotpSeed, totp } from "./auth/totp.ts";
 
 const FAKE_USER = "grace.fake@example.test";
 const FAKE_PASSWORD = "fake-Login-Pa55-not-real";

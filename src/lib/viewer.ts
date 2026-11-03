@@ -1,5 +1,5 @@
 // Who "you" are, as the server described you in /api/config `viewer`
-// (server/viewer-identity.ts). Older servers send no viewer: everything here
+// (server/people/viewer-identity.ts). Older servers send no viewer: everything here
 // then falls back to what the app did before.
 import type { ConfigStatus, Message } from "@/state/store";
 import type { ViewerCapabilities } from "../../shared/viewer-capabilities";

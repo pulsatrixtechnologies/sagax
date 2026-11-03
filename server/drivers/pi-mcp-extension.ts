@@ -9,14 +9,14 @@
 //
 // Protocol: the Sagax proxies speak raw JSON-RPC 2.0 over stdio, one
 // frame per line (no MCP SDK, no Content-Length framing) — see
-// server/mcp-bridge.ts and server/drivers/agents-proxy.ts. This client matches
+// server/mcp/mcp-bridge.ts and server/drivers/agents-proxy.ts. This client matches
 // that exactly.
 import { Type, type TObjectOptions, type TSchema, type TSchemaOptions } from "typebox";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { allowsTool, canUseMcpServer, parseToolScope, type ToolIdentity } from "../../shared/tool-scope.ts";
-import { CALL_TOOL, directoryCallTarget, isDirectoryTool } from "../mcp-directory.ts";
-import { REMOTE_MCP_STARTUP_MS } from "../mcp-http.ts";
+import { CALL_TOOL, directoryCallTarget, isDirectoryTool } from "../mcp/mcp-directory.ts";
+import { REMOTE_MCP_STARTUP_MS } from "../mcp/mcp-http.ts";
 
 interface McpServerDef {
   command: string;

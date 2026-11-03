@@ -14,7 +14,7 @@ export function channelRosterActions(input: {
   actorId: string;
   bots: { id: string; ownerUserId?: string }[];
   /** Organization server: false when someone else owns the group. Such a
-   * member still brings their own bots (server/group-ownership.ts). */
+   * member still brings their own bots (server/groups/group-ownership.ts). */
   ownsRoom?: boolean;
   /** Bots already in the room: one of yours there is not offered again. */
   memberIds?: readonly string[];

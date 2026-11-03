@@ -1,6 +1,6 @@
-// The authorization matrix's route list (server/authz-matrix.e2e.test.ts),
+// The authorization matrix's route list (server/auth/authz-matrix.e2e.test.ts),
 // derived from the code, never typed by hand. Every route a member session
-// may reach is a row of CLIENT_ALLOW (server/request-auth.ts); everything
+// may reach is a row of CLIENT_ALLOW (server/auth/request-auth.ts); everything
 // else is admin scope and refused at the gate. Each row's path pattern is
 // expanded here into the concrete paths it accepts, and each id in them is
 // named by what it points at (a bot, a thread, a routine...), so the e2e
@@ -9,7 +9,7 @@
 // A new row whose id this file cannot name fails
 // server/testing/authz-routes.test.ts: name the segment in SLOT_KINDS (and,
 // if it is a new kind of thing a person owns, give the e2e fixture B's).
-import { CLIENT_ALLOW, type ClientFeature } from "../request-auth.ts";
+import { CLIENT_ALLOW, type ClientFeature } from "../auth/request-auth.ts";
 
 /** What an id in a path points at. "fake" kinds are ids the fixture does not
  * create (a queue item, a card): the request is still aimed at B's bot or

@@ -22,7 +22,7 @@ import { TERMINAL_DEFAULT_COLS, TERMINAL_DEFAULT_ROWS, terminalResourceKey } fro
 import type { Store } from "../store.ts";
 import type { TerminalAccess } from "../terminal-resources/types.ts";
 import type { TerminalResourceRegistry } from "../terminal-resources/registry.ts";
-import type { createTerminalSessionManager } from "../terminal-sessions.ts";
+import type { createTerminalSessionManager } from "../terminal/terminal-sessions.ts";
 import { createTailcatAdapter } from "../terminal-resources/adapters/tailcat.ts";
 import { resolveSystemSsh, resolveTailcatBinary } from "../tailcat-bin.ts";
 import { markSessionClosed } from "./remote-support-local.ts";

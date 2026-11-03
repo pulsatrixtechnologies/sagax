@@ -5,7 +5,7 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { routeInventory } from "./route-inventory.ts";
-import { classifyRoute, policyKey, toolPolicyRows, type ToolPolicy } from "../../server/tool-policy.ts";
+import { classifyRoute, policyKey, toolPolicyRows, type ToolPolicy } from "../../server/tools/tool-policy.ts";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const existing = new Map(toolPolicyRows().map((row) => [policyKey(row), row]));

@@ -6,10 +6,10 @@ import { appendFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import { NATIVE_DIR } from "../config.ts";
-import { logAppended, registerSealedLog, sealLogLines } from "../content-at-rest.ts";
+import { logAppended, registerSealedLog, sealLogLines } from "../encryption/content-at-rest.ts";
 import { redactSecrets } from "../redact.ts";
-import { threadLogsForgotten } from "../forgotten-threads.ts";
-import { capThreadLog, currentThreadLogCap } from "../thread-log-rotation.ts";
+import { threadLogsForgotten } from "../threads/forgotten-threads.ts";
+import { capThreadLog, currentThreadLogCap } from "../threads/thread-log-rotation.ts";
 
 // Port de OpenMausBot #3129 : screenshots and files that ride inline as
 // base64 tell nothing about the protocol, only their size. Kept out of the
@@ -74,7 +74,7 @@ export function appendNative(threadId: string, entry: { dir: "in" | "out"; sourc
     // 0644 files people paste into bug reports, so values are masked while
     // the shape stays intact.
     const record = { at: new Date().toISOString(), ...entry, msg: redactSecrets(withoutInlineData(entry.msg)) };
-    // sealed at rest under the thread's key (server/content-at-rest.ts), on
+    // sealed at rest under the thread's key (server/encryption/content-at-rest.ts), on
     // disk when this returns, as before; the migration gathers the lines into
     // blocks once the log is quiet
     const line = JSON.stringify(record);

@@ -3,7 +3,7 @@
 // that follow the PERSON from device to device. The renderer keeps them in
 // localStorage under these exact keys (the modules that own them read them
 // there), and on an organization server they are also kept per person on
-// the server (server/user-preferences.ts, GET/PUT /api/me/preferences).
+// the server (server/people/user-preferences.ts, GET/PUT /api/me/preferences).
 //
 // Only these keys travel. Everything about one device or one window stays
 // on that device: drafts, window and panel sizes, which bots float and where
@@ -70,7 +70,7 @@ export const USER_PREFERENCE_KEYS = [
   // Simple or Advanced (src/lib/interface-mode.ts). "simple" | "advanced".
   "sagax.interfaceMode.v1",
   // the one-time move from Simple to Advanced was done for this person (an
-  // ISO date; src/lib/interface-mode.ts, server/user-preferences.ts)
+  // ISO date; src/lib/interface-mode.ts, server/people/user-preferences.ts)
   "sagax.advancedModeMigratedAt.v1",
   // where bots work for this person (organization server: their computer
   // through the desktop app, or their server environment; shared/bot-workplace.ts)
@@ -92,7 +92,7 @@ export const USER_PREFERENCE_KEYS = [
   // (shared/fresh-topic.ts; "0" never)
   "sagax.freshTopicAfter.v1",
   // Settings > Privacy: send read receipts in conversations between people
-  // (server/read-receipts.ts). "off" turns them off both ways; absent is on.
+  // (server/messages/read-receipts.ts). "off" turns them off both ways; absent is on.
   "sagax.readReceipts.v1",
   // privacy: "Show when I am online" ("0" hides; shared/presence.ts)
   "sagax.presenceVisible.v1",
@@ -103,6 +103,9 @@ export const USER_PREFERENCE_KEYS = [
   "sagax.routineEditorMore.v1",
   // the models starred in the composer's model menu (src/lib/model-favorites.ts)
   "sagax.modelFavorites.v1",
+  // the subscription starred in Usage ›, whose percent the account menu's
+  // Usage row shows (src/lib/usage-favorite.ts)
+  "sagax.usageFavorite.v1",
   // the first-run step "connect your own engine" on an organization server
   // was seen (an ISO date; src/lib/org-engine-readiness.ts)
   "sagax.orgEngineSetupSeen.v1",

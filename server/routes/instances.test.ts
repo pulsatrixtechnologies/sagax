@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { AppConfig } from "../config.ts";
-import { HOSTED_PROVIDER_SETTINGS_ERROR } from "../hosted-models.ts";
+import { HOSTED_PROVIDER_SETTINGS_ERROR } from "../models/hosted-models.ts";
 import { permissionRefusal } from "../../shared/permissions.ts";
 import { createInstancesRoutes, type InstancesRouteDeps } from "./instances.ts";
 import { PASS } from "./table.ts";

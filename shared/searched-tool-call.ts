@@ -27,7 +27,7 @@ export const BRIDGE_FIND_TOOL = "find_tool";
 export const BRIDGE_USE_TOOL = "use_tool";
 /** Tools that only reach another tool: never the target of a call. */
 const META_TOOLS: ReadonlySet<string> = new Set([BRIDGE_FIND_TOOL, BRIDGE_USE_TOOL, "search_tools", "describe_tool", SEARCH_CALL_TOOL]);
-/** An agents tool name, as server/member-tool-scope.ts reads one. */
+/** An agents tool name, as server/people/member-tool-scope.ts reads one. */
 const AGENT_TOOL = /^[a-z][a-z0-9_]{0,63}$/;
 /** `mcp__agents__x` (Claude), `agents__x` (ACP, Codex), `agents.x`, `agents:x`, `agents/x`. */
 const AGENTS_SPELLING = /^((?:mcp(?:__|[.:]))?agents(?:__|[.:/]))([a-z][a-z0-9_]{0,63})$/;

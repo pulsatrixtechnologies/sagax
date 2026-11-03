@@ -1,4 +1,4 @@
-// The voice bar's calls to the server (server/voice-mode.ts). Same origin,
+// The voice bar's calls to the server (server/voice/voice-mode.ts). Same origin,
 // session cookie: the xAI key stays on the server and never reaches here.
 import { useEffect, useState } from "react";
 
@@ -62,7 +62,7 @@ const PROVIDER_FAILURES = new Set<VoiceProviderFailure>(["key", "quota", "busy",
 const KEY_SOURCES = new Set<VoiceKeyInfo["source"]>(["voice-key", "perspicax-key", "org-key", "server"]);
 const PROVIDERS = new Set<VoiceProviderId>(VOICE_TTS_PROVIDERS);
 
-/** One key xAI refused on the way (server/voice-keys.ts). */
+/** One key xAI refused on the way (server/voice/voice-keys.ts). */
 export interface VoiceKeyRefusal extends VoiceKeyInfo {
   failure: VoiceProviderFailure;
 }
@@ -542,7 +542,7 @@ export function voiceModeSpeechUrl(botId: string, settings: VoiceModeSettings, t
   return `${origin.replace(/^http/, "ws")}${base(botId)}/speech?${query}`;
 }
 
-/** A call's realtime voice socket (GET /voice/realtime, server/realtime-call.ts). */
+/** A call's realtime voice socket (GET /voice/realtime, server/voice/realtime-call.ts). */
 export function voiceModeRealtimeUrl(botId: string, settings: VoiceModeSettings, threadId?: string, origin = typeof location === "undefined" ? "http://localhost" : location.origin): string {
   const view = voiceSettingsForBot(settings, botId);
   const query = new URLSearchParams({ language: view.language, ...(view.voice ? { voice: view.voice } : {}), ...(threadId ? { threadId } : {}) });

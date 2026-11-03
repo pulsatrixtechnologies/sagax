@@ -104,7 +104,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
   // path-free prompt and bounded inputs instead of needing a Read tool;
   // path-reading drivers retain the attachment tag as their compatibility route.
   state.resolvedImages = extractTurnImages(state.text);
-  // Files sealed at rest go plain in place for the engine (server/content-at-rest.ts):
+  // Files sealed at rest go plain in place for the engine (server/encryption/content-at-rest.ts):
   // this message's attachments before anything reads them; the bot's memory
   // files in parallel with the rest of the setup, awaited before the engine
   // starts (below).
@@ -245,7 +245,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
   // A voice call turn gets the hidden phone-call instruction; the first
   // written turn after a call is told the call ended. Only a person's own
   // turn: a continuation or a peer hop is not said on the phone.
-  // The thread is on a live call (server/voice-call-session.ts): the engine
+  // The thread is on a live call (server/voice/voice-call-session.ts): the engine
   // stays warm between turns and the turn's context stays short.
   state.onCall = Boolean(voiceCalls.active(state.threadId)) && !state.opts?.commsDepth && !state.userMessage.peerAsk;
   state.voiceCallText = state.opts?.cardContinuation || state.opts?.commsDepth || state.userMessage.peerAsk
@@ -256,7 +256,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
       state.userMessage.sender?.name ?? botUserName(state.bot),
     );
   // Organization server: where this turn's tools run, and for whom, decided
-  // once (server/desktop-bridge.ts); the speaker's own attachments are
+  // once (server/desktop/desktop-bridge.ts); the speaker's own attachments are
   // pointed there and small text ones given inline.
   const turnRemote = remoteComputerForTurn({
     organization: IDENTITY.kind === "perspicax",
@@ -275,7 +275,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
   // the person's computer when connected, else the cloud. A routine starts
   // in the cloud; routinesAllowed only permits an explicit computer_select
   // to this_computer. A thread opened with a workspace starts there when
-  // allowed (server/auto-computer.ts).
+  // allowed (server/computer/auto-computer.ts).
   const turnAutoWanted = turnWorks.auto ? autoWorkspaceWanted(state.bot, state.threadId) : null;
   const turnAutoStart = turnWorks.auto && IDENTITY.kind === "perspicax" && state.turnPrincipal ? autoStartTarget({
     wanted: turnAutoWanted,
@@ -314,7 +314,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
   state.placedText = state.opts.cardContinuation ? { text: state.providerText, staging: null } : workplaceTurnText(state.providerText, state.turnPlace);
   state.providerText = withWorkplaceNote(state.placedText.text, state.turnPlace, state.turnAuto, state.bot.id);
   // The engine's container runs in UTC: tell it the time where its person is
-  // (server/turn-clock.ts), so times are said in their zone.
+  // (server/turns/turn-clock.ts), so times are said in their zone.
   const clockZone = state.opts.cardContinuation || !turnClockEnabled() ? null : turnZoneFor(state.bot, state.speaker);
   if (clockZone) state.providerText = withTurnClock(state.providerText, new Date(), clockZone);
   // A compaction summarizes with the bot's engine too, so it is gated like

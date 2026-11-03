@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 
-import { streamProxiedMedia, verifyMediaProxyToken } from "../media-proxy.ts";
-import { logMediaProxyRefusal, MediaProxyBlockedError } from "../media-proxy-guard.ts";
-import { fetchYoutubeTranscript } from "../youtube-transcript.ts";
+import { streamProxiedMedia, verifyMediaProxyToken } from "../media/media-proxy.ts";
+import { logMediaProxyRefusal, MediaProxyBlockedError } from "../media/media-proxy-guard.ts";
+import { fetchYoutubeTranscript } from "../media/youtube-transcript.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 const transcriptBody = z.object({ videoId: z.string().regex(/^[\w-]{11}$/) }).strict();
@@ -20,7 +20,7 @@ const transcriptBody = z.object({ videoId: z.string().regex(/^[\w-]{11}$/) }).st
  * one read-only route and nothing else: resolveRequestAuth never treats it as
  * a session credential. Neither the token nor the upstream URL is logged.
  *
- * The upstream URL came from a bot: server/media-proxy-guard.ts refuses
+ * The upstream URL came from a bot: server/media/media-proxy-guard.ts refuses
  * loopback, private, link-local, metadata and other non-public destinations
  * (after DNS, on every redirect) unless SAGAX_MEDIA_PROXY_ALLOW_HOSTS allows
  * them, with a generic 403 here and the reason in one server log line.

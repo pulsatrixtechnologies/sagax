@@ -3,11 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import type { ActivityRow } from "./activity.ts";
-import type { AdminActionRow } from "./admin-activity.ts";
+import type { ActivityRow } from "./activity/activity.ts";
+import type { AdminActionRow } from "./activity/admin-activity.ts";
 import type { DecisionRow } from "./decision-log.ts";
 import { buildJournal, deciderOf, journalWire, replayable, sealJournal, testRuleOnJournal, verifyJournal, type JournalInput, type JournalRow } from "./action-journal.ts";
-import { reviewCustomRules } from "./custom-rules-review.ts";
+import { reviewCustomRules } from "./rules/custom-rules-review.ts";
 import { JOURNAL_SELF, type JournalEntry } from "../shared/action-journal.ts";
 import type { CustomRule } from "../shared/custom-rules.ts";
 

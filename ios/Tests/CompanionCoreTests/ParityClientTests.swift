@@ -1,6 +1,6 @@
 // Client calls and wire models for the visual-parity screens. Payloads are
 // written in the shapes the server's handlers return (server/index.ts,
-// server/user-sandbox-routes.ts, server/routes/user-preferences.ts,
+// server/sandbox/user-sandbox-routes.ts, server/routes/user-preferences.ts,
 // shared/command-allowlist.ts), one test per decoder and request builder.
 import Foundation
 import XCTest

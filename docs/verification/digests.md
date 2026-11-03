@@ -8,7 +8,7 @@ actions transactional, nor authorize a deployment.
 
 ```sh
 pnpm exec vitest run server/digest-control.e2e.test.ts
-pnpm exec vitest run server/commands.test.ts server/store.test.ts server/message-db.test.ts server/digest.test.ts server/checkpoints.test.ts server/hooks/omb-hook.test.ts server/hooks.e2e.test.ts server/digest.e2e.test.ts
+pnpm exec vitest run server/commands.test.ts server/store.test.ts server/messages/message-db.test.ts server/digest.test.ts server/checkpoints.test.ts server/hooks/omb-hook.test.ts server/hooks.e2e.test.ts server/digest.e2e.test.ts
 ```
 
 The first test starts `launchVerificationServer`, then uses the shared

@@ -4,7 +4,7 @@
 
 export type ThreadFileSource = "upload" | "attachment" | "link" | "written";
 
-/** GET /api/threads/:id/files, one entry (server/thread-files.ts). */
+/** GET /api/threads/:id/files, one entry (server/threads/thread-files.ts). */
 export interface ThreadFile {
   id: string;
   messageId: string;

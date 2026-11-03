@@ -85,7 +85,7 @@ final class DesktopSidebarPlacesTests: XCTestCase {
         XCTAssertEqual(DesktopComposeTo.bots(all, viewerId: "local-owner", query: "").map(\.id), ["orion", "lux"])
         XCTAssertEqual(DesktopComposeTo.bots(all, viewerId: "local-owner", query: " analy ").map(\.id), ["orion"])
         let bots = DesktopComposeTo.bots(all, viewerId: "local-owner", query: "")
-        XCTAssertEqual(DesktopComposeTo.rows(mode: .browse, bots: bots, canCreateBots: true), [.createBot, .createGroup, .bot("orion"), .bot("lux")])
+        XCTAssertEqual(DesktopComposeTo.rows(mode: .browse, bots: bots, canCreateBots: true), [.createBot, .createBotWizard, .createGroup, .bot("orion"), .bot("lux")])
         XCTAssertEqual(DesktopComposeTo.rows(mode: .browse, bots: bots, canCreateBots: false).first, .createGroup)
         XCTAssertEqual(DesktopComposeTo.rows(mode: .group, bots: bots, canCreateBots: true), [.createGroup, .bot("orion"), .bot("lux")])
         XCTAssertEqual(DesktopComposeTo.move(0, by: -1, count: 4), 3)

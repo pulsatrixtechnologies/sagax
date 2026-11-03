@@ -4,7 +4,7 @@
 // POST /api/instances/antigravity-accounts, body { displayName, sourceInstanceId }.
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { createClaudeAccountSchema } from "../claude-accounts.ts";
+import { createClaudeAccountSchema } from "../engines/claude-accounts.ts";
 import type { InstanceConfigMap } from "../contracts.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

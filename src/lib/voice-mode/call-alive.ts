@@ -1,4 +1,4 @@
-// The server's record of a live call (server/voice-call-session.ts) expires
+// The server's record of a live call (server/voice/voice-call-session.ts) expires
 // after 20 minutes without a turn or a heartbeat. A laptop that slept, or a
 // network that came back, missed heartbeats: the call says it is alive the
 // moment the page is visible or online again, not five minutes later.

@@ -1,5 +1,5 @@
 /** The inspector's wire data: what a thread's turn actually looked like.
- * Single home in shared/; server/thread-events.ts re-exports under the
+ * Single home in shared/; server/threads/thread-events.ts re-exports under the
  * historical names and keeps the file-reading half. */
 import type { RuntimeEvent } from "./runtime-events.ts";
 

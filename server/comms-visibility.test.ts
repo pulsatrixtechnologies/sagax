@@ -12,7 +12,7 @@ import {
   mirrorReply,
   type CommsBus,
 } from "./comms-visibility.ts";
-import { closeMessageDb } from "./message-db.ts";
+import { closeMessageDb } from "./messages/message-db.ts";
 import { Store, type StoreChange } from "./store.ts";
 
 const selection = (): ModelSelection => ({ instanceId: "claude", model: "fake-model" });

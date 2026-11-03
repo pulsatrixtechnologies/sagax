@@ -36,10 +36,10 @@ import { z } from "zod";
 
 import { planMailDelivery, plusTag, type MailTagRoutine } from "../../shared/routine-mail-alias.ts";
 import { isRelaySource, isTriggerSourceType, type NormalizedTriggerEvent, type TriggerSourceConfig } from "../../shared/trigger-sources.ts";
-import type { ConsoleAssertion, ConsoleAssertionActor } from "../oidc-rp.ts";
+import type { ConsoleAssertion, ConsoleAssertionActor } from "../auth/oidc-rp.ts";
 import { AssertionReplayCache } from "../org/org-admin-routes.ts";
-import { EMAIL_WATCH_PAYLOAD_MAX_CHARS } from "../cold-prompt-budget.ts";
-import { BOTMAIL_RUN_RULES, defang, type WebhookReceiveResult } from "../webhooks.ts";
+import { EMAIL_WATCH_PAYLOAD_MAX_CHARS } from "../context/cold-prompt-budget.ts";
+import { BOTMAIL_RUN_RULES, defang, type WebhookReceiveResult } from "../triggers/webhooks.ts";
 
 export const BOT_MAIL_PATH = "/api/org/inbound-mail";
 /** The only actor this route accepts, and the only route that accepts it. */
@@ -178,7 +178,7 @@ export function botmailTaggedPrompt(
  * A webhook run whose trigger is gone is
  * confined too: what woke it can no longer be told. Every relayed source is
  * confined the same way: bot email and, since 2026-10-26, bot phone
- * (server/bot-inbound-telephony.ts). */
+ * (server/bots/bot-inbound-telephony.ts). */
 export function botmailRunConfined(
   run: { triggerSource?: string; webhookId?: string } | null | undefined,
   triggerOf: (webhookId: string) => { source?: Pick<TriggerSourceConfig, "type" | "allowFullTools"> } | null | undefined,

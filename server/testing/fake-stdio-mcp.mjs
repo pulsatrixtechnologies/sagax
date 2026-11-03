@@ -1,4 +1,4 @@
-// A tiny MCP server over stdio for the console's Test (server/mcp-stdio-test.test.ts).
+// A tiny MCP server over stdio for the console's Test (server/mcp/mcp-stdio-test.test.ts).
 // FAKE_MCP_MODE: ok (two tools), refuse (initialize answers an error that
 // echoes FAKE_MCP_SECRET), exit (exits with code 3), hang (never answers).
 // FAKE_MCP_PID_FILE: where it writes its pid, so the test can see it stopped.

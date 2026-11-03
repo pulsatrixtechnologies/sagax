@@ -4,21 +4,21 @@
 //
 // Answers only behind the per-turn capability the internal block of
 // server/index.ts checks first. Capability gate and refusal checks stay there.
-import { ATTACHMENTS_DIR, deleteAttachment } from "../attachments.ts";
-import { attachForTurn, saveBotAttachment } from "../bot-attachment.ts";
-import { VM_WORKSPACE_GUEST } from "../container-computer.ts";
+import { ATTACHMENTS_DIR, deleteAttachment } from "../attachments/attachments.ts";
+import { attachForTurn, saveBotAttachment } from "../bots/bot-attachment.ts";
+import { VM_WORKSPACE_GUEST } from "../computer/container-computer.ts";
 import type { DirectApply } from "../direct-apply.ts";
 import type { BotActivity } from "../../shared/wire.ts";
-import type { RosterMember } from "../peer-roster.ts";
-import { recallMessages, recentMessages, readMessageText } from "../message-db.ts";
+import type { RosterMember } from "../peers/peer-roster.ts";
+import { recallMessages, recentMessages, readMessageText } from "../messages/message-db.ts";
 import type { MemoryDestination } from "../memory/memory-audience.ts";
-import { webhookPostText } from "../peer-provenance.ts";
-import { peerStatus, peerStatusWords, reachablePeers } from "../peer-roster.ts";
-import { claimRecallCrossings, recallCrossingLabel } from "../recall-disclosure.ts";
-import { sessionMemoryHitFor } from "../recall.ts";
+import { webhookPostText } from "../peers/peer-provenance.ts";
+import { peerStatus, peerStatusWords, reachablePeers } from "../peers/peer-roster.ts";
+import { claimRecallCrossings, recallCrossingLabel } from "../recall/recall-disclosure.ts";
+import { sessionMemoryHitFor } from "../recall/recall.ts";
 import { parseSince, parseUntil } from "../recent-work.ts";
-import { learnSource } from "../skill-learn.ts";
-import { skillDiscoveryPage } from "../skill-discovery.ts";
+import { learnSource } from "../skills/skill-learn.ts";
+import { skillDiscoveryPage } from "../skills/skill-discovery.ts";
 import {
   applySkillWriteWithReceipt,
   listSkills,
@@ -26,9 +26,9 @@ import {
   readSkillFile,
   rejectStagedSkillWrite,
   stageSkillWrite,
-} from "../skills.ts";
-import { queuedThreadPosition } from "../steer-queue.ts";
-import { searchMemoryFiles } from "../workspace.ts";
+} from "../skills/skills.ts";
+import { queuedThreadPosition } from "../turns/steer-queue.ts";
+import { searchMemoryFiles } from "../workspace/workspace.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 

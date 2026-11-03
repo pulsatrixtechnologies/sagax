@@ -5,10 +5,10 @@ import { createHash } from "node:crypto";
 import { request, ServerResponse, type IncomingMessage, type Server } from "node:http";
 import { Socket } from "node:net";
 import type { Duplex } from "node:stream";
-import { isSameOrigin, type RequestAuth } from "../request-auth.ts";
+import { isSameOrigin, type RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
-import { isDesktopTunnelPath } from "../desktop-bridge-routes.ts";
-import { bridgeWebSocketToStream, websocketAccept } from "../ws-bridge.ts";
+import { isDesktopTunnelPath } from "../desktop/desktop-bridge-routes.ts";
+import { bridgeWebSocketToStream, websocketAccept } from "../streams/ws-bridge.ts";
 
 // `sandbox/me` is the signed-in person's own server environment desktop
 // (organization mode): there is no id that names another person's.
@@ -54,7 +54,7 @@ export function createDesktopViewer(deps: {
   target: (id: string, auth: RequestAuth) => DesktopTarget | undefined;
   live: (auth: RequestAuth) => boolean;
   /** Other WebSocket routes that run through the same gates (voice mode's
-   * live call, server/voice-mode.ts); they take their socket with upgradeOf. */
+   * live call, server/voice/voice-mode.ts); they take their socket with upgradeOf. */
   acceptsUpgrade?: (path: string) => boolean;
   /** Bind a viewer to a control lease: a phone driving the Local VM directly,
    * without the companion sidecar. Answers nothing unless `controlLeaseId`
@@ -71,7 +71,7 @@ export function createDesktopViewer(deps: {
   function attach(server: Server, handle: (req: IncomingMessage, res: ServerResponse) => Promise<unknown>): void {
     server.on("upgrade", (req, socket, head) => {
       // The desktop bridge's tunnel answers its own upgrades
-      // (server/desktop-bridge-routes.ts attachDesktopTunnel).
+      // (server/desktop/desktop-bridge-routes.ts attachDesktopTunnel).
       try { if (isDesktopTunnelPath(new URL(req.url ?? "", "http://localhost").pathname)) return; } catch { /* answered below */ }
       if (stopped || !(socket instanceof Socket)) { socket.destroy(); return; }
       const res = new ServerResponse(req);

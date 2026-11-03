@@ -12,7 +12,7 @@
 // manage them here: the owner at this computer (the paired phone included)
 // and admins. Admin scope for sessions.
 import type { CommandAllowlistRule } from "../../shared/command-allowlist.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface AutoReviewRule extends CommandAllowlistRule {

@@ -169,15 +169,15 @@ Perspicax is the exception):
 
 `shared/misuse-guardrails.test.ts` is the red-team suite (French, English,
 base64, split quotes, hex, octal, zero-width characters, jailbreaks, the
-triage permission, paths, the MCP gate). `server/misuse-guardrails.test.ts`
+triage permission, paths, the MCP gate). `server/safety/misuse-guardrails.test.ts`
 covers the flag, the lockout, the alert, and the container limits.
-`shared/safety-review.test.ts` and `server/safety-review.test.ts` cover the
+`shared/safety-review.test.ts` and `server/safety/safety-review.test.ts` cover the
 safer path, the explicit card, final denial, untrusted wrapping, and
 outbound drafts. None of these files boot the server, so CI runs them with
 the unit shards.
 
 ```
-pnpm exec vitest run shared/misuse-guardrails.test.ts server/misuse-guardrails.test.ts
+pnpm exec vitest run shared/misuse-guardrails.test.ts server/safety/misuse-guardrails.test.ts
 ```
 
 ## Safety review
@@ -204,7 +204,7 @@ computer paths do.
 | Read-only tool | Auto-approved, including in Ask (`safety-read`). A Sagax gate card stays a person's choice: the gate already runs its own read-only list without asking. |
 | Any other write or known tool (a Sagax tool, a connector read the list does not name, a file write, `propose_routine`, a command) | Not held by the review (2026-10-27, #1098): the person's approval mode answers it, Ask, Auto, Full or their Allow rules, as for any card. No row in shadow. |
 | Call in the person's own environment (their server environment, their Local VM or computer, one of Sagax's own person-scoped tools) | Not held and not approved by the review: their approval mode answers it. A destructive git operation there is theirs too. A send, untrusted content and an unknown kind keep their review. |
-| Unknown kind, destructive git outside the own environment | Below Full access: a safer path is returned once, then the next attempt is a native approval card that Auto and a saved Allow rule do not accept (`safety-hold`, checked before those). At Full access (#1905, 2026-11-02): neither the safer path nor the card; the person chose that level for their own bot (`shared/safety-review.ts` code `full_access`, read from the server's one Full access decision, `server/full-access-gate.ts`). |
+| Unknown kind, destructive git outside the own environment | Below Full access: a safer path is returned once, then the next attempt is a native approval card that Auto and a saved Allow rule do not accept (`safety-hold`, checked before those). At Full access (#1905, 2026-11-02): neither the safer path nor the card; the person chose that level for their own bot (`shared/safety-review.ts` code `full_access`, read from the server's one Full access decision, `server/approvals/full-access-gate.ts`). |
 | Denial or expiry of that card | Final for that fingerprint. A destructive git intent, a prompt disclosure, or a credential grab is also final across rewording, splitting, and encoding. |
 | Outbound mail or message | Below Full access: the first attempt tells the bot to write a draft the person sends; the next attempt is the existing "Send on your behalf?" card, including when outbound policy is allow. Denial seals that message only. A different later message still asks. At Full access the send runs (#1905: `send_to_bot`, a send by its name, was held under Full); an organization or personal Refuse or Ask first rule and the allowed recipients still decide. |
 | Routine write | Its own routine card and the person's approval mode answer it, as any other write (#1098). |

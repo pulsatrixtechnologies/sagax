@@ -8,7 +8,7 @@ import { STABLE_ACK, STABLE_CWD_NOTE, STABLE_END_MARKER, splitStableMessages, st
 import { startFakeHttpMcp } from "../testing/fake-http-mcp-server.ts";
 import { whopLikeCatalog } from "../testing/whop-like-catalog.ts";
 import { buildMcpServers } from "./pi.ts";
-import { mcpStdioServer } from "../mcp-gate-config.ts";
+import { mcpStdioServer } from "../mcp/mcp-gate-config.ts";
 
 import extension, {
   allocateToolName,

@@ -21,9 +21,9 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
-import type { CapabilityMarketplacePolicy, LinkPostResult } from "../perspicax-link.ts";
+import type { CapabilityMarketplacePolicy, LinkPostResult } from "../perspicax/perspicax-link.ts";
 import type { OrgCapabilityView } from "../org/org-capabilities.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const PX_CAPABILITIES_PATH = "/api/v1/pulsabot/capabilities";
@@ -49,7 +49,7 @@ export interface OrgCapabilityRouteDeps {
   /** That person's live sign-in token for Perspicax; null when there is
    * none (signed in too long ago, signed out). Never a routine delegation. */
   subjectToken: (principalId: string) => Promise<string | null>;
-  /** One link call to Perspicax (server/perspicax-link.ts linkJson). */
+  /** One link call to Perspicax (server/perspicax/perspicax-link.ts linkJson). */
   call: (method: "GET" | "POST" | "PUT" | "DELETE", path: string, body: unknown, subjectToken: string) => Promise<LinkPostResult>;
   /** A committed write: read the directory again now (Perspicax signals it
    * too; whichever comes first). */

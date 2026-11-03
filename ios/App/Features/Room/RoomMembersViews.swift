@@ -4,7 +4,7 @@
 // opens an inline picker; this sheet still opens on the section named by
 // "+ Add" or "Manage members" (#1240, #1260). The owner removes anyone and
 // edits the roster; a member brings their own bots in and takes them out
-// (server/group-ownership.ts).
+// (server/groups/group-ownership.ts).
 import CompanionCore
 import SwiftUI
 

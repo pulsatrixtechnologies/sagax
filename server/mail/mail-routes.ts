@@ -17,7 +17,7 @@
 // limited per caller.
 import { applyMailSettingsPatch, mailSettingsPatchSchema, mailSettingsView, resolveMailSettings, type MailSettings } from "./mail-config.ts";
 import type { Mailer } from "./mailer.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
 
 export const MAIL_SETTINGS_PATH = "/api/mail/settings";

@@ -232,7 +232,7 @@ it("Grok: warms at call start, then every call turn is a bare prompt whose tools
     await t.send({ text: "in writing now" });
     await expect.poll(async () => (await t.replies()).length, { timeout: 15_000 }).toBe(4);
     expect(t.processes()).toHaveLength(2);
-    // the call ran in a session of its own (server/voice-turn.ts): this
+    // the call ran in a session of its own (server/voice/voice-turn.ts): this
     // conversation had none before it, so the written turn starts one
     expect(establishing(t.rpc()).slice(7)).toEqual(["initialize", "authenticate", "session/new", "session/prompt"]);
     // the call's process ran at low effort; the written turn's at the bot's own (none set)

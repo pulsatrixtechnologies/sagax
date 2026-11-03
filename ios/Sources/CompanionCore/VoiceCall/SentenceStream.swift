@@ -1,7 +1,7 @@
 // What of the bot's answer a call reads aloud, and in which pieces. A port
 // of the desktop's `src/lib/voice-mode/spoken.ts` and `sentences.ts`.
 //
-// The bot is told it is on the phone (server/voice-call-prompt.ts), but a
+// The bot is told it is on the phone (server/voice/voice-call-prompt.ts), but a
 // model still slips in a bold word, a bullet, an emoji or a link: the
 // speakable text is the safety net before a sentence goes to text to
 // speech. The bot ends a call with a written follow-up below a line of only

@@ -2099,7 +2099,7 @@ describe("workspace credential env strip", () => {
       SAGAX_PERSPICAX_LINK_FILE: "/run/pulsabot/link.json", SAGAX_PERSPICAX_ISSUER: "https://px.example.test",
       SAGAX_PERSPICAX_INTERNAL_URL: "http://perspicax:8787",
     };
-    // What an engine deliberately receives (server/hosted-models.ts passes the
+    // What an engine deliberately receives (server/models/hosted-models.ts passes the
     // hosted model token as the provider key), plus look-alike names.
     const engine = {
       PATH: "/usr/bin", ANTHROPIC_API_KEY: "hosted-token", ANTHROPIC_AUTH_TOKEN: "hosted-token",

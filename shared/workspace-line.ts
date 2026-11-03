@@ -1,5 +1,5 @@
 // The discreet thread line a bot on Auto leaves when its Workspace changes
-// (server/auto-computer.ts autoStartTarget): "On your computer", "In the
+// (server/computer/auto-computer.ts autoStartTarget): "On your computer", "In the
 // cloud", or "Moved to the cloud: your computer is offline" when the place it
 // wanted was not available. Routine reasons stay distinct: not allowed on
 // the computer, or routines start in the cloud by default. The server writes

@@ -7,9 +7,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { LiveCallState, LiveSettings } from "../../shared/wire.ts";
 import { json, readBody } from "../harness/http.ts";
-import { LiveCallBusyError, LiveCallSignedOutError } from "../live-call-controller.ts";
-import { LiveSessionError } from "../live-call.ts";
-import { requiredScope } from "../request-auth.ts";
+import { LiveCallBusyError, LiveCallSignedOutError } from "../voice/live-call-controller.ts";
+import { LiveSessionError } from "../voice/live-call.ts";
+import { requiredScope } from "../auth/request-auth.ts";
 import { createLiveRoutes, type LiveRouteDeps } from "./live.ts";
 import { dispatchRoutes } from "./table.ts";
 

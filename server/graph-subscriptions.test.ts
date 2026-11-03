@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { GraphSubscriptions, RENEW_MARGIN_MS, graphConnectorOptions, graphSourcesFor, type GraphSignIn } from "./graph-subscriptions.ts";
-import { WebhookManager } from "./webhooks.ts";
+import { WebhookManager } from "./triggers/webhooks.ts";
 
 const dirs: string[] = [];
 afterEach(() => {

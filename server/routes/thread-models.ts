@@ -1,13 +1,13 @@
 // "Switch them too": a bot's threads that run on a model of their own,
 // different from the bot's, follow the bot's model again. A one-time action
 // beside the bot's model setting, not a setting. Admin scope by default
-// (server/request-auth.ts), like the bot's model itself.
+// (server/auth/request-auth.ts), like the bot's model itself.
 //
 // POST /api/bots/:id/threads/follow-model, body {} for every such thread, or
 // { threadIds } for exactly those, each one of this bot's. A thread with a
 // turn running keeps its model until it settles; the reply counts it.
 import type { ModelSelection } from "../contracts.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { sameModelSelection } from "../../shared/thread-model.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

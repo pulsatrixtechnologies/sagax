@@ -1,6 +1,6 @@
 /** ACP ProviderInstance factory. */
 import { PROVIDER_CREDENTIAL_ENV, stripControlPlaneEnv, WORKSPACE_CREDENTIAL_ENV } from "../../config.ts";
-import { openStartupModelCatalog, writeStartupModelCache } from "../../startup-model-catalog.ts";
+import { openStartupModelCatalog, writeStartupModelCache } from "../../models/startup-model-catalog.ts";
 import { DeviceAuthController } from "../device-auth.ts";
 import { LinkSignInController } from "../link-sign-in.ts";
 import { killCliTree, spawnCli } from "../../procs.ts";
@@ -101,7 +101,7 @@ export async function createAcpInstance(
   const listeners = new Set<RuntimeEventListener>();
   /** Threads whose native session ran out of context room: the next turn
    * (Retry) starts a fresh session from the chat's rebuild instead of
-   * reopening the already-full one (server/context-renewal.ts). */
+   * reopening the already-full one (server/context/context-renewal.ts). */
   const freshNextTurn = new Set<string>();
   let disposing = false;
   const requireRunning = () => {

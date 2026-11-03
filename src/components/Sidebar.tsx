@@ -1639,7 +1639,7 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
 }
 
 /** The thread tree under a person's row: a conversation with a person has
- * threads like a bot (server/people-dms.ts), with the same rows, menus and
+ * threads like a bot (server/people/people-dms.ts), with the same rows, menus and
  * folders. No generated title (it would send the pair's words to a model)
  * and no approval refresh (no bot). */
 export function PersonThreadList({ group, name, selected, density = "comfortable", query = "", hidden = false }: {
@@ -1857,7 +1857,7 @@ export function BotListItem({
   // Threads off: an untouched extra thread never strands the person; the row
   // lands back on their latest conversation (see thread-home.ts).
   // With threads hidden a server that names the bot's main thread decides
-  // (openBot, server/main-thread.ts); an older one without it keeps that rule.
+  // (openBot, server/threads/main-thread.ts); an older one without it keeps that rule.
   const openConversation = () => navigate(() => {
     if (showThreads || bot.mainThreadId) openBot(dispatch, bot, showThreads);
     else for (const action of openBotConversationActions(bot, showThreads)) dispatch(action);

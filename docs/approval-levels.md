@@ -100,7 +100,7 @@ Its Auto-accept edits and Approve for me pass through to the provider
 unless an organization admin turned them off: **Settings > Organization >
 Automatic approval levels for members' bots**, or `memberAutoApproval` in
 the admin API's `POST settings` (on unless an admin turns it off; each
-change is an `org.settings` row; `server/member-auto-approval.ts`). While it
+change is an `org.settings` row; `server/approvals/member-auto-approval.ts`). While it
 is on, a looser level still needs the person's security key when they
 chose the rule-change class. While it is off those levels run as Ask, and a
 change of a member's bot (or one of its threads) to one of them is refused
@@ -127,7 +127,7 @@ bots again, so no saved Auto outlives the setting (2026-10-17,
 organization rules above.
 
 It also governs the owner's own **permission mode** of a member's bot
-(Automatic, Bypass, `server/owner-approval.ts`): while the setting is off
+(Automatic, Bypass, `server/approvals/owner-approval.ts`): while the setting is off
 the mode runs as Approval, and choosing Automatic or Bypass is refused with
 `member_auto_not_allowed` (re-review of 2026-10-17).
 
@@ -149,14 +149,14 @@ admin removes in the bot's Approval rules: `docs/member-admin-audit.md`).
 An organization admin can, in the Perspicax console (`org-approvals`,
 `docs/org-admin-api.md`), write rules in plain words for every person and
 bot of the server, and turn "Always allow" off for everyone
-(`server/custom-rules-org.ts`). An organization rule asks first or refuses,
+(`server/rules/custom-rules-org.ts`). An organization rule asks first or refuses,
 never allows; it wins over a person's own rule of the same behavior, shows
 in each bot's Rules card and on the card it decides as "Required by your
 administrator", and nobody else can change or remove it. With "Always
 allow" off, every card offers Deny and Allow once only and says that the
 organization requires an approval each time; every answer path refuses an
 answer that would save a standing grant (403 `org_always_allow_off`, in
-`server/step-up-gate.ts`), and the grants people saved before (allow rules
+`server/auth/step-up-gate.ts`), and the grants people saved before (allow rules
 in their words, saved commands, a gate's Always allow key, owner allow
 rules) stop answering (`autoVerdict`, `matchOwnerRule`, the custom rule
 store) until it is on again. An organization Refuse rule refuses even an email
@@ -181,7 +181,7 @@ Organization > Bots work freely in their owner's environment**, or
 admin turns it off; each change is an `org.settings` row). The environment
 still holds the owner's own credentials (a git credential store, a GitHub
 CLI login) and reaches the internet, so this is bounded
-(`server/member-environment.ts`, security review of 2026-10-16):
+(`server/people/member-environment.ts`, security review of 2026-10-16):
 
 - only at a level that already runs work unasked: **Approve for me** or
   **Auto-accept edits**. At **Ask** the person asked to see every call, so
@@ -224,7 +224,7 @@ CLI login) and reaches the internet, so this is bounded
   bot's permissions) and their **Always allow** rules follow the same two
   limits: a call in a class protected by a security key keeps its card
   (its Allow needs the key), and a call from a turn that is not the owner's
-  own runs unasked only as such a read (`server/owner-approval.ts`
+  own runs unasked only as such a read (`server/approvals/owner-approval.ts`
   `ownerDecision`, re-review of 2026-10-17). A deny rule still denies;
 - the person's own deny and ask rules, the safety review and the grant
   guard decide first, on every engine. On a Grok turn under the approval
@@ -301,7 +301,7 @@ previous fix had not touched: the owner's own computer (#1065), a may-I
 safety review holding a send (`send_to_bot` is a send by its name) before
 the level was read (#1905, a Grok turn in `default` mode because the
 account's connectors were loaded, so every Sagax tool asked). Since
-2026-11-02 one module decides: `server/full-access-gate.ts`
+2026-11-02 one module decides: `server/approvals/full-access-gate.ts`
 (`fullAccessDecision`). Under Full access the bot acts, and only these
 holds stand, nothing else:
 
@@ -334,9 +334,9 @@ What this changes for a turn at Full access:
 Every code path that can put an approval or a choice card between the bot
 and the person carries a marker comment, `// full-access: <surface>`, with
 the surface listed in `FULL_ACCESS_SURFACES`;
-`server/full-access-gate.guard.test.ts` (run by `pnpm verify:merge`) fails a
+`server/approvals/full-access-gate.guard.test.ts` (run by `pnpm verify:merge`) fails a
 card without one, a marker naming no surface, and a deciding file that
-stopped reading the gate. `server/full-access-gate.regressions.test.ts`
+stopped reading the gate. `server/approvals/full-access-gate.regressions.test.ts`
 holds the three incidents as tests.
 
 ## Answering a request
@@ -379,7 +379,7 @@ reviewed list of exact names):
   out of sight with `chr()` or `$$`) or uses `ATTACH`, `COPY`, `INSTALL`,
   `LOAD` keep their card, which the person may allow;
 - the **agents** tools a bot runs in its own scope
-  (`server/member-tool-scope.ts`: its teammates, threads, rooms, memory,
+  (`server/people/member-tool-scope.ts`: its teammates, threads, rooms, memory,
   skills and own setup). The host-level ones (`act`, `add_mcp_server`,
   `attach_file`, `vm_exec`, `shared_computer`, the cloud agent tools) keep
   their card.
@@ -444,7 +444,7 @@ exports there, each database closed first (`server/data/erase.ts`), and the
 files of their own ordinary threads on other people's bots: each thread's
 own folder, its tool results and the stored files no thread that stays
 points at. A folder another thread works in is kept, and nothing of anyone
-else's goes (`server/person-thread-erase.ts`).
+else's goes (`server/threads/person-thread-erase.ts`).
 
 Auto-accept edits and Ask card whatever the provider asks about. Approve for
 me cards whatever the provider's reviewer leaves for you, with the note "The
@@ -570,7 +570,7 @@ confidential threads; views across people stay in Perspicax.
 
 Nothing new is captured for it: `server/action-journal.ts` folds the
 decision log (`server/decision-log.ts`), the tool runs of your threads
-(`server/activity.ts`) and the agent tools' audit with the tool guard's
+(`server/activity/activity.ts`) and the agent tools' audit with the tool guard's
 verdict. A decision row now keeps the call's arguments (bounded, redacted,
 dropped in a confidential thread) so a rule can be replayed exactly.
 

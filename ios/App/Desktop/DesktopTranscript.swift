@@ -252,9 +252,10 @@ struct DesktopActionButton: View {
 
 // MARK: - Attachments
 
-/// AttachmentGallery.tsx: the pictures first (one column for one, two
-/// otherwise, at most 288 tall, 16 pt corners), then the file chips, all in
-/// a column of at most 544, 6 pt apart.
+/// AttachmentGallery.tsx (2026-11-03 references): under the message's
+/// words, the pictures as 96 pt tall thumbnails (`h-24 w-auto max-w-48`,
+/// 16 pt corners) in a wrapping row 8 apart, then the files as 28 pt pills
+/// in a wrapping row 6 apart. The bubble keeps its own width (`w-fit`).
 struct DesktopAttachmentGallery: View {
     let images: [DisplayedMessageAttachment]
     let files: [DisplayedMessageAttachment]
@@ -262,58 +263,93 @@ struct DesktopAttachmentGallery: View {
     let messageId: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if images.count == 1, let image = images.first {
-                TranscriptAttachmentView(attachment: image, threadId: threadId, messageId: messageId)
-            } else if !images.isEmpty {
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 8) {
+            if !images.isEmpty {
+                DesktopChipFlow(spacing: 8) {
                     ForEach(images, id: \.path) { image in
                         TranscriptAttachmentView(attachment: image, threadId: threadId, messageId: messageId)
                     }
                 }
             }
-            ForEach(files, id: \.path) { file in
-                TranscriptAttachmentView(attachment: file, threadId: threadId, messageId: messageId)
+            if !files.isEmpty {
+                DesktopChipFlow(spacing: 6) {
+                    ForEach(files, id: \.path) { file in
+                        TranscriptAttachmentView(attachment: file, threadId: threadId, messageId: messageId)
+                    }
+                }
             }
         }
-        .frame(maxWidth: DesktopChatMetrics.galleryWidth, alignment: .leading)
-        .padding(.bottom, 6)
     }
 }
 
-/// AttachedFileChip: 1 pt ring (hairline at 25 %), 12 pt corners, a 14 pt
-/// document glyph, the name 12 pt ink, a 13 pt download glyph; 40 tall.
+/// A wrapping row as wide as what it holds (`flex flex-wrap`), never wider
+/// than offered.
+struct DesktopChipFlow: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, line: CGFloat = 0, widest: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(ProposedViewSize(width: width, height: nil))
+            if x > 0, x + size.width > width {
+                y += line + spacing
+                x = 0
+                line = 0
+            }
+            x += size.width + spacing
+            line = max(line, size.height)
+            widest = max(widest, x - spacing)
+        }
+        return CGSize(width: min(widest, width), height: y + line)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, line: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                y += line + spacing
+                x = bounds.minX
+                line = 0
+            }
+            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            line = max(line, size.height)
+        }
+    }
+}
+
+/// AttachedFileChip (`file-chip`): a 28 pt pill of 6 % ink, a 14 pt
+/// document glyph, the name 13 in the ink (at most 16rem), a 13 pt download
+/// glyph in the secondary ink; ps-2.5 pe-2, 6 apart.
 struct DesktopFileChip: View {
     @Environment(\.desktopTheme) private var theme
     let name: String
     let loading: Bool
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "doc.text")
-                .font(.system(size: 12, weight: .regular))
-                .frame(width: 14, height: 14)
+        HStack(spacing: 6) {
+            DesktopIconView(icon: .fileText, size: 14)
                 .foregroundStyle(theme.inkSecondary)
             Text(verbatim: name)
-                .font(theme.font(12))
+                .font(theme.font(13))
                 .foregroundStyle(theme.ink)
                 .lineLimit(1)
                 .truncationMode(.middle)
             if loading {
                 ProgressView().controlSize(.mini)
             } else {
-                Image(systemName: "arrow.down.to.line")
-                    .font(.system(size: 11, weight: .regular))
-                    .frame(width: 13, height: 13)
+                DesktopLucideGlyph(paths: DesktopLucide.download, size: 13)
                     .foregroundStyle(theme.inkSecondary)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(minHeight: 40)
-        .padding(1)
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.25), lineWidth: 1))
-        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.leading, 10)
+        .padding(.trailing, 10)
+        .frame(height: 28)
+        .fixedSize()
+        .background(theme.ink.opacity(0.06), in: Capsule())
+        .contentShape(Capsule())
     }
 }
 

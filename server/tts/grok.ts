@@ -359,7 +359,7 @@ export function openTranscriptionStream(
   // inverse text normalization needs a language
   if (options.language && options.format) query.set("format", "true");
   // vocabulary biasing: the bot's and the person's names, the thread's
-  // proper nouns (server/voice-keyterms.ts)
+  // proper nouns (server/voice/voice-keyterms.ts)
   for (const term of options.keyterms ?? []) query.append("keyterm", term);
   const url = `${API.replace(/^http/, "ws")}/stt?${query}`;
   let socket: WebSocket;
@@ -588,7 +588,7 @@ export function openSpeechStream(
   };
 }
 
-/** wss://api.x.ai/v1/realtime for one call (server/realtime-call.ts): the
+/** wss://api.x.ai/v1/realtime for one call (server/voice/realtime-call.ts): the
  * key in the Authorization header, never in the URL. A refused handshake
  * comes back on `onerror` as this file's own words (key, credits, rate
  * limit), so the call can say which key to fix. */

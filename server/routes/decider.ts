@@ -2,7 +2,7 @@
 // yes/no call with the draft key in the body, or the saved key, whatever the
 // switches say, because it tests the key itself. The answer is a verdict
 // (and how long it took), never the key and never the vendor's raw body.
-// Admin-scoped by default (server/request-auth.ts lists no client rule for
+// Admin-scoped by default (server/auth/request-auth.ts lists no client rule for
 // it): it spends a real, if tiny, amount on the workspace's key.
 import type { Decider } from "../decider/index.ts";
 import { PASS, type RouteHandler } from "./table.ts";

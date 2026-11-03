@@ -1,5 +1,5 @@
 // A bot's capabilities: the one resolved list of what it receives on top of
-// its engine (shared/capabilities.ts, server/capabilities.ts).
+// its engine (shared/capabilities.ts, server/capabilities/capabilities.ts).
 //
 //   GET /api/bots/:id/capabilities[?engine=<instanceId>]   -> BotCapabilities
 //
@@ -8,7 +8,7 @@
 // the handler checks the bot level (`resolve` answers null for a bot the
 // caller cannot see). `engine` previews the list on another engine instance
 // of this server, for the bot's model picker and the plugin pages.
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { BotCapabilities } from "../../shared/capabilities.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

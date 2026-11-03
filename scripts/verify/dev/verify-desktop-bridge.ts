@@ -26,13 +26,13 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { SandboxdVerifier } from "../../../server/sandboxd-auth.ts";
-import { SandboxService } from "../../../server/sandboxd-core.ts";
+import { SandboxdVerifier } from "../../../server/sandbox/sandboxd-auth.ts";
+import { SandboxService } from "../../../server/sandbox/sandboxd-core.ts";
 import { createSandboxdHandler } from "../../../server/sandboxd.ts";
 import { FakeDocker } from "../../../server/testing/fake-docker.ts";
 import { startFakeOidcProvider } from "../../../server/testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../../../server/testing/ports.ts";
-import { sandboxdConfigFromEnv } from "../../../server/user-sandbox-spec.ts";
+import { sandboxdConfigFromEnv } from "../../../server/sandbox/user-sandbox-spec.ts";
 
 // The echo is plain text, never HTML: the request path it repeats cannot
 // become markup in whatever reads it.

@@ -80,7 +80,7 @@ final class DesktopShellModel: ObservableObject {
         case releaseNotes, whatsNew
 
         /// Drawn in the shell as the desktop's modals, not as sheets.
-        var inShell: Bool { [.settings, .plugins, .shortcuts, .releaseNotes, .whatsNew].contains(self) }
+        var inShell: Bool { [.settings, .search, .plugins, .shortcuts, .releaseNotes, .whatsNew].contains(self) }
         var id: String { rawValue }
     }
 
@@ -151,6 +151,8 @@ final class DesktopShellModel: ObservableObject {
     @Published var replacingPrimary: Bot?
     /// The team menu's Share team… (the package file, then the share sheet).
     @Published var sharingTeam: String?
+    /// A bot row's Share: the link that opens this bot in Sagax.
+    @Published var sharingBotLink: URL?
     /// The open "To:" picker's ⌘1 to ⌘9 (DesktopKeyCommands routes them).
     var composeActivate: ((Int) -> Void)?
     #if DEBUG
@@ -382,10 +384,8 @@ struct DesktopShell: View {
                         .transition(.move(edge: .trailing))
                 }
             }
-            // Settings open: the sidebar and the chat are hidden at once, with
-            // no animation, so nothing of them shows through or crosses it.
-            .opacity(model.modal == .settings ? 0 : 1)
-            .animation(nil, value: model.modal == .settings)
+            // Settings open: the window stays drawn behind the centred
+            // modal, as the desktop's (2026-11-03 references).
             if !docked, botOpen, let bot = selectedBot {
                 // Below 1024 the panel covers the leading edge (measured at
                 // 834: x 0, 360 wide), the chat still visible to its right.
@@ -413,7 +413,12 @@ struct DesktopShell: View {
                 AnyView(DesktopSettingsModal(close: { model.modal = nil }))
                     .transition(.identity)
             } else if model.modal == .plugins {
-                AnyView(DesktopPluginsModal(close: { model.modal = nil }))
+                // lot 3: Capabilities, the desktop's centred window
+                AnyView(DesktopCapabilitiesModal(close: { model.modal = nil }))
+                    .transition(.opacity)
+            } else if model.modal == .search {
+                // lot 3: the desktop's command palette (⌘K)
+                AnyView(DesktopCommandPalette(close: { model.modal = nil }))
                     .transition(.opacity)
             } else if model.modal == .shortcuts {
                 AnyView(DesktopShortcutsModal(close: { model.modal = nil }))
@@ -444,6 +449,7 @@ struct DesktopContent: View {
             switch page {
             case .teamMap: AnyView(DesktopTeamMapPage())
             case .automations: AnyView(DesktopAutomationsPage())
+            case .memory: AnyView(DesktopMemoryPage())
             }
         } else if let chat = model.selected {
             AnyView(DesktopChatColumn(chat: chat))
@@ -675,7 +681,6 @@ private struct DesktopShellRouting: ViewModifier {
                 model.panelSection = screen.panelSection
                 model.personaOpen = screen.opensPersonaEditor
                 model.avatarEditorOpen = screen == .panelAvatarEditor
-                model.modelPickerOpen = screen == .chatModelPicker
                 model.applyParityModals(screen)
                 model.page = screen.parityPage
                 if screen == .keyboardShortcuts { model.modal = .shortcuts }
@@ -752,16 +757,7 @@ private struct DesktopShellPresenter: ViewModifier {
         case .settings:
             EmptyView()
         case .search:
-            // The phone's sheet, large: the iPad's page sheet holds it
-            // (no dim or top inset of its own).
-            SearchSheet(embedded: true, close: { model.modal = nil }) { destination in
-                model.modal = nil
-                switch destination {
-                case let .chat(chat): model.open(session.returning(to: chat))
-                case let .exact(chat): model.open(chat)
-                }
-            }
-            .searchPageSheet()
+            EmptyView()
         case .newBot:
             CreateBotSheet(close: { model.modal = nil }) { bot in
                 model.modal = nil

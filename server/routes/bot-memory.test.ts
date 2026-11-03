@@ -13,8 +13,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { json, onJsonBody, readBody } from "../harness/http.ts";
 import { recordMemoryChange } from "../memory/memory-journal.ts";
-import { commitLearned, planLearned } from "../profile-learned.ts";
-import { requiredScope } from "../request-auth.ts";
+import { commitLearned, planLearned } from "../profiles/profile-learned.ts";
+import { requiredScope } from "../auth/request-auth.ts";
 import { launchVerificationServer, type VerificationServer } from "../../scripts/control-omb.ts";
 import { createBotMemoryRoutes, type BotMemoryRouteDeps } from "./bot-memory.ts";
 import { dispatchRoutes } from "./table.ts";

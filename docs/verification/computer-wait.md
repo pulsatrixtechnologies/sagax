@@ -6,8 +6,8 @@ Run the real-server fixture in an isolated home, with a local Boat API stub:
 pnpm exec vitest run server/index.test.ts -t 'shares one team computer|dispatches the conversation.s pinned computer|blocks bot-scoped Boat lifecycle'
 pnpm exec vitest run server/index.test.ts -t 'queues computer waiters in arrival order'
 pnpm exec vitest run server/index.test.ts -t 'parks the turn at the wait ceiling|routes a goal run around a member parked'
-pnpm exec vitest run server/turn-resources.test.ts server/group-local-vm.e2e.test.ts server/shared-computers.e2e.test.ts
-pnpm exec vitest run server/managed-desktop-cleanup.test.ts
+pnpm exec vitest run server/turns/turn-resources.test.ts server/group-local-vm.e2e.test.ts server/computer/shared-computers.e2e.test.ts
+pnpm exec vitest run server/computer/managed-desktop-cleanup.test.ts
 ```
 
 The shared-team-computer case proves:

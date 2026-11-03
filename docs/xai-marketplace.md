@@ -21,7 +21,7 @@ The marketplace pages are public and rendered on the server: no sign-in.
   its first memory. Full instructions, skill bodies, routine prompts and
   schedules stay inside the x.ai app.
 
-`server/xai-marketplace.ts` reads both (x.ai only, redirects that stay on
+`server/plugins/xai-marketplace.ts` reads both (x.ai only, redirects that stay on
 x.ai, 20 s, 4 MB), keeps them six hours, and answers through
 `GET /api/team-library/xai[?refresh=1]` and
 `GET /api/team-library/xai/bots/:slug` (`server/routes/xai-marketplace.ts`).
@@ -47,7 +47,7 @@ The desktop converts in the app and goes through the bot import
 `POST /api/bots/import/agent { marketplace: slug }`; the server reads the
 bot and stages the same package.
 
-Tests: `server/xai-marketplace.test.ts` (parser on
+Tests: `server/plugins/xai-marketplace.test.ts` (parser on
 `server/fixtures/xai-marketplace-*.html`, the real structure with neutral
 names), `server/routes/xai-marketplace.test.ts`,
 `shared/xai-marketplace.test.ts`, `server/routes/bot-zip.test.ts`,

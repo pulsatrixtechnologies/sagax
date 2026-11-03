@@ -665,7 +665,7 @@ function DraftRoutines({ draft }: { draft: BotCreationDraft }) {
       </div>)}
     </div>}
     <div><button type="button" className={PILL} onClick={() => setEditing("new")}><Plus size={14} aria-hidden="true" />{t("computer.routines.create")}</button></div>
-    {editing && <RoutineEditor routine={editing === "new" ? undefined : editing} bots={[draft.bot]} lockedBotId={draft.id} presentation="panel" onClose={() => setEditing(null)} />}
+    {editing && <RoutineEditor routine={editing === "new" ? undefined : editing} bots={[draft.bot]} lockedBotId={draft.id} presentation="panel" manage={false} onClose={() => setEditing(null)} />}
   </div>;
 }
 

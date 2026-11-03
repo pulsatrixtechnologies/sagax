@@ -13,10 +13,10 @@ import { parse as parseYaml } from "yaml";
 import type { ModelCatalog } from "../../contracts.ts";
 import { harnessHome } from "../../env-path.ts";
 import { resolveCli } from "../../procs.ts";
-import { engineStartGate } from "../../engine-start-gate.ts";
+import { engineStartGate } from "../../engines/engine-start-gate.ts";
 import { decodeInjectId, hostApiKey, INJECT_SEP, localHost, mergeLocalInject } from "../local-inject.ts";
 import { DATA_DIR } from "../../config.ts";
-import { HERMES_PROVIDER_ENV, hermesManagedEnvText } from "../../engine-api-keys.ts";
+import { HERMES_PROVIDER_ENV, hermesManagedEnvText } from "../../engines/engine-api-keys.ts";
 import { hermesTurnHome, withheldWorkspace } from "../host-tools.ts";
 import { createAcpDriver, type AcpSupport } from "./core.ts";
 

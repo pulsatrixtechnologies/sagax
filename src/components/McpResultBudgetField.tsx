@@ -1,7 +1,7 @@
 // A server's own Result size limit in the MCP server editor
 // (McpServersPanel): characters of one tool result allowed into context,
 // blank = the app default, 0 = never trim. The server keeps it as
-// config.json `mcpServers.<name>.resultBudget` (server/mcp-result-budget.ts).
+// config.json `mcpServers.<name>.resultBudget` (server/mcp/mcp-result-budget.ts).
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 
@@ -23,7 +23,7 @@ export interface McpResultBudgetDraft {
   resultBudget: string;
 }
 
-/** The most a server's result size limit may be (server/mcp-registry.ts). */
+/** The most a server's result size limit may be (server/mcp/mcp-registry.ts). */
 export const MAX_MCP_RESULT_BUDGET = 2_000_000;
 
 /** The Result size limit field: blank = the app default, 0 = never trim.

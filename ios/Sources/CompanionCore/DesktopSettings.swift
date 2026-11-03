@@ -11,6 +11,12 @@ import Foundation
 public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
     case general, organization, appearance, experimental, connections, myConnections, decisionModel, engines, myEngines,
          companion, computer, usage, people, mail, activity, backups
+    /// The desktop's pages of 2026-10-28 and 2026-10-30 (SettingsModal.tsx
+    /// SECTIONS): Providers (every account, key and server), Voice, this
+    /// app's Updates and About.
+    case providers, voice, updates, about
+    /// Security, Vault (`credentials`), Notifications and Import (lot 2b).
+    case security, vault = "credentials", notifications, importBot = "import"
 
     /// Search words beside the label (the desktop's `keywords`).
     public var keywords: [String] {
@@ -48,6 +54,16 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
         case .mail: ["email", "mail", "smtp", "sender", "invitations", "sign-in codes"]
         case .activity: ["activity", "audit", "log", "history", "who changed", "admin"]
         case .backups: ["export", "import", "restore", "full backup", "password", "recovery"]
+        case .providers:
+            ["providers", "fournisseurs", "model providers", "accounts", "comptes", "claude", "codex", "grok", "sign in",
+             "subscription", "keys", "api", "api key", "api keys", "xai", "mistral", "openrouter", "openai", "anthropic"]
+        case .voice: ["voice", "voix", "tts", "speech", "parole", "speed", "language", "microphone", "micro", "audio"]
+        case .updates: ["updates", "update", "version", "mise à jour", "testflight", "app store"]
+        case .about: ["about", "à propos", "version", "license", "licence", "github", "documentation", "release notes"]
+        case .security: ["security", "sécurité", "security key", "passkey", "approval rules", "règles d'approbation", "tool access", "always allow", "always deny"]
+        case .vault: ["vault", "coffre", "password", "mot de passe", "credentials", "identifiants", "login", "card", "carte"]
+        case .notifications: ["notifications", "sound", "son", "badge", "chime", "nudge", "blocked", "bloqué"]
+        case .importBot: ["import", "importer", "grok", "grok bot", "share link", "preferences", "préférences"]
         }
     }
 
@@ -77,18 +93,24 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
         // My engines (#1098): the person's own subscription sign-in, on an
         // organization server (`SurfaceFeature.myEngines`).
         let engines: [DesktopSettingsSection] = gate.allows(.myEngines) ? [.myEngines] : []
+        // 2026-11-03 (iPad 1:1): the desktop's rail, Personal (Account,
+        // Appearance), AI (Providers, Models, Voice), Installation
+        // (Organization, Computer, Usage, Backups), App (Experimental,
+        // Updates, About).
         switch gate.scope {
         case .sidecar, .serverClient:
-            return [.organization] + engines + mine + [.appearance]
+            return [.appearance, .notifications] + engines + mine + [.organization, .updates, .about]
         case .serverAdmin:
-            return [.general, .organization, .appearance, .experimental, .engines] + engines + mine + [.computer, .usage, .backups]
+            return [.general, .security, .vault, .appearance, .notifications, .providers, .engines] + engines + mine
+                + [.voice, .organization, .computer, .usage, .backups, .importBot, .experimental, .updates, .about]
         }
     }
 
     /// A section that is a card of another page now: the page that shows it.
     public var host: DesktopSettingsSection {
         switch self {
-        case .connections, .decisionModel: .engines
+        case .connections: .providers
+        case .decisionModel: .engines
         case .companion, .mail, .activity, .people: .organization
         default: self
         }
@@ -106,27 +128,27 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
     }
 }
 
-/// The iPad Settings nav's groups (2026-10-26, the Grok Bot layout): the
-/// same order as the phone's tree (SettingsTree), under short labels.
+/// The iPad Settings nav's groups: the desktop's `NAV_GROUPS` (Personal,
+/// AI, Installation, App), each page under its desktop heading.
 public enum DesktopSettingsNavGroup: String, CaseIterable, Hashable, Sendable {
-    case account, bots, apps, appearance, privacySecurity
+    case personal, ai, installation, app
 
     /// The group a section sits in.
     public static func of(_ section: DesktopSettingsSection) -> DesktopSettingsNavGroup {
         switch section {
-        case .general, .organization, .usage, .companion, .people, .mail, .activity: .account
-        case .engines, .myEngines, .connections, .decisionModel, .computer, .experimental: .bots
-        case .myConnections: .apps
-        case .appearance: .appearance
-        case .backups: .privacySecurity
+        case .general, .security, .vault, .appearance, .notifications: .personal
+        case .providers, .engines, .myEngines, .myConnections, .voice, .connections, .decisionModel: .ai
+        case .organization, .computer, .usage, .backups, .importBot, .companion, .people, .mail, .activity: .installation
+        case .experimental, .updates, .about: .app
         }
     }
 
-    /// `sections` in group order, each group in the nav's own order; empty
-    /// groups are left out.
+    /// `sections` in group order, each group in the desktop rail's order;
+    /// empty groups are left out.
     public static func grouped(_ sections: [DesktopSettingsSection]) -> [(group: DesktopSettingsNavGroup, sections: [DesktopSettingsSection])] {
         let order: [DesktopSettingsSection] = [
-            .general, .organization, .usage, .engines, .myEngines, .computer, .experimental, .myConnections, .appearance, .backups,
+            .general, .security, .vault, .appearance, .notifications, .providers, .engines, .myEngines, .myConnections, .voice,
+            .organization, .computer, .usage, .backups, .importBot, .experimental, .updates, .about,
         ]
         let ranked = sections.sorted { (order.firstIndex(of: $0) ?? 99) < (order.firstIndex(of: $1) ?? 99) }
         return allCases.compactMap { group in
@@ -193,6 +215,12 @@ public struct DesktopSettingsConfig: Decodable, Equatable, Sendable {
         public var installable: Bool?
     }
     public struct LocalVm: Decodable, Equatable, Sendable { public var mode: String? }
+    /// Settings > Voice > Advanced: the Chatterbox server and the Fish Audio model.
+    public struct Tts: Decodable, Equatable, Sendable {
+        public var baseUrl: String?
+        public var model: String?
+        public var fishModel: String?
+    }
 
     public var profile: Profile?
     public var language: String?
@@ -205,6 +233,7 @@ public struct DesktopSettingsConfig: Decodable, Equatable, Sendable {
     public var decider: Decider?
     public var browserEngine: BrowserEngine?
     public var localVm: LocalVm?
+    public var tts: Tts?
     public var openai, anthropic, xai, openrouter, mistral, openaiCompat, vps: Flag?
 
     public init() {}
@@ -264,6 +293,10 @@ public enum DesktopConfigChange: Equatable, Sendable {
     case deciderRoomRouting(Bool)
     /// A write-only key; an empty string clears it.
     case apiKey(DesktopAPIKeyProvider, String)
+    /// Settings > Voice > Advanced: the Chatterbox server (`tts.baseUrl`, `tts.model`).
+    case ttsServer(baseUrl: String, model: String)
+    /// Settings > Voice > Advanced: the Fish Audio model.
+    case fishModel(String)
 
     /// The features the Experimental and General switches may set.
     public static let switchableFeatures: Set<String> = [
@@ -307,6 +340,13 @@ public enum DesktopConfigChange: Equatable, Sendable {
             let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
             guard trimmed.count <= 4_096 else { return nil }
             return [provider.rawValue: ["key": trimmed]]
+        case let .ttsServer(baseUrl, model):
+            let url = baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard url.lowercased().hasPrefix("http://") || url.lowercased().hasPrefix("https://") else { return nil }
+            return ["tts": ["baseUrl": url, "model": model.trimmingCharacters(in: .whitespacesAndNewlines)]]
+        case let .fishModel(model):
+            guard ["s2.1-pro", "s2.1-pro-free"].contains(model) else { return nil }
+            return ["tts": ["fishModel": model]]
         }
     }
 }

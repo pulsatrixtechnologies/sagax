@@ -12,7 +12,7 @@ export type PasteAttachment = {
   lines: number;
 };
 
-/** What the server listed in an attached archive (server/attachment-archives.ts). */
+/** What the server listed in an attached archive (server/attachments/attachment-archives.ts). */
 export type ArchiveSummary = {
   kind: "zip" | "tar" | "tgz" | "7z" | null;
   status: "ok" | "encrypted" | "too-large" | "unsupported" | "invalid";

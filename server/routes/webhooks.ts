@@ -5,9 +5,9 @@
  * loopback listener. Registered in ROUTES after the auth gate. Never imports
  * server/index.ts.
  */
-import type { RequestAuth } from "../request-auth.ts";
-import { pollerCredentialInputSchema } from "../trigger-poller-credentials.ts";
-import { triggerSourceSetup, webhookCredential } from "../webhook-ingress.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { pollerCredentialInputSchema } from "../triggers/trigger-poller-credentials.ts";
+import { triggerSourceSetup, webhookCredential } from "../triggers/webhook-ingress.ts";
 import { isRelaySource, type TriggerSourceType } from "../../shared/trigger-sources.ts";
 import { BOT_ACT_ROUTE_HEADER } from "./remote-session-files.ts";
 import { PASS, type RouteHandler } from "./table.ts";

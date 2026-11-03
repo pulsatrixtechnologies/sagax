@@ -2,7 +2,7 @@
 // and the starter template, kept equal to the server's.
 import { describe, expect, it } from "vitest";
 
-import { RULES_MAX_BYTES as SERVER_MAX_BYTES, RULES_MAX_LINES as SERVER_MAX_LINES, RULES_TEMPLATE as SERVER_TEMPLATE, effectiveRulesText as serverEffective } from "../../server/workspace-files.ts";
+import { RULES_MAX_BYTES as SERVER_MAX_BYTES, RULES_MAX_LINES as SERVER_MAX_LINES, RULES_TEMPLATE as SERVER_TEMPLATE, effectiveRulesText as serverEffective } from "../../server/workspace/workspace-files.ts";
 import { RULES_TEMPLATE } from "../components/bot-settings/RulesSection";
 import { RULES_MAX_BYTES, RULES_MAX_LINES, docPathFromName, isRulesOrDoc, effectiveRulesText, entryAncestors, entryDepth, entryName, entryParent, entryVisible, rulesCount } from "./workspace-files";
 

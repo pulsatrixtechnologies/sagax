@@ -13,7 +13,7 @@ export const INTERFACE_MODE_KEY = "sagax.interfaceMode.v1";
 // is set to Advanced once, then this marker (an ISO date) is written and the
 // move never runs again, so Simple chosen afterwards stays. It is one of
 // USER_PREFERENCE_KEYS: on an organization server the server runs the same
-// move on its records (server/user-preferences.ts) and the marker follows the
+// move on its records (server/people/user-preferences.ts) and the marker follows the
 // person, so no device moves them a second time.
 export const ADVANCED_MODE_MIGRATION_KEY = "sagax.advancedModeMigratedAt.v1";
 

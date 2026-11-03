@@ -17,8 +17,8 @@ function failure(id: RpcId, method: unknown, message: string, code = -32603): un
 }
 
 /** Which tool server this proxy is: the person's server environment, their
- * own computer through the desktop bridge (server/desktop-bridge.ts), or the
- * Auto computer choice (server/auto-computer.ts). */
+ * own computer through the desktop bridge (server/desktop/desktop-bridge.ts), or the
+ * Auto computer choice (server/computer/auto-computer.ts). */
 export const PROXIED_TOOL_SERVERS = {
   "sagax-environment": { endpoint: "/api/internal/sandbox/mcp", unavailable: "The server environment is not connected. Start a new bot turn from Sagax.", interrupted: "The connection to the server environment was interrupted. Check the result before repeating the action." },
   "sagax-desktop": { endpoint: "/api/internal/desktop/mcp", unavailable: "Your computer is not connected through Sagax. Start a new bot turn from Sagax.", interrupted: "The connection to your computer was interrupted. Check the result before repeating the action." },
@@ -65,7 +65,7 @@ export async function userSandboxProxyRequest(frame: unknown, connection: { url:
 }
 
 /** The tool server name of a person's own MCP server command relayed to
- * their server environment (server/sandbox-stdio-mcp.ts): every frame goes
+ * their server environment (server/sandbox/sandbox-stdio-mcp.ts): every frame goes
  * through as is, notifications included. */
 export const PERSONAL_STDIO_TOOL_SERVER = "sagax-stdio";
 const PERSONAL_STDIO_ENDPOINT = "/api/internal/personal-mcp";

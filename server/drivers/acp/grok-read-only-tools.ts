@@ -18,7 +18,7 @@
 // Everything else (writes, actions, sends, approvals, commands, unknown
 // tools) keeps the classifier and its cards unchanged.
 import type { McpServerSpec } from "../../contracts.ts";
-import { READ_ONLY_AGENT_TOOL_NAMES } from "../../agent-tool-policy.ts";
+import { READ_ONLY_AGENT_TOOL_NAMES } from "../../tools/agent-tool-policy.ts";
 import { SPAWNED_PROXIES } from "../../proxy-paths.ts";
 
 /** Permission vocabulary only: schemas and computation are served by the

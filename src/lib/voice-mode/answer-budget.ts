@@ -1,6 +1,6 @@
 // How much of an answer a call says aloud. Pure.
 //
-// The bot is told the voice output contract (server/voice-call-prompt.ts:
+// The bot is told the voice output contract (server/voice/voice-call-prompt.ts:
 // the verdict first, one to four short spoken sentences, at most one
 // question and only for a real decision). A model still runs long or asks
 // two things at once; on a phone that is a monologue the person cannot

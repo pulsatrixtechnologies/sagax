@@ -26,7 +26,7 @@ engine is available. The isolated fixture should expose `claude`.
 Run the offline API fixture and driver regressions:
 
 ```sh
-pnpm exec vitest run server/claude-account-api.test.ts server/claude-accounts.test.ts server/drivers/claude-accounts.test.ts
+pnpm exec vitest run server/engines/claude-account-api.test.ts server/engines/claude-accounts.test.ts server/drivers/claude-accounts.test.ts
 ```
 
 The API fixture launches its own disposable server and synthetic CLI. It checks
@@ -52,7 +52,7 @@ prove real OAuth login or native Windows execution.
 ## Groq API setup
 
 ```sh
-pnpm exec vitest run server/drivers/groq.test.ts server/provider-key-check.test.ts server/config.test.ts server/openai-tools.e2e.test.ts src/components/ApiKeys.test.ts src/state/store.test.ts
+pnpm exec vitest run server/drivers/groq.test.ts server/engines/provider-key-check.test.ts server/config.test.ts server/openai-tools.e2e.test.ts src/components/ApiKeys.test.ts src/state/store.test.ts
 ```
 
 These fixtures use disposable data and local HTTP providers. They check the

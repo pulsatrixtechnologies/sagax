@@ -1,7 +1,7 @@
 /** Shared types for Codex turn phase modules (issue #1383). */
 import type { ChildProcess } from "node:child_process";
 import type { SendTurnInput, StdioMcpSpec } from "../../contracts.ts";
-import type { RenewalStep } from "../../context-renewal.ts";
+import type { RenewalStep } from "../../context/context-renewal.ts";
 import type { McpApprovalMode } from "./mcp-mount.ts";
 
 /** Mutable turn-level state owned by sendTurn / launchAttempt. */

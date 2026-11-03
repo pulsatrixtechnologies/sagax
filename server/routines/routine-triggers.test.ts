@@ -12,7 +12,7 @@ import {
   type RoutineRequestStore,
 } from "./routine-requests.ts";
 import { RoutineManager } from "./routines.ts";
-import { WebhookManager, type WebhookEvent } from "../webhooks.ts";
+import { WebhookManager, type WebhookEvent } from "../triggers/webhooks.ts";
 
 class MemoryStore implements RoutineRequestStore {
   readonly threads = new Map<string, RoutineRequestMessage[]>();

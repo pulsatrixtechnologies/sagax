@@ -1,5 +1,5 @@
 // Wall-clock arithmetic in a named IANA time zone, for routines that run in
-// the zone a person chose rather than the host's (server/bot-settings.ts).
+// the zone a person chose rather than the host's (server/bots/bot-settings.ts).
 // Built on Intl only: no time zone database ships with Sagax.
 
 export interface ZonedParts {

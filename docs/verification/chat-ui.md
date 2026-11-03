@@ -114,7 +114,7 @@ step with the verified ones tagged `(verified)`. A run with no verified step
 asks in plain words instead — `Save the steps below as a reusable skill for my
 review.`, then `Goal: <request>`, then "Keep the exact commands and note the
 failed ones as gotchas. Do not re-run anything.", then the step lines; the
-server (`server/skill-learn.ts`) expands a turn that opens with that sentence
+server (`server/skills/skill-learn.ts`) expands a turn that opens with that sentence
 into the same skill-authoring turn as `/learn`, so nobody sees or types a slash
 command. In both shapes the caret is in the composer and no new user message
 was sent — the transcript still holds exactly one `StaticText "hello"`. The person adds any notes and

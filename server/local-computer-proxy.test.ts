@@ -11,7 +11,7 @@ import { delimiter, dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CONTROL_UNCONFIRMED } from "./control-client.ts";
 import { gatedLocalComputer } from "./local-computer.ts";
-import { OWN_PROFILE_UNAVAILABLE } from "./local-computer-guidance.ts";
+import { OWN_PROFILE_UNAVAILABLE } from "./computer/local-computer-guidance.ts";
 import { SPAWNED_PROXIES } from "./proxy-paths.ts";
 
 // A disposable MCP child that never opens a computer or reads user data.

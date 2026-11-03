@@ -8,16 +8,16 @@
 // runners are injected; this module never imports index.ts.
 import { z } from "zod";
 import { signTurnHandle } from "../agent-api.ts";
-import { parseAutoComputerTarget } from "../auto-computer.ts";
-import { createdByBotMark, type BotCreationRefusal } from "../bot-creation.ts";
-import { validateBotCwd } from "../bot-cwd.ts";
-import { recordedBotOwner } from "../bot-owner.ts";
-import { botMaxConcurrentThreads, botMaxParallelPerPerson, type GlobalRuntimeSettings } from "../bot-runtime-settings.ts";
-import { CONFIDENTIAL_PEER_REFUSED } from "../confidential-threads.ts";
+import { parseAutoComputerTarget } from "../computer/auto-computer.ts";
+import { createdByBotMark, type BotCreationRefusal } from "../bots/bot-creation.ts";
+import { validateBotCwd } from "../bots/bot-cwd.ts";
+import { recordedBotOwner } from "../bots/bot-owner.ts";
+import { botMaxConcurrentThreads, botMaxParallelPerPerson, type GlobalRuntimeSettings } from "../bots/bot-runtime-settings.ts";
+import { CONFIDENTIAL_PEER_REFUSED } from "../threads/confidential-threads.ts";
 import type { HandoffView } from "../coordinator.ts";
 import { newId } from "../contracts.ts";
 import { appendDecision } from "../decision-log.ts";
-import { peerApprovalFailure, requestPeerApproval, type ApprovalBus } from "../peer-approval.ts";
+import { peerApprovalFailure, requestPeerApproval, type ApprovalBus } from "../peers/peer-approval.ts";
 import {
   PEER_ACCESS_HELP,
   canAccessBot,
@@ -25,10 +25,10 @@ import {
   peerInScope,
   roomRecruitIds,
   type RosterMember,
-} from "../peer-roster.ts";
-import { planPriorityWake, parseWakePriority, releasePriorityNow } from "../priority-wake.ts";
+} from "../peers/peer-roster.ts";
+import { planPriorityWake, parseWakePriority, releasePriorityNow } from "../proactive/priority-wake.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { decideRoomPost, emptyRoomPostBudget, type RoomPostAttempt, type RoomPostBudget } from "../room-post-budget.ts";
+import { decideRoomPost, emptyRoomPostBudget, type RoomPostAttempt, type RoomPostBudget } from "../rooms/room-post-budget.ts";
 import {
   chooseRelayEngine,
   relayOpening,
@@ -37,7 +37,7 @@ import {
   type RelayEngine,
 } from "../run-with-engine.ts";
 import { sectionKey, type Message } from "../store.ts";
-import { resumeOpening, resumeRefusal, subagentRequest } from "../subagent-threads.ts";
+import { resumeOpening, resumeRefusal, subagentRequest } from "../threads/subagent-threads.ts";
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { fitsOnOneLine } from "../../shared/bot-profile.ts";
 import type { ModelSelection } from "../../shared/model-selection.ts";
@@ -634,7 +634,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
       }
       const title = String(body.title ?? "").trim();
       const message = String(body.message ?? "").trim();
-      // sub-agents (parity D1, server/subagent-threads.ts): resume one by id, or run one read-only
+      // sub-agents (parity D1, server/threads/subagent-threads.ts): resume one by id, or run one read-only
       const resumeId = typeof body.resumeThreadId === "string" ? body.resumeThreadId.trim() : "";
       const readOnly = body.readOnly === true;
       if (!message || (!title && !resumeId)) return json(res, 400, { error: "title and message are required" });
@@ -654,7 +654,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
       const target = store.bot(toBotId);
       if (!target) return json(res, 404, { error: "no such bot" });
       // workspace: where a thread of this bot on Auto starts (sub-agents,
-      // server/auto-computer.ts). Checked again at each of its turns.
+      // server/computer/auto-computer.ts). Checked again at each of its turns.
       const autoWorkspace = body.workspace === undefined || body.workspace === null || body.workspace === "" ? null : parseAutoComputerTarget(body.workspace);
       if (body.workspace !== undefined && body.workspace !== null && body.workspace !== "" && !autoWorkspace) {
         return json(res, 400, { error: "workspace must be this_computer, browser, cloud or local_vm" });
@@ -903,7 +903,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
         return json(res, 403, { error: "source conversation does not belong to sender" });
       }
       // 2026-10-17: any bot of the person, not only the Primary Bot
-      // (server/bot-creation.ts). The Primary Bot's path is unchanged; any
+      // (server/bots/bot-creation.ts). The Primary Bot's path is unchanged; any
       // other bot also needs the owner's own turn, a depth and a rate.
       const primaryCreator = chief.chiefOfStaff === true;
       const creatorRefusal = () => primaryCreator ? null : nonPrimaryCreationRefusal(chief, fromThreadId, body);
@@ -992,7 +992,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
             ...(cwd !== undefined ? { cwd } : {}),
             // exactly the Primary Bot's audience: a restricted Primary Bot never makes a bot everyone sees
             ...(chief.visibility ? { visibility: chief.visibility } : {}),
-            // a bot made it: it cannot make more (server/bot-creation.ts)
+            // a bot made it: it cannot make more (server/bots/bot-creation.ts)
             createdByBot: createdByBotMark(chief, Date.now()),
           },
           { seedMessages: false },

@@ -1,5 +1,5 @@
 import { decodeInjectId } from "../local-inject.ts";
-import { readAtRest } from "../../content-at-rest.ts";
+import { readAtRest } from "../../encryption/content-at-rest.ts";
 import type { ModelVariantOption, TurnImageInput } from "../../contracts.ts";
 
 /** A tool call without a status is pending (ACP's default); a `tool_call_update` without

@@ -12,8 +12,8 @@
 import { connectorCallReads, connectorWriteKind } from "../../shared/engine-connectors.ts";
 import { isOutboundTool } from "../../shared/outbound.ts";
 import { parseToolId } from "../../shared/approval-describe.ts";
-import { perspicaxReadTool } from "../artifact-sources.ts";
-import { perspicaxWriteOnceTool } from "../perspicax-mcp.ts";
+import { perspicaxReadTool } from "../artifacts/artifact-sources.ts";
+import { perspicaxWriteOnceTool } from "../perspicax/perspicax-mcp.ts";
 
 export const WATCH_TOOL_NOT_READ = "A routine watch calls read tools only (search, list, get, query...). This tool may change or send something.";
 

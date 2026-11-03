@@ -209,7 +209,7 @@ export function serverErrorMessage(body: unknown): string | null {
   if (!body || typeof body !== "object") return null;
   const code = (body as { code?: unknown }).code;
   // 2026-11-02: a security block names the one reason that matched
-  // (server/misuse-guardrails.ts `reason`), never the whole list.
+  // (server/safety/misuse-guardrails.ts `reason`), never the whole list.
   const reason = (body as { reason?: unknown }).reason;
   if (code === "misuse_blocked" && typeof reason === "string" && Object.hasOwn(MISUSE_REASON, reason)) return t(MISUSE_REASON[reason]!);
   const key = typeof code === "string" && Object.hasOwn(BY_CODE, code) ? BY_CODE[code] : undefined;

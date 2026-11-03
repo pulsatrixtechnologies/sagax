@@ -14,8 +14,8 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import type { CoordinatorHost, HandoffView, RoomAddress } from "./coordinator.ts";
-import { createGracefulShutdown } from "./graceful-shutdown.ts";
-import { PerspicaxMcp, type PerspicaxMcpLink } from "./perspicax-mcp.ts";
+import { createGracefulShutdown } from "./process/graceful-shutdown.ts";
+import { PerspicaxMcp, type PerspicaxMcpLink } from "./perspicax/perspicax-mcp.ts";
 import { RoutineManager, type RoutineManagerOptions } from "./routines/routines.ts";
 import { createRoutineRunInternalRoutes } from "./routes/routine-run-internal.ts";
 import { RuntimeCoordinator } from "./runtime-coordinator.ts";

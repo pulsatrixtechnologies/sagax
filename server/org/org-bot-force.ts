@@ -11,7 +11,7 @@
 // otherwise. Both are audited; the owner is told (a notification to them
 // alone) when someone else acted. A solo server answers 403
 // `identity_perspicax`. The routes are admin scope (never in CLIENT_ALLOW).
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
 
 export interface ForceBot {

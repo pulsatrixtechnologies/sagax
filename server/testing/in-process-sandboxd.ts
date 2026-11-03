@@ -1,8 +1,8 @@
 // The real provisioner logic (SandboxService over a FakeDocker) behind a
 // SandboxdClient, as the Sagax server sees it over HTTP: a refusal arrives as
 // a SandboxdRequestError carrying the provisioner's code.
-import { SandboxError, type SandboxService } from "../sandboxd-core.ts";
-import { SandboxdRequestError, type SandboxdClient } from "../user-sandbox-client.ts";
+import { SandboxError, type SandboxService } from "../sandbox/sandboxd-core.ts";
+import { SandboxdRequestError, type SandboxdClient } from "../sandbox/user-sandbox-client.ts";
 
 const wire = <T>(work: () => Promise<T>): Promise<T> => work().catch((error: unknown) => {
   throw error instanceof SandboxError ? new SandboxdRequestError(error.status, error.code, error.message) : error;

@@ -16,8 +16,8 @@ import {
   resolveAgentBrowserBinary,
 } from "../browser/browser-engine.ts";
 import { editionForMembers, editionStatus } from "../enterprise.ts";
-import { healthzUnreadyBody } from "../healthz.ts";
-import { healthDetail } from "../request-auth.ts";
+import { healthzUnreadyBody } from "../process/healthz.ts";
+import { healthDetail } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 /** One cached CLI probe, as GET /api/health lists it. */

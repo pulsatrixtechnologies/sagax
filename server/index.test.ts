@@ -28,7 +28,7 @@ import { startFakeHttpMcp } from "./testing/fake-http-mcp-server.ts";
 import { startFakeOAuthMcp } from "./testing/fake-oauth-mcp-server.ts";
 import { freePortBlock } from "./testing/ports.ts";
 import { openSse } from "./testing/sse.ts";
-import { fileMaxBytes, imageMaxBytes } from "./attachments.ts";
+import { fileMaxBytes, imageMaxBytes } from "./attachments/attachments.ts";
 import { MISUSE_POLICY_PROMPT } from "../shared/misuse-guardrails.ts";
 import { computerPrompt, RUN_YOURSELF_PROMPT, SIGN_IN_PROMPT, VERIFY_FIRST_PROMPT } from "./system-prompt.ts";
 import {
@@ -36,8 +36,8 @@ import {
   phoneSecretAAD,
   type PhoneSecretContext,
 } from "./phone/phone-secret.ts";
-import { InstallationCapabilityStore } from "./installation-capability-store.ts";
-import { resolveVaultKey } from "./mcp-oauth.ts";
+import { InstallationCapabilityStore } from "./capabilities/installation-capability-store.ts";
+import { resolveVaultKey } from "./mcp/mcp-oauth.ts";
 
 /** Lot 5: MCP servers (and secret env) live in the sealed installation store. */
 function readInstallationMcpServers(dataDir: string): Record<string, any> {
@@ -1682,7 +1682,7 @@ describe("harness HTTP API", () => {
     const myMessages = bots.find((b: any) => b.id === second.body.bot.id)?.messages ?? [];
     // The opaque person key is the same for both lines: one session, one person.
     const personKey = theirMessages.find((m: any) => m.text === "from the paired person")?.sender?.id;
-    // A paired session carries its principal (server/principals.ts) as its person key.
+    // A paired session carries its principal (server/auth/principals.ts) as its person key.
     expect(personKey).toMatch(/^pr_[0-9a-f-]{36}$/);
     expect(theirMessages.find((m: any) => m.text === "from the paired person")?.sender).toEqual({ name: "Safari on Mac", id: personKey });
     expect(theirMessages.find((m: any) => m.text === "and one more")?.sender).toEqual({ name: "Safari on Mac", id: personKey });
@@ -2652,7 +2652,7 @@ describe("harness HTTP API", () => {
       })).body.group;
       // 2026-10-17: any bot of the person may create a bot, but only from
       // its owner's own request; a turn nobody wrote (this test capability)
-      // is refused (server/bot-creation.ts).
+      // is refused (server/bots/bot-creation.ts).
       const nonChief = await createOperator(outsiderChannel.threadId, "Non-Chief Operator", outsider.id);
       expect(nonChief).toMatchObject({ status: 403, body: { code: "not_owner_turn" } });
       const denied = await createOperator(outsiderChannel.threadId, "Forbidden Operator");

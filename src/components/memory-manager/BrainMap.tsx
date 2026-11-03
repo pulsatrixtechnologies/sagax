@@ -965,18 +965,18 @@ export function BrainMap({
       const x = e.clientX - r.left;
       const y = e.clientY - r.top;
       const lines = e.deltaMode === 1 ? 16 : 1;
-      // A pinch on a trackpad (ctrl) or a mouse wheel zooms; two fingers
-      // sliding on a trackpad move the map.
-      const mouse = e.deltaMode === 1 || (e.deltaX === 0 && Math.abs(e.deltaY) >= 40 && Number.isInteger(e.deltaY));
-      if (e.ctrlKey || mouse) zoomRef.current(x, y, Math.exp(-e.deltaY * lines * (e.ctrlKey ? 0.01 : 0.0018)));
-      else {
+      // 2026-11-03 (JC): scrolling zooms in and out (mouse wheel and
+      // trackpad alike); a pinch zooms too; drag moves the map. A mostly
+      // sideways trackpad swipe still pans.
+      if (!e.ctrlKey && Math.abs(e.deltaX) > Math.abs(e.deltaY) * 1.5) {
         const v = view.current;
         target.current = null;
         v.tx -= e.deltaX * lines;
-        v.ty -= e.deltaY * lines;
         fitted.current = false;
         kick();
+        return;
       }
+      zoomRef.current(x, y, Math.exp(-e.deltaY * lines * (e.ctrlKey ? 0.01 : 0.003)));
     };
     c.addEventListener("wheel", onWheel, { passive: false });
     return () => c.removeEventListener("wheel", onWheel);

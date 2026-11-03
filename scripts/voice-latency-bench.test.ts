@@ -7,7 +7,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 
-import { parseVoiceCallMeta } from "../server/voice-call-prompt.ts";
+import { parseVoiceCallMeta } from "../server/voice/voice-call-prompt.ts";
 import { VOICE_BENCH_THRESHOLDS } from "./voice-benchmark/model.ts";
 import {
   BENCH_SAY_VOICE_FR,

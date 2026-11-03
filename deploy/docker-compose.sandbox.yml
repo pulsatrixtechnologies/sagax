@@ -10,7 +10,7 @@
 # internal network shared with the Sagax server alone, answers signed requests
 # only (a key it writes to the `sandboxd-key` volume, read-only for the
 # server), and can create nothing but the fixed, isolated sandbox spec of
-# server/user-sandbox-spec.ts, one per PERSON. The production deploy uses the same
+# server/sandbox/user-sandbox-spec.ts, one per PERSON. The production deploy uses the same
 # services under the Perspicax infra compose (service `pulsabot` there).
 services:
   omb:

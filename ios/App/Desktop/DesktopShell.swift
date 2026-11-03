@@ -153,6 +153,15 @@ final class DesktopShellModel: ObservableObject {
     @Published var sharingTeam: String?
     /// A bot row's Share: the link that opens this bot in Sagax.
     @Published var sharingBotLink: URL?
+    /// The sidebar's multi-select of bots (lot 6): the row menu's Select, the
+    /// rows' checks and the bar's grouped actions.
+    @Published var selection = DesktopBotSelection()
+    /// The bar's Edit (Edit N bots) and Archive confirmation.
+    @Published var bulkEditing = false
+    @Published var archivingSelection = false
+    /// The bot's computer window drawn in the shell (lot 6): the fallback
+    /// where iPadOS has no second scene to give it, and the parity captures.
+    @Published var computerWindow: String?
     /// The open "To:" picker's ⌘1 to ⌘9 (DesktopKeyCommands routes them).
     var composeActivate: ((Int) -> Void)?
     #if DEBUG
@@ -334,6 +343,7 @@ struct DesktopShell: View {
         .parityLauncher()
         .modifier(DesktopShellPresenter(model: model))
         .modifier(DesktopSidebarPrompts(model: model))
+        .modifier(DesktopSelectionPrompts(model: model))
         .modifier(DesktopShellRouting(model: model))
         .onReceive(NotificationCenter.default.publisher(for: .approvalEditRule)) { _ in
             model.showPersona(.access)
@@ -407,6 +417,12 @@ struct DesktopShell: View {
                     }
                 ))
                 .transition(.opacity)
+            }
+            // lot 6: the bot's computer window where no second scene exists
+            if let botId = model.computerWindow {
+                AnyView(DesktopComputerWindowView(botId: botId, floating: true) { model.computerWindow = nil })
+                    .transition(.opacity)
+                    .zIndex(5)
             }
             // I5: Settings and Plugins are the desktop's modals, over everything
             if model.modal == .settings {
@@ -721,6 +737,13 @@ private struct DesktopShellRouting: ViewModifier {
             model.menu = DesktopMenuRequest(kind: .profile, anchor: CGPoint(x: 8, y: height - 64), opensUp: true)
         case .sidebarNewMenu:
             model.menu = DesktopMenuRequest(kind: .new, anchor: .zero)
+        case .sidebarSelect:
+            // the reference chooses Aurora from its menu, then clicks Helix
+            guard let aurora = bot("Aurora"), let helix = bot("Helix") else { return }
+            model.selection.start(with: aurora.id)
+            model.selection.toggle(helix.id)
+        case .computerWindow:
+            model.computerWindow = model.selected?.id
         case .newGroup:
             // the reference's pointer stays on the row under the click (Orion)
             model.parityComposePreset = (group: true, cursor: 1)

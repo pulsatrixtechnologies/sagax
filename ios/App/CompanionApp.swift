@@ -41,6 +41,17 @@ struct CompanionApp: App {
             liveRoot
             #endif
         }
+        // The bot's computer in its own window (lot 6): iPadOS opens it as a
+        // second scene (UIApplicationSupportsMultipleScenes in Info.plist);
+        // where it cannot, the shell draws the same panel in the app.
+        WindowGroup(id: DesktopComputerWindow.sceneId, for: String.self) { binding in
+            if let botId = binding.wrappedValue {
+                DesktopComputerWindowScene(botId: botId)
+                    .environmentObject(session)
+                    .environment(\.locale, AppLanguage.resolved(language).locale ?? .autoupdatingCurrent)
+                    .themeRoot()
+            }
+        }
         // `.defaultSize` is iOS 17 and `SceneBuilder` takes no conditionals,
         // so it is dropped while the app supports 16. It only suggested an
         // opening window size for iPad and Stage Manager; the system picks a

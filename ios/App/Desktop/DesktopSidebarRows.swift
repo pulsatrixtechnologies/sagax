@@ -218,10 +218,13 @@ struct DesktopSidebarRow: View {
     var body: some View {
         let selected = model.selected?.id == chat.id
         let hovered = model.hoveredRow == chat.id
+        // multi-select (lot 6): a bot row's tap joins or leaves the choice
+        let selecting = model.selection.active && !isRoom && density != .icons
+        let chosen = selecting && model.selection.contains(chat.id)
         let menu = DesktopSidebarMenus(session: session, model: model, prefs: prefs).entries(for: menuKind).0
         return ZStack(alignment: .leading) {
-            Button { open() } label: {
-                content(selected: selected, hovered: hovered)
+            Button { if selecting { model.selection.toggle(chat.id) } else { open() } } label: {
+                content(selected: selected, hovered: hovered && !selecting)
             }
             .buttonStyle(.plain)
             // the drag on the view that owns the context menu, so a long
@@ -230,17 +233,18 @@ struct DesktopSidebarRow: View {
             .contextMenu { DesktopMenuItems(entries: menu) }
             .onDrag { NSItemProvider(object: (isRoom ? "room:\(chat.id)" : "bot:\(chat.id)") as NSString) }
             .sidebarBotPinSwipe(chat, session: session)
-            .accessibilityAddTraits(selected ? .isSelected : [])
+            .accessibilityAddTraits(selected || chosen ? .isSelected : [])
             .accessibilityIdentifier("desktop-row.\(chat.id)")
             if density != .icons {
                 if showThreads, chat.desktopHasThreadList { disclosure }
-                if hovered || showsTouchRowActions, !menu.isEmpty { hoverActions(menu: menu) }
+                if !selecting, hovered || showsTouchRowActions, !menu.isEmpty { hoverActions(menu: menu) }
             }
+            if selecting { selectMark(chosen) }
         }
         // Unfolded, the selected thread below carries the one highlight
         // (the web's Sidebar.tsx rule): no second stacked block on the bot.
         .background(
-            selected && !(showThreads && threadsOpen) ? theme.sidebarSelected : (hovered ? theme.sidebarHover : .clear),
+            chosen || (selected && !selecting && !(showThreads && threadsOpen)) ? theme.sidebarSelected : (hovered && !selecting ? theme.sidebarHover : .clear),
             in: RoundedRectangle(cornerRadius: theme.radiusLg, style: .continuous)
         )
         .onHover { inside in
@@ -296,7 +300,7 @@ struct DesktopSidebarRow: View {
         let leading: CGFloat = showThreads ? 24 : (compact ? 8 : 4)
         // pr-9, or pr-[5.75rem] with the thread controls on hover; a group
         // row keeps pr-2
-        let trailing: CGFloat = isRoom ? 8 : (showThreads && hovered ? 92 : 36)
+        let trailing: CGFloat = isRoom ? 8 : (showThreads && hovered && !model.selection.active ? 92 : 36)
         let status = chat.desktopStatus
         let unread = chat.unread && !chat.busy
         let quietStatus = status != .idle
@@ -412,6 +416,24 @@ struct DesktopSidebarRow: View {
     private var sharer: BotSharer? {
         guard case let .bot(bot) = chat else { return nil }
         return PeopleDirectory.shared.sharer(of: bot, session: session)
+    }
+
+    /// `data-sidebar-select-mark`: an 18 pt ring at the row's right (right-3),
+    /// accent and checked once the bot is chosen.
+    private func selectMark(_ chosen: Bool) -> some View {
+        ZStack {
+            Circle().fill(chosen ? theme.accent : .clear)
+            Circle().strokeBorder(chosen ? theme.accent : theme.sidebarInkSecondary.opacity(0.6), lineWidth: 1)
+            if chosen {
+                DesktopIconView(icon: .check, size: 12, strokeWidth: 3)
+                    .foregroundStyle(theme.accentInk)
+            }
+        }
+        .frame(width: 18, height: 18)
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.trailing, 12)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     // MARK: Hover controls

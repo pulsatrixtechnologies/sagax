@@ -490,6 +490,16 @@
         }
       }
     },
+    "%@ bots": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ Bot(s)"
+          }
+        }
+      }
+    },
     "%@ bytes": {
       "localizations": {
         "en": {
@@ -562,6 +572,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ alterou este arquivo enquanto você editava."
+          }
+        }
+      }
+    },
+    "%@ changed, %@ refused, %@ already set": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ changé(s), %@ refusé(s), %@ déjà réglé(s)"
           }
         }
       }
@@ -1488,6 +1508,16 @@
         }
       }
     },
+    "%@ selected": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ sélectionné(s)"
+          }
+        }
+      }
+    },
     "%@ sent you a nudge": {
       "localizations": {
         "en": {
@@ -1810,6 +1840,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ · Pausada"
+          }
+        }
+      }
+    },
+    "%@ → %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ → %@"
           }
         }
       }
@@ -5436,6 +5476,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Um servidor remoto (um endereço https) ou um comando que roda no seu ambiente de servidor, nunca no servidor do Sagax."
+          }
+        }
+      }
+    },
+    "A removed bot": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un Bot retiré"
           }
         }
       }
@@ -9306,6 +9356,16 @@
         }
       }
     },
+    "Already set, nothing to change": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déjà réglé, rien à changer"
+          }
+        }
+      }
+    },
     "Already there": {
       "localizations": {
         "fr": {
@@ -10934,6 +10994,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arquivar"
+          }
+        }
+      }
+    },
+    "Archive %@ selected bots?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archiver %@ Bot(s) sélectionné(s) ?"
           }
         }
       }
@@ -12922,6 +12992,22 @@
         }
       }
     },
+    "Bot changed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changé"
+          }
+        }
+      }
+    },
     "Bot chats": {
       "localizations": {
         "fr": {
@@ -14778,6 +14864,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Certos dias"
+          }
+        }
+      }
+    },
+    "Change": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changer"
           }
         }
       }
@@ -17258,6 +17354,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fechar o painel, a janela ou a barra de busca aberta"
+          }
+        }
+      }
+    },
+    "Close and release control (Cmd/Ctrl+Shift+Esc)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fermer et rendre le contrôle (Cmd/Ctrl+Maj+Échap)"
           }
         }
       }
@@ -25448,6 +25554,16 @@
         }
       }
     },
+    "Each bot is changed in turn, as if you had edited it alone: the change shows in its Changes, and a bot that refuses says why.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaque Bot est changé à tour de rôle, comme si vous le modifiiez seul : le changement paraît dans son historique, et un Bot qui refuse dit pourquoi."
+          }
+        }
+      }
+    },
     "Each bot is changed on its own, as in its own settings: a bot that refuses keeps its values and says why.": {
       "localizations": {
         "en": {
@@ -25852,6 +25968,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Editar %@"
+          }
+        }
+      }
+    },
+    "Edit %@ bots": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifier %@ Bot(s)"
+          }
+        }
+      }
+    },
+    "Edit %@ selected bots: model, sharing, folder, access, voice, permissions": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifier les %@ Bot(s) sélectionné(s) : modèle, partage, dossier, accès, voix, permissions"
           }
         }
       }
@@ -27578,6 +27714,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cada execução usa o modelo, as ferramentas, as permissões, o computador e os apps conectados do agente. Os horários seguem o fuso horário do computador pareado."
+          }
+        }
+      }
+    },
+    "Every setting stays as it is unless you change it. Open a section to change it for all the selected bots.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaque réglage reste tel quel tant que vous ne le changez pas. Ouvrez une section pour la changer sur tous les Bots sélectionnés."
           }
         }
       }
@@ -41468,6 +41614,16 @@
         }
       }
     },
+    "Move %@ selected to a team": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déplacer %@ Bot(s) vers une équipe"
+          }
+        }
+      }
+    },
     "Move %@ to %@?": {
       "localizations": {
         "en": {
@@ -46706,6 +46862,16 @@
         }
       }
     },
+    "Not changed": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas changé"
+          }
+        }
+      }
+    },
     "Not changed for 90 days": {
       "localizations": {
         "fr": {
@@ -50650,6 +50816,16 @@
         }
       }
     },
+    "Open in a window": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir dans une fenêtre"
+          }
+        }
+      }
+    },
     "Open in browser": {
       "localizations": {
         "en": {
@@ -53853,7 +54029,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Autorisations"
+            "value": "Permissions"
           }
         },
         "pt-BR": {
@@ -56790,6 +56966,16 @@
         }
       }
     },
+    "Putting the bots back…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retour des Bots à leur état d'avant…"
+          }
+        }
+      }
+    },
     "Quality": {
       "localizations": {
         "fr": {
@@ -58623,7 +58809,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Libérer le contrôle"
+            "value": "Rendre le contrôle"
           }
         },
         "pt-BR": {
@@ -61113,13 +61299,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Review changes"
+            "value": "Review"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Relire les changements"
+            "value": "Vérifier"
           }
         }
       }
@@ -72130,6 +72316,16 @@
         }
       }
     },
+    "Takes the initiative": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prend l'initiative"
+          }
+        }
+      }
+    },
     "Talk": {
       "localizations": {
         "en": {
@@ -73830,6 +74026,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "O bot, suas threads e suas rotinas são removidos do seu computador. Isso não pode ser desfeito."
+          }
+        }
+      }
+    },
+    "The bots are back as they were.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les Bots sont revenus comme avant."
           }
         }
       }
@@ -81403,7 +81609,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Annuler ce changement"
+            "value": "Annuler cette modification"
           }
         },
         "pt-BR": {
@@ -83726,6 +83932,28 @@
         }
       }
     },
+    "Voice section": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voix"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voz"
+          }
+        }
+      }
+    },
     "Voice settings": {
       "localizations": {
         "fr": {
@@ -84542,6 +84770,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ver o computador"
+          }
+        }
+      }
+    },
+    "Watching": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Observation"
           }
         }
       }
@@ -85884,6 +86122,16 @@
         }
       }
     },
+    "Who drives the computer": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qui conduit l'ordinateur"
+          }
+        }
+      }
+    },
     "Who has access": {
       "localizations": {
         "en": {
@@ -86004,6 +86252,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sera créé"
+          }
+        }
+      }
+    },
+    "Will change": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sera changé"
           }
         }
       }

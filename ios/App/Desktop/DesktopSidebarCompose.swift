@@ -194,6 +194,9 @@ struct DesktopComposePicker: View {
         case .createBot:
             actionRow(icon: .plus, title: String(localized: "Create new Bot"), shortcut: shortcut, selected: selected,
                       disabled: false, id: "create-bot") { activate(row) }
+        case .createBotWizard:
+            actionRow(icon: .wand, title: String(localized: "Create a bot with the wizard"), shortcut: shortcut, selected: selected,
+                      disabled: false, id: "create-bot-wizard") { activate(row) }
         case .createGroup:
             actionRow(icon: .users, title: groupLabel, shortcut: shortcut, selected: selected,
                       disabled: mode == .group && picked.isEmpty, id: "create-group") { activate(row) }
@@ -317,6 +320,9 @@ struct DesktopComposePicker: View {
             // Lot 7: Create New Bot (quick create) first.
             model.menu = nil
             model.modal = .newBot
+        case .createBotWizard:
+            model.menu = nil
+            BotWizardPresenter.shared.open(startMode: .guided)
         case .createGroup:
             if mode == .browse {
                 mode = .group

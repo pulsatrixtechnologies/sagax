@@ -136,6 +136,25 @@ struct DesktopPinnedTile: View {
 
 /// The title under a pinned tile's name: a faint filled tag (11.5, a faint
 /// outline; LabelTag size "small", rounded-[5px] px-1). Rows draw no title.
+/// `BotRoleTag` (LabelTag.tsx): 11/16 in the secondary ink, px-1 py-px,
+/// a 0.5 pt outline at 10 % sidebar ink on a 2.2 % fill, radius 4; it
+/// shrinks to its text and truncates before the name does.
+struct DesktopRoleTag: View {
+    @Environment(\.desktopTheme) private var theme
+    let text: String
+
+    var body: some View {
+        DesktopLineText(text: text, size: 11, color: theme.sidebarInkSecondary, lineHeight: 16, tracking: 0.055)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(theme.sidebarInk.opacity(0.022), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(theme.sidebarInk.opacity(0.1), lineWidth: 0.5))
+            .fixedSize(horizontal: false, vertical: true)
+            .layoutPriority(1)
+            .accessibilityHidden(true)
+    }
+}
+
 struct DesktopTitleChip: View {
     @Environment(\.desktopTheme) private var theme
     let text: String
@@ -291,8 +310,12 @@ struct DesktopSidebarRow: View {
                             .foregroundStyle(theme.sidebarInkSecondary)
                     }
                     DesktopLineText(text: PeopleDirectory.shared.name(chat, session: session), size: 14,
-                                 weight: selected ? .semibold : .medium, color: theme.sidebarInk, lineHeight: 20)
+                                 weight: .medium, color: theme.sidebarInk, lineHeight: 20)
                         .layoutPriority(2)
+                    // BotRoleTag: the bot's role beside its name, 6 pt after it
+                    if let title = chat.desktopTitle, !title.isEmpty {
+                        DesktopRoleTag(text: title)
+                    }
                     Spacer(minLength: 0)
                     if selected, !threadsOpen, !hovered, let time = lastTime {
                         Text(verbatim: time)
@@ -346,8 +369,7 @@ struct DesktopSidebarRow: View {
 
     private var accessibilityName: String {
         var name = PeopleDirectory.shared.name(chat, session: session)
-        // the row does not draw the title (Sidebar.tsx, as upstream): it is
-        // read out with the name
+        // the role tag is read out with the name
         if let title = chat.desktopTitle { name += ", " + title }
         if let sharer { name += ", " + String(localized: "Shared by \(sharer.name)") }
         if case let .room(room) = chat, let presence = PeopleDirectory.shared.presence(of: room, session: session) {

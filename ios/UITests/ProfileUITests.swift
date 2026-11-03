@@ -509,7 +509,8 @@ final class ProfileUITests: XCTestCase {
         try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "iPad only")
         // Ara's chat, then her panel's Library tab
         let app = launch(screen: "02-chat")
-        let toggle = element("desktop-panel-toggle", in: app)
+        // the header pill opens the panel (BotHeaderPill.tsx)
+        let toggle = element("desktop-chat-pill", in: app)
         XCTAssertTrue(toggle.waitForExistence(timeout: 30))
         let library = element("desktop-panel-tab.library", in: app)
         if !library.waitForExistence(timeout: 3) { toggle.tap() }

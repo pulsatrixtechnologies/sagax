@@ -9514,6 +9514,16 @@
         }
       }
     },
+    "Answer the approval above, or write something else: it stays open": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Répondez à l'approbation ci-dessus, ou écrivez autre chose : elle reste en attente"
+          }
+        }
+      }
+    },
     "Answered": {
       "localizations": {
         "en": {
@@ -11008,6 +11018,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Anexar um arquivo"
+          }
+        }
+      }
+    },
+    "Attach files": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Joindre des fichiers"
           }
         }
       }
@@ -16384,6 +16404,16 @@
         }
       }
     },
+    "Close %@'s panel": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fermer le panneau de %@"
+          }
+        }
+      }
+    },
     "Close Chat": {
       "localizations": {
         "en": {
@@ -17672,6 +17702,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "As execuções concluídas, aguardando, com falha e iniciadas manualmente aparecem aqui."
+          }
+        }
+      }
+    },
+    "Composer actions": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actions de la barre de message"
           }
         }
       }
@@ -27092,6 +27132,16 @@
         }
       }
     },
+    "Export": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exporter"
+          }
+        }
+      }
+    },
     "Export CSV": {
       "localizations": {
         "en": {
@@ -29612,6 +29662,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Baixar o Sagax para iOS"
+          }
+        }
+      }
+    },
+    "Get Sagax on mobile": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Obtenir Sagax sur mobile"
           }
         }
       }
@@ -47946,6 +48006,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abra %@ no Telegram e toque em Iniciar para concluir."
+          }
+        }
+      }
+    },
+    "Open %@'s panel": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir le panneau de %@"
           }
         }
       }
@@ -67076,6 +67146,16 @@
         }
       }
     },
+    "Start a new topic with %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Commencer un nouveau sujet avec %@"
+          }
+        }
+      }
+    },
     "Start dictation": {
       "localizations": {
         "en": {
@@ -69460,6 +69540,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tarefas e rotinas"
+          }
+        }
+      }
+    },
+    "Teach a task": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apprendre une tâche"
           }
         }
       }
@@ -80298,6 +80388,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Voir la copie partagée"
+          }
+        }
+      }
+    },
+    "View usage": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voir l'utilisation"
           }
         }
       }

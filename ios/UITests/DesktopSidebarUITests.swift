@@ -108,7 +108,9 @@ final class DesktopSidebarUITests: XCTestCase {
 
     @MainActor
     private func tapMenuItem(_ label: String, in app: XCUIApplication) {
-        let item = app.buttons[label].firstMatch
+        // a system menu's item, never a sidebar button of the same name (a
+        // section header reads as its title alone since it lost its count)
+        let item = app.buttons.matching(NSPredicate(format: "label == %@ AND NOT (identifier BEGINSWITH 'desktop-')", label)).firstMatch
         XCTAssertTrue(item.waitForExistence(timeout: 5), "menu item \(label)")
         item.tap()
     }
@@ -230,6 +232,7 @@ final class DesktopSidebarUITests: XCTestCase {
         app.buttons["desktop-sidebar-new"].firstMatch.tap()
         XCTAssertTrue(app.textFields["desktop-compose-field"].waitForExistence(timeout: 5), "the To: field")
         XCTAssertTrue(app.buttons["desktop-compose.create-bot"].exists)
+        XCTAssertTrue(app.buttons["desktop-compose.create-bot-wizard"].exists, "the wizard beside the quick creation")
         let group = app.buttons["desktop-compose.create-group"].firstMatch
         XCTAssertTrue(group.exists)
         group.tap()
@@ -253,20 +256,29 @@ final class DesktopSidebarUITests: XCTestCase {
         }
         try api("PUT", "/api/config", ["features": ["connectedApps": false, "templates": false]])
         var app = launch()
-        app.buttons["desktop-sidebar-account"].tap()
-        XCTAssertTrue(app.buttons["desktop-menu.teamMap"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["desktop-menu.automations"].exists)
+        // The foot (2026-10-27): the account row and the round Capabilities
+        // button, no places; Team map and Automations are under Tools ›.
+        XCTAssertTrue(app.buttons["desktop-sidebar-capabilities"].waitForExistence(timeout: 10), "the round Capabilities button")
         XCTAssertFalse(app.buttons["desktop-sidebar-team-map"].exists)
         XCTAssertFalse(app.buttons["desktop-sidebar-automations"].exists)
-        XCTAssertFalse(app.buttons["desktop-sidebar-connected-apps"].exists, "Connected apps is experimental")
-        XCTAssertFalse(app.buttons["desktop-sidebar-templates"].exists, "Templates is experimental")
+        XCTAssertFalse(app.buttons["desktop-sidebar-templates"].exists, "no places in the foot")
         let points = app.buttons["desktop-sidebar-points"].firstMatch
         XCTAssertTrue(points.waitForExistence(timeout: 10), "the gamertag")
+        app.buttons["desktop-sidebar-account"].tap()
+        let tools = app.buttons["desktop-menu.tools"]
+        XCTAssertTrue(tools.waitForExistence(timeout: 10), "Tools in the account menu")
+        tools.tap()
+        XCTAssertTrue(app.buttons["Team map"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Automations"].firstMatch.exists)
+        XCTAssertFalse(app.buttons["Browse Bots"].firstMatch.exists, "Templates is experimental")
 
         try api("PUT", "/api/config", ["features": ["connectedApps": true, "templates": true]])
         app = launch()
-        XCTAssertTrue(app.buttons["desktop-sidebar-connected-apps"].waitForExistence(timeout: 10), "switched on")
-        XCTAssertTrue(app.buttons["desktop-sidebar-templates"].exists, "switched on (the parity pairing is an administrator's)")
+        app.buttons["desktop-sidebar-account"].tap()
+        let toolsOn = app.buttons["desktop-menu.tools"]
+        XCTAssertTrue(toolsOn.waitForExistence(timeout: 10))
+        toolsOn.tap()
+        XCTAssertTrue(app.buttons["Browse Bots"].firstMatch.waitForExistence(timeout: 5), "switched on (the parity pairing is an administrator's)")
     }
 
     @MainActor

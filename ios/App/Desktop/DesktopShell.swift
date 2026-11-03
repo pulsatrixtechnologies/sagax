@@ -151,6 +151,8 @@ final class DesktopShellModel: ObservableObject {
     @Published var replacingPrimary: Bot?
     /// The team menu's Share team… (the package file, then the share sheet).
     @Published var sharingTeam: String?
+    /// A bot row's Share: the link that opens this bot in Sagax.
+    @Published var sharingBotLink: URL?
     /// The open "To:" picker's ⌘1 to ⌘9 (DesktopKeyCommands routes them).
     var composeActivate: ((Int) -> Void)?
     #if DEBUG
@@ -675,7 +677,6 @@ private struct DesktopShellRouting: ViewModifier {
                 model.panelSection = screen.panelSection
                 model.personaOpen = screen.opensPersonaEditor
                 model.avatarEditorOpen = screen == .panelAvatarEditor
-                model.modelPickerOpen = screen == .chatModelPicker
                 model.applyParityModals(screen)
                 model.page = screen.parityPage
                 if screen == .keyboardShortcuts { model.modal = .shortcuts }

@@ -15,6 +15,12 @@ enum DesktopIcon: String, CaseIterable {
     case panelRight, squareTerminal, activity, calendarClock, fileText
     // the sidebar footer's gamertag (I2b)
     case trophy, tabletSmartphone, archive, x, command, check
+    // the sidebar foot's Capabilities button (SidebarFoot.tsx AppsGridIcon), the composer's Model row
+    case appsGrid, brain
+    // the account menu of 2026-10-28 (Usage ›, Help ›, Tools ›)
+    case gauge, bookOpen, wrench
+    // the compose picker's wizard row (WandSparkles)
+    case wand
 
     /// Path data in the 24 pt viewBox.
     var paths: [String] {
@@ -90,6 +96,20 @@ enum DesktopIcon: String, CaseIterable {
         case .x: ["M18 6 6 18", "m6 6 12 12"]
         case .command: ["M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"]
         case .check: ["M20 6 9 17l-5-5"]
+        case .wand: [
+            "m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72",
+            "m14 7 3 3", "M5 6v4", "M19 14v4", "M10 2v2", "M7 8H3", "M21 16h-4", "M11 3H9",
+        ]
+        case .gauge: ["m12 14 4-4", "M3.34 19a10 10 0 1 1 17.32 0"]
+        case .bookOpen: ["M12 7v14", "M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"]
+        case .wrench: ["M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.106-3.105c.32-.322.863-.22.983.218a6 6 0 0 1-8.259 7.057l-7.91 7.91a1 1 0 0 1-2.999-3l7.91-7.91a6 6 0 0 1 7.057-8.259c.438.12.54.662.219.984z"]
+        case .appsGrid: [Self.rect(3, 3, 7, 7, 1.5), Self.rect(14, 3, 7, 7, 1.5), Self.rect(3, 14, 7, 7, 1.5), "M17.5 14v7", "M14 17.5h7"]
+        case .brain: [
+            "M12 18V5", "M15 13a4.17 4.17 0 0 1-3-4 4.17 4.17 0 0 1-3 4",
+            "M17.598 6.5A3 3 0 1 0 12 5a3 3 0 1 0-5.598 1.5", "M17.997 5.125a4 4 0 0 1 2.526 5.77",
+            "M18 18a4 4 0 0 0 2-7.464", "M19.967 17.483A4 4 0 1 1 12 18a4 4 0 1 1-7.967-.517",
+            "M6 18a4 4 0 0 1-2-7.464", "M6.003 5.125a4 4 0 0 0-2.526 5.77",
+        ]
         case .archive: [Self.rect(2, 3, 20, 5, 1), "M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8", "M10 12h4"]
         case .tabletSmartphone: [Self.rect(3, 8, 10, 14, 2), "M5 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2h-2.4", "M8 18h.01"]
         case .trophy: [
@@ -142,6 +162,12 @@ enum DesktopIcon: String, CaseIterable {
         case .x: "xmark"
         case .command: "command"
         case .check: "checkmark"
+        case .appsGrid: "square.grid.2x2"
+        case .wand: "wand.and.stars"
+        case .gauge: "gauge.with.dots.needle.33percent"
+        case .bookOpen: "book"
+        case .wrench: "wrench.adjustable"
+        case .brain: "brain"
         case .squareTerminal: "terminal"
         case .activity: "waveform.path.ecg"
         case .calendarClock: "calendar.badge.clock"

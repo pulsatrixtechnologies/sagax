@@ -55,7 +55,9 @@ enum DesktopChatParity {
     /// The composer's open policy menu on its surface.
     static var openMenu: DesktopComposerMenu? {
         switch screen {
-        case .chatApprovalMode: .approval
+        // the desktop's composer has no approval control any more: the
+        // approval-mode and model-picker surfaces are the + menu (2026-11-03)
+        case .chatApprovalMode, .chatModelPicker: .plus
         default: nil
         }
     }

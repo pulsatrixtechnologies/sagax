@@ -25,11 +25,17 @@ enum DesktopIcon: String, CaseIterable {
     case bot
     // Automations header (List, Filters), the grouped list's folders, the bot panel's Suggestions
     case list, slidersHorizontal, folder, sparkles, refresh
+    // Team map (Monitor, Minus) and About's link rows (ExternalLink)
+    case monitor, minus, externalLink, messageCircle
 
     /// Path data in the 24 pt viewBox.
     var paths: [String] {
         switch self {
         case .plus: ["M5 12h14", "M12 5v14"]
+        case .monitor: [Self.rect(2, 3, 20, 14, 2), "M8 21h8", "M12 17v4"]
+        case .minus: ["M5 12h14"]
+        case .messageCircle: ["M7.9 20A9 9 0 1 0 4 16.1L2 22Z"]
+        case .externalLink: ["M15 3h6v6", "M10 14 21 3", "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"]
         case .panelLeftClose: [Self.rect(3, 3, 18, 18, 2), "M9 3v18", "m16 15-3-3 3-3"]
         case .panelLeftOpen: [Self.rect(3, 3, 18, 18, 2), "M9 3v18", "m14 9 3 3-3 3"]
         case .search: ["m21 21-4.34-4.34", Self.circle(11, 11, 8)]
@@ -154,6 +160,10 @@ enum DesktopIcon: String, CaseIterable {
         case .panelLeftClose: "sidebar.left"
         case .panelLeftOpen: "sidebar.left"
         case .search: "magnifyingglass"
+        case .monitor: "display"
+        case .minus: "minus"
+        case .messageCircle: "bubble.left"
+        case .externalLink: "arrow.up.right.square"
         case .chevronRight: "chevron.right"
         case .network: "point.3.connected.trianglepath.dotted"
         case .calendarDays: "calendar"

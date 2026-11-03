@@ -7624,6 +7624,16 @@
         }
       }
     },
+    "Add to team map": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter à la carte d’équipe"
+          }
+        }
+      }
+    },
     "Add your first key from the Sagax desktop app.": {
       "localizations": {
         "fr": {
@@ -12506,6 +12516,16 @@
         }
       }
     },
+    "Based on OpenMausBot %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Basé sur OpenMausBot %@"
+          }
+        }
+      }
+    },
     "Battery, network and Focus": {
       "localizations": {
         "en": {
@@ -12800,6 +12820,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Boat"
+          }
+        }
+      }
+    },
+    "Boat computer": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordinateur Boat"
           }
         }
       }
@@ -21948,6 +21978,16 @@
         }
       }
     },
+    "Create team": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Créer une équipe"
+          }
+        }
+      }
+    },
     "Create your first bot. Then come back to schedule it.": {
       "localizations": {
         "en": {
@@ -23093,7 +23133,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Supprimer l'équipe %@ ?"
+            "value": "Supprimer l'équipe %@?"
           }
         },
         "pt-BR": {
@@ -24778,6 +24818,16 @@
         }
       }
     },
+    "Documentation": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Documentation"
+          }
+        }
+      }
+    },
     "Documents": {
       "localizations": {
         "en": {
@@ -25216,6 +25266,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arraste dentro de uma equipe para organizar · Solte em outra equipe para mover · Deslize para navegar"
+          }
+        }
+      }
+    },
+    "Drag within a team to arrange · Drop in another team to move · Wheel zooms · Trackpad or Shift+wheel pans": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glissez dans une équipe pour organiser · Déposez dans une autre équipe pour déplacer · Molette pour zoomer · Pavé ou Maj+molette pour défiler"
           }
         }
       }
@@ -38776,6 +38836,16 @@
         }
       }
     },
+    "Local VM…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VM locale…"
+          }
+        }
+      }
+    },
     "Local discovery isn't available right now. Enter the address shown in Phone settings.": {
       "localizations": {
         "fr": {
@@ -39428,6 +39498,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gerenciar"
+          }
+        }
+      }
+    },
+    "Manage %@ team": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gérer l'équipe %@"
           }
         }
       }
@@ -63034,6 +63114,16 @@
         }
       }
     },
+    "Save name": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer le nom"
+          }
+        }
+      }
+    },
     "Save profile changes": {
       "localizations": {
         "fr": {
@@ -72366,6 +72456,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mapa da equipe"
+          }
+        }
+      }
+    },
+    "Team name": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom de l'équipe"
           }
         }
       }
@@ -85064,6 +85164,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ce que vos propres bots peuvent utiliser en plus des valeurs par défaut. Vous l'accordez et le révoquez vous-même."
+          }
+        }
+      }
+    },
+    "What's new": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quoi de neuf"
           }
         }
       }

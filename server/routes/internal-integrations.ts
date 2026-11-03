@@ -244,7 +244,7 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
     if (method === "POST" && path === "/api/internal/github-connect") {
       // The turn's own person connects their GitHub (device flow), like gh
       // auth login: the code and link go back to the bot to show; the device
-      // code and the token stay on the server (server/github-connect.ts).
+      // code and the token stay on the server (server/github/github-connect.ts).
       const body = await readBody();
       const owner = deps.ownsThread(sender.id, capability.threadId);
       if (!owner) return json(res, 403, { error: "source conversation does not belong to sender" });

@@ -467,7 +467,7 @@ describe("a marketplace's credential from the one list (2026-10-28)", () => {
   const PICKED = "fake-picked-token-1111";
   const PERSON = "fake-person-token-2222";
   async function setup() {
-    const { GithubCredentials } = await import("./github-credentials.ts");
+    const { GithubCredentials } = await import("./github/github-credentials.ts");
     const dir = temp();
     const store = new GithubCredentials(dir, () => ({ kind: "key", key: Buffer.alloc(32, 3) }));
     store.change("pr_owner", { op: "add", label: "Acme organization", token: PICKED });

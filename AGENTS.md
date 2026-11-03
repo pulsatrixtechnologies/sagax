@@ -6833,7 +6833,7 @@ Connected apps, shared one token by all and ran commands on the host;
 had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.test.ts`
 (OC-1 to OC-9), `server/person-connections.test.ts`,
 `server/org/org-person-connections.test.ts`,
-`server/github-connect.test.ts`, `server/bot-plugins.test.ts`,
+`server/github/github-connect.test.ts`, `server/bot-plugins.test.ts`,
 `server/turns/plugin-turn.test.ts`, `server/bot-plugin-act.test.ts`,
 `server/sandbox/sandbox-stdio-mcp.test.ts`, `server/sandboxd.test.ts` or
 `src/components/settings/MyConnectionsSettings.test.ts`:
@@ -6859,7 +6859,7 @@ had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.tes
   stream), never on the host; without server environments it is refused.
 - A server-wide MCP command is never added (403 `org_host_command`) nor
   mounted (`withoutHostCommands`) on an organization server.
-- Connecter GitHub (`server/github-connect.ts`): the device flow of the
+- Connecter GitHub (`server/github/github-connect.ts`): the device flow of the
   organization's GitHub OAuth App (`SAGAX_GITHUB_CLIENT_ID`, or
   `organization.githubClientId` from Settings > Organization), else a pasted
   token. The token goes into the person's environment for gh and git
@@ -6871,9 +6871,9 @@ had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.tes
   and `connect_github` call `probeStatus` (GitHub `/user`); a 401 Bad credentials
   sticks as `state: "error"` with `login` (Reconnect, never a healthy Connected)
   until a new connection or disconnect. Network blips keep Connected. Tests:
-  `server/github-connect.test.ts`.
+  `server/github/github-connect.test.ts`.
 - Organization access tokens: since 2026-10-28 the organization's labeled
-  credentials of the one list (`server/github-credentials.ts`, owner `org`),
+  credentials of the one list (`server/github/github-credentials.ts`, owner `org`),
   changed by an organization admin through `POST /api/me/github/credentials`
   `{ scope: "org" }` (a bot through `act` on that route). `PATCH
   /api/org/settings` no longer takes `githubTokens` and `GET /api/org` no
@@ -7042,7 +7042,7 @@ connectors and My MCP servers only.
 - The GitHub plugin (claude-plugins-official) ships its server with
   `Authorization: Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}`. Sagax never
   expanded it, so the row said Connected for nobody's account. Now
-  `server/github-mcp-token.ts` replaces that placeholder (also
+  `server/github/github-mcp-token.ts` replaces that placeholder (also
   `GITHUB_TOKEN`, `GH_TOKEN`, in headers or env) at each 1:1 and room turn
   with the turn person's GitHub connection (`githubAccountToken`: the
   person's connection on an organization server, the operator's own
@@ -7056,7 +7056,7 @@ connectors and My MCP servers only.
 - A load that meets a proxy's bare 502/503/504 (Sagax restarting behind
   Caddy during a deploy) is asked again (`retryTransient`); a failure is one
   plain line (`readableError`), never the raw status.
-- One list (`server/github-credentials.ts`, `github-credentials.enc`, vault
+- One list (`server/github/github-credentials.ts`, `github-credentials.enc`, vault
   key, AAD `sagax github-credentials v1`, out of workspace backups): labeled
   credentials owned by a person (principal id, `local` solo) or by the
   organization (`org`, marked Organization). `GET/POST
@@ -7080,8 +7080,8 @@ connectors and My MCP servers only.
   owner; the workspace's become the organization's) move in; each
   marketplace keeps the same effective credential; idempotent; the old files
   are removed after the new one is written. Tests:
-  `server/github-credentials.test.ts`, `server/routes/github-credentials.test.ts`,
-  `server/bot-plugins.test.ts`, `server/github-mcp-token.test.ts`,
+  `server/github/github-credentials.test.ts`, `server/routes/github-credentials.test.ts`,
+  `server/bot-plugins.test.ts`, `server/github/github-mcp-token.test.ts`,
   `src/components/plugins/GithubAccountSection.test.ts`,
   `src/components/PluginsPanel.gestures.test.ts`,
   `src/components/plugins/ConnectAppsView.test.ts`. Captures:

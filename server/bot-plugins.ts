@@ -21,10 +21,10 @@
 //     own bots whatever the list says.
 //   - A private marketplace is read with, in order: the credential this
 //     bot picks for it (the GitHub plugin's page in Capabilities, one list,
-//     server/github-credentials.ts), else the one the installation picks
+//     server/github/github-credentials.ts), else the one the installation picks
 //     (Everyone), then Automatic: the acting person's own GitHub connection
-//     (server/github-connect.ts), their other credentials, then the
-//     organization's (server/github-access.ts). For github.com, GitHub's API
+//     (server/github/github-connect.ts), their other credentials, then the
+//     organization's (server/github/github-access.ts). For github.com, GitHub's API
 //     says first which one reads the repository, or why none does (404
 //     private, 401 bad token, 403 SAML sign-on, rate limit). The token rides
 //     an extra HTTP header through the environment, never the URL, the argv
@@ -50,9 +50,9 @@ import { capabilityPluginRecordSchema as pluginRecord, capabilityPluginStateSche
 import type { CapabilityPluginValues } from "./capabilities/capability-plugin-state.ts";
 import { capturePluginHooks, type LifecycleHook } from "./lifecycle-hooks.ts";
 import { pluginUpdateAvailable, type MarketplaceViewer, type MarketplaceVisibility, type PluginMarketplaces } from "./plugins/plugin-marketplaces.ts";
-import { probeGithubRepo, type GithubCredential, type GithubProbe } from "./github-access.ts";
-import { githubGitEnvironment } from "./github-connect.ts";
-import { WORKSPACE_SCOPE as WORKSPACE_TOKEN_KEY } from "./github-credentials.ts";
+import { probeGithubRepo, type GithubCredential, type GithubProbe } from "./github/github-access.ts";
+import { githubGitEnvironment } from "./github/github-connect.ts";
+import { WORKSPACE_SCOPE as WORKSPACE_TOKEN_KEY } from "./github/github-credentials.ts";
 import type { MarketplaceCredentialView } from "../shared/github-credentials.ts";
 import { applyPluginConfig, checkPluginConfig, readConfigValues, readPluginConfigFields, writeConfigValues, type PluginConfigField, type PluginConfigValue } from "./plugins/plugin-config.ts";
 import { invalidatePluginMetaCache, pluginMetadataCacheRoot, rebuildPluginMetaCache } from "./plugins/plugin-metadata-cache.ts";
@@ -75,7 +75,7 @@ const STRIPPED_MANIFEST_KEYS = ["hooks", "mcpServers", "lspServers", "monitors"]
 export class BotPluginError extends Error {
   readonly code: string;
   readonly status: number;
-  /** What the person can do (server/github-access.ts GithubAccessFix). */
+  /** What the person can do (server/github/github-access.ts GithubAccessFix). */
   readonly fix?: string;
   constructor(message: string, code: string, status = 400, fix?: string) {
     super(message);
@@ -522,7 +522,7 @@ export interface BotPluginsOptions {
    * acting person's connection, then the organization's tokens. */
   credentials?: (input: { botId: string; source: GitSource; actor: string | undefined }) => GithubCredential[];
   /** Each marketplace's credential, per bot and source (the one list,
-   * server/github-credentials.ts). */
+   * server/github/github-credentials.ts). */
   tokens?: {
     get(botId: string, source: string): string | undefined;
     /** the picked credential with its id and label (for `used`) */

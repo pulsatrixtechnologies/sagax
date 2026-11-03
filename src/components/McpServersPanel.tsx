@@ -58,7 +58,7 @@ export type McpServerListing = (StdioMcpListing | RemoteMcpListing) & {
   /** where the server came from: absent when added by hand */
   source?: string;
   /** reads the person's GitHub account (the GitHub plugin's token
-   * placeholder, server/github-mcp-token.ts): whether it is connected */
+   * placeholder, server/github/github-mcp-token.ts): whether it is connected */
   github?: "connected" | "missing";
   /** Lot B: installation = shared config; person = only-me (never send header values into shared). */
   scope?: "installation" | "person";

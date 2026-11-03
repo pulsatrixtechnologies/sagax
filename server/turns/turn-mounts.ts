@@ -5,7 +5,7 @@
 // receives, so the list and the turn cannot drift (test "a turn mounts
 // exactly what the list says", server/capabilities/capabilities.test.ts).
 import type { McpServerSpec } from "../contracts.ts";
-import { githubServersAsPerson, withGithubToken } from "../github-mcp-token.ts";
+import { githubServersAsPerson, withGithubToken } from "../github/github-mcp-token.ts";
 import { personalAuthHeaders, type GithubConnection, type PersonalMcpServer } from "../person-connections.ts";
 import { claudePluginDirs } from "./plugin-turn.ts";
 import { reservedMcpName } from "../../shared/mcp-reserved-names.ts";
@@ -35,7 +35,7 @@ export function engineServerMcp<T extends Record<string, McpServerSpec>>(input: 
   return input.sign ? input.sign(allowed) : allowed;
 }
 
-/** The bot's MCP servers as the turn's person (server/github-mcp-token.ts):
+/** The bot's MCP servers as the turn's person (server/github/github-mcp-token.ts):
  * on an organization server each GitHub server carries that person's own
  * GitHub connection and is left out (githubWithheld) when they have none. */
 export function serverMcpAsPerson<T extends Record<string, McpServerSpec>>(servers: T, input: { organization: boolean; githubToken: string | undefined }): { servers: T; githubWithheld: string[] } {

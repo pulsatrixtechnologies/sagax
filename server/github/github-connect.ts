@@ -15,7 +15,7 @@
 // Sagax itself makes for them (private skills, plugin marketplaces).
 import { createHash } from "node:crypto";
 
-import type { GithubConnection } from "./person-connections.ts";
+import type { GithubConnection } from "../person-connections.ts";
 
 export const GITHUB_SCOPES = "repo read:org gist workflow";
 /** How long a successful /user probe keeps the connection "Connected" without asking GitHub again. */

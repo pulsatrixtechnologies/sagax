@@ -1,5 +1,5 @@
 // the GitHub plugin's page in Capabilities: the one list of credentials
-// (server/github-credentials.ts), 2026-10-28.
+// (server/github/github-credentials.ts), 2026-10-28.
 //
 //   GET  /api/me/github/credentials
 //        { credentials: [{ id, label, hint, owner: "mine" | "org", onlyWhereChosen?, chosenBy }],
@@ -14,7 +14,7 @@
 // A person without the Sagax permission `apps.ownIntegrations` gets that
 // 403 on a change to their own, like their other connections. No answer carries a token: a label and the last 4 characters.
 import type { GithubCredentialPublic } from "../../shared/github-credentials.ts";
-import { GithubCredentialsError, ORG_OWNER, parseCredentialChange, type CredentialChange } from "../github-credentials.ts";
+import { GithubCredentialsError, ORG_OWNER, parseCredentialChange, type CredentialChange } from "../github/github-credentials.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

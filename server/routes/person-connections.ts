@@ -1,5 +1,5 @@
 // A person's own connections on an organization server (Settings > Mes
-// connexions; server/person-connections.ts, server/github-connect.ts).
+// connexions; server/person-connections.ts, server/github/github-connect.ts).
 //
 //   GET    /api/me/capabilities   (lot 5 canonical person store)
 //   GET    /api/me/connections    (alias until 2027-11-01, Deprecation header)
@@ -23,7 +23,7 @@
 import type { IncomingMessage } from "node:http";
 
 import { setCapabilityDeprecationHeaders } from "../capabilities/capability-route-deprecation.ts";
-import type { GithubStatus } from "../github-connect.ts";
+import type { GithubStatus } from "../github/github-connect.ts";
 import type { PersonalMcpListing } from "../person-connections.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";

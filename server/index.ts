@@ -2089,19 +2089,19 @@ import {
   githubGitEnvironment,
   githubSandboxArgv,
   githubTokenKind
-} from "./github-connect.ts";
+} from "./github/github-connect.ts";
 import { SANDBOX_PLUGINS_DIR, syncPluginsToSandbox } from "./sandbox/sandbox-plugins.ts";
 import { OrgCapabilities, ORG_CAPABILITY_KEY_PREFIX, type OrgCapabilityMount } from "./org/org-capabilities.ts";
 import { createOrgCapabilityRoutes, ORG_CAPABILITIES_CALL, OrgSettingOwnedElsewhere } from "./routes/org-capabilities.ts";
 import { OrgGithubTokens } from "./org/org-github-tokens.ts";
-import { GithubCredentials, LOCAL_OWNER, ORG_OWNER } from "./github-credentials.ts";
+import { GithubCredentials, LOCAL_OWNER, ORG_OWNER } from "./github/github-credentials.ts";
 import { BotCapabilityStore } from "./bot-capability-store.ts";
 import { InstallationCapabilityStore } from "./capabilities/installation-capability-store.ts";
 import { installationCapabilityBridge, makeInstallationCapabilityBridge, setInstallationCapabilityBridge } from "./capabilities/installation-capability-bridge.ts";
 import { discoverBotPluginIds, discoverPersonIds, migrateCapabilitiesStores } from "./capabilities/capabilities-store-migration.ts";
 import { OrgBotSecrets } from "./org/org-bot-secrets.ts";
 import { MarketplaceTokens } from "./plugins/marketplace-tokens.ts";
-import { type GithubCredential } from "./github-access.ts";
+import { type GithubCredential } from "./github/github-access.ts";
 import {
   parsePersonalMcpInput,
   personalMcpHostRefusal,
@@ -2120,7 +2120,7 @@ import {
   skipPersonalInSharedProbe
 } from "./mcp/mcp-personal-shared-guard.ts";
 import { createPersonConnectionRoutes } from "./routes/person-connections.ts";
-import { readsGithubToken, githubServersAsPerson, githubWithheldPrompt } from "./github-mcp-token.ts";
+import { readsGithubToken, githubServersAsPerson, githubWithheldPrompt } from "./github/github-mcp-token.ts";
 import { createGithubCredentialRoutes } from "./routes/github-credentials.ts";
 import { SandboxStdioRelay, StdioRelayError } from "./sandbox/sandbox-stdio-mcp.ts";
 import { testStdioMcpCommand, testStdioMcpStream } from "./mcp/mcp-stdio-test.ts";
@@ -9256,7 +9256,7 @@ const legacyOrgGithubTokens = new OrgGithubTokens(DATA_DIR, vaultKeySource);
 const orgBotSecrets = new OrgBotSecrets(DATA_DIR, vaultKeySource);
 const legacyMarketplaceTokens = new MarketplaceTokens(DATA_DIR, vaultKeySource);
 /** One list of GitHub credentials (Capabilities > Sources > GitHub,
- * server/github-credentials.ts): each person's own, the organization's, and
+ * server/github/github-credentials.ts): each person's own, the organization's, and
  * the credential each marketplace picks. */
 const githubCredentials = new GithubCredentials(DATA_DIR, vaultKeySource);
 /** Whose list a person's credentials are in: their principal id on an
@@ -9321,7 +9321,7 @@ function githubCredentialsFor(actor: string | null | undefined, repoOwner?: stri
   return [...credentials.filter((entry) => names(entry).includes(wanted)), ...credentials.filter((entry) => !names(entry).includes(wanted))];
 }
 /** The one GitHub account a turn's MCP servers read (a plugin's
- * `${GITHUB_PERSONAL_ACCESS_TOKEN}`, server/github-mcp-token.ts): the
+ * `${GITHUB_PERSONAL_ACCESS_TOKEN}`, server/github/github-mcp-token.ts): the
  * person's GitHub connection on an organization server, the operator's own
  * credential on a solo one. Never the organization's shared credentials. */
 function githubAccountToken(principalId: string | null | undefined): string | undefined {
@@ -28557,7 +28557,7 @@ function mcpServerResponse(viewer?: string | null) {
   // Lot B: shared list entries are installation-scoped. Personal servers are
   // listed under /api/me; marking scope here lets editors skip personal lookups.
   const personalNames = personalMcpNamesForGuard();
-  // a server that reads the GitHub connection (server/github-mcp-token.ts)
+  // a server that reads the GitHub connection (server/github/github-mcp-token.ts)
   // is connected when the viewer has one; never the token itself
   let viewerGithub: boolean | undefined;
   const githubState = (name: string): { github?: "connected" | "missing" } => {
@@ -28646,7 +28646,7 @@ function engineMcpServers(bot: BotRecord, threadId?: string) {
   // (server/mcp/mcp-tool-filter.ts); listings only need the names.
   return threadId === undefined ? servers : withDisabledTools(servers, mcpDisabledTools(cfg), threadId);
 }
-/** The bot's MCP servers as `person` (server/github-mcp-token.ts): on an
+/** The bot's MCP servers as `person` (server/github/github-mcp-token.ts): on an
  * organization server each GitHub server carries that person's own GitHub
  * connection, never the sign-in or header it was saved with, and is left
  * out (named in githubWithheld) when they have none. */

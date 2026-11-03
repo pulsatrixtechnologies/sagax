@@ -10,7 +10,7 @@
 // (the GitHub plugin's page in Capabilities): at each turn it is replaced with the
 // token of the person the turn runs for, never written to config.json and
 // never listed; the listing says whether that person has one.
-import type { McpServerSpec } from "./contracts.ts";
+import type { McpServerSpec } from "../contracts.ts";
 
 /** The variable names a GitHub server reads its token from. */
 export const GITHUB_TOKEN_VARIABLES = ["GITHUB_PERSONAL_ACCESS_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"] as const;

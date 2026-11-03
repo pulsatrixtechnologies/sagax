@@ -356,7 +356,7 @@ SHA-256 the signed path names) and relays the JSON-RPC frames
 (`server/sandbox/sandbox-stdio-mcp.ts`). At most 8 such processes per person run at
 once; an idle one stops after 10 minutes.
 
-Their GitHub connection (`server/github-connect.ts`) is written into
+Their GitHub connection (`server/github/github-connect.ts`) is written into
 `/workspace/.config/gh/hosts.yml` and `/workspace/.git-credentials` (0600,
 `credential.https://github.com.helper store`) when they connect and again
 at the first tool call of each turn, so `gh` and `git` in the environment

@@ -1,9 +1,9 @@
 // Reading a private GitHub repository for a bot's plugins and skills.
 //
 // Which credential, in order: the one this marketplace picks on this bot
-// (the GitHub plugin's page in Capabilities, server/github-credentials.ts), then
+// (the GitHub plugin's page in Capabilities, server/github/github-credentials.ts), then
 // Automatic: the acting person's own GitHub connection
-// (server/github-connect.ts), their other credentials, then the
+// (server/github/github-connect.ts), their other credentials, then the
 // organization's. Before a clone, GET /repos/{owner}/{repo} on api.github.com
 // tells which one reads the repository and, when none does, why: GitHub
 // answers 404 for a private repository it will not show, 401 for a bad
@@ -20,7 +20,7 @@ export type GithubCredentialVia = "marketplace" | "person" | "own" | "organizati
 export interface GithubCredential {
   token: string;
   via: GithubCredentialVia;
-  /** The credential's id in the one list (server/github-credentials.ts). Never the token. */
+  /** The credential's id in the one list (server/github/github-credentials.ts). Never the token. */
   id?: string;
   /** The organization token's label, for messages. Never the token. */
   label?: string;

@@ -7,7 +7,7 @@
 //   - marketplace-tokens.enc: one token per marketplace, per bot (its owner
 //     or a manager) or for the whole installation (`workspace`, an admin);
 //   - (unchanged) the person's own GitHub connection
-//     (principals/<id>/capabilities.enc, server/github-connect.ts): gh, git,
+//     (principals/<id>/capabilities.enc, server/github/github-connect.ts): gh, git,
 //     the GitHub MCP and Sagax's own fetches for them.
 //
 // Here: labeled credentials, each owned by one person (their principal id;
@@ -30,10 +30,10 @@ import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 
-import { writeFileAtomic } from "./atomic.ts";
-import type { VaultKeySource } from "./mcp/mcp-oauth.ts";
-import { MAX_ORG_GITHUB_TOKENS, orgGithubTokenHint } from "../shared/org-github-tokens.ts";
-import { MAX_PERSON_GITHUB_CREDENTIALS, type GithubCredentialPublic, type MarketplaceCredentialView } from "../shared/github-credentials.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
+import { MAX_ORG_GITHUB_TOKENS, orgGithubTokenHint } from "../../shared/org-github-tokens.ts";
+import { MAX_PERSON_GITHUB_CREDENTIALS, type GithubCredentialPublic, type MarketplaceCredentialView } from "../../shared/github-credentials.ts";
 
 const FILE = "github-credentials.enc";
 const AAD = Buffer.from("sagax github-credentials v1");

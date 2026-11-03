@@ -1,5 +1,5 @@
 // LEGACY since 2026-10-28: read once at start and moved into the one
-// credential list (server/github-credentials.ts), then the file is removed.
+// credential list (server/github/github-credentials.ts), then the file is removed.
 //
 // A token per bot and plugin marketplace (Capabilities, "For this bot",
 // Manage > Marketplaces): how a bot reads a private repository when nobody's
@@ -106,7 +106,7 @@ export class MarketplaceTokens {
   }
 
   /** Every saved token, for the one-time move into the credential list
-   * (server/github-credentials.ts). Never send these to a client. */
+   * (server/github/github-credentials.ts). Never send these to a client. */
   all(): Entry[] {
     return this.read();
   }

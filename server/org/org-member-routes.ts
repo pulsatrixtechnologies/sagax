@@ -48,6 +48,7 @@
 // audited. A routine or a bot file is answered only when the catalogue
 // says the person owns it; anyone else's is 404, an admin's included.
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { readableRoutineProblems } from "../../shared/routine-problems.ts";
 
 import { formatQuestionAnswers, MAX_CUSTOM_ANSWER, MAX_OPTIONS, parseAskQuestions, parseChoices, type AskQuestion } from "../../shared/ask-question.ts";
 import { meetingRequestBehavior } from "../../shared/meeting-request.ts";
@@ -317,7 +318,7 @@ function lastRunOf(runs: readonly Record<string, unknown>[], routineId: string) 
     status: str(run.status),
     startedAt: typeof run.startedAt === "number" ? run.startedAt : null,
     endedAt: typeof run.finishedAt === "number" ? run.finishedAt : typeof run.endedAt === "number" ? run.endedAt : null,
-    ...(typeof run.problems === "string" && run.problems ? { problems: scrubText(run.problems).slice(0, 1_000) } : {}),
+    ...(typeof run.problems === "string" && run.problems ? { problems: readableRoutineProblems(scrubText(run.problems)).slice(0, 1_000) } : {}),
   };
 }
 
@@ -1552,7 +1553,7 @@ function wireRun(run: Record<string, unknown> | null | undefined, detail = false
     startedAt: typeof run.startedAt === "number" ? run.startedAt : null,
     endedAt: typeof run.finishedAt === "number" ? run.finishedAt : null,
     // 2026-11-01: completed, but not all of it went right: never a plain success.
-    ...(typeof run.problems === "string" && run.problems ? { problems: scrubText(run.problems).slice(0, 1_000) } : {}),
+    ...(typeof run.problems === "string" && run.problems ? { problems: readableRoutineProblems(scrubText(run.problems)).slice(0, 1_000) } : {}),
     ...(detail ? { attention: cut(run.attention, 500), error: cut(run.error, 500), output: cut(run.output, MEMBER_REPLY_MAX) } : {}),
   };
 }

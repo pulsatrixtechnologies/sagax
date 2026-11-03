@@ -1,7 +1,7 @@
 // The app's Geist face (latin, variable weight) as an @font-face rule with a
 // data: URL, for the documents the server draws bot content in: the widget
 // self-check (server/widget-check.ts) and the published pages' frame
-// (server/published-pages-render.ts). A data: font needs no request, so the
+// (server/pages/published-pages-render.ts). A data: font needs no request, so the
 // frames keep `font-src data:` and no network.
 import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";

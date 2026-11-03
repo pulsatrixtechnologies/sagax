@@ -31,12 +31,12 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { sanitizePageLook, type PageLook } from "../src/lib/page-look.ts";
-import { threadOwner } from "./threads/thread-privacy.ts";
-import { pageAudienceOf, samePageAudience, type PageAudience } from "../shared/page-audience.ts";
-import { ANON_STATE_LIMITS, anonymousBy, STATE_LIMITS, stateRulesOf, stateValueJson, type PageStateEntry, type StateRules } from "../shared/page-state.ts";
-import { THREAD_LIMITS, type PageQuote, type PageSuggestion, type PageThread, type PageThreadReply } from "../shared/page-threads.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { sanitizePageLook, type PageLook } from "../../src/lib/page-look.ts";
+import { threadOwner } from "../threads/thread-privacy.ts";
+import { pageAudienceOf, samePageAudience, type PageAudience } from "../../shared/page-audience.ts";
+import { ANON_STATE_LIMITS, anonymousBy, STATE_LIMITS, stateRulesOf, stateValueJson, type PageStateEntry, type StateRules } from "../../shared/page-state.ts";
+import { THREAD_LIMITS, type PageQuote, type PageSuggestion, type PageThread, type PageThreadReply } from "../../shared/page-threads.ts";
 import {
   DEFAULT_PAGES_POLICY,
   PAGE_FRAME_TICKET_MS,
@@ -53,7 +53,7 @@ import {
   type PagesPolicy,
   type PublishedPageSummary,
   type ReaderComment,
-} from "../shared/published-pages.ts";
+} from "../../shared/published-pages.ts";
 
 const TOKEN = /^([A-Za-z0-9_-]{22})\.([A-Za-z0-9_-]{32})$/;
 const TICKET = /^(\d{10,16})\.([A-Za-z0-9_-]{1,200})\.([A-Za-z0-9_-]{32})$/;

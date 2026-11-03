@@ -10,7 +10,7 @@ import { commentsForModel, parseThreadText } from "../../shared/page-threads.ts"
 import type { MausColor } from "../../shared/wire.ts";
 import { sameAudience } from "../bots/bot-visibility.ts";
 import { deliverableNotification } from "../notify.ts";
-import { pageOwnerFor } from "../published-pages.ts";
+import { pageOwnerFor } from "../pages/published-pages.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { sectionContextKey } from "../rooms/section-context.ts";
 import { TEAM_MEMORY_KINDS, type TeamMemoryKind } from "../memory/team-memory.ts";

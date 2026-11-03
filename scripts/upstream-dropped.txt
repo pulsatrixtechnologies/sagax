@@ -540,3 +540,5 @@ server/service-cli.test.ts
 server/service-cli.ts
 server/service-unit.test.ts
 server/service-unit.ts
+server/published-pages.e2e.test.ts
+server/published-teams.ts

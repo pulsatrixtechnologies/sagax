@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The prelude of every HTML page (FRAME_PRELUDE in
-// server/published-pages-render.ts), run here in a DOM: WebRTC gone for good,
+// server/pages/published-pages-render.ts), run here in a DOM: WebRTC gone for good,
 // and a resource hint or a speculation-rules script neutered synchronously,
 // before it is in the document, whichever way a script makes it; no nested
 // frame can be created. The cross-browser run (PR #646) checks the real thing.

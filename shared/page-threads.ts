@@ -2,7 +2,7 @@
 // page and is signed in selects text, or clicks a part of the page, and
 // attaches a comment to it. Each annotation is a thread: replies, resolved
 // or open, seen by everyone who may read the page. Shared by the server
-// (server/published-pages.ts, server/routes/published-pages.ts) and the
+// (server/pages/published-pages.ts, server/routes/published-pages.ts) and the
 // reader's bar (src/page-reader/).
 //
 // The anchor comes from the page's own frame, through a message the page's

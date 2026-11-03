@@ -5,7 +5,7 @@
 // as the bot's card route would.
 import { expect, it } from "vitest";
 
-import { launchVerificationServer } from "../scripts/control-omb.ts";
+import { launchVerificationServer } from "../../scripts/control-omb.ts";
 import { PublishedPages } from "./published-pages.ts";
 
 it("serves a published page in its wrapper and sandboxed frame, and stops at once when it is revoked", async () => {
@@ -148,7 +148,7 @@ it("with the UI served (desktop, container), a page's preview and link answer th
 
 it("the desktop on an organization server (bundled UI, net.fetch): a Markdown and an HTML page's frame answer the page, with its style, in the card and the open page (0.8.12: blank white)", async () => {
   const { createRequire } = await import("node:module");
-  const bundledUi = createRequire(import.meta.url)("../electron/bundled-ui.cjs");
+  const bundledUi = createRequire(import.meta.url)("../../electron/bundled-ui.cjs");
   const fixture = await launchVerificationServer();
   try {
     const url = fixture.info.url;

@@ -9,19 +9,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { json, readBody } from "./harness/http.ts";
+import { json, readBody } from "../harness/http.ts";
 import { PublishedPages } from "./published-pages.ts";
 import { ANNOTATE_SOURCE, pageDocument, presentationToHtml, splitSlides } from "./published-pages-render.ts";
-import type { RequestAuth } from "./auth/request-auth.ts";
-import { policyFor } from "./tool-policy.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { policyFor } from "../tool-policy.ts";
 import {
   createPublishedPageRoutes,
   handlePublishedPagePublic,
   type PageViewer,
   type PublicPageOptions,
   type PublishedPageRouteDeps,
-} from "./routes/published-pages.ts";
-import { PAGE_LIMITS, pageCsp, pageFrameSandbox, parsePageProposal } from "../shared/published-pages.ts";
+} from "../routes/published-pages.ts";
+import { PAGE_LIMITS, pageCsp, pageFrameSandbox, parsePageProposal } from "../../shared/published-pages.ts";
 
 const dirs: string[] = [];
 afterEach(() => {

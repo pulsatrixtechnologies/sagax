@@ -1,5 +1,5 @@
 // Who has a published page open, and its annotations as they change
-// (server/page-live.ts).
+// (server/pages/page-live.ts).
 import { describe, expect, it } from "vitest";
 
 import { LIVE_LIMITS, PageLive, presenceOf } from "./page-live.ts";

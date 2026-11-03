@@ -1,5 +1,5 @@
-// Published pages (server/published-pages.ts, server/routes/published-pages.ts,
-// server/published-pages-render.ts): approval before anything is served,
+// Published pages (server/pages/published-pages.ts, server/routes/published-pages.ts,
+// server/pages/published-pages-render.ts): approval before anything is served,
 // ownership by the conversation's person, the wrapper and its sandboxed
 // frame, each access level, revocation, expiry, versions, caps and storage,
 // the separate pages origin, and a person's own pages only.
@@ -10,12 +10,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createAgentCard, type AgentCardStore } from "./chat-widgets.ts";
-import { json, readBody } from "./harness/http.ts";
+import { createAgentCard, type AgentCardStore } from "../chat-widgets.ts";
+import { json, readBody } from "../harness/http.ts";
 import { pageOwnerFor, PublishedPages } from "./published-pages.ts";
 import { PageLive } from "./page-live.ts";
 import { bannerName, escapeHtml, FRAME_PRELUDE, jsonBlock, markdownToHtml, OPEN_BRIDGE_SOURCE, pageDocument, parseReaderAssets, REPORT_SIZE_SOURCE, SLIDE_PRINT_MM, STATE_BRIDGE_SOURCE, WRAPPER_OPEN_SOURCE, wrapperBanner, ANNOTATE_BRIDGE_SOURCE } from "./published-pages-render.ts";
-import type { RequestAuth } from "./auth/request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   createPublishedPageRoutes,
   handlePagesOriginRequest,
@@ -23,13 +23,13 @@ import {
   pageReadable,
   type PageViewer,
   type PublicPageOptions,
-} from "./routes/published-pages.ts";
-import type { Message } from "./store.ts";
-import { encodeSkinTokens, PAGE_THEME_LAYER, PAGE_THEME_STYLE_ID } from "../src/lib/page-theme.ts";
-import { PAGE_LIMITS, PAGE_OPEN_MESSAGE, pageCsp, pageFrameSandbox, parsePageProposal, validExpiry } from "../shared/published-pages.ts";
-import { parseReaderBoot, READER_BOOT_ID, READER_MASCOT_ID, readerNotice } from "../shared/page-reader.ts";
-import { holdContrast } from "../src/lib/bot-accent-colors.ts";
-import { fallbackWidgetTokens } from "../src/lib/widget-kit.ts";
+} from "../routes/published-pages.ts";
+import type { Message } from "../store.ts";
+import { encodeSkinTokens, PAGE_THEME_LAYER, PAGE_THEME_STYLE_ID } from "../../src/lib/page-theme.ts";
+import { PAGE_LIMITS, PAGE_OPEN_MESSAGE, pageCsp, pageFrameSandbox, parsePageProposal, validExpiry } from "../../shared/published-pages.ts";
+import { parseReaderBoot, READER_BOOT_ID, READER_MASCOT_ID, readerNotice } from "../../shared/page-reader.ts";
+import { holdContrast } from "../../src/lib/bot-accent-colors.ts";
+import { fallbackWidgetTokens } from "../../src/lib/widget-kit.ts";
 
 const dirs: string[] = [];
 afterEach(() => {

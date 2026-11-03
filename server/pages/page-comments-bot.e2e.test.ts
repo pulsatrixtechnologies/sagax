@@ -11,11 +11,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { freePortBlock } from "./testing/ports.ts";
+import { freePortBlock } from "../testing/ports.ts";
 import { PublishedPages } from "./published-pages.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
-const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
+const FAKE_CLAUDE = join(SERVER_DIR, "..", "testing", "fake-claude-cli.ts");
 const posixOnly = describe.skipIf(process.platform === "win32");
 
 posixOnly("page comments and the page's bot e2e", () => {
@@ -62,8 +62,8 @@ posixOnly("page comments and the page's bot e2e", () => {
     }));
     const port = await freePortBlock([0, 1]);
     base = `http://127.0.0.1:${port}`;
-    child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
-      cwd: join(SERVER_DIR, ".."),
+    child = spawn(process.execPath, [join(SERVER_DIR, "..", "index.ts")], {
+      cwd: join(SERVER_DIR, "..", ".."),
       env: { ...(process.env.PATH ? { PATH: process.env.PATH } : {}), HOME: home, USERPROFILE: home, SAGAX_PORT: String(port) },
       stdio: ["ignore", "pipe", "pipe"],
     });

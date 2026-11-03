@@ -16,12 +16,12 @@ import { extname, join, resolve } from "node:path";
 import { chromium } from "playwright";
 
 import { json, readBody } from "../../server/harness/http.ts";
-import { PublishedPages } from "../../server/published-pages.ts";
+import { PublishedPages } from "../../server/pages/published-pages.ts";
 import type { RequestAuth } from "../../server/auth/request-auth.ts";
 import * as routesModule from "../../server/routes/published-pages.ts";
 import type { PageViewer, PublicPageOptions } from "../../server/routes/published-pages.ts";
 import { PASS } from "../../server/routes/table.ts";
-import { PageLive } from "../../server/page-live.ts";
+import { PageLive } from "../../server/pages/page-live.ts";
 import { PAGE_LOOK_TOKENS } from "../../src/lib/page-look.ts";
 
 const outDir = resolve(process.argv[2] ?? "captures");

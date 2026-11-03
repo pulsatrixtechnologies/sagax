@@ -12,13 +12,13 @@
 // with a permanent banner that embeds the page in a frame sandboxed to
 // scripts only, whose navigation the wrapper's `frame-src` limits to the
 // page's own frame path.
-import { pageThemeStyle } from "../src/lib/page-theme.ts";
-import type { WidgetThemeTokens } from "../src/lib/widget-kit.ts";
-import { READER_ACTIONS_ID, READER_BOOT_ID, READER_MASCOT_ID, readerByline, type ReaderBoot } from "../shared/page-reader.ts";
-import { readerBarThemeCss, type PageLook } from "../src/lib/page-look.ts";
-import { STATE_ASK_MESSAGE, STATE_MESSAGE, STATE_RESULT_MESSAGE, STATE_SET_MESSAGE } from "../shared/page-state.ts";
-import { ANNOTATE_FOCUS_MESSAGE, ANNOTATE_FOUND_MESSAGE, ANNOTATE_MARKS_MESSAGE, ANNOTATE_MODE_MESSAGE, ANNOTATE_SELECT_MESSAGE, THREAD_LIMITS } from "../shared/page-threads.ts";
-import { PAGE_ANNOTATION_MESSAGE, PAGE_BANNER_NAME_MAX, PAGE_HEIGHT_MAX, PAGE_LIMITS, PAGE_OPEN_MESSAGE, PAGE_SCROLL_MAX, PAGE_SCROLL_MESSAGE, PAGE_SIZE_ASK, PAGE_SIZE_MESSAGE, pageCsp, pageFrameSandbox, type PageKind, type PageTheme, type ReaderComment } from "../shared/published-pages.ts";
+import { pageThemeStyle } from "../../src/lib/page-theme.ts";
+import type { WidgetThemeTokens } from "../../src/lib/widget-kit.ts";
+import { READER_ACTIONS_ID, READER_BOOT_ID, READER_MASCOT_ID, readerByline, type ReaderBoot } from "../../shared/page-reader.ts";
+import { readerBarThemeCss, type PageLook } from "../../src/lib/page-look.ts";
+import { STATE_ASK_MESSAGE, STATE_MESSAGE, STATE_RESULT_MESSAGE, STATE_SET_MESSAGE } from "../../shared/page-state.ts";
+import { ANNOTATE_FOCUS_MESSAGE, ANNOTATE_FOUND_MESSAGE, ANNOTATE_MARKS_MESSAGE, ANNOTATE_MODE_MESSAGE, ANNOTATE_SELECT_MESSAGE, THREAD_LIMITS } from "../../shared/page-threads.ts";
+import { PAGE_ANNOTATION_MESSAGE, PAGE_BANNER_NAME_MAX, PAGE_HEIGHT_MAX, PAGE_LIMITS, PAGE_OPEN_MESSAGE, PAGE_SCROLL_MAX, PAGE_SCROLL_MESSAGE, PAGE_SIZE_ASK, PAGE_SIZE_MESSAGE, pageCsp, pageFrameSandbox, type PageKind, type PageTheme, type ReaderComment } from "../../shared/published-pages.ts";
 
 /** Server side, before every HTML version is served: no element that can
  * reach the network outside CSP. `<link>` (hints such as prerender, which

@@ -1861,7 +1861,7 @@ Markdown page or a presentation follows it entirely. Widgets keep their kit
 skin's colors and sends `skin=` with its page previews. The prompt
 (`WIDGET_KIT_PROMPT`), propose_page and show_html tell bots to use the
 classes and variables. Same CSP and sandbox. Tests:
-`src/lib/page-theme.test.ts`, `server/published-pages.test.ts`,
+`src/lib/page-theme.test.ts`, `server/pages/published-pages.test.ts`,
 `ios/Tests/CompanionCoreTests/ContentThemeTests.swift`. Captures:
 `scripts/capture/bot-content-theme.ts`, docs/screenshots/bot-content-theme.
 
@@ -1933,7 +1933,7 @@ with the id `page:<pageId>`, one window per page, its place kept; a browser
 gets a new tab. That window draws the same PageSurface (×, title, Share, « ⋯ »)
 and asks the page again every 5 s for the bot's new version. Tests:
 `src/lib/page-windows.test.ts`, `src/components/bot-settings/LibraryTab.test.ts`.
-Tests: `server/published-pages.test.ts` (app's own look),
+Tests: `server/pages/published-pages.test.ts` (app's own look),
 `src/components/PageViewer.surface.dom.test.ts`, `src/lib/open-page.test.ts`.
 Lot 5 evidence: `docs/plans/grok-convergence-interface-evidence.md`.
 
@@ -2012,7 +2012,7 @@ admin): `/api/pages/:id/threads` (shared/page-threads.ts), threads anchored
 on text or a part of the page, replies, resolved, deleted by their author
 or the page's person. The frame's bridge (`ANNOTATE_BRIDGE_SOURCE`) is
 dormant until the wrapper turns the mode on and only ever gets anchors
-back, never a comment or a name. Live (server/page-live.ts):
+back, never a comment or a name. Live (server/pages/page-live.ts):
 `GET /api/pages/:id/live` streams who has the page open and "threads
 changed" (never a comment) to the people who may annotate; a comment by
 someone else notifies the page's person (`page-comment`, audience the
@@ -2076,7 +2076,7 @@ screen, never a password" as a quiet line with a shield, always visible
 and Share in the accent; icons only on a phone. Popover and comments panel
 read the same variables. Sandbox and CSPs unchanged; the app's preview never
 takes it. No iOS change: the phone has no reader bar. Tests:
-`server/published-pages.test.ts` ("in its person's look"),
+`server/pages/published-pages.test.ts` ("in its person's look"),
 `src/lib/page-look.test.ts`, `shared/page-reader.test.ts`. Captures:
 `node --experimental-strip-types scripts/capture/page-bar-theme.ts`,
 docs/screenshots/page-bar-theme.
@@ -9566,15 +9566,15 @@ file name once per failure, never its contents.
 
 A bot proposes a page (HTML, Markdown or a small one-file static app) with
 the agents tool `propose_page`; the person publishes it from its card
-(`shared/published-pages.ts`, store `server/published-pages.ts`, renderer
-`server/published-pages-render.ts`, routes `server/routes/published-pages.ts`,
+(`shared/published-pages.ts`, store `server/pages/published-pages.ts`, renderer
+`server/pages/published-pages-render.ts`, routes `server/routes/published-pages.ts`,
 UI `src/components/PublishedPages.tsx`: the chat card and Settings > Pages
 publiées). On iPhone, Settings > Pages > Snapshot frames that version's
 preview wrapper only (`ios/Sources/CompanionCore/PagePreview.swift`): the
 same `/pages/preview/<id>/<n>` path the desktop frames, and its
 preview-frame, on the API origin. Another host or path is not loaded.
-Keep these rules, covered by `server/published-pages.test.ts`,
-`server/published-pages.e2e.test.ts`, `server/published-pages-prelude.test.ts`,
+Keep these rules, covered by `server/pages/published-pages.test.ts`,
+`server/pages/published-pages.e2e.test.ts`, `server/pages/published-pages-prelude.test.ts`,
 `src/components/PublishedPages.test.ts` and `electron/page-frame-guard.node-test.mjs`
 (two security reviews of #646 folded in):
 
@@ -9687,8 +9687,8 @@ Keep these rules, covered by `server/published-pages.test.ts`,
 ### Pages: edit, comments, annotation, Presentation, link switch (lot R8, 2026-10-21)
 
 The reference design parity, chat rows 31 to 34. Covered by
-`server/published-pages-editing.test.ts`, the second case of
-`server/published-pages.e2e.test.ts` and `src/components/PageViewer.test.ts`.
+`server/pages/published-pages-editing.test.ts`, the second case of
+`server/pages/published-pages.e2e.test.ts` and `src/components/PageViewer.test.ts`.
 
 - Full-page viewer (`src/components/PageViewer.tsx`, opened from the card's
   and the Settings row's Open full page): rename, version picker, Annotate,
@@ -9709,7 +9709,7 @@ The reference design parity, chat rows 31 to 34. Covered by
   summary (a count only), the wrapper or the frame.
 - Annotation: `/pages/preview/<id>/<n>?annotate=1` (the page's person only)
   frames `...?t=<ticket>&a=1`, which adds `ANNOTATE_SOURCE`
-  (`server/published-pages-render.ts`): clicks are caught before the page
+  (`server/pages/published-pages-render.ts`): clicks are caught before the page
   sees them, the element gets a numbered badge, and `{ type:
   "sagax-page-annotation", v: 1, n, tag, text, path }` is posted to
   `window.top`. Nothing else: no network. A Markdown page or a presentation

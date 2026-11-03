@@ -16,8 +16,8 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { DATA_DIR } from "./config.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { DATA_DIR } from "../config.ts";
 
 export const PUBLISHED_TEAMS_FILE = join(DATA_DIR, "published-teams.json");
 

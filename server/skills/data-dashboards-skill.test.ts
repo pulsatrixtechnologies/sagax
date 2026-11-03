@@ -14,7 +14,7 @@ import { ARTIFACT_LIMITS } from "../../shared/artifacts.ts";
 import { loadBundledSkills, selectBundledSkills } from "./skill-library.ts";
 
 // The server's TypeScript has no DOM library: the happy-dom globals are read
-// loosely, the same way server/published-pages-prelude.test.ts does.
+// loosely, the same way server/pages/published-pages-prelude.test.ts does.
 const document = (globalThis as any).document;
 const windowAny = globalThis as any;
 

@@ -1,5 +1,5 @@
 // The frame's side of Annotate (ANNOTATE_BRIDGE_SOURCE in
-// server/published-pages-render.ts), run in a document: dormant until its
+// server/pages/published-pages-render.ts), run in a document: dormant until its
 // parent turns annotation mode on; a selection becomes an anchor with the
 // page's own words; anchors are found again, the right occurrence by what
 // comes before and after; only messages from the parent are heard.

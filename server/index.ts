@@ -621,7 +621,7 @@ import { reviewedSkillSha256 } from "../shared/skill-request.ts";
 import { checkPersonQuote, personWordsForTurn } from "../shared/primary-request.ts";
 import { sessionIdlePolicy } from "./drivers/session-idle.ts";
 import { serveStaticUi } from "./static-ui.ts";
-import { PageLive } from "./page-live.ts";
+import { PageLive } from "./pages/page-live.ts";
 import { commentsForModel } from "../shared/page-threads.ts";
 import { coalescedRun } from "./coalesced-run.ts";
 import type { EarlyListener } from "./early-listener.ts";
@@ -1386,7 +1386,7 @@ import {
   readPublishedLibrary,
   writePublishedLibrary
 } from "./presets.ts";
-import { readPublishedTeam, writePublishedTeam } from "./published-teams.ts";
+import { readPublishedTeam, writePublishedTeam } from "./pages/published-teams.ts";
 import { OrgLibrary } from "./org/org-library.ts";
 import { createTeamBackup, importTeamBackup } from "./backup/team-backup.ts";
 import { shouldMountLocalComputer } from "./local-routing.ts";
@@ -2287,7 +2287,7 @@ import { parseEvalJson } from "./meetings/meet-scripts.ts";
 import type { MeetingBrowser } from "./meetings/meeting-session.ts";
 import { createTemplateLinkRoutes, handleTemplateLinkPublic } from "./routes/template-links.ts";
 import { TemplateLinks } from "./template-links.ts";
-import { PublishedPages } from "./published-pages.ts";
+import { PublishedPages } from "./pages/published-pages.ts";
 import {
   createPublishedPageRoutes,
   handlePagesOriginRequest,
@@ -2705,7 +2705,7 @@ void reapOrphanEngineGroups(join(DATA_DIR, "engine-groups.json"), { log: (line) 
   .catch((error) => console.warn(`[engines] leftover process groups not checked: ${error instanceof Error ? error.message : String(error)}`));
 /** Public share links for bot templates (server/template-links.ts). */
 const templateLinks = new TemplateLinks(DATA_DIR);
-/** Pages a bot proposed and the person published (server/published-pages.ts). */
+/** Pages a bot proposed and the person published (server/pages/published-pages.ts). */
 const publishedPages = new PublishedPages(DATA_DIR);
 /** Who has a published page open, and its annotations as they change. */
 const pageLive = new PageLive();

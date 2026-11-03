@@ -10,7 +10,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
 import { DATA_DIR } from "../config.ts";
-import { renamePublishedTeam } from "../published-teams.ts";
+import { renamePublishedTeam } from "../pages/published-teams.ts";
 
 export const SECTION_CONTEXT_MAX_BYTES = 24_000;
 export const SECTION_CONTEXTS_FILE = join(DATA_DIR, "section-contexts.json");

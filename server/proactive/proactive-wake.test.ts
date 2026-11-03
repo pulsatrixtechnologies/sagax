@@ -426,17 +426,17 @@ describe("teammates' messages (peer inbox, 2026-11-02)", () => {
 
   it("replies between two bots count against the hop limit: no ping-pong", () => {
     const hops = new PeerNoticeHops();
-    const h = harness({ melonie: "proactive", osprey: "proactive" });
-    // a person's turn of Osprey sends a notice to Melonie: hop 1
+    const h = harness({ wren: "proactive", osprey: "proactive" });
+    // a person's turn of Osprey sends a notice to Wren: hop 1
     const first = hops.note("mel-th-1", 0);
-    expect(h.waker.offer(notice("melonie", 1, { threadId: "mel-th-1", hops: first }))).toBe("gathered");
-    // Melonie's wake (hop 1) replies to Osprey: hop 2, still woken
+    expect(h.waker.offer(notice("wren", 1, { threadId: "mel-th-1", hops: first }))).toBe("gathered");
+    // Wren's wake (hop 1) replies to Osprey: hop 2, still woken
     const second = hops.note("kat-th-1", 1 + 1);
-    expect(h.waker.offer(notice("osprey", 2, { threadId: "kat-th-1", hops: second, senderId: "melonie", senderName: "Melonie" }))).toBe("gathered");
+    expect(h.waker.offer(notice("osprey", 2, { threadId: "kat-th-1", hops: second, senderId: "wren", senderName: "Wren" }))).toBe("gathered");
     // Osprey's wake (hop 2) answers again: hop 3, the chain stops
     const third = hops.note("mel-th-2", second + 1);
     expect(third).toBe(PROACTIVE_MAX_HOPS);
-    expect(h.waker.offer(notice("melonie", 3, { threadId: "mel-th-2", hops: third }))).toBe("hops");
+    expect(h.waker.offer(notice("wren", 3, { threadId: "mel-th-2", hops: third }))).toBe("hops");
     // a notice turn (not a wake) that writes on carries the chain too
     expect(hops.get("mel-th-2")).toBe(3);
   });
@@ -463,8 +463,8 @@ describe("teammates' messages, second pass (production, 2026-11-02)", () => {
   });
 
   it("the wake is told the person never sees the notice threads and never ends quiet on them", () => {
-    const h = harness({ melonie: "proactive" });
-    h.waker.offer(notice("melonie", 1));
+    const h = harness({ wren: "proactive" });
+    h.waker.offer(notice("wren", 1));
     h.advance(30_000);
     const prompt = proactiveWakePrompt(h.woken[0]!);
     expect(prompt).toContain("The person never sees those threads");
@@ -481,24 +481,24 @@ describe("teammates' messages, second pass (production, 2026-11-02)", () => {
     for (const verdict of ["off", "hops", "auth", "gone", "own", "irrelevant"] as const) expect(peerNoticeDropped(verdict)).toBe(true);
     expect(peerNoticeDropped("gathered")).toBe(false);
     expect(peerNoticeDropped("duplicate")).toBe(false);
-    const h = harness({ melonie: "proactive" });
-    expect(peerNoticeDropped(h.waker.offer(notice("melonie", 1, { hops: PROACTIVE_MAX_HOPS })))).toBe(true);
+    const h = harness({ wren: "proactive" });
+    expect(peerNoticeDropped(h.waker.offer(notice("wren", 1, { hops: PROACTIVE_MAX_HOPS })))).toBe(true);
   });
 
   it("notices gathered and then skipped (the hour's limit of wakes, or turned off meanwhile) are handed back to be shown", () => {
-    const h = harness({ melonie: "proactive" });
+    const h = harness({ wren: "proactive" });
     for (let n = 1; n <= 12; n += 1) {
-      h.waker.offer(notice("melonie", n));
+      h.waker.offer(notice("wren", n));
       h.advance(2 * 60_000);
     }
     expect(h.woken).toHaveLength(12);
-    h.waker.offer(notice("melonie", 13));
+    h.waker.offer(notice("wren", 13));
     h.advance(2 * 60_000);
     expect(h.woken).toHaveLength(12);
     expect(h.dropped.map((row) => row.events.map((event) => event.peer?.threadId))).toEqual([["th-13"]]);
     h.advance(60 * 60_000);
-    h.waker.offer(notice("melonie", 14));
-    h.setMode("melonie", "off");
+    h.waker.offer(notice("wren", 14));
+    h.setMode("wren", "off");
     h.advance(60_000);
     expect(h.dropped.at(-1)!.events.map((event) => event.peer)).toEqual([{ threadId: "th-14", title: "Urgent Northwind 14", status: "completed", senderId: "osprey", senderName: "Osprey" }]);
   });
@@ -511,18 +511,18 @@ describe("pending wakes survive a restart; a two-bot DM post always reports (202
   });
   const dmPost = (botId: string, extra: Partial<ProactiveEvent> = {}): ProactiveEvent => ({
     botId, source: "bot", key: "room-post:m1", fromBotId: "osprey", hops: 1, mentionsBot: true, dm: true,
-    label: "Post by Osprey in Osprey and Melonie", detail: "Room: K and M\nFrom: Osprey\n\nSECRET_POST",
+    label: "Post by Osprey in Osprey and Wren", detail: "Room: K and M\nFrom: Osprey\n\nSECRET_POST",
     replay: { kind: "room", groupId: "g1", threadId: "gt1", messageId: "m1", posterId: "osprey", hops: 1 }, ...extra,
   });
 
   it("the waker reports what each bot has gathered, and clears it when the wake starts", () => {
-    const h = harness({ melonie: "proactive" });
-    h.waker.offer(notice("melonie", 1));
-    h.waker.offer(notice("melonie", 2));
-    expect(h.changes).toEqual([{ botId: "melonie", keys: ["peer-notice:node-1"] }, { botId: "melonie", keys: ["peer-notice:node-1", "peer-notice:node-2"] }]);
+    const h = harness({ wren: "proactive" });
+    h.waker.offer(notice("wren", 1));
+    h.waker.offer(notice("wren", 2));
+    expect(h.changes).toEqual([{ botId: "wren", keys: ["peer-notice:node-1"] }, { botId: "wren", keys: ["peer-notice:node-1", "peer-notice:node-2"] }]);
     h.advance(30_000);
     expect(h.woken).toHaveLength(1);
-    expect(h.changes.at(-1)).toEqual({ botId: "melonie", keys: [] });
+    expect(h.changes.at(-1)).toEqual({ botId: "wren", keys: [] });
   });
 
   it("the file keeps ids only (never the words), mode 0600, and hands them back once", () => {
@@ -530,15 +530,15 @@ describe("pending wakes survive a restart; a two-bot DM post always reports (202
     try {
       const file = join(dir, "proactive-pending.json");
       const first = new ProactivePendingFile(file);
-      first.set("melonie", [notice("melonie", 1), dmPost("melonie"), { botId: "melonie", source: "mail", key: "mail-1", label: "Email", detail: "SECRET_MAIL" }]);
+      first.set("wren", [notice("wren", 1), dmPost("wren"), { botId: "wren", source: "mail", key: "mail-1", label: "Email", detail: "SECRET_MAIL" }]);
       const raw = readFileSync(file, "utf8");
       for (const word of ["SECRET_WORDS", "SECRET_RESULT", "SECRET_POST", "SECRET_MAIL", "Northwind"]) expect(raw).not.toContain(word);
       expect(statSync(file).mode & 0o777).toBe(0o600);
       // a restart: a fresh instance reads what was kept
       const second = new ProactivePendingFile(file);
       expect(second.take()).toEqual([
-        { botId: "melonie", key: "peer-notice:node-1", ref: { kind: "peer", noticeId: "node-1" } },
-        { botId: "melonie", key: "room-post:m1", ref: { kind: "room", groupId: "g1", threadId: "gt1", messageId: "m1", posterId: "osprey", hops: 1 } },
+        { botId: "wren", key: "peer-notice:node-1", ref: { kind: "peer", noticeId: "node-1" } },
+        { botId: "wren", key: "room-post:m1", ref: { kind: "room", groupId: "g1", threadId: "gt1", messageId: "m1", posterId: "osprey", hops: 1 } },
       ]);
       expect(new ProactivePendingFile(file).take()).toEqual([]);
       // a garbled row is left out, the others kept
@@ -563,13 +563,13 @@ describe("pending wakes survive a restart; a two-bot DM post always reports (202
     expect(wakeAlwaysReports([dmPost("m")])).toBe(true);
     expect(wakeAlwaysReports([dmPost("m", { dm: undefined })])).toBe(false);
     expect(wakeAlwaysReports([{ botId: "m", source: "mail", key: "k", label: "Email", detail: "d" }])).toBe(false);
-    const h = harness({ melonie: "proactive" });
-    h.waker.offer(dmPost("melonie"));
+    const h = harness({ wren: "proactive" });
+    h.waker.offer(dmPost("wren"));
     h.advance(30_000);
     const prompt = proactiveWakePrompt(h.woken[0]!);
     expect(prompt).toContain(DM_WAKE_RULES);
     expect(prompt).toContain("never ends with NOTHING_TO_REPORT");
-    expect(peerWakeDigest([dmPost("m")])).toBe("Messages from teammates:\n- Post by Osprey in Osprey and Melonie");
+    expect(peerWakeDigest([dmPost("m")])).toBe("Messages from teammates:\n- Post by Osprey in Osprey and Wren");
     expect(proactiveWakePrompt({ mode: "proactive", events: [dmPost("m", { dm: undefined })], more: 0 })).not.toContain(DM_WAKE_RULES);
   });
 });

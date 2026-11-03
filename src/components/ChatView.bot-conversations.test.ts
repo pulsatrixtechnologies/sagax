@@ -53,25 +53,25 @@ const ottoline = (messages: Message[], botConversations: Bot["botConversations"]
   notifications: true, unread: false, busy: false, messages, botConversations,
   modelSelection: { instanceId: "test", model: "m" },
 });
-const melonie = { id: "mel", threadId: "mel-main", name: "Melonie", color: "blue" };
+const wren = { id: "mel", threadId: "mel-main", name: "Wren", color: "blue" };
 
 describe("bot-to-bot conversations in the chat", () => {
   const rows: NonNullable<Bot["botConversations"]> = [
-    { threadId: "w2", otherBotId: "mel", otherName: "Melonie", direction: "in", startedAt: T + 25 * MIN, updatedAt: T + 26 * MIN },
-    { threadId: "w1", otherBotId: "mel", otherName: "Melonie", direction: "out", startedAt: T + 5 * MIN, updatedAt: T + 90 * MIN },
+    { threadId: "w2", otherBotId: "mel", otherName: "Wren", direction: "in", startedAt: T + 25 * MIN, updatedAt: T + 26 * MIN },
+    { threadId: "w1", otherBotId: "mel", otherName: "Wren", direction: "out", startedAt: T + 5 * MIN, updatedAt: T + 90 * MIN },
   ];
   const messages = [message("a", "first question", T), message("b", "second question", T + 10 * MIN), message("c", "third question", T + 40 * MIN)];
 
   it("draws no card above the chat, only quiet lines placed by time", () => {
     const self = ottoline(messages, rows);
-    fixture.bots = [self, melonie];
+    fixture.bots = [self, wren];
     const markup = renderToStaticMarkup(createElement(ChatView, { bot: self }));
     expect(markup).not.toContain("data-bot-conversations");
-    expect(markup).not.toContain("Conversation with Melonie");
+    expect(markup).not.toContain("Conversation with Wren");
     const order = ["first question", 'data-thread-chip="w1"', "second question", 'data-thread-chip="w2"', "third question"].map((needle) => markup.indexOf(needle));
     expect(order.every((index) => index >= 0)).toBe(true);
     expect(order).toEqual([...order].sort((x, y) => x - y));
-    // Two Melonie conversations sit at different times (between different
+    // Two Wren conversations sit at different times (between different
     // person lines), so each stays its own quiet line.
     expect(markup.match(/data-testid="bot-exchange-chip"/g)).toHaveLength(2);
     expect(markup).toContain("Go to conversation");
@@ -99,11 +99,11 @@ describe("bot-to-bot conversations in the chat", () => {
   it("skips a conversation the transcript already links to, and shows nothing outside the main chat", () => {
     const linked = [...messages, { id: "r", role: "bot", kind: "activity", at: T + 6 * MIN, tool: { name: "Opened thread #x", ok: true }, threadRef: { botId: "mel", threadId: "w1", title: "x" } } as Message];
     const self = ottoline(linked, rows);
-    fixture.bots = [self, melonie];
+    fixture.bots = [self, wren];
     const markup = renderToStaticMarkup(createElement(ChatView, { bot: self }));
     expect(markup.match(/data-thread-chip="w1"/g)).toHaveLength(1);
     const side = { ...self, threadId: "kat-task" };
-    fixture.bots = [side, melonie];
+    fixture.bots = [side, wren];
     expect(renderToStaticMarkup(createElement(ChatView, { bot: side }))).not.toContain('data-bot-conversation="');
   });
 
@@ -118,16 +118,16 @@ describe("bot-to-bot conversations in the chat", () => {
 
   describe("conversations older than the topic's first line", () => {
     const old: NonNullable<Bot["botConversations"]> = [
-      { threadId: "o1", otherBotId: "mel", otherName: "Melonie", direction: "out", startedAt: T - 90 * MIN, updatedAt: T - 80 * MIN },
-      { threadId: "o2", otherBotId: "mel", otherName: "Melonie", direction: "in", startedAt: T - 60 * MIN, updatedAt: T - 50 * MIN },
+      { threadId: "o1", otherBotId: "mel", otherName: "Wren", direction: "out", startedAt: T - 90 * MIN, updatedAt: T - 80 * MIN },
+      { threadId: "o2", otherBotId: "mel", otherName: "Wren", direction: "in", startedAt: T - 60 * MIN, updatedAt: T - 50 * MIN },
       { threadId: "o3", otherBotId: "bru", otherName: "Brunhilde", direction: "out", startedAt: T - 30 * MIN, updatedAt: T - 20 * MIN },
-      { threadId: "o4", otherBotId: "mel", otherName: "Melonie", direction: "out", startedAt: T - 10 * MIN, updatedAt: T - 5 * MIN },
+      { threadId: "o4", otherBotId: "mel", otherName: "Wren", direction: "out", startedAt: T - 10 * MIN, updatedAt: T - 5 * MIN },
     ];
     const bru = { id: "bru", threadId: "bru-main", name: "Brunhilde", color: "orange" };
 
     it("folded: no link is drawn above the first message", () => {
       const self = ottoline([message("a", "hello", T)], old);
-      fixture.bots = [self, melonie, bru];
+      fixture.bots = [self, wren, bru];
       const markup = renderToStaticMarkup(createElement(ChatView, { bot: self }));
       expect(markup).not.toContain("Go to conversation");
       expect(markup).not.toContain("data-thread-chip");
@@ -136,7 +136,7 @@ describe("bot-to-bot conversations in the chat", () => {
     });
 
     it("splits what opens the topic from what sits inside it", () => {
-      const { leading, inline } = splitLeadingConversations([...old, { threadId: "mid", otherBotId: "mel", otherName: "Melonie", direction: "out", startedAt: T + MIN }], T, false);
+      const { leading, inline } = splitLeadingConversations([...old, { threadId: "mid", otherBotId: "mel", otherName: "Wren", direction: "out", startedAt: T + MIN }], T, false);
       expect(leading.map((row) => row.threadId)).toEqual(["o1", "o2", "o3", "o4"]);
       expect(inline.map((row) => row.threadId)).toEqual(["mid"]);
       expect(splitLeadingConversations(old, T, true).leading).toEqual([]);
@@ -146,7 +146,7 @@ describe("bot-to-bot conversations in the chat", () => {
     it("unfolded: one compact line per bot, the most recent, newest first", () => {
       expect(dedupeConversations(old).map((row) => row.threadId)).toEqual(["o4", "o3"]);
       const self = ottoline([], old);
-      fixture.bots = [self, melonie, bru];
+      fixture.bots = [self, wren, bru];
       const markup = renderToStaticMarkup(createElement(EarlierConversationList, { self, rows: old, bots: fixture.bots as Bot[] }));
       expect(markup.match(/data-thread-chip=/g)).toHaveLength(2);
       expect(markup.indexOf('data-thread-chip="o4"')).toBeLessThan(markup.indexOf('data-thread-chip="o3"'));

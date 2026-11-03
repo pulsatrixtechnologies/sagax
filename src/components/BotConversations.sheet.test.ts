@@ -19,7 +19,7 @@ import { BotConversationLine } from "./BotConversations";
 beforeAll(() => setLocale("en"));
 
 const self = { id: "kat", name: "Ottoline", color: "green" as const };
-const row = { threadId: "w1", otherBotId: "mel", otherName: "Melonie", direction: "out" as const, updatedAt: 1 };
+const row = { threadId: "w1", otherBotId: "mel", otherName: "Wren", direction: "out" as const, updatedAt: 1 };
 
 describe("bot-to-bot conversation sheet (#1502)", () => {
   let host: HTMLDivElement;
@@ -47,7 +47,7 @@ describe("bot-to-bot conversation sheet (#1502)", () => {
     reply.next.push(async () => ({ messages: [], hasMore: false, activeLeafId: null }));
     await openLine();
     expect(host.querySelector("[data-testid=bot-exchange-sheet]")).not.toBeNull();
-    expect(host.querySelector("[data-testid=bot-exchange-empty]")?.textContent).toContain("Melonie");
+    expect(host.querySelector("[data-testid=bot-exchange-empty]")?.textContent).toContain("Wren");
     expect(host.querySelector("[data-testid=bot-exchange-error]")).toBeNull();
   });
 

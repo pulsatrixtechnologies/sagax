@@ -72,7 +72,7 @@ function harness(answer: (command: string, argv: string[]) => CommandResult | Pr
     return answer(command, argv);
   };
   const store = {
-    bot: () => ({ id: BOT, name: "Melonie", color: "#336699" }),
+    bot: () => ({ id: BOT, name: "Wren", color: "#336699" }),
     appendMessage: (_thread: string, partial: Partial<Message>) => {
       const message = { id: `m${messages.length}`, at: 1, role: "bot", kind: "text", ...partial } as Message;
       messages.push(message);

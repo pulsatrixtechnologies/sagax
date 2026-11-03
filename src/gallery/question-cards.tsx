@@ -77,7 +77,7 @@ function Preview() {
           <QuestionCard threadId="t" bot={bot} message={ask("d", [{ question: "Pour combien de temps je les mets en pause ?", options: [] }])} />
         </Row>
         <Row id="ask-set" label="Plusieurs questions">
-          <QuestionCard threadId="t" bot={bot} message={ask("e", [{ ...WEBHOOKS, header: "Webhooks" }, { question: "Je préviens Melonie ?", header: "Melonie", options: [{ label: "Oui" }, { label: "Non" }] }])} />
+          <QuestionCard threadId="t" bot={bot} message={ask("e", [{ ...WEBHOOKS, header: "Webhooks" }, { question: "Je préviens Wren ?", header: "Wren", options: [{ label: "Oui" }, { label: "Non" }] }])} />
         </Row>
         <Row id="person-single" label="ask_person (carte simple)">
           <OptionCard botId="preview-bot" threadId="t" message={flat("f")} />

@@ -25,9 +25,9 @@ const HOST = `h_${"ab".repeat(16)}`;
 const OTHER = `h_${"cd".repeat(16)}`;
 
 const bot = {
-  id: "melonie",
-  threadId: "t-melonie",
-  name: "Melonie",
+  id: "wren",
+  threadId: "t-wren",
+  name: "Wren",
   title: "",
   description: "",
   notifications: true,

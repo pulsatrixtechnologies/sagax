@@ -39,7 +39,7 @@ const routine = (id: string, botId: string, name: string, hour: number, folder?:
   schedule: { type: "daily", time: `${String(hour).padStart(2, "0")}:00`, weekdays: [0, 1, 2, 3, 4, 5, 6] }, nextRunAt: Date.now() + hour * 3_600_000,
 }) as unknown as Routine;
 const routines = [
-  routine("a1", "atlas", "Outlook digest to Melonie", 8),
+  routine("a1", "atlas", "Outlook digest to Wren", 8),
   routine("a2", "atlas", "Client reply watch", 9, "Clients"),
   routine("s1", "scout", "Catch-up and manager copy", 10),
   routine("s2", "scout", "Weekly report", 11, "Reports"),

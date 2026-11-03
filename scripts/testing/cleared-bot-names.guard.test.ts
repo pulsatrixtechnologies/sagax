@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
-const CLEARED = new Set(["6236954eb0980f3a"]);
+const CLEARED = new Set(["6236954eb0980f3a", "f3a5ba05f3002a12"]);
 const SKIPPED = /(?:^|\/)(?:third_party|node_modules)\/|^pnpm-lock\.yaml$|\.(?:png|jpe?g|gif|webp|ico|icns|woff2?|ttf|otf|wasm|zip|gz|mp[34]|mov|pdf|bin|onnx|gguf|p8)$/i;
 const digest = (word: string) => createHash("sha256").update(word.normalize("NFKC").toLowerCase()).digest("hex").slice(0, 16);
 

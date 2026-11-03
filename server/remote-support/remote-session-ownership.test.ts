@@ -52,7 +52,7 @@ async function supportFolder(owner: { principalId?: string; botId?: string } = {
 
 function fakeStore(messages: Message[]): Store {
   return {
-    bot: (id: string) => ({ id, name: "Melonie", color: "#336699" }),
+    bot: (id: string) => ({ id, name: "Wren", color: "#336699" }),
     appendMessage: (_thread: string, partial: Partial<Message>) => {
       const message = { id: `m${messages.length}`, at: 1, role: "bot", kind: "text", ...partial } as Message;
       messages.push(message);

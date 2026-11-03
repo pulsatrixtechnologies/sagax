@@ -865,7 +865,7 @@ it("an external runtime's delegate_bot that needs the person's review is not hel
 
 it("peer inbox (2026-11-02): teammates' one-way notices wake each proactive receiver once, batched, Primary Bot and team bot alike; nothing resumes the sender", () => withFixture(async (f) => {
   const sender = (await f.cli("new-bot", "--name", "Osprey")).bot;
-  const primary = (await f.cli("new-bot", "--name", "Melonie")).bot;
+  const primary = (await f.cli("new-bot", "--name", "Wren")).bot;
   const teammate = (await f.cli("new-bot", "--name", "Harrie")).bot;
   await f.api(`/api/bots/${primary.id}`, { chiefOfStaff: true, acknowledgePeerScope: true }, "PATCH");
   f.plan[sender.id] = {
@@ -880,7 +880,7 @@ it("peer inbox (2026-11-02): teammates' one-way notices wake each proactive rece
   f.plan[primary.id] = receiverPlan("PRIMARY_WAKE_REPORT: two Northwind writes wait on your GO");
   f.plan[teammate.id] = receiverPlan("TEAMMATE_WAKE_REPORT: the support bank is under its threshold");
   f.save();
-  await f.api(`/api/bots/${sender.id}/messages`, { text: "Tell Melonie and Harrie what you found.", threadId: sender.activeTaskId });
+  await f.api(`/api/bots/${sender.id}/messages`, { text: "Tell Wren and Harrie what you found.", threadId: sender.activeTaskId });
   const wakes = async (botId: string) => ((await f.api("/api/routines", undefined, "GET")).runs as any[]).filter((run) => run.botId === botId && run.proactive);
   for (const bot of [primary, teammate]) {
     await expect.poll(async () => (await wakes(bot.id)).map((run) => run.status), { timeout: 60_000, interval: 250 }).toEqual(["completed"]);
@@ -939,7 +939,7 @@ it("peer inbox (2026-11-02): a one-way notice's question reaches its receiver's 
 // the person. A wake on teammates' messages now always reports.
 it("peer inbox (second pass): a wake on a teammate's notice that ends NOTHING_TO_REPORT still reports to the person, with the bot's words or the digest", () => withFixture(async (f) => {
   const sender = (await f.cli("new-bot", "--name", "Osprey")).bot;
-  const primary = (await f.cli("new-bot", "--name", "Melonie")).bot;
+  const primary = (await f.cli("new-bot", "--name", "Wren")).bot;
   const solo = (await f.cli("new-bot", "--name", "Harrie")).bot;
   await f.api(`/api/bots/${primary.id}`, { chiefOfStaff: true, acknowledgePeerScope: true }, "PATCH");
   f.plan[sender.id] = {
@@ -954,7 +954,7 @@ it("peer inbox (second pass): a wake on a teammate's notice that ends NOTHING_TO
   // the marker alone: the digest names who wrote and about what
   f.plan[solo.id] = { byPrompt: [{ promptIncludes: "Proactive wake", plan: { reply: "NOTHING_TO_REPORT" } }], reply: "Noted" };
   f.save();
-  await f.api(`/api/bots/${sender.id}/messages`, { text: "Tell Melonie and Harrie.", threadId: sender.activeTaskId });
+  await f.api(`/api/bots/${sender.id}/messages`, { text: "Tell Wren and Harrie.", threadId: sender.activeTaskId });
   const wakes = async (botId: string) => ((await f.api("/api/routines", undefined, "GET")).runs as any[]).filter((run) => run.botId === botId && run.proactive);
   for (const bot of [primary, solo]) {
     await expect.poll(async () => (await wakes(bot.id)).map((run) => run.status), { timeout: 60_000, interval: 250 }).toEqual(["completed"]);
@@ -1003,14 +1003,14 @@ it("peer inbox (second pass): a notice no wake runs for (proactive off) is shown
 
 it("peer inbox (second pass): a teammate's notice gathered before a restart (a pulsabot roll) wakes its receiver after it, with only ids on disk", () => withFixture(async (f) => {
   const sender = (await f.cli("new-bot", "--name", "Osprey")).bot;
-  const receiver = (await f.cli("new-bot", "--name", "Melonie")).bot;
+  const receiver = (await f.cli("new-bot", "--name", "Wren")).bot;
   f.plan[sender.id] = {
     steps: [{ tool: "send_to_bot", arguments: { bot_id: receiver.id, title: "Urgent Northwind 100200 client reply", message: "ROLL_SECRET_WORDS Sam answered on 100200" } }],
     reply: "Sent",
   };
   f.plan[receiver.id] = { byPrompt: [{ promptIncludes: "Proactive wake", plan: { reply: "AFTER_ROLL_REPORT: Sam answered on 100200" } }], reply: "Noted in the notice thread" };
   f.save();
-  await f.api(`/api/bots/${sender.id}/messages`, { text: "Tell Melonie.", threadId: sender.activeTaskId });
+  await f.api(`/api/bots/${sender.id}/messages`, { text: "Tell Wren.", threadId: sender.activeTaskId });
   // the gather window outlasts the roll: the notice waits on disk
   const pendingFile = join(f.dataDir, "proactive-pending.json");
   await expect.poll(() => existsSync(pendingFile) ? Object.keys(JSON.parse(readFileSync(pendingFile, "utf8")).pending) : [], { timeout: 60_000, interval: 250 }).toEqual([receiver.id]);

@@ -36,7 +36,7 @@ const bots = [bot("atlas", "Atlas", "blue", { pinned: true }), bot("boreas", "Bo
 const base = { prompt: "Summarize.", target: "bot", runOn: "maus", durationMinutes: 30, createdAt: 1, updatedAt: 1, canRun: true, canEdit: true };
 const daily = (time: string, weekdays = [1, 2, 3, 4, 5]) => ({ type: "daily", time, weekdays });
 const routines = [
-  { ...base, id: "r1", botId: "atlas", name: "Outlook digest to Melonie", enabled: true, schedule: daily("08:00"), nextRunAt: NOW + 2 * H },
+  { ...base, id: "r1", botId: "atlas", name: "Outlook digest to Wren", enabled: true, schedule: daily("08:00"), nextRunAt: NOW + 2 * H },
   { ...base, id: "r2", botId: "atlas", name: "Client reply watch", folder: "Clients", enabled: true, schedule: { type: "interval", everyMinutes: 30, anchorAt: NOW - H }, nextRunAt: NOW + 0.4 * H },
   { ...base, id: "r3", botId: "atlas", name: "Catch-up and manager copy", folder: "Clients", enabled: true, schedule: daily("16:30"), nextRunAt: NOW + 5 * H },
   { ...base, id: "r4", botId: "atlas", name: "Weekly board review", folder: "Reports", enabled: true, schedule: daily("09:00", [1]), nextRunAt: NOW + 40 * H, failureStreak: 2 },

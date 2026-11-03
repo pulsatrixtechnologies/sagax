@@ -1362,7 +1362,7 @@ export function MemoryManagerPanel() {
   const quality = useMemo(() => qualityStats(scopeRows, scopeArchived, scopeReview, Date.now(), stats), [scopeRows, scopeArchived, scopeReview, stats]);
   const active = useMemo(() => activeSeries(scopeRows, scopeTiers.map((tier) => tier.key), Date.now()), [scopeRows, scopeTiers]);
   const writes = useMemo(() => writeSeries(scopeJournal, Date.now()), [scopeJournal]);
-  // "Melonie / Logs": the folder under its bot or its tier, else the row's own name.
+  // "Wren / Logs": the folder under its bot or its tier, else the row's own name.
   const scopeLabel = (() => {
     if (place.kind === "collections" && openCollection) return `${listTitle} / ${openCollection.title}`;
     if (place.kind !== "folder") return listTitle;

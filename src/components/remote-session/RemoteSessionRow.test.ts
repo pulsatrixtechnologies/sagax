@@ -39,7 +39,7 @@ const $ = (selector: string) => host.querySelector<HTMLElement>(selector);
 
 function panel(overrides: Partial<Parameters<typeof RemoteSessionsPanel>[0]> = {}) {
   return createElement(StoreProvider, null, createElement(RemoteSessionsPanel, {
-    botId: "melonie", rows: [view], confirmId: null, error: null, onTakeControl: () => undefined, onClose: () => undefined, ...overrides,
+    botId: "wren", rows: [view], confirmId: null, error: null, onTakeControl: () => undefined, onClose: () => undefined, ...overrides,
   }));
 }
 

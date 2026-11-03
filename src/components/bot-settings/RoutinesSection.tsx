@@ -55,7 +55,7 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
   const openLogs = (routineId: string) => dispatch({ type: "showRoutines", section: "logs", routineId, botId: bot.id });
 
   // 2026-11-01: a run opened from the routine's history (or Run now) opens
-  // as an exchange sheet over the chat column (same place as Melonie <->
+  // as an exchange sheet over the chat column (same place as Wren <->
   // Osprey), not as a modal over the app.
   let runSheet: React.ReactNode = null;
   if (detail && openedRun) {

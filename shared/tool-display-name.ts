@@ -65,3 +65,11 @@ export function toolDisplayName(name: string, product?: string): string {
   const shown = capitalize(words(decodeEscapes(own ?? ""))) || raw;
   return declared ? `${shown} · ${declared}` : shown;
 }
+
+/** Every raw tool id in a sentence (`mcp__outlook__get_message failed 2
+ * times`) read as its name in words. */
+const TOOL_ID_IN_TEXT = /(?<![\w-])(?:[A-Za-z0-9][\w.-]*?__[\w.-]*[A-Za-z0-9]|(?:user|team|org|workspace)-[\w.-]+___\d+)(?![\w-])/g;
+
+export function humanizeToolIds(text: string): string {
+  return text.replace(TOOL_ID_IN_TEXT, (id) => toolDisplayName(id));
+}

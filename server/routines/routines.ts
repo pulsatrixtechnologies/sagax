@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { turnTrace } from "../turns/turn-trace.ts";
 import { readableRoutineProblems } from "../../shared/routine-problems.ts";
+import { humanizeToolIds } from "../../shared/tool-display-name.ts";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
@@ -3792,7 +3793,8 @@ export class RoutineManager {
       // each command its own title. A single real failure is the bot's to
       // declare (RUN_STATUS, the report contract).
       if (failure.count < 2) continue;
-      problems.push(`${title} failed ${failure.count} times and never succeeded after${failure.output ? `: ${failure.output}` : ""}`);
+      // the tool in words, as its card names it (shared/tool-display-name.ts)
+      problems.push(`${humanizeToolIds(title)} failed ${failure.count} times and never succeeded after${failure.output ? `: ${failure.output}` : ""}`);
     }
     if (trouble?.unanswered?.length) {
       const one = trouble.unanswered.length === 1;

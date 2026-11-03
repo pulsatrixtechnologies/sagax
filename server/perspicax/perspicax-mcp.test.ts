@@ -198,6 +198,29 @@ describe("PerspicaxMcp: the Flow guard's GO (elicitation)", () => {
 });
 
 describe("PerspicaxMcp", () => {
+  it("#1935: names the MCP server of this turn that runs a profile tool", async () => {
+    const h = harness({
+      mcp: ({ body }) => {
+        if (body.id === undefined) return new Response(null, { status: 202 });
+        const result = body.method === "tools/list" ? { tools: [{ name: "cw_psa_query" }, { name: "api_search" }] } : {};
+        return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "sess-1" } });
+      },
+    });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    // no mount name recorded yet: nothing to name
+    expect(h.mcp.toolHome(turn.threadId, turn.generation, "x", "cw_psa_query")).toBeUndefined();
+    h.mcp.setMount(turn.threadId, turn.generation, "P1", "perspicax_read_only_dispatch_view");
+    // before any listing: the server the gateway tools answer from, not sure
+    expect(h.mcp.toolHome(turn.threadId, turn.generation, "x", "cw_psa_query")).toEqual({ server: "perspicax_read_only_dispatch_view", served: false });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    expect(h.mcp.toolHome(turn.threadId, turn.generation, "x", "cw_psa_query")).toEqual({ server: "perspicax_read_only_dispatch_view", served: true });
+    // an earlier spelling with `__` is the same tool
+    expect(h.mcp.toolHome(turn.threadId, turn.generation, "x", "cw_psa__query")).toEqual({ server: "perspicax_read_only_dispatch_view", served: true });
+    // another bot, or another turn, gets nothing
+    expect(h.mcp.toolHome(turn.threadId, turn.generation, "y", "cw_psa_query")).toBeUndefined();
+    expect(h.mcp.toolHome(turn.threadId, "g-other", "x", "cw_psa_query")).toBeUndefined();
+  });
+
   it("exchanges the speaker's own sign-in, never the owner's", async () => {
     const h = harness();
     const plan = await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });

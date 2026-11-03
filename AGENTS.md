@@ -16,6 +16,18 @@ isolated fixture; never verify mutations against the user's live app or data.
 
 UI work: read docs/design/ux-reference-grokbot-cursor.md first; do not re-scan Grok Bot unless the doc lacks the surface, then extend the doc.
 
+## Perspicax profile servers on Claude and Codex (#1935, 2026-11-03)
+
+An MCP server name is at most 40 characters everywhere (`MCP_SERVER_NAME`,
+`shared/tool-scope.ts`), the cap of `perspicaxServerName`. Never narrow it
+back to 32: a longer profile server vanished from the Claude and Codex
+config while the prompt listed it. On a compact prompt a profile bridge
+lists its core whole (`compactGateSearch`, `server/mcp/mcp-gate-search.ts`).
+A forwarded gateway answer names the profile server (`PerspicaxMcp.toolHome`,
+set by `setMount` in `perspicaxTurnIntegration`); the agents server sends a
+call of a profile tool there (`{ locate }` on `/api/internal/perspicax/tool`).
+`docs/mcp-tool-names.md`, last section.
+
 ## A call is a realtime voice session (2026-11-02)
 
 Never text to speech on a call: `GET /voice/realtime` bridges the page to

@@ -72,9 +72,20 @@ The CLI only wrote `Skipping MCP tool` to its own log; the bot saw nothing.
    another MCP client): every tool must be there, `cw_psa__*` under their
    aliases. Then check `GET /api/mcp/tool-names` shows no `mismatch`.
 
-## Known limit
+## Server names up to 40 characters (#1935, 2026-11-03)
 
-Tool selection selectors (`mcp:<server>:<tool>`) still accept server names of
-at most 32 characters (`shared/tool-scope.ts`); a 40-character Perspicax
-profile slug cannot be narrowed by a selection. Unselected bots are not
-affected.
+A Perspicax profile is mounted as `perspicax_<slug>`, cut at 40 characters
+(`perspicaxServerName`). The tool selection rule (`MCP_SERVER_NAME` in
+`shared/tool-scope.ts`), the gate and the remote proxy accepted 32: Claude
+and Codex call `canUseMcpServer` on every bot-owned server, so a longer
+profile server (`perspicax_read_only_dispatch_view`, 33) was dropped from the
+engine's MCP config while the prompt still listed it as reachable. All four
+now share the 40-character rule, and a selection can name such a server.
+
+On a compact prompt a profile bridge also lists its own core whole
+(`PERSPICAX_BRIDGE_PINS`: `api_search`, `api_describe`, `api_result_query`,
+and up to 16 tools ending in `_query`, `_write` or `_action`); the rest stays
+behind that server's `search_tools`. A gateway answer the agents server
+forwards (`api_search`, `api_describe`, `api_list`, `api_plan`) ends with the
+profile server that runs the tools it names, and the agents server answers a
+call of such a tool with that server instead of "No tool named".

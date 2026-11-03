@@ -52,6 +52,7 @@ import { BASH_MAX_TIMEOUT_MS } from "../system-prompt.ts";
 import { ephemeralWorkspaceTokenPath } from "../backup/workspace-backup-policy.ts";
 import * as procs from "../procs.ts";
 import * as localInject from "./local-inject.ts";
+import { SPAWNED_PROXIES } from "../proxy-paths.ts";
 
 const FAKE_CLI = join(dirname(fileURLToPath(import.meta.url)), "..", "testing", "fake-claude-cli.ts");
 /** The process that played the latest turn a FAKE_CLAUDE_DUMP recorded. */
@@ -1977,6 +1978,27 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     const seen = JSON.parse(readFileSync(dump, "utf8"));
     expect(seen.env.ENABLE_TOOL_SEARCH).toBe("false");
     expect(seen.mcpConfig.mcpServers.agents.env.SAGAX_MERGED_TOOLS).toBeUndefined();
+  });
+
+  it("#1935: on a compact prompt a Perspicax profile bridge lists its core tools whole", async () => {
+    await create(undefined, { FAKE_CLAUDE_VERSION: "2.1.284" });
+    const dump = join(scratch, "compact-px-dump.json");
+    process.env.FAKE_CLAUDE_DUMP = dump;
+    await instance.adapter.sendTurn({
+      threadId: "t-compact-px", text: "hi",
+      compactPrompt: { agents: { core: "default", pinned: [] }, pinned: { perspicax_read_only_dispatch_view: ["cw_psa_find_tickets"] } },
+      integrations: { custom: {
+        perspicax_read_only_dispatch_view: { command: process.execPath, args: [SPAWNED_PROXIES.perspicax], env: { SAGAX_PERSPICAX_PROFILE: "P1" } },
+        ops: { command: process.execPath, args: ["/fake/ops.js"], env: {} },
+      } },
+    } as Parameters<typeof instance.adapter.sendTurn>[0]);
+    await recorder.until((e) => e.type === "turn.completed");
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    const bridge = JSON.parse(seen.mcpConfig.mcpServers.perspicax_read_only_dispatch_view.env.SAGAX_GATE_SEARCH);
+    expect(bridge.pinned).toEqual(["api_describe", "api_result_query", "api_search", "cw_psa_find_tickets"]);
+    expect(bridge.pinnedSuffixes).toEqual(["_action", "_query", "_write"]);
+    // another server the bot owns keeps only its own most used tools
+    expect(JSON.parse(seen.mcpConfig.mcpServers.ops.env.SAGAX_GATE_SEARCH).pinnedSuffixes).toBeUndefined();
   });
 
   // The harness hands the same per-session bearer to every turn; rewriting

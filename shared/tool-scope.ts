@@ -9,7 +9,13 @@ export type ToolIdentity =
 
 type ParsedToolScope = { ok: true; scope: ToolScope | undefined } | { ok: false; error: string };
 
-const SERVER_NAME = /^[a-z][a-z0-9_-]{0,31}$/;
+/** An MCP server name a selection, the gate and the mounts accept. 40
+ * characters: a Perspicax profile bridge is mounted as `perspicax_<slug>`
+ * cut at 40 (perspicaxServerName). At 32, a longer profile server
+ * (`perspicax_read_only_dispatch_view`) was silently left out of a Claude
+ * or Codex turn while the prompt still listed it (#1935). */
+export const MCP_SERVER_NAME = /^[a-z][a-z0-9_-]{0,39}$/;
+const SERVER_NAME = MCP_SERVER_NAME;
 // Selectors must never contain protocol control characters.
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARACTER = /[\x00-\x1f\x7f]/;

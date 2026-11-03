@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Headless screenshots of Tools > Memory page (2026-11-02):
- * src/gallery/memory-manager.html, list and map, light and dark.
- * Dense map (?dense=1, 40 notes with links) included for layout polish.
+ * Headless screenshots of Tools > Memory page (2026-11-02, the Perspicax
+ * console's shape): src/gallery/memory-manager.html, the views Notes, Map,
+ * Tags, Quality and a note, light and dark, at 1440 x 900.
  * Headless Chromium only: no window opens.
  * Usage: node scripts/capture/memory-manager.mjs [--out DIR] [--port N]
  */
@@ -16,11 +16,8 @@ const arg = (name) => { const index = process.argv.indexOf(name); return index >
 const outDir = resolve(arg("--out") ?? join(root, "docs", "screenshots", "memory-manager"));
 const port = Number(arg("--port") ?? 5341);
 const skins = [{ id: "pulsatrix-light", label: "light" }, { id: "pulsatrix", label: "dark" }];
-const shots = [
-  { view: "browse", dense: false, name: "browse" },
-  { view: "map", dense: false, name: "map" },
-  { view: "map", dense: true, name: "map-dense" },
-];
+const shots = ["notes", "map", "tags", "quality", "note"].map((view) => ({ view, name: view }));
+const prefix = arg("--prefix") ?? "memory";
 
 async function waitForServer(url, ms = 120_000) {
   const start = Date.now();
@@ -52,25 +49,15 @@ try {
     headless: true,
     ...(chromePath ? { executablePath: chromePath } : {}),
   });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
   for (const { id, label } of skins) {
     for (const shot of shots) {
-      const query = new URLSearchParams({ skin: id, lang: "en", view: shot.view });
-      if (shot.dense) query.set("dense", "1");
+      const query = new URLSearchParams({ skin: id, lang: arg("--lang") ?? "en", view: shot.view, width: "1440", height: "900" });
       await page.goto(`${base}?${query}`, { waitUntil: "load" });
       await page.waitForSelector("[data-memory-manager-page]");
       await page.waitForSelector('[data-gallery-ready="1"]', { timeout: 20_000 }).catch(() => {});
-      if (shot.view === "browse") {
-        await page.waitForSelector("[data-memory-browse]", { timeout: 10_000 }).catch(() => {});
-      }
-      if (shot.view === "map") {
-        await page.waitForSelector("[data-memory-map]", { timeout: 10_000 }).catch(() => {});
-        if (shot.dense) {
-          await page.waitForSelector('[data-memory-map-node="note"]', { timeout: 15_000 }).catch(() => {});
-        }
-      }
       await page.waitForTimeout(600);
-      await page.screenshot({ path: join(outDir, `memory-${shot.name}-${label}.png`), fullPage: false });
+      await page.screenshot({ path: join(outDir, `${prefix}-${shot.name}-${label}.png`), fullPage: false });
     }
   }
   console.log(`screenshots in ${outDir}`);

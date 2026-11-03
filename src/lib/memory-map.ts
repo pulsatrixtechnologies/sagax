@@ -364,3 +364,61 @@ export function buildMemoryMapGraph(input: {
 
   return { nodes: layoutMemoryMapNodes(draft), edges };
 }
+
+/** One tier of the page's map: its name and its notes (ids are the page's row keys). */
+export interface MemoryMapGroup {
+  key: string;
+  name: string;
+  notes: MemoryNoteRow[];
+}
+
+const GROUP_GAP = 120;
+
+/** The page's whole map: one layered cluster per tier (tier → folders →
+ * notes), the clusters side by side, plus the [[links]] between notes of
+ * any tier. Note ids are the page's row keys. */
+export function buildMemoryPageGraph(groups: MemoryMapGroup[], bodies: Record<string, string> = {}): MemoryMapGraph {
+  const nodes: MemoryMapNode[] = [];
+  const edges: MemoryMapEdge[] = [];
+  let offsetX = 0;
+  for (const group of groups) {
+    if (group.notes.length === 0) continue;
+    const counts = new Map<string, number>();
+    for (const note of group.notes) if (note.folder) counts.set(note.folder, (counts.get(note.folder) ?? 0) + 1);
+    const source: MemoryManagerSource = { id: group.key, kind: "perspicax", name: group.name, mayWrite: false };
+    const graph = buildMemoryMapGraph({
+      source,
+      browse: { folders: [...counts].map(([name, count]) => ({ id: name, name, count })), notes: group.notes, mayWrite: false },
+      bodies: {},
+    });
+    let maxX = 0;
+    for (const node of graph.nodes) {
+      nodes.push({ ...node, x: node.x + offsetX });
+      maxX = Math.max(maxX, node.x + MEMORY_NODE_WIDTH);
+    }
+    edges.push(...graph.edges);
+    offsetX += maxX + GROUP_GAP;
+  }
+  // [[links]] across the whole map, by title.
+  const byTitle = new Map<string, string>();
+  const nodeOfNote = new Map<string, string>();
+  for (const node of nodes) {
+    if (node.kind !== "note" || !node.noteId) continue;
+    byTitle.set(node.label.trim().toLowerCase(), node.id);
+    nodeOfNote.set(node.noteId, node.id);
+  }
+  const seen = new Set<string>();
+  for (const [noteId, body] of Object.entries(bodies)) {
+    const from = nodeOfNote.get(noteId);
+    if (!from) continue;
+    for (const target of extractWikiLinks(body)) {
+      const to = byTitle.get(target);
+      if (!to || to === from) continue;
+      const id = `link:${from}:${to}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      edges.push({ id, from, to, kind: "link" });
+    }
+  }
+  return { nodes, edges };
+}

@@ -578,8 +578,24 @@ export function createInternalBotChatRoutes(deps: InternalBotChatDeps): Internal
           botIds.push(resolved.id);
         }
         if (new Set(botIds).size !== botIds.length) return json(res, 400, { error: "bot_ids name the same teammate twice — send each teammate once" });
+        // Outside a room the work lands in this conversation's work thread
+        // with the teammate, opened below when there is none: never the
+        // teammate's selected thread, which may be confidential
+        // (docs/confidential-threads.md, "Turns that name no thread"). Until
+        // then the checks read the thread the work would use: the existing
+        // work thread, else an ordinary one of the teammate's. The real
+        // thread is checked again when the work is queued.
+        const directThread = (botId: string): string => {
+          const work = store.workThread(botId, internalSender.id, address.threadId);
+          if (work) return work.threadId;
+          const bot = store.bot(botId);
+          const tasks = (bot?.tasks ?? []) as ReadonlyArray<{ threadId: string; confidential?: boolean; archivedAt?: number }>;
+          const selected = tasks.find((task) => task.threadId === bot?.threadId);
+          if (selected && selected.confidential !== true) return selected.threadId;
+          return tasks.find((task) => task.confidential !== true && task.archivedAt === undefined)?.threadId ?? bot?.threadId ?? "";
+        };
         const targets = botIds.map(botId => ({ groupId: destination?.id,
-          threadId: destination ? destination.id === source?.id ? address.threadId : destination.threadId : store.bot(botId)?.threadId ?? "", botId,
+          threadId: destination ? destination.id === source?.id ? address.threadId : destination.threadId : directThread(botId), botId,
         }));
         for (const target of targets) {
           // roomHandoffProblem's "no longer exists" is written for a route

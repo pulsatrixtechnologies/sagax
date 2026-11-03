@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   OUTBOUND_DEFAULT_CAP,
   connectorCallsIn,
+  isMessageSendTool,
   isOutboundTool,
+  isPhoneCallTool,
   isReadOnlyTool,
   normalizeOutboundPolicy,
   outboundCallsIn,
@@ -216,5 +218,86 @@ describe("outboundCallsIn", () => {
     expect(sends.map((call) => call.slug)).toEqual(["GMAIL_SEND_EMAIL"]);
     expect(outboundCallsIn("GMAIL_FETCH_EMAILS", {})).toEqual([]);
     expect(isOutboundTool("COMPOSIO_PROXY_EXECUTE")).toBe(true);
+  });
+});
+
+// 2026-11-02: a phone call reaches a real person and costs money: held like
+// a text. Only known call-placing tools, never the word "call" in a name.
+describe("isPhoneCallTool: a call placed is outbound, like a text", () => {
+  const create = { resource: "Calls", action: "create", set: { To: "+15145550142", From: "+15145550100", Twiml: "<Response/>" } };
+
+  it("a Twilio Calls create is outbound, in both the old __ and the new _ names", () => {
+    for (const tool of [
+      "twilio_api_write",
+      "twilio_api__write",
+      "mcp__perspicax__twilio_api_write",
+      "mcp__perspicax__twilio_api__write",
+      "mcp__pulsatrix_connectwise_psa__twilio_api_write",
+    ]) {
+      expect(isPhoneCallTool(tool, create), tool).toBe(true);
+      expect(isOutboundTool(tool, create), tool).toBe(true);
+    }
+    // the resource spelled Calls.json or as the full path, a per-resource tool
+    expect(isOutboundTool("twilio_api_write", { ...create, resource: "Calls.json" })).toBe(true);
+    expect(isOutboundTool("twilio_api_write", { ...create, resource: "/2010-04-01/Accounts/AC123/Calls.json" })).toBe(true);
+    expect(isOutboundTool("twilio_api_Calls_write", { action: "create", set: { To: "+15145550142" } })).toBe(true);
+    expect(isOutboundTool("mcp__perspicax__twilio_api__Calls_write", { set: { To: "+15145550142" } })).toBe(true);
+    expect(isOutboundTool("api_write", create)).toBe(true);
+  });
+
+  it("voice_call and create_call place a call by name, with or without a server", () => {
+    for (const tool of [
+      "voice_call",
+      "mcp__perspicax__voice_call",
+      "mcp__pulsatrix_connectwise_psa__voice_call",
+      "create_call",
+      "mcp__twilio__create_call",
+      "TWILIO_CREATE_CALL",
+    ]) {
+      expect(isPhoneCallTool(tool), tool).toBe(true);
+      expect(isOutboundTool(tool), tool).toBe(true);
+    }
+    // run through a directory's call_tool or a gateway's use_tool
+    expect(isOutboundTool("mcp__directory__call_tool", { name: "voice_call", arguments: { to: "+15145550142", purpose: "Rappel" } })).toBe(true);
+    expect(isOutboundTool("mcp__gateway__use_tool", { tool_name: "twilio_api__write", tool_input: create })).toBe(true);
+  });
+
+  it("a read of calls is not held", () => {
+    for (const tool of ["twilio_api_query", "twilio_api__query", "mcp__perspicax__twilio_api_query", "calls_query", "get_call_recordings", "mcp__twilio__list_calls", "mcp__perspicax__voice_line"]) {
+      expect(isPhoneCallTool(tool, { resource: "Calls", params: { To: "+15145550142" } }), tool).toBe(false);
+      expect(isOutboundTool(tool, { resource: "Calls" }), tool).toBe(false);
+    }
+  });
+
+  it("a name that merely contains call is not held", () => {
+    for (const tool of ["call_tool", "mcp__directory__call_tool", "callback_handler", "recall_notes", "mcp__crm__log_call", "mcp__crm__update_call", "call_summary", "mcp__perspicax__voice_number"]) {
+      expect(isPhoneCallTool(tool, {}), tool).toBe(false);
+      expect(isOutboundTool(tool, {}), tool).toBe(false);
+    }
+    // a meta tool running a read is no call either
+    expect(isOutboundTool("mcp__directory__call_tool", { name: "twilio_api_query", arguments: { resource: "Calls" } })).toBe(false);
+  });
+
+  it("a Twilio write that does not place a call is not a call", () => {
+    // no To: an update of a live call, a recording of one, another resource
+    expect(isPhoneCallTool("twilio_api_write", { resource: "Calls", action: "update", id: "CA1", set: { Status: "completed" } })).toBe(false);
+    expect(isPhoneCallTool("twilio_api_write", { resource: "Calls", action: "create", set: { From: "+15145550100" } })).toBe(false);
+    expect(isPhoneCallTool("twilio_api_write", { resource: "Accounts_Calls_Recordings", action: "create", parent: "CA1", set: { To: "x" } })).toBe(false);
+    expect(isPhoneCallTool("twilio_api_write", { resource: "Messages", action: "create", set: { To: "+15145550142" } })).toBe(false);
+    // the name alone, without the arguments, is not read as a call
+    expect(isPhoneCallTool("twilio_api_write")).toBe(false);
+    // a Calls write of another product is not Twilio's
+    expect(isPhoneCallTool("cw_psa_write", create)).toBe(false);
+  });
+
+  it("place_phone_call keeps its own card and is not matched; a call is never a plain message send", () => {
+    expect(isPhoneCallTool("place_phone_call")).toBe(false);
+    expect(isMessageSendTool("mcp__perspicax__voice_call")).toBe(false);
+    expect(isMessageSendTool("TWILIO_CREATE_CALL")).toBe(false);
+  });
+
+  it("outboundCallsIn reads a Calls create through its arguments", () => {
+    expect(outboundCallsIn("mcp__perspicax__twilio_api__write", create).map((call) => call.slug)).toEqual(["mcp__perspicax__twilio_api__write"]);
+    expect(outboundCallsIn("mcp__perspicax__twilio_api__query", { resource: "Calls" })).toEqual([]);
   });
 });

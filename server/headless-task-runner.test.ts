@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { applyTeam, giveTask, readQueue, runnerPath, settleTask, waitTask, type HeadlessBot, type HeadlessTask } from "./headless-cli.ts";
+import { applyTeam, giveTask, readQueue, runnerPath, settleTask, waitTask, type HeadlessBot, type HeadlessTask } from "./cli/headless-cli.ts";
 import { claimHeadlessTasks, createHeadlessTaskRunner, type HeadlessRunOutcome } from "./headless-task-runner.ts";
 
 const dirs: string[] = [];

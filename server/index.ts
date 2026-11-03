@@ -1224,7 +1224,7 @@ import { redactSecretsInText } from "./redact.ts";
 import { routineRunCard } from "./routines/routine-run-card.ts";
 
 import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
-import type { HeadlessBot } from "./headless-cli.ts";
+import type { HeadlessBot } from "./cli/headless-cli.ts";
 import { createHeadlessTaskRunner } from "./headless-task-runner.ts";
 import * as vps from "./computer/vps-computer.ts";
 import { runAsRefusal, type RunAsChooser, type RunAsPerson } from "./routines/routine-run-as.ts";
@@ -1798,7 +1798,7 @@ import {
   type ThreadOwner,
   type Viewer
 } from "./bots/bot-visibility.ts";
-import { serviceThreadViewer, serviceViewerClosed } from "./service-viewer.ts";
+import { serviceThreadViewer, serviceViewerClosed } from "./cli/service-viewer.ts";
 import { browserNavigationRefusal } from "./browser/browser-navigation.ts";
 import { describeBrand, loadBrand } from "./brand.ts";
 import { deliverSseFrame } from "./sse-fanout.ts";
@@ -7547,7 +7547,7 @@ function askBotAndWait(targetBotId: string, message: string, depth: number, from
   });
 }
 
-/** `sagax task give` (server/headless-cli.ts): this server takes the tasks
+/** `sagax task give` (server/cli/headless-cli.ts): this server takes the tasks
  * queued in its data folder and runs each on the named bot in a conversation
  * of its own, shown under the bot like any thread. The turn speaks for the
  * owner of this computer, as a message typed here would. */

@@ -39,13 +39,13 @@ import { resolveLoopbackTrust } from "./auth/request-auth.ts";
 import { restartPolicy } from "./restart.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import { ensureCaddy, normalizeDomainOption, startCaddy, type RunningCaddy } from "./caddy.ts";
-import { runServiceCommand } from "./service-cli.ts";
+import { runServiceCommand } from "./cli/service-cli.ts";
 import { runFleetCommand, type FleetInput } from "./fleet/fleet-cli.ts";
 import { startFleetAgent } from "./fleet/fleet-agent.ts";
 import { fleetLayout } from "./fleet/fleet.ts";
-import { browserSignInLines, pairingBlock } from "./cli-pairing.ts";
+import { browserSignInLines, pairingBlock } from "./cli/cli-pairing.ts";
 import { explainTailscaleFailure, tailscaleServe, tailscaleServeOff, tailscaleStatus, type TailscaleStatus } from "./tailscale.ts";
-import { defaultSetupIo, SetupCancelled, type SetupIo } from "./cli-prompts.ts";
+import { defaultSetupIo, SetupCancelled, type SetupIo } from "./cli/cli-prompts.ts";
 import { normalizePhoneOrigin, phonePairingInstructions, runPhoneSetup } from "./phone/cli-phone-setup.ts";
 import type { AppConfig } from "./config.ts";
 import { defaultDataDir, ENVIRONMENT_PATH, fetchEnvironmentDescriptor, isOwnHealth, LEGACY_ENVIRONMENT_PATH } from "../electron/legacy-names.mjs";
@@ -69,7 +69,7 @@ import {
   type TunnelRecovery,
 } from "./tunnel.ts";
 import { createDataArchive, restoreDataArchive, verifyDataArchive } from "./data-dir-archive.ts";
-import { applyTeam, giveTask, parseTeamFile, waitTask } from "./headless-cli.ts";
+import { applyTeam, giveTask, parseTeamFile, waitTask } from "./cli/headless-cli.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -572,7 +572,7 @@ export async function runPair(options: CliOptions): Promise<number> {
     // describe the next launch, not necessarily the address working now.
     let origin = options.publicUrl ?? (typeof advertised.body?.publicUrl === "string" ? advertised.body.publicUrl : undefined);
     if (!origin) {
-      const { readCliStartup } = await import("./cli-setup.ts");
+      const { readCliStartup } = await import("./cli/cli-setup.ts");
       launch = applyStartupPreferences(options, readCliStartup(options.dataDir));
       origin = launch.publicUrl;
       if (launch.tunnel) origin = describeTunnelAccount(createTunnelAccount({ dataDir: options.dataDir, version: serverVersion() }).credentials.read()).address ?? undefined;
@@ -1196,7 +1196,7 @@ export async function runOnboardingCommand(
     if (interactive && options.open !== false) await (flow.open ?? openDashboard)(options.port);
     return 0;
   }
-  const { runSetup, isSetupComplete, readCliStartup, saveCliStartup } = await import("./cli-setup.ts");
+  const { runSetup, isSetupComplete, readCliStartup, saveCliStartup } = await import("./cli/cli-setup.ts");
   const prompts = flow.prompts ?? defaultSetupIo();
   try {
     if (options.command === "setup" || !(await isSetupComplete(options.dataDir))) {

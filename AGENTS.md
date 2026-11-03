@@ -1198,7 +1198,7 @@ docs/screenshots/host-control.
 ## Headless tasks run for real: sagax task give / task wait (2026-10-29)
 
 `sagax team apply FILE`, `sagax task give --bot NAME --text TEXT` and
-`sagax task wait ID` (server/headless-cli.ts) only write files in the data
+`sagax task wait ID` (server/cli/headless-cli.ts) only write files in the data
 folder; the Sagax server running on that folder now does the work
 (server/headless-task-runner.ts, wired in server/index.ts). About once a
 second it beats `headless-runner.json`, creates any bot of
@@ -1216,7 +1216,7 @@ The CLI and the server change the queue under `headless-tasks.lock`.
 reply and the thread), 1 (failed or unknown id), 2 (timeout) or 3 (no
 server beats on this data folder: it says to start one, the task stays
 queued). `SAGAX_HEADLESS_TASK_WAIT_MS` (1 h) bounds one task's turn. Tests:
-`server/headless-cli.test.ts`, `server/headless-task-runner.test.ts`,
+`server/cli/headless-cli.test.ts`, `server/headless-task-runner.test.ts`,
 `server/headless-tasks.e2e.test.ts` (fake engine).
 
 ## Show a task in my Chrome (2026-10-29)
@@ -2313,7 +2313,7 @@ Decision: PORT COMPLET of upstream a5f9183bc. Three walls, each with tests:
   the app window on http: and ws:). Same rule for the owner view of a
   published page (`loopbackBrowserRefused`). Programs (CLI, curl, MCP proxies,
   the companion relay) are unchanged. `openmausbot serve`/`pair` print a
-  `this computer:` sign-in link (`server/cli-pairing.ts`). Dev only:
+  `this computer:` sign-in link (`server/cli/cli-pairing.ts`). Dev only:
   `SAGAX_DEV_TRUST_LOCAL_BROWSER=1` (set by `pnpm dev:server` via
   `server/dev-server.ts` and by `scripts/control-omb.ts` fixtures; ignored by
   builds, the desktop app and service trust). Electron: no session but the
@@ -8690,7 +8690,7 @@ it after an upstream merge instead of renaming by hand.
   CLI from a checkout (`pnpm omb <command>`) or in the container. The
   remaining npm install hints name `@pulsatrixtechnologies/sagax`. This batch
   does not rewrite them into checkout commands: `docs/verification/fleet.md`
-  (the VPS recipe), the npx cache warning in `server/service-unit.ts`, the
+  (the VPS recipe), the npx cache warning in `server/cli/service-unit.ts`, the
   npm package README (`scripts/build-npm-package.mjs`), the npm line of the
   release notes (`.github/workflows/npm-package.yml`) and `fleet upgrade` in
   `server/fleet/fleet.ts`. The rebrand script re-applies the image, the native copy

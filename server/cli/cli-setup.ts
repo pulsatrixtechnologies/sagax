@@ -7,17 +7,17 @@ import { randomUUID } from "node:crypto";
 import {
   DATA_DIR, instanceConfigs, loadConfig, parseStoredConfig, saveConfig,
   stripWorkspaceCredentialEnv, PROVIDER_CREDENTIAL_ENV, type AppConfig,
-} from "./config.ts";
-import type { InstanceConfig, ModelCatalog, ProviderSnapshot } from "./contracts.ts";
-import { acquireDataDirLease } from "./data-dir-lease.ts";
-import { augmentedPath, resetPathCache } from "./env-path.ts";
-import { resolveCli } from "./procs.ts";
-import { ProviderRegistry } from "./harness/registry.ts";
-import { BUILT_IN_DRIVERS } from "./drivers/builtIn.ts";
+} from "../config.ts";
+import type { InstanceConfig, ModelCatalog, ProviderSnapshot } from "../contracts.ts";
+import { acquireDataDirLease } from "../data-dir-lease.ts";
+import { augmentedPath, resetPathCache } from "../env-path.ts";
+import { resolveCli } from "../procs.ts";
+import { ProviderRegistry } from "../harness/registry.ts";
+import { BUILT_IN_DRIVERS } from "../drivers/builtIn.ts";
 import { defaultSetupIo, SetupCancelled, type SetupIo } from "./cli-prompts.ts";
 import { API_ENDPOINTS, fetchSetupModels, normalizeApiUrl, verifySetupCompletion } from "./cli-api-setup.ts";
-import { onboardingKeyStorageNote, readOnboardingEngineKey, storeOnboardingEngineKey } from "./engines/onboarding-engine-key.ts";
-import { readEnvName } from "../electron/legacy-names.mjs";
+import { onboardingKeyStorageNote, readOnboardingEngineKey, storeOnboardingEngineKey } from "../engines/onboarding-engine-key.ts";
+import { readEnvName } from "../../electron/legacy-names.mjs";
 
 type Inspection = { snapshot: ProviderSnapshot; models: ModelCatalog };
 interface SetupDependencies {

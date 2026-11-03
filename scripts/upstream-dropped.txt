@@ -529,3 +529,14 @@ server/new-bot-defaults.e2e.test.ts
 server/new-bot-defaults.test.ts
 server/new-bot-defaults.ts
 server/team-package-skills.e2e.test.ts
+server/cli-api-setup.test.ts
+server/cli-api-setup.ts
+server/cli-pairing.ts
+server/cli-prompts.test.ts
+server/cli-prompts.ts
+server/cli-setup.test.ts
+server/cli-setup.ts
+server/service-cli.test.ts
+server/service-cli.ts
+server/service-unit.test.ts
+server/service-unit.ts

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { runServiceCommand, serviceServeArgs } from "./service-cli.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
 
 describe("openmausbot service", () => {
   let dir: string;

@@ -6,16 +6,16 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { applyStartupPreferences, formatSessions, parseArgs, runAccess, runLogin, runOnboardingCommand, serverEntry, type CliOptions, USAGE, verifyPhoneEndpoint } from "./cli.ts";
-import { browserSignInLines, pairingBlock, qrToString } from "./cli-pairing.ts";
+import { browserSignInLines, pairingBlock, qrToString } from "./cli/cli-pairing.ts";
 import { readAdminActivityRange } from "./admin-activity.ts";
-import { SetupCancelled } from "./cli-prompts.ts";
+import { SetupCancelled } from "./cli/cli-prompts.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { startControlPlaneStub } from "./testing/control-plane-stub.ts";
 import { freePortBlock } from "./testing/ports.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const setup = vi.hoisted(() => ({ runSetup: vi.fn(), isSetupComplete: vi.fn(), readCliStartup: vi.fn(), saveCliStartup: vi.fn() }));
-vi.mock("./cli-setup.ts", () => setup);
+vi.mock("./cli/cli-setup.ts", () => setup);
 
 describe("openmausbot command line", () => {
   it("parses commands and flags, and explains mistakes", () => {

@@ -10,7 +10,7 @@
 // The sentinel is truthy on purpose. An empty string is falsy, and the
 // channel and thread checks treat a missing viewer as the operator.
 
-import type { RequestAuth } from "./auth/request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 
 export const SERVICE_VIEWER = "service:loopback";
 

@@ -2,12 +2,12 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DATA_DIR, instanceConfigs, loadConfig, PROVIDER_CREDENTIAL_ENV, WORKSPACE_CREDENTIAL_ENV, type AppConfig } from "./config.ts";
-import { acquireDataDirLease } from "./data-dir-lease.ts";
+import { DATA_DIR, instanceConfigs, loadConfig, PROVIDER_CREDENTIAL_ENV, WORKSPACE_CREDENTIAL_ENV, type AppConfig } from "../config.ts";
+import { acquireDataDirLease } from "../data-dir-lease.ts";
 import { SetupCancelled, type SetupIo } from "./cli-prompts.ts";
 import { isSetupComplete, readCliStartup, runSetup, saveCliStartup } from "./cli-setup.ts";
-import { ONBOARDING_ENGINE_KEYS_FILE, readOnboardingEngineKey } from "./engines/onboarding-engine-key.ts";
-import { OpenAICompatDriver } from "./drivers/openai-compat.ts";
+import { ONBOARDING_ENGINE_KEYS_FILE, readOnboardingEngineKey } from "../engines/onboarding-engine-key.ts";
+import { OpenAICompatDriver } from "../drivers/openai-compat.ts";
 
 /** The key the running driver resolves for an instance — read from the
  * encrypted store and injected back onto the transient config, never from

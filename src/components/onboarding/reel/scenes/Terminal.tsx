@@ -1,7 +1,7 @@
 // The "run it from the terminal too" scene. One authored moment: the
 // browser window rising out of the terminal, because that is the whole
 // promise: same app, text wizard first. The wizard's lines are the real
-// ones from server/cli-setup.ts, typed at a human pace, with the picker
+// ones from server/cli/cli-setup.ts, typed at a human pace, with the picker
 // drawn the way Clack draws it.
 import { useEffect, useState } from "react";
 import { MausAvatar } from "@/components/Avatar";

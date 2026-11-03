@@ -6,7 +6,7 @@
 // the CLI decides where the file goes.
 import { homedir, userInfo } from "node:os";
 import { posix } from "node:path";
-import { NPM_BIN, NPM_PACKAGE } from "./npm-package.ts";
+import { NPM_BIN, NPM_PACKAGE } from "../npm-package.ts";
 
 // Unit files describe a Linux or macOS machine, so their paths are POSIX
 // whatever host renders them (the Windows CI runner included).

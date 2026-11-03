@@ -8,7 +8,7 @@ import { appendFileSync, closeSync, existsSync, fsyncSync, lstatSync, mkdirSync,
 import { posix } from "node:path";
 import { writeFileAtomic } from "../atomic.ts";
 import { releaseVersion } from "../environment.ts";
-import { unstableInstallWarning } from "../service-unit.ts";
+import { unstableInstallWarning } from "../cli/service-unit.ts";
 import {
   applySignIn,
   assertManagedWorkspace,

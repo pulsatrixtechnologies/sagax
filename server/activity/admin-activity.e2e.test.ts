@@ -137,6 +137,15 @@ posixOnly("admin activity log", () => {
     expect((await api("GET", "/api/admin-activity?from=2026-02-31", undefined, BOSS)).status).toBe(400);
   });
 
+  // 2026-11-03 (audit S-1): the admin scope was entered inside async
+  // authenticate, after awaits, so it never reached the route: PUT /api/config
+  // saved and no config.update row was written.
+  it("an admin's config change writes its config.update row, put down to that admin", async () => {
+    expect((await api("PUT", "/api/config", { profile: { name: "Scope desk" } }, BOSS)).status).toBe(200);
+    const row = (await activity("?what=config")).find((entry) => entry.after?.["profile.name"] === "Scope desk");
+    expect(row).toMatchObject({ type: "admin", who: BOSS, action: "config.update", changed: ["profile.name"] });
+  });
+
   it("records settings, people, keys and budgets with who changed them, never a secret", async () => {
     expect((await api("PUT", "/api/config", { signIn: { admins: [BOSS], members: [ADA, "carol@example.test"] } }, BOSS)).status).toBe(200);
     expect((await api("PUT", "/api/config", { anthropic: { key: SECRET } }, BOSS)).status).toBe(200);
@@ -148,7 +157,8 @@ posixOnly("admin activity log", () => {
     expect(people).toMatchObject({ type: "admin", who: BOSS, what: "people", action: "people.update", changed: ["signIn.members"],
       before: { "signIn.members": [ADA] }, after: { "signIn.members": [ADA, "carol@example.test"] } });
     const engine = (await activity("?what=engine"))[0];
-    expect(engine).toMatchObject({ who: BOSS, action: "engine.update", changed: ["anthropic.key"], after: { "anthropic.key": "[hidden]" } });
+    // 2026-11-03 (audit S-1): the save also fills a derived engine switch; the key is the point
+    expect(engine).toMatchObject({ who: BOSS, action: "engine.update", changed: expect.arrayContaining(["anthropic.key"]), after: { "anthropic.key": "[hidden]" } });
     const budget = (await activity("?what=budget"))[0];
     expect(budget).toMatchObject({ who: BOSS, changed: ["budgets.monthlyUsd"], after: { "budgets.monthlyUsd": 75 } });
     const config = await activity("?what=config");

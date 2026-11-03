@@ -4473,7 +4473,8 @@ function adminActorFor(auth: RequestAuth, req: IncomingMessage): AdminActor {
 /** The admin whose request is running, for config saves made while it runs.
  * Each save records exactly what it wrote, so a slow request never takes
  * the blame (or the credit) for another admin's change made meanwhile. */
-const adminActorScope = new AsyncLocalStorage<{ actor: AdminActor; sharedAtStart: boolean } | null>();
+type AdminActorScope = { actor: AdminActor; sharedAtStart: boolean } | null;
+const adminActorScope = new AsyncLocalStorage<AdminActorScope>();
 onConfigSaved((before, after) => {
   const scope = adminActorScope.getStore();
   if (!scope || DESKTOP_MANAGED) return;
@@ -4551,15 +4552,19 @@ function requestedBotFields(req: IncomingMessage, path: string): string[] {
 /** Record this request's admin changes once it has answered successfully.
  * Each row compares only what this request named or created, never a whole
  * snapshot, so another admin's change made meanwhile is not attributed here. */
-function beginAdminAudit(req: IncomingMessage, res: ServerResponse, method: string, path: string, auth: RequestAuth): void {
+/** Returns the admin scope of this request (config saves made while it runs
+ * are put down to it). It runs inside async authenticate, after awaits, so
+ * an enterWith here never reaches handleRequest's frame (audit S-1, the
+ * defect 0.8.32 fixed for the request scopes): handleRequest enters it from
+ * RequestScopes.adminActor, with the others (enterRequestScopes). */
+function beginAdminAudit(req: IncomingMessage, res: ServerResponse, method: string, path: string, auth: RequestAuth): AdminActorScope {
   const plan = DESKTOP_MANAGED ? null : adminAuditPlan(method, path);
   const actor = plan ? adminActorFor(auth, req) : null;
   // Whether several people share the workspace as the request begins: a
   // change that ends sharing (the last chat-only phone signed out) is kept.
   const sharedAtStart = plan ? adminActivityRecording() : false;
-  // Set for every request, so a kept-alive connection never inherits one.
-  adminActorScope.enterWith(plan?.config && actor ? { actor, sharedAtStart } : null);
-  if (!plan || !actor) return;
+  const scope: AdminActorScope = plan?.config && actor ? { actor, sharedAtStart } : null;
+  if (!plan || !actor) return scope;
   const before = {
     bot: auditBot(plan.botId ?? plan.deletesBot),
     botName: store.bot(plan.botId ?? plan.deletesBot ?? "")?.name,
@@ -4577,6 +4582,7 @@ function beginAdminAudit(req: IncomingMessage, res: ServerResponse, method: stri
       console.warn(`admin activity: could not record ${method} ${path}: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
+  return scope;
 }
 
 function adminAuditRows(
@@ -44131,8 +44137,12 @@ type RequestScopes = {
   delegated: boolean;
   continuation: ReturnType<typeof takeOwnerContinuation>;
   actConfirmed: ReturnType<typeof takeActConfirmation> | null;
+  /** The admin whose config saves this request records (beginAdminAudit). */
+  adminActor?: AdminActorScope;
 };
 function enterRequestScopes(scopes: RequestScopes): void {
+  // Set for every request (null when none), so a kept-alive connection never inherits one.
+  adminActorScope.enterWith(scopes.adminActor ?? null);
   threadViewerScope.enterWith(scopes.viewer);
   delegatedRequestScope.enterWith(scopes.delegated);
   continuationThreadScope.enterWith(scopes.continuation);
@@ -44436,7 +44446,7 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
       }
     }
   }
-  beginAdminAudit(req, res, method, path, auth);
+  scopes.adminActor = beginAdminAudit(req, res, method, path, auth);
 
   if (method === "POST" && path === "/api/workspace-backup/restore" && teamComputers.list().some(computer => computer.section !== null)) {
     json(res, 409, { error: "Unassign team computers before restoring a workspace; restored team names must not gain access to existing desktops" });

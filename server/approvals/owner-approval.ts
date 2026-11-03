@@ -35,7 +35,7 @@ import { sagaxFolder } from "../../shared/human-id.ts";
 import { singleProgramOf } from "../../shared/read-only-command.ts";
 import { readShell } from "../../shared/custom-rules.ts";
 import { isOutboundTool } from "../../shared/outbound.ts";
-import { decodeGrokGatewayName, grokGatewayToolConnector } from "../../shared/grok-cloud-connectors.ts";
+import { parseGrokGatewayToolId } from "../../shared/grok-cloud-connectors.ts";
 import { connectorWriteKind } from "../../shared/engine-connectors.ts";
 import { screenAppTarget, type ScreenAppIdentity } from "../../shared/computer-app.ts";
 import { standingGrantsAllowed } from "../rules/custom-rules-org.ts";
@@ -398,9 +398,9 @@ export function destructiveKindOf(call: Pick<RuleCall, "tool" | "input" | "hints
   const parsed = parseToolId(call.tool);
   // Grok's gateway escapes action separators (delete_5fmail_5fmessage).
   // Read that action for risk without changing the tool identity a rule names.
-  const gateway = parsed.server && grokGatewayToolConnector(`${parsed.server}__${parsed.name}`);
-  const action = gateway ? decodeGrokGatewayName(parsed.name.replace(/^(?:user|team|org|workspace)-[^-]+-/, "").replace(/___\d+$/, "")).replace(/-/g, "_") : null;
-  const described = describeApproval(action ? `mcp__${parsed.server}__${action}` : call.tool, call.input, call.hints);
+  const gateway = parseGrokGatewayToolId(call.tool);
+  const action = gateway?.tool.replace(/-/g, "_");
+  const described = describeApproval(gateway ? `mcp__${gateway.server}__${action}` : call.tool, call.input, call.hints);
   const connectorWrite = connectorWriteKind(call.tool);
   if (described.risk === "destructive" || (connectorWrite && /(^|[_.:-])trash([_.:-]|$)/i.test(action ?? parsed.name))) return "delete";
   const args = parseArgs(call.input);

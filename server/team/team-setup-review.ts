@@ -12,10 +12,10 @@
 // and a working folder on the server's disk (folders.botWorkingFolder: it
 // reaches other people's files there).
 
-import type { PermissionKey } from "../shared/permissions.ts";
-import { TEAM_SETUP_ADMIN_REQUIRED, type TeamSetupRequest } from "../shared/team-setup.ts";
+import type { PermissionKey } from "../../shared/permissions.ts";
+import { TEAM_SETUP_ADMIN_REQUIRED, type TeamSetupRequest } from "../../shared/team-setup.ts";
 
-export { TEAM_SETUP_ADMIN_REQUIRED, TEAM_SETUP_DESKTOP_ONLY } from "../shared/team-setup.ts";
+export { TEAM_SETUP_ADMIN_REQUIRED, TEAM_SETUP_DESKTOP_ONLY } from "../../shared/team-setup.ts";
 
 export const TEAM_SETUP_DESKTOP_MESSAGE =
   "Approve team setup or deletion from the desktop app or a paired Full-access device. In a local browser, wait until every bot is idle.";

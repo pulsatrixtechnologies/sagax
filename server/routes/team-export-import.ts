@@ -33,7 +33,7 @@ import {
 import { scoutProject, suggestTeam } from "../project-scout.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { BotRecord, GroupRecord } from "../store.ts";
-import { createTeamManifest, parseTeamManifest } from "../team-manifest.ts";
+import { createTeamManifest, parseTeamManifest } from "../team/team-manifest.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface TeamExportImportRouteDeps {

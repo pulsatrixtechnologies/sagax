@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { memberTeamSetupRefusal, TEAM_SETUP_ADMIN_REQUIRED, type MemberSetupContext } from "./team-setup-review.ts";
-import type { TeamSetupOperation, TeamSetupRequest } from "../shared/team-setup.ts";
+import type { TeamSetupOperation, TeamSetupRequest } from "../../shared/team-setup.ts";
 
 const selection = { instanceId: "claude", model: "sonnet" };
 const bots: Record<string, { owner: string; section: string }> = {

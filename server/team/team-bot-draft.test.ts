@@ -1,13 +1,13 @@
-// "Create a Team Bot from this conversation" (server/team-bot-draft.ts,
+// "Create a Team Bot from this conversation" (server/team/team-bot-draft.ts,
 // server/routes/team-bot-from-thread.ts): the draft from the bot's model or
 // the conversation; memory never carries over (owner 2026-10-21), the pure plan helpers stay covered.
 import { IncomingMessage, ServerResponse } from "node:http";
 import { Socket } from "node:net";
 import { describe, expect, it } from "vitest";
 
-import { json, readBody } from "./harness/http.ts";
-import type { RequestAuth } from "./auth/request-auth.ts";
-import { createTeamBotFromThreadRoutes, type TeamBotFromThreadDeps } from "./routes/team-bot-from-thread.ts";
+import { json, readBody } from "../harness/http.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { createTeamBotFromThreadRoutes, type TeamBotFromThreadDeps } from "../routes/team-bot-from-thread.ts";
 import {
   CARRY_SUMMARY_PATH,
   carryOverPlan,

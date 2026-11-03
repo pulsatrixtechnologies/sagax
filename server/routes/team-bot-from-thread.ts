@@ -1,4 +1,4 @@
-// "Create a Team Bot from this conversation" (server/team-bot-draft.ts).
+// "Create a Team Bot from this conversation" (server/team/team-bot-draft.ts).
 //
 //   POST /api/bots/:id/team-bot-draft   { threadId, language? }
 //        { draft }: the new bot's name, role, description and instructions
@@ -26,7 +26,7 @@ import {
   parseTeamBotDraft,
   teamBotDraftPrompt,
   type DraftMessage,
-} from "../team-bot-draft.ts";
+} from "../team/team-bot-draft.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 type Generate = (prompt: string, options?: { signal?: AbortSignal }) => Promise<string>;

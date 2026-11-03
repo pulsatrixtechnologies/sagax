@@ -11,7 +11,7 @@ orchestration, and always spawn workers with the best model per task."
   `store.projectBotForTask` puts the task's selection on the bot for a turn.
 - The selection is validated by `checkedModelSelection` (`server/index.ts`) for bot creation,
   `PATCH /api/bots/:id`, `PATCH .../tasks/:threadId` and the composer chip; team setup validates its
-  own copy (`server/team-setup-requests.ts`, zod `.strict()`); `create_bot` goes through
+  own copy (`server/team/team-setup-requests.ts`, zod `.strict()`); `create_bot` goes through
   `POST /api/internal/create-bot` (`defaultSelection()` when no model is given).
 - Who pays a turn: `resolveEngineAccess` (`server/engines/engine-credentials.ts`): solo mode the server's
   own sign-in; organization mode the person who speaks (own subscription, own key in Perspicax,

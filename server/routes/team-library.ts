@@ -1,6 +1,6 @@
 // Team library catalog, slug fetch and GitHub import (#1388 slice P1).
 // Creates nothing: each route only reads a remote team document.
-import { fetchGithubTeam, fetchLibraryTeam, fetchTeamCatalog } from "../team-library.ts";
+import { fetchGithubTeam, fetchLibraryTeam, fetchTeamCatalog } from "../team/team-library.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface TeamLibraryRouteDeps {

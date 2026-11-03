@@ -1,8 +1,8 @@
-import { parseJson, type JsonValue } from "./schema.ts";
-import { isBlockedUrl } from "../electron/upstream-hosts.mjs";
-import { isBotPackage, parseBotPackage, parsePackageDocument, type PackageDocument, type ParsedBotPackage } from "./bot-package.ts";
+import { parseJson, type JsonValue } from "../schema.ts";
+import { isBlockedUrl } from "../../electron/upstream-hosts.mjs";
+import { isBotPackage, parseBotPackage, parsePackageDocument, type PackageDocument, type ParsedBotPackage } from "../bot-package.ts";
 import { parseTeamManifest, type ParsedTeamManifest } from "./team-manifest.ts";
-import { grokMarketplaceSlugFrom, grokMarketplaceUrl, grokShareIdFrom, grokShareUrl, type GrokTemplateCard } from "../shared/grok-import.ts";
+import { grokMarketplaceSlugFrom, grokMarketplaceUrl, grokShareIdFrom, grokShareUrl, type GrokTemplateCard } from "../../shared/grok-import.ts";
 
 export const TEAM_LIBRARY_REPOSITORY = "https://github.com/pulsatrixtechnologies/sagax";
 /** Where the shared team catalog lives. The original project's catalog (the

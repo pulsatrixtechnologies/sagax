@@ -172,7 +172,7 @@ import { CLOUD_COMPUTER_BUSY_ERROR } from "../shared/computer-contention.ts";
 import { failedTurnCause, failedTurnTool } from "../shared/failed-turn.ts";
 import { STOPPED_TURN_NAME, assistantTranscript, errorTranscript } from "../shared/client-cancel.ts";
 import { SafePointPreempts } from "./safe-point-preempt.ts";
-import { atThreadCapacity, interruptKeepsTeammates, type DirectInterruptCause } from "./teammate-replies.ts";
+import { atThreadCapacity, interruptKeepsTeammates, type DirectInterruptCause } from "./team/teammate-replies.ts";
 
 import { canWorkOnCloud, type CloudEngine } from "../shared/cloud-computer.ts";
 import {
@@ -681,7 +681,7 @@ import {
 import { ComputerAppReader } from "./computer/computer-app.ts";
 import { appRuleOffered } from "../shared/computer-app.ts";
 import { proposalReplacements } from "./proposal-budget.ts";
-import { memberTeamSetupRefusal, TEAM_SETUP_DESKTOP_MESSAGE, TEAM_SETUP_DESKTOP_ONLY } from "./team-setup-review.ts";
+import { memberTeamSetupRefusal, TEAM_SETUP_DESKTOP_MESSAGE, TEAM_SETUP_DESKTOP_ONLY } from "./team/team-setup-review.ts";
 import {
   cardRuleCandidate,
   folderRuleCandidate,
@@ -1285,7 +1285,7 @@ import { buildBotOverview, type BotOverview } from "./bot-overview.ts";
 import { ProfileRequestService } from "./profile-requests.ts";
 import { ModelRequestService } from "./models/model-requests.ts";
 import { RuleRequestService } from "./rule-requests.ts";
-import { TeamSetupError, TeamSetupRequestService, teamSetupDirectApply } from "./team-setup-requests.ts";
+import { TeamSetupError, TeamSetupRequestService, teamSetupDirectApply } from "./team/team-setup-requests.ts";
 import type { TeamSetupRequest } from "../shared/team-setup.ts";
 import { profileRevision, profileSnapshot } from "./profile-revision.ts";
 import { flushAllProfileHistory, flushProfileHistory, readHistory, recordProfileChange } from "./profile-versions.ts";
@@ -5994,7 +5994,7 @@ function hasDirectDispatch(botId: string): boolean {
 function canAdmitDirectTurn(botId: string, threadId: string): boolean {
   return admit("peer", {}, {
     threadBusy: threadBusy(botId, threadId),
-    // 2026-11-01: startTurn's own rule (server/teammate-replies.ts), the
+    // 2026-11-01: startTurn's own rule (server/team/teammate-replies.ts), the
     // person's main chat never at capacity: a teammate's reply into it was
     // held while the person could still chat there, until the tree failed
     // as stalled.
@@ -6130,7 +6130,7 @@ async function stopDirectThreadByPerson(botId: string, threadId: string, utteran
   await stopOwnSubagents(botId, threadId);
 }
 
-/** `cause` (2026-11-01, server/teammate-replies.ts): a person's Stop by
+/** `cause` (2026-11-01, server/team/teammate-replies.ts): a person's Stop by
  * default. Any other cut (a safe-point cut to read their waiting words, a
  * turn parked on a busy computer, an engine change) keeps the conversation
  * awaiting the teammates it handed work to, and their replies still resume
@@ -25595,7 +25595,7 @@ function drainTeamSetupResumes(): void {
 /** Who may apply a team setup from this request (#1058): the desktop app
  * or an idle local browser on loopback, an organization admin, or on an
  * organization server the member a member-sized plan belongs to
- * (server/team-setup-review.ts). Null: allowed; else the 403 body. */
+ * (server/team/team-setup-review.ts). Null: allowed; else the 403 body. */
 function teamSetupApplyRefusal(auth: RequestAuth, req: IncomingMessage) {
   return (request: TeamSetupRequest): Record<string, unknown> | null => {
     if (auth.kind === "loopback") {

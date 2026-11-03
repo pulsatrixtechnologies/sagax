@@ -1,14 +1,14 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { soulDiffLines } from "../shared/line-diff.ts";
-import { newId, type ModelSelection } from "./contracts.ts";
-import { fitsOnOneLine, parseBotProfilePatch } from "./bot-profile.ts";
-import { profileSnapshot } from "./profile-revision.ts";
-import { validateBotCwd } from "./bot-cwd.ts";
-import { harnessCapabilityLines, type DriverCapabilities } from "./capabilities/harness-capabilities.ts";
-import { redactSecretsInText } from "./redact.ts";
-import type { BotRecord, OptionCardData } from "./store.ts";
-import type { TeamSetupFields, TeamSetupOperation, TeamSetupRequest, TeamSetupResult } from "../shared/team-setup.ts";
+import { soulDiffLines } from "../../shared/line-diff.ts";
+import { newId, type ModelSelection } from "../contracts.ts";
+import { fitsOnOneLine, parseBotProfilePatch } from "../bot-profile.ts";
+import { profileSnapshot } from "../profile-revision.ts";
+import { validateBotCwd } from "../bot-cwd.ts";
+import { harnessCapabilityLines, type DriverCapabilities } from "../capabilities/harness-capabilities.ts";
+import { redactSecretsInText } from "../redact.ts";
+import type { BotRecord, OptionCardData } from "../store.ts";
+import type { TeamSetupFields, TeamSetupOperation, TeamSetupRequest, TeamSetupResult } from "../../shared/team-setup.ts";
 
 const section = (value?: string) => value?.trim() || "";
 const teamName = z.string().trim().min(1).max(60).refine(fitsOnOneLine).refine((value) => redactSecretsInText(value) === value, "Team names cannot contain credentials");

@@ -59,7 +59,7 @@
 | `src/components/Avatar.tsx` | Shape lookup replaces the inline `GRADIENT_SILHOUETTE`; new `shape` and `bodyImage` props |
 | `src/components/BotProfileAvatarCard.tsx` | Shape picker row; `face` crop; upload defaults to `face` |
 | `shared/bot-avatar.ts` | Add `face` to `BOT_AVATAR_CROPS` |
-| `server/store.ts`, `server/bot-profile.ts`, `server/team-manifest.ts`, `server/bot-package.ts`, `server/package-export.ts`, `server/index.ts` | Carry `mascotShape` alongside `color` / `mascotExpression` |
+| `server/store.ts`, `server/bot-profile.ts`, `server/team/team-manifest.ts`, `server/bot-package.ts`, `server/package-export.ts`, `server/index.ts` | Carry `mascotShape` alongside `color` / `mascotExpression` |
 | `ios/Sources/CompanionCore/Models.swift` | `Bot.mascotShape`, `BotProfilePatch.mascotShape` |
 | `ios/App/MausAvatar.swift` | Per-shape silhouette lookup; `shape` and image-body parameters |
 | `ios/App/BotAvatarView.swift` | Three-way branch: flat image / image body / gradient body |
@@ -1124,7 +1124,7 @@ git commit -m "test: fail if a generated catalog drifts from its generator"
 ## Task 9: Persist and sync the shape
 
 **Files:**
-- Modify: `server/store.ts`, `server/bot-profile.ts`, `server/team-manifest.ts`, `server/bot-package.ts`, `server/package-export.ts`, `server/index.ts`
+- Modify: `server/store.ts`, `server/bot-profile.ts`, `server/team/team-manifest.ts`, `server/bot-package.ts`, `server/package-export.ts`, `server/index.ts`
 - Test: `server/bot-profile.test.ts` (extend)
 
 **Interfaces:**
@@ -1172,7 +1172,7 @@ Expected: FAIL — the patch strips the unknown key, so the first case returns `
    ```
    and add `"mascotShape"` to the profile pick at ~line 855 and the spread at ~line 873.
 2. `server/bot-profile.ts` — add `"mascotShape"` to the allow-list (~line 14), `mascotShape: mascotShapeSchema.optional()` to the schema (~line 39), `"mascotShape"` to the `Pick<>` (~line 52), and an issue branch beside the `avatarCrop` one (~line 77) producing the message the test expects.
-3. `server/team-manifest.ts` — `mascotShape: optionalText(40)` beside `mascotExpression` (~line 49); the optional field on both appearance interfaces (~lines 91, 203); and the three carry-through sites (~lines 162, 256, 285).
+3. `server/team/team-manifest.ts` — `mascotShape: optionalText(40)` beside `mascotExpression` (~line 49); the optional field on both appearance interfaces (~lines 91, 203); and the three carry-through sites (~lines 162, 256, 285).
 4. `server/bot-package.ts` — `mascotShape: optionalText(40)` (~line 72) and the appearance spread (~line 265).
 5. `server/package-export.ts` — beside line 111:
    ```ts
@@ -1183,7 +1183,7 @@ Expected: FAIL — the patch strips the unknown key, so the first case returns `
 - [ ] **Step 4: Run the server suite**
 
 ```bash
-pnpm exec vitest run server/bot-profile.test.ts server/team-manifest.test.ts server/index.test.ts
+pnpm exec vitest run server/bot-profile.test.ts server/team/team-manifest.test.ts server/index.test.ts
 pnpm typecheck
 ```
 

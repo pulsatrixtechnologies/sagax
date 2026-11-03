@@ -5645,7 +5645,7 @@ model in the chip clears it (a pin). Rules:
   (`workerModel`), Settings > Model providers (one paragraph).
 
 Tests: `server/models/model-auto.test.ts`, `server/auto-model.e2e.test.ts`,
-`server/team-setup-requests.test.ts`, `shared/viewer-bot-overrides.test.ts`,
+`server/team/team-setup-requests.test.ts`, `shared/viewer-bot-overrides.test.ts`,
 `src/lib/auto-model.test.ts`, `src/components/ModelPicker.interaction.test.ts`.
 
 ## Misuse guardrails (2026-10-12)
@@ -8572,7 +8572,7 @@ coordination prompt (`server/chief-of-staff.ts`), team setup, retries and
 peer proposals the Chief of Staff had. Stored and sent under the old field
 name `chiefOfStaff` (`shared/wire.ts`); everything a person reads says
 "Primary Bot" / "Robot principal". Keep these rules, covered by
-`server/store.test.ts`, `server/team-setup-requests.test.ts`,
+`server/store.test.ts`, `server/team/team-setup-requests.test.ts`,
 `server/backup/team-backup.test.ts`, `src/lib/primary-bot.test.ts` and
 `src/components/PrimaryBot.test.ts`:
 
@@ -8631,7 +8631,7 @@ Bot (rules in `server/bot-creation.ts`). Keep:
   Bot's. `create_agent` (agent API) stays the Primary Bot's.
 - Tests: `server/bot-creation.test.ts`,
   `server/drivers/agents-catalog-create-bots.test.ts`,
-  `server/team-setup-requests.test.ts`, `server/create-bot-any-bot.e2e.test.ts`,
+  `server/team/team-setup-requests.test.ts`, `server/create-bot-any-bot.e2e.test.ts`,
   `server/org/org-member-access.e2e.test.ts` (MA-4b).
 
 ## Legacy names kept for compatibility
@@ -9324,7 +9324,7 @@ Backups for whoever cannot manage backups, and in Simple mode), and the export o
 a bot shared on x.ai dropped on Bot templates > Import (`TemplateTools` readFile).
 `src/components/GrokImportBox.tsx` reads an `https://x.ai/bot/<id>` link or a
 marketplace page through `POST /api/team-library/grok`
-(`server/routes/team-library-grok.ts`, client scope since 2026-10-26; `server/team-library.ts`
+(`server/routes/team-library-grok.ts`, client scope since 2026-10-26; `server/team/team-library.ts`
 `fetchGrokTemplateCard` fetches only x.ai, redirects must stay there, 20 s,
 2 MB) and shows the public card (name, creator, description) with Start
 from the description (`grokStarterPackage`). The full setup comes from the
@@ -9338,7 +9338,7 @@ slugs when known), memories only when exported, key-shaped text redacted.
 Event routines and unreadable schedules are listed under Left out with their
 original text. The preview and Add are the templates' own
 (`TeamImportPreview`, `POST /api/teams/import?mode=add`). Tests:
-`shared/grok-import.test.ts`, `server/team-library.test.ts` (fixtures
+`shared/grok-import.test.ts`, `server/team/team-library.test.ts` (fixtures
 `server/fixtures/grok-share-page*.html`),
 `server/routes/team-library-grok.test.ts`,
 `src/components/settings/ImportSettings.dom.test.ts` (the export fixture
@@ -9517,7 +9517,7 @@ the person asked for are not views.
 Parity with the reference design (audit items 10, 11, 14 and the emoji picker). Keep:
 
 - Team Bot from a conversation (thread menu, `TeamBotFromThreadDialog.tsx`,
-  `server/routes/team-bot-from-thread.ts`, `server/team-bot-draft.ts`): the
+  `server/routes/team-bot-from-thread.ts`, `server/team/team-bot-draft.ts`): the
   draft comes from the conversation's own bot model through its one-shot
   (`threadTitleGate`, the generated-title path), conversation as data, text
   lines only, secrets scrubbed; a fallback draft from the title and lines

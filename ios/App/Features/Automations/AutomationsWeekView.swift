@@ -197,10 +197,16 @@ struct AutomationsWeekView: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: Self.hourHeight, maxHeight: Self.hourHeight, alignment: .top)
                         .contentShape(Rectangle())
+                        // 8d5344283: on the desktop a plain click no longer
+                        // creates; a drag or a right-click does. Here a
+                        // long press is the right-click (a drag scrolls).
                         .gesture(SpatialTapGesture().onEnded { value in
                             let minutes = Double(hour) * 60 + Double(value.location.y / Self.hourHeight) * 60
                             onCreate(RoutineCalendar.slot(day: date, minutes: minutes))
-                        })
+                        }, including: desktop ? .none : .all)
+                        .onLongPressGesture(minimumDuration: 0.45) {
+                            if desktop { onCreate(RoutineCalendar.slot(day: date, minutes: Double(hour) * 60)) }
+                        }
                         .accessibilityElement()
                         .accessibilityLabel(Text(verbatim: "\(date.formatted(.dateTime.weekday(.wide))) \(AutomationsCalendarView<EmptyView>.hourText(hour))"))
                         .accessibilityAddTraits(.isButton)

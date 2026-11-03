@@ -390,11 +390,27 @@ public extension CompanionClient {
         try await send(try makeRequest("POST", "/api/routine-runs/\(id)/seen"), as: RoutineRunResponse.self).run
     }
 
+    /// Clear one routine's run logs (`DELETE /api/routine-runs?routineId=`),
+    /// the routine panel's Runs header; runs in progress are kept. The ids
+    /// it removed.
+    func clearRoutineRuns(routineId: String) async throws -> [String] {
+        guard Self.validRouteID(routineId) else { throw APIError.badURL }
+        let request = try makeRequest("DELETE", "/api/routine-runs", query: [
+            URLQueryItem(name: "scope", value: "mine"), URLQueryItem(name: "routineId", value: routineId),
+        ])
+        return try await send(request, as: RoutineRunsCleared.self).removed
+    }
+
     /// "Mark all as read" (`POST /api/routine-runs/seen-all`): the ids of
     /// the runs it changed and their stamp.
     func markAllRoutineRunsSeen() async throws -> RoutineRunsSeen {
         try await send(try makeRequest("POST", "/api/routine-runs/seen-all"), as: RoutineRunsSeen.self)
     }
+}
+
+/// What Clear logs answers: the ids of the runs it removed.
+public struct RoutineRunsCleared: Decodable, Sendable {
+    public var removed: [String]
 }
 
 /// What "Mark all as read" answers: the ids it stamped, how many, and when.

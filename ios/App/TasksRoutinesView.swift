@@ -35,6 +35,8 @@ struct TasksRoutinesView: View {
     let page: Page
     /// The iPad desktop shell: the desktop's header, no navigation bar.
     @Environment(\.automationsDesktop) private var desktop
+    /// Lot 5: the routine open in the desktop's side panel.
+    @State private var panelRoutine: Routine?
     @State private var scheduleView: ScheduleView
     @State private var agendaDay = RoutineCalendar.startOfDay(Date())
     @State private var quickSlot: AutomationsSlot?
@@ -72,6 +74,7 @@ struct TasksRoutinesView: View {
         switch ParityLaunch.current?.iPadScreen {
         case .routinesList?: _scheduleView = State(initialValue: .list)
         case .routinesLogs?: _section = State(initialValue: .logs)
+        case .routineEdit?: _scheduleView = State(initialValue: .list)
         default: break
         }
         #endif
@@ -322,7 +325,22 @@ struct TasksRoutinesView: View {
     }
 
     var body: some View {
-        pageContent
+        HStack(spacing: 0) {
+            pageContent
+            if desktop, let routine = panelRoutine.flatMap({ open in routines.first { $0.id == open.id } ?? open }) {
+                Rectangle().fill(Theme.hairline).frame(width: 0.5)
+                DesktopRoutinePanel(
+                    routine: routine, runs: runs,
+                    close: { panelRoutine = nil },
+                    changed: { await reload() },
+                    openRun: { openRun = $0 },
+                    openEditor: { editor = .edit($0) },
+                    duplicate: { duplicating = $0 }
+                )
+                .frame(width: 400)
+                .transition(.move(edge: .trailing))
+            }
+        }
         .navigationTitle(automations ? "Automations" : "Threads & Routines")
         .toolbar(desktop ? .hidden : .automatic, for: .navigationBar)
         .modifier(LogsSearch(active: section == .logs, query: $query, limit: $logLimit))
@@ -423,6 +441,11 @@ struct TasksRoutinesView: View {
                 }
             }
             await reload()
+            #if DEBUG
+            if desktop, ParityLaunch.current?.iPadScreen == .routineEdit {
+                panelRoutine = routines.first { $0.name.hasPrefix("Scan skills") } ?? routines.first
+            }
+            #endif
         }
         .refreshable { await reload() }
         .onValueChange(of: botFilter) { _ in routineFilter = nil }
@@ -584,7 +607,7 @@ struct TasksRoutinesView: View {
     /// bot's colour.
     private func desktopRoutineRow(_ routine: Routine) -> some View {
         let canToggle = routine.mayEdit && routine.canToggle()
-        var parts = [RoutineWording.compact(routine.schedule)]
+        var parts = [RoutineWording.desktop(routine.schedule)]
         if let zone = routine.schedule.timeZone, !zone.isEmpty { parts.append(zone) }
         if routine.enabled, let next = routine.nextRunAt {
             let date = Date(timeIntervalSince1970: next / 1000)
@@ -618,8 +641,8 @@ struct TasksRoutinesView: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
-        .onTapGesture { if routine.mayEdit { editor = .edit(routine) } else { showLogs(of: routine) } }
-        .listRowBackground(Color.clear)
+        .onTapGesture { panelRoutine = routine }
+        .listRowBackground(panelRoutine?.id == routine.id ? Theme.card : Color.clear)
     }
 
     /// One routine row with its swipes and menu.
@@ -942,7 +965,9 @@ struct TasksRoutinesView: View {
         switch action {
         case .open:
             if let run = item.run { openRun = run }
-            else if let routine = item.routine { if routine.mayEdit { editor = .edit(routine) } else { showLogs(of: routine) } }
+            else if let routine = item.routine {
+                if desktop { panelRoutine = routine } else if routine.mayEdit { editor = .edit(routine) } else { showLogs(of: routine) }
+            }
         case .reschedule:
             rescheduling = item
         case .edit:

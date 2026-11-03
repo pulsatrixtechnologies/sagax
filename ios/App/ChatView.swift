@@ -284,7 +284,17 @@ struct ChatView: View {
         AnyView(screen)
         // "Use bot color as accent": this bot's colour while its chat is open
         .modifier(OpenBotAccent(color: current.isBot ? current.color : nil, name: current.isBot ? current.name : nil))
-        .sheet(item: $openBotConversation) { row in
+        // The iPad desktop shell: the exchange is a page over the chat
+        // column (ExchangeSheet, `absolute inset-0` in the column), the
+        // phone keeps its sheet.
+        .overlay {
+            if desktopChat != nil, let row = openBotConversation, case let .bot(bot) = current {
+                BotConversationPage(row: row, selfBot: bot, desktop: true) { openBotConversation = nil }
+                    .environmentObject(session)
+                    .transition(.opacity)
+            }
+        }
+        .sheet(item: Binding(get: { desktopChat == nil ? openBotConversation : nil }, set: { openBotConversation = $0 })) { row in
             if case let .bot(bot) = current {
                 BotConversationPage(row: row, selfBot: bot).environmentObject(session)
             }

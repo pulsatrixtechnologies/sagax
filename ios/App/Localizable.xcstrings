@@ -68,16 +68,6 @@
         }
       }
     },
-    "%1$@ at %2$@": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ à %2$@"
-          }
-        }
-      }
-    },
     "%@ %@ · %@": {
       "localizations": {
         "en": {
@@ -335,13 +325,23 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ archivé"
+            "value": "%@ archivées"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
             "value": "%@ arquivado"
+          }
+        }
+      }
+    },
+    "%@ around %@ %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ vers %2$@ %3$@"
           }
         }
       }
@@ -425,7 +425,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ à %@"
+            "value": "%1$@ à %2$@"
           }
         },
         "pt-BR": {
@@ -574,6 +574,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ conectado."
+          }
+        }
+      }
+    },
+    "%@ controlled, %@ required": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ contrôlés, %@ obligatoires"
           }
         }
       }
@@ -766,6 +776,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ tem uma pergunta"
+          }
+        }
+      }
+    },
+    "%@ has no screen. It can still chat and do anything that doesn't need one.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ n'a pas d'écran. Il peut toujours discuter et faire tout ce qui n'en exige pas."
           }
         }
       }
@@ -1194,6 +1214,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ notes · toucher pour ouvrir"
+          }
+        }
+      }
+    },
+    "%@ notes, %@ links": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ notes, %@ liens"
           }
         }
       }
@@ -4660,6 +4690,16 @@
         }
       }
     },
+    "A call runs on the realtime voice, never text to speech. Add or fix the xAI key in Settings > Voice.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un appel passe par la voix en temps réel, jamais par la synthèse vocale. Ajoutez ou corrigez la clé xAI dans Réglages > Voix."
+          }
+        }
+      }
+    },
     "A card was shown because: %@": {
       "localizations": {
         "en": {
@@ -5584,6 +5624,16 @@
         }
       }
     },
+    "A value its namespace lacks": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une valeur absente de son espace"
+          }
+        }
+      }
+    },
     "A value of the JSON result": {
       "localizations": {
         "en": {
@@ -6124,6 +6174,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ativa"
+          }
+        }
+      }
+    },
+    "Active notes": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes actives"
+          }
+        }
+      }
+    },
+    "Active notes per tier, 26 weeks": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes actives par palier, 26 semaines"
           }
         }
       }
@@ -7986,6 +8056,16 @@
         }
       }
     },
+    "Aging": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vieilles"
+          }
+        }
+      }
+    },
     "Alert": {
       "localizations": {
         "en": {
@@ -8166,6 +8246,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tout l'historique"
+          }
+        }
+      }
+    },
+    "All memory": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toute la mémoire"
           }
         }
       }
@@ -9364,6 +9454,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Un accès de niveau admin doit avoir une fin, 30 jours au plus."
+          }
+        }
+      }
+    },
+    "An administrator of the organization creates them in the Perspicax console.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un administrateur de l'organisation les crée dans la console Perspicax."
           }
         }
       }
@@ -13972,6 +14072,16 @@
         }
       }
     },
+    "Calls need a realtime voice": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les appels ont besoin d'une voix en temps réel"
+          }
+        }
+      }
+    },
     "Camera access needed": {
       "localizations": {
         "fr": {
@@ -16514,6 +16624,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Limpar filtro"
+          }
+        }
+      }
+    },
+    "Clear logs": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer les journaux"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limpar registros"
+          }
+        }
+      }
+    },
+    "Clear run logs?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer les journaux d'exécution?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limpar registros de execução?"
           }
         }
       }
@@ -23780,6 +23922,16 @@
         }
       }
     },
+    "Disable": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactiver"
+          }
+        }
+      }
+    },
     "Disable %@": {
       "localizations": {
         "en": {
@@ -24630,6 +24782,16 @@
         }
       }
     },
+    "Drag to move, scroll or pinch to zoom, press a note to open it.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glissez pour déplacer, défilez ou pincez pour zoomer, touchez une note pour l'ouvrir."
+          }
+        }
+      }
+    },
     "Drag to place your face in the circle. The photo is saved in Pulsatrix Perspicax and shown everywhere you appear.": {
       "localizations": {
         "fr": {
@@ -24734,6 +24896,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Duplicar"
+          }
+        }
+      }
+    },
+    "Duplicates": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Doublons"
           }
         }
       }
@@ -26771,7 +26943,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Todos os dias"
+            "value": "Todo dia"
           }
         }
       }
@@ -26974,6 +27146,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "À chaque tour"
+          }
+        }
+      }
+    },
+    "Every weekday": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du lundi au vendredi"
           }
         }
       }
@@ -28320,6 +28502,16 @@
         }
       }
     },
+    "Find on the map": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trouver sur la carte"
+          }
+        }
+      }
+    },
     "Finish": {
       "localizations": {
         "en": {
@@ -29328,6 +29520,16 @@
         }
       }
     },
+    "Format with AI": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettre en forme avec l'IA"
+          }
+        }
+      }
+    },
     "Forward": {
       "localizations": {
         "en": {
@@ -29429,6 +29631,16 @@
     "Français": {
       "shouldTranslate": false,
       "localizations": {}
+    },
+    "Free tags": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Étiquettes libres"
+          }
+        }
+      }
     },
     "French": {
       "localizations": {
@@ -31630,6 +31842,16 @@
         }
       }
     },
+    "Health": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Santé"
+          }
+        }
+      }
+    },
     "Held back by Perspicax": {
       "localizations": {
         "en": {
@@ -32034,6 +32256,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ocultar a chave"
+          }
+        }
+      }
+    },
+    "Hide the panel": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masquer le panneau"
           }
         }
       }
@@ -32452,6 +32684,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Com que frequência esta rotina roda"
+          }
+        }
+      }
+    },
+    "How the memory holds up: its size, its age, its doubles, its writes.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'état de la mémoire : sa taille, son âge, ses doublons, ses écritures."
           }
         }
       }
@@ -33482,6 +33724,16 @@
         }
       }
     },
+    "In review": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En revue"
+          }
+        }
+      }
+    },
     "In rooms set to Auto, picks the bot that fits each message nobody @mentioned. When Jev is unsure or unreachable, the room's lead answers.": {
       "localizations": {
         "en": {
@@ -33862,6 +34114,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Inclui"
+          }
+        }
+      }
+    },
+    "Incoming email": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Courriel entrant"
+          }
+        }
+      }
+    },
+    "Incoming webhook": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Webhook entrant"
           }
         }
       }
@@ -35242,6 +35514,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Joignez l'ordinateur de votre bot à votre tailnet privé."
+          }
+        }
+      }
+    },
+    "Journal": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Journal"
           }
         }
       }
@@ -38708,6 +38990,16 @@
         }
       }
     },
+    "Map of the memory": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carte de la mémoire"
+          }
+        }
+      }
+    },
     "Mark all as read": {
       "localizations": {
         "en": {
@@ -40330,6 +40622,16 @@
         }
       }
     },
+    "Most used": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les plus utilisées"
+          }
+        }
+      }
+    },
     "Move": {
       "localizations": {
         "en": {
@@ -41304,6 +41606,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "O nome, a função ou a descrição ainda têm alterações não salvas."
+          }
+        }
+      }
+    },
+    "Namespaces": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Espaces"
           }
         }
       }
@@ -43060,6 +43372,26 @@
         }
       }
     },
+    "No change in %@ days": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun changement depuis %@ jours"
+          }
+        }
+      }
+    },
+    "No change in the bots' memory journals yet.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun changement dans les journaux de mémoire des bots pour l'instant."
+          }
+        }
+      }
+    },
     "No changes recorded yet.": {
       "localizations": {
         "fr": {
@@ -43494,6 +43826,16 @@
         }
       }
     },
+    "No free tag.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune étiquette libre."
+          }
+        }
+      }
+    },
     "No group in common.": {
       "localizations": {
         "en": {
@@ -43846,6 +44188,16 @@
         }
       }
     },
+    "No note on the map yet. Write the first one.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune note sur la carte pour l'instant. Écrivez la première."
+          }
+        }
+      }
+    },
     "No notes here yet.": {
       "localizations": {
         "fr": {
@@ -43944,6 +44296,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nenhuma chave da organização está configurada neste servidor."
+          }
+        }
+      }
+    },
+    "No orphan tag.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune étiquette orpheline."
           }
         }
       }
@@ -44736,6 +45098,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nenhuma etapa foi guardada para esta execução."
+          }
+        }
+      }
+    },
+    "No tag namespace yet": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun espace d'étiquettes pour l'instant"
+          }
+        }
+      }
+    },
+    "No tag on any note yet.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune note n'a d'étiquette pour l'instant."
           }
         }
       }
@@ -46196,6 +46578,16 @@
         }
       }
     },
+    "Notes: %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes : %@"
+          }
+        }
+      }
+    },
     "Nothing": {
       "localizations": {
         "en": {
@@ -46724,6 +47116,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rien ce mois-ci."
+          }
+        }
+      }
+    },
+    "Nothing to chart yet.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien à tracer pour l'instant."
           }
         }
       }
@@ -50446,6 +50848,26 @@
         }
       }
     },
+    "Orphan tags": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Étiquettes orphelines"
+          }
+        }
+      }
+    },
+    "Orphans": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orphelines"
+          }
+        }
+      }
+    },
     "Other": {
       "localizations": {
         "en": {
@@ -50648,6 +51070,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "En rupture de stock"
+          }
+        }
+      }
+    },
+    "Outside every namespace": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hors de tout espace"
           }
         }
       }
@@ -54628,6 +55060,16 @@
         }
       }
     },
+    "Proposals waiting": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Propositions en attente"
+          }
+        }
+      }
+    },
     "Propose only": {
       "localizations": {
         "en": {
@@ -56716,6 +57158,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reduzida"
+          }
+        }
+      }
+    },
+    "Reformat the instruction of the routine \"%@\" so it reads clearly, keeping what it asks. Here it is:\n\n%@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reformule l'instruction de la routine « %1$@ » pour qu'elle se lise clairement, en gardant ce qu'elle demande. La voici :\n\n%2$@"
           }
         }
       }
@@ -60786,6 +61238,32 @@
         }
       }
     },
+    "Runs": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exécutions"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Execuções"
+          }
+        }
+      }
+    },
+    "Runs (%@)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exécutions (%@)"
+          }
+        }
+      }
+    },
     "Runs an action": {
       "localizations": {
         "en": {
@@ -60819,13 +61297,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Agit au nom de"
+            "value": "S'exécute en tant que"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Age em nome de"
+            "value": "Executa como"
           }
         }
       }
@@ -61242,6 +61720,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Le même brouillon dans les deux modes : changez en haut de l'assistant quand vous voulez."
+          }
+        }
+      }
+    },
+    "Same title in one tier": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Même titre dans un palier"
           }
         }
       }
@@ -62022,6 +62510,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Visualização da agenda"
+          }
+        }
+      }
+    },
+    "Schedule, duration and results": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Horaire, durée et résultats"
           }
         }
       }
@@ -70044,6 +70542,16 @@
         }
       }
     },
+    "Tag namespaces": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Espaces d'étiquettes"
+          }
+        }
+      }
+    },
     "Tags": {
       "localizations": {
         "fr": {
@@ -70072,6 +70580,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tags (separadas por vírgula)"
+          }
+        }
+      }
+    },
+    "Tags outside every namespace, with their notes": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Étiquettes hors de tout espace, avec leurs notes"
           }
         }
       }
@@ -70378,6 +70896,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fale com %@ sem usar as mãos"
+          }
+        }
+      }
+    },
+    "Talk with %@ (voice mode)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parler avec %@ (mode vocal)"
           }
         }
       }
@@ -74072,6 +74600,16 @@
         }
       }
     },
+    "The tags your notes carry, the most used, and those to tidy up.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les étiquettes de vos notes, les plus utilisées et celles à ranger."
+          }
+        }
+      }
+    },
     "The test did not finish. Try again.": {
       "localizations": {
         "en": {
@@ -76116,6 +76654,22 @@
         }
       }
     },
+    "This permanently deletes all the saved runs you can see. Runs in progress are kept.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cela supprime définitivement toutes les exécutions enregistrées que vous pouvez voir. Les exécutions en cours sont conservées."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Isso exclui permanentemente todas as execuções salvas que você pode ver. As execuções em andamento são mantidas."
+          }
+        }
+      }
+    },
     "This permanently deletes the %@ group chat, its messages, and every thread in it, and turns off the routines that run there. The bots in it are not deleted. This cannot be undone.": {
       "localizations": {
         "en": {
@@ -77810,6 +78364,16 @@
         }
       }
     },
+    "Today's notes by the week they were written.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les notes d'aujourd'hui selon la semaine où elles ont été écrites."
+          }
+        }
+      }
+    },
     "Together": {
       "localizations": {
         "en": {
@@ -78628,6 +79192,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lixeira · %lld"
+          }
+        }
+      }
+    },
+    "Trigger": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déclencheur"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gatilho"
           }
         }
       }
@@ -82770,6 +83350,16 @@
         }
       }
     },
+    "Weekly on %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaque semaine le %@"
+          }
+        }
+      }
+    },
     "Welcome to Sagax": {
       "localizations": {
         "en": {
@@ -84770,6 +85360,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Écrire à %lld bots"
+          }
+        }
+      }
+    },
+    "Writes per week": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Écritures par semaine"
           }
         }
       }
@@ -89110,6 +89710,16 @@
         }
       }
     },
+    "created": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "créée"
+          }
+        }
+      }
+    },
     "crossed out %lld contradicted notes": {
       "localizations": {
         "en": {
@@ -89194,6 +89804,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "excluir um arquivo"
+          }
+        }
+      }
+    },
+    "deleted": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "supprimée"
           }
         }
       }
@@ -89928,6 +90548,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "editar um arquivo"
+          }
+        }
+      }
+    },
+    "edited": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "modifiée"
           }
         }
       }

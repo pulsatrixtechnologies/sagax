@@ -46,6 +46,16 @@ struct DesktopMemoryPage: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+                #if DEBUG
+                .onAppear {
+                    switch ParityLaunch.current?.iPadScreen {
+                    case .memoryMap?: tab = .map
+                    case .memoryTags?: tab = .tags
+                    case .memoryQuality?: tab = .quality
+                    default: break
+                    }
+                }
+                #endif
             switch tab {
             case .notes:
                 HStack(spacing: 0) {
@@ -413,94 +423,25 @@ struct DesktopMemoryPage: View {
 
     // MARK: Map, Tags, Quality
 
-    /// The map: every tier and the notes it holds, as the desktop's brain
-    /// map lays them out around their source.
+    /// The map: the desktop's radial brain (BrainMap.tsx).
     private var mapView: some View {
-        ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 16)], alignment: .leading, spacing: 16) {
-                ForEach(sources) { source in
-                    let rows = entries.filter { $0.source.id == source.id }
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 6) {
-                            Circle().fill(tierColor(source)).frame(width: 8, height: 8)
-                            Text(verbatim: source.name).font(theme.font(13, .medium)).foregroundStyle(theme.ink)
-                            Spacer(minLength: 0)
-                            Text(verbatim: "\(rows.count)").font(theme.font(11.5)).foregroundStyle(theme.inkSecondary)
-                        }
-                        ForEach(rows.prefix(8)) { entry in
-                            Button { tab = .notes; place = .source(source.id); opened = entry } label: {
-                                Text(verbatim: entry.row.title).font(theme.font(12)).foregroundStyle(theme.inkSecondary).lineLimit(1)
-                                    .padding(.horizontal, 8).padding(.vertical, 4)
-                                    .background(theme.card, in: Capsule())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(12)
-                    .background(theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
-                }
-            }
-            .padding(20)
-        }
+        DesktopBrainMap(entries: entries, colorOf: tierColor, open: { entry in
+            tab = .notes; place = .source(entry.source.id); opened = entry
+        }, sources: sources)
+    }
+
+    /// Tags (MemoryTagsView.tsx): a tag opens the notes filtered by it.
+    private var tagsView: some View {
+        DesktopMemoryTags(entries: entries) { tag in tab = .notes; place = .all; tagFilter = tag }
+    }
+
+    /// Quality (MemoryQualityView.tsx): health, the 26-week charts, the journal.
+    private var qualityView: some View {
+        DesktopMemoryQuality(entries: entries, colorOf: tierColor)
     }
 
     private var allTags: [String] {
         Array(Set(entries.flatMap { $0.row.tags ?? [] })).sorted()
-    }
-
-    private var tagsView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                if allTags.isEmpty { DesktopText(Text("No tags yet."), color: \.inkSecondary) }
-                ForEach(allTags, id: \.self) { tag in
-                    let count = entries.filter { $0.row.tags?.contains(tag) == true }.count
-                    Button { tab = .notes; place = .all; tagFilter = tag } label: {
-                        HStack {
-                            Text(verbatim: "#\(tag)").font(theme.font(13, .medium)).foregroundStyle(theme.accentText)
-                            Spacer()
-                            Text(verbatim: "\(count)").font(theme.font(12)).foregroundStyle(theme.inkSecondary)
-                        }
-                        .padding(.horizontal, 12).frame(minHeight: 40)
-                        .background(theme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(20)
-        }
-    }
-
-    /// Quality: notes without a tag, with no text, or not changed for 90 days.
-    private var qualityView: some View {
-        let stale = Date().timeIntervalSince1970 * 1000 - 90 * 86_400_000
-        let checks: [(LocalizedStringKey, [Entry])] = [
-            ("Without a tag", entries.filter { ($0.row.tags ?? []).isEmpty }),
-            ("Without text", entries.filter { ($0.row.excerpt ?? "").isEmpty }),
-            ("Not changed for 90 days", entries.filter { ($0.row.updatedAt ?? stale) < stale }),
-        ]
-        return ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(Array(checks.enumerated()), id: \.offset) { _, check in
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(check.0).font(theme.font(13, .medium)).foregroundStyle(theme.ink)
-                            Spacer()
-                            Text(verbatim: "\(check.1.count)").font(theme.font(12)).foregroundStyle(theme.inkSecondary)
-                        }
-                        ForEach(check.1.prefix(6)) { entry in
-                            Button { tab = .notes; opened = entry } label: {
-                                Text(verbatim: "\(entry.row.title) · \(entry.source.name)").font(theme.font(12)).foregroundStyle(theme.inkSecondary).lineLimit(1)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(12)
-                    .background(theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-            }
-            .padding(20)
-        }
     }
 
     // MARK: Data

@@ -368,6 +368,40 @@ enum RoutineWording {
     /// the editor): "Weekdays around 8:30 AM", "Every Monday around 8:06 AM",
     /// "Once October 29 at 5:57 PM". The zone shows only when it is not the
     /// phone's own. A schedule that does not reduce keeps its full wording.
+    /// The desktop's `scheduleLabel` (src/lib/schedule-label.ts), word for
+    /// word: "Weekly on Mon at 7:00 AM", "Every weekday at 9:00 AM", "Every
+    /// day at 8:00 AM", "Incoming webhook"; a cron schedule as `compact`.
+    static func desktop(_ schedule: RoutineSchedule) -> String {
+        switch schedule.type {
+        case .daily:
+            let days = (schedule.weekdays ?? []).sorted()
+            let label: String
+            if days.count == 7 || days.isEmpty { label = String(localized: "Every day") }
+            else if days == [1, 2, 3, 4, 5] { label = String(localized: "Every weekday") }
+            else if days.count == 1 { label = String(localized: "Weekly on \(Self.shortDay(days[0]))") }
+            else { label = days.map(Self.shortDay).joined(separator: ", ") }
+            let time = timeText(schedule)
+            if schedule.timing == "flexible" {
+                let note = "(-\(schedule.windowEarlyMinutes ?? 0)/+\(schedule.windowLateMinutes ?? 0) min)"
+                return String(localized: "\(label) around \(time) \(note)")
+            }
+            return String(localized: "\(label) at \(time)")
+        case .once:
+            guard let at = schedule.at else { return Self.schedule(schedule) }
+            let date = Date(timeIntervalSince1970: at / 1_000)
+            return "\(date.formatted(.dateTime.weekday(.wide).month(.wide).day())), \(date.formatted(date: .omitted, time: .shortened))"
+        case .webhook: return String(localized: "Incoming webhook")
+        case .event: return String(localized: "Incoming email")
+        default: return compact(schedule)
+        }
+    }
+
+    /// Short weekday names, index 0 = Sunday (the desktop's `dayNames`).
+    static func shortDay(_ index: Int) -> String {
+        let names = Calendar.current.shortWeekdaySymbols
+        return names[((index % 7) + 7) % 7]
+    }
+
     static func compact(_ schedule: RoutineSchedule) -> String {
         switch schedule.type {
         case .cron:

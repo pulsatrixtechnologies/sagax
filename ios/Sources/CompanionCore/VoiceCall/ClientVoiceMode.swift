@@ -61,8 +61,16 @@ public struct VoiceModeStatus: Decodable, Equatable, Sendable {
     /// every key that may serve, in order, the refused ones last
     public var keys: [VoiceKeyState]?
     public var refusal: VoiceModeRefusal?
+    /// The call runs on the realtime voice (the desktop's `realtimeCallReady`,
+    /// 2026-11-02: a call is never text to speech). Nil from an older server.
+    public var realtime: Bool?
 
-    public init(provider: String = "xai", available: Bool, organization: Bool? = nil, via: String? = nil, key: VoiceKeyInfo? = nil, keys: [VoiceKeyState]? = nil, refusal: VoiceModeRefusal? = nil) {
+    /// `realtimeCallReady`: available and on the realtime voice. An older
+    /// server that names no `realtime` keeps its call.
+    public var realtimeCallReady: Bool { available && (realtime ?? true) }
+
+    public init(provider: String = "xai", available: Bool, organization: Bool? = nil, via: String? = nil, key: VoiceKeyInfo? = nil, keys: [VoiceKeyState]? = nil, refusal: VoiceModeRefusal? = nil, realtime: Bool? = nil) {
+        self.realtime = realtime
         self.provider = provider
         self.available = available
         self.organization = organization

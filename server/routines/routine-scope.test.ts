@@ -198,4 +198,10 @@ describe("Clear logs", () => {
     expect(clearable("all", admin, "&status=paused")).toEqual(["run-carol"]);
     expect(clearable("mine", admin)).toEqual(["run-mia"]);
   });
+
+  it("routineId narrows Clear logs to one routine's runs", () => {
+    const [first] = RUNS;
+    expect(clearable("all", admin, `&routineId=${first.routineId}`)).toEqual(RUNS.filter((row) => row.routineId === first.routineId).map((row) => row.id).sort());
+    expect(clearable("mine", member, "&routineId=no-such-routine")).toEqual([]);
+  });
 });

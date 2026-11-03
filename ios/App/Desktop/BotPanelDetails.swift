@@ -441,9 +441,19 @@ struct BotPanelRoutines: View {
                     .font(theme.font(13))
                     .foregroundStyle(theme.inkSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                // RoutinesSection.tsx: the ⋯ (Run logs, Automations) and the +
+                Menu {
+                    Button(String(localized: "Run logs"), systemImage: "list.bullet.rectangle") { model.show(.automations) }
+                    Button(String(localized: "Automations"), systemImage: "calendar") { model.show(.automations) }
+                } label: {
+                    DesktopIconView(icon: .ellipsis, size: 15)
+                        .foregroundStyle(theme.inkSecondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel(Text("More options"))
                 iconButton(.plus, size: 15, label: "Create schedule") { adding = true }
                     .accessibilityIdentifier("desktop-panel-routine-new")
-                iconButton(.fileText, size: 14, label: "Run logs") { model.modal = .automations }
             }
             .frame(height: 28)
             AnyView(list)
@@ -557,11 +567,18 @@ struct BotPanelRoutines: View {
                         .foregroundStyle(theme.ink)
                         .lineLimit(1)
                         .frame(height: 18)
-                    Text(stateLabel(routine))
-                        .font(theme.font(13))
+                    // the desktop's row: the schedule, its zone, the next run; Paused under it
+                    Text(verbatim: Self.scheduleLine(routine))
+                        .font(theme.font(12))
                         .foregroundStyle(theme.inkSecondary)
                         .lineLimit(1)
-                        .frame(height: 18)
+                        .frame(height: 17)
+                    if !routine.enabled {
+                        Text(stateLabel(routine))
+                            .font(theme.font(12))
+                            .foregroundStyle(theme.inkSecondary)
+                            .frame(height: 17)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -577,6 +594,20 @@ struct BotPanelRoutines: View {
         .padding(.vertical, 10)
         .contentShape(Rectangle())
         .hoverEffect(.highlight)
+    }
+
+    static func scheduleLine(_ routine: Routine) -> String {
+        var parts = [RoutineWording.desktop(routine.schedule)]
+        if let zone = routine.schedule.timeZone, !zone.isEmpty { parts.append(zone) }
+        if routine.enabled, let next = routine.nextRunAt {
+            let date = Date(timeIntervalSince1970: next / 1000)
+            let time = date.formatted(date: .omitted, time: .shortened)
+            let when = Calendar.current.isDateInToday(date) ? String(localized: "Today at \(time)")
+                : Calendar.current.isDateInTomorrow(date) ? String(localized: "Tomorrow at \(time)")
+                : "\(date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())), \(time)"
+            parts.append(String(localized: "Next: \(when)"))
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func stateLabel(_ routine: Routine) -> LocalizedStringKey {

@@ -237,7 +237,8 @@ struct BotPanelComputer: View {
                         Text(offline ? "This computer is offline" : "Starting your bot's computer…")
                     case .off, .picture:
                         Image(systemName: "power").font(.system(size: 19, weight: .regular))
-                        Text("This bot's computer is off")
+                        // place.view.off.line
+                        Text("\(bot.name) has no screen. It can still chat and do anything that doesn't need one.")
                     }
                 }
                 .font(theme.font(12))

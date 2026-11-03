@@ -370,6 +370,8 @@ private struct BotPanelIdentity: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Edit avatar"))
                 .accessibilityIdentifier("desktop-panel-avatar")
+                // 2026-11-03: no pencil on the mascot (the desktop's Edit bot
+                // is in the panel's ⋯ menu); kept only for VoiceOver
                 if DesktopPersonaEditor.offered(gate: session.surfaceGate, bot: bot) {
                     Button { model.showPersona() } label: {
                         Image(systemName: "pencil")
@@ -381,6 +383,7 @@ private struct BotPanelIdentity: View {
                     }
                     .buttonStyle(.plain)
                     .offset(x: -4, y: 28)
+                    .opacity(0)
                     .accessibilityLabel(Text("Edit persona"))
                     .accessibilityIdentifier("desktop-panel-edit-persona")
                 }

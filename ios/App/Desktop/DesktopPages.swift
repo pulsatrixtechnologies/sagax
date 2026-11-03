@@ -449,9 +449,9 @@ extension IPadParityScreen {
     /// The page surfaces (desktop-*-53 to -56): the page in the main column.
     var parityPage: DesktopPage? {
         switch self {
-        case .routinesCalendar, .routinesList, .routinesLogs: .automations
+        case .routinesCalendar, .routinesList, .routinesLogs, .routineEdit: .automations
         case .teamMap: .teamMap
-        case .memoryPage: .memory
+        case .memoryPage, .memoryMap, .memoryTags, .memoryQuality: .memory
         default: nil
         }
     }

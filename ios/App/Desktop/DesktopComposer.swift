@@ -23,6 +23,7 @@ enum DesktopComposerMenu: Equatable {
 struct DesktopComposerPill: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
+    @EnvironmentObject private var shell: DesktopShellModel
     @Binding var draft: String
     let prompt: String
     var focused: FocusState<Bool>.Binding
@@ -47,6 +48,9 @@ struct DesktopComposerPill: View {
     let draftChanged: (String, String) -> Void
 
     @State private var modelLabel: String?
+    /// The bot's realtime voice: false, the call button says "Calls need a
+    /// realtime voice" and opens Settings > Voice (CallView.tsx, 2026-11-02).
+    @State private var realtimeReady: Bool?
     /// The model menu (#477, #478, #518), as the desktop chip opens it.
     @State private var modelMenuOpen = false
     @State private var menu: DesktopComposerMenu? = DesktopComposerPill.parityMenu
@@ -275,7 +279,14 @@ struct DesktopComposerPill: View {
     }
 
     private var voiceButton: some View {
-        Button(action: voice) {
+        Button {
+            if realtimeReady == false {
+                shell.settingsSection = .voice
+                shell.modal = .settings
+            } else {
+                voice()
+            }
+        } label: {
             if bot != nil {
                 DesktopLucideGlyph(paths: DesktopLucide.audioLines, size: 16)
                     .foregroundStyle(cta.ink)
@@ -292,8 +303,20 @@ struct DesktopComposerPill: View {
         .disabled(blocked)
         .opacity(blocked ? 0.45 : 1)
         .hoverEffect(.highlight)
-        .accessibilityLabel(Text("Voice mode"))
+        .accessibilityLabel(voiceLabel)
+        .accessibilityHint(realtimeReady == false ? Text("A call runs on the realtime voice, never text to speech. Add or fix the xAI key in Settings > Voice.") : Text(verbatim: ""))
         .accessibilityIdentifier("desktop-composer-voice")
+        .task(id: bot?.id) {
+            guard let id = bot?.id else { realtimeReady = nil; return }
+            realtimeReady = await session.voiceModeStatus(botId: id)?.realtimeCallReady
+        }
+    }
+
+    /// `voiceMode.start` / `voiceMode.realtimeNeededLabel`.
+    private var voiceLabel: Text {
+        if realtimeReady == false { return Text("Calls need a realtime voice") }
+        if let bot { return Text("Talk with \(bot.name) (voice mode)") }
+        return Text("Voice mode")
     }
 
     private var sendButton: some View {

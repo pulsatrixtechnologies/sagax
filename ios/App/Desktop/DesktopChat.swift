@@ -410,6 +410,11 @@ struct DesktopChatHeader: View {
                 }
                 .padding(.top, 10)
                 .padding(.trailing, 20)
+            } else if case let .bot(bot) = chat, !DesktopSidebarState.threadsOn(model: model, prefs: prefs) {
+                // the docked panel's bar holds the menu; New topic stays here
+                HStack { Spacer(minLength: 0); DesktopNewTopicButton(bot: bot) }
+                    .padding(.top, 10)
+                    .padding(.trailing, 20)
             }
         }
         .frame(maxWidth: .infinity)

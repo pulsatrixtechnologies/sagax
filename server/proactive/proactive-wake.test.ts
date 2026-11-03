@@ -33,7 +33,7 @@ import {
   type ProactiveWakeBatch,
 } from "./proactive-wake.ts";
 
-function harness(modes: Record<string, ProactiveMode | undefined | string>, opts: { gatherMs?: number; engineExpired?: (botId: string) => boolean } = {}) {
+function harness(modes: Record<string, ProactiveMode | undefined | string>, opts: { gatherMs?: number; engineExpired?: (botId: string) => boolean; owner?: (botId: string) => string | undefined } = {}) {
   let now = 1_000_000;
   const timers: Array<{ at: number; fn: () => void; live: boolean }> = [];
   const woken: ProactiveWakeBatch[] = [];
@@ -47,6 +47,7 @@ function harness(modes: Record<string, ProactiveMode | undefined | string>, opts
     dropped: (botId, events) => dropped.push({ botId, events }),
     pendingChanged: (botId, events) => changes.push({ botId, keys: events.map((event) => event.key) }),
     ...(opts.engineExpired ? { engineExpired: opts.engineExpired } : {}),
+    ...(opts.owner ? { owner: opts.owner } : {}),
     now: () => now,
     setTimer: (fn, ms) => {
       const timer = { at: now + ms, fn, live: true };
@@ -195,6 +196,45 @@ describe("batching", () => {
     h.advance(90_000);
     expect(h.modelCalls()).toBe(2);
     expect(h.woken[1]!.events.map((event) => event.key)).toEqual(["mail-2", "mail-3"]);
+  });
+
+  // 2026-11-03 (audit S-2): a shared org bot's events of two people in one
+  // window used to make one wake under the first runAs found, so person A's
+  // turn read person B's (and the owner's) content.
+  it("two people's events in one window make one wake each, never mixed, each under its own person", () => {
+    const h = harness({ nova: "proactive" }, { owner: () => "owner-o" });
+    const failed = (n: number, runAs: string): ProactiveEvent => ({
+      botId: "nova", source: "run", key: `run-${n}`, failed: true, runAs,
+      label: "Routine failed: Daily report", detail: `Run ${n} failed for ${runAs}`,
+    });
+    h.waker.offer(failed(1, "person-a"));
+    h.advance(1_000);
+    h.waker.offer(failed(2, "person-b"));
+    h.advance(1_000);
+    h.waker.offer(mail("nova", 3));
+    h.advance(1_000);
+    h.waker.offer(failed(4, "person-a"));
+    expect(h.waker.pendingFor("nova")).toBe(4);
+    // the disk copy of the bot still lists every gathered event
+    expect(h.changes.at(-1)!.keys).toEqual(["run-1", "run-4", "run-2", "mail-3"]);
+    h.advance(30_000);
+    expect(h.modelCalls()).toBe(3);
+    const byPerson = Object.fromEntries(h.woken.map((batch) => [batch.runAs, batch.events.map((event) => event.key)]));
+    expect(byPerson).toEqual({ "person-a": ["run-1", "run-4"], "person-b": ["run-2"], "owner-o": ["mail-3"] });
+    for (const batch of h.woken) {
+      expect(new Set(batch.events.map((event) => event.runAs ?? "owner-o"))).toEqual(new Set([batch.runAs]));
+    }
+    expect(h.waker.pendingFor("nova")).toBe(0);
+    expect(h.changes.at(-1)!.keys).toEqual([]);
+  });
+
+  it("an event with the owner's own runAs joins the owner's events", () => {
+    const h = harness({ nova: "proactive" }, { owner: () => "owner-o" });
+    h.waker.offer(mail("nova", 1));
+    h.waker.offer({ botId: "nova", source: "run", key: "run-2", failed: true, runAs: "owner-o", label: "Routine failed: X", detail: "failed" });
+    h.advance(30_000);
+    expect(h.modelCalls()).toBe(1);
+    expect(h.woken[0]!.runAs).toBe("owner-o");
   });
 
   it("past the hour's wakes, events are skipped with a line", () => {

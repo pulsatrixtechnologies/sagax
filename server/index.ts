@@ -24140,6 +24140,12 @@ const proactiveEngine = new ProactiveEngine({
 const proactivePending = new ProactivePendingFile(join(DATA_DIR, "proactive-pending.json"));
 const proactiveWaker = new ProactiveWaker({
   pendingChanged: (botId, events) => proactivePending.set(botId, events),
+  // 2026-11-03 (audit S-2): events gather per (bot, person); an event
+  // without runAs is the owner's
+  owner: (botId) => {
+    const bot = store.bot(botId);
+    return bot ? effectiveBotOwner(bot) || undefined : undefined;
+  },
   bot: (botId) => {
     const bot = store.bot(botId);
     // a hidden or temporary bot has no conversation to act in

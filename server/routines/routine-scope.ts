@@ -137,6 +137,8 @@ const REDACTED_RUN_FIELDS = [
   "executionThreadId", "sourceThreadId", "resultsThreadId", "threadId", "webhookId", "deliveryId",
   // what the organization memory told the person it runs as
   "memoryHint",
+  // the teammate threads its work went to (2026-11-03)
+  "handedTo",
 ] as const;
 
 /** Someone else's run: its status and timing, never its work. */

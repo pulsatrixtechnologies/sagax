@@ -1019,12 +1019,16 @@ const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { m
 export function RoutineRunRow({ message, onResume }: { message: Message; botId: string; onResume?: () => void }) {
   "use memo";
   const dispatch = useStoreDispatch();
+  const getState = useStoreGetter();
+  const showThreads = useShowThreads();
   const run = message.routineRun;
   return (
     <RoutineRunCard
       message={message}
       onResume={onResume}
       onOpen={run?.runId ? () => openRoutineRun(dispatch, { runId: run.runId, routineId: run.routineId }) : undefined}
+      // 2026-11-03: a run that handed work to a teammate links that thread.
+      onOpenThread={(botId, threadId) => { openThread(dispatch, { botId, threadId }, getState(), showThreads); }}
     />
   );
 }

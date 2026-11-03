@@ -3,6 +3,7 @@ import { activeLocale, t } from "./i18n";
 import { scheduleLabel } from "./schedule-label";
 import { ROUTINE_AUTO_PAUSE_CHOICES } from "../../shared/routine-auto-pause";
 import { readableRoutineProblems } from "../../shared/routine-problems";
+import { routineResultParts } from "../../shared/routine-result";
 
 /** A completed run's problems as a person reads them: a teammate's quoted
  * last message as plain text, rows stored before 2026-11-03 included. */
@@ -59,6 +60,8 @@ export function routineRunError(error: string | undefined): string | undefined {
 export function routineRunTone(run: RoutineRun): string {
   if (run.status === "waiting" || ["needs-input", "limit-reached", "paused"].includes(run.goalStatus ?? "")) return "text-warning";
   if (["failed", "missed"].includes(run.status) || ["failed", "blocked"].includes(run.goalStatus ?? "")) return "text-danger";
+  // 2026-11-03: blocked waits on something; never the success green.
+  if (run.status === "blocked") return "text-warning";
   if (run.status === "running") return "text-accent";
   if (run.status === "completed" && run.problems) return "text-warning";
   if (run.status === "completed" && run.quiet) return "text-ink-secondary";
@@ -187,12 +190,64 @@ export function routineRunDuration(run: Pick<RoutineRun, "startedAt" | "finished
   return rest === 0 ? t("routineRun.hours", { count: Math.floor(minutes / 60) }) : t("routineRun.hoursMinutes", { hours: Math.floor(minutes / 60), minutes: rest });
 }
 
-/** The first line of what a run has to say: what it waits on, its error, its
- * report. A quiet run says it had nothing. */
-export function routineRunPreview(run: Pick<RoutineRun, "status" | "quiet" | "attention" | "error" | "output" | "problems">): string {
-  if (run.status === "completed" && run.problems) return routineRunProblems(run).split("\n")[0]!.trim();
-  if (run.status === "completed" && run.quiet) return t("routineRun.quiet");
-  const text = run.attention || routineRunError(run.error) || run.output || "";
+/** A run's final words in plain sentences (2026-11-03, owner report: "the
+ * only result is a {"). Prose stays as written; a RUN_STATUS line or a JSON
+ * report (shared/routine-result.ts) becomes what was done, what is blocked
+ * and why, and what the person must do; any other structure a short excerpt
+ * with its pretty-printed whole in `details` for "Show details". Never a
+ * lone brace. */
+export function routineResultText(raw: string | undefined): { text: string; details?: string; structured: boolean } {
+  const parts = routineResultParts(raw);
+  const lines: string[] = [];
+  if (parts.status) {
+    const reason = parts.reason ?? parts.blocked[0] ?? "";
+    if (reason) lines.push(t(`routineResult.${parts.status}`, { reason }));
+  }
+  if (parts.summary) lines.push(parts.summary);
+  if (parts.done.length) lines.push(t("routineResult.done", { items: parts.done.join("; ") }));
+  const blocked = parts.status && !parts.reason ? parts.blocked.slice(1) : parts.blocked;
+  if (blocked.length) lines.push(t("routineResult.blockedItems", { items: blocked.join("; ") }));
+  if (parts.todo.length) lines.push(t("routineResult.todo", { items: parts.todo.join("; ") }));
+  if (!lines.length && parts.excerpt) lines.push(parts.excerpt);
+  if (!lines.length && parts.structured) lines.push(t("routineResult.structured"));
+  return { text: lines.join("\n"), ...(parts.structured && parts.details ? { details: parts.details } : {}), structured: parts.structured };
+}
+
+/** The reason in a run's error or attention, in plain words; empty when it
+ * says nothing a person can read (a "{" kept by an older server). */
+function plainReason(text: string | undefined): string {
+  const said = routineRunError(text);
+  if (!said?.trim()) return "";
+  const parts = routineResultParts(said);
+  if (!parts.structured) return said.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+  return parts.reason ?? parts.summary ?? parts.blocked[0] ?? parts.excerpt ?? "";
+}
+
+/** A blocked run's one line: "Blocked: <why>", the teammate it waits on, or
+ * a plain line when its reason was lost. The run list, the run's bubble and
+ * its chat card all show this. */
+export function routineRunBlockedLine(run: { error?: string; attention?: string; handedTo?: ReadonlyArray<{ name?: string; status: string }> }): string {
+  const reason = plainReason(run.error) || plainReason(run.attention);
+  if (reason) return t("routineRun.blockedLine", { reason: reason.replace(/^blocked\s*[:—-]\s*/i, "") });
+  const waitingOn = run.handedTo?.find((entry) => !["completed", "failed", "cancelled", "expired"].includes(entry.status));
+  if (waitingOn) return t("routineRun.blockedWaitingFor", { name: waitingOn.name || t("routineRun.aTeammate") });
+  return t("routineRun.blockedNoReason");
+}
+
+/** What a run has to say, the same for its row, its bubble and its card:
+ * its problems, that it was quiet, why it is blocked, what it waits on, its
+ * error, or its report in plain sentences. */
+export function routineRunSummary(run: Pick<RoutineRun, "status" | "quiet" | "attention" | "error" | "output" | "problems" | "handedTo">): { text: string; details?: string } {
+  if (run.status === "completed" && run.problems) return { text: routineRunProblems(run) };
+  if (run.status === "completed" && run.quiet) return { text: t("routineRun.quiet") };
+  if (run.status === "blocked") return { text: routineRunBlockedLine(run) };
+  const { text, details } = routineResultText(run.attention || routineRunError(run.error) || run.output || "");
+  return details ? { text, details } : { text };
+}
+
+/** The first line of what a run has to say (routineRunSummary). */
+export function routineRunPreview(run: Pick<RoutineRun, "status" | "quiet" | "attention" | "error" | "output" | "problems" | "handedTo">): string {
+  const text = routineRunSummary(run).text;
   const line = text.split("\n").map((part) => part.trim()).find((part) => part && !/^\|?\s*:?-{2,}/.test(part)) ?? "";
   const plain = line.startsWith("|") ? line.split("|").map((cell) => cell.trim()).filter(Boolean).join(" · ") : line;
   return plain.replace(/[*_`#>]+/g, "").trim();

@@ -4,7 +4,7 @@
 // `onStop`, a running entry the viewer may stop gets a Stop button; given
 // `where`, a third line says where it works (a coding job's repository and
 // branch).
-import { AlertCircle, CheckCircle2, ChevronRight, CircleSlash, Clock, Hand, Loader2, Square } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronRight, CircleSlash, Clock, Hand, Loader2, Square, TriangleAlert } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -23,6 +23,9 @@ export function ActivityStatusIcon({ status, size = 16 }: { status: BotActivityS
       return <AlertCircle {...common} data-activity-icon="failed" className="shrink-0 text-danger" />;
     case "stopped":
       return <CircleSlash {...common} data-activity-icon="stopped" className="shrink-0 text-ink-secondary" />;
+    // 2026-11-03: a blocked run is never a green check.
+    case "blocked":
+      return <TriangleAlert {...common} data-activity-icon="blocked" className="shrink-0 text-warning" />;
     default:
       return <CheckCircle2 {...common} data-activity-icon="finished" className="shrink-0 text-success" />;
   }

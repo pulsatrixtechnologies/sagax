@@ -24196,7 +24196,11 @@ routines = new RoutineManager({
   // 2026-11-01: a run ends as its teammates' work did (server/routines/routines.ts settleCompleted).
   handedOutOutcome: (threadId, since) => {
     const outcome = coordinator.handedOutOutcome(threadId, since);
-    return outcome && { ...outcome, failed: outcome.failed.map(({ botId, ...rest }) => ({ name: store.bot(botId)?.name ?? "A teammate", ...rest })) };
+    return outcome && {
+      ...outcome,
+      failed: outcome.failed.map(({ botId, ...rest }) => ({ name: store.bot(botId)?.name ?? "A teammate", ...rest })),
+      ...(outcome.handed ? { handed: outcome.handed.map((entry) => ({ ...entry, ...(store.bot(entry.botId)?.name ? { name: store.bot(entry.botId)!.name } : {}) })) } : {}),
+    };
   },
   // 2026-11-01: a running run whose turn is gone ends as lost (server/routines/routines.ts endLostTurns).
   // Read lazily at tick time; a value declared later in this module still

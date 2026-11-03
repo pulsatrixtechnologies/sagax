@@ -224,6 +224,16 @@ export interface Routine {
  * are gone and a routine paused for one resumes when the server starts. */
 export type RoutineSuspendReason = "person_out" | "no_right";
 
+/** One teammate a run handed work to, and the thread that work runs in. */
+export interface RoutineRunHandoff {
+  botId: string;
+  threadId: string;
+  /** The teammate's name when known. */
+  name?: string;
+  /** Where that work stands: queued, running, completed, failed... */
+  status: string;
+}
+
 export interface RoutineRun {
   id: string;
   routineId: string;
@@ -257,6 +267,10 @@ export interface RoutineRun {
   /** 2026-11-01: completed, but not all of it went right: why ("Completed
    * with problems"). Counts as a problem run. */
   problems?: string;
+  /** 2026-11-03: the teammates this run handed work to ("Sent work to a
+   * teammate"), so the run and its card link the thread where that work's
+   * outcome is. */
+  handedTo?: RoutineRunHandoff[];
   /** 2026-11-01: a person started this run; its card shows from the start. */
   startedBy?: "person";
   /** 2026-11-01: a waiting run waits on its teammates' work, not on the person. */

@@ -284,6 +284,7 @@ const STATUS_KEYS: Record<BotActivityStatus, LocaleKey> = {
   finished: "botPanel.coding.status.finished",
   failed: "botPanel.coding.status.failed",
   stopped: "botPanel.coding.status.stopped",
+  blocked: "routines.status.blocked",
 };
 
 export function activityStatusLabel(status: BotActivityStatus): string {

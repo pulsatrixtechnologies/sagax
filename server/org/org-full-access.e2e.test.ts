@@ -310,7 +310,7 @@ posixOnly("organization Full access", () => {
   it("FA-6: the packaged desktop app on a remote organization server turns Full on, for the conversation and the bot (#1674)", async () => {
     // the app's own saves (src/state/store.tsx, loaded at run time: the
     // server's typecheck does not compile the app)
-    const appStore: string = "../src/state/store.tsx";
+    const appStore: string = "../../src/state/store.tsx";
     type Save = (...args: unknown[]) => Promise<{ id: string; approvalMode?: string }>;
     const { persistBotUpdate, persistTaskApproval } = await import(appStore) as { persistBotUpdate: Save; persistTaskApproval: Save };
     // the app's own transport on a remote page: the session cookie, no private channel

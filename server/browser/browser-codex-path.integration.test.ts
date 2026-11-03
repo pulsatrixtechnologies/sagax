@@ -43,7 +43,7 @@ describe.skipIf(process.platform === "win32")("Codex browser turns with a minima
     // The extensionless executable must exercise /usr/bin/env node, rather
     // than the driver's explicit .ts-file launch through process.execPath.
     const codex = join(bin, "codex");
-    writeFileSync(codex, '#!/usr/bin/env node\nimport("../fake-codex-app-server.mjs");\n', { mode: 0o755 });
+    writeFileSync(codex, '#!/usr/bin/env node\nimport("./fake-codex-app-server.mjs");\n', { mode: 0o755 });
     // A Linux system Node may precede our symlink; it need not support .ts.
     writeFileSync(join(bin, "fake-codex-app-server.mjs"), stripTypeScriptTypes(
       readFileSync(join(SERVER_DIR, "testing", "fake-codex-app-server.ts"), "utf8"),

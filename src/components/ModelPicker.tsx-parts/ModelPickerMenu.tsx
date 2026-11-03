@@ -15,6 +15,12 @@ import type { EffortLevel } from "../../../shared/wire";
 import { MENU_WIDTH } from "./helpers";
 import { AnchoredPopover, enclosingWindowBounds } from "../AnchoredPopover";
 
+/** The height a menu anchored by its bottom edge can take: up to 560px, never
+ * past the window's top (8px margin). */
+export function menuRoomAbove(bottom: number, viewportHeight = typeof window === "undefined" ? 800 : window.innerHeight): number {
+  return Math.max(120, Math.min(560, viewportHeight - bottom - 8));
+}
+
 export function ModelPickerMenu({
   menuRef,
   menuAt,
@@ -151,7 +157,9 @@ export function ModelPickerMenu({
       data-model-menu
       role="dialog"
       aria-label={t("model.menu")}
-      style={menuAt ? { left: menuAt.left, right: menuAt.right, bottom: menuAt.bottom, width: MENU_WIDTH } : { width: MENU_WIDTH }}
+      // The menu opens upward from its bottom edge: it may only be as tall as
+      // the room above that edge, or its top leaves the window (2026-11-03).
+      style={menuAt ? { left: menuAt.left, right: menuAt.right, bottom: menuAt.bottom, width: MENU_WIDTH, maxHeight: menuRoomAbove(menuAt.bottom) } : { width: MENU_WIDTH }}
       onKeyDown={onKeyDown}
       {...menuMotion.exitProps}
       className={cn(

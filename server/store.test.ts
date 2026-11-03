@@ -36,6 +36,16 @@ describe("Store", () => {
     rmSync(DATA_DIR, { recursive: true, force: true });
   });
 
+  it("persists an explicit Perspicax identity and clears it back to the default", () => {
+    const store = new Store(selection);
+    const bot = store.createBot({ name: "Identity fixture" }, { seedMessages: false });
+    expect(bot.perspicaxActAs).toBeUndefined();
+    store.setBotPerspicaxActAs(bot.id, { slug: "redacted", name: "Bot attribution" });
+    expect(new Store(selection).bot(bot.id)?.perspicaxActAs).toEqual({ slug: "redacted", name: "Bot attribution" });
+    store.setBotPerspicaxActAs(bot.id, null);
+    expect(new Store(selection).bot(bot.id)?.perspicaxActAs).toBeUndefined();
+  });
+
   it("does not count a routine execution thread toward bot-wide busy", () => {
     const store = new Store(selection);
     const bot = store.createBot({ name: "Dispatch" }, { seedMessages: false });

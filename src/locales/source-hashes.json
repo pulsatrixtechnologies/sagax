@@ -16816,7 +16816,15 @@
       "botPanel.library.pageState.org": "8119b886dd6fdd7f0794c5c7b7bfa10335290523691b82ffd5be2862249ae342",
       "botPanel.library.pageState.link": "5b55be3d77de8180e359226b31d65e4632d60372ae6694059ca87e20dc0c4f5f",
       "botPanel.library.pageState.revoked": "4bb47f186df233e48b09d241ee4defb821add0c35ac8311469fe1522c6813dd5",
-      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3"
+      "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
+      "perspicax.identity.label": "550f8efeb4cc2895b312737db613c22a4710c8e606a5960513d2b5391578c167",
+      "perspicax.identity.default": "479241cafdc0d8d4b9bc15c6a07f3c5ce8b63ac030510119120d2ac091f768cc",
+      "perspicax.identity.help": "78ebc5581c39fe98bd135e5e10bc0bd416465abf8dbd21e14ad6f14e7943b428",
+      "perspicax.identity.chip": "55690dd5299c954343210ae44f5baff9dba7623b698edacaf3fc8129c8262a6d",
+      "perspicax.identity.unavailable": "1cc72c479243100b14c392881af6d0e2ec77bc53abca1dc8eca3c02f2028a94a",
+      "perspicax.identity.switch_not_consented": "a75fcf1f7d84bb760326ccb4356eafa259cf3270734eaeb1af06b0b18eebf964",
+      "perspicax.identity.params_invalid": "b4cd8710d40a2f89f54a636e2aca6eef17423075a449889401148415193634b9",
+      "perspicax.identity.failed": "402cbe8107b727c011caccf90906dcd4b1c7eb9ea13ea9c142c8edb357554d4d"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

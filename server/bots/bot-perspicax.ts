@@ -18,6 +18,7 @@ import type { DirectoryProfile } from "../perspicax/perspicax-link.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
 import { MAX_BOT_PERSPICAX_PROFILES } from "../store.ts";
+import type { IdentityInventory } from "../perspicax/perspicax-identity.ts";
 
 const PROFILE_ID = /^[0-9A-Za-z_.:-]{1,64}$/;
 
@@ -41,6 +42,9 @@ export interface BotPerspicaxRouteDeps {
   catalog(): DirectoryProfile[];
   setProfiles(botId: string, profiles: string[]): void;
   onChanged(botId: string): void;
+  identities?(auth: RequestAuth): Promise<IdentityInventory>;
+  actsAsOf?(botId: string): { slug: string; name: string } | undefined;
+  setActsAs?(botId: string, identity: { slug: string; name: string } | null): void;
 }
 
 function describe(id: string, catalog: ReadonlyMap<string, DirectoryProfile>): WirePerspicaxProfile {
@@ -65,6 +69,11 @@ export function createBotPerspicaxRoutes(deps: BotPerspicaxRouteDeps): RouteHand
     if (!canOnBot(viewer, "bot.use", facts)) return reply(404, { error: "no such bot" });
     const canEdit = canOnBot(viewer, "bot.edit", facts);
     const catalog = new Map(deps.catalog().map((profile) => [profile.id, profile] as const));
+    let identities: IdentityInventory | undefined;
+    let identityUnavailable = false;
+    if (deps.identities) {
+      try { identities = await deps.identities(auth); } catch { identityUnavailable = true; }
+    }
     const answer = (profiles: readonly string[]) => {
       const held = new Set(deps.heldBy(auth));
       res.setHeader("cache-control", "no-store");
@@ -72,12 +81,24 @@ export function createBotPerspicaxRoutes(deps: BotPerspicaxRouteDeps): RouteHand
         selected: profiles.map((id) => ({ ...describe(id, catalog), heldByMe: held.has(id) })),
         available: [...catalog.values()].filter((profile) => held.has(profile.id)).map((profile) => describe(profile.id, catalog)),
         canEdit,
+        ...(deps.identities ? { identities: identities ?? { supported: false, profiles: [] }, actsAs: deps.actsAsOf?.(botId) ?? null, identityUnavailable } : {}),
       });
     };
     if (method === "GET") return answer(current);
 
     if (!canEdit) return reply(403, { error: "changing this bot's Perspicax tools needs edit on the bot", code: "needs_edit" });
     const body = await readBody(req);
+    const record = body && typeof body === "object" && !Array.isArray(body) ? body as Record<string, unknown> : {};
+    let identity: { slug: string; name: string } | null | undefined;
+    if (Object.hasOwn(record, "actsAs")) {
+      if (record.actsAs === null) identity = null;
+      else {
+        if (!identities?.supported) return reply(409, { code: "identity_unavailable", error: "Perspicax identities are unavailable. Try again." });
+        const profile = identities.profiles.find((profile) => profile.slug === record.actsAs);
+        if (!profile) return reply(400, { code: "params_invalid", error: "Choose a Perspicax profile you hold." });
+        identity = { slug: profile.slug, name: profile.name };
+      }
+    }
     const list = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>).profiles : undefined;
     if (!Array.isArray(list) || !list.every((id): id is string => typeof id === "string" && PROFILE_ID.test(id))) {
       return reply(400, { error: "send { profiles: [<profile id>] }", code: "bad_profiles" });
@@ -93,6 +114,7 @@ export function createBotPerspicaxRoutes(deps: BotPerspicaxRouteDeps): RouteHand
       return reply(403, { error: "you can only add a Perspicax profile you hold", code: "profile_not_held" });
     }
     deps.setProfiles(botId, next);
+    if (identity !== undefined) deps.setActsAs?.(botId, identity);
     console.log(`[perspicax] bot ${botId}: MCP profiles set (${next.length}; ${added.length} added, ${current.filter((id) => !next.includes(id)).length} removed)`);
     deps.onChanged(botId);
     return answer(deps.profilesOf(botId) ?? next);

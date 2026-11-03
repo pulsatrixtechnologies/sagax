@@ -13001,5 +13001,13 @@
   "memoryManager.graph.center": "Centre force",
   "memoryManager.graph.repel": "Repel force",
   "memoryManager.graph.link": "Link force",
-  "memoryManager.graph.linkDistance": "Link distance"
+  "memoryManager.graph.linkDistance": "Link distance",
+  "perspicax.identity.label": "Acts as (Perspicax profile)",
+  "perspicax.identity.default": "Default identity",
+  "perspicax.identity.help": "Perspicax tools and attribution follow this profile during the bot’s work.",
+  "perspicax.identity.chip": "as {name}",
+  "perspicax.identity.unavailable": "Perspicax profiles could not be loaded. Try again.",
+  "perspicax.identity.switch_not_consented": "Perspicax did not allow this connection to switch profiles. Reconnect to Perspicax and allow profile switching. This turn can only read.",
+  "perspicax.identity.params_invalid": "You no longer hold this Perspicax profile. Choose another profile in the bot’s settings. This turn can only read.",
+  "perspicax.identity.failed": "Perspicax could not switch profiles. Check the connection and the bot’s profile setting. This turn can only read."
 }

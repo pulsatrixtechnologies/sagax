@@ -31,6 +31,7 @@ import type { SubjectTokenOutcome } from "../auth/idp-session.ts";
 import type { DirectoryProfile, ExchangeResult } from "./perspicax-link.ts";
 import { PERSPICAX_READ_ONLY_TOOLS } from "../drivers/acp/grok-read-only-tools.ts";
 import { executionKey, WriteOnce } from "../write-once.ts";
+import { PerspicaxIdentity, identityLapsed, identityProfiles, identityValue, identityWarning, type IdentityFailure, type IdentityInventory } from "./perspicax-identity.ts";
 
 export type PerspicaxUnavailableReason = "not_held" | "no_session" | "unreachable" | "rate_limited" | "no_delegation" | "unknown_speaker" | "unknown_profile";
 
@@ -104,6 +105,9 @@ export interface PerspicaxMcpOptions {
   delegationRefused?(principalId: string): void;
   /** The bot's current profile ids (undefined: the bot is gone). */
   botProfiles(botId: string): readonly string[] | undefined;
+  botActAs?(botId: string): { slug: string; name: string } | undefined;
+  heldProfiles?(principalId: string): readonly string[];
+  onIdentityWarning?(input: { threadId: string; botId: string; principalId: string; reason: IdentityFailure }): void;
   /** The thread is on a live voice call: a turn's tokens are kept for its
    * next turn instead of revoked, so the call's tools stay mounted from turn
    * to turn without a new exchange (server/voice/voice-call-session.ts). */
@@ -245,6 +249,11 @@ interface Entry {
   token: string;
   expiresAt: number;
   mcpSessionId?: string;
+  initialized?: boolean;
+  identity?: PerspicaxIdentity;
+  implicitIdentity?: string;
+  servedTools?: Set<string>;
+  twilioTools?: Set<string>;
   /** One re-initialize at a time (relay, a session Perspicax dropped). */
   reopening?: Promise<boolean>;
   /** The person is out, or the access could not be renewed: every call ends. */
@@ -458,11 +467,6 @@ export class PerspicaxMcp {
    * and the connectors whose reads it marks as reviewed. */
   private readonly apiNames = new Map<string, { at: number; names: Map<string, string>; reviewed: Set<string> }>();
   private readonly apiNamesPending = new Set<string>();
-  /** Per profile: tools whose tools/list entry names Twilio (telephony guard). */
-  private readonly twilioTools = new Map<string, Set<string>>();
-  /** Per profile, the tool names its tools/list served (bounded): a native
-   * call (callTool) uses the spelling the server serves. */
-  private readonly servedTools = new Map<string, Set<string>>();
   /** "At the same time": a 5 minute window, then a write is sent again. */
   private readonly writes = new WriteOnce<PerspicaxRelayAnswer>({ ttlMs: 5 * 60_000 });
 
@@ -475,12 +479,63 @@ export class PerspicaxMcp {
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 
+  private setIdentity(entry: Entry, slug: string | undefined): void {
+    if (!slug) return;
+    entry.identity = new PerspicaxIdentity({
+      slug,
+      now: this.now,
+      rpc: (method, params) => this.identityRpc(entry, method, params),
+      warn: (reason) => this.options.onIdentityWarning?.({ threadId: entry.threadId, botId: entry.botId, principalId: entry.principalId, reason }),
+    });
+  }
+
+  /** Internal identity traffic uses the very same token and session as the
+   * engine's calls. It never enters the identity gate recursively. */
+  private async identityRpc(entry: Entry, method: string, params?: Json): Promise<unknown> {
+    const link = this.options.link();
+    if (!link || entry.ended) throw new Error("Perspicax unavailable");
+    const speaker = this.options.subjectOf(entry.principalId);
+    if (!speaker || speaker.disabled) { this.end(entry); throw new Error("Perspicax access ended"); }
+    if (entry.expiresAt - this.now() < PERSPICAX_TOKEN_MIN_LIFE_MS && !await this.renew(entry)) throw new Error("Perspicax access ended");
+    if (!entry.initialized && !entry.mcpSessionId && !await this.reopen(link, entry)) throw new Error("Perspicax unavailable");
+    const id = `sagax-identity-${++this.nativeCalls}`;
+    const sent = await this.send(link, entry, { jsonrpc: "2.0", id, method, ...(params ? { params } : {}) }, undefined, true);
+    if (typeof sent === "string" || !sent.response.ok) throw new Error("Perspicax unavailable");
+    const body = parseMcpBody(sent.text, id);
+    if (method === "tools/list" && isObject(body) && isObject(body.result) && Array.isArray(body.result.tools)) {
+      entry.servedTools = new Set(body.result.tools.filter(isObject).map((tool) => String(tool.name)).slice(0, 2000));
+      entry.twilioTools = new Set(twilioToolsOf(body).slice(0, 500));
+    }
+    return body;
+  }
+
+  /** Settings discovery has its own short-lived connection in the signed-in
+   * person's name. It only lists identities, never chooses one. */
+  async listIdentities(principalId: string, profileId: string): Promise<IdentityInventory> {
+    const link = this.options.link();
+    const subject = this.options.subjectOf(principalId);
+    if (!link || !subject || subject.disabled || subject.iss !== this.options.issuer) throw new Error("Perspicax sign-in required");
+    const signIn = await this.options.subjectToken(subject);
+    if (!signIn.ok) throw new Error("Perspicax sign-in required");
+    const exchanged = await link.exchangeToken(signIn.token, profileId);
+    if (!exchanged.ok) throw new Error("Perspicax unavailable");
+    const entry: Entry = { threadId: "identity-settings", generation: "listing", botId: "", profileId, principalId, subject, source: "session", token: exchanged.token, expiresAt: Math.min(exchanged.expiresAt, signIn.expiresAt) };
+    try {
+      const tools = await this.identityRpc(entry, "tools/list");
+      if (!isObject(tools) || !isObject(tools.result) || !Array.isArray(tools.result.tools)) throw new Error("Perspicax unavailable");
+      if (!tools.result.tools.some((tool) => isObject(tool) && tool.name === "identity_switch")) return { supported: false, profiles: [] };
+      const body = await this.identityRpc(entry, "tools/call", { name: "identity_switch", arguments: {} });
+      if (!isObject(body) || !isObject(body.result) || body.result.isError) throw new Error("Perspicax unavailable");
+      return { supported: true, profiles: identityProfiles(body) };
+    } finally { await this.close(entry); }
+  }
+
   /** Exchange the speaker's access for each profile of the bot, before the
    * engine starts. Never throws. */
   async prepareTurn(input: {
     threadId: string;
     generation: string;
-    bot: { id: string; perspicax?: { profiles: readonly string[] } };
+    bot: { id: string; perspicax?: { profiles: readonly string[] }; perspicaxActAs?: { slug: string; name: string } };
     speakerPrincipalId: string;
     speakerOrigin: "person" | "operator" | "owner-routine" | "peer";
     /** The turn descends from a routine or other automation (a hop it
@@ -489,7 +544,16 @@ export class PerspicaxMcp {
   }): Promise<PerspicaxTurnPlan> {
     const plan: PerspicaxTurnPlan = { mounted: [], unavailable: [] };
     const link = this.options.link();
+    const selected = input.bot.perspicaxActAs;
     const profiles = [...new Set(input.bot.perspicax?.profiles ?? [])];
+    if (!profiles.length && selected && link) {
+      // The base connection needs a held profile even when the chosen identity
+      // has since been removed. That lets identity_switch report the refusal
+      // and keep the person's read plane available.
+      const held = this.options.heldProfiles?.(input.speakerPrincipalId);
+      const profileId = held ? held[0] : link.profileCatalog().find((profile) => profile.slug === selected.slug)?.id;
+      if (profileId) profiles.push(profileId);
+    }
     if (!link || !profiles.length) return plan;
     const catalog = new Map(link.profileCatalog().map((profile) => [profile.id, profile] as const));
     const nameOf = (id: string) => catalog.get(id)?.name || catalog.get(id)?.slug || id;
@@ -527,8 +591,9 @@ export class PerspicaxMcp {
         if (kept && !kept.ended && kept.botId === input.bot.id && kept.expiresAt - this.now() >= PERSPICAX_TOKEN_MIN_LIFE_MS) {
           this.warm.delete(at);
           kept.generation = input.generation;
+          this.setIdentity(kept, input.bot.perspicaxActAs?.slug);
           const previous = this.entries.get(key(input.threadId, input.generation, profileId));
-          if (previous && previous !== kept) void this.revoke(previous.token);
+          if (previous && previous !== kept) void this.close(previous);
           this.entries.set(key(input.threadId, input.generation, profileId), kept);
           const profile = catalog.get(profileId)!;
           plan.mounted.push({ profileId, slug: profile.slug, name: profile.name || profile.slug || profileId });
@@ -589,8 +654,8 @@ export class PerspicaxMcp {
       }
       const at = key(input.threadId, input.generation, profileId);
       const previous = this.entries.get(at);
-      if (previous) void this.revoke(previous.token);
-      this.entries.set(at, {
+      if (previous) void this.close(previous);
+      const entry: Entry = {
         threadId: input.threadId,
         generation: input.generation,
         botId: input.bot.id,
@@ -598,9 +663,12 @@ export class PerspicaxMcp {
         principalId,
         subject: who,
         source,
+        ...(!input.bot.perspicax?.profiles.length && selected ? { implicitIdentity: selected.slug } : {}),
         token: result.token,
         expiresAt: Math.min(result.expiresAt, signIn.expiresAt),
-      });
+      };
+      this.setIdentity(entry, input.bot.perspicaxActAs?.slug);
+      this.entries.set(at, entry);
       const profile = catalog.get(profileId)!;
       plan.mounted.push({ profileId, slug: profile.slug, name: profile.name || profile.slug || profileId });
     }
@@ -657,7 +725,7 @@ export class PerspicaxMcp {
     if (!entry || entry.botId !== input.botId) return null;
     const scope = this.options.writeOnceScope({ threadId: input.threadId, botId: input.botId, principalId: entry.principalId });
     if (!scope) return null;
-    return executionKey([scope, entry.principalId, input.profileId, name, params.arguments ?? {}]);
+    return executionKey([scope, entry.principalId, input.profileId, entry.identity?.profile() ?? "default", name, params.arguments ?? {}]);
   }
 
   private async relayFrame(input: { threadId: string; generation: string; botId: string; profileId: string; frame: unknown; judged?: boolean }): Promise<PerspicaxRelayAnswer> {
@@ -668,7 +736,7 @@ export class PerspicaxMcp {
     const id = frame.id;
     const notification = id === undefined;
     const ended = (): PerspicaxRelayAnswer => (notification ? { status: 202 } : { status: 200, body: rpcError(id, -32001, PERSPICAX_ACCESS_ENDED) });
-    if (!(this.options.botProfiles(input.botId) ?? []).includes(input.profileId)) {
+    if (!this.entryMounted(entry)) {
       return { status: 403, body: { error: "this bot no longer lists that Perspicax profile", code: "profile_not_mounted" } };
     }
     // a tools/call is always a request: one without an id would run with no
@@ -709,7 +777,7 @@ export class PerspicaxMcp {
         };
       }
     }
-    const blocked = input.judged ? null : telephonyBlock(frame, this.twilioTools.get(input.profileId)) ?? await this.permissionBlock(entry, frame);
+    const blocked = input.judged ? null : telephonyBlock(frame, entry.twilioTools) ?? await this.permissionBlock(entry, frame);
     if (blocked) return { status: 200, body: { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: blocked }], isError: true } } };
     const speaker = this.options.subjectOf(entry.principalId);
     if (!speaker || speaker.disabled) this.end(entry);
@@ -727,8 +795,15 @@ export class PerspicaxMcp {
     // A turn's entry starts without a session while the engine may keep the
     // bridge it initialized on an earlier turn: open one first, or Perspicax
     // answers 422 "expect initialize request".
-    if (frame.method !== "initialize" && !notification && !entry.mcpSessionId && this.initParams.has(initKey(entry.threadId, entry.profileId))) {
+    if (frame.method !== "initialize" && !notification && !entry.initialized && !entry.mcpSessionId && (entry.identity || this.initParams.has(initKey(entry.threadId, entry.profileId)))) {
       await this.reopen(link, entry);
+    }
+    if (!notification && frame.method !== "initialize") {
+      await entry.identity?.ensure();
+      const params = isObject(frame.params) ? frame.params : {};
+      if (frame.method === "tools/call" && entry.identity && !entry.identity.allows(String(params.name ?? ""))) {
+        return { status: 200, body: this.identityRefusal(frame) };
+      }
     }
     const usedSession = entry.mcpSessionId;
     const sent = entry.source === "delegation" && !notification
@@ -747,6 +822,7 @@ export class PerspicaxMcp {
       if (notification) return { status: 202 };
       if (!reopened) return { status: 200, body: rpcError(id, -32000, `Perspicax answered HTTP ${response.status}`) };
       if (!replay) return { status: 200, body: rpcError(id, -32000, PERSPICAX_SESSION_RESET) };
+      await entry.identity?.ensure(true);
       const again = await this.send(link, entry, frame);
       if (again === "ended") return ended();
       if (again === "unreachable") return { status: 200, body: rpcError(id, -32000, "Perspicax is unavailable") };
@@ -764,13 +840,33 @@ export class PerspicaxMcp {
       return { status: 200, body: rpcError(id, -32000, `Perspicax answered HTTP ${response.status}`) };
     }
     try {
-      const body = parseMcpBody(text, id);
+      let body = parseMcpBody(text, id);
+      if (entry.identity && identityLapsed(body)) {
+        entry.identity.invalidate();
+        await entry.identity.ensure(true);
+        const params = isObject(frame.params) ? frame.params : {};
+        if (frame.method !== "tools/call" || entry.identity.allows(String(params.name ?? ""))) {
+          // act_as_expired explicitly says the operation was refused. One retry,
+          // including a write, is safe; never recurse if it lapses again.
+          const retry = await this.send(link, entry, frame);
+          if (typeof retry !== "string") body = parseMcpBody(retry.text, id);
+        }
+      }
+      if (frame.method === "initialize" && isObject(body) && isObject(body.result)) entry.initialized = true;
+      if (frame.method === "tools/call" && isObject(frame.params) && frame.params.name === "identity_switch") {
+        const value = identityValue(body);
+        if (!entry.identity && isObject(value.acting_as) && typeof value.acting_as.slug === "string") this.setIdentity(entry, value.acting_as.slug);
+        const args = isObject(frame.params.arguments) ? frame.params.arguments : {};
+        if (!entry.identity && typeof args.profile === "string" && (entry.servedTools?.has("identity_switch") || /switch_not_consented|params_invalid/.test(JSON.stringify(body)))) this.setIdentity(entry, args.profile);
+        await entry.identity?.observe(body);
+      }
       if (frame.method === "tools/list" && body !== null) {
+        body = entry.identity?.catalog(body) ?? body;
         const served = isObject(body) && isObject(body.result) && Array.isArray(body.result.tools)
           ? body.result.tools.filter((tool): tool is Json => isObject(tool) && typeof tool.name === "string").map((tool) => String(tool.name)) : [];
-        if (served.length) this.servedTools.set(input.profileId, new Set([...(this.servedTools.get(input.profileId) ?? []), ...served].slice(-2000)));
+        entry.servedTools = new Set(served.slice(0, 2000));
         const named = twilioToolsOf(body);
-        if (named.length) this.twilioTools.set(input.profileId, new Set([...(this.twilioTools.get(input.profileId) ?? []), ...named].slice(-500)));
+        entry.twilioTools = new Set(named.slice(0, 500));
       }
       return body === null ? { status: 200, body: rpcError(id, -32000, "Perspicax sent no answer") } : { status: 200, body };
     } catch {
@@ -794,11 +890,22 @@ export class PerspicaxMcp {
    * profile its bot still lists. */
   private turnEntry(threadId: string, generation: string, botId: string): Entry | undefined {
     const prefix = `${threadId}\u0000${generation}\u0000`;
-    const listed = this.options.botProfiles(botId) ?? [];
     for (const [at, entry] of this.entries) {
-      if (at.startsWith(prefix) && entry.botId === botId && !entry.ended && listed.includes(entry.profileId)) return entry;
+      if (at.startsWith(prefix) && entry.botId === botId && !entry.ended && this.entryMounted(entry)) return entry;
     }
     return undefined;
+  }
+
+  private entryMounted(entry: Entry): boolean {
+    const profiles = this.options.botProfiles(entry.botId);
+    if (!profiles) return false;
+    if (profiles.includes(entry.profileId)) return true;
+    const identity = this.options.botActAs?.(entry.botId);
+    return profiles.length === 0 && !!identity && entry.implicitIdentity === identity.slug;
+  }
+
+  private identityRefusal(frame: Json): Json {
+    return { jsonrpc: "2.0", id: frame.id, result: { isError: true, content: [{ type: "text", text: identityWarning("unavailable", "en") }] } };
   }
 
   /** The person this turn's Perspicax tokens speak for, if a profile is mounted. */
@@ -872,13 +979,14 @@ export class PerspicaxMcp {
     if (!entry) return { ok: false, code: "profile_not_mounted", error: "no Perspicax profile is mounted in this turn" };
     const link = this.options.link();
     if (!link) return { ok: false, code: "access_ended", error: PERSPICAX_ACCESS_ENDED };
-    if (!entry.mcpSessionId && !(await this.reopen(link, entry))) {
+    if (!entry.initialized && !entry.mcpSessionId && !(await this.reopen(link, entry))) {
       return entry.ended
         ? { ok: false, code: "access_ended", error: PERSPICAX_ACCESS_ENDED }
         : { ok: false, code: "unreachable", error: "Perspicax is unavailable" };
     }
     const id = `sagax-native-${++this.nativeCalls}`;
-    const name = servedSpelling(requested, this.servedTools.get(entry.profileId));
+    await entry.identity?.ensure();
+    const name = servedSpelling(requested, entry.servedTools);
     const answer = await this.relay({
       threadId: input.threadId,
       generation: input.generation,
@@ -935,13 +1043,17 @@ export class PerspicaxMcp {
 
   /** POST one frame with the entry's token and session; a 401 renews the
    * token once. The answer is read whole (bounded); the session it names is kept. */
-  private async send(link: PerspicaxMcpLink, entry: Entry, frame: Json, note?: { unsent?: boolean }): Promise<{ response: Response; text: string } | "ended" | "unreachable"> {
+  private async send(link: PerspicaxMcpLink, entry: Entry, frame: Json, note?: { unsent?: boolean }, identityInternal = false): Promise<{ response: Response; text: string } | "ended" | "unreachable"> {
     let response: Response;
     try {
       response = await this.post(link.mcpEndpoint(), entry, frame);
       if (response.status === 401) {
         void response.body?.cancel().catch(() => {});
         if (!(await this.renew(entry))) return "ended";
+        if (!identityInternal && frame.id !== undefined && frame.method !== "initialize") await entry.identity?.ensure(true);
+        if (!identityInternal && frame.method === "tools/call" && isObject(frame.params) && entry.identity && !entry.identity.allows(String(frame.params.name))) {
+          return { response: new Response(null, { status: 200 }), text: JSON.stringify(this.identityRefusal(frame)) };
+        }
         response = await this.post(link.mcpEndpoint(), entry, frame);
         if (response.status === 401) {
           void response.body?.cancel().catch(() => {});
@@ -955,7 +1067,10 @@ export class PerspicaxMcp {
       return "unreachable";
     }
     const session = response.headers.get("mcp-session-id");
-    if (session && session.length <= 256) entry.mcpSessionId = session;
+    if (session && session.length <= 256) {
+      if (session !== entry.mcpSessionId) entry.identity?.invalidate();
+      entry.mcpSessionId = session;
+    }
     try {
       const onRequest = this.options.askGo ? (request: Json) => this.answerServerRequest(link, entry, request) : undefined;
       return { response, text: await readBounded(response, PERSPICAX_RELAY_MAX_BYTES, onRequest) };
@@ -1017,15 +1132,21 @@ export class PerspicaxMcp {
   private async reopenOnce(link: PerspicaxMcpLink, entry: Entry): Promise<boolean> {
     if (entry.ended) return false;
     entry.mcpSessionId = undefined;
+    entry.initialized = false;
+    entry.identity?.invalidate();
     const params = this.initParams.get(initKey(entry.threadId, entry.profileId)) ?? {
       protocolVersion: PERSPICAX_PROTOCOL_VERSION,
       capabilities: this.options.askGo ? withElicitation({}) : {},
       clientInfo: { name: `Pulsa Bot (${entry.botId})`, version: this.options.version },
     };
-    const opened = await this.send(link, entry, { jsonrpc: "2.0", id: `sagax-reopen-${++this.reopens}`, method: "initialize", params });
-    if (typeof opened === "string" || !opened.response.ok || !entry.mcpSessionId) return false;
+    const id = `sagax-reopen-${++this.reopens}`;
+    const opened = await this.send(link, entry, { jsonrpc: "2.0", id, method: "initialize", params });
+    if (typeof opened === "string" || !opened.response.ok) return false;
+    const body = parseMcpBody(opened.text, id);
+    if (!isObject(body) || !isObject(body.result)) return false;
+    entry.initialized = true;
     const done = await this.send(link, entry, { jsonrpc: "2.0", method: "notifications/initialized" });
-    return typeof done !== "string" && Boolean(entry.mcpSessionId);
+    return typeof done !== "string";
   }
 
   /** The engine's own initialize, kept so a new session looks like its first. */
@@ -1069,6 +1190,10 @@ export class PerspicaxMcp {
     for (const [at, entry] of this.entries) {
       if (!at.startsWith(prefix)) continue;
       this.entries.delete(at);
+      await entry.identity?.clear();
+      entry.identity = undefined;
+      entry.servedTools = undefined;
+      entry.twilioTools = undefined;
       if (keep && !entry.ended && entry.expiresAt - this.now() >= PERSPICAX_TOKEN_MIN_LIFE_MS) {
         const warm = warmKey(entry.threadId, entry.profileId, entry.principalId, entry.source);
         const previous = this.warm.get(warm);
@@ -1162,6 +1287,7 @@ export class PerspicaxMcp {
     const old = entry.token;
     entry.token = result.token;
     entry.expiresAt = Math.min(result.expiresAt, signIn.expiresAt);
+    entry.identity?.invalidate();
     void this.revoke(old);
     return true;
   }
@@ -1169,12 +1295,14 @@ export class PerspicaxMcp {
   private end(entry: Entry): void {
     if (entry.ended) return;
     entry.ended = true;
+    void entry.identity?.clear();
     void this.revoke(entry.token);
   }
 
   private async close(entry: Entry): Promise<void> {
     const link = this.options.link();
     if (entry.ended) return;
+    await entry.identity?.clear();
     entry.ended = true;
     // The session goes first, while its token still opens it; then the token.
     if (link && entry.mcpSessionId) {

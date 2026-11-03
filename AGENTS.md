@@ -1,5 +1,19 @@
 # Sagax agent notes
 
+## Perspicax identities (2026-11-03)
+
+`perspicaxActAs` is an explicit per-bot profile choice (slug and human name),
+absent by default. Settings lists the person's held profiles through a
+short-lived `identity_switch {}` connection. `server/perspicax/perspicax-identity.ts`
+holds the turn's identity lease on the existing Perspicax MCP connection:
+switch before tools, re-list, renew before expiry, re-switch after a parent
+token refresh or `act_as_expired` and retry the refused call once, clear on
+turn end (including warm calls). A switch failure reports plain words and
+serves only reads for that turn. An older server without the tool stays
+unchanged. Never automatically choose an explicit-only/redacted profile.
+Tool and Twilio catalogues belong to an entry, never a global profile cache.
+Tests: `server/perspicax/perspicax-identity.test.ts` (fake MCP, no network).
+
 Before every merge (and before every push, through the pre-push hook), run
 `pnpm verify:merge`: the local gate (lint, typecheck, locale catalogs, source
 terms, contrast, unused files via `pnpm check:unused`, the guard tests that

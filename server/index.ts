@@ -1758,6 +1758,7 @@ import {
 } from "./rooms/section-channels.ts";
 import { createBotGrantRoutes, visibleGrants, wireGrants } from "./bots/bot-grants.ts";
 import { createBotPerspicaxRoutes } from "./bots/bot-perspicax.ts";
+import { identityWarning } from "./perspicax/perspicax-identity.ts";
 import { OrgFlowPlugins, guarded as orgFlowGuarded } from "./org/org-flow-plugins.ts";
 import { applyIdentityMigration, principalIdFor, rewritePeopleForAttach } from "./people/identity-migration.ts";
 import { ThreadStarters } from "./threads/thread-starters.ts";
@@ -7336,7 +7337,7 @@ async function perspicaxTurnIntegration(input: {
   const none = { custom: {}, prompt: "" };
   if (IDENTITY.kind !== "perspicax" || !perspicaxMcp) return none;
   const live = store.bot(input.bot.id) ?? input.bot;
-  if (!live.perspicax?.profiles.length) return none;
+  if (!live.perspicax?.profiles.length && !live.perspicaxActAs) return none;
   const routine = routineLineage(input.speaker);
   // MCP speaks only for a known person: a routine's lineage speaks for the
   // person it runs as, through their routine delegation (slice 6), and a
@@ -7348,7 +7349,7 @@ async function perspicaxTurnIntegration(input: {
   const plan = await perspicaxMcp.prepareTurn({
     threadId: input.threadId,
     generation: input.generation,
-    bot: { id: live.id, perspicax: live.perspicax },
+    bot: { id: live.id, perspicax: live.perspicax, perspicaxActAs: live.perspicaxActAs },
     speakerPrincipalId,
     speakerOrigin: input.speaker.origin,
     ...(routine ? { routine: true } : {})
@@ -37551,10 +37552,21 @@ if (IDENTITY.kind === "perspicax") {
       return person?.subject?.iss === IDENTITY.issuer && person.disabledAt === undefined ? perspicaxDirectory?.profilesOf(person.subject.sub) ?? [] : [];
     },
     catalog: () => perspicaxDirectory?.profileCatalog() ?? [],
+    identities: async (auth) => {
+      const person = principals.byId(actorPrincipalId(auth));
+      const profileId = person?.subject && person.subject.iss === IDENTITY.issuer && person.disabledAt === undefined
+        ? perspicaxDirectory?.profilesOf(person.subject.sub)[0] : undefined;
+      if (!profileId || !person || !perspicaxMcp) return { supported: false, profiles: [] };
+      return perspicaxMcp.listIdentities(person.id, profileId);
+    },
+    actsAsOf: (id) => store.bot(id)?.perspicaxActAs,
+    setActsAs: (id, identity) => { store.setBotPerspicaxActAs(id, identity); },
     setProfiles: (id, profiles) => { store.setBotPerspicax(id, profiles); },
     onChanged: (id) => {
       const bot = store.bot(id);
       if (bot) broadcast({ kind: "bot", bot: wireBot(bot) });
+      // An idle engine must discover the next turn's identity surface anew.
+      for (const task of bot?.tasks ?? []) if (!threadBusy(id, task.threadId)) releaseWarmEngine(task.threadId);
       // a profile added is also a trigger of the organization's Flow plugins
       void orgFlowPlugins.sync("profile").catch(() => undefined);
     }
@@ -38287,7 +38299,7 @@ async function reachMeVoice(person: string, botId: string, tool: "voice_line" | 
       const threadId = `reach-me-${randomBytes(6).toString("hex")}`;
       const generation = "1";
       try {
-        const plan = await perspicaxMcp.prepareTurn({ threadId, generation, bot: { id: bot.id, perspicax: { profiles: [profileId] } }, speakerPrincipalId: person, speakerOrigin: "owner-routine", routine: true });
+        const plan = await perspicaxMcp.prepareTurn({ threadId, generation, bot: { id: bot.id, perspicax: { profiles: [profileId] }, perspicaxActAs: bot.perspicaxActAs }, speakerPrincipalId: person, speakerOrigin: "owner-routine", routine: true });
         if (!plan.mounted.length) { last = plan.unavailable[0]?.reason ?? "not mounted"; continue; }
         const answer = await perspicaxMcp.callTool({ threadId, generation, botId: bot.id, name: tool, args });
         if (answer.ok && !answer.isError) return { ok: true, value: answer.value };
@@ -39706,6 +39718,9 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
   perspicaxMcp = new PerspicaxMcp({
     issuer,
     link: () => directory,
+    onIdentityWarning: ({ threadId, principalId, reason }) => {
+      store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: identityWarning(reason, personLanguageOf(principalId, (id) => userPreferenceStore.get(id).preferences, cfg.language)), ok: false } });
+    },
     // Routine runs and teammate turns: the same write twice at once is one.
     writeOnceScope: ({ threadId }) => activeRoutineRunForThread(threadId) || internalTurnThreads.has(threadId) ? "unattended" : null,
     // a live call keeps its Perspicax tools mounted from turn to turn
@@ -39785,7 +39800,9 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
     // Slice 6: routine lineage speaks through the runAs's delegation.
     routineSubjectToken: (principalId) => routineConsents ? routineConsents.subjectToken(principalId) : Promise.resolve({ ok: false as const, error: "no_session" as const }),
     delegationRefused: (principalId) => routineConsents?.dropCache(principalId),
-    botProfiles: (id) => store.bot(id)?.perspicax?.profiles,
+    botProfiles: (id) => { const bot = store.bot(id); return bot ? bot.perspicax?.profiles ?? [] : undefined; },
+    botActAs: (id) => store.bot(id)?.perspicaxActAs,
+    heldProfiles: (id) => { const subject = principals.byId(id)?.subject; return subject?.iss === issuer ? directory.profilesOf(subject.sub) : []; },
     permissionGuard: ({ botId, principalId }) => {
       const person = isPrincipalId(principalId) ? principals.byId(principalId) : null;
       const env = mcpIdentityEnv({ botId, principalId, perspicaxRole: person?.perspicaxRole, teamIds: (person?.teams ?? []).map((team) => team.id), ...personOwnScope(principalId) });

@@ -1,4 +1,4 @@
-/** Performance fixture of the Automations calendar (2026-11-02): a GOX-size
+/** Performance fixture of the Automations calendar (2026-11-02): a production-size
  * dataset (9 bots, 60 routines of every schedule kind, about 2,000 runs over
  * six weeks, six calendar calls) on the real store reducer, so a live run
  * frame goes through the same `routineRunPatched` path the app takes. The

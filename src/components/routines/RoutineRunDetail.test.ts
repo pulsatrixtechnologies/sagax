@@ -126,19 +126,19 @@ describe("a run's detail", () => {
 
   it("a delegated run links the teammate's thread", () => {
     const opened: string[] = [];
-    const markup = html({ run: run("blocked", { error: "{", handedTo: [{ botId: "melonie", threadId: "teammate-thread", name: "Melonie", status: "running" }] }), onOpenThread: (_botId, threadId) => opened.push(threadId) });
-    expect(markup).toContain("Blocked: waiting for Melonie");
+    const markup = html({ run: run("blocked", { error: "{", handedTo: [{ botId: "nova", threadId: "teammate-thread", name: "Nova", status: "running" }] }), onOpenThread: (_botId, threadId) => opened.push(threadId) });
+    expect(markup).toContain("Blocked: waiting for Nova");
     expect(markup).toContain('data-run-teammate-thread="teammate-thread"');
-    expect(markup).toContain("Sent work to Melonie");
+    expect(markup).toContain("Sent work to Nova");
   });
 
   it("a JSON final answer reads as plain sentences with its whole under Show details", () => {
-    const output = JSON.stringify({ summary: "Timesheets checked", done: ["Sheet 14203 audited"], blocked: ["Alubar overage: waiting for Melonie"], next_steps: ["Approve sheet 14203"] }, null, 2);
+    const output = JSON.stringify({ summary: "Timesheets checked", done: ["Sheet 100203 audited"], blocked: ["Northwind overage: waiting for Nova"], next_steps: ["Approve sheet 100203"] }, null, 2);
     const markup = html({ run: run("completed", { output }) });
     expect(markup).toContain("Timesheets checked");
-    expect(markup).toContain("Done: Sheet 14203 audited");
-    expect(markup).toContain("Blocked: Alubar overage: waiting for Melonie");
-    expect(markup).toContain("For you: Approve sheet 14203");
+    expect(markup).toContain("Done: Sheet 100203 audited");
+    expect(markup).toContain("Blocked: Northwind overage: waiting for Nova");
+    expect(markup).toContain("For you: Approve sheet 100203");
     expect(markup).toContain("data-run-result-details");
     expect(routineRunPreview(run("completed", { output }))).toBe("Timesheets checked");
   });

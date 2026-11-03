@@ -4945,18 +4945,18 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
   it("a delegated run is not blocked by a document naming a refusal code, and links the teammate thread", async () => {
     const h = harness(start);
     h.options.handedOutOutcome = () => ({ root: { status: "completed", detail: "", result: "" }, pending: false, failed: [],
-      handed: [{ botId: "melonie", threadId: "teammate-thread", name: "Melonie", status: "completed" }] });
+      handed: [{ botId: "nova", threadId: "teammate-thread", name: "Nova", status: "completed" }] });
     const routine = h.manager.create(input());
     h.manager.runNow(routine.id); await h.manager.tick();
     const skill = JSON.stringify({ path: "skills/running-px-flow/SKILL.md", content: `${"Flow. ".repeat(300)}\nrun init reports it as \`previous_unclosed\`` }, null, 2);
     tool(h, "thread-1", "t1", "read_file", true, skill);
     tool(h, "thread-1", "t2", "Sent work to a teammate", true, "{\n  \"ok\": true\n}");
-    say(h, "thread-1", "Sent the Alubar overage to Melonie.\nNOTHING_TO_REPORT");
+    say(h, "thread-1", "Sent the Northwind overage to Nova.\nNOTHING_TO_REPORT");
     done(h, "thread-1");
     const run = runOf(h);
     expect(run.status).toBe("completed");
     expect(run.error).toBeUndefined();
-    expect(run.handedTo).toEqual([{ botId: "melonie", threadId: "teammate-thread", name: "Melonie", status: "completed" }]);
+    expect(run.handedTo).toEqual([{ botId: "nova", threadId: "teammate-thread", name: "Nova", status: "completed" }]);
   });
 
   it("a real Flow refusal blocks the run with a plain reason, never the output's first line", async () => {

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { driverKeyBacked, type AppConfig } from "../config.ts";
-import { accessCardAudience, accessCardForViewer, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberOwnedBot, memberOwnHostToolCall, resolveTurnSpeaker, sensitiveHiddenSegment, routineAccessNotifications, routineLineage, serverCommandApproval, speakerPrincipal, type MemberHostToolPlace, signInExpiredCard, subscriptionSignInRefused, engineNameForViewer, keyEngineProvider, orgKeyEngineName } from "./engine-access.ts";
+import { accessCardAudience, accessCardForViewer, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, engineAccountConnectorCall, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberOwnedBot, memberOwnHostToolCall, resolveTurnSpeaker, sensitiveHiddenSegment, routineAccessNotifications, routineLineage, serverCommandApproval, speakerPrincipal, type MemberHostToolPlace, signInExpiredCard, subscriptionSignInRefused, engineNameForViewer, keyEngineProvider, orgKeyEngineName } from "./engine-access.ts";
 import { CODEX_SIGN_IN_EXPIRED, codexNotSignedIn, codexSignInExpired } from "../drivers/codex-errors.ts";
 
 const ALICE = "pr_aaaaaaaa-0000-4000-8000-000000000001";
@@ -251,6 +251,27 @@ describe("the admin gate on a member's bot", () => {
     expect(viaGate("mcp__claude_ai___x", "subscription")).toBe(true);
     // a shell-named connector tool is still a command
     expect(viaGate("mcp__claude_ai_Thing__bash", "subscription")).toBe(true);
+  });
+  it("lets the owner answer their own Grok account connector, like a claude.ai one (#1930)", () => {
+    // the gateway's tool name splits as server `cursor`, which no owner list names
+    const tool = "cursor__user-Outlook-send_5fmail___23";
+    const grokGate = (event: { accountConnector?: boolean; engineConnector?: boolean }, via: string | undefined, command?: unknown) => memberBotAdminApproval({
+      tool, command, workspaceRoot: root,
+      ownerScopedMcpServer: (server) => claudeAiOwnerScopedServer(server, via),
+      ownAccountConnector: engineAccountConnectorCall(event, via),
+    });
+    const own = { accountConnector: true, engineConnector: true };
+    expect(grokGate(own, "subscription")).toBe(false);
+    // a connector tool named like a shell is still the person's connector
+    expect(memberBotAdminApproval({ tool: "cursor__user-GitHub-run_5fshell___4", workspaceRoot: root, ownAccountConnector: engineAccountConnectorCall(own, "subscription") })).toBe(false);
+    // not the speaker's own sign-in, or not confirmed by the driver: an admin's
+    expect(grokGate(own, "org-key")).toBe(true);
+    expect(grokGate(own, undefined)).toBe(true);
+    expect(grokGate({ engineConnector: true }, "subscription")).toBe(true);
+    expect(grokGate({ accountConnector: true }, "subscription")).toBe(true);
+    expect(grokGate({}, "subscription")).toBe(true);
+    // a real command on the organization's server stays an admin's
+    expect(grokGate(own, "subscription", { command: "ls", cwd: root })).toBe(true);
   });
   it("still sends to an admin what goes beyond the owner's rights", () => {
     // an unknown server, a host-level built-in server, a shell, a fetch from the host

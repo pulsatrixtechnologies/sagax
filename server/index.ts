@@ -1541,7 +1541,7 @@ import {
   type OrgXaiMedia
 } from "./org/org-xai-media.ts";
 import { configuredKeyterms, VOICE_KEYTERM_RECENT_MESSAGES, voiceKeyterms } from "./voice/voice-keyterms.ts";
-import { installTerminalFeature } from "./terminal-install.ts";
+import { installTerminalFeature } from "./terminal/terminal-install.ts";
 import { createRemoteSessionService } from "./remote-support/remote-sessions.ts";
 import { createRemoteSessionActionsAudit, readRemoteSessionLog } from "./remote-support/remote-session-actions-audit.ts";
 import { createUnattendedConsentStore } from "./remote-support/remote-session-consent-store.ts";
@@ -1572,7 +1572,7 @@ import {
   type ConnectorSetupContext
 } from "./routes/connector-setup.ts";
 import type { ConnectorSetupView } from "../shared/connector-setup.ts";
-import type { TerminalWorkPlace } from "./terminal-requests.ts";
+import type { TerminalWorkPlace } from "./terminal/terminal-requests.ts";
 import type { TerminalAccess } from "./terminal-resources/types.ts";
 import { streamTerminalAttachment } from "./terminal-resources/adapters/personal.ts";
 import { parseTerminalDestinationPick, type TerminalDestinationPick } from "../shared/terminal-request.ts";

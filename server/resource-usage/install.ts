@@ -12,7 +12,7 @@ import { createResourceUsageInternalRoutes, createResourceUsageRoutes } from "..
 import type { RouteHandler } from "../routes/table.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { resolveTailcatBinary } from "../tailcat-bin.ts";
-import { configuredHosts } from "../terminal-install.ts";
+import { configuredHosts } from "../terminal/terminal-install.ts";
 import type { TerminalAccess } from "../terminal-resources/types.ts";
 import type { AppConfig } from "../config.ts";
 import { prepareVpsSsh } from "../computer/vps-ssh.ts";

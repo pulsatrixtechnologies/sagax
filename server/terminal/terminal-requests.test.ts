@@ -3,16 +3,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { parseTerminalDestinationPick, terminalRequestBehavior } from "../shared/terminal-request.ts";
-import { parseTerminalControl } from "../shared/terminal-resources.ts";
-import { TerminalResourceRegistry, terminalResourceAllowed } from "./terminal-resources/registry.ts";
-import { createTestTerminalAdapter, testTerminalAdapter } from "./terminal-resources/adapters/test.ts";
-import { createPersonalTerminalAdapter } from "./terminal-resources/adapters/personal.ts";
+import { parseTerminalDestinationPick, terminalRequestBehavior } from "../../shared/terminal-request.ts";
+import { parseTerminalControl } from "../../shared/terminal-resources.ts";
+import { TerminalResourceRegistry, terminalResourceAllowed } from "../terminal-resources/registry.ts";
+import { createTestTerminalAdapter, testTerminalAdapter } from "../terminal-resources/adapters/test.ts";
+import { createPersonalTerminalAdapter } from "../terminal-resources/adapters/personal.ts";
 import { createTerminalAuditLog } from "./terminal-audit.ts";
 import { createTerminalSessionManager } from "./terminal-sessions.ts";
 import { createTerminalRequestService, defaultTerminalDestination, type TerminalWorkPlace } from "./terminal-requests.ts";
-import type { TerminalAccess, TerminalOpenContext } from "./terminal-resources/types.ts";
-import type { Store, Message } from "./store.ts";
+import type { TerminalAccess, TerminalOpenContext } from "../terminal-resources/types.ts";
+import type { Store, Message } from "../store.ts";
 
 const OWNER = "pr_owner";
 const MEMBER = "pr_member";

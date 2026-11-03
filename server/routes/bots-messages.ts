@@ -87,7 +87,7 @@ import {
   restoreHeldSteeredQueue,
   settleHeldSteeredQueue,
 } from "../turns/steer-queue.ts";
-import { resolveAndSendTerminal } from "../terminal-requests.ts";
+import { resolveAndSendTerminal } from "../terminal/terminal-requests.ts";
 import { extractTurnImages } from "../turns/turn-images.ts";
 import {
   pinVoiceInterrupt,

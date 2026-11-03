@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
-import type { ApprovalMode } from "../shared/approval-mode.ts";
-import type { TerminalDestinationPick, TerminalRequestCardData } from "../shared/terminal-request.ts";
+import type { ApprovalMode } from "../../shared/approval-mode.ts";
+import type { TerminalDestinationPick, TerminalRequestCardData } from "../../shared/terminal-request.ts";
 import {
   TERMINAL_DEFAULT_COLS,
   TERMINAL_DEFAULT_ROWS,
@@ -9,13 +9,13 @@ import {
   type TerminalDestinationChoice,
   type TerminalProviderKind,
   type TerminalResource,
-} from "../shared/terminal-resources.ts";
+} from "../../shared/terminal-resources.ts";
 import type { TerminalAuditEvent } from "./terminal-audit.ts";
-import type { Store } from "./store.ts";
+import type { Store } from "../store.ts";
 import type { createTerminalSessionManager } from "./terminal-sessions.ts";
-import type { TerminalResourceRegistry } from "./terminal-resources/registry.ts";
-import type { TerminalAccess, TerminalListContext } from "./terminal-resources/types.ts";
-import type { RequestAuth } from "./auth/request-auth.ts";
+import type { TerminalResourceRegistry } from "../terminal-resources/registry.ts";
+import type { TerminalAccess, TerminalListContext } from "../terminal-resources/types.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 
 /** Where the bot works now, as a terminal destination kind (2026-10-15):
  * the default of a card when the bot names none. */

@@ -6,10 +6,10 @@ import {
   type TerminalProviderKind,
   type TerminalSessionPublic,
   parseTerminalResourceKey,
-} from "../shared/terminal-resources.ts";
+} from "../../shared/terminal-resources.ts";
 import type { TerminalAuditEvent } from "./terminal-audit.ts";
-import type { TerminalAccess, TerminalAttachment } from "./terminal-resources/types.ts";
-import type { TerminalResourceRegistry } from "./terminal-resources/registry.ts";
+import type { TerminalAccess, TerminalAttachment } from "../terminal-resources/types.ts";
+import type { TerminalResourceRegistry } from "../terminal-resources/registry.ts";
 
 interface LiveSession {
   id: string;

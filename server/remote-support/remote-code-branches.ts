@@ -21,7 +21,11 @@
 // base64 there), so a channel can pass the whole command through any login
 // shell inside `/bin/sh -c '...'` (branch-channels.ts: fish reads
 // backslashes in single quotes, csh expands `!` and refuses a line break
-// there). The push never forces and never touches the
+// there). A word is never sent as another one: the files a commit names
+// keep every byte (setWords), and a word q() cannot carry exactly (a
+// trailing line break) is refused. A commit is one command (add, then
+// commit), so a refusal before it runs leaves nothing staged. The push
+// never forces and never touches the
 // default branch; offline and unknown-OS answers carry no address. git's
 // reads take no optional lock (GIT_OPTIONAL_LOCKS=0): a status read from the
 // panel never holds .git/index.lock while the bot commits in that same
@@ -63,7 +67,13 @@ export interface RemoteGitResult {
  * own holds it, the person's bots run every command their cloud computer
  * takes at once). `tooLong`: the command is longer than that channel
  * carries, so it was not sent. Nothing ran in any of these cases. */
-export type RemoteExec = (command: string, timeoutMs?: number, env?: Record<string, string>) => Promise<RemoteGitResult | { error: string; busy?: boolean; tooLong?: boolean }>;
+export interface RemoteExec {
+  (command: string, timeoutMs?: number, env?: Record<string, string>): Promise<RemoteGitResult | { error: string; busy?: boolean; tooLong?: boolean }>;
+  /** Whether that channel carries `command`, measured as it measures it
+   * (framed, wrapped, in bytes where Linux caps one argument); nothing is
+   * sent. Absent: taken to carry it. */
+  fits?(command: string): boolean;
+}
 
 /** Who signs the push and the pull request (see the header). */
 export interface RemoteBranchCredentials {
@@ -89,20 +99,41 @@ const GIT_OVERRIDES = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=f
 /** What git answers when no name or email is set to sign a commit. */
 const IDENTITY_UNKNOWN = /identity unknown|tell me who you are|unable to auto-detect email|empty ident name|no email was given/i;
 
+/** What a word that goes through base64 holds: a backslash, a `!` or a
+ * control character (a line break in a commit message, a tab in a file
+ * name). */
+// oxlint-disable-next-line no-control-regex -- control characters are exactly what goes through base64
+const NOT_PLAIN = /[\\!\u0000-\u001f\u007f]/;
+/** base64 decoded on that computer: `base64 --decode`, else BusyBox's `-d`
+ * (an option it does not know stops it before it reads anything). */
+const DECODE = "{ base64 --decode 2>/dev/null || base64 -d; }";
+const base64 = (word: string) => Buffer.from(word, "utf8").toString("base64");
+
 /** A shell word as data: nothing in it is read as syntax, and it holds no
  * backslash, no `!` and no line break (see the header). Single quoted, a
- * quote written '"'"'; a word with a backslash, a `!` or a control
- * character (a line break in a commit message, a tab in a file name) is
- * decoded from base64 on that computer, its data written once
- * (`base64 --decode`, else BusyBox's `-d`: an option it does not know stops
- * it before it reads anything). */
+ * quote written '"'"'; a word that is not plain (NOT_PLAIN) is decoded from
+ * base64 on that computer, its data written once. A word that ends with a
+ * line break is refused (`unsupported_name`): the command substitution that
+ * decodes it drops that line break, so it would name another file or folder
+ * there (the files a commit names keep every byte: setWords). */
 export function q(word: string): string {
-  // oxlint-disable-next-line no-control-regex -- control characters are exactly what goes through base64
-  if (/[\\!\u0000-\u001f\u007f]/.test(word)) {
-    const data = Buffer.from(word, "utf8").toString("base64");
-    return `"$(printf %s '${data}' | { base64 --decode 2>/dev/null || base64 -d; })"`;
-  }
+  if (word.endsWith("\n")) throw new BranchActionError("A name that ends with a line break cannot be sent to that computer exactly, so nothing ran there. Ask the bot to do it.", "unsupported_name", 409);
+  if (NOT_PLAIN.test(word)) return `"$(printf %s '${base64(word)}' | ${DECODE})"`;
   return `'${word.replace(/'/g, `'"'"'`)}'`;
+}
+
+/** Commands that set the shell's arguments ("$@") to exactly `words` (after
+ * those already there with `append`), every byte kept: plain words quoted
+ * (q), the others decoded from base64 with an `x` after them that comes off
+ * once out of the command substitution, which drops trailing line breaks (a
+ * file "dup<LF>" picked alone was committed as "dup"). A decode that fails
+ * ends the command with `failed`. Each word once on the command line,
+ * however many commands use them. */
+function setWords(words: readonly string[], failed: number, append = false): string {
+  return [
+    `set --${append ? " \"$@\"" : ""}${words.filter((word) => !NOT_PLAIN.test(word)).map((word) => ` ${q(word)}`).join("")}`,
+    ...words.filter((word) => NOT_PLAIN.test(word)).map((word) => `v=$(printf %s '${base64(word)}' | ${DECODE} && printf x) || exit ${failed}; set -- "$@" "\${v%x}"`),
+  ].join("; ");
 }
 
 /** `cd` to a folder as branch-place.ts writes it: absolute, home relative
@@ -127,9 +158,9 @@ function line(program: "git" | "gh", cwd: string, args: readonly string[], prefi
 /** The refusal for a computer the channel did not reach, worded for any
  * computer (the person's own cloud computer as much as a client's): offline,
  * there but busy with other work, or a command longer than its connection
- * carries. */
+ * carries (a commit says which part: commitTooLong). */
 function unreached(result: { busy?: boolean; tooLong?: boolean }): BranchActionError {
-  if (result.tooLong) return new BranchActionError("That is too long to send to that computer in one command. Commit fewer files at a time, or ask the bot to do it.", "too_long", 413);
+  if (result.tooLong) return new BranchActionError("That is too long to send to that computer in one command, so nothing ran there. Ask the bot to do it.", "too_long", 413);
   if (result.busy) return new BranchActionError("The computer that holds this branch is busy with other work right now. Try again in a moment.", "busy", 503);
   return new BranchActionError("The computer that holds this branch cannot be reached, so nothing ran there.", "offline", 502);
 }
@@ -141,7 +172,8 @@ function unreached(result: { busy?: boolean; tooLong?: boolean }): BranchActionE
  * none is. "" is where that computer's commands start. An offline computer
  * is refused (`offline`). One round trip. */
 export async function locateBranchFolder(exec: RemoteExec, branch: string, folders: readonly string[]): Promise<{ folder: string; hasBranch: boolean } | null> {
-  const candidates = [...new Set(folders.filter((folder) => typeof folder === "string"))].slice(0, 8);
+  // a folder whose name ends with a line break cannot be named exactly there (q): never another one in its place
+  const candidates = [...new Set(folders.filter((folder) => typeof folder === "string" && !folder.endsWith("\n")))].slice(0, 8);
   if (!candidates.length || !validBranchName(branch)) return null;
   const probe = (test: string, tag: string, folder: string) => `(${cdTo(folder)} 2>/dev/null && sgx_git ${test} >/dev/null 2>&1 && printf '%s ' ${tag} && { sgx_git rev-parse --show-toplevel 2>/dev/null || pwd -P; }) && exit 0`;
   const script = [
@@ -162,6 +194,21 @@ const BASE_CANDIDATES = ["origin/main", "origin/master", "main", "master"] as co
 const candidateRef = (name: string) => (name.startsWith("origin/") ? `refs/remotes/${name}` : `refs/heads/${name}`);
 /** How much of each read comes back (a status of thousands of files). */
 const READ_CAP = 256 * 1024;
+/** How a commit's one command says it stopped before git committed: the
+ * folder could not be opened, or nothing was staged (the add failed). */
+const COMMIT_NO_FOLDER = 97;
+const COMMIT_NOT_STAGED = 90;
+/** The files a commit names, as literal pathspecs: `add`, the picked files
+ * git does not know yet (git add, then git commit); `more`, the other picked
+ * files and the old paths of the picked renames (git commit only: it takes
+ * them from the folder as it is, and git add refuses by name a staged
+ * rename's old path or a staged deletion, in neither the index nor the
+ * folder). */
+interface NamedFiles {
+  add: string[];
+  more: string[];
+}
+const literal = (path: string) => `:(literal)${path}`;
 
 /** The values one branch read takes, from one script on the computer. A
  * line the channel cut short (no line end: the solo Local VM keeps 20,000
@@ -340,8 +387,14 @@ export class RemoteBranchGit {
     const status = (await this.snapshot()).raw("status");
     const text = status?.out ?? "";
     // a status cut short (by the read's cap or by the channel) keeps its whole entries only
-    const whole = status?.cut || Buffer.byteLength(text) >= READ_CAP ? text.slice(0, text.lastIndexOf("\0") + 1) : text;
-    return parseStatus(whole).slice(0, 500);
+    const cut = status?.cut === true || Buffer.byteLength(text) >= READ_CAP;
+    const entries = parseStatus(cut ? text.slice(0, text.lastIndexOf("\0") + 1) : text);
+    // a rename or copy is two fields (its new path, then its old one): one
+    // whose old path the cut took is not whole either (picked, its new path
+    // alone would be committed as a copy, the old file kept)
+    const last = entries.at(-1);
+    if (cut && last?.status === "renamed" && !last.from) entries.pop();
+    return entries.slice(0, 500);
   }
 
   async state(): Promise<BotBranchState> {
@@ -379,17 +432,26 @@ export class RemoteBranchGit {
     };
   }
 
-  /** Commit the branch's changes (all, or the listed paths) in the folder
-   * where it is checked out. The message is a single quoted argument (data),
-   * never written to a file on the computer. `author`: the person's name and
-   * email, who then authors and commits it (the cloud computer); without
-   * it, that computer's own git identity, and none at all is refused
-   * plainly: on the cloud computer their profile names them (`no_author`),
-   * elsewhere that computer's own git settings do (`no_git_identity`).
-   * Every change picked, named in more than that computer's connection
-   * carries in one command (a remote session's 8,000 characters): all of
-   * them, unnamed (`git add --all`, then the whole index). Some of them, too
-   * many to name: refused (`too_long`), nothing staged. */
+  /** Commit the branch's changes in the folder where it is checked out, in
+   * one command there: `git add`, then `git commit` only when the add
+   * worked, so a refusal before it runs (too long for that computer's
+   * connection, busy, offline) leaves nothing staged. Without `paths` (the
+   * panel's dialog with every file checked): every change of the
+   * repository, unnamed (`git add --all`, then the whole index), also those
+   * the panel does not list (past the 500 it lists, past a cut, made since
+   * it read them), as the server path commits every change; the dialog
+   * says so. With `paths`: exactly those files, each name to its last byte
+   * (setWords), a rename with its old path (a move), a staged deletion too
+   * (NamedFiles: git add only for the files git does not know yet). The
+   * message is a quoted argument (data), never written to a file on the
+   * computer. Too long for
+   * that computer: the message alone (`message_too_long_for_computer`), or
+   * those files with it (`commit_too_long`), never sent. `author`: the
+   * person's name and email, who then authors and commits it (the cloud
+   * computer); without it, that computer's own git identity, and none at
+   * all is refused plainly: on the cloud computer their profile names them
+   * (`no_author`), elsewhere that computer's own git settings do
+   * (`no_git_identity`). */
   async commit(message: string, paths?: readonly string[], author?: { name: string; email: string }): Promise<{ sha: string }> {
     const text = message.trim();
     if (!text) throw new BranchActionError("Write a commit message first.", "empty_message", 400);
@@ -397,37 +459,23 @@ export class RemoteBranchGit {
     if (!(await this.checkedOutHere())) throw new BranchActionError("This branch is not checked out in its folder, so it has no changes to commit.", "not_checked_out");
     const changes = await this.changes();
     if (!changes.length) throw new BranchActionError("Nothing to commit on this branch.", "nothing_to_commit");
-    const known = new Set(changes.map((change) => change.path));
-    const picked = paths?.length ? paths.filter((path) => known.has(path)) : [...known];
-    if (paths?.length && picked.length !== paths.length) throw new BranchActionError("Some of those files have no changes any more. Refresh and try again.", "stale_files");
-    const all = new Set(picked).size === known.size;
-    const renamedFrom = new Map(changes.flatMap((change) => (change.from ? [[change.path, change.from] as const] : [])));
-    const chosen = [...new Set(picked.flatMap((path) => (renamedFrom.has(path) ? [path, renamedFrom.get(path)!] : [path])))];
-    const pathspecs = chosen.map((path) => `:(literal)${path}`);
-    /** Too long to name every path in one command there, every change picked. */
-    const unnamedFits = (error: unknown) => all && error instanceof BranchActionError && error.code === "too_long";
-    let named = true;
-    let add: RemoteGitResult;
-    try {
-      add = await this.run("git", ["add", "--all", "--", ...pathspecs]);
-    } catch (error) {
-      if (!unnamedFits(error)) throw error;
-      named = false;
-      add = await this.run("git", ["add", "--all"]);
+    let named: NamedFiles | undefined;
+    if (paths?.length) {
+      const known = new Map(changes.map((change) => [change.path, change] as const));
+      if (!paths.every((path) => known.has(path))) throw new BranchActionError("Some of those files have no changes any more. Refresh and try again.", "stale_files");
+      const picked = [...new Set(paths)];
+      const add = picked.filter((path) => known.get(path)!.status === "untracked");
+      // a renamed file commits with its old path, or the old one stays behind
+      const more = [...new Set([...picked, ...picked.flatMap((path) => known.get(path)!.from ?? [])])].filter((path) => !add.includes(path));
+      named = { add: add.map(literal), more: more.map(literal) };
     }
-    if (add.exitCode !== 0) throw new BranchActionError(firstLine(add.stderr) || "git could not stage those files.", "add_failed", 500);
     const name = author?.name.trim();
     const email = author?.email.trim();
     const identity = name && email ? `GIT_AUTHOR_NAME=${q(name)} GIT_AUTHOR_EMAIL=${q(email)} GIT_COMMITTER_NAME=${q(name)} GIT_COMMITTER_EMAIL=${q(email)}` : undefined;
-    const commitArgs = ["commit", "--no-verify", "--no-gpg-sign", "-m", text];
-    let done: RemoteGitResult;
-    try {
-      done = await this.run("git", named ? [...commitArgs, "--", ...pathspecs] : commitArgs, { env: identity });
-    } catch (error) {
-      // every change is staged now: the whole index is exactly them
-      if (!named || !unnamedFits(error)) throw error;
-      done = await this.run("git", commitArgs, { env: identity });
-    }
+    const done = await this.exec(this.commitCommand(text, named, identity));
+    if ("error" in done) throw done.tooLong ? this.commitTooLong(text, named, identity) : unreached(done);
+    if (done.exitCode === COMMIT_NO_FOLDER) throw new BranchActionError("The branch's folder could not be opened on the computer.", "no_path", 409);
+    if (done.exitCode === COMMIT_NOT_STAGED) throw new BranchActionError(firstLine(done.stderr) || "git could not stage those files.", "add_failed", 500);
     if (done.exitCode !== 0) {
       if (IDENTITY_UNKNOWN.test(`${done.stderr}\n${done.stdout}`)) {
         if (this.credentials.mode === "person") throw new BranchActionError("Your name and email are needed to sign a commit here. Add them to your profile first.", "no_author", 403);
@@ -438,6 +486,31 @@ export class RemoteBranchGit {
     this.facts = undefined;
     const sha = await this.ok(["rev-parse", "HEAD"]);
     return { sha: sha ?? "" };
+  }
+
+  /** The commit as one command: `cd` to the folder, `git add` (every change,
+   * or the picked files git does not know yet), then, only when the add
+   * worked, `git commit` (the whole index, or every file named: the shell's
+   * arguments, each set once). */
+  private commitCommand(text: string, named: NamedFiles | undefined, identity: string | undefined): string {
+    const git = (args: readonly string[]) => `${NO_OPTIONAL_LOCKS} git ${[...GIT_OVERRIDES, ...args].map(q).join(" ")}`;
+    const lines = [`${cdTo(this.cwd)} || exit ${COMMIT_NO_FOLDER}`];
+    if (!named) lines.push(`${git(["add", "--all"])} || exit ${COMMIT_NOT_STAGED}`);
+    else {
+      if (named.add.length) lines.push(setWords(named.add, COMMIT_NOT_STAGED), `${git(["add", "--all"])} -- "$@" || exit ${COMMIT_NOT_STAGED}`);
+      if (named.more.length) lines.push(setWords(named.more, COMMIT_NOT_STAGED, named.add.length > 0));
+    }
+    lines.push(`${identity ? `${identity} ` : ""}${git(["commit", "--no-verify", "--no-gpg-sign", "-m", text])}${named ? " -- \"$@\"" : ""}`);
+    return lines.join("; ");
+  }
+
+  /** A commit too long for that computer's connection: the message is what
+   * does not fit when the command naming no file does not fit either, else
+   * the files named with it do (that computer's channel measures both). */
+  private commitTooLong(text: string, named: NamedFiles | undefined, identity: string | undefined): BranchActionError {
+    const messageFits = named !== undefined && (this.exec.fits?.(this.commitCommand(text, undefined, identity)) ?? true);
+    if (messageFits) return new BranchActionError("That commit is too long to send to that computer in one command. Pick fewer files or shorten the message, or ask the bot to commit.", "commit_too_long", 413);
+    return new BranchActionError("That commit message is too long for that computer. Shorten it, or ask the bot to commit.", "message_too_long_for_computer", 413);
   }
 
   /** Push the branch under the same name, never forced, never the default
@@ -512,7 +585,8 @@ export class RemoteBranchGit {
       } catch { /* fall through to create */ }
     }
     const subjects = await this.subjects(base ? `origin/${base}` : undefined);
-    const title = (subjects.length === 1 ? subjects[0]! : fallbackTitle || subjects.at(-1) || this.branch).slice(0, 200);
+    // trimmed: a title is one line, and a word never ends with a line break (q)
+    const title = (subjects.length === 1 ? subjects[0]! : fallbackTitle.trim() || subjects.at(-1) || this.branch).slice(0, 200).trim();
     const body = subjects.length > 1 ? subjects.map((subject) => `- ${subject}`).join("\n") : "";
     const result = await this.run("gh", ["pr", "create", `--head=${this.branch}`, `--base=${base}`, `--title=${title}`, `--body=${body}`, "--repo", repo], { timeoutMs: 60_000, withToken: signed });
     if (result.exitCode === 127) return { compareUrl };

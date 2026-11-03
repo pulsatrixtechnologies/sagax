@@ -7536,12 +7536,29 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
   once, shared by all their bots). A full computer reads busy, never
   stopped; a desktop command that ran out of time while that desktop stayed
   connected (a long job of its own ahead of it) reads busy, and the next
-  panel commands to it answer busy at once while it still works. A command
+  panel commands to it answer busy at once while it still works. The panel
+  holds at most one of the person's four sandboxd slots: while its command
+  runs, a fourth command of their bots can still be refused (429), fewer
+  refusals than before but not none. A command
   longer than its channel carries (a remote session's 8,000 characters, a
-  solo Local VM's 20,000, the desktop app's and the cloud computer's
-  100,000) is not sent (`too_long`, 413; a commit of every change is then
-  done unnamed, `git add --all`), and a remote session's own `[cut at 64
-  KB]` mark reads as a cut, never as data. One branch read is one script
+  solo Local VM's 20,000, the desktop app's 100,000; 120,000 UTF-8 bytes
+  where Linux caps one argument at 131,072: the cloud computer, a Linux
+  desktop, the desktop's Local VM) is not sent (`too_long`, 413), and a
+  remote session's own `[cut at 64 KB]` mark reads as a cut, never as
+  data. A commit there is one command (2026-11-03, final review: git add,
+  then git commit only when the add worked), so a refusal before it runs
+  (too long, busy, offline) leaves nothing staged. Every file checked in
+  the dialog (it says so) commits every change, unnamed (`git add --all`),
+  also those the list does not show (past 500, past a cut, made since), as
+  the server path does; some files checked commits exactly those, each name
+  to its last byte (`setWords`: a file "dup<LF>" is never committed as
+  "dup"), a rename with its old path (given to git commit only: git add
+  refuses a staged rename's old path). Too long, the answer says which: the
+  message (`message_too_long_for_computer`: shorten it) or those files with
+  it (`commit_too_long`). A cut status never lists a rename whose old path
+  it lost; a word `q()` cannot carry exactly (a trailing line break) is
+  refused, and a script holding a backslash, a `!` or a line break never
+  reaches a login shell (`viaPosixShell` throws). One branch read is one script
   (one round trip after the folder probe), and git there takes no optional
   lock (`GIT_OPTIONAL_LOCKS=0`: no index.lock while the bot commits); the
   panel reads again only the rows of the conversation the bot just worked
@@ -7555,7 +7572,9 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
   server. A branch no channel reaches (no computer of the person's, a tool
   no channel names, Boat cloud computers) reads `place: "elsewhere"`; an
   offline computer, an unknown folder, Windows or an unknown OS read as
-  such, and a computer busy with other work (`busy`, 503) fails the read.
+  such, and a computer busy with other work (`busy`, 503) fails the read
+  (also a read again over an earlier one: the row keeps its place and
+  counts, and the menu never acts on that earlier read).
   In each of those the menu says why in plain words and what to do
   (outside the menu, which it describes), "Try again" first where reading
   it again can help (the computer was off or busy, its OS not known yet:
@@ -7628,8 +7647,11 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
   tcsh; the solo Local VM's clip; one desktop job at a time; reach per
   kind; five rows read at once against sandboxd's four-command gate; a
   long job holding the real desktop bridge; a remote session's cut mark
-  and 8,000 characters; each channel's length),
-  `remote-code-branches.test.ts`,
+  and 8,000 characters, a message too long for it; a solo Local VM's frame
+  cutting a rename refactor; each channel's length, in bytes where Linux
+  caps one argument), `remote-code-branches.test.ts` (a rename a cut split,
+  a picked rename committed as a move, every change with every file kept,
+  one command per commit, a name ending in a line break),
   `src/components/bot-settings/CodeBranchList.test.ts`,
   `CodeBranchList.ask.test.ts` (the ask click, Try again), `ActivitySection.test.ts`,
   `server/activity-code-work.test.ts`.

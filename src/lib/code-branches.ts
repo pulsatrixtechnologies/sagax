@@ -116,11 +116,14 @@ const OFF_REASON: Record<BotBranchComputer, LocaleKey> = {
 /** Why the panel cannot run this branch's actions itself, in plain words
  * with what to do (its params: `{ bot }`), or null when it can: the
  * computer that holds it is off or not known, runs Windows, its folder is
- * not known, or the branch could not be read. Each action then asks the bot
- * to do it, in the conversation the branch came from: never a silent grey
- * menu. */
+ * not known, or the branch could not be read now. Each action then asks the
+ * bot to do it, in the conversation the branch came from: never a silent
+ * grey menu. A read that failed comes first, also over an earlier read the
+ * row keeps (its place and counts): that read may no longer hold (the bot
+ * ran git again, and the computer answered busy). */
 export function branchAway(info: BotBranchInfo | undefined, readFailed = false): LocaleKey | null {
-  if (!info) return readFailed ? "botPanel.branch.away.unread" : null;
+  if (readFailed) return "botPanel.branch.away.unread";
+  if (!info) return null;
   if (info.place === "elsewhere") return "botPanel.branch.away.elsewhere";
   if (info.place !== "remote") return null;
   if (info.offline) return OFF_REASON[info.computer ?? "remote_session"];
@@ -131,11 +134,12 @@ export function branchAway(info: BotBranchInfo | undefined, readFailed = false):
 
 /** Reading the branch again can change what the panel can do, so its menu
  * offers "Try again" (the reasons say to): its computer was off, its OS
- * not known yet, or the read failed (busy, no answer). Not where the
- * computer or the folder is not known, nor on Windows: reading again
- * changes nothing there. */
+ * not known yet, or the last read failed (busy, no answer), also over an
+ * earlier read. Not where the computer or the folder is not known, nor on
+ * Windows: reading again changes nothing there. */
 export function branchCanReadAgain(info: BotBranchInfo | undefined, readFailed = false): boolean {
-  if (!info) return readFailed;
+  if (readFailed) return true;
+  if (!info) return false;
   if (info.place !== "remote") return false;
   return Boolean(info.offline) || (info.publishBlocked === "unknown_os" && !info.windows);
 }

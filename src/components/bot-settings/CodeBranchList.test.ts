@@ -242,6 +242,9 @@ describe("Coding branches: the card", () => {
     expect(html).toContain("src/widget.ts");
     expect(html).toContain("src/new.ts");
     expect(html.match(/type="checkbox"[^>]*checked=""/g)).toHaveLength(2);
+    // every file checked: it says the commit takes every change, also any not listed (as it does)
+    expect(html).toContain('data-branch-commit-scope=""');
+    expect(html).toContain("With every file checked, every change in this repository is committed, including any not listed here.");
   });
 
   it("words a refusal by its code, else the server's message", () => {
@@ -253,10 +256,16 @@ describe("Coding branches: the card", () => {
     expect(branchErrorText(new ApiError("x", 502, { code: "offline" }))).toBe("The computer that holds this branch cannot be reached right now");
     expect(branchErrorText(new ApiError("x", 409, { code: "no_path" }))).toBe("The folder that holds this branch is not known");
     // too long for that computer's connection: what to do, never "cannot be reached"
-    expect(branchErrorText(new ApiError("x", 413, { code: "too_long" }))).toBe("That is too long to send to that computer in one command. Commit fewer files at a time, or ask the bot to do it.");
+    expect(branchErrorText(new ApiError("x", 413, { code: "too_long" }))).toBe("That is too long to send to that computer in one command, so nothing ran there. Ask the bot to do it.");
+    expect(branchErrorText(new ApiError("x", 413, { code: "commit_too_long" }))).toBe("That commit is too long to send to that computer in one command. Pick fewer files or shorten the message, or ask the bot to commit.");
+    // the message is what does not fit: said so, never "fewer files"
+    expect(branchErrorText(new ApiError("x", 413, { code: "message_too_long_for_computer" }))).toBe("That commit message is too long for that computer. Shorten it, or ask the bot to commit.");
+    expect(en["botPanel.branch.error.messageTooLong"]).not.toMatch(/files/i);
+    expect((fr as Record<string, string>)["botPanel.branch.error.messageTooLong"]).toBe("Ce message de commit est trop long pour cet ordinateur. Raccourcissez-le, ou demandez au bot de faire le commit.");
+    expect((fr as Record<string, string>)["botPanel.branch.error.tooLong"]).not.toMatch(/fichiers/);
     // that computer's own git identity, not the person's profile
     expect(branchErrorText(new ApiError("x", 409, { code: "no_git_identity" }))).toBe("Git has no name and email on that computer to sign the commit. Set them there (git config --global user.name and user.email), then try again, or ask the bot to commit.");
-    for (const key of ["botPanel.branch.error.tooLong", "botPanel.branch.error.noGitIdentity", "botPanel.branch.tryAgain"] as const) {
+    for (const key of ["botPanel.branch.error.tooLong", "botPanel.branch.error.commitTooLong", "botPanel.branch.error.messageTooLong", "botPanel.branch.commit.everyChange", "botPanel.branch.error.noGitIdentity", "botPanel.branch.tryAgain"] as const) {
       expect((fr as Record<string, string>)[key], key).toBeTruthy();
       expect(`${en[key]} ${(fr as Record<string, string>)[key]}`, key).not.toMatch(/[\u2013\u2014]/);
     }

@@ -64,6 +64,8 @@ const ERROR_KEYS: Record<string, LocaleKey> = {
   unsafe_config: "botPanel.branch.error.unsafeConfig",
   busy: "botPanel.branch.error.busy",
   too_long: "botPanel.branch.error.tooLong",
+  commit_too_long: "botPanel.branch.error.commitTooLong",
+  message_too_long_for_computer: "botPanel.branch.error.messageTooLong",
 };
 
 /** The words for a refused action: ours for the known codes, else the
@@ -427,7 +429,9 @@ export function CodeBranchList({ branches, archivedBranches = [], now, actions, 
       }
       return info;
     } catch {
-      // the row keeps what the bot's calls said; its menu offers to ask the bot
+      // the row keeps what the bot's calls and its last read said (its place
+      // and counts); its menu says it could not read it now, offers Try
+      // again and to ask the bot, and never acts on that earlier read
       patch(codingBranchKey(branch), { readFailed: true });
       return undefined;
     }
@@ -514,13 +518,14 @@ export function CodeBranchList({ branches, archivedBranches = [], now, actions, 
   /** "Try again": read the branch again (the row shows it working). Still
    * out of reach: the row says why; not read at all: what the last read
    * said (stopped, not known) may no longer hold, so the row says it could
-   * not be read now; readable: the menu acts itself. */
+   * not be read now (keeping its place and counts, as a read again that
+   * fails on its own does); readable: the menu acts itself. */
   const readAgain = async (branch: CodingBranch) => {
     const key = codingBranchKey(branch);
     patch(key, { busy: true, note: undefined });
     const info = await read(branch);
     const reason = info ? (branchUnavailable(info, branch) ? null : branchAway(info)) : "botPanel.branch.away.unread";
-    patch(key, { busy: false, ...(info ? {} : { info: undefined }), ...(reason ? { note: { tone: "error", text: t(reason, { bot: actions?.botName ?? "" }) } } : {}) });
+    patch(key, { busy: false, ...(reason ? { note: { tone: "error", text: t(reason, { bot: actions?.botName ?? "" }) } } : {}) });
   };
 
   const act = (branch: CodingBranch) => (action: BranchMenuAction) => {
@@ -693,7 +698,11 @@ export function CodeBranchList({ branches, archivedBranches = [], now, actions, 
 }
 
 /** Commit the branch's changes: the proposed message (editable) and the
- * changed files, all chosen to start with. */
+ * changed files, all chosen to start with. Every file checked commits every
+ * change of the repository, also those the list does not show (past the
+ * 500 it lists, past what that computer's connection carries back, made
+ * since it was read), wherever the branch is, and the dialog says so; some
+ * of them checked commits exactly those. */
 export function CommitDialog({ botId, branch, info, onClose, onCommitted }: {
   botId: string;
   branch: CodingBranch;
@@ -775,6 +784,9 @@ export function CommitDialog({ botId, branch, info, onClose, onCommitted }: {
               </li>
             ))}
           </ul>
+          {changes.length > 0 && chosen.size === changes.length && (
+            <p data-branch-commit-scope="" className="text-[12px] leading-4 text-ink-secondary">{t("botPanel.branch.commit.everyChange")}</p>
+          )}
         </fieldset>
         {error && <p role="alert" className="text-[12.5px] text-danger">{error}</p>}
       </DialogFrame>

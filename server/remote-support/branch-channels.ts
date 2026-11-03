@@ -20,7 +20,7 @@
 // The desktop runs a command with the person's login shell (`$SHELL -lc`)
 // and a remote session with the remote login shell, which may be fish or
 // csh: their command goes inside `/bin/sh -c '...'` (viaPosixShell), so only
-// sh reads it.
+// sh reads it, and one that cannot go there is never sent.
 //
 // Light on the person's computers (2026-11-03, review): the panel reads
 // every row of the Coding list at once, and the person's bots need the
@@ -33,8 +33,10 @@
 // stayed connected (a long job of its own ahead of it) reads busy too, and
 // the panel's next commands to it answer busy at once while it still works
 // instead of each waiting the bridge's whole timeout. A command longer than
-// a channel carries (each computer's own limit, below) is refused before it
-// is sent (`tooLong`), and a remote session's own cut mark is read as a cut.
+// a channel carries (each computer's own limit, below, in bytes where Linux
+// caps one argument) is refused before it is sent (`tooLong`; each channel
+// says what it carries: `fits`), and a remote session's own cut mark is read
+// as a cut.
 import type { RemoteBranchDeps, RemoteBranchReach } from "../routes/bot-code-branches.ts";
 import { EXEC_ENV_KEY_RE, type SandboxExecInput, type SandboxExecOutput } from "../sandboxd-core.ts";
 import type { RemoteExec, RemoteGitResult } from "./remote-code-branches.ts";
@@ -43,15 +45,20 @@ const SECOND = 1000;
 const DEFAULT_TIMEOUT_MS = 60 * SECOND;
 const seconds = (timeoutMs: number | undefined) => Math.min(600, Math.max(1, Math.ceil((timeoutMs ?? DEFAULT_TIMEOUT_MS) / SECOND)));
 
-/** The longest command line each channel carries: the cloud computer's one
- * argument (Kubernetes passes it in the exec's address, Docker caps one
- * argument at 128 KiB), the desktop app's (electron/desktop-bridge.mjs
- * validBridgeOperation), a solo server's Local VM (containerExec) and a
- * remote session (remote-sessions.ts exec, after trimming). */
-export const SANDBOX_MAX_COMMAND = 100_000;
+/** The longest command line each channel carries, in characters: the
+ * desktop app's (electron/desktop-bridge.mjs validBridgeOperation), a solo
+ * server's Local VM (containerExec) and a remote session
+ * (remote-sessions.ts exec, after trimming). */
 export const DESKTOP_MAX_COMMAND = 100_000;
 export const HOST_VM_MAX_COMMAND = 20_000;
 export const REMOTE_SESSION_MAX_COMMAND = 8000;
+/** Linux caps one argument at 131,072 bytes (MAX_ARG_STRLEN), and a shell
+ * gets the command as one (`bash -lc` on the cloud computer, through Docker
+ * or Kubernetes, `$SHELL -lc` on a Linux desktop, `bash -lc` in the
+ * desktop's Local VM): measured in UTF-8 bytes there (a character of a
+ * Chinese file name is three), room left for the arguments around it (the
+ * bot's folder). */
+export const ARGUMENT_MAX_BYTES = 120_000;
 
 const TOO_LONG = "That command is too long for that computer's connection, so it was not sent.";
 const tooLong = () => ({ error: TOO_LONG, tooLong: true as const });
@@ -68,8 +75,9 @@ function refusedAsBusy(error: unknown): boolean {
  * the bot's folder there, as its run_command). Full (the person's bots run
  * four commands there): busy, not stopped. */
 export function sandboxBranchExec(run: (input: SandboxExecInput) => Promise<SandboxExecOutput>): RemoteExec {
-  return async (command, timeoutMs, env) => {
-    if (command.length > SANDBOX_MAX_COMMAND) return tooLong();
+  const fits = (command: string) => Buffer.byteLength(command, "utf8") <= ARGUMENT_MAX_BYTES;
+  const exec: RemoteExec = async (command, timeoutMs, env) => {
+    if (!fits(command)) return tooLong();
     const variables = Object.fromEntries(Object.entries(env ?? {}).filter(([key, value]) => EXEC_ENV_KEY_RE.test(key) && typeof value === "string"));
     try {
       const out = await run({
@@ -90,6 +98,8 @@ export function sandboxBranchExec(run: (input: SandboxExecInput) => Promise<Sand
       return { error: "The cloud computer could not be reached." };
     }
   };
+  exec.fits = fits;
+  return exec;
 }
 
 /** What a login shell other than sh would read in a single-quoted word:
@@ -99,9 +109,10 @@ const NOT_FOR_LOGIN_SHELLS = /[\\!\n\r]/;
 /** `script` run by /bin/sh whatever login shell receives the command line
  * (bash, zsh, fish, csh, ...): one single-quoted argument, a quote written
  * '"'"'. A script that holds a character some login shell would read in
- * quotes goes as it is (remote-code-branches.ts writes none: q()). */
+ * quotes is refused (thrown, so nothing is sent: fish or csh could run part
+ * of it). remote-code-branches.ts writes none (q()). */
 export function viaPosixShell(script: string): string {
-  if (NOT_FOR_LOGIN_SHELLS.test(script)) return script;
+  if (NOT_FOR_LOGIN_SHELLS.test(script)) throw new Error("A command for a login shell holds a backslash, a ! or a line break, so it was not sent.");
   return `/bin/sh -c '${script.replace(/'/g, `'"'"'`)}'`;
 }
 
@@ -169,13 +180,17 @@ function resultText(value: unknown): { text: string; isError: boolean } {
  * bridge's run_command or vm_run_command, a solo Local VM). `caps` bound the
  * output so the framed answer fits what the channel carries; `wrap` puts
  * the framed script in /bin/sh for a channel that runs a login shell;
- * `maxCommand`: the longest line it carries (a longer one is not sent).
- * Variables are never sent. */
-export function framedBranchExec(run: (command: string, timeoutSeconds: number) => Promise<unknown>, caps: FrameCaps, offline: string, options: { wrap?: boolean; maxCommand?: number } = {}): RemoteExec {
-  return async (command, timeoutMs) => {
+ * `maxCommand`: the longest line it carries in characters, `maxBytes` in
+ * UTF-8 bytes (a longer one is not sent). Variables are never sent. */
+export function framedBranchExec(run: (command: string, timeoutSeconds: number) => Promise<unknown>, caps: FrameCaps, offline: string, options: { wrap?: boolean; maxCommand?: number; maxBytes?: number } = {}): RemoteExec {
+  const lineFor = (command: string) => {
     const framed = framedCommand(command, caps);
-    const line = options.wrap ? viaPosixShell(framed) : framed;
-    if (options.maxCommand !== undefined && line.length > options.maxCommand) return tooLong();
+    return options.wrap ? viaPosixShell(framed) : framed;
+  };
+  const carried = (line: string) => (options.maxCommand === undefined || line.length <= options.maxCommand) && (options.maxBytes === undefined || Buffer.byteLength(line, "utf8") <= options.maxBytes);
+  const exec: RemoteExec = async (command, timeoutMs) => {
+    const line = lineFor(command);
+    if (!carried(line)) return tooLong();
     let answer: unknown;
     try {
       answer = await run(line, seconds(timeoutMs));
@@ -189,6 +204,8 @@ export function framedBranchExec(run: (command: string, timeoutSeconds: number) 
     // no marker: nothing ran there (the VM is stopped, the app refused it)
     return parseFramed(text, caps) ?? { error: offline };
   };
+  exec.fits = (command) => carried(lineFor(command));
+  return exec;
 }
 
 /** One task at a time per key, in the order asked (a failed one does not
@@ -345,7 +362,8 @@ export function branchRemoteDeps(channels: BranchChannels): RemoteBranchDeps {
           if (!desktop || !who) return unreachable;
           // the desktop this request named (its row says which), not one
           // that connects in the meantime
-          const desktopId = desktop.current(who)?.id;
+          const named = desktop.current(who);
+          const desktopId = named?.id;
           const held = `${who}\n${desktopId ?? ""}`;
           /** That desktop now (connected, running a job), as far as known. */
           const now = () => {
@@ -375,9 +393,12 @@ export function branchRemoteDeps(channels: BranchChannels): RemoteBranchDeps {
             }
           });
           if (place.computer === "desktop") {
-            return framedBranchExec((command, timeout) => send({ action: "run_command", command, timeout_seconds: timeout }), DESKTOP_CAPS, "Your computer is not connected.", { wrap: true, maxCommand: DESKTOP_MAX_COMMAND });
+            // its login shell gets the line as one argument: a Mac has no cap
+            // on one argument, a Linux desktop the kernel's (in bytes)
+            return framedBranchExec((command, timeout) => send({ action: "run_command", command, timeout_seconds: timeout }), DESKTOP_CAPS, "Your computer is not connected.", { wrap: true, maxCommand: DESKTOP_MAX_COMMAND, ...(named?.platform === "darwin" ? {} : { maxBytes: ARGUMENT_MAX_BYTES }) });
           }
-          return framedBranchExec((command, timeout) => send({ action: "vm_run_command", command, timeout_seconds: timeout, ...(place.container ? { container: place.container } : {}) }), DESKTOP_VM_CAPS, "The Local VM is not running.", { maxCommand: DESKTOP_MAX_COMMAND });
+          // the Local VM runs it with `bash -lc` in Linux
+          return framedBranchExec((command, timeout) => send({ action: "vm_run_command", command, timeout_seconds: timeout, ...(place.container ? { container: place.container } : {}) }), DESKTOP_VM_CAPS, "The Local VM is not running.", { maxCommand: DESKTOP_MAX_COMMAND, maxBytes: ARGUMENT_MAX_BYTES });
         }
         case "remote_session": {
           const sessions = channels.remoteSessions;
@@ -385,9 +406,10 @@ export function branchRemoteDeps(channels: BranchChannels): RemoteBranchDeps {
           if (!sessions || !principal) return unreachable;
           // a client's computer: no variable (no token) is ever sent there,
           // and its login shell only starts /bin/sh
-          return async (command, timeoutMs) => {
+          const fits = (command: string) => viaPosixShell(command).trim().length <= REMOTE_SESSION_MAX_COMMAND;
+          const exec: RemoteExec = async (command, timeoutMs) => {
+            if (!fits(command)) return tooLong();
             const line = viaPosixShell(command);
-            if (line.trim().length > REMOTE_SESSION_MAX_COMMAND) return tooLong();
             const result = await sessions.exec({ principalId: principal, botId, threadId, command: line, ...(timeoutMs ? { timeoutMs } : {}) });
             if ("error" in result) return /under 8,000 characters/.test(result.error) ? tooLong() : { error: result.error };
             // its own cut mark is a cut, never data (a status line cut short reads as cut)
@@ -400,6 +422,8 @@ export function branchRemoteDeps(channels: BranchChannels): RemoteBranchDeps {
               ...(stdout.cut ? { truncated: true } : {}),
             };
           };
+          exec.fits = fits;
+          return exec;
         }
         default:
           return unreachable;

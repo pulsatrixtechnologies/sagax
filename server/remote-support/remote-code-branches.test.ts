@@ -365,4 +365,114 @@ describe("RemoteBranchGit: the same actions on the bot's computer", () => {
     expect(diff.truncated).toBe(true);
     expect(diff.files.map((entry) => entry.path)).toEqual(["a.ts"]);
   });
+
+  it("drops a rename whose old path a cut status lost: it is never listed, nor committed, as half a move", async () => {
+    const b64 = (text: string) => Buffer.from(text, "utf8").toString("base64");
+    /** A branch read as the snapshot script writes it, its status cut after
+     * `keep` bytes, through a channel that says it cut the answer. */
+    const answer = (status: string, keep: number): RemoteExec => async (command) => {
+      if (!command.includes("sgx_read sha")) return { exitCode: 0, stdout: "", stderr: "" };
+      const lines = [
+        `@sha 0 ${b64(`${"1".repeat(40)}\n`)}`, `@head 0 ${b64("feat/move\n")}`, "@remote 1 ", "@originHead 1 ", "@c0 1 ", "@c1 1 ",
+        `@c2 0 ${b64(`${"2".repeat(40)}\n`)}`, "@c3 1 ", "@origin 1 ", `@subject 0 ${b64("move files\n")}`, `@against 0 ${b64("main")}`, `@count 0 ${b64("0\t1\n")}`,
+        `@status 0 ${Buffer.from(status, "utf8").subarray(0, keep).toString("base64")}`,
+      ];
+      return { exitCode: 0, stdout: lines.join("\n"), stderr: "", truncated: true };
+    };
+    // a rename is two fields in -z: its new path, then its old one
+    const status = " M src/app.ts\0R  src/new-name.ts\0src/old-name-that-is-long.ts\0";
+    // the cut inside the old path, and right after the new path's end
+    for (const keep of [status.indexOf("old-name") + 3, status.indexOf("src/old-name")]) {
+      const remote = new RemoteBranchGit(answer(status, keep), "/repo", "feat/move");
+      expect((await remote.state()).changes, `cut at ${keep}`).toEqual([{ path: "src/app.ts", status: "modified" }]);
+      // a commit can no longer pick the new path alone
+      await expect(remote.commit("Move it", ["src/new-name.ts"])).rejects.toMatchObject({ code: "stale_files" });
+    }
+    // whole: kept, with its old path
+    expect((await new RemoteBranchGit(answer(status, status.length), "/repo", "feat/move").state()).changes).toEqual([
+      { path: "src/app.ts", status: "modified" },
+      { path: "src/new-name.ts", status: "renamed", from: "src/old-name-that-is-long.ts" },
+    ]);
+  });
+
+  it("commits a picked rename as a move and a picked staged deletion, neither named to git add", async () => {
+    // git mv and git rm: the old path is in neither the index nor the folder, so git add refuses it by name
+    writeFileSync(join(repo, "spare.txt"), "s\n");
+    git(repo, "add", "spare.txt");
+    git(repo, "commit", "-m", "spare");
+    git(repo, "mv", "README.md", "GUIDE.md");
+    git(repo, "rm", "-q", "spare.txt");
+    const branch = new RemoteBranchGit(shell, repo, "feat/widgets");
+    expect((await branch.state()).changes).toEqual(expect.arrayContaining([{ path: "GUIDE.md", status: "renamed", from: "README.md" }, { path: "spare.txt", status: "deleted" }]));
+    await branch.commit("Rename the readme", ["GUIDE.md"]);
+    expect(git(repo, "show", "--name-status", "--format=", "HEAD")).toMatch(/^R\d*\tREADME\.md\tGUIDE\.md$/);
+    await branch.commit("Drop the spare", ["spare.txt"]);
+    expect(git(repo, "show", "--name-status", "--format=", "HEAD")).toBe("D\tspare.txt");
+    // with an untracked file picked alongside: added, then committed with them
+    writeFileSync(join(repo, "README.md"), "back\n");
+    git(repo, "mv", "GUIDE.md", "MANUAL.md");
+    await branch.commit("Both", ["MANUAL.md", "README.md"]);
+    expect(git(repo, "show", "--name-status", "--format=", "HEAD").split("\n").sort()).toEqual(["A\tREADME.md", "R100\tGUIDE.md\tMANUAL.md"]);
+    // what was not picked stays out of it
+    expect(git(repo, "status", "--porcelain")).toBe("?? widget.ts");
+  });
+
+  it("commits every change when every file is kept, also those its list did not show", async () => {
+    for (let index = 0; index < 40; index++) writeFileSync(join(repo, `kept-${String(index).padStart(2, "0")}-${"z".repeat(60)}.ts`), "z\n");
+    // the channel cut the read's status: the list shows some of the 41 changes, and naming them fits
+    const cut: RemoteExec = async (command, timeoutMs) => {
+      const result = await shell(command, timeoutMs);
+      if ("error" in result || !/sgx_read status/.test(command)) return result;
+      const at = result.stdout.indexOf("@status ");
+      return { ...result, stdout: result.stdout.slice(0, at + 8 + 2 + 1500), truncated: true };
+    };
+    const branch = new RemoteBranchGit(cut, repo, "feat/widgets");
+    expect((await branch.state()).changes.length).toBeLessThan(41);
+    await branch.commit("All of it");
+    expect(git(repo, "show", "--name-only", "--format=", "HEAD").split("\n")).toHaveLength(41);
+    expect(git(repo, "status", "--porcelain")).toBe("");
+  });
+
+  it("adds and commits in one command: refused before it runs (too long, busy), nothing is staged", async () => {
+    writeFileSync(join(repo, "notes.txt"), "n\n");
+    // a channel that carries 8,000 characters and says what fits
+    const sent: string[] = [];
+    const limited: RemoteExec = async (command, timeoutMs) => {
+      if (command.length > 8000) return { error: "too long", tooLong: true };
+      sent.push(command);
+      return shell(command, timeoutMs);
+    };
+    limited.fits = (command) => command.length <= 8000;
+    // a French note under the 5,000 characters the panel takes, too long for that channel once quoted
+    const message = `Mise à jour\n\n${"Énoncé révisé, accentué et vérifié à côté. ".repeat(140)}`.slice(0, 4900);
+    for (const paths of [["notes.txt"], undefined]) {
+      await expect(new RemoteBranchGit(limited, repo, "feat/widgets").commit(message, paths)).rejects.toMatchObject({ code: "message_too_long_for_computer", status: 413 });
+    }
+    // too many files with a message that fits alone: that commit, not the message
+    for (let index = 0; index < 120; index++) writeFileSync(join(repo, `generated-${String(index).padStart(3, "0")}-${"q".repeat(60)}.txt`), "q\n");
+    const many = (await new RemoteBranchGit(limited, repo, "feat/widgets").state()).changes.map((change) => change.path);
+    await expect(new RemoteBranchGit(limited, repo, "feat/widgets").commit("Some of them", many.slice(0, 110))).rejects.toMatchObject({ code: "commit_too_long", status: 413 });
+    expect(sent.some((command) => /'add'|'commit'/.test(command))).toBe(false);
+    // the computer is busy when the commit is sent: nothing ran there
+    const busy: RemoteExec = async (command, timeoutMs) => (/'commit'/.test(command) ? { error: "busy", busy: true } : shell(command, timeoutMs));
+    await expect(new RemoteBranchGit(busy, repo, "feat/widgets").commit("Add the notes", ["notes.txt"])).rejects.toMatchObject({ code: "busy", status: 503 });
+    expect(git(repo, "diff", "--cached", "--name-only")).toBe("");
+    expect(git(repo, "rev-list", "--count", "main..feat/widgets")).toBe("0");
+    // a folder gone between the read and the commit: said so, nothing ran
+    const moved = new RemoteBranchGit(async (command, timeoutMs) => shell(/'commit'/.test(command) ? command.replace(`cd -- ${q(repo)}`, `cd -- ${q(join(repo, "gone"))}`) : command, timeoutMs), repo, "feat/widgets");
+    await expect(moved.commit("Add the notes", ["notes.txt"])).rejects.toMatchObject({ code: "no_path" });
+  });
+
+  it("commits a file whose name ends with a line break by that very name, never another file", async () => {
+    writeFileSync(join(repo, "dup"), "a\n");
+    writeFileSync(join(repo, "dup\n"), "b\n");
+    const branch = new RemoteBranchGit(shell, repo, "feat/widgets");
+    expect((await branch.state()).changes.map((change) => change.path).sort()).toEqual(["dup", "dup\n", "widget.ts"]);
+    await branch.commit("Only the one with a line break", ["dup\n"]);
+    const committed = execFileSync("git", ["show", "--name-only", "-z", "--format=", "HEAD"], { cwd: repo, encoding: "utf8" }).split("\0").filter(Boolean);
+    expect(committed).toEqual(["dup\n"]);
+    // a quoted word never loses a line break at its end on the way: refused
+    expect(() => q("dup\n")).toThrow(BranchActionError);
+    expect(q("two\nlines")).toContain("base64");
+  });
 });

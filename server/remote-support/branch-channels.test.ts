@@ -10,7 +10,7 @@
 // (no token) ever travels through the desktop or a remote session.
 import { execFile, execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -52,8 +52,8 @@ describe("framed commands: exact answers through a channel that speaks text", ()
     const framed = framedCommand("git status", CAPS);
     expect(framed).not.toMatch(/[\\!\n\r]/);
     expect(viaPosixShell(framed).startsWith("/bin/sh -c '")).toBe(true);
-    // a script some login shell would read in quotes is sent as it is
-    expect(viaPosixShell("echo a\nb")).toBe("echo a\nb");
+    // a script some login shell would read in quotes never reaches it: refused, nothing sent
+    for (const script of ["echo a\nb", "echo a\rb", "printf 'a\\b'", "echo hi!"]) expect(() => viaPosixShell(script), JSON.stringify(script)).toThrow();
   });
 
   for (const shell of LOGIN_SHELLS) {
@@ -515,7 +515,8 @@ describe("a remote session: its own cut mark and its 8,000 characters", () => {
   const longName = (index: number) => `generated-output-file-number-${String(index).padStart(4, "0")}-with-a-long-name-that-goes-on-and-on-like-a-deep-package-path.txt`;
 
   it("reads its cut mark as a cut, not as data", async () => {
-    const answer = await exec()("head -c 70000 /dev/zero | tr '\\0' 'x'");
+    // (no backslash: a command for a login shell never holds one)
+    const answer = await exec()("head -c 70000 /dev/zero | tr '[:cntrl:]' 'x'");
     expect(answer).toMatchObject({ exitCode: 0, truncated: true });
     expect("stdout" in answer && answer.stdout).toBe("x".repeat(64 * 1024));
   });
@@ -529,7 +530,7 @@ describe("a remote session: its own cut mark and its 8,000 characters", () => {
     // a few of them: too long to name on that computer, said so, and nothing ran
     const picked = state.changes.slice(0, 300).map((change) => change.path);
     sent.length = 0;
-    await expect(remote.commit("Some of it", picked)).rejects.toMatchObject({ code: "too_long", status: 413 });
+    await expect(remote.commit("Some of it", picked)).rejects.toMatchObject({ code: "commit_too_long", status: 413 });
     expect(sent.some((line) => /'commit'|'add'/.test(line))).toBe(false);
     expect(git(repo, "diff", "--cached", "--name-only")).toBe("");
     // all of it: every change, unnamed
@@ -540,6 +541,81 @@ describe("a remote session: its own cut mark and its 8,000 characters", () => {
     expect(git(repo, "show", "--name-only", "--format=", "HEAD").split("\n")).toHaveLength(450);
     expect(sent.every((line) => line.length <= 8000)).toBe(true);
   });
+
+  it("refuses a commit message too long for it before anything runs there, and says the message is what does not fit", async () => {
+    const own = join(dir, "notes");
+    git(dir, "init", "--initial-branch=main", own);
+    writeFileSync(join(own, "a.txt"), "a\n");
+    git(own, "add", ".");
+    git(own, "commit", "-m", "first");
+    git(own, "checkout", "-b", "feat/notes");
+    writeFileSync(join(own, "notes.txt"), "n\n");
+    writeFileSync(join(own, "other.txt"), "o\n");
+    const remote = new RemoteBranchGit(branchRemoteDeps({ organization: true, remoteSessions: sessions }).exec("pepper", "t1", "sam", { computer: "remote_session", folder: own, others: [] }), own, "feat/notes");
+    // French notes under the 5,000 characters the panel takes: one paragraph after another, accented
+    const messages = [
+      `Mise à jour\n\n${"Énoncé révisé, accentué et vérifié à côté. ".repeat(140)}`.slice(0, 4900),
+      `Résumé des changements\n\n${"é".repeat(3_600 - 24)}`,
+    ];
+    sent.length = 0;
+    for (const message of messages) {
+      expect(message.length).toBeLessThanOrEqual(5000);
+      for (const paths of [["notes.txt"], ["notes.txt", "other.txt"], undefined]) {
+        const refused = await remote.commit(message, paths).then(() => null, (error: { code?: string; status?: number; message?: string }) => error);
+        expect(refused, JSON.stringify(paths)).toMatchObject({ code: "message_too_long_for_computer", status: 413 });
+        expect(refused?.message).toMatch(/message is too long for that computer/);
+        expect(refused?.message).not.toMatch(/fewer files/);
+      }
+    }
+    // nothing was sent to add or commit, nothing is staged, nothing committed
+    expect(sent.some((line) => /'add'|'commit'/.test(line))).toBe(false);
+    expect(git(own, "diff", "--cached", "--name-only")).toBe("");
+    expect(git(own, "rev-list", "--count", "main..feat/notes")).toBe("0");
+    // a short one goes through, in one command
+    sent.length = 0;
+    await remote.commit("Add the notes", ["notes.txt"]);
+    expect(sent.filter((line) => /'add'|'commit'/.test(line))).toHaveLength(1);
+    expect(git(own, "show", "--name-only", "--format=", "HEAD")).toBe("notes.txt");
+  });
+});
+
+describe("a solo Local VM's frame cuts a rename refactor's status", () => {
+  let dir = "";
+  let env: NodeJS.ProcessEnv = {};
+  const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  beforeAll(() => {
+    dir = realpathSync(mkdtempSync(join(tmpdir(), "sagax-branch-moves-")));
+    env = { ...process.env, GIT_CONFIG_GLOBAL: join(dir, "gitconfig"), GIT_CONFIG_NOSYSTEM: "1" };
+    writeFileSync(join(dir, "gitconfig"), "[user]\n\tname = Test\n\temail = test@example.com\n[init]\n\tdefaultBranch = main\n");
+  });
+  afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }); });
+
+  it("lists no rename without its old path, and a listed rename commits as a move", async () => {
+    const repo = join(dir, "moves");
+    git(dir, "init", "--initial-branch=main", repo);
+    const legacy = "src/components/legacy/a-long-component-folder-name";
+    const old = (index: number) => `${legacy}/${String(index).padStart(3, "0")}-component-with-a-descriptive-name.tsx`;
+    mkdirSync(join(repo, legacy), { recursive: true });
+    for (let index = 0; index < 100; index++) writeFileSync(join(repo, old(index)), `export const c${index} = ${index};\n`);
+    git(repo, "add", ".");
+    git(repo, "commit", "-m", "first");
+    git(repo, "checkout", "-b", "feat/move");
+    mkdirSync(join(repo, "src/ui"), { recursive: true });
+    for (let index = 0; index < 100; index++) git(repo, "mv", old(index), `src/ui/c${String(index).padStart(3, "0")}.tsx`);
+    // the solo Local VM: 11 KiB of output come back framed, so the status is cut
+    const vm = framedBranchExec(async (command) => ({ content: [{ type: "text", text: (await runAsync(command, env)).stdout }] }), HOST_VM_CAPS, "The Local VM is not running.", { maxCommand: 20_000 });
+    const remote = new RemoteBranchGit(vm, repo, "feat/move");
+    const changes = (await remote.state()).changes;
+    expect(changes.length).toBeGreaterThan(10);
+    expect(changes.length).toBeLessThan(100);
+    // every rename listed is whole: its old path came with it
+    expect(changes.filter((change) => change.status !== "renamed" || !change.from)).toEqual([]);
+    const last = changes.at(-1)!;
+    await remote.commit("Move one component", [last.path]);
+    expect(git(repo, "show", "--name-status", "--format=", "HEAD")).toMatch(/^R\d*\t/);
+    expect(git(repo, "ls-tree", "--name-only", "HEAD", "--", last.from!)).toBe("");
+    expect(git(repo, "ls-tree", "--name-only", "HEAD", "--", last.path)).toBe(last.path);
+  });
 });
 
 describe("each channel's own command length", () => {
@@ -548,9 +624,39 @@ describe("each channel's own command length", () => {
     const desktop = framedBranchExec(async () => { sent++; return { content: [] }; }, DESKTOP_CAPS, "Your computer is not connected.", { wrap: true, maxCommand: 100_000 });
     expect(await desktop(`printf %s '${"x".repeat(100_000)}'`)).toMatchObject({ tooLong: true });
     const cloud = sandboxBranchExec(async () => { sent++; throw new Error("not sent"); });
-    expect(await cloud(`printf %s '${"x".repeat(100_001)}'`)).toMatchObject({ tooLong: true });
+    expect(await cloud(`printf %s '${"x".repeat(120_001)}'`)).toMatchObject({ tooLong: true });
     const soloVm = branchRemoteDeps({ organization: false, hostVm: { running: async () => true, exec: async () => { sent++; return { stdout: "" }; } } }).exec("pepper", "t1", undefined, { computer: "local_vm", vm: "host", folder: "/repo", others: [] });
     expect(await soloVm(`printf %s '${"x".repeat(20_000)}'`)).toMatchObject({ tooLong: true });
     expect(sent).toBe(0);
+  });
+
+  it("counts bytes where Linux caps one argument at 131,072: the cloud computer, a Linux desktop, a Local VM", async () => {
+    // 99,000 characters, about 297,000 bytes of UTF-8: under the old count of characters
+    const wide = `printf %s '${"漢".repeat(99_000)}'`;
+    expect(wide.length).toBeLessThan(100_000);
+    const seen: string[] = [];
+    const cloud = sandboxBranchExec(async (input) => { seen.push(input.argv[2]!); return { exitCode: 0, stdout: "", stderr: "", truncated: false, timedOut: false }; });
+    expect(await cloud(wide)).toMatchObject({ tooLong: true });
+    expect(cloud.fits?.(wide)).toBe(false);
+    // plain ASCII up to the cap still goes
+    expect(await cloud(`printf %s '${"x".repeat(110_000)}'`)).toMatchObject({ exitCode: 0 });
+    expect(seen).toHaveLength(1);
+    // the desktop app: a Linux one runs `$SHELL -lc` (one argument), a Mac has no such cap; its Local VM is Linux
+    const requests: string[] = [];
+    const desktopOf = (platform: string) => branchRemoteDeps({
+      organization: true,
+      desktop: {
+        current: () => ({ id: "desk-1", name: "Studio", platform, capabilities: { shell: true, localVm: true } }),
+        request: async (_principal, operation) => { requests.push(operation.action); return { content: [{ type: "text", text: "" }] }; },
+      },
+    });
+    const middle = `printf %s '${"漢".repeat(45_000)}'`; // 45,000 characters, 135,000 bytes
+    const desktopPlace: BranchWorkPlace = { computer: "desktop", folder: "/repo", others: [] };
+    const vmPlace: BranchWorkPlace = { computer: "local_vm", vm: "desktop", folder: "", others: [] };
+    expect(await desktopOf("linux").exec("pepper", "t1", "sam", desktopPlace)(middle)).toMatchObject({ tooLong: true });
+    expect(await desktopOf("darwin").exec("pepper", "t1", "sam", vmPlace)(middle)).toMatchObject({ tooLong: true });
+    expect(requests).toEqual([]);
+    await desktopOf("darwin").exec("pepper", "t1", "sam", desktopPlace)(middle);
+    expect(requests).toEqual(["run_command"]);
   });
 });

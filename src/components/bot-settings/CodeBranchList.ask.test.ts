@@ -169,6 +169,58 @@ describe("Coding branches: asking the bot when its computer cannot be reached", 
     expect(menu.querySelector("[data-menu-item-ask]")).toBeNull();
   });
 
+  it("says it could not read the branch when a read again fails while an earlier read is on the row, and offers Try again and the bot", async () => {
+    const readable: BotBranchInfo = { branch: branch.name, place: "remote", computer: "desktop", host: "Studio", canPublish: true, state: { exists: true, pushed: true, ahead: 1, behind: 0, worktree: "/Users/sam/web", changes: [{ path: "a.ts", status: "modified" }] } };
+    await mount(readable);
+    expect(open().querySelector("[data-branch-away]")).toBeNull();
+    flushSync(() => document.querySelector<HTMLButtonElement>('[data-branch-menu-button="fix/send-card"]')!.click());
+    // the bot ran git again: the row is read again, and the computer answers busy
+    api.mockImplementation(async () => { throw new Error("busy"); });
+    flushSync(() => root!.render(createElement(CodeBranchList, {
+      branches: [{ ...branch, at: NOW - 60_000 }],
+      now: NOW,
+      label: "Branches",
+      actions: { botId: "scout-id", botName: "Scout", onArchive: async () => {} },
+    })));
+    await settle();
+    await settle();
+    const menu = open();
+    expect(menu.querySelector("[data-branch-away]")?.textContent).toBe("Sagax could not read this branch right now. Try again in a moment, or ask Scout to do this action.");
+    expect(menu.querySelector('[data-menu-item="retry"]')).not.toBeNull();
+    // the actions ask the bot instead of acting on the earlier read
+    for (const id of ["commit", "push", "diff", "delete"]) {
+      expect(menu.querySelector(`[data-menu-item="${id}"]`)?.hasAttribute("data-menu-item-ask"), id).toBe(true);
+    }
+    flushSync(() => menu.querySelector<HTMLButtonElement>('[data-menu-item="commit"]')!.click());
+    expect(dispatch.mock.calls[0]![0]).toMatchObject({ type: "send", threadId: "t-work", text: "Commit the changes on the branch fix/send-card, with a clear message." });
+    // the row keeps where the branch is and what the earlier read counted
+    expect(document.querySelector('[data-code-row="branch"]')?.textContent).toContain("on Studio");
+    expect(document.querySelector('[data-code-row="branch"]')?.textContent).toContain("1 changed file");
+  });
+
+  it("says what a commit takes: every change with every file checked, else exactly the checked files", async () => {
+    const readable: BotBranchInfo = { branch: branch.name, place: "remote", computer: "sandbox", canPublish: true, proposedMessage: "Fix the card", state: { exists: true, pushed: true, ahead: 0, behind: 0, worktree: "/workspace/web", changes: [{ path: "a.ts", status: "modified" }, { path: "b.ts", status: "untracked" }] } };
+    await mount(readable);
+    flushSync(() => open().querySelector<HTMLButtonElement>('[data-menu-item="commit"]')!.click());
+    const dialog = () => document.querySelector<HTMLElement>('[data-branch-commit="fix/send-card"]')!;
+    const scope = () => dialog().querySelector("[data-branch-commit-scope]")?.textContent;
+    expect(scope()).toBe("With every file checked, every change in this repository is committed, including any not listed here.");
+    const sent = () => api.mock.calls.filter(([path]) => String(path).endsWith("/branch/commit")).map(([, init]) => JSON.parse(String((init as { body: string }).body)) as Record<string, unknown>);
+    // one file unchecked: exactly the checked one, and no word about every change
+    flushSync(() => dialog().querySelector<HTMLInputElement>('input[aria-label="b.ts"]')!.click());
+    expect(scope()).toBeUndefined();
+    api.mockImplementation(async (path: string) => (String(path).endsWith("/branch/commit") ? { ok: true, sha: "a".repeat(40) } : readable));
+    flushSync(() => dialog().querySelector<HTMLButtonElement>("[data-branch-commit-confirm]")!.click());
+    await settle();
+    expect(sent()).toEqual([{ threadId: "t-work", branch: "fix/send-card", message: "Fix the card", paths: ["a.ts"] }]);
+    // every file checked: no list sent, every change committed
+    await settle();
+    flushSync(() => open().querySelector<HTMLButtonElement>('[data-menu-item="commit"]')!.click());
+    flushSync(() => dialog().querySelector<HTMLButtonElement>("[data-branch-commit-confirm]")!.click());
+    await settle();
+    expect(sent()[1]).toEqual({ threadId: "t-work", branch: "fix/send-card", message: "Fix the card" });
+  });
+
   it("reads no pull request on the bot's computer (nothing runs there for it)", async () => {
     await mount({ branch: branch.name, place: "remote", computer: "sandbox", repo: "acme/web", canPublish: true, state: { exists: true, pushed: true, ahead: 0, behind: 0, changes: [] } });
     expect(api.mock.calls.map(([path]) => String(path)).filter((path) => /\/branch\/pull\?/.test(path))).toEqual([]);

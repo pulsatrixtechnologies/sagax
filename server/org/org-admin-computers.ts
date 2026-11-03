@@ -16,7 +16,7 @@
 //
 // A server environment is the organization's: an admin starts, stops,
 // pauses, resumes, updates, resets or deletes it with the same calls the
-// person's own Computer tab makes (server/user-sandbox-manager.ts). A
+// person's own Computer tab makes (server/sandbox/user-sandbox-manager.ts). A
 // person's desktop computer is theirs: listed read only (its name, platform,
 // whether it is online, when it was last seen), never an action, never its
 // files or its Local VM (Sagax reaches those only for the person, through
@@ -25,8 +25,8 @@
 // desktop's own id, a sandbox key or a path.
 import { createHash } from "node:crypto";
 
-import type { SandboxStats } from "../sandboxd-core.ts";
-import type { UserSandboxView } from "../user-sandbox-manager.ts";
+import type { SandboxStats } from "../sandbox/sandboxd-core.ts";
+import type { UserSandboxView } from "../sandbox/user-sandbox-manager.ts";
 import type { AdminPerson } from "./org-admin-routes.ts";
 import {
   badRequest,

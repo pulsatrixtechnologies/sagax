@@ -65,7 +65,7 @@ export async function userSandboxProxyRequest(frame: unknown, connection: { url:
 }
 
 /** The tool server name of a person's own MCP server command relayed to
- * their server environment (server/sandbox-stdio-mcp.ts): every frame goes
+ * their server environment (server/sandbox/sandbox-stdio-mcp.ts): every frame goes
  * through as is, notifications included. */
 export const PERSONAL_STDIO_TOOL_SERVER = "sagax-stdio";
 const PERSONAL_STDIO_ENDPOINT = "/api/internal/personal-mcp";

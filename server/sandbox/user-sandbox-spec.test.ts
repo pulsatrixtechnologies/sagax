@@ -190,7 +190,7 @@ describe("configuration", () => {
 });
 
 describe("compose overlay (deploy/docker-compose.sandbox.yml)", () => {
-  const compose = parse(readFileSync(join(import.meta.dirname, "..", "deploy", "docker-compose.sandbox.yml"), "utf8")) as {
+  const compose = parse(readFileSync(join(import.meta.dirname, "..", "..", "deploy", "docker-compose.sandbox.yml"), "utf8")) as {
     services: Record<string, Record<string, unknown>>;
     networks: Record<string, Record<string, unknown>>;
   };

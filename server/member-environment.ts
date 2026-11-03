@@ -57,9 +57,9 @@ import { DESKTOP_BRIDGE_MCP_NAME } from "../shared/bot-workplace.ts";
 import type { TurnSpeaker } from "./engine-access.ts";
 import { ownerLineageOrigin } from "./approvals/owner-autonomy.ts";
 import { sensitiveReadPath } from "./sensitive-path.ts";
-import { USER_SANDBOX_MCP_NAME } from "./user-sandbox-routing.ts";
+import { USER_SANDBOX_MCP_NAME } from "./sandbox/user-sandbox-routing.ts";
 
-/** The server environment's tools (server/user-sandbox-tools.ts). */
+/** The server environment's tools (server/sandbox/user-sandbox-tools.ts). */
 export const SERVER_ENVIRONMENT_TOOLS: ReadonlySet<string> = new Set([
   "run_command", "read_file", "write_file", "list_files", "browse", "computer_list_tools", "computer_use",
 ]);

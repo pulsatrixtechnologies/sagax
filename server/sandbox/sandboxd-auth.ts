@@ -21,7 +21,7 @@ export const SANDBOXD_MAX_KEYS = 2;
 /** How often a key source looks at its file for a rotation. */
 export const SANDBOXD_KEY_RECHECK_MS = 5_000;
 /** Domain of a signature. The person-sandbox routes sign under the first;
- * the run routes (server/sandboxd-runs.ts) under the second, with their own
+ * the run routes (server/sandbox/sandboxd-runs.ts) under the second, with their own
  * key, so a signature made for one surface never verifies on the other. */
 export const SANDBOXD_AUTH_CONTEXT = "sagax-sandboxd-v1";
 export const SANDBOXD_RUNS_AUTH_CONTEXT = "sagax-sandboxd-runs-v1";

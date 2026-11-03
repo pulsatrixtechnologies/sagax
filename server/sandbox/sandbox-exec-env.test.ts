@@ -17,12 +17,12 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { SandboxService } from "./sandboxd-core.ts";
-import { podFromDockerSpec, type K8sSandboxConfig } from "./sandboxd-k8s/sandboxd-k8s-spec.ts";
-import { FakeDocker } from "./testing/fake-docker.ts";
+import { podFromDockerSpec, type K8sSandboxConfig } from "../sandboxd-k8s/sandboxd-k8s-spec.ts";
+import { FakeDocker } from "../testing/fake-docker.ts";
 import { sandboxContainerSpec, sandboxKeyForPrincipal, sandboxdConfigFromEnv } from "./user-sandbox-spec.ts";
 import { callUserSandboxTool } from "./user-sandbox-tools.ts";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const key = sandboxKeyForPrincipal("default", "pr_00000000-0000-4000-8000-0000000000ab");
 const ALLOWED = new Set(["HOME", "LANG", "PATH", "SAGAX_ENVIRONMENT"]);
 const k8s: K8sSandboxConfig = {

@@ -8,7 +8,7 @@ import { randomInt } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import type { Duplex } from "node:stream";
 
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 import type { SandboxExecInput, SandboxExecOutput, SandboxStats, SandboxStatus, SandboxStdioSpec } from "./sandboxd-core.ts";
 import { sandboxRouteFromEnv, type SandboxBackend } from "./sandbox-route.ts";
 import type { SandboxdClient, SandboxdInfo } from "./user-sandbox-client.ts";
@@ -52,7 +52,7 @@ export interface UserSandboxManagerOptions {
   /** Per call, so a test can change the route. Production reads the environment each call. */
   backendFor?: (principalId: string, botId?: string) => SandboxBackend;
   /** Starts the Kubernetes provisioner's cluster when it is stopped
-   * (server/sandbox-k8s-wake.ts). Without it an unreachable provisioner
+   * (server/sandbox/sandbox-k8s-wake.ts). Without it an unreachable provisioner
    * fails the call, as before 0.5.3. Never used for Docker. */
   kubernetesWaker?: SandboxClusterWaker;
   /** A call of this person waits for the cluster to start, or gave up
@@ -258,7 +258,7 @@ export class UserSandboxManager {
           waking,
         };
       }
-      // The Kubernetes cluster is stopped (server/sandbox-k8s-wake.ts): the
+      // The Kubernetes cluster is stopped (server/sandbox/sandbox-k8s-wake.ts): the
       // environment is off, and Start or the next bot turn starts it.
       if (error instanceof UserSandboxUnavailable && error.code === "cluster_stopped") {
         return { state: "stopped", lastUsedAt: null, workspaceBytes: null, overQuota: false, limits: null, idleMinutes: null, pendingDeletionAt, error: error.code };
@@ -504,7 +504,7 @@ export class UserSandboxManager {
   }
 
   /** A person's own MCP server command, running in their environment,
-   * as a byte stream (server/sandbox-stdio-mcp.ts). Starts it when needed. */
+   * as a byte stream (server/sandbox/sandbox-stdio-mcp.ts). Starts it when needed. */
   /** The person's own in-chat terminal in their environment (by person:
    * never anyone else's). Wakes a stopped cluster like a bot's command. */
   async ttyStream(principalId: string, size: { cols: number; rows: number }, botId?: string, cwd?: string): Promise<{ stream: Duplex; resize(cols: number, rows: number): void }> {

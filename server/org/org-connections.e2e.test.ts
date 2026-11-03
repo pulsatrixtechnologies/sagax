@@ -31,15 +31,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { SandboxdVerifier } from "../sandboxd-auth.ts";
-import { SandboxService } from "../sandboxd-core.ts";
+import { SandboxdVerifier } from "../sandbox/sandboxd-auth.ts";
+import { SandboxService } from "../sandbox/sandboxd-core.ts";
 import { createSandboxdHandler, createSandboxdUpgradeHandler } from "../sandboxd.ts";
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { FakeDocker } from "../testing/fake-docker.ts";
 import { startFakeOAuthMcp, type FakeOAuthMcp } from "../testing/fake-oauth-mcp-server.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
-import { sandboxKeyForPrincipal, sandboxNames, sandboxdConfigFromEnv } from "../user-sandbox-spec.ts";
+import { sandboxKeyForPrincipal, sandboxNames, sandboxdConfigFromEnv } from "../sandbox/user-sandbox-spec.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");

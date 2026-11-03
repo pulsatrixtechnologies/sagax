@@ -13,7 +13,7 @@
 //
 // An organization's server runs on the Sagax host, the way its bots run it;
 // a person's own server runs in that person's server environment
-// (server/sandbox-stdio-mcp.ts), never on the host.
+// (server/sandbox/sandbox-stdio-mcp.ts), never on the host.
 import type { Duplex } from "node:stream";
 
 import { createLineSplitter } from "./mcp-bridge.ts";

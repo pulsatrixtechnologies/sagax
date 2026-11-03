@@ -17,7 +17,7 @@ import {
   normalizedDestinationPath,
 } from "./member-environment.ts";
 import { SPAWNED_PROXIES } from "./proxy-paths.ts";
-import { USER_SANDBOX_MCP_NAME } from "./user-sandbox-routing.ts";
+import { USER_SANDBOX_MCP_NAME } from "./sandbox/user-sandbox-routing.ts";
 import { DESKTOP_BRIDGE_MCP_NAME } from "../shared/bot-workplace.ts";
 import { callStepUpClasses } from "./step-up-gate.ts";
 

@@ -24,8 +24,8 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { localVmDesktopSpec } from "./container-computer.ts";
-import { SandboxdVerifier } from "./sandboxd-auth.ts";
-import { SandboxService } from "./sandboxd-core.ts";
+import { SandboxdVerifier } from "./sandbox/sandboxd-auth.ts";
+import { SandboxService } from "./sandbox/sandboxd-core.ts";
 import { createSandboxdHandler } from "./sandboxd.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { FakeDocker } from "./testing/fake-docker.ts";
@@ -33,7 +33,7 @@ import { zipArchive } from "./testing/archive-fixtures.mjs";
 import { connectFakeDesktop, openFakeTunnel, type FakeDesktop } from "./testing/fake-desktop.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "./testing/fake-oidc-provider.ts";
 import { freePortBlock } from "./testing/ports.ts";
-import { sandboxdConfigFromEnv } from "./user-sandbox-spec.ts";
+import { sandboxdConfigFromEnv } from "./sandbox/user-sandbox-spec.ts";
 
 // The echo is plain text, never HTML: the request path it repeats cannot
 // become markup in whatever reads it.

@@ -8,8 +8,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import type { SandboxAudit, SandboxAuditEvent } from "./sandbox-audit.ts";
 import { SANDBOXD_AUTH_HEADER, SANDBOXD_RUNS_AUTH_CONTEXT, SandboxdVerifier, signSandboxdRequest } from "./sandboxd-auth.ts";
-import type { K8sClient, K8sResponse } from "./sandboxd-k8s/sandboxd-k8s-client.ts";
-import { kubernetesSandboxConfigFromEnv } from "./sandboxd-k8s/sandboxd-k8s-spec.ts";
+import type { K8sClient, K8sResponse } from "../sandboxd-k8s/sandboxd-k8s-client.ts";
+import { kubernetesSandboxConfigFromEnv } from "../sandboxd-k8s/sandboxd-k8s-spec.ts";
 import { RunService, createRunsServer } from "./sandboxd-runs.ts";
 import { RUN_ENDED_ANNOTATION, runsConfigFromEnv, type RunsConfig } from "./sandboxd-runs-spec.ts";
 import { sandboxdConfigFromEnv } from "./user-sandbox-spec.ts";

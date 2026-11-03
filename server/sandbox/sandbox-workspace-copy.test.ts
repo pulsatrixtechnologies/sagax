@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { parseMigrateArgs, workspaceVolumeName } from "../scripts/sandbox-workspace-migrate.ts";
+import { parseMigrateArgs, workspaceVolumeName } from "../../scripts/sandbox-workspace-migrate.ts";
 import { copyWorkspace, workspaceManifest } from "./sandbox-workspace-copy.ts";
 
 const ALICE = "pr_00000000-0000-4000-8000-0000000000aa";

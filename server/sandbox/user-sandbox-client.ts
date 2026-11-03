@@ -50,11 +50,11 @@ export interface SandboxdClient {
    * view). Refused when the sandbox is not running. */
   desktopStream(key: string, options: { control: boolean }): Promise<Duplex>;
   /** The stdin and stdout of a person's MCP server command in this sandbox
-   * (server/sandbox-stdio-mcp.ts). The command rides the stream's first
+   * (server/sandbox/sandbox-stdio-mcp.ts). The command rides the stream's first
    * line; the signed path names its SHA-256. */
   stdioStream(key: string, spec: SandboxStdioSpec): Promise<Duplex>;
   /** The in-chat terminal in this sandbox: the size rides the signed URL;
-   * what is written is framed (server/sandbox-tty-frames.ts), what is read
+   * what is written is framed (server/sandbox/sandbox-tty-frames.ts), what is read
    * is the terminal's raw output. Optional: a test double may lack it. */
   ttyStream?(key: string, size: { cols: number; rows: number }, cwd?: string): Promise<{ stream: Duplex; resize(cols: number, rows: number): void }>;
 }
@@ -174,7 +174,7 @@ export function sandboxdClient(baseUrl: string, key: () => string, fetchImpl: ty
     ttyStream: async (sandboxKey, size, cwd) => {
       const cols = Math.max(2, Math.min(1000, Math.floor(size.cols)));
       const rows = Math.max(1, Math.min(500, Math.floor(size.rows)));
-      // The bot's own folder (server/sandbox-bot-folder.ts); an older
+      // The bot's own folder (server/sandbox/sandbox-bot-folder.ts); an older
       // provisioner ignores it and opens /workspace.
       const where = cwd && BOT_FOLDER_RE.test(cwd) ? `&cwd=${encodeURIComponent(cwd)}` : "";
       const socket = await upgrade(keyPath(sandboxKey, `/tty?cols=${cols}&rows=${rows}${where}`), "sagax-tty");
@@ -223,7 +223,7 @@ export function sandboxdClient(baseUrl: string, key: () => string, fetchImpl: ty
 
 /** The provisioner's unsigned `GET /healthz`: true on 200, false on any
  * other answer, a refused connection or a timeout. Used by the cluster wake
- * (server/sandbox-k8s-wake.ts) to see whether the Kubernetes provisioner is
+ * (server/sandbox/sandbox-k8s-wake.ts) to see whether the Kubernetes provisioner is
  * up; it carries no key and starts nothing. */
 export function sandboxdHealth(baseUrl: string, tls?: SandboxdTls, fetchImpl: typeof fetch = fetch): (timeoutMs: number) => Promise<boolean> {
   const ca = tls?.ca?.length ? tls.ca : caFromEnv();

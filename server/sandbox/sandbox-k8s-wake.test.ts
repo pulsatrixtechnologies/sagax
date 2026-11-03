@@ -9,11 +9,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CONTROL_PLANE_ENV, stripControlPlaneEnv } from "./config.ts";
-import { json as sendJson, readBody } from "./harness/http.ts";
-import type { RequestAuth } from "./request-auth.ts";
-import { createComputerStatusRoutes } from "./routes/computer-status.ts";
-import { dispatchRoutes } from "./routes/table.ts";
+import { CONTROL_PLANE_ENV, stripControlPlaneEnv } from "../config.ts";
+import { json as sendJson, readBody } from "../harness/http.ts";
+import type { RequestAuth } from "../request-auth.ts";
+import { createComputerStatusRoutes } from "../routes/computer-status.ts";
+import { dispatchRoutes } from "../routes/table.ts";
 import { createUserSandboxRoutes } from "./user-sandbox-routes.ts";
 import {
   DEFAULT_WAKE_TIMEOUT_MS, POST_WINDOW_MS, SANDBOX_STARTING_CODE, SANDBOX_STARTING_RETRY_DELAY_MS, SANDBOX_STARTING_RETRY_MS, SandboxClusterWaker, provisionerNotReached, provisionerUnreachable, sandboxWakeSettingsFromEnv,

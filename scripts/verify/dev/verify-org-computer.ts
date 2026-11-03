@@ -16,11 +16,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { SandboxService } from "../../../server/sandboxd-core.ts";
-import { dockerApi } from "../../../server/sandboxd-docker.ts";
+import { SandboxService } from "../../../server/sandbox/sandboxd-core.ts";
+import { dockerApi } from "../../../server/sandbox/sandboxd-docker.ts";
 import { startFakeOidcProvider } from "../../../server/testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../../../server/testing/ports.ts";
-import { SANDBOX_INSTANCE_LABEL, sandboxdConfigFromEnv } from "../../../server/user-sandbox-spec.ts";
+import { SANDBOX_INSTANCE_LABEL, sandboxdConfigFromEnv } from "../../../server/sandbox/user-sandbox-spec.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const electron = createRequire(import.meta.url)("electron") as unknown as string;

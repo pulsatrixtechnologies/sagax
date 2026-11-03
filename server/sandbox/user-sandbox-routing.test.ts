@@ -2,12 +2,12 @@
 // proxy, and the settings routes.
 import { describe, expect, it } from "vitest";
 
-import { toolExecutionTarget, USER_SANDBOX_SERVER } from "../shared/execution-target.ts";
-import type { RequestAuth } from "./request-auth.ts";
-import { PASS, type RouteContext } from "./routes/table.ts";
+import { toolExecutionTarget, USER_SANDBOX_SERVER } from "../../shared/execution-target.ts";
+import type { RequestAuth } from "../request-auth.ts";
+import { PASS, type RouteContext } from "../routes/table.ts";
 import type { SandboxExecOutput } from "./sandboxd-core.ts";
 import type { UserSandboxManager } from "./user-sandbox-manager.ts";
-import { restorePrefixedEnvironment, userSandboxProxyRequest } from "./user-sandbox-proxy.ts";
+import { restorePrefixedEnvironment, userSandboxProxyRequest } from "../user-sandbox-proxy.ts";
 import { createUserSandboxRoutes } from "./user-sandbox-routes.ts";
 import { remoteComputerForTurn, resolveExecutionTarget, sandboxPrincipalForTurn, screenVisibleToPrincipal, USER_SANDBOX_MCP_NAME } from "./user-sandbox-routing.ts";
 import { browsableUrl, callUserSandboxTool, handleUserSandboxMcp, type ToolExec } from "./user-sandbox-tools.ts";
@@ -259,7 +259,7 @@ describe("settings routes", () => {
 
 describe("no VM per bot in organization mode", () => {
   it("reads a saved per-bot Local VM mode as shared on an organization server", async () => {
-    const { localVmMode } = await import("./config.ts");
+    const { localVmMode } = await import("../config.ts");
     const cfg = { localVm: { mode: "per-bot" } } as Parameters<typeof localVmMode>[0];
     expect(localVmMode(cfg, { SAGAX_IDENTITY: "perspicax" })).toBe("shared");
     expect(localVmMode(cfg, {})).toBe("per-bot");

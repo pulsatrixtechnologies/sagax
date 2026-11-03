@@ -6,8 +6,8 @@
 import { execFileSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { scriptPtyCommand, shellQuote, spawnScriptPty } from "../electron/script-pty.mjs";
-import { loginShellArgv, parseResize } from "../electron/desktop-terminal.mjs";
+import { scriptPtyCommand, shellQuote, spawnScriptPty } from "../../electron/script-pty.mjs";
+import { loginShellArgv, parseResize } from "../../electron/desktop-terminal.mjs";
 import { dockerApi } from "./sandboxd-docker.ts";
 import { ttyDataFrames, ttyFrameDecoder, ttyResizeFrame } from "./sandbox-tty-frames.ts";
 

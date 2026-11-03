@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { SANDBOX_TTY_ARGV, SandboxService, ttyArgv } from "./sandboxd-core.ts";
-import { FakeDocker } from "./testing/fake-docker.ts";
+import { FakeDocker } from "../testing/fake-docker.ts";
 import { sandboxIsolationProblems, sandboxKeyForPrincipal, sandboxNames, sandboxdConfigFromEnv } from "./user-sandbox-spec.ts";
 
 const alice = sandboxKeyForPrincipal("default", "pr_00000000-0000-4000-8000-00000000000a");

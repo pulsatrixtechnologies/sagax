@@ -14,7 +14,7 @@ import { HOST_LEVEL_AGENT_TOOLS } from "./member-tool-scope.ts";
 import { ownComputerChoiceCall, ownDestinationCall } from "./member-environment.ts";
 import { terminalResourceAllowed } from "./terminal-resources/registry.ts";
 import type { TerminalAccess } from "./terminal-resources/types.ts";
-import { USER_SANDBOX_MCP_NAME } from "./user-sandbox-routing.ts";
+import { USER_SANDBOX_MCP_NAME } from "./sandbox/user-sandbox-routing.ts";
 
 const DOC = readFileSync(new URL("../docs/member-admin-audit.md", import.meta.url), "utf8");
 const OWNER = "pr_member";

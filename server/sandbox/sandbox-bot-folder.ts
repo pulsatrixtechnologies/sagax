@@ -23,10 +23,10 @@
 // leaves them be. Routines whose prompt or watch names a moved path are
 // also updated to the new path.
 import { existsSync, readFileSync } from "node:fs";
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 import type { SandboxExecInput, SandboxExecOutput } from "./sandboxd-core.ts";
 import { SANDBOX_WORKSPACE } from "./user-sandbox-spec.ts";
-import { workspaceDiskLevel, type WorkspaceDisk } from "../shared/workspace-disk.ts";
+import { workspaceDiskLevel, type WorkspaceDisk } from "../../shared/workspace-disk.ts";
 
 export const SANDBOX_BOTS_DIR = `${SANDBOX_WORKSPACE}/bots`;
 export const SANDBOX_SHARED_DIR = `${SANDBOX_WORKSPACE}/shared`;

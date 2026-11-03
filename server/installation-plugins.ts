@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { copySanitizedPlugin, readPluginContents } from "./bot-plugins.ts";
 import type { InstalledMarketplacePlugin, PluginMarketplaces } from "./plugin-marketplaces.ts";
 import type { McpServerSpec } from "./contracts.ts";
-import { SANDBOX_PLUGINS_DIR } from "./sandbox-plugins.ts";
+import { SANDBOX_PLUGINS_DIR } from "./sandbox/sandbox-plugins.ts";
 import { invalidatePluginMetaCache, pluginMetadataCacheRoot, rebuildPluginMetaCache } from "./plugin-metadata-cache.ts";
 
 export class InstallationPlugins {

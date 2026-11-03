@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { CLOUD_ONLY_BOTS_FILE, cloudOnlyBot } from "./cloud-only-bots.ts";
-import { remoteComputerForTurn } from "./user-sandbox-routing.ts";
+import { remoteComputerForTurn } from "./sandbox/user-sandbox-routing.ts";
 import { resolveSurface } from "./surface.ts";
 
 const dir = () => mkdtempSync(join(tmpdir(), "cloud-only-"));

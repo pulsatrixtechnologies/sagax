@@ -42,8 +42,8 @@ the contract between the two repositories.
 ## What Sagax must keep
 
 - The provisioner entry `dist-server/sandboxd.js` and its environment
-  variables (`server/user-sandbox-spec.ts`).
-- An existing key file is read, never replaced (`server/sandboxd-auth.ts`).
+  variables (`server/sandbox/user-sandbox-spec.ts`).
+- An existing key file is read, never replaced (`server/sandbox/sandboxd-auth.ts`).
 - The image's `deploy/sandbox/Dockerfile` path.
 - The labels `com.pulsatrix.sagax.sandbox.instance=<instance>` and
   `sagax-user=<key>` (the README's cleanup commands filter on them).

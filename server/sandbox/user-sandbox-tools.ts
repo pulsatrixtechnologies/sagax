@@ -8,11 +8,11 @@
 // computer_list_tools, then computer_use with one of SANDBOX_COMPUTER_TOOLS,
 // the same vocabulary as a cloud computer (server/drivers/chat-boat-tools.ts).
 // The desktop starts on the first such call (deploy/sandbox/sagax-desktop).
-import { MISUSE_MAX_COMMAND_SECONDS } from "../shared/misuse-guardrails.ts";
-import { boundToolResult, readOnHint, type BoundToolTextOptions } from "./tool-output-bound.ts";
-import { wrapUntrusted } from "../shared/safety-review.ts";
+import { MISUSE_MAX_COMMAND_SECONDS } from "../../shared/misuse-guardrails.ts";
+import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tool-output-bound.ts";
+import { wrapUntrusted } from "../../shared/safety-review.ts";
 import type { SandboxExecInput, SandboxExecOutput } from "./sandboxd-core.ts";
-import { procSecretPath, resolvedReadRefusal, type ResolvedEnvironmentPath } from "./sensitive-path.ts";
+import { procSecretPath, resolvedReadRefusal, type ResolvedEnvironmentPath } from "../sensitive-path.ts";
 import { botFolderNote } from "./sandbox-bot-folder.ts";
 
 export const USER_SANDBOX_TOOLS = [
@@ -119,7 +119,7 @@ export interface ToolExec {
   textRefusal?(text: string): string | null;
   /** 2026-11-02: one short line when a path (or a command) names this bot's
    * own folder on the Sagax server, which is not in the environment
-   * (server/sandbox-server-path.ts). Checked before the misuse guard, so the
+   * (server/sandbox/sandbox-server-path.ts). Checked before the misuse guard, so the
    * bot reads where its folder is, never the policy refusal. */
   serverPathAnswer?(value: string, kind: "path" | "command"): string | null;
   /** Safety review before the tool runs. A string stops the call. Plugin and
@@ -339,7 +339,7 @@ const OPEN_GUARD = [
   "        os.fchdir(fd)",
   "        hide = []",
   "        if real == '/workspace':",
-  "            # the tidy's links to moved files (server/sandbox-bot-folder.ts)",
+  "            # the tidy's links to moved files (server/sandbox/sandbox-bot-folder.ts)",
   "            try:",
   "                names = [l.strip() for l in open('.hidden', encoding='utf-8')]",
   "            except OSError:",
@@ -504,7 +504,7 @@ async function callSandboxComputerTool(name: string, args: Record<string, unknow
 }
 
 /** The tool list with the bot's own folder in the descriptions
- * (server/sandbox-bot-folder.ts): relative paths start there. */
+ * (server/sandbox/sandbox-bot-folder.ts): relative paths start there. */
 export function userSandboxToolsFor(folder?: string | null): typeof USER_SANDBOX_TOOLS {
   if (!folder) return USER_SANDBOX_TOOLS;
   return USER_SANDBOX_TOOLS.map((tool) => {
@@ -616,7 +616,7 @@ export async function handleUserSandboxMcp(
   exec: ToolExec,
   options?: {
     hold?: BoundToolTextOptions["hold"];
-    /** The bot's own folder (its commands run there, server/sandbox-bot-folder.ts). */
+    /** The bot's own folder (its commands run there, server/sandbox/sandbox-bot-folder.ts). */
     folder?: string | null;
     /** A disk-full warning to append to each answer, or null. */
     diskWarning?: () => string | null;

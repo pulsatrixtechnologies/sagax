@@ -17,7 +17,7 @@ sandboxEgressPolicy:
 provisionerRbac:
   enabled: true
 
-# Matches server/user-sandbox-spec.ts. One environment per person.
+# Matches server/sandbox/user-sandbox-spec.ts. One environment per person.
 sandbox:
   instance: default
   maxRunning: 8
@@ -63,7 +63,7 @@ storage:
     numberOfReplicas: "2"
 
 # Destinations a sandbox may never reach. Same list as DEFAULT_EGRESS_DENY
-# in server/user-sandbox-spec.ts. Public internet stays open.
+# in server/sandbox/user-sandbox-spec.ts. Public internet stays open.
 egressDeny:
   - 0.0.0.0/8
   - 10.0.0.0/8

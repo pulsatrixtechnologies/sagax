@@ -19,8 +19,8 @@ import type { TLSSocket } from "node:tls";
 
 import type { SandboxAudit } from "./sandbox-audit.ts";
 import { SANDBOXD_AUTH_HEADER, type SandboxdVerifier } from "./sandboxd-auth.ts";
-import type { K8sClient } from "./sandboxd-k8s/sandboxd-k8s-client.ts";
-import { quotaProblems, storageClassEncrypts } from "./sandboxd-k8s/sandboxd-k8s-spec.ts";
+import type { K8sClient } from "../sandboxd-k8s/sandboxd-k8s-client.ts";
+import { quotaProblems, storageClassEncrypts } from "../sandboxd-k8s/sandboxd-k8s-spec.ts";
 import {
   RUN_ENDED_ANNOTATION,
   RUN_ENV_LABEL,

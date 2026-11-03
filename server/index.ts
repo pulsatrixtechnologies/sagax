@@ -2090,7 +2090,7 @@ import {
   githubSandboxArgv,
   githubTokenKind
 } from "./github-connect.ts";
-import { SANDBOX_PLUGINS_DIR, syncPluginsToSandbox } from "./sandbox-plugins.ts";
+import { SANDBOX_PLUGINS_DIR, syncPluginsToSandbox } from "./sandbox/sandbox-plugins.ts";
 import { OrgCapabilities, ORG_CAPABILITY_KEY_PREFIX, type OrgCapabilityMount } from "./org/org-capabilities.ts";
 import { createOrgCapabilityRoutes, ORG_CAPABILITIES_CALL, OrgSettingOwnedElsewhere } from "./routes/org-capabilities.ts";
 import { OrgGithubTokens } from "./org/org-github-tokens.ts";
@@ -2122,7 +2122,7 @@ import {
 import { createPersonConnectionRoutes } from "./routes/person-connections.ts";
 import { readsGithubToken, githubServersAsPerson, githubWithheldPrompt } from "./github-mcp-token.ts";
 import { createGithubCredentialRoutes } from "./routes/github-credentials.ts";
-import { SandboxStdioRelay, StdioRelayError } from "./sandbox-stdio-mcp.ts";
+import { SandboxStdioRelay, StdioRelayError } from "./sandbox/sandbox-stdio-mcp.ts";
 import { testStdioMcpCommand, testStdioMcpStream } from "./mcp-stdio-test.ts";
 import { roomMentionNotification } from "./room-mentions.ts";
 import { PERSONAL_STDIO_TOOL_SERVER } from "./user-sandbox-proxy.ts";
@@ -2545,13 +2545,13 @@ import {
   type TestResult
 } from "./org/org-admin-ops.ts";
 import { createOrgImportRoute } from "./org/org-import-routes.ts";
-import { sandboxdKeySource } from "./sandboxd-auth.ts";
-import { sandboxBackendFor, sandboxRouteFromEnv } from "./sandbox-route.ts";
-import { sandboxdClient, sandboxdHealth } from "./user-sandbox-client.ts";
-import { SandboxClusterWaker } from "./sandbox-k8s-wake.ts";
+import { sandboxdKeySource } from "./sandbox/sandboxd-auth.ts";
+import { sandboxBackendFor, sandboxRouteFromEnv } from "./sandbox/sandbox-route.ts";
+import { sandboxdClient, sandboxdHealth } from "./sandbox/user-sandbox-client.ts";
+import { SandboxClusterWaker } from "./sandbox/sandbox-k8s-wake.ts";
 import { SANDBOX_WAKE_NOTICE, SANDBOX_WAKE_TIMEOUT_NOTICE } from "../shared/sandbox-wake.ts";
-import { UserSandboxManager, userSandboxSettingsFromEnv } from "./user-sandbox-manager.ts";
-import { createUserSandboxRoutes } from "./user-sandbox-routes.ts";
+import { UserSandboxManager, userSandboxSettingsFromEnv } from "./sandbox/user-sandbox-manager.ts";
+import { createUserSandboxRoutes } from "./sandbox/user-sandbox-routes.ts";
 import { createBotHistoryRoutes } from "./routes/bot-history.ts";
 import { createBotSendStateRoutes } from "./routes/bot-send-state.ts";
 import { createMeEngineModelsRoutes } from "./routes/me-engine-models.ts";
@@ -2562,11 +2562,11 @@ import {
   sandboxPrincipalForTurn,
   screenVisibleToPrincipal,
   USER_SANDBOX_MCP_NAME
-} from "./user-sandbox-routing.ts";
-import { handleUserSandboxMcp } from "./user-sandbox-tools.ts";
-import { BotFolderRegistry, WorkspaceTidier, botFolderNote, botFolderPath, inBotFolder, rewriteMovedPaths, workspaceDiskWarning, type TidyMove } from "./sandbox-bot-folder.ts";
+} from "./sandbox/user-sandbox-routing.ts";
+import { handleUserSandboxMcp } from "./sandbox/user-sandbox-tools.ts";
+import { BotFolderRegistry, WorkspaceTidier, botFolderNote, botFolderPath, inBotFolder, rewriteMovedPaths, workspaceDiskWarning, type TidyMove } from "./sandbox/sandbox-bot-folder.ts";
 import { enginePluginCommandRefusal } from "./person-integrations.ts";
-import { SandboxControlHolds } from "./sandbox-control.ts";
+import { SandboxControlHolds } from "./sandbox/sandbox-control.ts";
 import { DesktopBridges, resolveBotWorkplace, type WorkplaceDecision } from "./desktop-bridge.ts";
 import { DesktopLocalModels } from "./desktop-local-models.ts";
 import { withDesktopModelPerson } from "./desktop-model-grant.ts";
@@ -2575,7 +2575,7 @@ import { isPiLocalModel, piLocalKeyRefusalLifted } from "./pi-local-model.ts";
 import { defaultTurnPayerMode, effectiveTurnPayerMode, type TurnPayerMode } from "../shared/turn-payer.ts";
 import { handleDesktopBridgeMcp } from "./desktop-bridge-tools.ts";
 import { cloudOnlyBot } from "./cloud-only-bots.ts";
-import { TypingPrewakeThrottle } from "./sandbox-typing-prewake.ts";
+import { TypingPrewakeThrottle } from "./sandbox/sandbox-typing-prewake.ts";
 import {
   AUTO_COMPUTER_MCP_NAME,
   AUTO_COMPUTER_RULES,
@@ -7030,7 +7030,7 @@ function soloArchiveText(text: string): { text: string; annotated: boolean } {
  * computer is not connected (the UI says so too). Provider text only. */
 function withWorkplaceNote(text: string, decision: WorkplaceDecision, auto?: AutoComputerState | null, botId?: string): string {
   // 2026-11-02: the bot's own folder of the server environment, whenever
-  // its tools may run there (server/sandbox-bot-folder.ts).
+  // its tools may run there (server/sandbox/sandbox-bot-folder.ts).
   const folder = botId && userSandbox && (decision.target === "user-sandbox" || (auto?.auto && auto.sandboxConfigured)) ? sandboxBotFolder(botId) : null;
   // 2026-11-02: and that the engine's own folder on the server is not it
   const withFolder = (out: string) => folder ? `${out}\n\n<workplace>${botFolderNote(folder, DATA_DIR)}</workplace>` : out;
@@ -8501,7 +8501,7 @@ if (IDENTITY.kind === "perspicax") {
   const steppedDown = store.enforceOnePrimaryPerOwner();
   if (steppedDown.length) console.log(`[primary-bot] one Primary Bot per person: ${steppedDown.length} former Chief(s) of Staff stepped down`);
 }
-// The per-person server environments (server/user-sandbox-manager.ts):
+// The per-person server environments (server/sandbox/user-sandbox-manager.ts):
 // organization mode with a provisioner only. A person signed out by
 // Perspicax has theirs stopped now and deleted after the grace period.
 const userSandbox: UserSandboxManager | null = (() => {
@@ -8509,14 +8509,14 @@ const userSandbox: UserSandboxManager | null = (() => {
   const settings = userSandboxSettingsFromEnv();
   if (!settings) return null;
   // The first line of the key file signs; the file is reread when it changes,
-  // so a key rotation needs no restart (server/sandboxd-auth.ts).
+  // so a key rotation needs no restart (server/sandbox/sandboxd-auth.ts).
   let keys: (() => readonly string[]) | null = null;
   const sandboxdKey = () => (keys ||= sandboxdKeySource(settings.keyFile))()[0]!;
   const kubernetesTls = settings.kubernetesUrl && settings.tlsCaFile ? { ca: readFileSync(settings.tlsCaFile) } : null;
   const kubernetes = settings.kubernetesUrl && kubernetesTls
     ? sandboxdClient(settings.kubernetesUrl, sandboxdKey, fetch, kubernetesTls)
     : undefined;
-  // The cluster wake (server/sandbox-k8s-wake.ts): only with a Kubernetes
+  // The cluster wake (server/sandbox/sandbox-k8s-wake.ts): only with a Kubernetes
   // provisioner and a webhook. The URL stays inside the waker.
   const kubernetesWaker = kubernetes && settings.kubernetesUrl && kubernetesTls && settings.wake
     ? new SandboxClusterWaker({ settings: settings.wake, health: sandboxdHealth(settings.kubernetesUrl, kubernetesTls) })
@@ -8534,7 +8534,7 @@ const userSandbox: UserSandboxManager | null = (() => {
   return manager;
 })();
 // 2026-11-02: each bot works in its own folder of the environment,
-// /workspace/bots/<slug>/ (server/sandbox-bot-folder.ts). The folder names
+// /workspace/bots/<slug>/ (server/sandbox/sandbox-bot-folder.ts). The folder names
 // are kept here so a renamed bot keeps its folder; the tidy moves the loose
 // files of the root once per start of an environment.
 const sandboxBotFolders = new BotFolderRegistry(join(DATA_DIR, "sandbox-bot-folders.json"));
@@ -8724,7 +8724,7 @@ ROUTES.push(createUserSandboxRoutes({
 // encrypted per person with the vault key of mcp-oauth.enc, and their own
 // OAuth sign-ins (one manager per person, principals/<pid>/mcp-oauth.enc).
 // Nobody else's turn ever gets them. A command they add runs in their
-// server environment (server/sandbox-stdio-mcp.ts), never on this host.
+// server environment (server/sandbox/sandbox-stdio-mcp.ts), never on this host.
 function vaultKeySource(): VaultKeySource {
   if (mcpOAuthKey?.kind === "key") return mcpOAuthKey;
   mcpOAuthKey = resolveVaultKey(DATA_DIR);
@@ -9180,7 +9180,7 @@ async function syncGithubForTurn(principalId: string, generation: string, botId?
   if (connection) await syncGithubToSandbox(principalId, connection, botId);
 }
 /** Once per turn: the bot's installed plugins in its owner's own cloud
- * computer (server/sandbox-plugins.ts), so a plugin's scripts run there.
+ * computer (server/sandbox/sandbox-plugins.ts), so a plugin's scripts run there.
  * Never in another person's environment: a plugin may come from a private
  * marketplace only its owner reads. Best effort. */
 const pluginSyncedGenerations = new Map<string, Promise<void>>();
@@ -22792,7 +22792,7 @@ function serverPathView(botId: string): { dataDirs: string[]; botWorkspaces: str
 /** 2026-11-02: this bot's own folders on the Sagax server (its workspace
  * and its task workspaces), as written and through a linked data folder.
  * A tool of the server environment given one answers where the bot's
- * folder in the environment is (server/sandbox-server-path.ts). */
+ * folder in the environment is (server/sandbox/sandbox-server-path.ts). */
 function serverBotRoots(botId: string): string[] {
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(botId)) return [];
   const roots = [workspaceDir(botId), join(TASK_WORKSPACES_DIR, botId)];
@@ -24021,7 +24021,7 @@ function routineWatchPlace(routine: WatchRoutine): WatchPlace {
         wake: () => { void userSandbox?.prewake(target.principal, bot.id); },
         exec: async (command, options) => {
           if (!userSandbox) return { exitCode: null, stdout: "", truncated: false, timedOut: false };
-          // In the bot's own folder, like its commands (server/sandbox-bot-folder.ts).
+          // In the bot's own folder, like its commands (server/sandbox/sandbox-bot-folder.ts).
           const input = {
             argv: ["/bin/sh", "-c", command], env: { LANG: "C.UTF-8" },
             timeoutSec: Math.max(1, Math.floor(options.timeoutMs / 1000)), maxOutputBytes: options.maxOutputBytes
@@ -32311,7 +32311,7 @@ function threadWarmRequest(auth: RequestAuth, botId: string, body: Record<string
   }
   // 2026-10-26: the person is typing: wake their cloud computer now, so the
   // bot's first command does not wait for the cluster or a node
-  // (server/sandbox-typing-prewake.ts). Opening the conversation never does.
+  // (server/sandbox/sandbox-typing-prewake.ts). Opening the conversation never does.
   if (body.typing === true) prewakeComputerWhileTyping(bot.id, actorPrincipalId(auth));
   // files sealed at rest start opening for the coming turn (server/content-at-rest.ts)
   openForComingTurn(bot.id, threadId);

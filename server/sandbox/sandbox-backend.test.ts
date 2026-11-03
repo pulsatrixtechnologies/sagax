@@ -8,7 +8,7 @@ import { parse, parseAllDocuments } from "yaml";
 
 import { sandboxBackendFor, sandboxCanaryBotIds, sandboxRouteFromEnv } from "./sandbox-route.ts";
 
-const ROOT = join(import.meta.dirname, "..");
+const ROOT = join(import.meta.dirname, "..", "..");
 const POOL = join(ROOT, "deploy/k8s/sandboxes");
 
 function yamlFiles(dir: string): string[] {

@@ -1138,7 +1138,7 @@ export function threadEventLogRetentionDays(cfg: AppConfig): number | null {
 export function localVmMode(cfg: AppConfig, env: NodeJS.ProcessEnv = process.env): "shared" | "per-bot" | "pool" {
   const mode = cfg.localVm?.mode ?? DEFAULT_LOCAL_VM_MODE;
   // Organization mode never runs a VM per bot: each person has one server
-  // environment (server/user-sandbox-routing.ts). A saved per-bot choice
+  // environment (server/sandbox/user-sandbox-routing.ts). A saved per-bot choice
   // from before reads as shared there.
   return mode === "per-bot" && env.SAGAX_IDENTITY?.trim().toLowerCase() === "perspicax" ? "shared" : mode;
 }
@@ -1723,7 +1723,7 @@ export const WORKSPACE_CREDENTIAL_ENV = [
  * server's link token, and an engine that learnt its path (or the issuer to
  * use it with) could read it as the same user. The webhook that starts the
  * sandboxes' Kubernetes cluster carries its token in its URL
- * (server/sandbox-k8s-wake.ts). */
+ * (server/sandbox/sandbox-k8s-wake.ts). */
 export const CONTROL_PLANE_ENV = [
   "SAGAX_LICENSE_KEY", "SAGAX_INSTALLATION_CREDENTIAL",
   "SAGAX_PERSPICAX_LINK_FILE", "SAGAX_PERSPICAX_ISSUER", "SAGAX_PERSPICAX_INTERNAL_URL",

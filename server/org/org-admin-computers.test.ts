@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { COMPUTER_ACTIONS, computersRoutes, desktopComputerId, environmentActions, type ComputersDeps, type EnvironmentFacts } from "./org-admin-computers.ts";
 import { routeNames } from "./org-admin-console.ts";
-import type { UserSandboxView } from "../user-sandbox-manager.ts";
+import type { UserSandboxView } from "../sandbox/user-sandbox-manager.ts";
 import { fakeConsole } from "../testing/console-context.ts";
 
 const NOW = Date.UTC(2026, 9, 11, 12);

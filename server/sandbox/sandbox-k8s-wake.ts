@@ -25,7 +25,7 @@ export const DEFAULT_WAKE_TIMEOUT_MS = 9 * 60_000;
  * 12 minute one of the environment's MCP proxy, so the person gets this
  * module's clear error rather than a cut connection. The pod-start retries
  * that follow share the same budget (SANDBOX_CALL_BUDGET_MS in
- * server/user-sandbox-manager.ts). */
+ * server/sandbox/user-sandbox-manager.ts). */
 export const MAX_WAKE_TIMEOUT_MS = 9 * 60_000;
 export const MIN_WAKE_TIMEOUT_MS = 30_000;
 /** At most one webhook POST in this window, whatever the callers do. */

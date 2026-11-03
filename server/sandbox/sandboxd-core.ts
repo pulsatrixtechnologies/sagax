@@ -111,7 +111,7 @@ export const MAX_TTY_STREAMS = 4;
 export const SANDBOX_TTY_ARGV = ["/bin/bash", "-l"] as const;
 
 /** The terminal's shell, in the bot's own folder when one is named
- * (server/sandbox-bot-folder.ts; created on first use), else /workspace.
+ * (server/sandbox/sandbox-bot-folder.ts; created on first use), else /workspace.
  * Only a folder of /workspace/bots is accepted. */
 export function ttyArgv(cwd?: string): string[] {
   if (!cwd || !BOT_FOLDER_RE.test(cwd)) return [...SANDBOX_TTY_ARGV];
@@ -521,7 +521,7 @@ export class SandboxService {
   }
 
   /** A person's own MCP server (a command) for one turn's engine: its stdin
-   * and stdout as a byte stream (server/sandbox-stdio-mcp.ts). Starts the
+   * and stdout as a byte stream (server/sandbox/sandbox-stdio-mcp.ts). Starts the
    * sandbox when needed, runs as the sandbox user in /workspace, and counts
    * as use while open. The command and its environment are the person's
    * own, in their own environment: nothing here runs on the host. */

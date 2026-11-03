@@ -26,7 +26,7 @@ import {
   storageClassEncrypts,
   type K8sSandboxConfig,
 } from "./sandboxd-k8s-spec.ts";
-import { DEFAULT_EGRESS_DENY, sandboxContainerSpec, sandboxKeyForPrincipal, sandboxdConfigFromEnv } from "../user-sandbox-spec.ts";
+import { DEFAULT_EGRESS_DENY, sandboxContainerSpec, sandboxKeyForPrincipal, sandboxdConfigFromEnv } from "../sandbox/user-sandbox-spec.ts";
 
 const DIGEST = "ab".repeat(32);
 const REGISTRY = "ghcr.io/pulsatrixtechnologies";

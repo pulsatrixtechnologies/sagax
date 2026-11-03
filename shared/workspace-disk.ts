@@ -1,6 +1,6 @@
 // How full a server environment's /workspace volume is, from its own
 // filesystem figures (df). One rule for the bot's warning
-// (server/sandbox-bot-folder.ts), the phone's diskState
+// (server/sandbox/sandbox-bot-folder.ts), the phone's diskState
 // (server/routes/computer-status.ts) and the Computer tab's banner.
 
 export interface WorkspaceDisk {

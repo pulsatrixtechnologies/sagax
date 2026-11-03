@@ -1373,7 +1373,7 @@ export interface WireGroup {
   createdAt: number;
   /** Organization server: the principal who created the room. A bot's
    * follow-up no person asked for runs in this person's server environment
-   * (server/user-sandbox-routing.ts). Absent on older rooms. */
+   * (server/sandbox/user-sandbox-routing.ts). Absent on older rooms. */
   createdBy?: string;
   /** Organization server: who owns the room's settings (its creator, else
    * the first person listed; null when its organization admins do). Only

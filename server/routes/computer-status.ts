@@ -15,7 +15,7 @@
 // owner only: update pulls the current image (POST /api/local-computer/pull),
 // reset removes the container and creates it again from that image (the
 // workspace folder on this computer is kept either way).
-import { UserSandboxUnavailable, type UserSandboxView } from "../user-sandbox-manager.ts";
+import { UserSandboxUnavailable, type UserSandboxView } from "../sandbox/user-sandbox-manager.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 import { workspaceDiskLevel } from "../../shared/workspace-disk.ts";
@@ -58,7 +58,7 @@ export function diskStateForFree(freeBytes: number | null, totalBytes: number | 
 
 /** The server environment's own volume (df): full under 200 MiB or 2%
  * free, almost full under 10% free (at most 1 GiB), the rule the bot's
- * warning uses (server/sandbox-bot-folder.ts workspaceDiskLevel). */
+ * warning uses (server/sandbox/sandbox-bot-folder.ts workspaceDiskLevel). */
 export function diskStateForWorkspace(freeBytes: number, totalBytes: number | null): DiskState {
   return workspaceDiskLevel(totalBytes && totalBytes > 0 ? { freeBytes, totalBytes } : null);
 }

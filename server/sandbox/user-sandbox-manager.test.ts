@@ -8,8 +8,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { sandboxBackendFor, sandboxRouteFromEnv } from "./sandbox-route.ts";
 import { SandboxService } from "./sandboxd-core.ts";
-import { FakeDocker } from "./testing/fake-docker.ts";
-import { inProcessSandboxdClient } from "./testing/in-process-sandboxd.ts";
+import { FakeDocker } from "../testing/fake-docker.ts";
+import { inProcessSandboxdClient } from "../testing/in-process-sandboxd.ts";
 import type { SandboxdClient } from "./user-sandbox-client.ts";
 import { UserSandboxManager, userSandboxSettingsFromEnv } from "./user-sandbox-manager.ts";
 import { sandboxNames, sandboxdConfigFromEnv } from "./user-sandbox-spec.ts";

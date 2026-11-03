@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { kubernetesSandboxConfigFromEnv } from "./sandboxd-k8s/sandboxd-k8s-spec.ts";
+import { kubernetesSandboxConfigFromEnv } from "../sandboxd-k8s/sandboxd-k8s-spec.ts";
 import {
   RUN_CEILINGS,
   RUN_DEADLINE_MARGIN_SEC,

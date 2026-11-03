@@ -45,7 +45,7 @@ import { writeFileAtomic } from "./atomic.ts";
 import type { McpServerSpec } from "./contracts.ts";
 import { parseStoredMcpServer } from "./mcp-registry.ts";
 import { readPluginMcpServers } from "./plugin-mcp.ts";
-import { SANDBOX_PLUGINS_DIR } from "./sandbox-plugins.ts";
+import { SANDBOX_PLUGINS_DIR } from "./sandbox/sandbox-plugins.ts";
 import { capabilityPluginRecordSchema as pluginRecord, capabilityPluginStateSchema as stateSchema } from "./capability-plugin-state.ts";
 import type { CapabilityPluginValues } from "./capability-plugin-state.ts";
 import { capturePluginHooks, type LifecycleHook } from "./lifecycle-hooks.ts";

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { SandboxStdioRelay } from "./sandbox-stdio-mcp.ts";
 import type { SandboxStdioSpec } from "./sandboxd-core.ts";
-import { personalStdioRelayRequest } from "./user-sandbox-proxy.ts";
+import { personalStdioRelayRequest } from "../user-sandbox-proxy.ts";
 
 /** A tiny MCP server on a stream: answers initialize, tools/list and
  * tools/call, asks its client for roots once, and records what it read. */

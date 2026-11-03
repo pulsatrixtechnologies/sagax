@@ -37,7 +37,7 @@ import {
   type ThreadFileRef,
 } from "../thread-files.ts";
 import { THUMB_MAX_SOURCE_BYTES, thumbnailFor, thumbnailable } from "../thumbnail.ts";
-import { screenVisibleToPrincipal } from "../user-sandbox-routing.ts";
+import { screenVisibleToPrincipal } from "../sandbox/user-sandbox-routing.ts";
 import {
   normalizeReactions,
   reactionEmoji,

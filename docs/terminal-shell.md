@@ -67,7 +67,7 @@ and size are remembered per session.
 
 | Destination | Path |
 |-------------|------|
-| `sandbox` | The provisioner's `/v1/sandboxes/<key>/tty` upgrade (signed, size in the URL): `docker exec` with a TTY (`sandboxd-docker.ts execTty`) or the Kubernetes exec API with `tty=true` and its resize channel (`server/sandboxd-k8s/sandboxd-k8s-client.ts execTty`), as the sandbox user in `/workspace`. Keystrokes and resizes are framed (`server/sandbox-tty-frames.ts`). |
+| `sandbox` | The provisioner's `/v1/sandboxes/<key>/tty` upgrade (signed, size in the URL): `docker exec` with a TTY (`sandboxd-docker.ts execTty`) or the Kubernetes exec API with `tty=true` and its resize channel (`server/sandboxd-k8s/sandboxd-k8s-client.ts execTty`), as the sandbox user in `/workspace`. Keystrokes and resizes are framed (`server/sandbox/sandbox-tty-frames.ts`). |
 | `local-vm`, `desktop` (organization) | A bridge operation (`terminal_open`, `vm_terminal_open`) with a one-time ticket; the app connects back (`GET /api/desktop-bridge/<id>/terminal/<ticket>`, session cookie + bridge secret, same person) and runs the shell (`electron/desktop-terminal.mjs`): the login shell, or `docker exec -it -u cua` into the Local VM (`electron/local-vm.mjs terminalCommand`, which holds the VM against its idle stop). |
 | `local-vm`, `desktop` (solo), `ssh`, `unraid` | A local PTY from the system's `script` command (`electron/script-pty.mjs`): `docker exec -it -u cua`, the login shell, `ssh -tt`. |
 

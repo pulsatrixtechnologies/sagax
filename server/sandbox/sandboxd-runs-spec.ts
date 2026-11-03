@@ -2,7 +2,7 @@
 // NetworkPolicy and the Secret that holds the run token. A run is not a
 // person's sandbox: it lives in its own namespace, on its own node pool,
 // under its own quota, and is called by Perspicax only, with its own key and
-// a client certificate (server/sandboxd-runs.ts). No client and no cluster
+// a client certificate (server/sandbox/sandboxd-runs.ts). No client and no cluster
 // here, so the isolation rules are asserted in unit tests.
 //
 // What a run can ask for is closed: an image from the allowlist (pinned by
@@ -19,7 +19,7 @@ import {
   type K8sGuards,
   type K8sSandboxConfig,
   type K8sToleration,
-} from "./sandboxd-k8s/sandboxd-k8s-spec.ts";
+} from "../sandboxd-k8s/sandboxd-k8s-spec.ts";
 import { DEFAULT_EGRESS_DENY, SANDBOX_INSTANCE_LABEL, SANDBOX_UID, SANDBOX_WORKSPACE, cidrContains, parseCidr, type SandboxdConfig } from "./user-sandbox-spec.ts";
 
 const MiB = 1024 * 1024;

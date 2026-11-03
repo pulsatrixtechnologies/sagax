@@ -2,7 +2,7 @@
 // A declaration without a current folder never claims a plugin name.
 import type { McpServerSpec } from "./contracts.ts";
 import { parseStoredMcpServer } from "./mcp-registry.ts";
-import { SANDBOX_PLUGINS_DIR } from "./sandbox-plugins.ts";
+import { SANDBOX_PLUGINS_DIR } from "./sandbox/sandbox-plugins.ts";
 
 export type PluginScope = "organization" | "person" | "bot";
 export interface PluginFolder { name: string; dir: string }

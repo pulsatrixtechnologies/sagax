@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { ownEnvironmentSensitiveRead } from "./member-environment.ts";
 import { credentialLocation, procSecretPath, resolvedReadRefusal, sensitiveEnvironmentPath } from "./sensitive-path.ts";
-import { callUserSandboxTool, type ToolExec } from "./user-sandbox-tools.ts";
+import { callUserSandboxTool, type ToolExec } from "./sandbox/user-sandbox-tools.ts";
 
 const hasPython = spawnSync("python3", ["-c", "print(1)"]).status === 0;
 

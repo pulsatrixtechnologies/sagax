@@ -18,8 +18,8 @@ import {
   setMisuseOwnPaths,
 } from "./misuse-guardrails.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
-import { callUserSandboxTool, type ToolExec } from "./user-sandbox-tools.ts";
-import { serverPathAnswer, serverPathInCommand } from "./sandbox-server-path.ts";
+import { callUserSandboxTool, type ToolExec } from "./sandbox/user-sandbox-tools.ts";
+import { serverPathAnswer, serverPathInCommand } from "./sandbox/sandbox-server-path.ts";
 import { misuseRefusalText } from "../shared/misuse-guardrails.ts";
 import {
   DEFAULT_EGRESS_DENY,
@@ -28,7 +28,7 @@ import {
   sandboxdConfigFromEnv,
   sandboxIsolationProblems,
   sandboxKeyForPrincipal,
-} from "./user-sandbox-spec.ts";
+} from "./sandbox/user-sandbox-spec.ts";
 
 const dirs: string[] = [];
 

@@ -1,7 +1,7 @@
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
 
-import { sandboxDesktopTarget } from "./desktop-viewer-targets.ts";
+import { sandboxDesktopTarget } from "../desktop-viewer-targets.ts";
 import { SandboxControlHolds } from "./sandbox-control.ts";
 
 const ALICE = "pr_00000000-0000-4000-8000-00000000000a";

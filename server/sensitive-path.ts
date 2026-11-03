@@ -1,7 +1,7 @@
 // Which paths of a person's server environment hold credentials or secrets
 // (2026-10-17, leftovers of the #688/#689/#690 security review). Pure: no
 // disk; the environment is another machine, so its links are resolved there
-// (server/user-sandbox-tools.ts resolveInSandbox) and the answers come back
+// (server/sandbox/user-sandbox-tools.ts resolveInSandbox) and the answers come back
 // here.
 //
 // Three readings:

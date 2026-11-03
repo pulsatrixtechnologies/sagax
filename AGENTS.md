@@ -2906,7 +2906,7 @@ computer only to show its state.
   `dist-server/sandboxd.js`), 353 MB unpacked instead of 1.6 GB.
 - Typing: `src/lib/prewarm.ts` sends `typing: true` from the composer on its
   own refresh; `threadWarmRequest` calls `prewakeComputerWhileTyping`
-  (`server/sandbox-typing-prewake.ts` throttle, 2 min per person and bot),
+  (`server/sandbox/sandbox-typing-prewake.ts` throttle, 2 min per person and bot),
   which uses `UserSandboxManager.prewake` (Kubernetes with the wake only, a
   bot that used it in 7 days only). Opening a conversation never wakes.
 - Reserve: `server/sandboxd-k8s/sandboxd-k8s-spare.ts` (provisioner, every 15 s) sets the
@@ -3019,7 +3019,7 @@ The maintainer's GO on points 1 and 2 of the bot quality diagnostic. Rules:
   is writable. The member-bot file rule (`memberBotAdminApproval`) admits the
   same two folders for reads only.
 - The bot's enabled plugins are copied into its owner's own cloud computer
-  (`server/sandbox-plugins.ts`, `/workspace/sagax-plugins/<plugin>`), once
+  (`server/sandbox/sandbox-plugins.ts`, `/workspace/sagax-plugins/<plugin>`), once
   per change, never into another person's environment. GitHub there stays
   the environment owner's own connection (`syncGithubForTurn`), never an
   organization or another person's token.
@@ -6129,7 +6129,7 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   `server/voice-call-latency.e2e.test.ts` (Claude and Grok),
   `server/drivers/acp/acp.test.ts` (call session, warm),
   `server/voice-call-effort.test.ts`, `server/voice-call-warmup.test.ts`,
-  `server/user-sandbox-manager.test.ts`, `call.test.ts` ("latency"), bench
+  `server/sandbox/user-sandbox-manager.test.ts`, `call.test.ts` ("latency"), bench
   `scripts/voice-latency-bench.ts` (Claude and Grok).
 
 A change to `server/voice-mode.ts` needs the server image redeployed.
@@ -6507,22 +6507,22 @@ not open a shared machine. Keep these rules, each covered by `server/user-sandbo
 `server/sandboxd*.test.ts` or `server/user-sandbox.e2e.test.ts`:
 
 - Only `sagax-sandboxd` (`server/sandboxd.ts`) holds the Docker socket; the
-  Sagax server calls it with signed requests (`server/sandboxd-auth.ts`).
+  Sagax server calls it with signed requests (`server/sandbox/sandboxd-auth.ts`).
   `SANDBOX_BACKEND` defaults to `docker`. `kubernetes`
   (`server/sandboxd-k8s/sandboxd-k8s.ts`) is the same API with one Pod and one PVC per
   person, NetworkPolicies for egress, and no docker.sock. It runs; it does
   not exit. Secret encryption and NetworkPolicy enforcement are operator
   attestations. Sagax keeps both provisioners and routes with
   `SAGAX_SANDBOX_CANARY_PEOPLE`, `SAGAX_SANDBOX_CANARY_BOTS` and
-  `SAGAX_SANDBOX_ROUTE` (`server/sandbox-route.ts`). `docker` on that route
+  `SAGAX_SANDBOX_ROUTE` (`server/sandbox/sandbox-route.ts`). `docker` on that route
   sends everyone back to the Docker provisioner. The Kubernetes URL is
   https with `SAGAX_SANDBOXD_TLS_CA`. Manifests are `deploy/k8s/`
   (`provisioner/`, `sandboxes/`, `helm/`, `tofu/`). Copy a workspace with
   `scripts/sandbox-workspace-migrate.ts` (source kept, checksums, both
   directions). Runbook: `docs/ops/sandboxes/cutover-rollback.md`. Tests:
   `server/sandboxd-k8s/sandboxd-k8s-spec.test.ts`, `server/sandboxd-k8s/sandboxd-k8s.test.ts`,
-  `server/sandbox-route.test.ts`, `server/sandbox-backend.test.ts`,
-  `server/sandbox-workspace-copy.test.ts`; kind only with
+  `server/sandbox/sandbox-route.test.ts`, `server/sandbox/sandbox-backend.test.ts`,
+  `server/sandbox/sandbox-workspace-copy.test.ts`; kind only with
   `SAGAX_SANDBOX_K8S_INTEGRATION=1` (`scripts/sandbox-k8s-kind.sh`).
   Design and the SOC 2 mapping: `docs/sandbox-kubernetes.md`.
 - The provisioner API is keyed by person (`sandboxKeyForPrincipal`); never add
@@ -6545,7 +6545,7 @@ not open a shared machine. Keep these rules, each covered by `server/user-sandbo
   nothing and reaches the VNC port only through the provisioner's signed
   upgrade (`/v1/sandboxes/<key>/desktop`). While a control view is open,
   the bots' `computer_use` there is refused with `SANDBOX_CONTROL_REFUSAL`
-  (`server/sandbox-control.ts`, test `server/sandbox-control.test.ts`). The
+  (`server/sandbox/sandbox-control.ts`, test `server/sandbox/sandbox-control.test.ts`). The
   desktop starts openbox, a background and a tint2 launcher bar (Chromium,
   Terminal, Files); a change there needs the sandbox image rebuilt. The
   Computer tab's power and usage
@@ -6835,7 +6835,7 @@ had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.tes
 `server/org/org-person-connections.test.ts`,
 `server/github-connect.test.ts`, `server/bot-plugins.test.ts`,
 `server/plugin-turn.test.ts`, `server/bot-plugin-act.test.ts`,
-`server/sandbox-stdio-mcp.test.ts`, `server/sandboxd.test.ts` or
+`server/sandbox/sandbox-stdio-mcp.test.ts`, `server/sandboxd.test.ts` or
 `src/components/settings/MyConnectionsSettings.test.ts`:
 
 - Settings > Mes connexions (organization server only,
@@ -6855,7 +6855,7 @@ had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.tes
   or GitHub. A remote one must resolve to a public address (checked at add
   and, cached, at mount; `SAGAX_PERSONAL_MCP_ALLOW_PRIVATE=1` is for a lab or
   a test only). A command runs in the person's server environment through
-  `sagax-stdio` (`server/sandbox-stdio-mcp.ts`, sandboxd's signed stdio
+  `sagax-stdio` (`server/sandbox/sandbox-stdio-mcp.ts`, sandboxd's signed stdio
   stream), never on the host; without server environments it is refused.
 - A server-wide MCP command is never added (403 `org_host_command`) nor
   mounted (`withoutHostCommands`) on an organization server.
@@ -9941,7 +9941,7 @@ lot P1.4). Entry `server/sagax-runner.ts` (at the server root so the
 drivers' helpers resolve beside it once bundled), code in `server/runner/`,
 image `deploy/run/Dockerfile` (built locally by `scripts/build-run-image.sh`,
 never pushed). The Pod comes from the run provisioner
-(`server/sandboxd-runs-spec.ts`). Rules, none optional:
+(`server/sandbox/sandboxd-runs-spec.ts`). Rules, none optional:
 
 - The image has no Hermes, so its engines stage runs
   `scripts/harden-image-deps.mjs --no-venv` (npm overlay only; a venv found

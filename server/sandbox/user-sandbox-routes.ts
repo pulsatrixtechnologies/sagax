@@ -8,7 +8,7 @@
 //   POST /api/me/server-environment/power   { action: start|shutdown|pause|resume,
 //                                             confirm? } (the Computer tab)
 //   GET  /api/me/server-environment/stats   CPU, memory, disk, OS (usage panel)
-import { PASS, type RouteHandler } from "./routes/table.ts";
+import { PASS, type RouteHandler } from "../routes/table.ts";
 import type { UserSandboxManager } from "./user-sandbox-manager.ts";
 import { UserSandboxUnavailable } from "./user-sandbox-manager.ts";
 

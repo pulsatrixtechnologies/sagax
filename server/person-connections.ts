@@ -8,7 +8,7 @@
 //
 // Where a personal server runs: a remote one is reached by the engine like
 // any remote MCP server; a local command runs in the person's server
-// environment (server/sandbox-stdio-mcp.ts), never on the Sagax host.
+// environment (server/sandbox/sandbox-stdio-mcp.ts), never on the Sagax host.
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import type { LookupAddress } from "node:dns";
 import { lookup as dnsLookup } from "node:dns/promises";

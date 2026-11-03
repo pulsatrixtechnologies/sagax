@@ -33,7 +33,9 @@ enum DesktopSidebarState {
     /// surface's preset.
     static func showThreads(model: DesktopShellModel, prefs: SidebarPrefsModel) -> Bool {
         #if DEBUG
-        if let preset = model.parityShowThreads { return preset }
+        // main-threads and chat-threads set only `omb-show-threads`: the
+        // location stays the default, the chat header, so no tree
+        if model.parityShowThreads != nil { return false }
         #endif
         return prefs.threads.allows(.sidebarTree)
     }
@@ -677,6 +679,20 @@ struct DesktopSidebarFooter: View {
     var body: some View {
         let icons = model.density == .icons
         return VStack(spacing: 8) {
+            // `data-sidebar-compact-toggle`: ChevronsRight 20 on a 36 pt row,
+            // back to the full sidebar
+            if icons {
+                Button { model.toggleCollapsed() } label: {
+                    DesktopIconView(icon: .chevronsRight, size: 20)
+                        .foregroundStyle(theme.sidebarInkSecondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(DesktopHoverFill(radius: 8, fill: \.sidebarHover))
+                .accessibilityLabel(Text("Collapse or expand the sidebar"))
+                .accessibilityIdentifier("desktop-sidebar-expand")
+            }
             if icons, DesktopSettingsSection.available(for: session.surfaceGate).contains(.companion) {
                 AnyView(DesktopRailPhoneButton())
             }
@@ -732,10 +748,13 @@ struct DesktopSidebarFooter: View {
                         .padding(.leading, 2)
                         .padding(.vertical, 5)
                         .frame(height: 46)
-                        .background(
-                            model.menu?.kind == .profile ? theme.sidebarHover : .clear,
-                            in: RoundedRectangle(cornerRadius: theme.radiusLg, style: .continuous)
-                        )
+                        // `open ? "ring-2 ring-accent/60"`: the open menu's
+                        // row wears the accent ring, rounded-full
+                        .overlay {
+                            if model.menu?.kind == .profile {
+                                Capsule().strokeBorder(theme.accent.opacity(0.6), lineWidth: 2)
+                            }
+                        }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(DesktopSidebarRowButtonStyle())

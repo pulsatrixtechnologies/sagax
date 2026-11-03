@@ -8,10 +8,54 @@
 // - icons: 63 x 48 (py 6), the avatar 36 centred; a group 52 tall.
 //
 // Show threads moves the text 16 pt right (pl-6) for the disclosure and,
-// on hover, reserves room for New thread, New folder and "⋯".
+// on hover, reserves room for New thread and "⋯" (pr-[64px]).
 import SwiftUI
 import UIKit
+import GameController
 import CompanionCore
+
+/// The desktop's two row layouts (src/styles.css `@custom-variant touch`,
+/// `(hover: none), (pointer: coarse)`): with a pointer a row's New thread
+/// and "⋯" show on hover only; on touch they stay at 70 % (`touch:opacity-70`).
+/// The iPad has a pointer once a trackpad or a mouse is connected
+/// (GameController's `GCMouse`) or once a hover was seen; Mac (Designed for
+/// iPad) always has one. The parity captures draw the pointer layout, as
+/// the desktop's references are taken with a mouse; `-desktop.touchRows YES`
+/// forces the touch layout (the UI tests tap the "⋯").
+@MainActor
+final class DesktopPointer: ObservableObject {
+    static let shared = DesktopPointer()
+    @Published private(set) var present: Bool
+    private let forced: Bool?
+    private var observers: [NSObjectProtocol] = []
+
+    private init() {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: "desktop.touchRows") != nil {
+            forced = !defaults.bool(forKey: "desktop.touchRows")
+        } else if ParityMode.isActive {
+            forced = true
+        } else {
+            forced = nil
+        }
+        present = forced ?? (ProcessInfo.processInfo.isiOSAppOnMac || GCMouse.current != nil)
+        guard forced == nil else { return }
+        for name in [NSNotification.Name.GCMouseDidConnect, .GCMouseDidDisconnect] {
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { DesktopPointer.shared.refresh() }
+            })
+        }
+    }
+
+    private func refresh() {
+        present = ProcessInfo.processInfo.isiOSAppOnMac || GCMouse.current != nil
+    }
+
+    /// A hover event: a pointer is there.
+    func sawHover() {
+        if forced == nil, !present { present = true }
+    }
+}
 
 extension Chat {
     /// The bot's title (its label), as the desktop's chip shows it.
@@ -87,11 +131,12 @@ struct DesktopPinnedTile: View {
     @State private var hovering = false
 
     var body: some View {
-        let selected = model.selected?.id == chat.id
+        // a full page (Automations, Team map, Memory) leaves no row selected
+        let selected = model.selected?.id == chat.id && model.page == nil
         let menu = DesktopSidebarMenus(session: session, model: model, prefs: prefs).entries(for: menuKind).0
         Button { model.open(session.returning(to: chat)) } label: {
             VStack(spacing: rail ? 6 : 3) {
-                ChatAvatarView(chat: chat, size: rail ? 36 : 64, state: .idle, background: theme.sidebar)
+                ChatAvatarView(chat: chat, size: rail ? 36 : 64, state: .idle, background: theme.sidebar, fillBox: true)
                     .frame(width: rail ? 36 : 64, height: rail ? 36 : 64)
                 if !rail {
                     DesktopLineText(text: PeopleDirectory.shared.name(chat, session: session), size: 12,
@@ -207,16 +252,17 @@ struct DesktopSidebarRow: View {
     let showThreads: Bool
     let threadsOpen: Bool
 
+    @ObservedObject private var pointer = DesktopPointer.shared
+
     private var density: DesktopSidebarDensity { model.density }
     private var isRoom: Bool { if case .room = chat { true } else { false } }
-    /// Electron `touch:` / `pointer: coarse` shows ⋯. iPad has no hover;
-    /// Mac (Designed for iPad) keeps hover-only.
-    private var showsTouchRowActions: Bool {
-        UIDevice.current.userInterfaceIdiom == .pad && !ProcessInfo.processInfo.isiOSAppOnMac
-    }
+    /// `touch:pointer-events-auto touch:opacity-70`: without a pointer the
+    /// row's actions stay on screen at 70 %.
+    private var touchLayout: Bool { !pointer.present }
 
     var body: some View {
-        let selected = model.selected?.id == chat.id
+        // a full page (Automations, Team map, Memory) leaves no row selected
+        let selected = model.selected?.id == chat.id && model.page == nil
         let hovered = model.hoveredRow == chat.id
         // multi-select (lot 6): a bot row's tap joins or leaves the choice
         let selecting = model.selection.active && !isRoom && density != .icons
@@ -237,18 +283,23 @@ struct DesktopSidebarRow: View {
             .accessibilityIdentifier("desktop-row.\(chat.id)")
             if density != .icons {
                 if showThreads, chat.desktopHasThreadList { disclosure }
-                if !selecting, hovered || showsTouchRowActions, !menu.isEmpty { hoverActions(menu: menu) }
+                // select mode puts the check where the actions were, on every row
+                if !model.selection.active, hovered || touchLayout { hoverActions(menu: menu) }
             }
             if selecting { selectMark(chosen) }
         }
+        // the rail's row: Grok Bot's 54 pt square (`h-[54px] w-[54px]
+        // p-[9px]`, rounded 10), centred in the rail
+        .frame(width: density == .icons ? 54 : nil)
         // Unfolded, the selected thread below carries the one highlight
         // (the web's Sidebar.tsx rule): no second stacked block on the bot.
         .background(
             chosen || (selected && !selecting && !(showThreads && threadsOpen)) ? theme.sidebarSelected : (hovered && !selecting ? theme.sidebarHover : .clear),
-            in: RoundedRectangle(cornerRadius: theme.radiusLg, style: .continuous)
+            in: RoundedRectangle(cornerRadius: density == .icons ? 10 : theme.radiusLg, style: .continuous)
         )
+        .frame(maxWidth: density == .icons ? .infinity : nil)
         .onHover { inside in
-            if inside { model.hoveredRow = chat.id } else if model.hoveredRow == chat.id { model.hoveredRow = nil }
+            if inside { pointer.sawHover(); model.hoveredRow = chat.id } else if model.hoveredRow == chat.id { model.hoveredRow = nil }
         }
     }
 
@@ -277,7 +328,7 @@ struct DesktopSidebarRow: View {
 
     private var iconsContent: some View {
         avatar(size: 36)
-            .padding(.vertical, 6)
+            .padding(9)
             .frame(maxWidth: .infinity)
             .overlay(alignment: .bottomTrailing) {
                 if chat.unread, !chat.busy {
@@ -298,9 +349,14 @@ struct DesktopSidebarRow: View {
         // 6 pt before the name, rows 56 tall (py-1.5)
         let avatarSize: CGFloat = compact ? 28 : 44
         let leading: CGFloat = showThreads ? 24 : (compact ? 8 : 4)
-        // pr-9, or pr-[5.75rem] with the thread controls on hover; a group
-        // row keeps pr-2
-        let trailing: CGFloat = isRoom ? 8 : (showThreads && hovered && !model.selection.active ? 92 : 36)
+        // comfortable pr-2, compact pr-9, pr-[64px] while New thread and
+        // "⋯" show (hover, touch), pr-9 for the select check; a group row
+        // keeps pr-2
+        let actionsShown = (hovered || touchLayout) && !model.selection.active
+        let trailing: CGFloat = isRoom ? 8
+            : model.selection.active ? 36
+            : actionsShown ? 64
+            : (compact ? 36 : 8)
         let status = chat.desktopStatus
         let unread = chat.unread && !chat.busy
         let quietStatus = status != .idle
@@ -390,7 +446,7 @@ struct DesktopSidebarRow: View {
             if case let .room(room) = chat, PeopleDirectory.shared.peer(room, session: session) == nil {
                 DesktopStackedMauses(members: room.memberIds.compactMap { session.state.bot($0) }, density: density)
             } else {
-                ChatAvatarView(chat: chat, size: size, state: MausState.forChat(chat, in: session.state), background: theme.sidebar)
+                ChatAvatarView(chat: chat, size: size, state: MausState.forChat(chat, in: session.state), background: theme.sidebar, fillBox: true)
                     .frame(width: size, height: size)
             }
         }
@@ -459,35 +515,40 @@ struct DesktopSidebarRow: View {
 
     private var name: String { PeopleDirectory.shared.name(chat, session: session) }
 
-    /// New thread, New folder (Show threads on) and "⋯", 28 pt each, on hover.
+    /// A bot row's New thread (Show threads on, `right-8`) and "⋯"
+    /// (`right-1`), 28 pt each: on hover with a pointer, at 70 % on touch.
+    /// A group row has no "⋯" (its menu is the context menu); its New
+    /// thread is the desktop's `newGroupTask`, which the iPad's rooms do not
+    /// have yet. New folder is in the thread list's own menu, not on the row.
+    @ViewBuilder
     private func hoverActions(menu: [DesktopMenuEntry]) -> some View {
-        HStack(spacing: 0) {
-            Spacer(minLength: 0)
-            if showThreads, case let .bot(bot) = chat {
-                hoverButton(.plus, label: "New thread", id: "new-thread") {
-                    Task {
-                        if let created = await session.createRosterThread(for: bot) {
-                            model.openThreadLists.insert(bot.id)
-                            model.open(.bot(created))
+        if case let .bot(bot) = chat {
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                // `showThreads` (useShowThreads): threads on, wherever they live
+                if DesktopSidebarState.threadsOn(model: model, prefs: prefs) {
+                    hoverButton(.plus, label: "New thread", id: "new-thread") {
+                        Task {
+                            if let created = await session.createRosterThread(for: bot) {
+                                model.openThreadLists.insert(bot.id)
+                                model.open(.bot(created))
+                            }
                         }
                     }
                 }
-                if session.surfaceGate.allows(.threadFolders, bot: bot) {
-                    hoverButton(.folderPlus, label: "New folder", id: "new-folder") {
-                        model.openThreadLists.insert(bot.id)
-                        model.threadActions.newFolder(for: bot)
+                if !menu.isEmpty {
+                    GeometryReader { geometry in
+                        hoverButton(.ellipsis, label: "Actions for \(name)", id: "actions", size: 15) {
+                            let frame = geometry.frame(in: .named(desktopShellSpace))
+                            model.menu = DesktopMenuRequest(kind: menuKind, anchor: CGPoint(x: frame.minX, y: frame.maxY))
+                        }
                     }
+                    .frame(width: 28, height: 28)
                 }
             }
-            GeometryReader { geometry in
-                hoverButton(.ellipsis, label: "Actions for \(name)", id: "actions", size: 15) {
-                    let frame = geometry.frame(in: .named(desktopShellSpace))
-                    model.menu = DesktopMenuRequest(kind: menuKind, anchor: CGPoint(x: frame.minX, y: frame.maxY))
-                }
-            }
-            .frame(width: 28, height: 28)
+            .padding(.trailing, 4)
+            .opacity(model.hoveredRow == chat.id ? 1 : 0.7)
         }
-        .padding(.trailing, 4)
     }
 
     private func hoverButton(_ icon: DesktopIcon, label: LocalizedStringKey, id: String, size: CGFloat = 14, action: @escaping () -> Void) -> some View {

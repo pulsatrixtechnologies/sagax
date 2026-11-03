@@ -146,6 +146,12 @@ struct BotPanelDetails: View {
     @StateObject private var activity: BotActivityModel
     @StateObject private var remoteSessions: BotRemoteSessionsModel
     @State private var route: BotActivityRoute?
+    /// `useShowAllHistory` (lib/panel-visibility.ts, `sagax.showAllHistory.v1`):
+    /// the "All history" row is off unless the person turns it on; the
+    /// history stays behind the Coding title and the palette.
+    @AppStorage("sagax.showAllHistory.v1") private var showAllHistory = false
+    /// The overview's setup checklist for the Suggestions card.
+    @State private var suggestionsSetup: [BotSetupStep]?
 
     init(bot: Bot) {
         self.bot = bot
@@ -158,7 +164,7 @@ struct BotPanelDetails: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             // Details > Suggestions (SuggestionsSection.tsx); the routines are just below
-            DesktopBotSuggestionsCard(bot: bot) { action in
+            DesktopBotSuggestionsCard(bot: bot, setup: suggestionsSetup) { action in
                 switch action {
                 case let .openThread(threadId): session.openChat(threadId: threadId)
                 case .openSection("routines"): break
@@ -171,7 +177,7 @@ struct BotPanelDetails: View {
                 if activity.showsCodingSection {
                     AnyView(codingSection)
                 }
-                if activity.list != nil, !activity.showsCodingSection {
+                if showAllHistory, activity.list != nil, !activity.showsCodingSection {
                     AnyView(allHistoryRow)
                 }
             }
@@ -185,6 +191,11 @@ struct BotPanelDetails: View {
         .padding(.trailing, 16)
         .padding(.bottom, 24)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // SuggestionsSection re-reads the overview when the name, title,
+        // instructions or routines change
+        .task(id: "\(bot.id)|\(session.connection?.id ?? "")|\(bot.name)|\(bot.title)") {
+            suggestionsSetup = (try? await session.settingsClient?.overview(botId: bot.id))?.setup
+        }
         .task(id: session.connection?.id) {
             if showsActivity { activity.start(client: session.profileClient) }
             remoteSessions.start(client: session.profileClient ?? session.settingsClient)
@@ -585,8 +596,10 @@ struct BotPanelRoutines: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("desktop-panel-routine.\(routine.name)")
+            // RoutineSwitch: the track wears the bot's colour, as the desktop's does
             PanelSwitch(label: routine.enabled ? "Pause" : "Resume", isOn: routine.enabled,
-                        disabled: toggling.contains(routine.id) || routine.schedule.type == .unknown) { on in
+                        disabled: toggling.contains(routine.id) || routine.schedule.type == .unknown,
+                        onColor: BubbleColors.user(botColor: bot.color)?.fill.color) { on in
                 Task { await toggle(routine, on: on) }
             }
         }
@@ -647,9 +660,11 @@ struct DesktopBotSuggestionsCard: View {
     @EnvironmentObject private var session: Session
     @ObservedObject private var prefs = SidebarPrefsModel.shared
     let bot: Bot
+    /// The overview's setup checklist, loaded by the Details tab: a Group
+    /// with nothing in it hands its `.task` to no child, so the card could
+    /// never ask for it itself (the card never showed).
+    let setup: [BotSetupStep]?
     let run: (BotSuggestion.Action) -> Void
-
-    @State private var setup: [BotSetupStep]?
 
     private var items: [BotSuggestion] {
         BotSuggestions.suggestions(setup: setup, tasks: bot.tasks, waiting: bot.waitingApprovals)
@@ -711,9 +726,6 @@ struct DesktopBotSuggestionsCard: View {
                     .overlay(RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous).strokeBorder(theme.hairlineWeak, lineWidth: 1))
                 }
             }
-        }
-        .task(id: "\(bot.id)|\(session.connection != nil)") {
-            setup = (try? await session.settingsClient?.overview(botId: bot.id))?.setup
         }
     }
 

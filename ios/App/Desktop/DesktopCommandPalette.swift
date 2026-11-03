@@ -151,7 +151,7 @@ struct DesktopCommandPalette: View {
     private func heading(_ group: DesktopPaletteGroup, first: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             if !first { Rectangle().fill(theme.hairline.opacity(0.3)).frame(height: 1).padding(.top, 4) }
-            DesktopText(Text(verbatim: Self.label(group).uppercased()), size: 11, weight: .medium, line: 14, color: \.inkSecondary)
+            DesktopText(Text(verbatim: Self.label(group).uppercased()), size: 11, weight: .medium, line: 16.5, color: \.inkSecondary)
                 .tracking(0.88)
                 .padding(.horizontal, 12)
                 .padding(.top, first ? 6 : 10)
@@ -166,11 +166,12 @@ struct DesktopCommandPalette: View {
                 if case let .message(hit) = item.action {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 8) {
-                            DesktopIconView(icon: .fileText, size: 13).foregroundStyle(theme.inkSecondary)
+                            DesktopIconView(icon: .messageSquare, size: 13).foregroundStyle(theme.inkSecondary)
                             Text(verbatim: hit.name).font(theme.font(13, .medium)).foregroundStyle(theme.ink)
                             if let task = hit.task { Text(verbatim: "· \(task)").font(theme.font(13)).foregroundStyle(theme.inkSecondary) }
                         }
                         .lineLimit(1)
+                        .frame(height: 19.5)
                         snippet(hit)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -179,6 +180,8 @@ struct DesktopCommandPalette: View {
                         DesktopIconView(icon: Self.icon(item), size: 16).foregroundStyle(theme.inkSecondary)
                         Text(verbatim: recent ? "\(Self.label(item.group)): \(item.label)" : item.label)
                             .font(theme.font(14)).foregroundStyle(theme.ink).lineLimit(1)
+                            // the body's 1.5 line height
+                            .frame(height: 21)
                         if let detail = item.detail, !recent {
                             Text(verbatim: detail).font(theme.font(12.5)).foregroundStyle(theme.inkSecondary).lineLimit(1)
                         }
@@ -190,16 +193,15 @@ struct DesktopCommandPalette: View {
                     }
                 }
             }
+            // `px-3 py-2`, the 14/20 label: 36 pt rows (a message hit two
+            // lines more); the selected row is the accent tint alone, as the
+            // reference draws it
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .frame(minHeight: 44)
             .background(
                 selected ? theme.accent.opacity(0.2) : .clear,
                 in: RoundedRectangle(cornerRadius: 12, style: .continuous)
             )
-            .overlay {
-                if selected { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.accent.opacity(0.6), lineWidth: 1) }
-            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -220,6 +222,8 @@ struct DesktopCommandPalette: View {
         return Text(attributed)
             .font(theme.font(12.5))
             .foregroundStyle(theme.inkSecondary)
+            .lineSpacing(18.75 - UIFont.systemFont(ofSize: 12.5).lineHeight)
+            .padding(.vertical, (18.75 - UIFont.systemFont(ofSize: 12.5).lineHeight) / 2)
             .lineLimit(2)
     }
 
@@ -355,7 +359,7 @@ struct DesktopCommandPalette: View {
         switch item.action {
         case .chat(.room): .users
         case .chat(.bot): .bot
-        case .message: .fileText
+        case .message: .messageSquare
         case .newConversation: .squarePen
         case .newBot: .plus
         case .routines: .calendarDays

@@ -14496,6 +14496,16 @@
         }
       }
     },
+    "Calls": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appels"
+          }
+        }
+      }
+    },
     "Calls need a realtime voice": {
       "localizations": {
         "fr": {
@@ -15353,7 +15363,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Discussion et composeur"
+            "value": "Conversation et saisie"
           }
         },
         "pt-BR": {
@@ -18035,7 +18045,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Réduire ou déployer la barre latérale"
+            "value": "Replier ou déplier la barre latérale"
           }
         },
         "pt-BR": {
@@ -21918,6 +21928,16 @@
         }
       }
     },
+    "Create a group chat": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Créer une discussion de groupe"
+          }
+        }
+      }
+    },
     "Create a group from the sidebar first, then come back to schedule its goal.": {
       "localizations": {
         "en": {
@@ -24472,6 +24492,16 @@
         }
       }
     },
+    "Dictate into the message field (again to stop)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dicter dans le champ du message (encore une fois pour arrêter)"
+          }
+        }
+      }
+    },
     "Dictation isn't available for this language.": {
       "localizations": {
         "fr": {
@@ -26298,6 +26328,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Editar rótulo"
+          }
+        }
+      }
+    },
+    "Edit last message (when composer is empty)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifier le dernier message (champ vide)"
           }
         }
       }
@@ -29291,7 +29331,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rechercher dans la conversation"
+            "value": "Chercher dans la conversation"
           }
         },
         "pt-BR": {
@@ -31792,6 +31832,16 @@
         }
       }
     },
+    "Go to the message field": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aller au champ du message"
+          }
+        }
+      }
+    },
     "Goal": {
       "localizations": {
         "en": {
@@ -32604,6 +32654,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Raccrocher"
+          }
+        }
+      }
+    },
+    "Hang up a Live call": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raccrocher un appel en direct"
           }
         }
       }
@@ -35247,7 +35307,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Insérer un saut de ligne sans envoyer"
+            "value": "Aller à la ligne sans envoyer"
           }
         },
         "pt-BR": {
@@ -40108,6 +40168,16 @@
         }
       }
     },
+    "Management & Groups": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestion et groupes"
+          }
+        }
+      }
+    },
     "Manual": {
       "localizations": {
         "en": {
@@ -42394,6 +42464,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couper le micro"
+          }
+        }
+      }
+    },
+    "Mute or unmute a Live call": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couper ou rétablir le micro d’un appel en direct"
           }
         }
       }
@@ -46317,7 +46397,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucun raccourci trouvé pour « %@ »"
+            "value": "Aucun raccourci pour « %@ »"
           }
         },
         "pt-BR": {
@@ -50891,7 +50971,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ouvrir la palette de commandes (sélecteur et recherche dans les conversations)"
+            "value": "Ouvrir la palette de commandes (changer de bot, chercher dans les conversations)"
           }
         },
         "pt-BR": {
@@ -55884,6 +55964,16 @@
         }
       }
     },
+    "Press": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appuyez sur"
+          }
+        }
+      }
+    },
     "Press ⌘ / to open": {
       "localizations": {
         "en": {
@@ -57188,6 +57278,16 @@
         }
       }
     },
+    "Put on the desktop": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettre sur le bureau"
+          }
+        }
+      }
+    },
     "Put the call on hold": {
       "localizations": {
         "fr": {
@@ -57442,6 +57542,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ativadas em silêncio"
+          }
+        }
+      }
+    },
+    "Quote the selected text in the message": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Citer le texte sélectionné dans le message"
           }
         }
       }
@@ -59626,6 +59736,16 @@
         }
       }
     },
+    "Remove from the desktop": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer du bureau"
+          }
+        }
+      }
+    },
     "Remove from this device": {
       "localizations": {
         "fr": {
@@ -60174,6 +60294,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reordenar pastas"
+          }
+        }
+      }
+    },
+    "Reorder sidebar sections (focus a section heading)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réordonner les sections de la barre latérale (focus sur un en-tête de section)"
           }
         }
       }
@@ -63578,6 +63708,16 @@
         }
       }
     },
+    "Save group instruction changes": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer les instructions du groupe"
+          }
+        }
+      }
+    },
     "Save key": {
       "localizations": {
         "en": {
@@ -64638,6 +64778,16 @@
         }
       }
     },
+    "Search conversations and messages": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher dans les conversations et les messages"
+          }
+        }
+      }
+    },
     "Search failed": {
       "localizations": {
         "en": {
@@ -64769,7 +64919,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rechercher ou créer un bot"
+            "value": "Chercher ou créer un bot"
           }
         },
         "pt-BR": {
@@ -64949,7 +65099,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rechercher des raccourcis"
+            "value": "Rechercher un raccourci"
           }
         },
         "pt-BR": {
@@ -64971,7 +65121,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rechercher des raccourcis…"
+            "value": "Rechercher un raccourci…"
           }
         },
         "pt-BR": {
@@ -67623,7 +67773,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Afficher l'aide-mémoire des raccourcis clavier"
+            "value": "Afficher les raccourcis clavier"
           }
         },
         "pt-BR": {
@@ -81576,6 +81726,16 @@
         }
       }
     },
+    "Turn the compact sidebar on or off": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activer ou désactiver la barre latérale compacte"
+          }
+        }
+      }
+    },
     "Turned off by your organization.": {
       "localizations": {
         "en": {
@@ -93740,6 +93900,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "organisation"
+          }
+        }
+      }
+    },
+    "outside a text field to open this window.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hors d’un champ de texte pour ouvrir cette fenêtre."
           }
         }
       }

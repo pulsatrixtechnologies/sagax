@@ -29,6 +29,9 @@ enum DesktopIcon: String, CaseIterable {
     case monitor, minus, externalLink, messageCircle
     // lot 6: the multi-select bar (CheckCheck, ListChecks) and the computer window (Minimize2, Hand)
     case checkCheck, listChecks, minimize, hand
+    // sweep: the rail's expand (ChevronsRight), the palette's message hits
+    // (MessageSquare), Put on the desktop (PictureInPicture2)
+    case chevronsRight, messageSquare, pictureInPicture
 
     /// Path data in the 24 pt viewBox.
     var paths: [String] {
@@ -154,6 +157,9 @@ enum DesktopIcon: String, CaseIterable {
         case .hand:
             ["M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2", "M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2", "M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8",
              "M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"]
+        case .chevronsRight: ["m6 17 5-5-5-5", "m13 17 5-5-5-5"]
+        case .messageSquare: ["M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"]
+        case .pictureInPicture: ["M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4", Self.rect(12, 13, 10, 7, 2)]
         case .eye:
             ["M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0",
              Self.circle(12, 12, 3)]
@@ -227,6 +233,9 @@ enum DesktopIcon: String, CaseIterable {
         case .listChecks: "checklist"
         case .minimize: "arrow.down.right.and.arrow.up.left"
         case .hand: "hand.raised"
+        case .chevronsRight: "chevron.right.2"
+        case .messageSquare: "message"
+        case .pictureInPicture: "pip"
         }
     }
 

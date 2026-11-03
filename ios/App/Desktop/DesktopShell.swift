@@ -169,6 +169,8 @@ final class DesktopShellModel: ObservableObject {
     /// rests on a row after its click).
     var parityComposePreset: (group: Bool, cursor: Int)?
     #endif
+    /// ⌘⇧N: the next "To:" picker opens in group mode.
+    var composeGroupMode = false
     /// The WP5, WP6 and WP11 menus' prompts, mounted once by the shell.
     let threadActions = ThreadActions()
     let sectionActions = SidebarSectionActions()
@@ -713,7 +715,8 @@ private struct DesktopShellRouting: ViewModifier {
     }
 
     /// The sidebar surfaces' pointer and menus, at the references' points
-    /// (desktop-*-08 to -12 DOM dumps). On the iPad a right click or a long
+    /// (desktop-*-08 to -12 DOM dumps; re-measured on the 1376x1032
+    /// references of 2026-11-03: the "⋯" button's bottom, the right click). On the iPad a right click or a long
     /// press opens iPadOS's context menu with the same entries; the
     /// surfaces draw the desktop popover at the desktop's click point.
     private func applyParitySidebar(_ screen: IPadParityScreen) async {
@@ -725,13 +728,13 @@ private struct DesktopShellRouting: ViewModifier {
         case .sidebarBotMenu:
             // the reference moves the pointer away after the click: no hover
             guard let aurora = bot("Aurora") else { return }
-            model.menu = DesktopMenuRequest(kind: .bot(aurora.id), anchor: CGPoint(x: 235, y: 413))
+            model.menu = DesktopMenuRequest(kind: .bot(aurora.id), anchor: CGPoint(x: 235, y: 385))
         case .sidebarBotContextMenu:
             guard let helix = bot("Helix") else { return }
-            model.menu = DesktopMenuRequest(kind: .bot(helix.id), anchor: CGPoint(x: 76, y: 446))
+            model.menu = DesktopMenuRequest(kind: .bot(helix.id), anchor: CGPoint(x: 76, y: 418))
         case .sidebarSectionMenu:
             guard let aurora = bot("Aurora"), let team = aurora.section, !team.isEmpty else { return }
-            model.menu = DesktopMenuRequest(kind: .section(SidebarSectionID.user(team)), anchor: CGPoint(x: 68, y: 351))
+            model.menu = DesktopMenuRequest(kind: .section(SidebarSectionID.user(team)), anchor: CGPoint(x: 68, y: 322))
         case .sidebarProfileMenu:
             // 4 pt over the 48 pt account row (12 pt from the bottom)
             model.menu = DesktopMenuRequest(kind: .profile, anchor: CGPoint(x: 8, y: height - 64), opensUp: true)
@@ -745,8 +748,9 @@ private struct DesktopShellRouting: ViewModifier {
         case .computerWindow:
             model.computerWindow = model.selected?.id
         case .newGroup:
-            // the reference's pointer stays on the row under the click (Orion)
-            model.parityComposePreset = (group: true, cursor: 1)
+            // the reference's pointer rests on Liora's row once the list
+            // redraws in group mode: its "Add" hint, ⌘2 on Orion
+            model.parityComposePreset = (group: true, cursor: 2)
             model.menu = DesktopMenuRequest(kind: .new, anchor: .zero)
         default:
             break
@@ -827,15 +831,37 @@ private struct DesktopShellPresenter: ViewModifier {
 /// The docked panel's resize handle (`app-resize-handle`, 12 pt across its
 /// leading edge): drag to 320 to 720 pt; the width is kept.
 private struct DesktopPanelResizeHandle: View {
+    @Environment(\.desktopTheme) private var theme
     @ObservedObject var model: DesktopShellModel
     @State private var start: CGFloat?
+    @State private var hovering = false
+
+    /// `.app-resize-handle::after`: a 2 pt accent line (55 %) while the
+    /// handle is hovered, dragged or focused. The desktop's Details and
+    /// Computer references are taken with the handle focused (the panel
+    /// hands it the focus as it opens), so their parity screens draw it lit.
+    private var lit: Bool {
+        if hovering || start != nil { return true }
+        #if DEBUG
+        if let screen = ParityLaunch.current?.iPadScreen, screen == .panelDetails || screen == .panelComputer { return true }
+        #endif
+        return false
+    }
 
     var body: some View {
         Color.clear
             .frame(width: 12)
             .contentShape(Rectangle())
+            .overlay {
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(lit ? theme.accent.opacity(0.55) : .clear)
+                    .frame(width: 2)
+                    .offset(x: -3)
+                    .animation(.easeOut(duration: 0.12), value: lit)
+                    .allowsHitTesting(false)
+            }
             .offset(x: -6)
-            .hoverEffect(.highlight)
+            .onHover { hovering = $0 }
             .gesture(
                 DragGesture(minimumDistance: 2, coordinateSpace: .global)
                     .onChanged { value in

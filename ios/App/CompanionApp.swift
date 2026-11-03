@@ -52,6 +52,16 @@ struct CompanionApp: App {
                     .themeRoot()
             }
         }
+        // A bot put on the desktop (DesktopFloatingBots): its chat in a
+        // window of its own that Stage Manager floats.
+        WindowGroup(id: DesktopFloatingBots.sceneId, for: String.self) { binding in
+            if let botId = binding.wrappedValue {
+                DesktopFloatingBotScene(botId: botId)
+                    .environmentObject(session)
+                    .environment(\.locale, AppLanguage.resolved(language).locale ?? .autoupdatingCurrent)
+                    .themeRoot()
+            }
+        }
         // `.defaultSize` is iOS 17 and `SceneBuilder` takes no conditionals,
         // so it is dropped while the app supports 16. It only suggested an
         // opening window size for iPad and Stage Manager; the system picks a

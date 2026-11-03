@@ -35,6 +35,8 @@ final class DesktopLot6ComputerSelectUITests: XCTestCase {
             "-companion.onboarding.welcomeSeen", "YES",
             "-companion.onboarding.notificationsSeen", "YES",
             "-companion.sidebarPrefs.parity-harness", "{}",
+            // the touch layout: each row's "⋯" stays on screen (no hover in XCUITest)
+            "-desktop.touchRows", "YES",
         ]
         if let environment { arguments += ["-parityEnvironment", environment] }
         app.launchArguments = arguments + extra

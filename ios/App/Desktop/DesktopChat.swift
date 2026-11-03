@@ -257,6 +257,22 @@ extension ChatView {
                 hardwareReturn: { submit() },
                 draftChanged: { old, new in draftChanged(from: old, to: new) }
             ))
+            // ⌘I, ⌘L, ⌘D (DesktopKeyCommands): the field, a quote of the
+            // selected text, dictation
+            .onReceive(NotificationCenter.default.publisher(for: DesktopComposerCommand.notification)) { note in
+                switch DesktopComposerCommand.from(note) {
+                case .focus: composerFocused = true
+                case .quote:
+                    if let selection = DesktopComposerCommand.selectedText() {
+                        draft = DesktopComposerCommand.quoted(selection, into: draft)
+                    }
+                    composerFocused = true
+                case .dictate:
+                    composerFocused = false
+                    dictation.toggle(capturing: draft)
+                case nil: break
+                }
+            }
         }
         // the dock is `px-4` (the transcript `px-5`), both at most 960
         .frame(maxWidth: DesktopShellRules.chatColumn)

@@ -362,9 +362,9 @@ private struct BotPanelIdentity: View {
                 Button {
                     withAnimation(.easeOut(duration: 0.15)) { model.avatarEditorOpen.toggle() }
                 } label: {
-                    BotMascotView(bot: bot, size: 112, state: MausState.forChat(.bot(bot), in: session.state), animated: true, owlHandle: owlHandle)
-                        .frame(width: 112, height: 112)
-                        .frame(width: 112, height: 119, alignment: .top)
+                    // BotProfileAvatarCard: the 144 pt mascot in the panel, pt-5
+                    BotMascotView(bot: bot, size: 144, state: MausState.forChat(.bot(bot), in: session.state), animated: true, owlHandle: owlHandle)
+                        .frame(width: 144, height: 144)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -388,10 +388,13 @@ private struct BotPanelIdentity: View {
                     .accessibilityIdentifier("desktop-panel-edit-persona")
                 }
             }
-            .padding(.top, 24)
+            .padding(.top, 20)
+            // the name under the mascot (`-mt-1` under BotAvatar's 144 pt
+            // box, whose owl sits higher than the iPad's: measured on the
+            // 1376x1032 references, the name's baseline 15 pt lower)
             PanelInlineText(value: bot.name, placeholder: nil, label: "Edit name", size: 17, lineHeight: 24, weight: .medium,
                             limit: 100, required: true, isEditing: binding(.name)) { save(name: $0) }
-                .padding(.top, 20)
+                .padding(.top, 11)
                 .accessibilityIdentifier("desktop-panel-name")
             PanelInlineText(value: bot.title, placeholder: "Add a label", label: "Edit label", size: 12.5, lineHeight: 16,
                             muted: true, limit: 200, isEditing: binding(.label)) { save(title: $0) }

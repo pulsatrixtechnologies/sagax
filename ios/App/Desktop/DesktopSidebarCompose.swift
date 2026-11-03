@@ -41,7 +41,7 @@ struct DesktopComposePicker: View {
     }
 
     private var rows: [DesktopComposeTo.Row] {
-        DesktopComposeTo.rows(mode: mode, bots: bots, canCreateBots: session.surfaceGate.allows(.createBot), people: people)
+        DesktopComposeTo.rows(mode: mode, bots: bots, canCreateBots: session.surfaceGate.allows(.createBot), people: people, query: query)
     }
 
     var body: some View {
@@ -72,6 +72,10 @@ struct DesktopComposePicker: View {
             // the desktop's autoFocus; the parity captures keep the
             // simulator's software keyboard away
             if !ParityMode.isActive { focused = true }
+            if model.composeGroupMode {
+                model.composeGroupMode = false
+                mode = .group
+            }
             #if DEBUG
             if let preset = model.parityComposePreset {
                 mode = preset.group ? .group : .browse

@@ -684,6 +684,29 @@ describe("a person's message that ran on a quick model Sagax picked", () => {
     expect(w.store.blockedUntil("server", "claude")).toBeNull();
   });
 
+  // 2026-11-02 (review of the final pass): a call turn runs on Sagax's quick pick on Auto too ("pinned or Auto alike",
+  // voicePickForTurn), in place of Auto's own pick, so Auto's refusal memory never sees that model. Before, a refusal bound
+  // to it held nothing at all: Auto sent the call's message again, and the next quick pick took the same model, up to six
+  // times. It is skipped as on a pinned conversation, even when it is the model Auto falls back to.
+  it("skips it on an Auto conversation too, whose own pick a call turn replaces, without holding its engine", async () => {
+    const quickModels: ModelSelection[] = [{ instanceId: "claude", model: "haiku" }, { instanceId: "codex", model: "gpt-mini" }, { ...A }];
+    for (const fast of quickModels) {
+      const refused: Array<{ payer: string; selection: ModelSelection; until: number }> = [];
+      const w = world();
+      const host = createLimitFailoverHost({ ...w.deps, refuseModel: (payer, selection, until) => { refused.push({ payer, selection, until }); } });
+      w.state.selection = { ...A, auto: true };
+      quick(w, host, fast);
+      host.noteError("thread", "This account has reached its weekly limit for this model.", w.clock.now + 5 * HOUR, "model");
+      expect(host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: undefined, stopReason: "quota" })).toBe(true);
+      await host.idle();
+      expect(refused).toEqual([{ payer: "server", selection: fast, until: w.clock.now + 5 * HOUR }]);
+      expect(w.store.blockedUntil("server", fast.instanceId)).toBeNull();
+      // Auto takes the same message again at once; the conversation stays on Auto.
+      expect(w.state.resent).toEqual([{ messageId: "m1", on: { ...A, auto: true } }]);
+      expect(w.state.switches).toEqual([]);
+    }
+  });
+
   it("never holds the conversation's own model for its quick picks when a refusal bound to it refused that model", async () => {
     const refused: ModelSelection[] = [];
     const w = world();
@@ -951,6 +974,108 @@ describe("a turn whose backup standing in for the conversation's own engine is r
     w.clock.now += 2 * HOUR + w.store.afterResetMs;
     expect(w.host.beforeTurn("bot", "thread", undefined)).toBeNull();
     expect(w.state.selection).toEqual(A);
+  });
+
+  // 2026-11-02 (review of the final pass): the conversation's own engine took turns again before its return was due (its
+  // hold ended at its reset, and the return waits a minute more; or a turn on it worked since, which ends its hold), so
+  // the backup picked for the refused stand-in was that engine itself. Before, the conversation moved "to" Claude as a
+  // stand-in for Claude, its row went from Claude to Claude, and the line said "continuing on Claude, back on Claude when
+  // it resets". It goes back to Claude, as a run does (routineLimit's backHome), and the line says so.
+  it("goes back to the conversation's own engine when its limit ended before its return was due", async () => {
+    for (const ended of ["at its reset", "a turn on it worked"] as const) {
+      const w = world();
+      await onStandIn(w);
+      if (ended === "at its reset") w.clock.now += 2 * HOUR + 30_000;
+      else {
+        // Another conversation of this payer gets an answer from Claude: its hold ends now.
+        w.host.noteDispatch("thread-2", { botId: "bot", engine: { instanceId: "claude", driverKind: "claudeAgent" }, selection: A, payer: "server", at: w.clock.now });
+        w.host.turnSucceeded("thread-2");
+      }
+      w.host.turnFailed({ threadId: "thread", turnId: "turn-2", cause: LIMIT_5H });
+      await w.host.idle();
+      expect(w.state.selection).toEqual(A);
+      expect(w.state.resent.at(-1)).toEqual({ messageId: "m1", on: A });
+      expect(w.store.failover("bot", "thread")).toBeUndefined();
+      expect(w.state.lines.at(-1)).toEqual({ threadId: "thread", replaced: "turn-2", line: { kind: "back", engine: "Claude", refused: "Codex" } });
+      expect(w.store.blockedUntil("server", "codex")).toBe(w.clock.now + 5 * HOUR);
+    }
+  });
+
+  it("goes back to it before the next turn too, when the backup is held and that engine's limit ended", async () => {
+    const w = world();
+    w.dispatch();
+    w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT });
+    await w.host.idle();
+    expect(w.state.selection).toEqual(B);
+    // Claude's hold ended at its reset, its return is due a minute later, and another conversation met Codex's limit.
+    w.clock.now += 2 * HOUR + 30_000;
+    w.store.block("server", "codex", w.clock.now + 5 * HOUR);
+    await w.host.beforeTurn("bot", "thread", undefined);
+    expect(w.state.selection).toEqual(A);
+    expect(w.store.failover("bot", "thread")).toBeUndefined();
+    expect(w.state.lines.at(-1)).toEqual({ threadId: "thread", line: { kind: "back", engine: "Claude", refused: "Codex" } });
+  });
+
+  it("sends a routine run back to it too, and runs the routine there", async () => {
+    const w = world();
+    await onStandIn(w);
+    w.state.request = undefined;
+    w.clock.now += 2 * HOUR + 30_000;
+    expect(w.host.turnFailed({ threadId: "thread", turnId: "turn-2", cause: LIMIT_5H, routineRun: { id: "run-1", routineId: "routine" } })).toBe(true);
+    await w.host.idle();
+    expect(w.state.selection).toEqual(A);
+    expect(w.state.reruns).toEqual(["routine"]);
+    expect(w.state.superseded).toEqual(["run-1"]);
+    expect(w.store.failover("bot", "thread")).toBeUndefined();
+    expect(w.state.lines.at(-1)!.line).toEqual({ kind: "back", engine: "Claude", refused: "Codex" });
+  });
+
+  // A limit bound only to the conversation's own model (Claude's limitScope "model": that model's weekly window) holds
+  // nothing on its engine, so Claude takes turns, even answers one, while that model's own limit holds. Claude is no
+  // backup for it then (as for a run, routineBackup), and no line says its limit has reset.
+  it("never takes the conversation's own engine back while a limit bound to its own model still holds", async () => {
+    const ownModelLimit = (w: ReturnType<typeof world>) => {
+      w.dispatch();
+      w.host.noteError("thread", "This Claude account has reached its weekly limit for this model.", w.clock.now + 3 * HOUR, "model");
+      w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: undefined, stopReason: "quota" });
+    };
+    const switching = world();
+    ownModelLimit(switching);
+    await switching.host.idle();
+    expect(switching.state.selection).toEqual(B);
+    expect(switching.store.blockedUntil("server", "claude")).toBeNull();
+    // Another model of Claude answers another conversation: that says nothing of this model's own limit.
+    switching.host.noteDispatch("thread-2", { botId: "bot", engine: { instanceId: "claude", driverKind: "claudeAgent" }, selection: { instanceId: "claude", model: "sonnet" }, payer: "server", at: switching.clock.now });
+    switching.host.turnSucceeded("thread-2");
+    switching.dispatch(switching.state.selection);
+    switching.state.request = { messageId: "m1", turnId: "turn-2", origin: { kind: "user" } };
+    switching.host.turnFailed({ threadId: "thread", turnId: "turn-2", cause: LIMIT });
+    await switching.host.idle();
+    expect(switching.state.selection).toEqual(C);
+    expect(switching.state.lines.at(-1)!.line).toEqual({ kind: "switched", from: "Codex", to: "Grok", home: "Claude", resetsAt: switching.clock.now + 3 * HOUR });
+    // Back on Claude at that model's own reset.
+    switching.clock.now += 3 * HOUR + switching.store.afterResetMs;
+    expect(switching.host.beforeTurn("bot", "thread", undefined)).toBeNull();
+    expect(switching.state.selection).toEqual(A);
+
+    const waiting = world({ allowed: ["claude", "codex"] });
+    ownModelLimit(waiting);
+    await waiting.host.idle();
+    waiting.dispatch(waiting.state.selection);
+    waiting.state.request = { messageId: "m1", turnId: "turn-2", origin: { kind: "user" } };
+    waiting.host.turnFailed({ threadId: "thread", turnId: "turn-2", cause: LIMIT });
+    await waiting.host.idle();
+    expect(waiting.state.selection).toEqual(B);
+    expect(waiting.state.lines.at(-1)!.line).toEqual({ kind: "waiting", from: "Codex", home: "Claude", resetsAt: waiting.clock.now + 3 * HOUR });
+    expect(waiting.store.resumes()).toEqual([expect.objectContaining({ kind: "message", engine: "claude", at: waiting.clock.now + 3 * HOUR + waiting.store.afterResetMs })]);
+    // Within the minute after that model's reset, its limit is over: the stand-in's next refusal sends it back there.
+    waiting.clock.now += 3 * HOUR + 30_000;
+    waiting.dispatch(waiting.state.selection);
+    waiting.state.request = { messageId: "m2", turnId: "turn-3", origin: { kind: "user" } };
+    waiting.host.turnFailed({ threadId: "thread", turnId: "turn-3", cause: LIMIT });
+    await waiting.host.idle();
+    expect(waiting.state.selection).toEqual(A);
+    expect(waiting.state.lines.at(-1)!.line).toEqual({ kind: "back", engine: "Claude", refused: "Codex" });
   });
 
   it("names them for a routine run too, when it goes on another backup or waits for the conversation's own engine", async () => {

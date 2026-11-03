@@ -87,6 +87,12 @@ export interface LimitFailover {
   resetsAt: number;
   /** `resetsAt` is Sagax's estimate: the engine named no reset (2026-11-02). */
   estimated?: true;
+  /** No hold on `from`'s engine reaches `resetsAt`: the limit that moved the
+   * conversation off bound only `from`'s model (Claude's limitScope "model":
+   * its extra-usage credits, its family's weekly window). That engine taking
+   * turns again, even answering one on another model, says nothing of
+   * `from`'s own limit, which holds until `resetsAt` (2026-11-02). */
+  modelOnly?: true;
   at: number;
 }
 
@@ -217,14 +223,18 @@ export class LimitFailoverStore {
   }
 
   /** A thread moved to `to`. A second move keeps the engine the thread
-   * started on, so it still goes back there. */
+   * started on, so it still goes back there, and what its own limit was
+   * (`modelOnly`). */
   record(failover: LimitFailover): LimitFailover {
     const earlier = this.state.failovers.find((row) => row.threadId === failover.threadId && row.botId === failover.botId);
     // The later reset wins, and with it whether that time is only Sagax's estimate.
     const later = earlier && earlier.resetsAt > failover.resetsAt ? earlier : failover;
-    const { estimated: _estimated, ...moved } = failover;
+    const { estimated: _estimated, modelOnly: _modelOnly, ...moved } = failover;
     const kept = earlier && earlier.to.instanceId === failover.from.instanceId && earlier.to.model === failover.from.model
-      ? { ...moved, from: earlier.from, resetsAt: later.resetsAt, ...(later.estimated ? { estimated: true as const } : {}) } : failover;
+      ? {
+        ...moved, from: earlier.from, resetsAt: later.resetsAt, ...(later.estimated ? { estimated: true as const } : {}),
+        ...(earlier.modelOnly ? { modelOnly: true as const } : {}),
+      } : failover;
     this.state.failovers = [...this.state.failovers.filter((row) => row.threadId !== failover.threadId), kept].slice(-MAX_ROWS);
     this.save();
     return kept;

@@ -344,6 +344,27 @@ describe("a quick model Sagax picked that a refusal bound to that model refused"
     w.clock.now = NOW + HOUR + 1;
     expect(await w.say()).toEqual(CLAUDE_FAST);
   });
+
+  // 2026-11-02 (review of the final pass): on Auto too a call turn runs on Sagax's quick pick, in place of Auto's own
+  // (voicePickForTurn, "pinned or Auto alike"), so Auto's own memory never sees that model. Before, nothing held it: Auto
+  // sent the call's message again onto the same model, up to six times.
+  it("never sends an Auto conversation's call message back onto it either", async () => {
+    const auto: ModelSelection = { ...GROK, auto: true };
+    const w = world({ own: auto, fast: CLAUDE_FAST, chat: true, call: true });
+    w.threads.set("chat", { ...auto });
+    expect(await w.say()).toEqual(CLAUDE_FAST);
+    expect(w.fail("chat", CREDITS, { stopReason: "quota", limitScope: "model" }).taken).toBe(true);
+    await w.host.idle();
+    expect(w.refusedModels).toEqual([{ payer: "person", selection: CLAUDE_FAST, until: NOW + HOUR }]);
+    // Auto takes the message again at once, never on that model, and the conversation stays on Auto.
+    expect(w.resent).toEqual([{ threadId: "chat", messageId: "msg-1", on: auto }]);
+    expect(w.threads.get("chat")).toEqual(auto);
+    expect(w.store.blockedUntil("person", "claude")).toBeNull();
+    // The person's next message on the call skips it too until Sagax tries it again.
+    expect(await w.say()).toEqual(auto);
+    w.clock.now = NOW + HOUR + 1;
+    expect(await w.say()).toEqual(CLAUDE_FAST);
+  });
 });
 
 describe("a webhook run or a scheduled routine its engine's limit refused", () => {
@@ -645,6 +666,31 @@ describe("a run in the person's own conversation that another engine took over",
     expect(w.threads.get("chat")).toEqual(CLAUDE);
     expect(w.store.failover("nova", "chat")).toBeUndefined();
     expect(w.lines.at(-1)).toEqual({ threadId: "chat", line: { kind: "back", engine: "Claude" } });
+  });
+
+  // 2026-11-02 (review of the final pass): Claude holds nothing engine-wide for that model's own window, so when the
+  // backup is refused in turn, Claude is no backup for its own model before that window resets, and no line says it has.
+  it("keeps the conversation off its own model until that model's window resets when the backup is refused", async () => {
+    const codex: ModelSelection = { instanceId: "codex", model: "gpt-6.1-sol" };
+    const w = world({ own: CLAUDE, joinChat: true, chat: true });
+    const routine = w.manager.create({ name: "Follow-up", prompt: "Check the reply", botId: "nova", schedule: { type: "daily", time: "09:00", weekdays: [1, 2, 3, 4, 5] } });
+    const run = w.manager.runNow(routine.id)!;
+    await w.tick();
+    w.fail("chat", "This Claude account has reached its weekly Sonnet limit, which resets Nov 2, 4:16 PM (UTC). Until then, choose another model for this bot.",
+      { stopReason: "quota", limitResetsAt: NOW + 3 * HOUR, limitScope: "model" });
+    await w.tick();
+    expect(w.threads.get("chat")).toEqual(codex);
+    w.complete("chat");
+    expect(w.run(run.id).status).toBe("completed");
+    // The person's next message runs on Codex, and Codex's limit refuses it: Grok takes it, never Claude's own model.
+    expect(await w.say()).toEqual(codex);
+    expect(w.fail("chat", LIMIT_2H).taken).toBe(true);
+    await w.host.idle();
+    expect(w.resent).toEqual([{ threadId: "chat", messageId: "msg-1", on: GROK }]);
+    expect(w.lines.at(-1)).toEqual({ threadId: "chat", line: { kind: "switched", from: "Codex", to: "Grok", home: "Claude", resetsAt: NOW + 3 * HOUR } });
+    // Back on Claude at that window's reset.
+    w.clock.now = NOW + 3 * HOUR + 61_000;
+    expect(await w.say()).toEqual(CLAUDE);
   });
 
   it("never leaves the conversation on the backup when the hold lapsed before the run could start", async () => {

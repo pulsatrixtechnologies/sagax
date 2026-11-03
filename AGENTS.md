@@ -979,7 +979,10 @@ unless that engine's plan is spent. So does a refusal bound to one model
 window) of any quick model Sagax picked, on any engine: nothing engine-wide,
 but the next wake's or call's quick pick skips that model until the reset, as
 the lines say, instead of picking it again (a call's message used to go back
-onto it up to `MAX_RESENDS` times). A takeover is not the run's one
+onto it up to `MAX_RESENDS` times). An Auto conversation's call turn included
+(`quickPicked`): its quick pick runs in place of Auto's own, so Auto's refusal
+memory never sees it, even when it is the model Auto falls back to (Auto sent
+the message again onto it up to six times). A takeover is not the run's one
 automatic retry: its start carries the limit's note (`retried`) with
 `takeoverRetried`, so a stall or an empty response on the engine that took
 the run over, or a wait for a reset after it, still gets that retry
@@ -1017,9 +1020,18 @@ with nothing else to take it, the wait names both and the engine it waits
 for (`waiting` or `waitingRoutine` with `home`,
 `limitFailover.waitingStandIn`, `limitFailover.waitingRoutineStandIn`), the
 bot owner's limit included (`limitFailover.ownerSwitchedStandIn`,
-`limitFailover.ownerWaitingStandIn`). Incidents and notification titles say
-"proactive wake" or "webhook run", failed or waiting (`routineRunTitle`,
-`server/notify.ts`), never "scheduled routine".
+`limitFailover.ownerWaitingStandIn`). When the backup picked then is the
+conversation's own engine (its hold ended before its return was due: within
+the minute after its reset, or a turn on it worked since), the conversation
+goes back to its own model at once, as a run does (`backHome`): its row is
+forgotten and the line is `back` with `refused`, never "continuing on
+Claude, back on Claude when it resets". A limit bound only to its own model
+held nothing on that engine (`LimitFailover.modelOnly`, kept across a second
+move): that engine is no backup until the row's reset (`ownModelHolds`, as
+`routineBackup`), even when a turn on another of its models works.
+Incidents and notification titles say "proactive wake" or "webhook run",
+failed or waiting (`routineRunTitle`, `server/notify.ts`), never "scheduled
+routine".
 
 What Sagax holds is per payer and per engine, and as accurate as it knows.
 Only a refusal Sagax saw holds an engine for Auto, its panel, a backup

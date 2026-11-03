@@ -416,7 +416,7 @@ describe("teammates' messages (peer inbox, 2026-11-02)", () => {
   });
 });
 
-describe("teammates' messages, second pass (GOX Melonie, 2026-11-02)", () => {
+describe("teammates' messages, second pass (production, 2026-11-02)", () => {
   const notice = (receiverId: string, n: number, extra: Partial<Parameters<typeof peerNoticeEvent>[0]> = {}) => peerNoticeEvent({
     receiverId, noticeId: `node-${n}`, threadId: `th-${n}`, title: `Urgent Northwind ${n}`, status: "completed",
     text: `Carl answered on ${n}.`, senderId: "katarina", senderName: "Katarina", ...extra,

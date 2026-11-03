@@ -505,7 +505,7 @@ export interface RoutineRunProactive {
   alwaysReport?: true;
 }
 
-/** 2026-11-02 (peer inbox, second pass): on GOX five wakes of six on
+/** 2026-11-02 (peer inbox, second pass): in production five wakes of six on
  * teammates' messages ended NOTHING_TO_REPORT ("already told you"), the
  * bot taking the reply of the notice's own thread, which the person never
  * sees, for one they had read. A wake with a teammate's message (or a post

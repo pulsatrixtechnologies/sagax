@@ -932,7 +932,7 @@ it("peer inbox (2026-11-02): a one-way notice's question reaches its receiver's 
     .map((message) => message.inputRequest.question), { timeout: 60_000, interval: 250 }).toEqual(["GO for the seven Northwind writes?"]);
 }), 150_000);
 
-// 2026-11-02 (peer inbox, second pass, GOX Melonie): the wakes ran, but five
+// 2026-11-02 (peer inbox, second pass, production): the wakes ran, but five
 // of six ended NOTHING_TO_REPORT ("Already told you at 1:32 p.m. ET"): the bot
 // took the reply of the notice's own thread, which its person never sees, for
 // one they had read, so nothing of Katarina's or Harrie's messages reached
@@ -949,7 +949,7 @@ it("peer inbox (second pass): a wake on a teammate's notice that ends NOTHING_TO
     ],
     reply: "Sent",
   };
-  // GOX: the bot writes why it thinks the person knows, then the marker
+  // In production: the bot writes why it thinks the person knows, then the marker
   f.plan[primary.id] = { byPrompt: [{ promptIncludes: "Proactive wake", plan: { reply: "Already told you at 1:32 p.m. ET: Zachary has the box.\n\nNOTHING_TO_REPORT" } }], reply: "Noted in this thread" };
   // the marker alone: the digest names who wrote and about what
   f.plan[solo.id] = { byPrompt: [{ promptIncludes: "Proactive wake", plan: { reply: "NOTHING_TO_REPORT" } }], reply: "Noted" };

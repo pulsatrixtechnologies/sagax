@@ -1,6 +1,6 @@
 // The telephony guard (spec docs/specs/bot-telephony.md 6.5) on the
 // Perspicax relay: what a bot may do with the Twilio tools of its person's
-// profile, whatever its approval level. Checked in server/perspicax-mcp.ts
+// profile, whatever its approval level. Checked in server/perspicax/perspicax-mcp.ts
 // before a bot's own tools/call frame leaves for Perspicax; a call the
 // harness makes itself (place_phone_call, `judged`) is not a bot's frame
 // and is built by Sagax.

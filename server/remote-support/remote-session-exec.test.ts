@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { consumeRemoteExecApproval, grantRemoteExecApproval, noteRemoteExecRequest, remoteCommandReadOnly, remoteSessionToolCall } from "./remote-session-exec.ts";
-import { memberOwnScopeTool } from "../member-tool-scope.ts";
+import { memberOwnScopeTool } from "../people/member-tool-scope.ts";
 
 const exec = (command: string) => JSON.stringify({ command });
 

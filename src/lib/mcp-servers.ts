@@ -6,7 +6,7 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import { api } from "@/state/store";
 
-/** What the server says about a connector's sign-in (server/mcp-oauth.ts). */
+/** What the server says about a connector's sign-in (server/mcp/mcp-oauth.ts). */
 export type McpAuthState = "none" | "required" | "connected" | "expired" | "error";
 
 export interface McpServerSummary {

@@ -30,7 +30,7 @@ import {
 export type { BotCatalogDetail, BotCatalogEntry, BotCatalogResponse } from "../../shared/bot-catalog";
 
 /** A community team template (GET /api/team-library/catalog, one entry;
- * server/team-library.ts TeamCatalogEntry). */
+ * server/team/team-library.ts TeamCatalogEntry). */
 export interface CommunityTemplate {
   slug: string;
   name: string;

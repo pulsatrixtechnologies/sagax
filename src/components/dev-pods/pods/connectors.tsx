@@ -1,6 +1,6 @@
 // Connectors: what the bot really reached on this conversation's last turn
 // (task.connectors, recorded by the server when it built that turn:
-// server/turn-connectors.ts), grouped by where each comes from: the person's
+// server/turns/turn-connectors.ts), grouped by where each comes from: the person's
 // own Claude and Grok accounts, Perspicax, their own MCP servers, this
 // server's MCP servers and the bot's plugins. Each row says Connected or
 // To reconnect. Before the first recorded turn, the servers this bot is set

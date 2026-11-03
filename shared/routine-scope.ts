@@ -48,7 +48,8 @@ export interface RoutineScopeQuery {
   botId?: string;
   ownerId?: string;
   status?: RoutineScopeStatus;
-  /** Clear logs of one routine only (the routine panel's Runs header). */
+  /** DELETE /api/routine-runs only (2026-11-03): one routine's runs, the
+   * routine panel's Clear run logs. */
   routineId?: string;
 }
 

@@ -1,6 +1,6 @@
 // A server, plugin or skill name as people say it, shared by the Capabilities page
 // (src/lib/installed-model.ts) and the capabilities list
-// (server/capabilities.ts): "github-github" is "GitHub".
+// (server/capabilities/capabilities.ts): "github-github" is "GitHub".
 
 /** One app's key across sources: "Asana", "asana" and "Asana MCP" match. */
 export function appKey(name: string): string {

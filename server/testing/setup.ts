@@ -48,7 +48,7 @@ process.env.SAGAX_CONTENT_ENCRYPTION ??= "off";
 // A DOM environment (happy-dom) never opens it, and Vite cannot bundle
 // node:sqlite for one, so those files skip the import.
 const { closeMessageDb } = !("window" in globalThis)
-  ? await import("../message-db.ts")
+  ? await import("../messages/message-db.ts")
   : { closeMessageDb: () => {} };
 afterEach(closeMessageDb);
 

@@ -18,7 +18,7 @@
 // admin right. A bot the caller cannot see is 404.
 import { z } from "zod";
 
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { ROUTINE_FOLDER_MAX, type RoutineFolderUndo } from "../../shared/routine-folders.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { TeamMemoryEntry } from "../memory/team-memory.ts";
 import { createTeamMemoryHttpRoutes, teamMemoryWriteRefusal, type TeamMemoryHttpDeps } from "./team-memory-http.ts";
 import { PASS, type RouteContext } from "./table.ts";

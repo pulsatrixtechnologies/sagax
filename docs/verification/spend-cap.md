@@ -34,14 +34,14 @@ limit message once the cap is reached.
 ## Driving it
 
 ```sh
-pnpm exec vitest run --no-file-parallelism server/spend-cap-api.test.ts
+pnpm exec vitest run --no-file-parallelism server/usage/spend-cap-api.test.ts
 ```
 
 The test writes a stand-in enterprise layer (the folder shape core loads,
 granting `budgets` and `billing`) and launches the `control-omb` fixture with
 it through `launchVerificationServer(..., { dir, licenseKey })`, which also
 proves a present layer's grant reaches the gates; without a layer both are on
-anyway (`server/spend.test.ts` covers that default). It sets a
+anyway (`server/usage/spend.test.ts` covers that default). It sets a
 $0.015 cap and a default price list, sends two turns that the fake engine
 books at $0.01 each, and checks the third is refused with 409 `spend_cap`,
 that `/api/usage` reports the cap exceeded, warned, and priced, that the CSV
@@ -59,7 +59,7 @@ features are on) and use the normal chat-turn commands.
 ## Unit regressions
 
 ```sh
-pnpm exec vitest run server/spend.test.ts server/model-prices.test.ts server/prices.ts server/config.test.ts server/usage-ledger.test.ts src/lib/notify.test.ts
+pnpm exec vitest run server/usage/spend.test.ts server/models/model-prices.test.ts server/usage/prices.ts server/config.test.ts server/usage/usage-ledger.test.ts src/lib/notify.test.ts
 ```
 
 These cover price precedence and cached-input pricing, month-to-date sums

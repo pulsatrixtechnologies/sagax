@@ -14,11 +14,11 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 import { DATA_DIR, stripWorkspaceCredentialEnv } from "../config.ts";
-import { laterStartup, openStartupModelCatalog, writeStartupModelCache } from "../startup-model-catalog.ts";
+import { laterStartup, openStartupModelCatalog, writeStartupModelCache } from "../models/startup-model-catalog.ts";
 import { hostedWorkspaceConfigured } from "../enterprise.ts";
 import { ChatGptPlanAuthController } from "./chatgpt-plan-auth.ts";
 import { codexLaunchesStarting, codexLaunchSlot } from "./codex-process.ts";
-import { isReservedMcpEnvEntry } from "../mcp-registry.ts";
+import { isReservedMcpEnvEntry } from "../mcp/mcp-registry.ts";
 
 import type {
   DriverCreateInput,
@@ -38,7 +38,7 @@ import { codexHome } from "./codex-identity.ts";
 import { codexNotSignedIn, type CodexRoute } from "./codex-errors.ts";
 import { codexLoginCheck, storedCodexLogin } from "./codex-login.ts";
 import { keyRejected, noteKeyAccepted, noteKeyRejected } from "../key-rejections.ts";
-import { type RenewalStep } from "../context-renewal.ts";
+import { type RenewalStep } from "../context/context-renewal.ts";
 import { assertToolScopeSupported } from "../../shared/tool-scope-support.ts";
 
 import { isSagaxPerspicaxBridge, isSagaxWorkplaceProxy } from "./codex/mcp-mount.ts";
@@ -209,7 +209,7 @@ export const CodexDriver: ProviderDriver<CodexConfig> = {
     const turnReviewers = new Map<string, { mode: ApprovalMode; sagaxAnswers: boolean }>();
     /** Threads whose Codex thread ran out of context room: the next turn
      * (Retry, or any new message) starts a new Codex thread from the chat's
-     * rebuild instead of resuming the full one (server/context-renewal.ts). */
+     * rebuild instead of resuming the full one (server/context/context-renewal.ts). */
     const freshNextTurn = new Set<string>();
     /** Logical turns that already used their one in-turn context renewal. A
      * second overflow fails in plain words and marks freshNextTurn. */

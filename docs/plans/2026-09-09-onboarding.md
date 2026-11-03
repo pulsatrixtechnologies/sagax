@@ -106,4 +106,4 @@ sweep, and beats swap without the view transition.
 - Phone and native clients: they see nothing from this branch.
 - A skin picker inside the welcome flow.
 - Per-user onboarding state (prepared for `feat/rbac-users`, moved there).
-- The CLI setup wizard in `server/cli-setup.ts`.
+- The CLI setup wizard in `server/cli/cli-setup.ts`.

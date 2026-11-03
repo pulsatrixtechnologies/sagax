@@ -13,7 +13,7 @@ import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { gateServer } from "./mcp-gate-config.ts";
+import { gateServer } from "./mcp/mcp-gate-config.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
 
 const GATE = join(dirname(fileURLToPath(import.meta.url)), "mcp-gate.ts");

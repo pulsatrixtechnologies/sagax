@@ -12,7 +12,7 @@ extension Session {
         var decision = ApprovalDockRules.decision(choice, for: pending)
         let thread = pending.answerThread(conversation: chat.threadId)
         // A step-up made for this card covers its Always allow and its
-        // Allow, each once (server/step-up-gate.ts): one Face ID, not two.
+        // Allow, each once (server/auth/step-up-gate.ts): one Face ID, not two.
         var stepUp: String?
         if let key = decision.alwaysAllowKey, let botId = askingBotId(pending, in: chat) {
             await perform { client in

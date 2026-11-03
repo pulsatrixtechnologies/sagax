@@ -1,7 +1,7 @@
 /** Mutable Codex app-server session bag shared across launch phases. */
 import type { RuntimeEvent, SendTurnInput, SteerOutcome } from "../../contracts.ts";
 import type { ApprovalMode } from "../../../shared/approval-mode.ts";
-import type { RenewalStep } from "../../context-renewal.ts";
+import type { RenewalStep } from "../../context/context-renewal.ts";
 import type { CodexRoute } from "../codex-errors.ts";
 import type { CodexConfig } from "./config.ts";
 import type { PreparedCodexLaunch } from "./turn-types.ts";

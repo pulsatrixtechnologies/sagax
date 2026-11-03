@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { SERVER_FEATURE_NAMES } from "../../shared/server-features.ts";
-import { LOCKOUT } from "../sessions.ts";
+import { LOCKOUT } from "../auth/sessions.ts";
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { openSse } from "../testing/sse.ts";
 import { freePortBlock } from "../testing/ports.ts";

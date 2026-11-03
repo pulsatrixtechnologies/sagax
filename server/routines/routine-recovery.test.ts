@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { RuntimeEvent } from "../../shared/runtime-events.ts";
 import { CLAUDE_NEEDS_RECONNECTING, CLAUDE_SIGN_IN_EXPIRED, claudeSignInExpired } from "../drivers/claude-errors.ts";
 import { CODEX_SIGN_IN_EXPIRED, codexSignInExpired } from "../drivers/codex-errors.ts";
-import { engineNeedsReconnecting, engineReconnectAheadDetail } from "../engine-reconnect-ahead.ts";
+import { engineNeedsReconnecting, engineReconnectAheadDetail } from "../engines/engine-reconnect-ahead.ts";
 import {
   classifyRoutineFailure, dispatchRefusal, retryNote, ROUTINE_BUSY_RECHECK_MS, ROUTINE_BUSY_WAIT_MS, weekRuns, type RoutineAlert,
 } from "./routine-recovery.ts";

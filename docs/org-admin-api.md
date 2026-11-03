@@ -169,7 +169,7 @@ backup are server facts.
 ```
 
 - `engines`: the boot self-check of the image's engines
-  (`server/engines-self-check.ts`); without an image manifest, the configured
+  (`server/engines/engines-self-check.ts`); without an image manifest, the configured
   instances as their probes found them (`checkedAt` null).
 - `presence`: Sagax knows online, away and offline; `idle` is always 0.
   Hidden presence counts as offline.
@@ -812,7 +812,7 @@ refused with 403 `org_always_allow_off`, no allow rule is saved or turned
 on, and the standing grants people already saved stop answering while it is
 off (they answer again when it is back on). Each change is an `approval`
 row of the admin activity (`org.approvals.*`). Kept in
-`custom-approval-rules.json` under `org`; `server/custom-rules-org.ts`.
+`custom-approval-rules.json` under `org`; `server/rules/custom-rules-org.ts`.
 
 ## Connections
 

@@ -19,7 +19,7 @@ export const GROK_PROMPT_BYTE_LIMIT = 96_000;
 
 /** The marker that starts the person's latest message in a turn's text. */
 const LATEST_MESSAGE = "[Now reply to the user's latest message:]";
-/** The line of the folded earlier context (server/compaction-summary.ts). */
+/** The line of the folded earlier context (server/context/compaction-summary.ts). */
 const HISTORY_HEADER = "Historical excerpts in chronological order";
 /** A shortened line keeps at least this much. */
 const MIN_KEEP = 600;

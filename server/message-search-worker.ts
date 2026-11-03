@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { Worker } from "node:worker_threads";
-import type { SealedKeyMaterial, SearchHit } from "./message-search-query.ts";
+import type { SealedKeyMaterial, SearchHit } from "./messages/message-search-query.ts";
 
 export class SearchUnavailable extends Error {
   readonly status = 503;

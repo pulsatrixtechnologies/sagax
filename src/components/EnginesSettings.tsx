@@ -232,7 +232,7 @@ export function personalEngineLine(mine: MyEngine): { ready: boolean; line: stri
 /** `mine`: on an organization server, the signed-in person's own access to
  * this engine. The card then shows one line on what pays for their turns and
  * their own Connect or Disconnect (EngineConnect), never the server's account
- * (which serves no one's turns there: server/engine-credentials.ts). */
+ * (which serves no one's turns there: server/engines/engine-credentials.ts). */
 export function EngineRow({ instance, mine, member = false, issuer = "", bare = false, keysManaged = false }: { instance: InstanceInfo; mine?: MyEngine; member?: boolean; issuer?: string; bare?: boolean; keysManaged?: boolean }) {
   const { refreshInstances } = useStore();
   const [open, setOpen] = useState(false);

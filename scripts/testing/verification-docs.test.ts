@@ -33,9 +33,13 @@ helpVerbs.add("help");
 const ROUTES_DIR = join(ROOT, "server", "routes");
 const routeModules = readdirSync(ROUTES_DIR).filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts")).sort();
 // Organization features register theirs from server/org/*-routes.ts and
-// server/org/org-export.ts, which server/index.ts mounts. Other domains may
-// keep *-routes.ts at the server root until they move.
-const featureRouteDirs = [join(ROOT, "server"), join(ROOT, "server", "org"), join(ROOT, "server", "mail")];
+// server/org/org-export.ts, which server/index.ts mounts. The other domains
+// keep their *-routes.ts in their folder (server/perspicax/, server/sandbox/,
+// server/desktop/...) or at the server root.
+const SERVER_DIR = join(ROOT, "server");
+const featureRouteDirs = [SERVER_DIR, ...readdirSync(SERVER_DIR, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && entry.name !== "routes")
+  .map((entry) => join(SERVER_DIR, entry.name))];
 const featureRouteModules = featureRouteDirs
   .flatMap((dir) => readdirSync(dir)
     .filter((name) => name.endsWith("-routes.ts") || name === "org-export.ts")
@@ -43,7 +47,7 @@ const featureRouteModules = featureRouteDirs
   .sort();
 const serverSource = [join(ROOT, "server", "index.ts"), ...routeModules.map((name) => join(ROUTES_DIR, name)), ...featureRouteModules]
   .map((file) => readFileSync(file, "utf8")).join("\n");
-const hooksSource = readFileSync(join(ROOT, "server", "webhook-ingress.ts"), "utf8");
+const hooksSource = readFileSync(join(ROOT, "server", "triggers", "webhook-ingress.ts"), "utf8");
 // The hosted workspace adapter lives in the private enterprise layer, which
 // this tree stopped shipping with the Sagax 0.1.0 line (8a563e929). When it is
 // absent, the server's delegation prefix is what a doc may cite.

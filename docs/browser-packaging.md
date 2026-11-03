@@ -248,4 +248,4 @@ and does not go through the gate (an operator's explicit choice, for every
 bot of that server); the server never treats a browser as its
 owner anyway ([A browser signs in](self-hosting.md#a-browser-signs-in)), and
 the companion's control page needs its per-launch token. The widget check
-(`server/widget-check.ts`) keeps its own Chrome with no network at all.
+(`server/widgets/widget-check.ts`) keeps its own Chrome with no network at all.

@@ -18,7 +18,7 @@ import {
 } from "./achievements.ts";
 import { ACHIEVEMENTS_PATH, createAchievementRoutes } from "./routes/achievements.ts";
 import { PASS } from "./routes/table.ts";
-import { CLIENT_ALLOW } from "./request-auth.ts";
+import { CLIENT_ALLOW } from "./auth/request-auth.ts";
 
 const ADA = "pr_11111111-1111-4111-8111-111111111111";
 const BOB = "pr_22222222-2222-4222-8222-222222222222";

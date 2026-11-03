@@ -27,7 +27,7 @@
 import { engineOffer, offeredEngines, type EngineOfferContext } from "./offered-engines.ts";
 
 /** Drivers whose provider key a person can keep in Perspicax
- * (server/engine-credentials.ts providersOfDriver). */
+ * (server/engines/engine-credentials.ts providersOfDriver). */
 export const PERSONAL_KEY_DRIVERS: readonly string[] = ["claudeAgent", "codex", "grokAgent", "geminiAgent", "kimiAgent", "piAgent"];
 
 /** xAI engines: the organization's xAI key is voice only for chat purposes. */

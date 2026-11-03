@@ -1,5 +1,5 @@
 // HTTP routes for cloud coding agents on a bot, and credential settings.
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 import type { CloudAgentManager } from "../cloud-agents/manager.ts";
 import type { CloudAgentCredentialStore } from "../cloud-agents/credentials.ts";

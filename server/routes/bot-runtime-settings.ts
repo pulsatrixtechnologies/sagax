@@ -1,6 +1,6 @@
 // A bot's own runtime settings and tool access (2026-10-15), edited in the
 // bot editor instead of Settings > General > Advanced
-// (server/bot-runtime-settings.ts says what each field does).
+// (server/bots/bot-runtime-settings.ts says what each field does).
 //
 //   GET   /api/bots/:id/runtime-settings -> { settings, stored }
 //   PATCH /api/bots/:id/runtime-settings { maxConcurrentThreads?,
@@ -35,15 +35,15 @@
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 
-import type { RequestAuth } from "../request-auth.ts";
-import type { ToolGrantStore } from "../tool-grants.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import type { ToolGrantStore } from "../tools/tool-grants.ts";
 import {
   botRuntimeSettingsPatchSchema,
   effectiveBotRuntimeSettings,
   type BotAutomaticRecovery,
   type BotRuntimeSettings,
   type GlobalRuntimeSettings,
-} from "../bot-runtime-settings.ts";
+} from "../bots/bot-runtime-settings.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 import { grantStaysInOwnEnvironment, ORG_REACH_AREAS } from "../../shared/grant-reach.ts";
 import { maxParallelPerPersonFor } from "../../shared/parallel-tasks.ts";

@@ -10,11 +10,11 @@ import { z } from "zod";
 import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../shared/image-generation.ts";
 
 import { writeFileAtomic } from "./atomic.ts";
-import { applyStoredEngineEnv } from "./engine-api-keys.ts";
-import { migrateConfigPlaintextKeys, readOnboardingEngineKey } from "./onboarding-engine-key.ts";
-import { withoutComputerEngine } from "./computer-engine-removal.ts";
-import { newBotDefaultsSchema, type NewBotDefaults } from "./new-bot-defaults.ts";
-import { loopDetectorConfigSchema, type LoopDetectorConfig } from "./loop-detector.ts";
+import { applyStoredEngineEnv } from "./engines/engine-api-keys.ts";
+import { migrateConfigPlaintextKeys, readOnboardingEngineKey } from "./engines/onboarding-engine-key.ts";
+import { withoutComputerEngine } from "./computer/computer-engine-removal.ts";
+import { newBotDefaultsSchema, type NewBotDefaults } from "./bots/new-bot-defaults.ts";
+import { loopDetectorConfigSchema, type LoopDetectorConfig } from "./safety/loop-detector.ts";
 import { loopGuardConfigSchema, type LoopGuardConfig } from "./host/loop-guard.ts";
 import { EFFORT_LEVELS, type LiveSettings } from "../shared/wire.ts";
 import { isModelVariant, type InstanceConfigMap, type ModelSelection } from "./contracts.ts";
@@ -22,7 +22,7 @@ import { DEFAULT_WINDOW_MINUTES, MAX_WINDOW_MINUTES } from "./cache-keepwarm.ts"
 import { PROVIDER_ICON_PRESETS, providerIconError } from "../shared/provider-icon.ts";
 import type { McpServerSpec } from "./contracts.ts";
 import type { MailSettings } from "./mail/mail-config.ts";
-import { isRemoteMcpServer, parseStoredMcpServer, reservedMcpServerLog, reservedMcpServerName } from "./mcp-registry.ts";
+import { isRemoteMcpServer, parseStoredMcpServer, reservedMcpServerLog, reservedMcpServerName } from "./mcp/mcp-registry.ts";
 import { parseJson, schemaIssue, type JsonObject, type JsonValue } from "./schema.ts";
 import { isPersonalBrowserProfileId } from "../shared/person-settings.ts";
 import { browserEgressConfigSchema, type BrowserEgressConfig } from "./browser/egress/policy.ts";
@@ -448,7 +448,7 @@ const threadsPatchSchema = threadsConfigSchema.extend({
 const appConfigSchema = z.object({
   /** Verified by the dedicated domain endpoint, never a generic config patch. */
   customDomain: z.string().optional(),
-  /** Who may sign in with an emailed code (server/account-signin.ts):
+  /** Who may sign in with an emailed code (server/auth/account-signin.ts):
    * addresses or `@domain` entries; admins get every scope, members chat only. */
   signIn: z.object({ admins: z.array(z.string().max(320)).max(500).optional(), members: z.array(z.string().max(320)).max(5000).optional() }).optional(),
   // Slice 8: the interim organization (`org`) was removed; an older
@@ -472,15 +472,15 @@ const appConfigSchema = z.object({
     allowFullAccess: z.boolean().optional(),
     /** 2026-10-16: a bot a member owns runs its commands in its owner's
      * own isolated environment (their server environment, their Local VM)
-     * without an approval card (server/member-environment.ts). Absent means
+     * without an approval card (server/people/member-environment.ts). Absent means
      * on; an admin turns it off in Settings > Organization. */
     memberEnvironmentAutonomy: z.boolean().optional(),
     /** 2026-10-16: new threads start confidential unless the person
-     * says otherwise (server/confidential-threads.ts). Absent means off; an
+     * says otherwise (server/threads/confidential-threads.ts). Absent means off; an
      * admin turns it on in Settings > Organization. */
     confidentialThreadsByDefault: z.boolean().optional(),
     /** 2026-10-16: a bot a member owns runs its Auto and Auto-accept edits
-     * levels as such unless this is false (server/member-auto-approval.ts).
+     * levels as such unless this is false (server/approvals/member-auto-approval.ts).
      * Absent means allowed; an admin turns it off in Settings >
      * Organization. */
     memberAutoApproval: z.boolean().optional(),
@@ -491,9 +491,9 @@ const appConfigSchema = z.object({
     allowVaultExport: z.boolean().optional(),
     /** When the one-time pass, the first time the setting above was off,
      * set members' saved Auto and Auto-accept edits levels back to Ask
-     * (server/member-auto-approval.ts). */
+     * (server/approvals/member-auto-approval.ts). */
     memberAutoResetAt: z.number().finite().nonnegative().optional(),
-    /** Where bots' Claude Code plugins may come from (server/bot-plugins.ts).
+    /** Where bots' Claude Code plugins may come from (server/bots/bot-plugins.ts).
      * Absent means any marketplace; an admin may keep a list. */
     pluginMarketplaces: z.union([
       z.object({ mode: z.literal("any") }).strict(),
@@ -515,12 +515,12 @@ const appConfigSchema = z.object({
     disabledModels: z.array(z.string().max(300)).max(2000).optional(),
     /** #1098: folders of the server's disk an admin opened to members as
      * working folders, keyed by principal id or `*` for every member
-     * (server/member-folders.ts). */
+     * (server/people/member-folders.ts). */
     memberFolders: z.record(z.string().max(200), z.array(z.string().max(1024)).max(50)).optional(),
   }).optional(),
-  /** When stored person references became principal ids (server/identity-migration.ts). */
+  /** When stored person references became principal ids (server/people/identity-migration.ts). */
   identityMigratedAt: z.number().optional(),
-  /** When every bot thread got its owner (server/thread-privacy.ts). */
+  /** When every bot thread got its owner (server/threads/thread-privacy.ts). */
   privateThreadsMigratedAt: z.number().optional(),
   invites: z.array(z.object({
     token: z.string().min(1),
@@ -706,7 +706,7 @@ const appConfigSchema = z.object({
      * without Sagax, and the person may notice it. */
     autoCompactOffBots: z.array(z.string().min(1).max(200)).max(1_000).optional(),
     /** Hours of quiet after which a thread's engine session is not resumed
-     * but rebuilt from Sagax's summary (server/stale-session.ts; default 6,
+     * but rebuilt from Sagax's summary (server/auth/stale-session.ts; default 6,
      * 0 turns the check off). */
     staleSessionHours: z.number().min(0).max(24 * 365).optional(),
     /** Saved engine session size (bytes) past which it is not resumed
@@ -716,7 +716,7 @@ const appConfigSchema = z.object({
     /** Minutes of quiet before the size check applies (default 60). */
     staleSessionColdMinutes: z.number().min(0).max(24 * 60 * 30).optional(),
   }).optional(),
-  /** Stops a run that repeats itself (server/loop-detector.ts). Absent
+  /** Stops a run that repeats itself (server/safety/loop-detector.ts). Absent
    * fields take the defaults; `enabled: false` turns it off. */
   loopDetector: loopDetectorConfigSchema.optional(),
   /** Opt-in shell-failure streak guard (server/host/loop-guard.ts). Separate
@@ -729,7 +729,7 @@ const appConfigSchema = z.object({
     captureQuietMs: z.number().int().min(1_000).max(24 * 60 * 60_000).optional(),
     /** Local hour (0-23) after which the nightly tidy-up runs. */
     tidyHour: z.number().int().min(0).max(23).optional(),
-    /** Recall by meaning beside FTS5 (server/semantic-index.ts). On unless
+    /** Recall by meaning beside FTS5 (server/recall/semantic-index.ts). On unless
      * false, or SAGAX_SEMANTIC_RECALL=0. */
     semanticRecall: z.boolean().optional(),
     /** An OpenAI-compatible embeddings endpoint the person runs (Ollama,
@@ -803,12 +803,12 @@ export interface AppConfig {
     /** 2026-10-30: models the organization turned off (`<engine>/<model>`). */
     disabledModels?: string[];
     /** #1098: folders of the server's disk an admin opened to members as
-     * working folders, by principal id or `*` (server/member-folders.ts). */
+     * working folders, by principal id or `*` (server/people/member-folders.ts). */
     memberFolders?: Record<string, string[]>;
   };
-  /** When stored person references became principal ids (server/identity-migration.ts). */
+  /** When stored person references became principal ids (server/people/identity-migration.ts). */
   identityMigratedAt?: number;
-  /** When every bot thread got its owner (server/thread-privacy.ts). */
+  /** When every bot thread got its owner (server/threads/thread-privacy.ts). */
   privateThreadsMigratedAt?: number;
   invites?: Array<{
     token: string;
@@ -1138,7 +1138,7 @@ export function threadEventLogRetentionDays(cfg: AppConfig): number | null {
 export function localVmMode(cfg: AppConfig, env: NodeJS.ProcessEnv = process.env): "shared" | "per-bot" | "pool" {
   const mode = cfg.localVm?.mode ?? DEFAULT_LOCAL_VM_MODE;
   // Organization mode never runs a VM per bot: each person has one server
-  // environment (server/user-sandbox-routing.ts). A saved per-bot choice
+  // environment (server/sandbox/user-sandbox-routing.ts). A saved per-bot choice
   // from before reads as shared there.
   return mode === "per-bot" && env.SAGAX_IDENTITY?.trim().toLowerCase() === "perspicax" ? "shared" : mode;
 }
@@ -1162,7 +1162,7 @@ export function autoRecallEnabled(cfg: AppConfig): boolean {
   return cfg.features?.autoRecall !== false;
 }
 
-/** Recall by meaning (server/semantic-index.ts): on unless the config says
+/** Recall by meaning (server/recall/semantic-index.ts): on unless the config says
  * false or the process was started with SAGAX_SEMANTIC_RECALL=0. */
 export function semanticRecallEnabled(cfg: AppConfig, env: NodeJS.ProcessEnv = process.env): boolean {
   if (/^(0|off|false|no)$/i.test(env.SAGAX_SEMANTIC_RECALL?.trim() ?? "")) return false;
@@ -1693,10 +1693,10 @@ export const WORKSPACE_CREDENTIAL_ENV = [
   "SAGAX_JEV_API_KEY",
   "SAGAX_OPENAI_IMAGE_KEY",
   "SAGAX_CUSTOM_IMAGE_KEY",
-  // The key of the encrypted MCP sign-in vault (server/mcp-oauth.ts).
+  // The key of the encrypted MCP sign-in vault (server/mcp/mcp-oauth.ts).
   "SAGAX_MCP_OAUTH_KEY",
   // The client secret that signs in to Azure Key Vault for content
-  // encryption (server/content-key-azure.ts).
+  // encryption (server/encryption/content-key-azure.ts).
   "SAGAX_CONTENT_KEY_AZURE_CLIENT_SECRET",
   // Cloud Pro's included Boat, voice and decision relay tokens
   // (included-services.ts), used only in-process by the Boat, voice and
@@ -1723,7 +1723,7 @@ export const WORKSPACE_CREDENTIAL_ENV = [
  * server's link token, and an engine that learnt its path (or the issuer to
  * use it with) could read it as the same user. The webhook that starts the
  * sandboxes' Kubernetes cluster carries its token in its URL
- * (server/sandbox-k8s-wake.ts). */
+ * (server/sandbox/sandbox-k8s-wake.ts). */
 export const CONTROL_PLANE_ENV = [
   "SAGAX_LICENSE_KEY", "SAGAX_INSTALLATION_CREDENTIAL",
   "SAGAX_PERSPICAX_LINK_FILE", "SAGAX_PERSPICAX_ISSUER", "SAGAX_PERSPICAX_INTERNAL_URL",
@@ -1855,7 +1855,7 @@ export function mergeOpenCodeProviderKeys(
 const configSaveListeners = new Set<(before: JsonObject, after: JsonObject) => void>();
 
 /** Told, synchronously, what each saveConfig wrote: the file before and
- * after. The admin activity log (server/admin-activity.ts) records the
+ * after. The admin activity log (server/activity/admin-activity.ts) records the
  * change for whoever's request made it. A listener must not throw. */
 export function onConfigSaved(listener: (before: JsonObject, after: JsonObject) => void): () => void {
   configSaveListeners.add(listener);
@@ -2174,7 +2174,7 @@ function injectedEnvironment(cfg: AppConfig, instanceId: string, driver: string)
   if (driver === "grok" && cfg.xai?.key) environment.set("XAI_API_KEY", cfg.xai.key);
   // Grok Build never runs on it in solo mode (acp/grok.ts strips it); on an
   // organization server it is the organization's key for Grok Build, after
-  // each person's own sign-in and key (server/engine-credentials.ts).
+  // each person's own sign-in and key (server/engines/engine-credentials.ts).
   if (driver === "grokAgent" && cfg.xai?.key && process.env.SAGAX_IDENTITY?.trim().toLowerCase() === "perspicax") environment.set("XAI_API_KEY", cfg.xai.key);
   // A provider key belongs only to its API instance. The retired global
   // switch is read once by the saved-selection migration, never at dispatch.
@@ -2235,7 +2235,7 @@ const DRIVER_CREDENTIAL_VARIABLES: Record<string, readonly string[]> = {
  * (Codex, ACP agents) never are, nor grokAgent outside an organization
  * server. On an organization server such a
  * key is the organization's key, the fallback after the speaker's own
- * subscription and key (server/engine-credentials.ts). */
+ * subscription and key (server/engines/engine-credentials.ts). */
 export function driverKeyBacked(cfg: AppConfig, driver: string, instanceId = ""): boolean {
   const variables = DRIVER_CREDENTIAL_VARIABLES[driver];
   if (!variables) return false;
@@ -2329,7 +2329,7 @@ export function instanceConfigs(cfg: AppConfig): InstanceConfigMap {
   // A fleet saved before the Computer engine was removed may still name it.
   const map: InstanceConfigMap = withoutComputerEngine(configured ? { ...configured } : { ...DEFAULT_FLEET });
   // An organization server serves Gemini CLI on each person's own Google key
-  // (Perspicax provider `google`, server/engine-credentials.ts): the retired
+  // (Perspicax provider `google`, server/engines/engine-credentials.ts): the retired
   // consumer login above is not what pays there, so the engine is listed.
   if (process.env.SAGAX_IDENTITY?.trim().toLowerCase() === "perspicax" && (!configured || Object.hasOwn(configured, "claude") || Object.hasOwn(configured, "grok") || Object.hasOwn(configured, "codex"))) {
     if (!Object.hasOwn(map, "gemini")) map.gemini = { driver: "geminiAgent" };

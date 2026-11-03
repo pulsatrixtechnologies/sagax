@@ -7,7 +7,7 @@ between two people, on a solo server and an organization server alike.
 
 Every thread keeps one read position per participant: `{ messageId, at }`
 keyed by the person's principal id or `bot:<botId>`
-(`server/read-receipts.ts`, table `thread_reads`). A person's position moves
+(`server/messages/read-receipts.ts`, table `thread_reads`). A person's position moves
 when their focused app shows a message (`POST /api/threads/<t>/read`), a
 bot's when its turn consumed the message. Positions only move forward and are
 never written to the transcript.
@@ -96,7 +96,7 @@ reaction it is a quiet `message.patch`: no notification, no unread.
 
 ## Tests
 
-- `server/read-receipts.test.ts`, `server/read-receipts.e2e.test.ts`,
+- `server/messages/read-receipts.test.ts`, `server/messages/read-receipts.e2e.test.ts`,
   `src/components/SeenBy.test.ts`, `src/components/GroupView.seenBy.test.ts`
 - `shared/reactions.test.ts`, `server/reactions-store.test.ts`,
   `server/reactions.e2e.test.ts` (RX-1 to RX-3),

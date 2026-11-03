@@ -1,12 +1,12 @@
 // Which engines can run a local model (a `host::model` inject row), and why
 // not when they cannot. One list for the picker (src/components/ModelPicker.tsx)
-// and the turn guard (server/desktop-local-models.ts).
+// and the turn guard (server/desktop/desktop-local-models.ts).
 //
 // Two kinds of local row:
 // - "loopback": a server on the same machine as the Sagax server (solo, or
 //   the organization server's own machine). The engine talks to it directly.
 // - "desktop": a model on the signed-in person's own computer, reached
-//   through the desktop bridge (server/desktop-local-models.ts). The bridge
+//   through the desktop bridge (server/desktop/desktop-local-models.ts). The bridge
 //   carries /v1/models and /v1/chat/completions, and /v1/messages only to a
 //   loopback server the desktop probed as speaking the Anthropic protocol.
 

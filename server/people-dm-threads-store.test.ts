@@ -1,4 +1,4 @@
-// A conversation between two people has threads like a bot (server/people-dms.ts).
+// A conversation between two people has threads like a bot (server/people/people-dms.ts).
 // In the store: the migration of a conversation saved by 0.4.16 into its
 // "General" thread (no data loss, same thread id, done once), new threads
 // that do not move the default thread, and folders shared with bots.

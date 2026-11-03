@@ -21,7 +21,7 @@ not exit. The pool manifests (`deploy/k8s/sandboxes/`), the Helm chart
 and the OpenTofu modules (`deploy/k8s/helm/`, `deploy/k8s/tofu/`) are the
 same tree.
 
-Sagax chooses a provisioner per call (`server/sandbox-route.ts`):
+Sagax chooses a provisioner per call (`server/sandbox/sandbox-route.ts`):
 
 | Variable | Effect |
 |---|---|

@@ -11,8 +11,8 @@ as (a portable Bot Profile, a real connections surface, and a machine that stays
 **Why these seven and not the community's list verbatim:** the community proposal asks
 for a multi-engine architecture, harness-level memory, engine-independent learning, and
 a vendor-neutral control plane. Those exist today — `server/contracts.ts` makes the model
-a data value rather than a service binding, `server/workspace.ts` owns memory outside any
-engine, `server/skills.ts` owns skills, and a mid-thread engine switch already replays the
+a data value rather than a service binding, `server/workspace/workspace.ts` owns memory outside any
+engine, `server/skills/skills.ts` owns skills, and a mid-thread engine switch already replays the
 thread into the new engine (`server/branching.test.ts:253`). The gap is packaging and
 surface area, not architecture. Every plan below is scoped to that gap.
 
@@ -43,14 +43,14 @@ codebase already enforces; a task that violates one is wrong even if its tests p
   older one and degrade to "unavailable" rather than throwing. `InstanceConfig.driver`
   is deliberately unvalidated for this reason.
 - **Exports never carry** credentials, transcripts, memory, grants, absolute paths,
-  engine bindings, or a schedule's active state. `server/package-export.ts` states
+  engine bindings, or a schedule's active state. `server/packages/package-export.ts` states
   this as its contract; every new export path inherits it. The one deliberate
-  exception is the private team backup (`server/team-backup.ts`): it exists to
+  exception is the private team backup (`server/backup/team-backup.ts`): it exists to
   move a person's own fleet between their own machines, so it carries transcripts
   and memory — redacted — and is never a shareable package.
 - **Imports land disabled.** Skills, connectors, routines, and MCP servers arriving
   from outside are inert until a person enables them after reading. See the policy
-  comment at the top of `server/skills.ts`.
+  comment at the top of `server/skills/skills.ts`.
 - **Audit what you authorize.** Any new allow/deny decision writes a row through
   `appendDecision` (`server/decision-log.ts`), fire-and-forget — an audit log must
   never take down the decision it audits.

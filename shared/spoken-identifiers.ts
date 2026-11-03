@@ -1,6 +1,6 @@
 // Identifiers and file paths are never read aloud on a call. Pure.
 //
-// The bot is told on every call turn (server/voice-call-prompt.ts) to name
+// The bot is told on every call turn (server/voice/voice-call-prompt.ts) to name
 // things instead of reading their ids, but a model still slips in a UUID, a
 // commit hash, a ticket number or a home folder path. Read aloud, a UUID is
 // thirty seconds of letters and digits, a token is a secret said into a car,

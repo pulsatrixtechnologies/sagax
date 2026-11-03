@@ -123,7 +123,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       throw new DirectTurnSetupCancelled("Coordination access changed before dispatch");
     }
     // Single stream (thread mode off): a person's turn in a stream segment
-    // carries the digest of their earlier topics (server/single-stream.ts),
+    // carries the digest of their earlier topics (server/streams/single-stream.ts),
     // never on a call (a phone turn stays short), and those topics leave
     // the recent-work brief so nothing is said twice.
     state.streamPart = !state.onCall && streamTurn(state.bot, state.threadId, { person: state.commsDepth === 0 && !state.coordinationNode && !state.opts?.automationSource && !state.opts?.unattended && !state.warmOnly && !state.userMessage.peerAsk })
@@ -183,9 +183,9 @@ export function createPromptStartTurn(host: StartTurnHost) {
         canContact: Boolean(state.coordinationPrompt),
         asksBeforeContact: peerReviewRequired(state.liveBot ?? state.bot, state.threadId)
       }) },
-      // 2026-10-30: the bot knows it is proactive, and how (server/proactive-wake.ts)
+      // 2026-10-30: the bot knows it is proactive, and how (server/proactive/proactive-wake.ts)
       { id: "proactive", label: "Proactive", text: proactivePrompt(proactiveModeFor(state.liveBot ?? state.bot)) },
-      // what this turn reaches, in one line: "what connectors do you have" needs no tool call (server/turn-reach.ts)
+      // what this turn reaches, in one line: "what connectors do you have" needs no tool call (server/turns/turn-reach.ts)
       { id: "reach", label: "Reach", text: turnReachPrompt(state.liveBot ?? state.bot, state.instance, state.speaker, state.threadId, state.integrations, Boolean(state.mountedComputer)) },
       { id: "browser", label: "Browser", text: state.integrations.browser ? BUILT_IN_BROWSER_SYSTEM_PROMPT + myChromePromptFor(state.bot, state.threadId) : "" },
       { id: "data", label: "Data", text: state.integrations.data ? BUILT_IN_DATA_SYSTEM_PROMPT : "" },
@@ -217,7 +217,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       { id: "rules", label: "Rules (RULES.md)", text: rulesSystemPrompt(state.bot.id, { writes: Boolean(state.integrations.agents) }) },
       { id: "memory", label: "Memory", text: memoryPromptFor(state.bot, { managedWrites: Boolean(state.integrations.agents), fileTools: state.worksInWorkspace, withholdHostTools: withholdHostToolsFor(state.instance) }) },
       { id: "host-tools", label: "Host tools", text: withholdHostToolsFor(state.instance) ? WITHHELD_HOST_TOOLS_PROMPT : "" },
-      // docs/: an index only, never the documents (server/workspace-files.ts)
+      // docs/: an index only, never the documents (server/workspace/workspace-files.ts)
       { id: "docs", label: "Documents index", text: docsIndexPrompt(state.bot.id, { tools: state.integrations.agents ? "agents" : state.worksInWorkspace && serverFiles ? "files" : "none" }) },
       // liveBot was captured before awaited setup work; an assignment PUT
       // in that window must still reach this turn's prompt.
@@ -226,7 +226,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       { id: "playbooks", label: "Playbooks", text: state.coldPrompt ? "" : state.packagePlaybooks },
       { id: "webhook", label: "Webhook provenance", text: state.opts?.automationSource === "webhook" ? WEBHOOK_PROMPT : "" },
       { id: "mentions", label: "Mentions", text: state.boundedCoordination && state.tagged.length ? `The user named these existing teammates: ${state.tagged.map((b: any) => uniquePeerName(b, state.sectionPeers) ? peerName(b.name) : `${peerName(b.name)} (${b.id})`).join(", ")}. Use coordinate_bots when their contribution is needed (a unique name works as its bot_ids entry), with relay=true when the user only wants one teammate's own answer passed back; do not substitute native helper agents for these bots.` : mentionPrompt(state.tagged) },
-      // a voice call: the phone-call instruction (server/voice-call-prompt.ts)
+      // a voice call: the phone-call instruction (server/voice/voice-call-prompt.ts)
       { id: "voice-call", label: "Phone call", text: state.voiceCallText },
     ];
     if (!serverFiles) {

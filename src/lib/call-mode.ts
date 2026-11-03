@@ -4,7 +4,7 @@
 // voice, and strict turn-taking (the microphone closes while the bot talks).
 // "live" hands the conversation itself to OpenAI GPT-Live — both sides can
 // talk at once — while every real request still goes to the bot as a normal
-// turn. See server/live-call.ts.
+// turn. See server/voice/live-call.ts.
 import { useSyncExternalStore } from "react";
 import type { LocaleKey } from "@/locales";
 import { t } from "./i18n";

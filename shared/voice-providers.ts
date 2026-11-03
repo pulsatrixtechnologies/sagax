@@ -12,7 +12,7 @@
 // bot > Voice, `bots[botId]` of the same preference). "auto" takes the
 // first provider the person has a key for, in VOICE_*_PROVIDERS order.
 // Whatever the choice, a provider that fails or reaches its limit gives way
-// to the next one the person has a key for (server/voice-mode.ts), silently,
+// to the next one the person has a key for (server/voice/voice-mode.ts), silently,
 // with a line in the thread's Events lens.
 
 export const VOICE_TTS_PROVIDERS = ["xai", "openai", "elevenlabs", "fish", "system", "chatterbox"] as const;

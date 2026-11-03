@@ -15,13 +15,13 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { SandboxService } from "../server/sandboxd-core.ts";
-import { dockerApi } from "../server/sandboxd-docker.ts";
-import { readSandboxdKey } from "../server/sandboxd-auth.ts";
-import { sandboxdClient } from "../server/user-sandbox-client.ts";
-import { UserSandboxManager } from "../server/user-sandbox-manager.ts";
-import { callUserSandboxTool } from "../server/user-sandbox-tools.ts";
-import { SANDBOX_INSTANCE_LABEL, egressChain, sandboxNames, sandboxdConfigFromEnv } from "../server/user-sandbox-spec.ts";
+import { SandboxService } from "../server/sandbox/sandboxd-core.ts";
+import { dockerApi } from "../server/sandbox/sandboxd-docker.ts";
+import { readSandboxdKey } from "../server/sandbox/sandboxd-auth.ts";
+import { sandboxdClient } from "../server/sandbox/user-sandbox-client.ts";
+import { UserSandboxManager } from "../server/sandbox/user-sandbox-manager.ts";
+import { callUserSandboxTool } from "../server/sandbox/user-sandbox-tools.ts";
+import { SANDBOX_INSTANCE_LABEL, egressChain, sandboxNames, sandboxdConfigFromEnv } from "../server/sandbox/user-sandbox-spec.ts";
 
 const argImage = process.argv.indexOf("--image");
 const image = argImage > 0 ? process.argv[argImage + 1]! : "sagax-sandbox:smoke-userenv";

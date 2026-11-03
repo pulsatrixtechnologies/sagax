@@ -9,8 +9,10 @@ describe("routine timing fields", () => {
     const exact = renderToStaticMarkup(createElement(RoutineTimingFields, {
       mode: "exact", earlyMinutes: 15, lateMinutes: 15, onMode: () => {}, onEarly: () => {}, onLate: () => {},
     }));
+    // The app's pill menu (2026-11-03): the current choice, no native select.
     expect(exact).toContain("Exact");
-    expect(exact).toContain("Flexible");
+    expect(exact).toContain("data-pill-select");
+    expect(exact).not.toContain("<select");
     expect(exact).not.toContain("Early window minutes");
 
     const flexible = renderToStaticMarkup(createElement(RoutineTimingFields, {
@@ -20,6 +22,7 @@ describe("routine timing fields", () => {
     expect(flexible).toContain("Late window minutes");
     expect(flexible).toContain("0 late means ready by the scheduled time.");
     expect(flexible).toContain('value="0"');
+    expect(flexible).toContain("Flexible");
   });
 
   it("keeps an exact choice on a repeating schedule and drops it from a one-time schedule", () => {

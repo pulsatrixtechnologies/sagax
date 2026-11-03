@@ -1,6 +1,6 @@
 // The bot settings dialog's Overview section: a plain-language read of a
 // single bot, built entirely from server-generated sentences (BotOverview,
-// server/bot-overview.ts) so the phone app and this dialog never disagree
+// server/bots/bot-overview.ts) so the phone app and this dialog never disagree
 // about what a bot does. Pure presentational (no store, no fetch); the
 // dialog owns loading, errors, and the section switch (onOpen).
 import { useState } from "react";

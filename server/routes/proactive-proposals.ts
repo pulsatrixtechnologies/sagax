@@ -1,11 +1,11 @@
 // The person's answer to a proactive proposal card (2026-10-30,
-// server/proactive-wake.ts).
+// server/proactive/proactive-wake.ts).
 //
 //   POST /api/bots/:id/proactive/:proposalId   { accept: boolean }
 //
 // accept runs the bot's wake at its own level and rules (the person's yes
 // is the request); decline closes the card. Answered once: a second answer
-// is 409. Client-scoped in server/request-auth.ts and allowed to a paired
+// is 409. Client-scoped in server/auth/request-auth.ts and allowed to a paired
 // phone (companion/src/routes.ts); the handler checks the caller may write
 // in the conversation the card is in.
 

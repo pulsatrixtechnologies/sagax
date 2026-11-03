@@ -1,6 +1,6 @@
 /** ACP turn establish phase: handshake, session/load|new, model and approval. */
 import { recoveryPromptFor } from "../../resume-recovery.ts";
-import { contextRenewedNotice } from "../../context-renewal.ts";
+import { contextRenewedNotice } from "../../context/context-renewal.ts";
 import {
   INIT_TIMEOUT, LOAD_SESSION_TIMEOUT, NEW_SESSION_TIMEOUT, SESSION_CONFIG_TIMEOUT,
 } from "./constants.ts";

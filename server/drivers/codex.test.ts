@@ -29,13 +29,13 @@ import {
 } from "./codex.ts";
 import { codexCliOverrides } from "./codex-process.ts";
 import { CODEX_SIGN_IN_EXPIRED, codexContextFull, codexNotSignedIn, codexSignInRefused, codexUserError } from "./codex-errors.ts";
-import { contextFullMessage, contextRenewedNotice } from "../context-renewal.ts";
+import { contextFullMessage, contextRenewedNotice } from "../context/context-renewal.ts";
 import { CODEX_USAGE_LIMIT_REACHED } from "../../shared/codex-usage-limit.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
 import { rebuiltSessionNotice } from "../resume-recovery.ts";
 import { startFakeHttpMcp, type FakeHttpMcp } from "../testing/fake-http-mcp-server.ts";
 import * as procs from "../procs.ts";
-import { autoVerdict } from "../auto-approve.ts";
+import { autoVerdict } from "../approvals/auto-approve.ts";
 import { formatQuestionAnswers } from "../../shared/ask-question.ts";
 
 vi.mock("./codex-release.ts", async (importOriginal) => ({

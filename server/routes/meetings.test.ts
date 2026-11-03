@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it } from "vitest";
 
 import type { MeetingService } from "../meetings/meeting-requests.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { InternalRouteContext } from "./internal-route.ts";
 import { createMeetingInternalRoutes } from "./meeting-internal.ts";
 import { createMeetingRoutes } from "./meetings.ts";

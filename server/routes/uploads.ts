@@ -16,7 +16,7 @@ import {
   removeArchiveUpload,
   storedArchiveManifest,
   type StoredArchiveManifest,
-} from "../attachment-archives.ts";
+} from "../attachments/attachment-archives.ts";
 import {
   attachmentMime,
   extensionForMime,
@@ -30,10 +30,10 @@ import {
   servableAttachmentPath,
   validateAttachmentUploadId,
   type SavedAttachment,
-} from "../attachments.ts";
-import { atRestStream, describeHandle } from "../content-at-rest.ts";
-import { ContentKeyUnavailable } from "../content-keys.ts";
-import type { RequestAuth } from "../request-auth.ts";
+} from "../attachments/attachments.ts";
+import { atRestStream, describeHandle } from "../encryption/content-at-rest.ts";
+import { ContentKeyUnavailable } from "../encryption/content-keys.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface UploadsRouteDeps {

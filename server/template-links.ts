@@ -2,7 +2,7 @@
 // "Share a link to the template" / "Turn off the public link").
 //
 // A template is the preset file Share preset already writes (package format
-// v2, kind library: server/package-export.ts createLibraryPackageExport),
+// v2, kind library: server/packages/package-export.ts createLibraryPackageExport),
 // frozen when the link is made. The link serves it read only to anyone who
 // has it, without a session:
 //

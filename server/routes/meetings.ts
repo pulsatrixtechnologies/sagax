@@ -6,7 +6,7 @@
 // card's answer: the bot's owner, or on a shared server the person who asked).
 import { z } from "zod";
 
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { MeetingService } from "../meetings/meeting-requests.ts";
 import { MEETINGS_DISABLED } from "../../shared/meeting-request.ts";
 import { PASS, type RouteHandler } from "./table.ts";

@@ -6,8 +6,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import { requiredScope, type RequestAuth } from "../request-auth.ts";
-import { SecurityKeyStore, SecurityKeys } from "../security-keys.ts";
+import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
+import { SecurityKeyStore, SecurityKeys } from "../auth/security-keys.ts";
 import { fakeAuthenticator, type FakeAuthenticator } from "../testing/fake-authenticator.ts";
 import { createSecurityKeyRoutes, relyingParty, securityKeyCeremonyRoutes, settingsGrant } from "./security-keys.ts";
 import { dispatchRoutes } from "./table.ts";

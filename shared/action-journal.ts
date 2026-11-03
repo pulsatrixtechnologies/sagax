@@ -2,7 +2,7 @@
 // every action of the signed-in person's own bots, allowed, asked (a card),
 // refused, failed or expired, with what decided it. Built by the server
 // (server/action-journal.ts) from what is already on disk: the decision log
-// (server/decision-log.ts), the per-thread tool runs (server/activity.ts)
+// (server/decision-log.ts), the per-thread tool runs (server/activity/activity.ts)
 // and the agent tools' audit rows (server/agent-api.ts, the tool guard).
 //
 // Read by the desktop (src/components/approvals/ApprovalsJournal.tsx) and
@@ -47,7 +47,7 @@ export type JournalDecider =
   /** the engine ran it without a card at this level */
   | "no-card";
 
-/** The tool guard's verdict on an agent tool call (server/tool-guard.ts). */
+/** The tool guard's verdict on an agent tool call (server/tools/tool-guard.ts). */
 export interface JournalGuard {
   allow: boolean;
   /** default, grant, not_granted, speaker_not_granted */

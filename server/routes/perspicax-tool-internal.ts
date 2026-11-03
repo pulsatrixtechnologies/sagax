@@ -3,7 +3,7 @@
 // the profile mounted in this turn, in the speaker's name, after the same
 // misuse and safety review as a Perspicax MCP call. Behind the agents
 // capability (see internal-route.ts).
-import type { PerspicaxMcp } from "../perspicax-mcp.ts";
+import type { PerspicaxMcp } from "../perspicax/perspicax-mcp.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 
@@ -14,7 +14,7 @@ export interface PerspicaxToolInternalDeps {
   /** The misuse and safety review of a Perspicax MCP call: the refusal to
    * answer with, or null to go on. */
   review(text: string, capability: InternalCapabilityView): Promise<unknown>;
-  /** A confidential thread's refusal (server/confidential-threads.ts): the
+  /** A confidential thread's refusal (server/threads/confidential-threads.ts): the
    * text to answer with, or null to go on. */
   confidential?(capability: InternalCapabilityView, tool: string, args: Record<string, unknown>): string | null;
   /** Whose credentials made this turn's call and which bot. A remote_support_*

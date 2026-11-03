@@ -1,8 +1,8 @@
 // The person's web search settings (2026-10-26): provider, SearXNG address
 // and key, sealed with the vault key (AES-256-GCM, AAD
-// `sagax web-search v1`, the key from server/mcp-oauth.ts resolveVaultKey:
+// `sagax web-search v1`, the key from server/mcp/mcp-oauth.ts resolveVaultKey:
 // the OS credential store on the desktop, a 0600 key file on a headless
-// server), mode 0600, the same treatment as server/engine-api-keys.ts.
+// server), mode 0600, the same treatment as server/engines/engine-api-keys.ts.
 // Solo: `<data>/web-search.enc`. Organization: one file per person,
 // `principals/<id>/web-search.enc`. The key is read back only by the server,
 // at the moment of the HTTP call (server/web-search/providers.ts); the
@@ -13,7 +13,7 @@ import { dirname, join } from "node:path";
 
 import { isWebSearchProvider, WEB_SEARCH_PROVIDER_INFO, type WebSearchProviderId, type WebSearchSettingsView } from "../../shared/web-search.ts";
 import { writeFileAtomic } from "../atomic.ts";
-import { resolveVaultKey, type VaultKeySource } from "../mcp-oauth.ts";
+import { resolveVaultKey, type VaultKeySource } from "../mcp/mcp-oauth.ts";
 import type { WebSearchConfig } from "./providers.ts";
 
 export const WEB_SEARCH_FILE = "web-search.enc";

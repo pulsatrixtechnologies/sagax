@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Routine run exchange (2026-11-01): opens like Melonie <-> Katarina, Escape
+// Routine run exchange (2026-11-01): opens like Nova <-> Orion, Escape
 // closes, the bottom Close Chat pill closes, footer keeps Run again / Continue / logs / configuration.
 import { createElement } from "react";
 import { flushSync } from "react-dom";

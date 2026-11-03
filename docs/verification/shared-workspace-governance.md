@@ -12,8 +12,8 @@ prompt or dialog: visibility is access control and the log is a record.
 - **Per-bot visibility.** `PATCH /api/bots/:id` takes `visibility`:
   `"everyone"` (default), `"admins"`, or `{ "people": [emails or @domains] }`
   (admins always included). Members' PATCHes may not set it (the client
-  body filter in `server/request-auth.ts`). The rules live in
-  `server/bot-visibility.ts`; `server/index.ts` applies them:
+  body filter in `server/auth/request-auth.ts`). The rules live in
+  `server/bots/bot-visibility.ts`; `server/index.ts` applies them:
   - one gate for every path naming a bot, thread, room, routine, run or
     attachment (`pathSubject` / `subjectVisible`): a hidden one answers 404
     exactly like an unknown id;
@@ -27,11 +27,11 @@ prompt or dialog: visibility is access control and the log is a record.
     that becomes visible arrives whole with a transcript page;
   - rooms need every bot visible; teams need a visible bot or room;
   - bots reach teammates only with exactly the same audience
-    (`peerAllowed` in `server/peer-roster.ts`, used by rosters, `list_bots`,
+    (`peerAllowed` in `server/peers/peer-roster.ts`, used by rosters, `list_bots`,
     asks, delegations, @mentions and the Chief's team);
   - admins, the owner on this machine and a session-less local service see
     everything; members never receive a bot's audience list.
-- **Admin activity log.** `server/admin-activity.ts`. Each successful admin
+- **Admin activity log.** `server/activity/admin-activity.ts`. Each successful admin
   change is diffed around its request (config.json, the bot's audited
   fields, the bot and webhook lists, sessions, pairing codes, engine actions)
   and written to `<data>/admin-activity/YYYY-MM.ndjson` (0600) with the
@@ -47,13 +47,13 @@ prompt or dialog: visibility is access control and the log is a record.
 ## Driving it
 
 ```sh
-pnpm exec vitest run server/bot-visibility.test.ts server/bot-visibility.e2e.test.ts \
-  server/admin-activity.test.ts server/admin-activity.e2e.test.ts server/peer-roster.test.ts \
+pnpm exec vitest run server/bots/bot-visibility.test.ts server/bots/bot-visibility.e2e.test.ts \
+  server/activity/admin-activity.test.ts server/activity/admin-activity.e2e.test.ts server/peers/peer-roster.test.ts \
   server/cli.test.ts src/components/ActivitySection.test.ts \
   src/components/bot-settings/VisibilitySection.test.ts
 ```
 
-- `server/bot-visibility.e2e.test.ts` boots a server with an admin (Boss) and
+- `server/bots/bot-visibility.e2e.test.ts` boots a server with an admin (Boss) and
   two members (Ada, Bob) on the sign-in list and the fake ACP engine. Boss
   restricts "Payroll" to Ada and "Board" to admins, puts Payroll in a room
   with an everyone-visible bot, gives it a routine, a webhook, an image in
@@ -68,7 +68,7 @@ pnpm exec vitest run server/bot-visibility.test.ts server/bot-visibility.e2e.tes
   `group.deleted`, and later changes to it send them nothing). Finally, two
   bots with the same audience are teammates and a bot with a different one
   is not, in the real system prompt.
-- `server/admin-activity.e2e.test.ts` changes people, an engine key, a spend
+- `server/activity/admin-activity.e2e.test.ts` changes people, an engine key, a spend
   limit and settings (as Boss, as the owner on loopback, and with the
   command-line marker), adds an MCP server with a secret, creates, restricts,
   re-permissions and deletes a bot, creates and deletes a webhook, revokes a
@@ -95,11 +95,11 @@ On a disposable worktree stacked on #1708 and rebased onto Sagax main
 `0b132aec`: `pnpm typecheck`, `pnpm lint`, `pnpm i18n:check` and the files
 above passed. Before that rebase (main `0bb37982` plus #1708),
 `pnpm test:packaged-server` and `server/index.test.ts`,
-`server/independent-threads-api.test.ts`,
+`server/workspace/independent-threads-api.test.ts`,
 `server/notification-routing.e2e.test.ts`, `server/comms.test.ts`,
 `server/guarded-messages-api.test.ts`,
 `server/paired-thread-targets-api.test.ts`, `server/chief-rooms.e2e.test.ts`,
-`server/direct-coordination.e2e.test.ts`, `server/request-auth.test.ts`,
+`server/direct-coordination.e2e.test.ts`, `server/auth/request-auth.test.ts`,
 `server/decision-log.test.ts`, `server/decision-log-wiring.test.ts`,
 `server/card-answerers.e2e.test.ts`, `server/peer-allowlist.e2e.test.ts`,
 `server/runtime/runtime.test.ts`, `server/chief-of-staff.test.ts`,
@@ -126,9 +126,9 @@ A review of #1717 reproduced eight problems; each is now covered.
 - **Room recall.** A bot everyone sees repeated, in a member's 1:1, what a
   restricted bot said in a room they shared (the recent-work brief and
   `session_search`). Rooms whose bots have a narrower audience than the
-  recalling bot are now left out (`roomFeeds` in `server/bot-visibility.ts`),
+  recalling bot are now left out (`roomFeeds` in `server/bots/bot-visibility.ts`),
   and creating a room or adding a member with a different audience is
-  refused. `server/bot-visibility.e2e.test.ts` ("keeps a room fewer people
+  refused. `server/bots/bot-visibility.e2e.test.ts` ("keeps a room fewer people
   can see out of a visible bot's recall…") checks Bob's real reply and the
   real `/api/internal/session-search`.
 - **Restricted at creation.** `POST /api/bots` and `POST /api/teams/import`
@@ -144,7 +144,7 @@ A review of #1717 reproduced eight problems; each is now covered.
   any member cursor at or before it resumes with a fresh snapshot
   (`resumed:false`), including a member who was away; admin streams stay up.
 - **Redaction.** Flag values after `--api-key`/`--token` and credential URL
-  parameters are hidden (`server/admin-activity.test.ts`).
+  parameters are hidden (`server/activity/admin-activity.test.ts`).
 - **Attribution.** Config rows come from each `saveConfig` in the request's
   own async context; bot and webhook rows compare only the fields the
   request named; creations come from the request's own answer

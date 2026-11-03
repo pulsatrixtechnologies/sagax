@@ -9,7 +9,7 @@
 // posts `authenticated: true` and `person.id`, the Perspicax user the
 // number belongs to. A text is the person's own when that id is the line
 // owner's (the assertion's `sub`, already matched to the bot's owner by
-// server/bot-inbound-telephony.ts). Anyone else on the line (a teammate's
+// server/bots/bot-inbound-telephony.ts). Anyone else on the line (a teammate's
 // verified number) keeps the phone triggers, as before.
 //
 // Where it lands: the bot's single conversation with that person, the

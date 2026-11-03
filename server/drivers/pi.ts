@@ -25,15 +25,15 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 
-import { readAtRestSync } from "../content-at-rest.ts";
+import { readAtRestSync } from "../encryption/content-at-rest.ts";
 import { PROVIDER_CREDENTIAL_ENV, stripWorkspaceCredentialEnv } from "../config.ts";
 import { applyEngineCommandVariables } from "../vault/credential-command-env.ts";
-import { openStartupModelCatalog, writeStartupModelCache } from "../startup-model-catalog.ts";
+import { openStartupModelCatalog, writeStartupModelCache } from "../models/startup-model-catalog.ts";
 import { augmentedPath } from "../env-path.ts";
 import { describeSpawnFailure, execCli, killCliTree, spawnCli } from "../procs.ts";
 import { SEARCH_CALL_TOOL, searchedToolCall } from "../../shared/searched-tool-call.ts";
 import { PERSPICAX_TOKEN_ENV, warmCommsEnv, warmPerspicaxEnv, withoutTurnTokens } from "./spawn-contract.ts";
-import { engineStartGate } from "../engine-start-gate.ts";
+import { engineStartGate } from "../engines/engine-start-gate.ts";
 import {
   deletePromptSplitReceipt,
   promptHalves,
@@ -43,10 +43,10 @@ import {
 } from "./prompt-split.ts";
 import type { PromptSplitReceipt } from "./prompt-split.ts";
 import { STABLE_END_MARKER } from "./pi-mcp-extension.ts";
-import { COMPACT_VOLATILE_LAST } from "../compact-prompt.ts";
+import { COMPACT_VOLATILE_LAST } from "../context/compact-prompt.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
-import { commandSummary, cwToolResult, toolDetailPreview } from "../tool-summary.ts";
-import { filesField, writtenFilesFromToolInput } from "../thread-files.ts";
+import { commandSummary, cwToolResult, toolDetailPreview } from "../tools/tool-summary.ts";
+import { filesField, writtenFilesFromToolInput } from "../threads/thread-files.ts";
 
 import type {
   DriverCreateInput,
@@ -77,8 +77,8 @@ import { localModelFailureMessage, providerReason } from "./engine-errors.ts";
 import { appendNative } from "./native.ts";
 import { piHostToolArgs } from "./host-tools.ts";
 import { canUseMcpServer, parseToolScope } from "../../shared/tool-scope.ts";
-import { customServerGate, gateServer, mcpStdioServer } from "../mcp-gate-config.ts";
-import { remoteMcpSpec } from "../mcp-http.ts";
+import { customServerGate, gateServer, mcpStdioServer } from "../mcp/mcp-gate-config.ts";
+import { remoteMcpSpec } from "../mcp/mcp-http.ts";
 import { readMcpGatewayCall } from "../../shared/mcp-gateway-call.ts";
 
 const DRIVER_KIND = "piAgent";

@@ -9,7 +9,7 @@ or moving its last bot does not remove the team.
 Run the isolated lifecycle checks:
 
 ```sh
-pnpm exec vitest run server/team-lifecycle.e2e.test.ts server/section-context.test.ts server/store.test.ts src/lib/team-map.test.ts --maxWorkers=2
+pnpm exec vitest run server/team-lifecycle.e2e.test.ts server/rooms/section-context.test.ts server/store.test.ts src/lib/team-map.test.ts --maxWorkers=2
 SAGAX_UI_E2E=1 pnpm exec vitest run scripts/testing/team-lifecycle-ui.e2e.test.ts scripts/testing/team-template-ui.e2e.test.ts --maxWorkers=1
 SAGAX_UI_E2E=1 pnpm exec vitest run scripts/testing/team-canvas-ui.e2e.test.ts --maxWorkers=1
 SAGAX_UI_E2E=1 pnpm exec vitest run scripts/testing/team-computers-ui.e2e.test.ts --maxWorkers=1

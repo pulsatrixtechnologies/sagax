@@ -1,6 +1,6 @@
 // POST /api/internal/perspicax/claims: a native claim tool (claim, claim_renew,
 // claim_release, claim_list) forwarded to Perspicax in the speaker's name,
-// through this turn's mounted profile (server/perspicax-claims.ts).
+// through this turn's mounted profile (server/perspicax/perspicax-claims.ts).
 //
 // An internal route answers only behind the per-turn agents capability, which
 // the internal block of server/index.ts checks before anything else. So this
@@ -11,8 +11,8 @@
 // path guard.
 import type { ServerResponse } from "node:http";
 import type { json } from "../harness/http.ts";
-import type { PerspicaxMcp } from "../perspicax-mcp.ts";
-import { runClaimTool } from "../perspicax-claims.ts";
+import type { PerspicaxMcp } from "../perspicax/perspicax-mcp.ts";
+import { runClaimTool } from "../perspicax/perspicax-claims.ts";
 import { PASS } from "./table.ts";
 
 /** What the internal block already knows about the caller. The holder of a

@@ -9,11 +9,11 @@
 // bridge action behind these routes. The test never returns message bodies.
 import { messagesOnBotMac, type MessagesHost } from "../../shared/imessage.ts";
 import { messagesPrivacyAnchor, type MessagesPrivacyPane } from "../../shared/mac-messages-setup.ts";
-import { writeMessagesSettings } from "../imessage-settings.ts";
+import { writeMessagesSettings } from "../imessage/imessage-settings.ts";
 import {
   buildMessagesSetupStatus,
   testMessagesConversationNames,
-} from "../imessage-permissions.ts";
+} from "../imessage/imessage-permissions.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 const OPEN_PANES = new Set<MessagesPrivacyPane>(["fullDiskAccess", "automation"]);

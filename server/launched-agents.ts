@@ -3,8 +3,8 @@
 import type { BotActivityStatus } from "../shared/bot-activity.ts";
 import type { BotLaunchedAgentItem, BotLaunchedAgentPullRequest } from "../shared/bot-launched-agents.ts";
 import { BOT_LAUNCHED_AGENTS_LIMIT, BOT_LAUNCHED_AGENTS_WINDOW_MS } from "../shared/bot-launched-agents.ts";
-import { CodeWorkCollector, type RepositoryInfo } from "./activity-code-work.ts";
-import { addCodingSignal, isCodingWork, type CodingSignals } from "./activity-coding.ts";
+import { CodeWorkCollector, type RepositoryInfo } from "./activity/activity-code-work.ts";
+import { addCodingSignal, isCodingWork, type CodingSignals } from "./activity/activity-coding.ts";
 import { turnStartIndex } from "./routes/bot-activity.ts";
 
 export interface LaunchedAgentTask {

@@ -149,14 +149,14 @@ $13.97 rather than ~$46. The fix is to stop presenting three quantities as one.
 **Files:**
 - Modify: `server/config.ts` (`appConfigSchema`, `AppConfig`)
 - Modify: `server/store.ts` (`BotRecord`)
-- Modify: `server/bot-profile.ts` (`BOT_PROFILE_PATCH_FIELDS`, `profilePatchSchema`)
-- Test: `server/config.test.ts`, `server/bot-profile.test.ts`
+- Modify: `server/bots/bot-profile.ts` (`BOT_PROFILE_PATCH_FIELDS`, `profilePatchSchema`)
+- Test: `server/config.test.ts`, `server/bots/bot-profile.test.ts`
 
 **Interfaces:**
 - Produces: `AppConfig.budget?: { workspaceUsd?: number }`, `BotRecord.budgetUsd?: number`.
 
 - [ ] Write a failing test in `server/config.test.ts`: `budget.workspaceUsd` round-trips, rejects negatives and non-finite values, and a config file with an unknown key inside `budget` still loads (forward compatibility).
-- [ ] Write a failing test in `server/bot-profile.test.ts`: `budgetUsd` is an accepted profile patch field, rejects negatives, and accepts `null` to clear the cap.
+- [ ] Write a failing test in `server/bots/bot-profile.test.ts`: `budgetUsd` is an accepted profile patch field, rejects negatives, and accepts `null` to clear the cap.
 - [ ] Run both; expect FAIL.
 - [ ] Add `budgetConfigSchema = z.object({ workspaceUsd: z.number().nonnegative().finite().optional() })` to `server/config.ts` and thread it through `AppConfig`. Note that `appConfigPatchSchema` derives from `appConfigSchema` by omitting `instances`, so the **write** path picks this up with no further change. The read path does not: `GET /api/config` returns a hand-built `configStatus()` (`server/index.ts:4831`), so `budget` must be added there explicitly. Unlike the credential fields it is not a secret, so it is returned by value rather than as a `configured` flag.
 - [ ] Add `budgetUsd?: number` to `BotRecord` and to `BOT_PROFILE_PATCH_FIELDS` with a matching zod rule.

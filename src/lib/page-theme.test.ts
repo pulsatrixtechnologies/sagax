@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { buildWidgetDocument } from "./rich-blocks.ts";
 import { decodeSkinTokens, encodeSkinTokens, pageThemeCss, pageThemeVars, PAGE_THEME_LAYER } from "./page-theme.ts";
 import { iosWidgetKitSource } from "./page-theme-ios.ts";
-import { pageDocument } from "../../server/published-pages-render.ts";
+import { pageDocument } from "../../server/pages/published-pages-render.ts";
 import { WIDGET_KIT_PROMPT } from "../../server/system-prompt.ts";
 import { PAGE_TOOL_DEFINITIONS } from "../../server/drivers/agents-page-tools.ts";
 import { APP_TOOL_DEFINITIONS } from "../../server/drivers/agents-app-tools.ts";

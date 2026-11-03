@@ -4,7 +4,7 @@ import { registerHooks } from 'node:module';
 import { jsLiteral } from '../../scripts/testing/js-literal.mjs';
 const state = process.env.SAGAX_TEST_VM_STATE;
 if (!state) throw new Error('An explicit isolated VM state file is required');
-const actual = new URL('../container-computer.ts?actual', import.meta.url).href;
+const actual = new URL('../computer/container-computer.ts?actual', import.meta.url).href;
 const mock = new URL('./group-local-vm-mock.mjs', import.meta.url).href;
 registerHooks({
   resolve(specifier, context, nextResolve) {

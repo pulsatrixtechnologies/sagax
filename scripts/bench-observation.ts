@@ -1,4 +1,4 @@
-import { ObservationCoordinator } from "../server/computer-observation.ts";
+import { ObservationCoordinator } from "../server/computer/computer-observation.ts";
 
 // Stable fixture: every requested observation still captures, because pages
 // can update asynchronously. Only byte-identical frames are withheld from the

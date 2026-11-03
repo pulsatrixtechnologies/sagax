@@ -8,8 +8,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import type { RequestAuth } from "../request-auth.ts";
-import { XaiMarketplaceSource } from "../xai-marketplace.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { XaiMarketplaceSource } from "../plugins/xai-marketplace.ts";
 import { PASS } from "./table.ts";
 import { createXaiMarketplaceRoutes } from "./xai-marketplace.ts";
 

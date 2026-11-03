@@ -9,7 +9,7 @@ import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 
 import { isPublicDomainAddress } from "./custom-domain.ts";
-import { personalMcpHostRefusal } from "./person-connections.ts";
+import { personalMcpHostRefusal } from "./people/person-connections.ts";
 
 const MAX_HOPS = 3;
 const REDIRECT = new Set([301, 302, 303, 307, 308]);

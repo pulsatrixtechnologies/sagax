@@ -33,7 +33,7 @@ const FENCE_KINDS: Readonly<Record<string, RichFenceKind>> = {
   widget: "widget",
   "html-widget": "widget",
   // a widget that still failed check_widget after its last attempt
-  // (server/widget-check.ts): drawn as usual, with a discreet note
+  // (server/widgets/widget-check.ts): drawn as usual, with a discreet note
   "widget-imperfect": "widget",
   artifact: "widget",
   chart: "chart",

@@ -23,7 +23,7 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-import { botFolder as defaultBotFolder } from "../bot-folder.ts";
+import { botFolder as defaultBotFolder } from "../bots/bot-folder.ts";
 import { DATA_DIR } from "../config.ts";
 
 /** Separates the bot id from the scope suffix. Bot ids never contain it. */

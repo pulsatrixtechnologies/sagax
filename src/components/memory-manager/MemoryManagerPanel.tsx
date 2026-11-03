@@ -3,13 +3,15 @@
 // 2026-11-02: "la page des mémoires devrait être presque identique"). The
 // header row is Automations' (content-page.tsx) with the views under the
 // title: Notes | Map | Tags | Quality, "+ New note" and the ⋯ menu on the
-// right. Notes puts the console's explorer on the LEFT (MemorySidebar.tsx)
-// and the list beside it (MemoryNotesList.tsx); a note opens as a page
-// (MemoryNoteView.tsx). Every source shows: each bot's memory (a folder of
+// right. Notes puts the console's explorer in the page's RIGHT rail, the
+// same piece as Automations' calendar rail (RightRail.tsx, JC 2026-11-03),
+// and the list to its left (MemoryNotesList.tsx); a note, its preview or its
+// page (MemoryNoteView.tsx), takes the list's place in the content, left of
+// the rail, which stays usable. Every source shows: each bot's memory (a folder of
 // My memory with its Topics and Logs), the team sections (General and its
 // built-in groups as folders) and, on a Perspicax organization server, the
 // Perspicax tiers. Every number is one Sagax reads; nothing is made up.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
   BookOpen,
@@ -22,7 +24,6 @@ import {
   Loader2,
   Network,
   NotebookText,
-  PanelLeftOpen,
   Pin,
   Plus,
   RefreshCw,
@@ -80,11 +81,12 @@ import {
 import { useCaptionChrome } from "../DesktopCapabilities";
 import { PAGE_HEADER_BUTTON, PAGE_MENU_ITEM, PAGE_POPOVER, PageHeader, PageSegment, PageTopStrip, useDismissMenus } from "../content-page";
 import { confirmAsync } from "../ConfirmProvider";
-import { addToCollection, fetchCollections, MemoryCollections, type CollectionSummary } from "./MemoryCollections";
+import { addToCollection, fetchCollectionItems, fetchCollections, MemoryCollections, type CollectionItem, type CollectionSummary } from "./MemoryCollections";
 import { MemoryMapView } from "./MemoryMapView";
 import { MemoryNoteView, type NoteSave } from "./MemoryNoteView";
 import { MemoryNotesList, type ListTemplate } from "./MemoryNotesList";
 import { MemoryQualityView } from "./MemoryQualityView";
+import { RightRailStrip, useRightRailOpen } from "@/components/RightRail";
 import { MemorySidebar, type MemoryRowAction, type MemorySidebarFolder, type MemorySidebarNav, type MemorySidebarTier } from "./MemorySidebar";
 import { MemoryTagsView } from "./MemoryTagsView";
 import { FIELD, PRIMARY_BUTTON, Swatch } from "./memory-ui";
@@ -166,6 +168,35 @@ async function pooled<T>(items: T[], limit: number, work: (item: T) => Promise<v
   }));
 }
 
+// The rail's selection scopes the four views and lasts across a reload
+// (JC 2026-11-03), with the tab it was on.
+const SCOPE_KEY = "sagax.memory.scope";
+const VIEWS: readonly View[] = ["notes", "map", "tags", "quality"];
+const LIST_PLACES = ["all", "teams", "pinned", "recent", "review", "archived", "trash", "collections"];
+
+function readScope(): { view: View; place: Place } {
+  const fallback = { view: "notes" as View, place: { kind: "all" } as Place };
+  try {
+    const value = JSON.parse(window.localStorage.getItem(SCOPE_KEY) ?? "null") as { view?: unknown; place?: { kind?: unknown; tier?: unknown; folder?: unknown } } | null;
+    if (!value || typeof value !== "object") return fallback;
+    const view = VIEWS.includes(value.view as View) ? value.view as View : "notes";
+    const raw = value.place;
+    let place: Place = { kind: "all" };
+    if (raw && typeof raw.kind === "string") {
+      if (LIST_PLACES.includes(raw.kind)) place = { kind: raw.kind as "all" };
+      else if (raw.kind === "tier" && typeof raw.tier === "string") place = { kind: "tier", tier: raw.tier };
+      else if (raw.kind === "folder" && typeof raw.tier === "string" && typeof raw.folder === "string") place = { kind: "folder", tier: raw.tier, folder: raw.folder };
+    }
+    return { view, place };
+  } catch {
+    return fallback;
+  }
+}
+
+function writeScope(view: View, place: Place) {
+  try { window.localStorage.setItem(SCOPE_KEY, JSON.stringify({ view, place })); } catch { /* a private window: the scope lasts for this page */ }
+}
+
 /** Full-page Memory (main column). */
 export function MemoryManagerPanel() {
   const { dispatch } = useStore();
@@ -173,8 +204,10 @@ export function MemoryManagerPanel() {
   const close = useCallback(() => dispatch({ type: "toggleMemoryManager", open: false }), [dispatch]);
   const mac = useMemo(() => isMacPlatform(), []);
 
-  const [view, setView] = useState<View>("notes");
-  const [place, setPlace] = useState<Place>({ kind: "all" });
+  const [initialScope] = useState(readScope);
+  const [view, setView] = useState<View>(initialScope.view);
+  const [place, setPlace] = useState<Place>(initialScope.place);
+  useEffect(() => { writeScope(view, place); }, [view, place]);
   const [screen, setScreen] = useState<Screen>({ kind: "list" });
   const [sources, setSources] = useState<MemoryManagerSource[] | null>(null);
   const [overviews, setOverviews] = useState<Record<string, MemoryBrowse>>({});
@@ -206,7 +239,16 @@ export function MemoryManagerPanel() {
   // The console's preview: a click on a row opens the note beside the list.
   const [preview, setPreview] = useState<{ entry: PageRow; detail: MemoryNoteDetail | null } | null>(null);
   const [collections, setCollections] = useState<CollectionSummary[]>([]);
-  const [explorerOpen, setExplorerOpen] = useState(() => typeof window === "undefined" || typeof window.matchMedia !== "function" || window.matchMedia("(min-width: 1024px)").matches);
+  // Each collection's notes, loaded once the Collections scope is picked and
+  // kept (a save or an add refreshes its entry); the one opened, if any.
+  const [collectionItems, setCollectionItems] = useState<Record<string, CollectionItem[]>>({});
+  const [openCollection, setOpenCollection] = useState<{ id: string; title: string } | null>(null);
+  // The explorer opens as Automations' calendar rail does (RightRail.tsx):
+  // open from 1280px, folded into its strip below, a press away either way.
+  const [explorerOpen, setExplorerOpen] = useRightRailOpen();
+  // The list keeps its place while a note is read: its scroll is kept here.
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const listScrollTop = useRef(0);
   const switcherRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDetailsElement | null>(null);
   useDismissMenus([menuRef]);
@@ -434,18 +476,37 @@ export function MemoryManagerPanel() {
     if (place.kind === "review") return rows.filter((entry) => entry.row.status === "proposed");
     if (place.kind === "archived") return archivedRows;
     if (place.kind === "trash") return trashRows;
-    if (place.kind === "collections") return [];
+    if (place.kind === "collections") {
+      // The union of every collection's notes, or the opened collection's only.
+      const ids = openCollection ? [openCollection.id] : collections.map((entry) => entry.id);
+      const keys = new Set(ids.flatMap((id) => (collectionItems[id] ?? []).map((item) => `perspicax|${item.note_scope}/${item.note_id}`)));
+      return rows.filter((entry) => keys.has(entry.key));
+    }
     if (place.kind === "tier") return rows.filter((entry) => entry.tier === place.tier);
     if (place.kind !== "folder") return rows;
     const folder = place.folder;
     return rows.filter((entry) => entry.folderKey === folder || entry.folderKey.startsWith(`${folder}/`));
-  }, [place, rows, tierByKey, pins, archivedRows, trashRows]);
+  }, [place, rows, tierByKey, pins, archivedRows, trashRows, openCollection, collections, collectionItems]);
 
-  const goPlace = (next: Place) => {
+  // The Collections scope: every collection's notes not loaded yet.
+  useEffect(() => {
+    if (place.kind !== "collections") return;
+    const missing = collections.filter((entry) => !(entry.id in collectionItems));
+    if (missing.length === 0) return;
+    let cancelled = false;
+    void Promise.all(missing.map(async (entry) => [entry.id, await fetchCollectionItems(entry.id).catch(() => [] as CollectionItem[])] as const)).then((loaded) => {
+      if (!cancelled) setCollectionItems((current) => ({ ...current, ...Object.fromEntries(loaded) }));
+    });
+    return () => { cancelled = true; };
+  }, [place.kind, collections, collectionItems]);
+  useEffect(() => { if (place.kind !== "collections") setOpenCollection(null); }, [place.kind]);
+
+  /** A row of the rail: its scope, on the tab in view (every tab is scoped). */
+  const goPlace = (next: Place, toNotes = false) => {
     setPreview(null);
     setPlace(next);
     setScreen({ kind: "list" });
-    setView("notes");
+    if (toNotes) setView("notes");
     setNote(null);
     setListQuery(undefined);
   };
@@ -479,10 +540,29 @@ export function MemoryManagerPanel() {
   };
   useEffect(() => {
     if (!preview) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setPreview(null); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) setPreview(null); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [preview]);
+  // Escape leaves a note's page for the list too, unless it is typed into a field.
+  const readingPage = screen.kind === "note" && !preview;
+  useEffect(() => {
+    if (!readingPage) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      setScreen({ kind: "list" });
+      setNote(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [readingPage]);
+  // Back on the list: the scroll it had before the note opened.
+  const listShown = screen.kind === "list" && !preview;
+  useLayoutEffect(() => {
+    if (listShown && listScrollRef.current) listScrollRef.current.scrollTop = listScrollTop.current;
+  }, [listShown]);
 
   /** A double click (or Edit): the note's own page. */
   const openNote = async (entry: PageRow, edit = false) => {
@@ -739,16 +819,16 @@ export function MemoryManagerPanel() {
       if (source.kind === "bot" && source.botId) {
         const path = `memory/${slugify(title, "note")}.md`;
         await saveBotNote(source.botId, path, createBody || `# ${title}\n\n`, undefined);
-        goPlace({ kind: "folder", tier: "mine", folder: `${source.id}/topics` });
+        goPlace({ kind: "folder", tier: "mine", folder: `${source.id}/topics` }, true);
       } else if (source.kind === "team") {
         const kind = createFolder || "term";
         await api(`/api/team-memory?section=${encodeURIComponent(source.section ?? "")}`, { method: "POST", body: JSON.stringify({ kind, name: title, detail: createBody }) });
-        goPlace({ kind: "folder", tier: source.id, folder: `${source.id}/${kind}` });
+        goPlace({ kind: "folder", tier: source.id, folder: `${source.id}/${kind}` }, true);
       } else if (source.kind === "perspicax") {
         const scope = target.id.slice(3);
         const topic = createFolder.trim() || "notes";
         await pxMemory("/entry", { method: "POST", body: JSON.stringify({ scope, topic, title, body: createBody }) });
-        goPlace({ kind: "folder", tier: pxTierKey(scope), folder: `px:${scope}/${topic}` });
+        goPlace({ kind: "folder", tier: pxTierKey(scope), folder: `px:${scope}/${topic}` }, true);
       }
       setNotice({ text: t("memoryManager.createdNote", { title }) });
       refresh();
@@ -853,6 +933,8 @@ export function MemoryManagerPanel() {
     const notes = keys.map(lookup).filter((entry): entry is PageRow => Boolean(entry?.row.scope)).map((entry) => ({ scope: entry.row.scope!, id: entry.row.id }));
     try {
       await addToCollection(collection, notes);
+      // its cached notes are stale: the next Collections scope reloads them
+      setCollectionItems((current) => { const next = { ...current }; delete next[collection]; return next; });
       const title = collections.find((entry) => entry.id === collection)?.title ?? "";
       setNotice({ text: t("memoryManager.collections.added", { count: notes.length, title }) });
       void fetchCollections().then(setCollections).catch(() => undefined);
@@ -881,7 +963,8 @@ export function MemoryManagerPanel() {
 
   // ---- the explorer --------------------------------------------------------------------
 
-  const current = (next: Place) => screen.kind !== "note" && JSON.stringify(next) === JSON.stringify(place);
+  // The folder stays selected while one of its notes is read.
+  const current = (next: Place) => JSON.stringify(next) === JSON.stringify(place);
   const lists: MemorySidebarNav[] = [
     { id: "all", label: t("memoryManager.nav.all"), icon: NotebookText, count: counts.all, current: current({ kind: "all" }), onOpen: () => goPlace({ kind: "all" }) },
   ];
@@ -1105,11 +1188,38 @@ export function MemoryManagerPanel() {
 
   // ---- tags and quality ------------------------------------------------------------------
 
-  const stats = useMemo(() => tagStats(rows, vocabulary), [rows, vocabulary]);
+  // ---- the scope: the rail's selection narrows Map, Tags and Quality as it does the list ----
+
+  const scoped = place.kind !== "all";
+  const scopeRows = placeRows;
+  const scopeKeys = useMemo(() => new Set(scopeRows.map((entry) => entry.key)), [scopeRows]);
+  const scopeTiers = useMemo(() => (scoped ? tiers.filter((tier) => scopeRows.some((entry) => entry.tier === tier.key)) : tiers), [scoped, tiers, scopeRows]);
+  const stats = useMemo(() => tagStats(scopeRows, vocabulary), [scopeRows, vocabulary]);
   const allJournal = useMemo(() => Object.values(journals).flat(), [journals]);
-  const quality = useMemo(() => qualityStats(rows, pxSource ? pxTiers.reduce((sum, tier) => sum + (tier.archived ?? 0), 0) : null, counts.review, Date.now(), stats), [rows, pxSource, pxTiers, counts.review, stats]);
-  const active = useMemo(() => activeSeries(rows, tiers.map((tier) => tier.key), Date.now()), [rows, tiers]);
-  const writes = useMemo(() => writeSeries(allJournal, Date.now()), [allJournal]);
+  const scopeJournal = useMemo(() => (scoped ? allJournal.filter((row) => scopeKeys.has(`bot:${row.botId}|${row.path}`)) : allJournal), [scoped, allJournal, scopeKeys]);
+  const scopeArchived = useMemo<number | null>(() => {
+    if (!pxSource) return null;
+    if (!scoped) return pxTiers.reduce((sum, tier) => sum + (tier.archived ?? 0), 0);
+    if (place.kind === "archived") return archivedRows.length;
+    if (place.kind === "tier") return archivedRows.filter((entry) => entry.tier === place.tier).length;
+    if (place.kind === "folder") return archivedRows.filter((entry) => entry.folderKey === place.folder || entry.folderKey.startsWith(`${place.folder}/`)).length;
+    return null;
+  }, [pxSource, scoped, place, pxTiers, archivedRows]);
+  const scopeReview = scoped ? scopeRows.filter((entry) => entry.row.status === "proposed").length : counts.review;
+  const quality = useMemo(() => qualityStats(scopeRows, scopeArchived, scopeReview, Date.now(), stats), [scopeRows, scopeArchived, scopeReview, stats]);
+  const active = useMemo(() => activeSeries(scopeRows, scopeTiers.map((tier) => tier.key), Date.now()), [scopeRows, scopeTiers]);
+  const writes = useMemo(() => writeSeries(scopeJournal, Date.now()), [scopeJournal]);
+  // "Melonie / Logs": the folder under its bot or its tier, else the row's own name.
+  const scopeLabel = (() => {
+    if (place.kind === "collections" && openCollection) return `${listTitle} / ${openCollection.title}`;
+    if (place.kind !== "folder") return listTitle;
+    const bot = botSources.find((source) => source.id === place.folder);
+    if (bot) return bot.name;
+    const owner = botSources.find((source) => place.folder.startsWith(`${source.id}/`));
+    if (owner) return `${owner.name} / ${listTitle}`;
+    const tier = tierByKey.get(place.tier);
+    return tier && tier.name !== listTitle ? `${tier.name} / ${listTitle}` : listTitle;
+  })();
 
   // ---- render ----------------------------------------------------------------------------
 
@@ -1148,12 +1258,12 @@ export function MemoryManagerPanel() {
               <button type="button" role="menuitem" className={PAGE_MENU_ITEM} onClick={() => { menuRef.current?.removeAttribute("open"); refresh(); }} data-memory-refresh="">
                 <RefreshCw size={16} />{t("memoryManager.refresh")}
               </button>
-              <button type="button" role="menuitem" className={PAGE_MENU_ITEM} onClick={() => { menuRef.current?.removeAttribute("open"); goPlace({ kind: "review" }); }}>
+              <button type="button" role="menuitem" className={PAGE_MENU_ITEM} onClick={() => { menuRef.current?.removeAttribute("open"); goPlace({ kind: "review" }, true); }}>
                 <CircleCheck size={16} />{t("memoryManager.proposals")}
                 {counts.review > 0 && <span className="ml-auto rounded-full bg-raised px-1.5 text-[11px] text-ink-secondary">{counts.review}</span>}
               </button>
               {pxSource && (
-                <button type="button" role="menuitem" className={PAGE_MENU_ITEM} onClick={() => { menuRef.current?.removeAttribute("open"); goPlace({ kind: "trash" }); }}>
+                <button type="button" role="menuitem" className={PAGE_MENU_ITEM} onClick={() => { menuRef.current?.removeAttribute("open"); goPlace({ kind: "trash" }, true); }}>
                   <Trash2 size={16} />{t("memoryManager.nav.trash")}
                 </button>
               )}
@@ -1165,8 +1275,18 @@ export function MemoryManagerPanel() {
         </>}
         below={(
           <div className="mt-3 space-y-2" style={noDragStyle}>
-            <div className="flex" data-memory-views="">
-              <PageSegment label={t("memoryManager.viewLabel")} value={view} onChange={(next) => { setView(next); if (next !== "map") setMapFocus(null); }} options={viewOptions} />
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex" data-memory-views="">
+                <PageSegment label={t("memoryManager.viewLabel")} value={view} onChange={(next) => { setView(next); if (next !== "map") setMapFocus(null); }} options={viewOptions} />
+              </div>
+              {scoped && (
+                <span className="inline-flex h-7 min-w-0 max-w-full items-center gap-1 rounded-full border border-hairline/60 bg-raised pl-2.5 pr-1 text-[12.5px] text-ink" data-memory-scope-chip="">
+                  <span className="truncate">{t("memoryManager.scope", { scope: scopeLabel })}</span>
+                  <button type="button" aria-label={t("memoryManager.scopeClear")} title={t("memoryManager.scopeClear")} className="grid size-5 shrink-0 place-items-center rounded-full text-ink-secondary hover:bg-hover hover:text-ink" onClick={() => goPlace({ kind: "all" })} data-memory-scope-clear="">
+                    <X size={12} aria-hidden="true" />
+                  </button>
+                </span>
+              )}
             </div>
             {error && <p role="alert" className="rounded-xl bg-danger/10 px-3 py-2 text-[12.5px] text-danger">{error}</p>}
             {notice && (
@@ -1189,54 +1309,47 @@ export function MemoryManagerPanel() {
 
       <div data-memory-row="" className="relative flex min-h-0 min-w-0 flex-1">
         <div className="content-card-body flex min-h-0 min-w-0 flex-1">
-          {view === "notes" && (explorerOpen ? (
-            <MemorySidebar
-              shortcut={mac ? "⌘O" : "Ctrl+O"}
-              onOpenSwitcher={() => setSwitcherOpen((open) => !open)}
-              switcher={switcher}
-              lists={lists}
-              tiers={explorerTiers}
-              tidy={tidy}
-              renaming={renaming}
-              onRenameDone={() => setRenaming(null)}
-              loading={explorerLoading}
-              footer={explorerFooter}
-              onCollapse={() => setExplorerOpen(false)}
-            />
-          ) : (
-            <button type="button" onClick={() => setExplorerOpen(true)} aria-label={t("memoryManager.explorerShow")} title={t("memoryManager.explorerShow")} className="flex w-10 shrink-0 flex-col items-center gap-2 border-r border-hairline/50 bg-panel px-1 py-4 text-ink-secondary hover:bg-raised hover:text-ink" data-memory-explorer-show="">
-              <PanelLeftOpen size={16} aria-hidden="true" />
-            </button>
-          ))}
-
-          <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {view === "map" && <MemoryMapView rows={rows} tiers={tiers} bodies={bodies} review={counts.review} focusKey={mapFocus} onOpen={previewKey} onNew={targets.length ? () => startCreate() : undefined} />}
+          <section className="flex min-h-0 min-w-0 flex-1 flex-col" data-memory-content="">
+            {view === "map" && (
+              <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", preview && "hidden")} data-memory-map-view="">
+                <MemoryMapView rows={scopeRows} tiers={scopeTiers} bodies={bodies} review={scopeReview} focusKey={mapFocus} onOpen={previewKey} onOpenNote={(key) => openKey(key)} onNew={targets.length ? () => startCreate() : undefined} />
+              </div>
+            )}
             {view === "tags" && (
               <div className="min-h-0 flex-1 overflow-y-auto">
-                <MemoryTagsView stats={stats} vocabulary={vocabulary} onTag={(tag) => { goPlace({ kind: "all" }); setListQuery(`tag:${/\s/.test(tag) ? `"${tag}"` : tag}`); }} />
+                <MemoryTagsView stats={stats} vocabulary={vocabulary} onTag={(tag) => { goPlace(place, true); setListQuery(`tag:${/\s/.test(tag) ? `"${tag}"` : tag}`); }} />
               </div>
             )}
             {view === "quality" && (
               <div className="min-h-0 flex-1 overflow-y-auto">
                 <MemoryQualityView
                   stats={quality}
-                  tiers={tiers}
+                  tiers={scopeTiers}
                   active={active}
                   writes={writes}
-                  journal={allJournal}
+                  journal={scopeJournal}
                   botName={(botId) => botSources.find((source) => source.botId === botId)?.name ?? ""}
                   onOpenPath={(botId, path) => openKey(`bot:${botId}|${path}`)}
                 />
               </div>
             )}
             {view === "notes" && (
-              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-                {screen.kind === "list" && place.kind === "collections" && (
+              // The list stays mounted while a note is read, so Back finds it as it was.
+              <div ref={listScrollRef} onScroll={(event) => { listScrollTop.current = event.currentTarget.scrollTop; }} className={cn("min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5", (screen.kind !== "list" || preview) && "hidden")} data-memory-list-scroll="">
+                {place.kind === "collections" && (
                   <div data-memory-nav-view="collections">
-                    <MemoryCollections onOpenNote={(scope, id) => previewKey(`perspicax|${scope}/${id}`)} onChanged={() => void fetchCollections().then(setCollections).catch(() => undefined)} />
+                    <MemoryCollections
+                      openId={openCollection?.id}
+                      onOpenNote={(scope, id) => previewKey(`perspicax|${scope}/${id}`)}
+                      onChanged={() => void fetchCollections().then(setCollections).catch(() => undefined)}
+                      onSelect={(picked) => {
+                        setOpenCollection(picked ? { id: picked.id, title: picked.title } : null);
+                        if (picked) setCollectionItems((current) => ({ ...current, [picked.id]: picked.items }));
+                      }}
+                    />
                   </div>
                 )}
-                {screen.kind === "list" && place.kind !== "collections" && (
+                {place.kind !== "collections" && (
                   <div data-memory-nav-view={place.kind} data-memory-browse={place.kind === "folder" || place.kind === "tier" ? "" : undefined}>
                     <MemoryNotesList
                       key={JSON.stringify(place)}
@@ -1272,6 +1385,10 @@ export function MemoryManagerPanel() {
                     {place.kind === "trash" && <div data-memory-trash="" />}
                   </div>
                 )}
+              </div>
+            )}
+            {view === "notes" && screen.kind !== "list" && !preview && (
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5" data-memory-reading="">
 
                 {screen.kind === "note" && !note && busy && (
                   <div className="flex min-h-[160px] items-center justify-center text-ink-secondary"><Loader2 size={18} className="animate-spin" aria-label={t("memoryManager.loading")} /></div>
@@ -1361,18 +1478,9 @@ export function MemoryManagerPanel() {
                 )}
               </div>
             )}
-          </section>
-        </div>
-        {preview && (view === "notes" || view === "map") && (
-          <>
-            <button type="button" aria-label={t("common.close")} className="absolute inset-0 z-30 cursor-default bg-ink/10" onClick={() => setPreview(null)} data-memory-preview-scrim="" />
-            <aside role="complementary" aria-label={preview.entry.row.title} className="absolute inset-y-0 right-0 z-40 flex w-[min(920px,calc(100%-40px))] flex-col border-l border-hairline/60 bg-app shadow-xl" data-memory-preview-panel="">
-              <div className="flex shrink-0 items-center justify-end px-4 pt-3">
-                <button type="button" aria-label={t("common.close")} title={t("common.close")} className="grid size-8 place-items-center rounded-full text-ink-secondary hover:bg-hover hover:text-ink" onClick={() => setPreview(null)} data-memory-preview-close="">
-                  <X size={16} aria-hidden="true" />
-                </button>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
+            {/* A click on a row: the note in the content, in the list's place, left of the rail. */}
+            {preview && (view === "notes" || view === "map") && (
+              <div role="region" aria-label={preview.entry.row.title} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5" data-memory-preview-panel="">
                 {preview.detail ? (
                   <MemoryNoteView
                     key={`preview:${preview.entry.key}`}
@@ -1399,9 +1507,28 @@ export function MemoryManagerPanel() {
                   <div className="flex min-h-[160px] items-center justify-center text-ink-secondary"><Loader2 size={18} className="animate-spin" aria-label={t("memoryManager.loading")} /></div>
                 )}
               </div>
-            </aside>
-          </>
-        )}
+            )}
+          </section>
+
+          {/* The right rail, after the content (RightRail.tsx, as Automations). */}
+          {explorerOpen ? (
+            <MemorySidebar
+              shortcut={mac ? "⌘O" : "Ctrl+O"}
+              onOpenSwitcher={() => setSwitcherOpen((open) => !open)}
+              switcher={switcher}
+              lists={lists}
+              tiers={explorerTiers}
+              tidy={tidy}
+              renaming={renaming}
+              onRenameDone={() => setRenaming(null)}
+              loading={explorerLoading}
+              footer={explorerFooter}
+              onCollapse={() => setExplorerOpen(false)}
+            />
+          ) : (
+            <RightRailStrip onOpen={() => setExplorerOpen(true)} showLabel={t("memoryManager.explorerShow")} icon={<Brain size={16} aria-hidden="true" />} text={t("memoryManager.sidebarLabel")} data-memory-explorer-show="" />
+          )}
+        </div>
       </div>
     </main>
   );

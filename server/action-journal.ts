@@ -4,19 +4,19 @@
 // Nothing is captured for the Journal's sake. Three records already on disk
 // know it between them: the decision log (server/decision-log.ts) says what
 // was asked, which rule or level answered and who answered a card; the
-// per-thread tool runs (server/activity.ts readToolRuns) say what ran and
+// per-thread tool runs (server/activity/activity.ts readToolRuns) say what ran and
 // whether it failed, including what the engine ran without asking; the
 // agent tools' audit rows (server/agent-api.ts and agent-tool-card-guard.ts,
 // in the admin activity log) carry the tool guard's verdict. This module
 // folds them into one row per action, the same way the bot's activity log
-// does (server/activity.ts), and replays a rule over them ("Tester cette
-// règle") with the real matcher (server/custom-rules-review.ts).
+// does (server/activity/activity.ts), and replays a rule over them ("Tester cette
+// règle") with the real matcher (server/rules/custom-rules-review.ts).
 //
 // Pure: the server passes what the person may read (their bots, their
 // confidential threads) and how to name things; this never reads a file.
-import type { AdminActionRow } from "./admin-activity.ts";
-import { hashJournalLink, JOURNAL_GENESIS, type JournalSealFields } from "./journal-seal.ts";
-import type { ActivityRow } from "./activity.ts";
+import type { AdminActionRow } from "./activity/admin-activity.ts";
+import { hashJournalLink, JOURNAL_GENESIS, type JournalSealFields } from "./encryption/journal-seal.ts";
+import type { ActivityRow } from "./activity/activity.ts";
 import type { DecisionActor, DecisionCall, DecisionKind, DecisionRow } from "./decision-log.ts";
 import type { CustomRuleBehavior, CustomRuleDecision, RiskClass } from "../shared/custom-rules.ts";
 import {
@@ -64,7 +64,7 @@ export interface JournalInput {
 }
 
 /** An approval is folded into the tool run it unblocked when the run
- * started inside this window around the decision (server/activity.ts). */
+ * started inside this window around the decision (server/activity/activity.ts). */
 const MATCH_BEFORE_MS = 5_000;
 const MATCH_AFTER_MS = 30_000;
 

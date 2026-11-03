@@ -4,7 +4,7 @@ Run the isolated integration recipe:
 
 ```sh
 pnpm exec vitest run server/full-access-workflows.e2e.test.ts
-pnpm exec vitest run server/team-setup-requests.test.ts server/profile-requests.test.ts server/routines/routine-requests.test.ts
+pnpm exec vitest run server/team/team-setup-requests.test.ts server/profiles/profile-requests.test.ts server/routines/routine-requests.test.ts
 pnpm exec electron scripts/smoke-approval-modes.cjs --all-threads-only
 pnpm typecheck
 pnpm lint
@@ -82,16 +82,16 @@ reached Full but denied the Outlook move as an outbound send in enforce.
 ## One Full access decision (#1905, 2026-11-02)
 
 ```sh
-pnpm exec vitest run server/full-access-gate.test.ts server/full-access-gate.regressions.test.ts server/full-access-gate.guard.test.ts shared/permission-question.test.ts
+pnpm exec vitest run server/approvals/full-access-gate.test.ts server/approvals/full-access-gate.regressions.test.ts server/approvals/full-access-gate.guard.test.ts shared/permission-question.test.ts
 ```
 
-`server/full-access-gate.regressions.test.ts` holds the three incidents as tests:
+`server/approvals/full-access-gate.regressions.test.ts` holds the three incidents as tests:
 `send_to_bot` under Full with misuse guardrails in enforce (the safer path,
 then the "Approval needed" card, on every engine's permission path and on
 the Grok `default` mode a loaded account connector forces), the may-I
 `ask_choice` answered with its recommended option and a real decision kept,
 Bypass on the owner's own computer, and a conversation's older Approve for
-me exception ending when the bot goes Full. `server/full-access-gate.guard.test.ts`
+me exception ending when the bot goes Full. `server/approvals/full-access-gate.guard.test.ts`
 scans `server/` for every card emitter and requires its `// full-access:`
 marker and its deciding file's read of the gate; it runs with the merge
 gate. Both are pure: no server, no live data.

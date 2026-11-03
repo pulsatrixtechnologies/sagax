@@ -5,18 +5,18 @@
 // Solo: this computer's own logins, admin only (unlisted). Organization
 // server: the asking person's own subscription logins, never the
 // server's, the organization's key or another person's
-// (server/plan-usage.ts); a member may read their own
+// (server/usage/plan-usage.ts); a member may read their own
 // (request-auth.ts CLIENT_ALLOW, orgDirectory).
 import type { AppConfig } from "../config.ts";
 import { driverKeyBacked, instanceConfigs } from "../config.ts";
-import { providersOfInstance } from "../engine-credentials.ts";
+import { providersOfInstance } from "../engines/engine-credentials.ts";
 import {
   loadPlanUsage,
   orgPlanAccounts,
   planAccountsFromInstances,
   type PlanUsageReport,
-} from "../plan-usage.ts";
-import { isPrincipalId } from "../principals.ts";
+} from "../usage/plan-usage.ts";
+import { isPrincipalId } from "../auth/principals.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface PlanUsageRouteDeps {
@@ -37,7 +37,7 @@ export interface PlanUsageRouteDeps {
   identityIssuer: () => string;
   localPrincipalId: () => string;
   announcePlanThresholds: (report: PlanUsageReport, scope: string) => void;
-  /** Defaults to server/plan-usage.ts loadPlanUsage (tests inject a stub). */
+  /** Defaults to server/usage/plan-usage.ts loadPlanUsage (tests inject a stub). */
   loadPlanUsage?: typeof loadPlanUsage;
 }
 

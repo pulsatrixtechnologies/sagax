@@ -1,5 +1,5 @@
 // The card of an outward action a bot asks for (message field `outbound`,
-// shared/wire.ts `OutboundCard`): a phone call (server/outbound-calls.ts) or
+// shared/wire.ts `OutboundCard`): a phone call (server/outbound/outbound-calls.ts) or
 // a purchase with a saved card (server/vault/credential-vault.ts). Parité Grok Bot
 // V4, 59, 83; the desktop's src/components/OutboundCard.tsx.
 //

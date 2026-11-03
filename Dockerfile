@@ -89,7 +89,7 @@ WORKDIR /app
 # packages, native downloads with their SHA-256, the Python engine's source
 # archive). scripts/install-engines.mjs installs the selection, checks that
 # each one starts (`<cli> --version`) and writes the manifest the server's
-# startup self-check reads (server/engines-self-check.ts). Before the app's
+# startup self-check reads (server/engines/engines-self-check.ts). Before the app's
 # own files so a code change does not reinstall the engines.
 #   ENGINE_SET      all (default). none and an empty value install nothing.
 #                   On 2026-10-12 a build that left this unset shipped

@@ -7,7 +7,7 @@ import { codexDeveloperInstructions, syncCodexInstructions } from "../codex-inst
 import { sectionFingerprints, volatileContextNote, volatileSectionsUpdate, withContextNote } from "../prompt-split.ts";
 import { classifyError, RETRY_MAX_ATTEMPTS } from "../retry.ts";
 import { classifyResumeFailure, mayReplay, rebuiltSessionNotice, recoveryPromptFor } from "../../resume-recovery.ts";
-import { contextRenewedNotice } from "../../context-renewal.ts";
+import { contextRenewedNotice } from "../../context/context-renewal.ts";
 import { codexSignInExpired, codexSignInRefused, codexUserError } from "../codex-errors.ts";
 import { sagaxReviewsAuto } from "../sagax-reviewer.ts";
 import {

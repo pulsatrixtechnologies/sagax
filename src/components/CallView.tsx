@@ -1,6 +1,6 @@
 // The call button and the call dock. A call is a realtime voice session
 // (the maintainer, 2026-11-02: never text to speech): voice-mode/RealtimeCall.tsx runs
-// it on the configured realtime voice (server/realtime-call.ts). Without
+// it on the configured realtime voice (server/voice/realtime-call.ts). Without
 // one, the button says so and opens the voice settings; the older macOS
 // dictation plus text to speech call is gone.
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
@@ -79,7 +79,7 @@ export function CallTargetButton({
   setupBotId?: string;
   /** Rooms cannot rely on one workspace fallback for multiple speakers. */
   requireExplicitVoices: boolean;
-  /** Voice mode with xAI (server/voice-mode.ts): when available it carries
+  /** Voice mode with xAI (server/voice/voice-mode.ts): when available it carries
    * the call on any desktop (macOS, Windows) or browser, without the macOS
    * dictation helper. */
   voiceMode?: VoiceModeStatus | null;

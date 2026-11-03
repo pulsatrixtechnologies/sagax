@@ -7,7 +7,7 @@
 // With `credentials` (2026-10-28), a marketplace reads with the person's
 // GitHub account (the GitHub plugin's page) by default ("Automatic") and says
 // which credential read it last. Only when the person has other credentials
-// beside that account (server/github-credentials.ts) does each row offer a
+// beside that account (server/github/github-credentials.ts) does each row offer a
 // small selector to pick one; there is no token field here. In the bot scope
 // the pick is that bot's (its owner or a manager), in the "Everyone" scope
 // the installation's. When the git host refuses an add or a refresh, the

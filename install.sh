@@ -161,7 +161,7 @@ new_secret() {
 
 write_env() {
   # Created once. The vault key encrypts the sign-ins and credentials the
-  # server keeps (server/mcp-oauth.ts). It lives here, outside the data
+  # server keeps (server/mcp/mcp-oauth.ts). It lives here, outside the data
   # volume, so a copy of the volume alone does not open them. An existing
   # volume already has its own key file: no key is added for it.
   local key=""

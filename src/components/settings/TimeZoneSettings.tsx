@@ -1,6 +1,6 @@
 // Settings > General > Appearance > Time zone (parity 2E): the person's own
 // zone, which the clock a bot is told and their routines' wall-clock times
-// read (server/bot-settings.ts, GET and PUT /api/settings/bot). "Detect
+// read (server/bots/bot-settings.ts, GET and PUT /api/settings/bot). "Detect
 // automatically" follows this computer's zone, as the phone's row does.
 // sagax_settings: account.timeZone and account.timeZoneAuto.
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";

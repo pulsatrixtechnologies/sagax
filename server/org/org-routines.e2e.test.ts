@@ -170,7 +170,7 @@ const storedAccessCards = (threadId: string): NonNullable<Message["access"]>[] =
     db.close();
   }
 };
-/** Every usage row the server booked (server/usage-ledger.ts). */
+/** Every usage row the server booked (server/usage/usage-ledger.ts). */
 const usageRows = () => {
   const dir = join(home, ".sagax", "usage");
   if (!existsSync(dir)) return [];

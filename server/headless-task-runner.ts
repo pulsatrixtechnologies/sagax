@@ -1,5 +1,5 @@
 // Takes the tasks `sagax task give` queues in the data folder and runs each
-// one as a real turn of the named bot (server/headless-cli.ts writes the
+// one as a real turn of the named bot (server/cli/headless-cli.ts writes the
 // queue). One server start holds a task at a time: it marks it running
 // with its boot id, so a task is never taken twice, and a task a stopped
 // server left running is queued again at the next start.
@@ -15,7 +15,7 @@ import {
   updateQueue,
   type HeadlessBot,
   type HeadlessTask,
-} from "./headless-cli.ts";
+} from "./cli/headless-cli.ts";
 
 export type HeadlessRunOutcome = { ok: true; text: string } | { ok: false; reason: string };
 

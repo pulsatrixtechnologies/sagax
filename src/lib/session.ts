@@ -12,7 +12,7 @@ export interface EnvironmentDescriptor {
   version: string;
   capabilities: { remoteSessions: true; selfUpdate: "desktop-managed" | "operator"; emailSignIn?: boolean; sharedComputers?: true; cloudHome?: true; signInPreview?: true };
   /** An organization server: people sign in with Pulsatrix Perspicax at
-   * `loginPath` (server/oidc-login.ts); email codes and invitations are off. */
+   * `loginPath` (server/auth/oidc-login.ts); email codes and invitations are off. */
   identity?: { kind: "perspicax"; protocol: "oidc"; issuer: string; loginPath: string };
 }
 

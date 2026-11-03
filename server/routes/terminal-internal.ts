@@ -11,7 +11,7 @@ import { z } from "zod";
 import type { TerminalProviderKind } from "../../shared/terminal-resources.ts";
 import { PASS } from "./table.ts";
 import type { InternalRouteHandler } from "./internal-route.ts";
-import type { createTerminalRequestService } from "../terminal-requests.ts";
+import type { createTerminalRequestService } from "../terminal/terminal-requests.ts";
 
 const offerBody = z.object({
   /** Older proxies still send these; the capability's own values win. */

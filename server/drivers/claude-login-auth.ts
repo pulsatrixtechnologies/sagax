@@ -18,7 +18,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import type { ProviderAuthenticationStart, ProviderAuthenticationStatus } from "../contracts.ts";
-import { engineStartGate } from "../engine-start-gate.ts";
+import { engineStartGate } from "../engines/engine-start-gate.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
 import { canonicalPath } from "./device-auth.ts";
 

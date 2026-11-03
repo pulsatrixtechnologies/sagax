@@ -4,7 +4,7 @@
 // from the session). Read-only by default: the server hands the VNC server's
 // view-only password; "Prendre le contrôle" (a button in the middle of the
 // screen) asks for the full one, and while that view is open the server
-// refuses the bots' clicks there (server/sandbox-control.ts). Nothing
+// refuses the bots' clicks there (server/sandbox/sandbox-control.ts). Nothing
 // starts until the person asks to see it, and the view closes when the
 // environment idles out.
 import { useEffect, useRef, useState } from "react";

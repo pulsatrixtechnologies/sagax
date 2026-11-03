@@ -5,7 +5,7 @@ Date: 2026-09-25 · Status: implemented on the desktop, iPhone and Android
 ## Intent
 
 During a Live call (OpenAI GPT-Live as the voice, the bot as the brain — see
-`server/live-call.ts`), the chat stays visible. The person sees what the bot is
+`server/voice/live-call.ts`), the chat stays visible. The person sees what the bot is
 doing — a lookup, a tool step, its answer — while they talk. The call controls
 shrink to a compact **call bar** instead of covering the chat. This works the
 same on the desktop app, the iPhone companion and the Android companion.
@@ -64,7 +64,7 @@ Success looks like:
   built-in `WebSocket` send the header). It receives transcripts and delegation
   events and sends `session.{thinking,commentary,instructions}.append`.
 
-### Harness: `LiveCallController` (new, `server/live-call-controller.ts`)
+### Harness: `LiveCallController` (new, `server/voice/live-call-controller.ts`)
 
 One active call per harness. Responsibilities, moved from today's renderer
 `LiveCall.tsx` plus new ones:

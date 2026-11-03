@@ -1,7 +1,7 @@
 // How much of an answer a call says aloud. A port of the desktop's
 // `src/lib/voice-mode/answer-budget.ts`.
 //
-// The bot is told the voice output contract (server/voice-call-prompt.ts:
+// The bot is told the voice output contract (server/voice/voice-call-prompt.ts:
 // the verdict first, one to four short spoken sentences, at most one
 // question). This is the deterministic cap: at most four sentences are said
 // (a line break after words ends one too), and a question ends what is

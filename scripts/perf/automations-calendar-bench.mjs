@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Headless benchmark of the Automations calendar (2026-11-02), on the fixture
- * src/gallery/automations-calendar-perf.html (GOX-size data, the real store
+ * src/gallery/automations-calendar-perf.html (production-size data, the real store
  * reducer). It builds the fixture for production with React's profiling
  * build, serves it on 127.0.0.1 and measures in headless Chromium:
  *   - first render (navigation to the first painted frame with the cards),

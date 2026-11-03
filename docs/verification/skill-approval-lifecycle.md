@@ -31,7 +31,7 @@ data are cleaned up after the run; the evidence remains.
 ## Ordering regressions
 
 ```sh
-pnpm exec vitest run src/state/store.test.ts src/components/ChatView.controls.test.ts src/components/ApprovalCard.test.ts server/skills.test.ts server/independent-task-store.test.ts
+pnpm exec vitest run src/state/store.test.ts src/components/ChatView.controls.test.ts src/components/ApprovalCard.test.ts server/skills/skills.test.ts server/independent-task-store.test.ts
 pnpm exec vitest run server/index.test.ts -t 'only enables the exact learned-skill'
 pnpm typecheck
 pnpm lint

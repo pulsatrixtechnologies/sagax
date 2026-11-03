@@ -10,7 +10,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { restartPolicy } from "./restart.ts";
+import { restartPolicy } from "./process/restart.ts";
 
 export function superviseServer(start: () => ChildProcess, options: { signals?: Pick<NodeJS.Process, "on" | "off">; now?: () => number } = {}): Promise<number> {
   const signals = options.signals ?? process, now = options.now ?? Date.now;

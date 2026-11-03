@@ -13,7 +13,7 @@ function render(element: Parameters<typeof renderToStaticMarkup>[0]): string {
 }
 
 // A bot with every off switch flipped: exercises all six "wont" sentences
-// buildBotOverview (server/bot-overview.ts) can produce at once.
+// buildBotOverview (server/bots/bot-overview.ts) can produce at once.
 const sentences: BotOverview = {
   who: {
     name: "Scout",

@@ -61,7 +61,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
   return async function dispatchStartTurn(state: TurnState): Promise<void> {
     // Before sendTurn: an adapter may emit the whole turn before it resolves.
     if (!state.warmOnly) handoffs.dispatching(state.threadId, state.dispatchClaimId, state.dispatchContext.handoff);
-    // Read receipts (server/read-receipts.ts): the person's words this turn
+    // Read receipts (server/messages/read-receipts.ts): the person's words this turn
     // carries are what the bot has now seen. A card continuation carries
     // none of its own: it sees the conversation it resumes.
     if (!state.warmOnly) {
@@ -103,14 +103,14 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     } } : undefined);
     // A call turn (and the warm that prepares its process, so the two share
     // one spawn contract) runs at the engine's low effort: the person is
-    // waiting for the first word (server/voice-call-effort.ts).
-    // A pre-warm off a call (server/thread-prewarm.ts) takes the next
+    // waiting for the first word (server/voice/voice-call-effort.ts).
+    // A pre-warm off a call (server/threads/thread-prewarm.ts) takes the next
     // turn's own effort and flags, or the turn would relaunch it.
     const turnEffort = state.onCall
       ? callTurnEffort({ driverKind: state.instance.driverKind, levels: state.instance.adapter.capabilities.effortLevels, effort: state.effort })
       : resolveEngineTurnEffort(state.effort, state.instance.driverKind, state.instance.adapter.capabilities.effortLevels);
     // A routine run while the server boots waits for an engine start slot
-    // (server/engine-start-gate.ts): the runs that came due during a
+    // (server/engines/engine-start-gate.ts): the runs that came due during a
     // restart start two at a time instead of every engine at once.
     // After boot, routine turns keep a steady limit (SAGAX_ROUTINE_ENGINE_SLOTS)
     // and wait while memory is critical (server/engine-memory-guard.ts).

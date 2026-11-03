@@ -15,7 +15,7 @@ import { PerspicaxAgentsClient } from "../cloud-agents/perspicax-client.ts";
 import { createPerspicaxProvider } from "../cloud-agents/providers/perspicax.ts";
 import { CloudAgentStore } from "../cloud-agents/store.ts";
 import { startFakePerspicaxAgents, type FakePerspicaxAgents } from "../testing/fake-perspicax-agents.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { createCodeRoutes } from "./code.ts";
 import { PASS } from "./table.ts";
 

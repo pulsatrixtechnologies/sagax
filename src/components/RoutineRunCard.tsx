@@ -172,8 +172,9 @@ export function RoutineRunCard({
         {details && <RunResultDetails details={details} />}
       </div>}
       {handedTo.length > 0 && <TeammateThreadLinks handedTo={handedTo} onOpenThread={onOpenThread} />}
-      {withProblems && <p data-routine-problems className="mt-1 max-w-[min(42rem,88%)] whitespace-pre-wrap px-1 text-[12px] leading-relaxed text-warning">{problems}</p>}
-      <div className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-1 text-[11.5px] text-ink-secondary", (report || detail || withProblems) && "mt-1")}>
+      {/* 2026-11-03 (JC): the problem details stay in the run detail (View run);
+          the chat card only says "Completed with problems". */}
+      <div className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-1 text-[11.5px] text-ink-secondary", (report || detail) && "mt-1")}>
         <span className="truncate">{t("routines.post.routine", { name: run.routineName })}</span>
         {(!reported || withProblems) && <>
           <span aria-hidden="true">·</span>

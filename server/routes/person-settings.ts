@@ -1,13 +1,13 @@
 // A person's own Experimental switches and browser profiles on an
-// organization server (#1098, 2026-10-27, server/person-settings.ts). Their
+// organization server (#1098, 2026-10-27, server/people/person-settings.ts). Their
 // own: no admin right, no right to edit the installation.
 //
 //   GET   /api/me/experimental   { features, browserProfiles }
 //   PATCH /api/me/experimental   { features?: { <key>: true | false | null }, browserProfiles?: [{ id?, name }] }
 //
 // A solo server answers 404: its one person edits the installation itself.
-import type { RequestAuth } from "../request-auth.ts";
-import { PersonSettingsError, type PersonSettings, type PersonSettingsStore } from "../person-settings.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { PersonSettingsError, type PersonSettings, type PersonSettingsStore } from "../people/person-settings.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const PERSON_SETTINGS_PATH = "/api/me/experimental";

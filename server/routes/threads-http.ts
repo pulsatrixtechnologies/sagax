@@ -7,8 +7,8 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { deliveredCopy } from "../bot-attachment.ts";
-import type { ApprovalViewer } from "../approval-audience.ts";
+import { deliveredCopy } from "../bots/bot-attachment.ts";
+import type { ApprovalViewer } from "../approvals/approval-audience.ts";
 import {
   listMessageFolder,
   messageAttachmentName,
@@ -21,23 +21,23 @@ import {
   openMessageFolderEntry,
   referencedFileName,
   statMessageFile,
-} from "../message-file.ts";
-import type { RequestAuth } from "../request-auth.ts";
+} from "../messages/message-file.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   personParticipant,
   roomReceiptMember,
-} from "../read-receipts.ts";
+} from "../messages/read-receipts.ts";
 import { PUSH_TOKEN_HEADER, pushTokenFromHeader } from "../push/devices.ts";
-import { openSseHeartbeat } from "../sse-fanout.ts";
+import { openSseHeartbeat } from "../streams/sse-fanout.ts";
 import type { BotRecord, GroupRecord, Message } from "../store.ts";
-import { readThreadEvents } from "../thread-events.ts";
+import { readThreadEvents } from "../threads/thread-events.ts";
 import {
   listThreadFiles,
   writtenFilesForMessage,
   type ThreadFileRef,
-} from "../thread-files.ts";
-import { THUMB_MAX_SOURCE_BYTES, thumbnailFor, thumbnailable } from "../thumbnail.ts";
-import { screenVisibleToPrincipal } from "../user-sandbox-routing.ts";
+} from "../threads/thread-files.ts";
+import { THUMB_MAX_SOURCE_BYTES, thumbnailFor, thumbnailable } from "../media/thumbnail.ts";
+import { screenVisibleToPrincipal } from "../sandbox/user-sandbox-routing.ts";
 import {
   normalizeReactions,
   reactionEmoji,
@@ -311,7 +311,7 @@ export function createThreadsHttpRoutes(deps: ThreadsHttpRouteDeps): RouteHandle
       return json(res, asked.status, asked.body);
     }
 
-    // Read receipts (server/read-receipts.ts): GET answers the positions
+    // Read receipts (server/messages/read-receipts.ts): GET answers the positions
     // this person may see and which one is theirs; POST moves their own,
     // forward only, to a message their app showed them.
     m = path.match(/^\/api\/threads\/([\w-]+)\/read$/);

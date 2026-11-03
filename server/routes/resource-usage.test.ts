@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { ResourceUsageView } from "../../shared/resource-usage.ts";
 import { json, readBody } from "../harness/http.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { createResourceSamplers, type ResourceSamplers, type SampleSource } from "../resource-usage/sampler.ts";
 import type { ResolvedResourceTarget, ResourceTargetRefusal, ResourceTargetRequest } from "../resource-usage/targets.ts";
 import { createResourceUsageInternalRoutes, createResourceUsageRoutes, resourceSummary } from "./resource-usage.ts";

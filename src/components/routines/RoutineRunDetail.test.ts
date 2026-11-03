@@ -126,19 +126,19 @@ describe("a run's detail", () => {
 
   it("a delegated run links the teammate's thread", () => {
     const opened: string[] = [];
-    const markup = html({ run: run("blocked", { error: "{", handedTo: [{ botId: "melonie", threadId: "teammate-thread", name: "Melonie", status: "running" }] }), onOpenThread: (_botId, threadId) => opened.push(threadId) });
-    expect(markup).toContain("Blocked: waiting for Melonie");
+    const markup = html({ run: run("blocked", { error: "{", handedTo: [{ botId: "nova", threadId: "teammate-thread", name: "Nova", status: "running" }] }), onOpenThread: (_botId, threadId) => opened.push(threadId) });
+    expect(markup).toContain("Blocked: waiting for Nova");
     expect(markup).toContain('data-run-teammate-thread="teammate-thread"');
-    expect(markup).toContain("Sent work to Melonie");
+    expect(markup).toContain("Sent work to Nova");
   });
 
   it("a JSON final answer reads as plain sentences with its whole under Show details", () => {
-    const output = JSON.stringify({ summary: "Timesheets checked", done: ["Sheet 14203 audited"], blocked: ["Alubar overage: waiting for Melonie"], next_steps: ["Approve sheet 14203"] }, null, 2);
+    const output = JSON.stringify({ summary: "Timesheets checked", done: ["Sheet 100203 audited"], blocked: ["Northwind overage: waiting for Nova"], next_steps: ["Approve sheet 100203"] }, null, 2);
     const markup = html({ run: run("completed", { output }) });
     expect(markup).toContain("Timesheets checked");
-    expect(markup).toContain("Done: Sheet 14203 audited");
-    expect(markup).toContain("Blocked: Alubar overage: waiting for Melonie");
-    expect(markup).toContain("For you: Approve sheet 14203");
+    expect(markup).toContain("Done: Sheet 100203 audited");
+    expect(markup).toContain("Blocked: Northwind overage: waiting for Nova");
+    expect(markup).toContain("For you: Approve sheet 100203");
     expect(markup).toContain("data-run-result-details");
     expect(routineRunPreview(run("completed", { output }))).toBe("Timesheets checked");
   });
@@ -154,14 +154,23 @@ describe("a routine's page", () => {
     expect(markup).not.toContain("Write the morning briefing.");
   });
 
-  it("keeps no second copy of the configuration: its summary opens the editor (2026-10-29)", () => {
-    const markup = renderToStaticMarkup(createElement(RoutineDetail, { routine, runs, bots: [bot], now: NOW, onOpenRun: () => {}, onConfigure: () => {} }));
+  it("keeps no second copy of the configuration: rows Trigger, Active, Next run; no chip, no badge, no link (2026-11-03)", () => {
+    const markup = renderToStaticMarkup(createElement(RoutineDetail, { routine, runs, bots: [bot], now: NOW, onOpenRun: () => {}, onToggle: () => {}, onPatch: async () => {}, onClearRuns: () => {} }));
     expect(markup).not.toContain("data-routine-config-prompt");
     expect(markup).not.toContain('role="tab"');
     expect(markup).toContain("data-routine-summary");
-    expect(markup).toContain("See and edit the configuration");
+    expect(markup).not.toContain("See and edit the configuration");
+    expect(markup).not.toContain("data-routine-state");
+    expect(markup).toContain("data-routine-trigger-row");
+    expect(markup).toMatch(/<button[^>]*data-routine-trigger[^>]*aria-haspopup="dialog"/);
+    expect(markup).toMatch(/data-routine-active[\s\S]*role="switch"/);
+    expect(markup).toContain("Next run");
+    // Clear run logs at the right of "Runs (n)".
+    expect(markup).toContain("data-routine-clear-runs");
+    expect(markup).toContain('aria-label="Clear run logs"');
     const plain = renderToStaticMarkup(createElement(RoutineDetail, { routine, runs, bots: [bot], now: NOW, onOpenRun: () => {} }));
-    expect(plain).not.toContain("See and edit the configuration");
+    expect(plain).not.toContain("data-routine-clear-runs");
+    expect(plain).not.toMatch(/<button[^>]*data-routine-trigger/);
   });
 });
 

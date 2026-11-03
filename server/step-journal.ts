@@ -9,7 +9,7 @@
 import { appendFile, mkdir, readdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
 
-import { monthKey } from "./usage-ledger.ts";
+import { monthKey } from "./usage/usage-ledger.ts";
 
 /** Outcome class for a tool step, derived from ok + short motifs only. */
 export type StepClass =

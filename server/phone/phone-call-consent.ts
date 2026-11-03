@@ -11,7 +11,7 @@ import {
   type PhoneCallConsentCardData,
 } from "../../shared/phone-call-consent.ts";
 import { writeFileAtomic } from "../atomic.ts";
-import { personSettingsPrincipal } from "../person-settings.ts";
+import { personSettingsPrincipal } from "../people/person-settings.ts";
 
 export const PHONE_CALL_CONSENT_FILE = "phone-call-consent.json";
 

@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { setLocale } from "@/lib/i18n";
-import * as server from "../../../server/skill-upload.ts";
+import * as server from "../../../server/skills/skill-upload.ts";
 import { SKILL_FILE_MAX_BYTES } from "../../../shared/skill-md.ts";
 import {
   SKILL_MD_MAX_BYTES,

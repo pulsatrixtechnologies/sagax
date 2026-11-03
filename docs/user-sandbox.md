@@ -16,7 +16,7 @@ open a shared machine.
 | `host` | solo server | this machine, unchanged |
 | `none` | organization mode without a provisioner | nothing is mounted |
 
-The choice between the two is `resolveBotWorkplace` (`server/desktop-bridge.ts`),
+The choice between the two is `resolveBotWorkplace` (`server/desktop/desktop-bridge.ts`),
 from the bot's Works on: Auto and Cloud ("Cloud (server environment)") use the
 server environment, the default; Local VM and This computer use the person's
 own computer, and when their desktop app is not connected nothing runs there
@@ -44,11 +44,11 @@ bot's follow-up after a person's message keeps that person's environment
 rather than the creator's: the work they asked for and its files stay
 together, and nothing they wrote moves into someone else's environment.
 
-Code: `server/user-sandbox-routing.ts` (targets, owner), `server/user-sandbox-tools.ts`
+Code: `server/sandbox/user-sandbox-routing.ts` (targets, owner), `server/sandbox/user-sandbox-tools.ts`
 (`run_command`, `read_file`, `write_file`, `list_files`, `browse`,
 `computer_list_tools`, `computer_use`, mounted as the MCP server
-`sagax-environment`), `server/user-sandbox-manager.ts` (lifecycle on
-the Sagax side), `server/sandboxd*.ts` (the provisioner), `server/user-sandbox-spec.ts`
+`sagax-environment`), `server/sandbox/user-sandbox-manager.ts` (lifecycle on
+the Sagax side), `server/sandboxd.ts` and `server/sandbox/sandboxd-*.ts` (the provisioner), `server/sandbox/user-sandbox-spec.ts`
 (the exact container, network and egress policy).
 
 `read_file`, `list_files` and `write_file` resolve their path inside the environment first
@@ -56,7 +56,7 @@ the Sagax side), `server/sandboxd*.ts` (the provisioner), `server/user-sandbox-s
 the `fd`, `root` and `cwd` links, also under `task/<tid>`) is never read, a
 symbolic link in any component that leads to a credential location (`.ssh`,
 `.git-credentials`, `.config/gh`, `.aws`...) is refused, and so is an
-ordinary name whose real place is a dotfile (`server/sensitive-path.ts`,
+ordinary name whose real place is a dotfile (`server/safety/sensitive-path.ts`,
 2026-10-17).
 
 - **Hard links.** A regular file of the sandbox user with more than one
@@ -150,7 +150,7 @@ scripts, and Chromium for HTML. `WITH_APPS=0` builds the image without them
 ## Workspace layout (2026-11-02)
 
 `/workspace` is shared by every bot of the person, so each bot works in its
-own folder (`server/sandbox-bot-folder.ts`):
+own folder (`server/sandbox/sandbox-bot-folder.ts`):
 
 | Path | What |
 |---|---|
@@ -218,10 +218,10 @@ quota and the volume.
   on the screen about 2 s, on keyboard focus or on a tap) opens the desktop large (92vw by 88vh, letterboxed) and hands
   the full one there, while the tab's square stays view-only; while such a
   view is open, the bots' `computer_use` there is refused, never queued
-  (`server/sandbox-control.ts`), and "Rendre le contrôle" or closing the
+  (`server/sandbox/sandbox-control.ts`), and "Rendre le contrôle" or closing the
   window (Cmd/Ctrl+Shift+Esc, or Escape outside the screen) hands it back. The WebSocket never
   starts anything: the Sagax server frames the RFB bytes itself
-  (`server/ws-bridge.ts`) and reaches the VNC port only through the
+  (`server/streams/ws-bridge.ts`) and reaches the VNC port only through the
   provisioner, a signed HTTP upgrade (`/v1/sandboxes/<key>/desktop`) spliced
   to a `docker exec` relay inside that one sandbox. No port is published, no
   network path opens between Sagax and a sandbox. A view in control counts as
@@ -353,10 +353,10 @@ server keeps one process per person, server and thread through the
 provisioner's signed stdio stream (`/v1/sandboxes/<key>/stdio`, upgrade
 `sagax-stdio`; the command and its variables ride the first line, whose
 SHA-256 the signed path names) and relays the JSON-RPC frames
-(`server/sandbox-stdio-mcp.ts`). At most 8 such processes per person run at
+(`server/sandbox/sandbox-stdio-mcp.ts`). At most 8 such processes per person run at
 once; an idle one stops after 10 minutes.
 
-Their GitHub connection (`server/github-connect.ts`) is written into
+Their GitHub connection (`server/github/github-connect.ts`) is written into
 `/workspace/.config/gh/hosts.yml` and `/workspace/.git-credentials` (0600,
 `credential.https://github.com.helper store`) when they connect and again
 at the first tool call of each turn, so `gh` and `git` in the environment

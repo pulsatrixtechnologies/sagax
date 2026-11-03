@@ -166,7 +166,7 @@ Internal helpers with no command of their own (`parse_moment`, `utc_at`,
 
 Skills are written procedures: judgment, voice, decision tables. They are
 content, not logic, and Sagax already installs a plugin's skills and commands
-on a bot (Capabilities, `server/bot-plugins.ts`). None is copied into Sagax.
+on a bot (Capabilities, `server/bots/bot-plugins.ts`). None is copied into Sagax.
 
 | Skills | Status |
 |---|---|
@@ -200,7 +200,7 @@ their skills (depends on plugin).
 | Old | Status |
 |---|---|
 | `agents/px-flow-worker.md`, `agents/px-flow-aggregator.md` | depends on plugin: sub-agents of the plugin's engine. Sagax's own equivalents are bot-level (`start_thread`, `coordinate_bots`, parallel tasks) and are not a port |
-| `hooks/session-start` (injects `using-px-flow`) | not migrating: Sagax strips hooks from a plugin it installs on a bot (`server/bot-plugins.ts`); Claude loads the plugin with `--plugin-dir`, other engines get its skills and commands in the turn prompt |
+| `hooks/session-start` (injects `using-px-flow`) | not migrating: Sagax strips hooks from a plugin it installs on a bot (`server/bots/bot-plugins.ts`); Claude loads the plugin with `--plugin-dir`, other engines get its skills and commands in the turn prompt |
 | `hooks/pre-tool-use.py` (always-refused list, kill switch, read-only, human approvals) | not migrating: hooks are stripped in Sagax (above). Sagax's own controls apply instead: approval modes and cards, misuse guardrails and safety review, and Perspicax's server-side profiles and confirmation holds. Its lists name the organization's tool risks, which stay in the organization's configuration |
 
 ## Data completeness

@@ -34,7 +34,7 @@ export function permissionPaths(tool: unknown, input: unknown, cwd: string | und
 
 /** The tool input with its file path fields made absolute against the
  * engine's cwd (a Claude tool may name a working-folder file by its
- * relative path, server/workspace.ts): what Sagax shows on a card, scopes
+ * relative path, server/workspace/workspace.ts): what Sagax shows on a card, scopes
  * an "Always allow" rule with and records as a written file. Anything that
  * is not a relative path field of a file tool is left as it was. */
 export function withAbsolutePaths(tool: unknown, input: unknown, cwd: string | undefined): unknown {

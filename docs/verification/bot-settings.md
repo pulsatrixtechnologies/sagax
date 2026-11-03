@@ -103,7 +103,7 @@ Use only the fixture's harmless skills and routines.
 Automated coverage:
 
 ```sh
-pnpm exec vitest run server/new-bot-defaults.test.ts server/new-bot-defaults.e2e.test.ts src/lib/bot-creation-draft.test.ts src/lib/create-configured-bot.test.ts src/components/NewBotDialog.test.ts
+pnpm exec vitest run server/bots/new-bot-defaults.test.ts server/bots/new-bot-defaults.e2e.test.ts src/lib/bot-creation-draft.test.ts src/lib/create-configured-bot.test.ts src/components/NewBotDialog.test.ts
 node --test electron/approval-trusted-mode.node-test.mjs
 ```
 

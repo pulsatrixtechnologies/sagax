@@ -1,8 +1,8 @@
 // A signed-in person's own model, effort and notification choices for a bot
-// they do not own (server/viewer-bot-overrides.ts). GET lists theirs. PUT
+// they do not own (server/bots/viewer-bot-overrides.ts). GET lists theirs. PUT
 // merges one bot. The owner's bot record is not a parameter of this route.
 // Organization server only, same gate as /api/me/preferences.
-import type { ViewerBotOverrideStore } from "../viewer-bot-overrides.ts";
+import type { ViewerBotOverrideStore } from "../bots/viewer-bot-overrides.ts";
 import { isViewerOverridePatch, sharedBotForViewer } from "../../shared/viewer-bot-overrides.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

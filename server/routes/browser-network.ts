@@ -8,7 +8,7 @@
 import type { IncomingMessage } from "node:http";
 
 import { NetworkDebugError, parseNetworkDebugBody, type BrowserNetworkDebug, type NetworkDebugSpec } from "../browser/browser-network-debug.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface BrowserNetworkRouteDeps {

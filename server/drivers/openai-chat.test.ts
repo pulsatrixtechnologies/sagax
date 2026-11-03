@@ -1068,7 +1068,7 @@ describe("createOpenAIChatRuntime rejected keys", () => {
 
 describe("interruptTurn duplex cap", () => {
   it("returns within DUPLEX_INTERRUPT_WAIT_MS when the stream hangs, and does not delete a newer turn", async () => {
-    const { DUPLEX_INTERRUPT_WAIT_MS } = await import("../voice-call-duplex.ts");
+    const { DUPLEX_INTERRUPT_WAIT_MS } = await import("../voice/voice-call-duplex.ts");
     let completions = 0;
     vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
       if (!String(url).endsWith("/chat/completions")) return new Response(JSON.stringify({ data: [] }), { status: 200 });

@@ -218,7 +218,7 @@ if (isolated) {
   if (!mcpFromUserConfig && !keepsClaudeAiConnectors && claudeCliSupports(cliVersion, "--strict-mcp-config")) args.push("--strict-mcp-config");
   if (claudeCliSupports(cliVersion, "--setting-sources")) args.push("--setting-sources", "project");
 }
-// The bot's plugins (server/bot-plugins.ts): skills, commands and
+// The bot's plugins (server/bots/bot-plugins.ts): skills, commands and
 // agents only, loaded for this session. A guest's confined turn gets none.
 if (!turn.guestConfined && claudeCliSupports(cliVersion, "--plugin-dir")) {
   for (const dir of turn.pluginDirs ?? []) args.push("--plugin-dir", dir);

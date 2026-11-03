@@ -867,7 +867,7 @@ export function PluginsPanel() {
     if (item.kind === "plugin") {
       if (scope !== "workspace") {
         // installed on this bot: Install again updates it in place (its
-        // switch and install date stay, server/bot-plugins.ts)
+        // switch and install date stay, server/bots/bot-plugins.ts)
         if (!scopedPluginView?.canChange || (item.installed && !item.updateAvailable)) return null;
         return (
           <button type="button" {...(item.installed ? { "data-bot-plugin-update": item.id } : { "data-bot-plugin-add": item.id })} disabled={botBusy !== null} onClick={() => installForBot(item.id)} className={cn(cardActionClass(item.installed ? "secondary" : "quiet"), "min-w-[76px]")}>

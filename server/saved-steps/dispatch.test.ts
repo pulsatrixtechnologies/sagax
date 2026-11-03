@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { newId, type ProviderInstance, type RuntimeEvent, type SendTurnInput, type TurnStartResult } from "../contracts.ts";
 import { CONTROL_BUSY } from "../control-client.ts";
-import { Handoffs, unseenMessages, type HandedState, type Handoff } from "../delta-context.ts";
+import { Handoffs, unseenMessages, type HandedState, type Handoff } from "../context/delta-context.ts";
 import type { Message } from "../store.ts";
 import { completeWindowState, windowState } from "../testing/saved-steps-fixtures.ts";
 import { SavedStepsDispatch, type DispatchDeps, type ReplayRequest } from "./dispatch.ts";

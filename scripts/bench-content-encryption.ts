@@ -31,7 +31,7 @@ if (!mode) {
 const directory = mkdtempSync(join(tmpdir(), "sagax-content-bench-"));
 process.env.SAGAX_DATA_DIR = directory;
 process.env.SAGAX_MCP_OAUTH_KEY = "ab".repeat(32); // synthetic vault key, this process only
-const db = await import("../server/message-db.ts");
+const db = await import("../server/messages/message-db.ts");
 const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]!;
 const p95 = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length * 0.95)]!;
 

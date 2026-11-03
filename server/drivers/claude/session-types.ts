@@ -2,7 +2,7 @@
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 import type { SendTurnInput } from "../../contracts.ts";
-import type { RenewalStep } from "../../context-renewal.ts";
+import type { RenewalStep } from "../../context/context-renewal.ts";
 import type { ClaudeLimit } from "./limits.ts";
 
 export type ClaudeChild = ChildProcessByStdio<Writable, Readable, Readable>;
@@ -155,7 +155,7 @@ export type ClaudeSession = {
     continuationSilence: ReturnType<typeof setTimeout> | null;
     /** The CLI stopped the turn because its context is full (compaction
      * thrashing, a prompt past the window): its close goes on in a fresh
-     * session instead of failing (server/context-renewal.ts). */
+     * session instead of failing (server/context/context-renewal.ts). */
     contextFull?: boolean;
     /** The CLI's running cost total on the result that said so. */
     contextFullTotal?: number;

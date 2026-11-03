@@ -1,7 +1,7 @@
 // A live call's streaming voice over a provider that speaks by HTTP only
 // (OpenAI /v1/audio/speech, ElevenLabs /text-to-speech/<voice>/stream):
 // the same SpeechStream the xAI socket gives (server/tts/grok.ts
-// openSpeechStream), so server/voice-speech-session.ts drives either alike.
+// openSpeechStream), so server/voice/voice-speech-session.ts drives either alike.
 //
 // Words arrive in pieces (`delta`). They are held until a sentence ends,
 // the bot pauses (HOLD_IDLE_MS), the piece grows long (HOLD_MAX_CHARS, cut at

@@ -10,18 +10,18 @@ import {
   isPendingCredentialRequest,
   type CredentialTargetId,
 } from "../../shared/credential-request.ts";
-import { CONFIDENTIAL_PEER_REFUSED } from "../confidential-threads.ts";
+import { CONFIDENTIAL_PEER_REFUSED } from "../threads/confidential-threads.ts";
 import {
   botAddedMcpServerEnabled,
   isRemoteMcpServer as isRemoteMcpServerLeaf,
   type DisabledMcpServerAdd,
   type StoredMcpServer,
-} from "../mcp-registry.ts";
+} from "../mcp/mcp-registry.ts";
 import {
   personalMcpInputFromAgent,
   PersonConnectionsError,
   type PersonalMcpInput,
-} from "../person-connections.ts";
+} from "../people/person-connections.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 
@@ -244,7 +244,7 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
     if (method === "POST" && path === "/api/internal/github-connect") {
       // The turn's own person connects their GitHub (device flow), like gh
       // auth login: the code and link go back to the bot to show; the device
-      // code and the token stay on the server (server/github-connect.ts).
+      // code and the token stay on the server (server/github/github-connect.ts).
       const body = await readBody();
       const owner = deps.ownsThread(sender.id, capability.threadId);
       if (!owner) return json(res, 403, { error: "source conversation does not belong to sender" });
@@ -402,7 +402,7 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
 
     // Slice 5: a Perspicax MCP frame from the stdio bridge of this turn
     // (server/perspicax-mcp-bridge.ts). The Perspicax token never leaves
-    // this process: server/perspicax-mcp.ts holds it and relays.
+    // this process: server/perspicax/perspicax-mcp.ts holds it and relays.
     if (method === "POST" && path === "/api/internal/perspicax/mcp") {
       const profileId = url?.searchParams.get("profile") ?? "";
       if (!deps.perspicaxMounted(capability, profileId)) {

@@ -13,7 +13,7 @@ import { parse as parseYaml } from "yaml";
 import type { ModelCatalog, ProviderErrorCode, TurnAccessInput } from "../../contracts.ts";
 import { harnessHome, splitCliString } from "../../env-path.ts";
 import { resolveCli } from "../../procs.ts";
-import { engineStartGate } from "../../engine-start-gate.ts";
+import { engineStartGate } from "../../engines/engine-start-gate.ts";
 import type { DeviceSignIn } from "../device-auth.ts";
 import { decodeInjectId, hostApiKey, localHost, mergeLocalInject } from "../local-inject.ts";
 import { createAcpDriver, type AccountErrorCode, type AcpSupport } from "./core.ts";
@@ -25,9 +25,9 @@ import { gateReadOnlyTools, grokApprovalGateEnabled } from "./grok-approval-gate
 import { knownGrokTools, knownGrokToolsSection, recordGrokToolUse, useToolName } from "./grok-tool-usage.ts";
 import { grokCatalogFor, grokCatalogSection, noteGrokAccountReach, rememberGrokCatalog } from "./grok-tool-catalog.ts";
 import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors.ts";
-import { turnReachFor } from "../../turn-reach.ts";
+import { turnReachFor } from "../../turns/turn-reach.ts";
 import { allowsTool, canUseMcpServer, narrowsNativeTools, parseToolScope } from "../../../shared/tool-scope.ts";
-import { grokAliasBase, grokToolNameProblem } from "../../mcp-tool-names.ts";
+import { grokAliasBase, grokToolNameProblem } from "../../mcp/mcp-tool-names.ts";
 
 /** Fallback only, for when the engine cannot be asked (not installed, or no
  * answer). Grok 1.0.46 and 1.0.50 signed in to grok.com offer exactly these

@@ -3,7 +3,7 @@
  * Headless screenshots of the bot panel's Library tab (src/gallery/library-tab.html),
  * light and dark: every row with its mini preview, and Older after "Show more".
  * The page's thumbnail requests (/api/threads/t1/files/<id>?thumb=1) are answered
- * here with the real server code (server/thumbnail.ts, resvg) from generated
+ * here with the real server code (server/media/thumbnail.ts, resvg) from generated
  * pictures, so what shows is what the server route draws. Headless Chromium only.
  * Usage: node --experimental-strip-types scripts/capture/library-thumbs.mjs --out DIR [--prefix after] [--root CHECKOUT] [--port N]
  *   (--root: the checkout whose gallery to serve, e.g. a worktree of the old main for "before")
@@ -23,7 +23,7 @@ const prefix = arg("--prefix") ?? "after";
 const skins = [{ id: "pulsatrix-light", label: "light" }, { id: "midnight", label: "dark" }];
 
 // A different gradient picture per file id: drawn by the real thumbnail code.
-const { thumbnailFor } = await import(join(here, "server", "thumbnail.ts"));
+const { thumbnailFor } = await import(join(here, "server", "media", "thumbnail.ts"));
 const { Resvg } = await import(join(here, "node_modules", "@resvg", "resvg-js", "index.js")).then((m) => m.default ?? m);
 const palettes = ["#f97316 #db2777", "#0ea5e9 #1d4ed8", "#22c55e #0f766e", "#a855f7 #4338ca", "#eab308 #dc2626", "#14b8a6 #2563eb"];
 const picture = (n, w, h) => {

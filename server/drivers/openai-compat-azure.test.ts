@@ -4,7 +4,7 @@
 // deployment, and a list that fails says why.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { recordEvents } from "../testing/events.ts";
-import { checkProviderKey } from "../provider-key-check.ts";
+import { checkProviderKey } from "../engines/provider-key-check.ts";
 import { OpenAICompatDriver } from "./openai-compat.ts";
 import { azureDeployments, azureOpenAIEndpoint, looksLikeAzureUrl } from "../../shared/azure-openai.ts";
 

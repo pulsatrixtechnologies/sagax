@@ -15,10 +15,10 @@
 //
 // JSON-only CSRF (content-type), per-source lockout, cookie issue/clear and
 // org admin target checks stay identical to the former index.ts bodies.
-import type { ProfileManagement } from "../oidc-login.ts";
-import type { RequestAuth } from "../request-auth.ts";
-import { labelFromUserAgent, parseCookies, requestOrigin, requestSource } from "../request-auth.ts";
-import type { PublicSession, Scope, SessionRecord } from "../sessions.ts";
+import type { ProfileManagement } from "../auth/oidc-login.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { labelFromUserAgent, parseCookies, requestOrigin, requestSource } from "../auth/request-auth.ts";
+import type { PublicSession, Scope, SessionRecord } from "../auth/sessions.ts";
 import {
   PASS,
   type PreAuthRouteHandler,

@@ -2,7 +2,7 @@
 //
 //   POST /api/org/link/directory-refresh   Bearer <link token>
 //
-// The directory (server/perspicax-link.ts) is re-read every
+// The directory (server/perspicax/perspicax-link.ts) is re-read every
 // SAGAX_PERSPICAX_DIRECTORY_SECONDS (300 by default), so a rights change in
 // Perspicax (a permission set, `sagax_bots`, a team, a
 // profile) reached Sagax up to five minutes later. Perspicax calls this
@@ -29,7 +29,7 @@
 //     404 `{error: "not_found"}`.
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { AuthFailureLimiter } from "../webhook-ingress.ts";
+import { AuthFailureLimiter } from "../triggers/webhook-ingress.ts";
 
 export const ORG_LINK_PREFIX = "/api/org/link/";
 export const DIRECTORY_REFRESH_PATH = "/api/org/link/directory-refresh";

@@ -71,7 +71,7 @@ export async function createWizardBot(request: Request = defaultApi, options: { 
   const body = {
     ...(defaults.suggestedName?.trim() ? { name: defaults.suggestedName.trim() } : {}),
     ...(autoSelectionReady(selection) ? { modelSelection: selection } : {}),
-    // the template's own fields go in `settings` (server/new-bot-defaults.ts)
+    // the template's own fields go in `settings` (server/bots/new-bot-defaults.ts)
     ...(options.noMcp ? { settings: { mcpServers: [] } } : {}),
   };
   return (await request<{ bot: Bot }>("/api/bots", { method: "POST", body: JSON.stringify(body) })).bot;
@@ -132,7 +132,7 @@ export async function createDesignerBot(language: string, request: Request = def
   const selection = defaults.modelSelection;
   const { soul, ...profile } = designerProfile(language);
   // name, title and description ride beside the request; the soul is a
-  // template field, so it goes in `settings` (server/new-bot-defaults.ts)
+  // template field, so it goes in `settings` (server/bots/new-bot-defaults.ts)
   const body = { ...profile, settings: { soul }, ...(autoSelectionReady(selection) ? { modelSelection: selection } : {}) };
   return (await request<{ bot: Bot }>("/api/bots", { method: "POST", body: JSON.stringify(body) })).bot;
 }

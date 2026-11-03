@@ -7,7 +7,7 @@ repository's fake Claude and fake Codex engines:
 ```sh
 pnpm exec vitest run server/team-setup.e2e.test.ts
 pnpm exec vitest run server/bot-deletion-write-failure.e2e.test.ts
-pnpm exec vitest run server/team-setup-requests.test.ts server/store.test.ts
+pnpm exec vitest run server/team/team-setup-requests.test.ts server/store.test.ts
 pnpm exec vitest run server/index.test.ts -t 'delet|Full and Custom bots'
 pnpm typecheck
 pnpm lint

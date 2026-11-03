@@ -179,7 +179,7 @@ let e: any = cause;
         }
       }
       const current = store.projectBotForTask(state.bot.id, state.threadId);
-      // The bot's own recovery setting (server/bot-runtime-settings.ts).
+      // The bot's own recovery setting (server/bots/bot-runtime-settings.ts).
       const backups = botRecoveryBackups(current, cfg);
       const nextIndex = backups.findIndex((candidate: any, index: any) => index >= (state.opts?.automaticRecoveryIndex ?? 0) &&
         registry.get(candidate.instanceId)?.enabled && !orgEngineTurnRefusal(state.bot, registry.get(candidate.instanceId)!, state.opts?.speaker ?? { origin: "person" }) &&

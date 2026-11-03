@@ -1,5 +1,5 @@
 // The bot package: one bot, whole, as `<bot-name>.sagaxbot.zip` (server
-// side in server/bot-zip.ts, docs/bot-package.md). This module holds what
+// side in server/bots/bot-zip.ts, docs/bot-package.md). This module holds what
 // the server, the renderer's preview and the admin console share: the
 // manifest's schema, the limits, the file name and the preview's shape.
 // Pure: zod only.

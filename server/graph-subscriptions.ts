@@ -18,7 +18,7 @@ import {
   type TriggerAutomationStatus,
   type TriggerSourceType,
 } from "../shared/trigger-sources.ts";
-import type { AutomationPatch, AutomationTarget } from "./webhooks.ts";
+import type { AutomationPatch, AutomationTarget } from "./triggers/webhooks.ts";
 
 export const GRAPH_API = "https://graph.microsoft.com/v1.0";
 const MICROSOFT_ISSUER_HOSTS = new Set(["login.microsoftonline.com", "login.microsoft.com", "login.windows.net", "sts.windows.net", "login.microsoftonline.us", "login.partner.microsoftonline.cn"]);

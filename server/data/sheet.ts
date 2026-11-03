@@ -8,7 +8,7 @@ import { join } from "node:path";
 
 import { DATA_LIMITS, type DataBroadcast, type DataCard, type DataSheet, type DataSource } from "../../shared/data-surface.ts";
 import { writeFileAtomic } from "../atomic.ts";
-import { botFolder } from "../bot-folder.ts";
+import { botFolder } from "../bots/bot-folder.ts";
 import { DATA_SCOPES_ROOT, dataScopeBotId, dataScopeFolder, dataScopesFolderOf } from "./scope.ts";
 
 export const SHEET_FILE = "sheet.json";

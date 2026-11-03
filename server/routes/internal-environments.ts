@@ -15,10 +15,10 @@ import {
   COMPUTER_SELECT_TOOL,
   selectAutoComputer,
   type AutoComputerState,
-} from "../auto-computer.ts";
+} from "../computer/auto-computer.ts";
 import { MY_CHROME_PROFILE, runMyChromeTool, toolName as browserToolName } from "../browser/my-chrome/pilot.ts";
 import { browserNavigationRefusal } from "../browser/browser-navigation.ts";
-import { pickComputer } from "../computer-selection.ts";
+import { pickComputer } from "../computer/computer-selection.ts";
 import type { Surface } from "../surface.ts";
 
 /** One computer select_computer can offer (selectableComputers in index). */
@@ -32,29 +32,29 @@ export type SelectableComputer = {
   reason?: string;
 };
 import { withCommandVariables } from "../vault/credential-command-env.ts";
-import type { DesktopBridgeOperation } from "../desktop-bridge.ts";
-import { handleDesktopBridgeMcp } from "../desktop-bridge-tools.ts";
-import { handleMessagesMcp } from "../imessage-mcp.ts";
+import type { DesktopBridgeOperation } from "../desktop/desktop-bridge.ts";
+import { handleDesktopBridgeMcp } from "../desktop/desktop-bridge-tools.ts";
+import { handleMessagesMcp } from "../imessage/imessage-mcp.ts";
 import { messagesOnBotMac } from "../../shared/imessage.ts";
-import { misusePathRefusal, misuseRefusal, misuseToolFrameText } from "../misuse-guardrails.ts";
-import { serverPathAnswer, serverPathInCommand } from "../sandbox-server-path.ts";
+import { misusePathRefusal, misuseRefusal, misuseToolFrameText } from "../safety/misuse-guardrails.ts";
+import { serverPathAnswer, serverPathInCommand } from "../sandbox/sandbox-server-path.ts";
 import { deliverableNotification } from "../notify.ts";
-import { enginePluginCommandRefusal } from "../person-integrations.ts";
-import type { PersonalMcpServer } from "../person-connections.ts";
+import { enginePluginCommandRefusal } from "../people/person-integrations.ts";
+import type { PersonalMcpServer } from "../people/person-connections.ts";
 import { readPersonalCopy } from "../personal-copy.ts";
-import { SANDBOX_CONTROL_REFUSAL } from "../sandbox-control.ts";
-import { StdioRelayError } from "../sandbox-stdio-mcp.ts";
-import { sharedComputerOperation } from "../shared-computers.ts";
+import { SANDBOX_CONTROL_REFUSAL } from "../sandbox/sandbox-control.ts";
+import { StdioRelayError } from "../sandbox/sandbox-stdio-mcp.ts";
+import { sharedComputerOperation } from "../computer/shared-computers.ts";
 import { SMALL_TALK_CLOUD_REFUSAL } from "../small-talk.ts";
 import { DESKTOP_BRIDGE_MCP_NAME } from "../../shared/bot-workplace.ts";
 import { parseSurface, surfaceLabel } from "../surface.ts";
-import { teamComputerOwner } from "../team-computers.ts";
-import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tool-output-bound.ts";
-import { USER_SANDBOX_MCP_NAME } from "../user-sandbox-routing.ts";
-import { UserSandboxUnavailable } from "../user-sandbox-manager.ts";
-import { handleUserSandboxMcp } from "../user-sandbox-tools.ts";
-import { inBotFolder } from "../sandbox-bot-folder.ts";
-import type { SandboxExecInput } from "../sandboxd-core.ts";
+import { teamComputerOwner } from "../computer/team-computers.ts";
+import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tools/tool-output-bound.ts";
+import { USER_SANDBOX_MCP_NAME } from "../sandbox/user-sandbox-routing.ts";
+import { UserSandboxUnavailable } from "../sandbox/user-sandbox-manager.ts";
+import { handleUserSandboxMcp } from "../sandbox/user-sandbox-tools.ts";
+import { inBotFolder } from "../sandbox/sandbox-bot-folder.ts";
+import type { SandboxExecInput } from "../sandbox/sandboxd-core.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 
@@ -170,12 +170,12 @@ export interface InternalEnvironmentsDeps {
   withCommandVariables: typeof withCommandVariables;
   userSandboxExec(ownerId: string, input: unknown, botId: string): Promise<unknown>;
   userSandboxOverQuota(ownerId: string, botId: string): boolean | Promise<boolean>;
-  /** The bot's own folder in the environment (server/sandbox-bot-folder.ts),
+  /** The bot's own folder in the environment (server/sandbox/sandbox-bot-folder.ts),
    * or null: its commands then start at /workspace as before. */
   sandboxBotFolder?(botId: string): string | null;
   /** This bot's own folders on the Sagax server (its workspace and task
    * workspaces, every spelling): a sandbox tool given one gets a short line
-   * naming its folder in the environment (server/sandbox-server-path.ts). */
+   * naming its folder in the environment (server/sandbox/sandbox-server-path.ts). */
   serverBotRoots?(botId: string): string[];
   /** The start-of-environment tidy (once per start) and disk check. */
   sandboxTidy?(ownerId: string, botId: string): Promise<void>;

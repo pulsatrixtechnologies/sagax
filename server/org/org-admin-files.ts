@@ -23,7 +23,7 @@
 //   desktop      the owner's own computer through the desktop bridge: never
 //                reachable from the server
 //
-// A confidential thread (server/confidential-threads.ts) is not here at all:
+// A confidential thread (server/threads/confidential-threads.ts) is not here at all:
 // its folder under tasks and its attachments are left out of every listing
 // and read as missing (404), so an admin learns nothing, not even its id.
 //
@@ -38,7 +38,7 @@ import { lstat, open, realpath, type FileHandle } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, isAbsolute, join, relative, sep } from "node:path";
 
-import { atRestStream, describeHandle } from "../content-at-rest.ts";
+import { atRestStream, describeHandle } from "../encryption/content-at-rest.ts";
 
 export const ADMIN_FILES_ROUTE = /^files\/([A-Za-z0-9_-]{1,128})\/(roots|list|stat|read|download)$/;
 export const FILES_MAX_ENTRIES = 1_000;
@@ -471,7 +471,7 @@ export async function answerBotFiles(input: {
       await handle.close();
       throw new FileRefusal(413, "too_large", `This file is over ${FILES_MAX_DOWNLOAD_BYTES} bytes.`);
     }
-    // a memory file or an attachment sealed at rest downloads as its plaintext (server/content-at-rest.ts)
+    // a memory file or an attachment sealed at rest downloads as its plaintext (server/encryption/content-at-rest.ts)
     let content: Awaited<ReturnType<typeof describeHandle>>;
     try {
       content = await describeHandle(handle, join(target.rootDir, ...target.segments));

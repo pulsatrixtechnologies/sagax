@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { CustomRuleStore } from "../custom-rules-store.ts";
+import { CustomRuleStore } from "../rules/custom-rules-store.ts";
 import { json, readBody } from "../harness/http.ts";
-import { requiredScope, type RequestAuth } from "../request-auth.ts";
+import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
 import { createCustomRuleRoutes } from "./custom-rules.ts";
 import { dispatchRoutes } from "./table.ts";
 import type { CustomRule, CustomRuleBinding, RuleProduct, TurnStart } from "../../shared/custom-rules.ts";

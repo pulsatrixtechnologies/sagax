@@ -92,10 +92,10 @@ Export worker behavior and repeatable latency measurements are documented in
 
 ```sh
 pnpm exec vitest run server/workspace-backup.test.ts \
-  server/workspace-backup-policy.test.ts \
-  server/workspace-backup-http.test.ts \
-  server/workspace-backup-maintenance.test.ts \
-  server/webhook-ingress.test.ts server/request-auth.test.ts
+  server/backup/workspace-backup-policy.test.ts \
+  server/backup/workspace-backup-http.test.ts \
+  server/backup/workspace-backup-maintenance.test.ts \
+  server/triggers/webhook-ingress.test.ts server/auth/request-auth.test.ts
 SAGAX_UI_E2E=1 pnpm exec vitest run scripts/testing/workspace-backup-ui.e2e.test.ts
 ```
 

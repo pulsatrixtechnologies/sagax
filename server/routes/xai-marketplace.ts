@@ -1,5 +1,5 @@
 // The xAI Bot Marketplace as a template source of Browse Bots
-// (server/xai-marketplace.ts, shared/xai-marketplace.ts):
+// (server/plugins/xai-marketplace.ts, shared/xai-marketplace.ts):
 //
 //   GET /api/team-library/xai                 ?refresh=1
 //       { label, url, fetchedAt, bots, stale? }: every bot's card.
@@ -12,7 +12,7 @@
 // and creates nothing: anyone signed in (request-auth.ts CLIENT_ALLOW).
 // Adding a bot goes through the usual bot import (the app converts it, the
 // phone through POST /api/bots/import/agent { marketplace }).
-import { XaiMarketplaceError, type XaiMarketplaceSource } from "../xai-marketplace.ts";
+import { XaiMarketplaceError, type XaiMarketplaceSource } from "../plugins/xai-marketplace.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 const ROUTE = /^\/api\/team-library\/xai(?:\/bots\/([^/]+))?$/;

@@ -156,7 +156,7 @@ export function fetchUpkeepStatus(botId: string): Promise<UpkeepStatus> {
   return api(`/api/bots/${botId}/memory/upkeep`);
 }
 
-/** Recall by meaning for one bot (server/semantic-index.ts). */
+/** Recall by meaning for one bot (server/recall/semantic-index.ts). */
 export interface SemanticRecallStatus {
   enabled: boolean;
   encoder: "built-in" | "endpoint";

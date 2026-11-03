@@ -178,11 +178,11 @@ describe("RoutineRunCard", () => {
     expect(plain).not.toContain("data-routine-resume");
     expect(renderToStaticMarkup(createElement(RoutineRunCard, { message: message("failed", { autoPausedAfter: 1 }) }))).toContain("Paused after a failure");
   });
-  it("says a run completed with problems, with the problems under the report (2026-11-01)", () => {
+  it("says a run completed with problems, the details only in the run detail (2026-11-03)", () => {
     const html = renderToStaticMarkup(createElement(RoutineRunCard, { message: message("completed", { summary: "Checked 10 invoices.", problems: "crm_login failed 2 times" }) }));
     expect(html).toContain("Checked 10 invoices.");
-    expect(html).toContain("data-routine-problems");
-    expect(html).toContain("crm_login failed 2 times");
+    expect(html).not.toContain("data-routine-problems");
+    expect(html).not.toContain("crm_login failed");
     expect(html).toContain("Completed with problems");
   });
 
@@ -194,20 +194,20 @@ describe("RoutineRunCard", () => {
   // 2026-11-03 production: the bubble and the card were a lone "{".
   it("a blocked run's bubble says why in one line, the same as the run list, and links the teammate thread", () => {
     const html = renderToStaticMarkup(createElement(RoutineRunCard, {
-      message: message("blocked", { error: "{", handedTo: [{ botId: "melonie", threadId: "teammate-thread", name: "Melonie", status: "running" }] }),
+      message: message("blocked", { error: "{", handedTo: [{ botId: "nova", threadId: "teammate-thread", name: "Nova", status: "running" }] }),
       onOpen: () => {}, onOpenThread: () => {},
     }));
-    expect(html).toContain("Blocked: waiting for Melonie");
+    expect(html).toContain("Blocked: waiting for Nova");
     expect(html).not.toMatch(/>\{</);
     expect(html).toContain('data-run-teammate-thread="teammate-thread"');
     expect(html).toContain("text-warning");
   });
 
   it("a JSON report reads as plain sentences with Show details", () => {
-    const summary = '{\n  "summary": "Bank watch updated",\n  "todo": ["Approve sheet 14203"]\n}';
+    const summary = '{\n  "summary": "Bank watch updated",\n  "todo": ["Approve sheet 100203"]\n}';
     const html = renderToStaticMarkup(createElement(RoutineRunCard, { message: message("completed", { summary }) }));
     expect(html).toContain("Bank watch updated");
-    expect(html).toContain("For you: Approve sheet 14203");
+    expect(html).toContain("For you: Approve sheet 100203");
     expect(html).toContain("data-run-result-details");
   });
 });

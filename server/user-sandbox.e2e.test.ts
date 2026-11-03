@@ -23,15 +23,15 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { claudeLaunchLevel } from "./testing/claude-level.ts";
 
-import { SandboxdVerifier } from "./sandboxd-auth.ts";
-import { SandboxService } from "./sandboxd-core.ts";
+import { SandboxdVerifier } from "./sandbox/sandboxd-auth.ts";
+import { SandboxService } from "./sandbox/sandboxd-core.ts";
 import { createSandboxdHandler } from "./sandboxd.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { FakeDocker } from "./testing/fake-docker.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "./testing/fake-oidc-provider.ts";
 import { fakeAuthenticator } from "./testing/fake-authenticator.ts";
 import { freePortBlock } from "./testing/ports.ts";
-import { sandboxKeyForPrincipal, sandboxNames, sandboxdConfigFromEnv } from "./user-sandbox-spec.ts";
+import { sandboxKeyForPrincipal, sandboxNames, sandboxdConfigFromEnv } from "./sandbox/user-sandbox-spec.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");

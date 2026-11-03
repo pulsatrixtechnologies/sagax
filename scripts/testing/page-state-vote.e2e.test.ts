@@ -18,7 +18,7 @@ import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 
-import { PublishedPages } from "../../server/published-pages.ts";
+import { PublishedPages } from "../../server/pages/published-pages.ts";
 import { handlePublishedPagePublic, readerAssetsFrom, type PublicPageOptions } from "../../server/routes/published-pages.ts";
 import { removeTempDir } from "../../server/testing/cleanup.ts";
 import { ensureUiBrowser } from "./control-omb-ui.ts";

@@ -259,7 +259,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
         ? buildTurnContext({ text: userTurnText, transcript: state.transcript, rewound: false, fresh: false, externallyUpdated: true, replaysNatively: false }).turnText
         : buildRecoveryText({ text: userTurnText, transcript: state.transcript });
       // What this turn puts in front of the provider, for each session it can end
-      // up in (server/delta-context.ts). buildTurnContext prepends a replay only
+      // up in (server/context/delta-context.ts). buildTurnContext prepends a replay only
       // when it replays, so a changed text means the transcript was sent.
       const carried = [...skipTranscript];
       const windowIds = state.selection.representedIds;
@@ -277,7 +277,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
       };
     };
     state.dispatchContext = state.decideContext(state.plannedConfig);
-    // A call turn (server/voice-turn.ts) runs in the call's own session,
+    // A call turn (server/voice/voice-turn.ts) runs in the call's own session,
     // never the conversation's: no conversation cursor, no handed-message
     // record. Its first dispatch (the warm, or the first spoken turn) closes
     // an idle process the thread kept, so the call never reuses the long

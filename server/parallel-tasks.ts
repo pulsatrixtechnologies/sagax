@@ -50,7 +50,7 @@ export function parallelBrief(input: {
   workspace: ParallelWorkspace;
   personName: string;
   byBot?: boolean;
-  /** Handed off from a live call (server/voice-turn.ts): the conversation
+  /** Handed off from a live call (server/voice/voice-turn.ts): the conversation
    * so far (its summary and latest turns), in place of the recent lines,
    * since the call turn itself only saw a short view of it. */
   history?: string;

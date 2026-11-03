@@ -11,12 +11,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { parsePackageDocument } from "../../shared/package-format.ts";
 import { parseTeamBackup } from "../../shared/team-backup.ts";
 import { DATA_DIR } from "../config.ts";
-import { selectGroupGoalCoordinator } from "../group-goal-run.ts";
-import { createTeamPackageExport } from "../package-export.ts";
+import { selectGroupGoalCoordinator } from "../groups/group-goal-run.ts";
+import { createTeamPackageExport } from "../packages/package-export.ts";
 import { RoutineManager } from "../routines/routines.ts";
 import { Store, normalizeGroupDefaultResponder, roomResponders, type BotRecord, type GroupRecord } from "../store.ts";
-import { createTeamBackup, importTeamBackup } from "../team-backup.ts";
-import { parseTeamManifest } from "../team-manifest.ts";
+import { createTeamBackup, importTeamBackup } from "../backup/team-backup.ts";
+import { parseTeamManifest } from "../team/team-manifest.ts";
 
 const FIXTURES = join(import.meta.dirname, "..", "..", "shared", "package-fixtures");
 const fixture = (name: string) => JSON.parse(readFileSync(join(FIXTURES, name), "utf8"));

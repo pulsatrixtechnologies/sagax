@@ -50,7 +50,7 @@ The printed JSON line names the fixture's data directory and server log.
 ## Format, export and import units
 
 ```sh
-pnpm exec vitest run shared/package-format.test.ts server/package-export.test.ts server/package-import.test.ts server/bot-package.test.ts
+pnpm exec vitest run shared/package-format.test.ts server/packages/package-export.test.ts server/packages/package-import.test.ts server/bots/bot-package.test.ts
 ```
 
 - `shared/package-format.test.ts` parses every file in
@@ -58,7 +58,7 @@ pnpm exec vitest run shared/package-format.test.ts server/package-export.test.ts
   v1 downgrade recorded in `manifest.json` (Admin reads the same files), and
   covers the 4 MiB boundary, stripped authority fields, the publisher rule,
   each refusal sentence, redaction and the canonical form.
-- `server/package-export.test.ts` covers team scoping, starter-note caps,
+- `server/packages/package-export.test.ts` covers team scoping, starter-note caps,
   redaction, picture and connection skips, key stability across renames,
   what "all" leaves out (30 per bot with switched-on skills first, 60 per
   team, conflicting names), exact choices refused with `TeamExportError`,
@@ -70,7 +70,7 @@ pnpm exec vitest run shared/package-format.test.ts server/package-export.test.ts
   name, a percent-escaped key) and one of plain addresses that must stay
   byte for byte (`github-mcp-server-2024`, `acme-corp-2025-sales`,
   `path%20with%20spaces`, localhost).
-- `server/package-import.test.ts` imports into a real store, routine manager,
+- `server/packages/package-import.test.ts` imports into a real store, routine manager,
   skill store and memory in a throwaway home: every part, repeat imports,
   MCP policy refusal, full rollback when the last step fails, the library
   refusal, run-limit adjustment, and the organization path (skills on,
@@ -144,7 +144,7 @@ id; the dialog shows the address it will write.
 ## 2026-09-24 (second review): what was actually run
 
 On macOS (arm64) against disposable fixtures only: `pnpm typecheck`,
-`pnpm lint`, `pnpm i18n:check`, `server/package-export.test.ts`,
+`pnpm lint`, `pnpm i18n:check`, `server/packages/package-export.test.ts`,
 `server/team-share.e2e.test.ts`, `src/components/ShareTeamDialog.test.ts`,
 `src/lib/team-share.test.ts`, `src/state/store.test.ts`, and the
 headless-renderer run with `SAGAX_UI_E2E=1` all passed. Each of these was

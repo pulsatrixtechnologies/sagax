@@ -1,5 +1,5 @@
 // LEGACY since 2026-10-28: read once at start and moved into the one
-// credential list (server/github-credentials.ts), then the file is removed.
+// credential list (server/github/github-credentials.ts), then the file is removed.
 //
 // The organization's GitHub access tokens (personal access tokens or
 // repository credentials), one list for Settings > Organization > Plugins
@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
-import type { VaultKeySource } from "../mcp-oauth.ts";
+import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
 import { MAX_ORG_GITHUB_TOKENS, orgGithubTokenHint, type OrgGithubTokenPublic } from "../../shared/org-github-tokens.ts";
 
 const FILE = "org-github-tokens.enc";
@@ -147,7 +147,7 @@ export class OrgGithubTokens {
   }
 
   /** The old file goes once its tokens are in the credential list
-   * (server/github-credentials.ts). */
+   * (server/github/github-credentials.ts). */
   discard(): void {
     rmSync(this.file, { force: true });
     this.cached = { version: 1, tokens: [] };

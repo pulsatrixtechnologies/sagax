@@ -11,7 +11,7 @@ const sectionKey = (section?: string | null) => (section ?? "").trim();
 
 /** A Chief covers this bot when it holds the role in the bot's section or
  * has the bot's section among its owner-approved managed sections: the
- * same reach server/peer-roster.ts grants a Chief for proposals. */
+ * same reach server/peers/peer-roster.ts grants a Chief for proposals. */
 function chiefCovers(bot: Bot, bots: ReadonlyArray<Bot>): boolean {
   const target = sectionKey(bot.section);
   return bots.some((candidate) =>

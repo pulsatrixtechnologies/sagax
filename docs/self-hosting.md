@@ -274,7 +274,7 @@ Server logs survive a container recreation on that same volume:
 for `GET /api/org/admin/logs`. Stdout from the container runtime is separate
 and can still rotate away with the old container; use the data-volume files
 (or the admin Logs page) when you need history across a deploy. See
-`server/server-log-ring.ts` and AGENTS.md ("Server log on disk").
+`server/process/server-log-ring.ts` and AGENTS.md ("Server log on disk").
 
 A local build keeps the Chrome for Testing (and any `ENGINES`) it installed
 first, because those layers sit beneath the app and stay cached across code
@@ -1418,7 +1418,7 @@ server after a change; a running bot takes the new rules at its next launch.
 
 On an organization server, plugins and skills do not go through a bot's
 shell at all: the bot's owner adds a marketplace and installs plugins in
-Connect apps, in that bot's scope ("For <bot>", `server/bot-plugins.ts`; the
+Connect apps, in that bot's scope ("For <bot>", `server/bots/bot-plugins.ts`; the
 marketplace list is the workspace's own, one list for both scopes); Sagax
 fetches the marketplace itself and loads each plugin with `--plugin-dir`, without its
 hooks or MCP servers. The organization's admin may keep a list of allowed
@@ -1665,7 +1665,7 @@ The figure is every cost in the usage ledger. Claude reports its own cost
 (real on your keys, an equivalent on personal subscriptions). Codex, the
 OpenAI-compatible/OpenRouter engine, Grok, MiniMax and the ACP engines report
 tokens but no price, so the server books an **estimate** from a built-in list
-of vendor list prices (`server/model-prices.ts`, each entry with its source
+of vendor list prices (`server/models/model-prices.ts`, each entry with its source
 and the date it was read) and marks the row `costSource: "estimated"`. A model
 that is not in the list is unpriced and not counted; Usage says how many
 turns that was. Estimates use each vendor's standard short-context rate, so

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// A conversation with a person has threads like a bot (server/people-dms.ts):
+// A conversation with a person has threads like a bot (server/people/people-dms.ts):
 // the same picker in the chat header or the same tree in the sidebar,
 // according to Settings > Threads location, never both; the same row and
 // folder menus; no generated title and no approval refresh.

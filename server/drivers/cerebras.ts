@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ModelCatalog, ProviderDriver } from "../contracts.ts";
-import { publishedContextWindow } from "../published-context-window.ts";
+import { publishedContextWindow } from "../pages/published-context-window.ts";
 import { createOpenAIChatRuntime } from "./openai-chat.ts";
 
 // Cerebras serves open models on wafer-scale chips: same OpenAI chat

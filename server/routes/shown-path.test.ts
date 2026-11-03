@@ -7,8 +7,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { DATA_DIR } from "../config.ts";
 import { PASS } from "./table.ts";
 import { createShownPathRoutes } from "./shown-path.ts";
-import { installSkill, listSkills, readSkillFile, removeSkill } from "../skills.ts";
-import { ensureWorkspace, workspaceDir } from "../workspace.ts";
+import { installSkill, listSkills, readSkillFile, removeSkill } from "../skills/skills.ts";
+import { ensureWorkspace, workspaceDir } from "../workspace/workspace.ts";
 
 const steps = [{ id: "1", kind: "note", text: "Check the total." }];
 

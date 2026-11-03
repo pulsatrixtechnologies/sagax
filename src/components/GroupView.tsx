@@ -1043,7 +1043,7 @@ export function DefaultResponderSelect({ group, members, disabled = false }: { g
   );
 }
 
-/** Whether @all notifies every person in the room (server/room-mentions.ts).
+/** Whether @all notifies every person in the room (server/rooms/room-mentions.ts).
  * A person tagged by name is notified either way. The owner's setting. */
 function RoomMentionAll({ group, disabled = false }: { group: Group; disabled?: boolean }) {
   const { dispatch } = useStore();
@@ -1183,7 +1183,7 @@ async function loadRemoteActor(): Promise<{ id: string; role: "owner" | "admin" 
 export function GroupView({ group: stored, pane }: { group: Group; pane?: SideChat }) {
   "use memo";
   const roomShowThreads = useShowThreads();
-  // A direct conversation between two people (server/people-dms.ts) runs on
+  // A direct conversation between two people (server/people/people-dms.ts) runs on
   // the single-thread path of a bot-to-bot channel: no panel, no tasks. It
   // reads as the other person.
   const group = useMemo(() => (stored.peopleDm ? { ...stored, dm: true } : stored), [stored]);
@@ -1302,7 +1302,7 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
     memberIds: group.memberIds,
   });
   // Your own bots: a member who does not own the room still brings them in
-  // and takes them out (server/group-ownership.ts).
+  // and takes them out (server/groups/group-ownership.ts).
   const ownBotIds = new Set(state.bots.filter((bot) => actorId !== "" && (bot.ownerUserId ?? "").trim().toLowerCase() === actorId).map((bot) => bot.id));
   // "+ Add" under Bots: bots this person may add that are not in the room yet.
   // A member sees only their own; the owner sees every bot they may add.

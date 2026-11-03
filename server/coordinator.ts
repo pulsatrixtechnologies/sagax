@@ -5,7 +5,7 @@
 // as the read model (HandoffView) the server's call sites were written
 // against. The view goes once those sites read Assignment rows directly.
 import { RuntimeCoordinator } from "./runtime-coordinator.ts";
-import type { WorkOrigin } from "./peer-provenance.ts";
+import type { WorkOrigin } from "./peers/peer-provenance.ts";
 import type { EnvelopeNames, Level, Limits } from "./runtime/types.ts";
 
 export type HandoffStatus = "source" | "queued" | "running" | "waiting" | "resume" | "completed" | "failed" | "cancelled" | "expired";

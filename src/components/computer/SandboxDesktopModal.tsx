@@ -10,7 +10,7 @@
 // lifecycle runs on its own and lives in the bot's settings (JC 2026-11-02).
 // Closing releases control: the control
 // view's WebSocket ends, so the server lets the bots' clicks through again
-// and tells the bot, as before (server/sandbox-control.ts).
+// and tells the bot, as before (server/sandbox/sandbox-control.ts).
 //
 // Keys go to the VNC canvas while it has focus. Cmd/Ctrl+Shift+Escape always
 // closes; a plain Escape closes only when focus is not in the remote screen

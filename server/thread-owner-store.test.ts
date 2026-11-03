@@ -1,5 +1,5 @@
 // Private threads in the store: a thread's owner is set with the thread and
-// the one-time migration writes owners once (server/thread-privacy.ts).
+// the one-time migration writes owners once (server/threads/thread-privacy.ts).
 import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { DATA_DIR } from "./config.ts";
 import type { ModelSelection } from "./contracts.ts";
 import { Store, type BotRecord, type TaskPatch } from "./store.ts";
-import { planThreadOwners } from "./thread-privacy.ts";
+import { planThreadOwners } from "./threads/thread-privacy.ts";
 
 const selection = (): ModelSelection => ({ instanceId: "claude", model: "default" });
 const savedBots = (): BotRecord[] => JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));

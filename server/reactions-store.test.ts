@@ -5,7 +5,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { DATA_DIR } from "./config.ts";
-import { closeMessageDb } from "./message-db.ts";
+import { closeMessageDb } from "./messages/message-db.ts";
 import { Store, type StoreChange } from "./store.ts";
 import type { ModelSelection } from "./contracts.ts";
 import type { ReactionActor } from "../shared/reactions.ts";

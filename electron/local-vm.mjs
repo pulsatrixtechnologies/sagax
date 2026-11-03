@@ -1,6 +1,6 @@
 // The Local VM on this computer, desktop side (server mode): the Sagax Linux
 // desktop container the person's bots can use, reached through the desktop
-// bridge (electron/desktop-bridge.mjs, server/desktop-bridge-routes.ts).
+// bridge (electron/desktop-bridge.mjs, server/desktop/desktop-bridge-routes.ts).
 //
 // What it does, and what it never does:
 // - Finds the container runtime this computer has (Docker Desktop, OrbStack,
@@ -13,7 +13,7 @@
 //   recreates it, keeping the files of the folder it was bound to.
 // - Setup (one click) runs in the background with visible steps: start the
 //   runtime if it is installed but stopped, prepare the image, create the
-//   container from the server's own recipe (server/container-computer.ts
+//   container from the server's own recipe (server/computer/container-computer.ts
 //   localVmDesktopSpec, checked here), start it. Idempotent.
 // - Installs nothing by itself: an install opens the vendor's download page,
 //   or runs Homebrew, only after the person confirms in an OS dialog.

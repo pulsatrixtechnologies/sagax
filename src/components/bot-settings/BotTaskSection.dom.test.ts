@@ -14,7 +14,7 @@ import { join } from "node:path";
 
 import { setLocale } from "@/lib/i18n";
 import { BOT_TASKS_EVENT } from "@/lib/bot-task-events";
-import { createBotTaskStore } from "../../../server/bot-task-list";
+import { createBotTaskStore } from "../../../server/bots/bot-task-list";
 import { createBotTaskInternalRoutes } from "../../../server/routes/bot-task-list";
 import type { BotTasksFrame } from "../../../shared/bot-task-list";
 import { BackgroundBriefCard } from "./BackgroundBriefCard";

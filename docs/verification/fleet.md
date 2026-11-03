@@ -23,7 +23,7 @@ An operator runs the commands on the server. A client's admin gets a link to
 The planners and the command are proven offline:
 
 ```sh
-pnpm exec vitest run server/fleet.test.ts server/fleet-cli.test.ts server/fleet-cli-filesystem.test.ts server/fleet-agent.test.ts server/cli.test.ts
+pnpm exec vitest run server/fleet/fleet.test.ts server/fleet/fleet-cli.test.ts server/fleet/fleet-cli-filesystem.test.ts server/fleet/fleet-agent.test.ts server/cli.test.ts
 ```
 
 These pin the rendered template unit (per-slug user, private `/tmp`, no new

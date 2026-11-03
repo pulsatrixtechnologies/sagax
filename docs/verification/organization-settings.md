@@ -68,7 +68,7 @@ requests and a fake utility-process acknowledgement. It does **not** prove
 real Admin consent, OS keychain persistence, private runtime synchronization,
 native provider execution, cloud backups, public DNS/TLS or paid model calls.
 Provider isolation, expiry and no-personal-fallback behavior are separately
-covered by `server/managed-desktop.test.ts`. Read-only Company engine settings
+covered by `server/computer/managed-desktop.test.ts`. Read-only Company engine settings
 and preservation of personal controls have focused renderer regressions.
 
 ## Returning from a hosted workspace
@@ -131,7 +131,7 @@ used.
   saved under the old device-scoped key is adopted (not turned off) on upgrade
   and on re-enrolment; losing the connection pauses it; another organization
   or account still clears it.
-- `pnpm vitest run server/managed-policy.test.ts server/managed-desktop.test.ts
+- `pnpm vitest run server/managed-policy.test.ts server/computer/managed-desktop.test.ts
   server/store-rename-instances.test.ts`: refusal sentences, MCP name/address
   matching, computer-kind mapping, the real `bindTurnComputer` guard from
   `index.ts`, expiry of the last policy; renewal and licence suspension applied
@@ -172,7 +172,7 @@ Unit, component and node tests only. The Electron smoke above was **not**
 re-run for this change, and no installed app, keychain, production Admin,
 engine account or paid model call was used.
 
-- `pnpm vitest run server/default-model-selection.test.ts`: with no saved
+- `pnpm vitest run server/models/default-model-selection.test.ts`: with no saved
   default, an enrolled desktop picks an instance that can run now: a
   signed-in personal engine first (Claude first), then a Company model (Claude
   first), then today's choice. An installed but signed-out personal Claude
@@ -181,7 +181,7 @@ engine account or paid model call was used.
   signed-in Codex. An engine the organization's policy refuses (company models
   only, or an engine allow-list) is never picked, and a refused saved default
   sends new bots to setup.
-- `pnpm vitest run server/managed-desktop.test.ts`: against the real provider
+- `pnpm vitest run server/computer/managed-desktop.test.ts`: against the real provider
   registry with fake engines, new bots land on Company Claude while enrolled
   and on the personal engine again after disconnect; disconnecting leaves a
   personal bot's selection untouched and keeps a Company bot's stable id for
@@ -217,7 +217,7 @@ Review fixes (same day, same limits): archived bots are never counted or
 switched; the "Now using …" status names only bots the server kept on the
 Company model after their PATCH settled (none when every PATCH was refused);
 the note now says bots not allowed by the organization change too; and
-`server/default-model-selection.test.ts` runs `index.ts`'s actual
+`server/models/default-model-selection.test.ts` runs `index.ts`'s actual
 `defaultSelection` and `policyModelRefusal` against a synthetic registry,
 enrolment and policy. Mutation checks: counting archived bots, naming every
 requested bot, and dropping the whole context, the enrolment or the policy
@@ -231,7 +231,7 @@ does), **Settings → Servers** / **Server → Connect to a server…** for save
 remote servers, **Settings → Installations** for the fleet screen, "this
 installation" for the whole app and its data, and "folder" for bot and task
 folders. The Anthropic Console's "workspace API key" and ChatGPT's "workspace
-admin" keep their own words. `server/hosted-models.ts` keeps its two model
+admin" keep their own words. `server/models/hosted-models.ts` keeps its two model
 errors word for word, because the cloud Slack worker matches that text.
 
 Tested, not production qualification:

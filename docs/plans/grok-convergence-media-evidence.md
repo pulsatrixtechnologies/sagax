@@ -61,7 +61,7 @@ Implemented:
   still forcing private/no-store. Caddy's `encode` honors no-transform and
   never encodes 206 (checked against Caddy's encode.go on 2026-11-01), so the
   shipped Caddyfiles (`deploy/`, `install.sh`, `server/caddy.ts`,
-  `server/fleet.ts`) and an external Caddy front keep exact lengths and seek.
+  `server/fleet/fleet.ts`) and an external Caddy front keep exact lengths and seek.
   The Electron companion origin gateway and the companion proxy pass Range,
   206/416 and seek headers byte for byte. Provider media proxy responses also
   carry no-transform. A bot's `attach_file` copy of a video now uses the 1 GB
@@ -105,7 +105,7 @@ Verification for this package:
   proxy/routes, thread-files and organization resume e2e). 32 more passed in
   the archive, member-identity and organization-permission e2e consumers of
   the message file route and the viewers DOM test.
-  `server/authz-matrix.e2e.test.ts` failed at collection on unclassified
+  `server/auth/authz-matrix.e2e.test.ts` failed at collection on unclassified
   slots already present in the 0.8.23 release; fixed at integration. Typecheck and
   `generate-locale --check` pass.
 
@@ -119,7 +119,7 @@ Remaining in Lot 4:
 - The Perspicax control-plane proxy for AKS sandboxes lives in another
   repository and was not inspected here. It must forward Range and keep
   no-transform responses unencoded.
-- Done at integration: `server/attachments.test.ts` keeps the native
+- Done at integration: `server/attachments/attachments.test.ts` keeps the native
   `AttachmentPolicy` picture budget, count, file and video ceilings equal to
   the server's.
 - Provider request size with 32 scaled pictures (up to 3.75 MB each) has not
@@ -179,7 +179,7 @@ Verification for this step (worktree `sagax-grok-video`, 2026-11-01):
 - `oxlint --deny-warnings` on the touched server files: pass.
 - `node scripts/generate-locale.mjs --check`: valid; only the French string
   of the one changed key (`keys.xai.descVoice`) was re-signed.
-- 10 test files, 99 tests passed: `server/video-provider.test.ts`,
+- 10 test files, 99 tests passed: `server/video/video-provider.test.ts`,
   `video-generation.test.ts`, `video-credentials.test.ts`,
   `video-source.test.ts`, `video-status.test.ts`,
   `drivers/agents-video.test.ts`, `drivers/agents-catalog-wire.test.ts`,

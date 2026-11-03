@@ -22,7 +22,7 @@ export interface BotLaunchedAgentItem {
   updatedAt: number;
   /** Open the agent's hidden conversation when the viewer may read it. */
   threadId?: string;
-  /** Coding work (server/activity-coding.ts, read off its tool calls and
+  /** Coding work (server/activity/activity-coding.ts, read off its tool calls and
    * folder, never its title). Absent for everything else. */
   coding?: true;
   /** The pull request tied to a failed run, when the agent opened one. */

@@ -1,8 +1,8 @@
 // Lot 5: canonical installation capability store surface. Legacy
 // /api/marketplaces and /api/skills-library stay as aliases with a
 // Deprecation header until 2027-11-01.
-import { installationCapabilityBridge } from "../installation-capability-bridge.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import { installationCapabilityBridge } from "../capabilities/installation-capability-bridge.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface InstallationCapabilityRouteDeps {

@@ -5,7 +5,7 @@
 // build of this repository, the server runs the open-source edition and every
 // gated feature is on (OPEN_SOURCE_FEATURES). A feature gate is never an
 // authorization check: who may use a feature stays with the request's scope
-// (server/request-auth.ts) and the route's own checks.
+// (server/auth/request-auth.ts) and the route's own checks.
 //
 // The hook stays for a layer that lives outside this tree (its own folder and
 // LICENSE), loaded only if that folder is present. Core never imports it
@@ -20,8 +20,8 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { RequestAuth } from "./request-auth.ts";
-import type { SessionRegistry } from "./sessions.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
+import type { SessionRegistry } from "./auth/sessions.ts";
 
 import { SERVER_ROOT } from "./proxy-paths.ts";
 

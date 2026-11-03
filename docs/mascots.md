@@ -404,7 +404,7 @@ store on `mascotLook.avatarDef`. Bodies never render disassembled
 | Geometry (radii, faces, skins) | `shared/mascot-geometry.json` |
 | Portable definition schema | `shared/shape-avatar-def.ts` |
 | Object presets | `shared/shape-avatar-presets.ts` |
-| Generate from a description | `shared/shape-avatar-generate.ts`, `server/shape-avatar.ts` |
+| Generate from a description | `shared/shape-avatar-generate.ts`, `server/media/shape-avatar.ts` |
 | Engine, volume, motion, moves | `src/components/shape-*.ts`, `ShapeMascot.tsx` |
 | Generate a new shape (dev only, not in the UX) | `scripts/generate-shape.mjs`, `docs/design/shape-generator.md` |
 | Phone | `ios/Sources/CompanionCore/ShapeEngine*.swift`, `ShapeMascotView.swift` |

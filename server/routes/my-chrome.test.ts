@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { MyChromeService } from "../browser/my-chrome/service.ts";
 import { json, readBody } from "../harness/http.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
 import { createMyChromeRoutes } from "./my-chrome.ts";
 import { PASS } from "./table.ts";

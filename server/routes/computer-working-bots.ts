@@ -8,8 +8,8 @@
 // bots on an organization server. Names are human; the id travels only for
 // the row's tooltip / Copy and for the stop, which reuses the ordinary task
 // stop (POST /api/bots/:id/interrupt) with its own authorization.
-import type { RequestAuth } from "../request-auth.ts";
-import type { WorkingBot } from "../computer-working-bots.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import type { WorkingBot } from "../computer/computer-working-bots.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface WorkingBotsRefusal {

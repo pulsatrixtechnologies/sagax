@@ -6,9 +6,9 @@
 import type { IncomingMessage } from "node:http";
 import type { Socket } from "node:net";
 
-import { isSameOrigin, type RequestAuth } from "../request-auth.ts";
-import { websocketAccept } from "../ws-bridge.ts";
-import { webSocketSession } from "../ws-session.ts";
+import { isSameOrigin, type RequestAuth } from "../auth/request-auth.ts";
+import { websocketAccept } from "../streams/ws-bridge.ts";
+import { webSocketSession } from "../streams/ws-session.ts";
 import { parseControlEvent, type ControlEvent } from "../../shared/remote-control.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 import type { ControlHandle, OpenControl } from "../remote-support/remote-control-session.ts";

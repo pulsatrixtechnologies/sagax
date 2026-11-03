@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TurnFacts } from "../shared/bot-act.ts";
-import type { BotActService } from "./bot-act.ts";
+import type { BotActService } from "./bots/bot-act.ts";
 import { sagaxInternalTool } from "./sagax-internal-tools.ts";
 import { SETTINGS } from "../shared/settings-actions.ts";
 import { createSettingsActions, settingStepUpClasses, type SettingsActionDeps } from "./settings-actions.ts";

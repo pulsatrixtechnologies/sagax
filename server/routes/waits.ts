@@ -5,8 +5,8 @@ import { isAbsolute } from "node:path";
 import { WAIT_HOURS, WAIT_KINDS, type WaitKind } from "../../shared/waits.ts";
 import type { Surface } from "../../shared/wire.ts";
 import type { json as sendJson } from "../harness/http.ts";
-import { expandHome } from "../wait-probes.ts";
-import { WAIT_WAKE_MS, waitList, type NewWaitCondition, type WaitManager } from "../waits.ts";
+import { expandHome } from "../waits/wait-probes.ts";
+import { WAIT_WAKE_MS, waitList, type NewWaitCondition, type WaitManager } from "../waits/waits.ts";
 import { PASS } from "./table.ts";
 
 export const WAIT_MESSAGES = {

@@ -1,5 +1,5 @@
 // Confidential threads ("Fil confidentiel"), the phone's half of
-// server/confidential-threads.ts: a thread its owner marked confidential
+// server/threads/confidential-threads.ts: a thread its owner marked confidential
 // is never remembered, exported or shared beyond them. The flag is
 // permanent; only deleting the thread ends it, so no surface offers a way
 // back. Everything a view needs to decide is here, so it is tested without

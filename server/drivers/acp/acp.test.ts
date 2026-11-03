@@ -20,17 +20,17 @@ import { TurnNotStartedError } from "../../contracts.ts";
 import { recordEvents, type EventRecorder } from "../../testing/events.ts";
 import { promptSplitFingerprints, writePromptSplitReceipt } from "../prompt-split.ts";
 import { GROK_TOOL_REUSE_HINT as HINT } from "./grok.ts";
-import { contextFullMessage, contextRenewedNotice } from "../../context-renewal.ts";
+import { contextFullMessage, contextRenewedNotice } from "../../context/context-renewal.ts";
 import { createAcpDriver, DEFAULT_ACP_PROMPT_IDLE_MS, skipSubscriptionAuthForLocalInject, type AcpSupport } from "./core.ts";
 import { GrokAgentDriver, grokAcceptsUnadvertisedImages, grokCloudConnectorEnv, grokConfigDeclaresMcp, grokConnectableConnectors, grokPermissionMode } from "./grok.ts";
 import { grokAccountReach } from "./grok-tool-catalog.ts";
-import { READ_ONLY_AGENT_TOOL_NAMES } from "../../agent-tool-policy.ts";
+import { READ_ONLY_AGENT_TOOL_NAMES } from "../../tools/agent-tool-policy.ts";
 import { GeminiAgentDriver } from "./gemini.ts";
 import { KimiAgentDriver } from "./kimi.ts";
 import { DroidAgentDriver } from "./droid.ts";
 import { CursorAgentDriver } from "./cursor.ts";
 import { QwenAgentDriver } from "./qwen.ts";
-import { TurnWatchdog } from "../../turn-watchdog.ts";
+import { TurnWatchdog } from "../../turns/turn-watchdog.ts";
 import { removeTempDir } from "../../testing/cleanup.ts";
 import { startFakeHttpMcp } from "../../testing/fake-http-mcp-server.ts";
 import * as procs from "../../procs.ts";
@@ -105,7 +105,7 @@ const CONTROL_PLANE_FIXTURE = {
 };
 
 /** Grok mounts connector MCP servers through the gate (tool names Grok cannot
- * qualify, server/mcp-tool-names.ts); these tests check what is behind it. */
+ * qualify, server/mcp/mcp-tool-names.ts); these tests check what is behind it. */
 type AcpServer = { name: string; command: string; args: string[]; env: Array<{ name: string; value: string }> };
 function ungated<T>(value: T): T {
   const servers = value as unknown as AcpServer[];

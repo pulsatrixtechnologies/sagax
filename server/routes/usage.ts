@@ -1,7 +1,7 @@
 // The usage ledger: what this workspace spent over a period.
 // Read-only over the month files usage-ledger.ts appends at turn.completed.
 // Admin scope by default, like every route not opened to clients
-// (server/request-auth.ts).
+// (server/auth/request-auth.ts).
 //
 // GET /api/usage and GET /api/usage.csv: the whole ledger, admin (or the
 // usage.view permission on an organization server).
@@ -14,9 +14,9 @@
 // open to every signed-in person (request-auth.ts CLIENT_ALLOW). Settings >
 // Usage reads it, so a member sees their own plan and cost; the
 // organization's totals stay in its admin console.
-import { clearPersonalCap, MIN_PERSONAL_CAP_USD, personalCapState, writePersonalCap } from "../personal-spend-cap.ts";
-import type { PriceList } from "../prices.ts";
-import type { SpendState } from "../spend.ts";
+import { clearPersonalCap, MIN_PERSONAL_CAP_USD, personalCapState, writePersonalCap } from "../usage/personal-spend-cap.ts";
+import type { PriceList } from "../usage/prices.ts";
+import type { SpendState } from "../usage/spend.ts";
 import {
   parseUsageRange,
   readUsage,
@@ -26,9 +26,9 @@ import {
   type UsageViewer,
   USAGE_GROUPINGS,
   type UsageGroupBy,
-} from "../usage-ledger.ts";
-import { buildUsageTraces, parseTracePaging, USAGE_TRACE_MAX_JOBS } from "../usage-trace.ts";
-import type { RequestAuth } from "../request-auth.ts";
+} from "../usage/usage-ledger.ts";
+import { buildUsageTraces, parseTracePaging, USAGE_TRACE_MAX_JOBS } from "../usage/usage-trace.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface UsageRouteDeps {
@@ -61,7 +61,7 @@ export function ownUsageViewer(auth: RequestAuth, organization: boolean): UsageV
 
 export function createUsageRoutes(deps: UsageRouteDeps): RouteHandler {
   return async ({ res, req, url, path, method, json, readBody, auth }) => {
-    // The person's own monthly spend limit (server/personal-spend-cap.ts).
+    // The person's own monthly spend limit (server/usage/personal-spend-cap.ts).
     // Read: every signed-in person. Write: admin scope (the owner), solo only.
     if (path === "/api/me/spend-cap" && (method === "GET" || method === "PUT")) {
       const organization = deps.organization();

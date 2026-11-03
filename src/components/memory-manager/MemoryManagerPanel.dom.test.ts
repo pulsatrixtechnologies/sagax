@@ -161,8 +161,13 @@ describe("MemoryManagerPanel page", () => {
     await settle();
   };
   const segment = (label: string) => Array.from(host.querySelectorAll<HTMLButtonElement>("[data-memory-views] button")).find((button) => button.textContent?.includes(label))!;
+  // The map opens on Graph since the Obsidian-like view; the scope tests read the radial brain's node count.
+  const radial = async () => {
+    const button = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-memory-map-layout-switch] button")).find((b) => b.textContent === "Radial");
+    if (button) await act(async () => { button.click(); });
+  };
 
-  it("is a full page with the console's views under the title and the explorer on the LEFT", async () => {
+  it("is a full page with the console's views under the title and the explorer as the RIGHT rail", async () => {
     await render();
     expect(host.querySelector("[data-memory-manager-page]")).not.toBeNull();
     expect(host.querySelector('[role="dialog"]')).toBeNull();
@@ -173,10 +178,20 @@ describe("MemoryManagerPanel page", () => {
     expect(Array.from(host.querySelectorAll("[data-memory-views] button")).map((button) => button.textContent)).toEqual(["Notes", "Map", "Tags", "Quality"]);
     expect(host.querySelector("[data-memory-create]")?.textContent).toContain("New note");
     const body = host.querySelector("[data-memory-row] .content-card-body")!;
-    expect(body.children[0]!.hasAttribute("data-memory-sources")).toBe(true);
-    expect(body.children[1]!.tagName).toBe("SECTION");
-    expect(host.querySelector("[data-memory-sources]")!.className).toContain("border-r");
-    expect(host.querySelector("[data-memory-sources]")!.className).toContain("w-[236px]");
+    // JC 2026-11-03: the content first, the explorer on its right, as Automations' calendar rail.
+    expect(body.children[0]!.tagName).toBe("SECTION");
+    const rail = body.children[body.children.length - 1]!;
+    expect(rail.hasAttribute("data-memory-sources")).toBe(true);
+    expect(rail.hasAttribute("data-right-rail")).toBe(true);
+    expect(rail.className).toContain("w-[280px]");
+    expect(rail.className).toContain("border-l");
+    expect(rail.className).not.toContain("border-r");
+    // The "›" sits at its top-left, in its own row above "Open a note".
+    const hide = rail.querySelector("[data-right-rail-hide]")!;
+    expect(hide).not.toBeNull();
+    expect(rail.children[0]!.contains(hide)).toBe(true);
+    expect(rail.children[0]!.querySelector("[data-memory-switcher-open]")).toBeNull();
+    expect(hide.querySelector("svg")?.getAttribute("class")).toContain("chevron-right");
   });
 
   it("Notes: lists, tiers and tidy up like the Perspicax explorer, with real counts only", async () => {
@@ -247,7 +262,12 @@ describe("MemoryManagerPanel page", () => {
     const panel = host.querySelector("[data-memory-preview-panel]")!;
     expect(panel).not.toBeNull();
     expect(host.querySelector("[data-memory-list]")).not.toBeNull();
-    expect(panel.querySelector("[data-memory-note-back]")).toBeNull();
+    // In the content, in the list's place, left of the rail: no overlay over it.
+    expect(panel.closest("[data-memory-content]")).not.toBeNull();
+    expect(host.querySelector("[data-memory-preview-scrim]")).toBeNull();
+    expect(host.querySelector("[data-memory-list-scroll]")!.className.split(" ")).toContain("hidden");
+    expect(host.querySelector("[data-memory-sources]")).not.toBeNull();
+    expect(panel.querySelector("[data-memory-note-back]")?.textContent).toBe("Memory");
     expect(panel.querySelector("[data-memory-note-line]")?.textContent).toContain("My memory / notes");
     expect(panel.querySelector("[data-memory-note-line]")?.textContent).toContain("by Dana Reyes");
     const props = panel.querySelector("[data-memory-note-props]")!.textContent!;
@@ -295,11 +315,14 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector("[data-memory-note-backlinks]")?.textContent).toContain("Travel");
   });
 
-  it("Map: the console's radial brain by default, the column map one press away, a note previews from it", async () => {
+  it("Map: the Obsidian-like graph by default, the radial brain and the column map one press away, a note previews from it", async () => {
     await render();
     await act(async () => { segment("Map").click(); });
     await settle();
-    expect(host.querySelector("[data-memory-sources]")).toBeNull();
+    expect(host.querySelector("[data-memory-sources]")).not.toBeNull();
+    expect(host.querySelector('[data-memory-map-layout="graph"] [data-testid="memory-graph"] canvas')).not.toBeNull();
+    const radial = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-memory-map-layout-switch] button")).find((button) => button.textContent === "Radial")!;
+    await act(async () => { radial.click(); });
     expect(host.querySelector('[data-memory-map-layout="brain"] [data-testid="memory-brain"] canvas')).not.toBeNull();
     expect(host.querySelector('[data-testid="memory-brain"]')?.getAttribute("data-nodes")).toBe("5");
     expect(host.querySelector("[data-memory-map-search]")?.getAttribute("placeholder")).toBe("Find on the map");
@@ -378,8 +401,34 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelectorAll("[data-memory-journal-row]").length).toBe(2);
   });
 
-  it("folds the explorer under 1024px, and Cmd+O opens it with the quick switcher", async () => {
-    viewport = 900;
+  it("opens the rail from 1280px, as Automations does", async () => {
+    viewport = 1280;
+    await render();
+    expect(host.querySelector("[data-memory-sources]")).not.toBeNull();
+    expect(host.querySelector("[data-right-rail-strip]")).toBeNull();
+  });
+
+  it("folds the rail under 1280px into the strip, which opens it again", async () => {
+    viewport = 1279;
+    await render();
+    expect(host.querySelector("[data-memory-sources]")).toBeNull();
+    const strip = host.querySelector("[data-right-rail-strip]") as HTMLButtonElement;
+    expect(strip).not.toBeNull();
+    expect(strip.getAttribute("aria-label")).toBe("Show memory sources");
+    expect(strip.className).toContain("w-10");
+    expect(strip.className).toContain("border-l");
+    // The strip is the body's last child, on the right of the content.
+    const body = host.querySelector("[data-memory-row] .content-card-body")!;
+    expect(body.children[body.children.length - 1]).toBe(strip);
+    await act(async () => { strip.click(); });
+    expect(host.querySelector("[data-memory-sources]")).not.toBeNull();
+    await act(async () => { (host.querySelector("[data-right-rail-hide]") as HTMLButtonElement).click(); });
+    expect(host.querySelector("[data-memory-sources]")).toBeNull();
+    expect(host.querySelector("[data-right-rail-strip]")).not.toBeNull();
+  });
+
+  it("folds the explorer under 1280px, and Cmd+O opens it with the quick switcher", async () => {
+    viewport = 1100;
     await render();
     expect(host.querySelector("[data-memory-sources]")).toBeNull();
     await act(async () => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "o", metaKey: true, ctrlKey: true })); });
@@ -419,5 +468,159 @@ describe("MemoryManagerPanel page", () => {
     }
     await act(async () => { (host.querySelector('[data-memory-nav="review"]') as HTMLButtonElement).click(); });
     expect(host.querySelectorAll("[data-memory-note-row]").length).toBe(1);
+  });
+
+  // JC 2026-11-03: a note takes the content's whole place, never over the rail.
+  it("a note fills the content left of the rail, its bar in its header, and Escape or Back returns to the list where it was", async () => {
+    await render();
+    const scroller = host.querySelector("[data-memory-list-scroll]") as HTMLDivElement;
+    await act(async () => { scroller.scrollTop = 120; scroller.dispatchEvent(new Event("scroll")); });
+    await act(async () => { (host.querySelector('[data-memory-source="bot:atlas"]') as HTMLButtonElement).click(); });
+    await settle();
+    await act(async () => { (host.querySelector('[data-memory-row-key="bot:atlas|memory/dining.md"] [data-memory-row-open]') as HTMLButtonElement).click(); });
+    await wait();
+    await settle();
+    const content = host.querySelector("[data-memory-content]")!;
+    const panel = host.querySelector("[data-memory-preview-panel]")!;
+    expect(content.contains(panel)).toBe(true);
+    expect(panel.className).toContain("flex-1");
+    expect(panel.className).not.toMatch(/absolute|fixed/);
+    // The rail stays, with the bot's folder still selected.
+    const rail = host.querySelector("[data-memory-sources]")!;
+    expect(rail.compareDocumentPosition(content) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(host.querySelector('[data-memory-source="bot:atlas"]')?.getAttribute("aria-current")).toBeTruthy();
+    // More, Neighbourhood and Edit in the note's own bar, at its top, with "‹ Memory".
+    const bar = panel.querySelector("[data-memory-note-bar]")!;
+    expect(bar.querySelector("[data-memory-note-back]")?.textContent).toBe("Memory");
+    expect(bar.querySelector("[data-memory-note-toolbar]")?.textContent).toContain("Neighbourhood");
+    expect(panel.querySelector("[data-memory-preview]")!.firstElementChild).toBe(bar);
+    // Escape: the list again.
+    await act(async () => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); });
+    expect(host.querySelector("[data-memory-preview-panel]")).toBeNull();
+    expect(host.querySelector("[data-memory-list-scroll]")!.className.split(" ")).not.toContain("hidden");
+    // The note's own page fills the content the same way; Back finds the list at its scroll.
+    const list = host.querySelector("[data-memory-list-scroll]") as HTMLDivElement;
+    await act(async () => { list.scrollTop = 80; list.dispatchEvent(new Event("scroll")); });
+    await act(async () => { (host.querySelector('[data-memory-row-key="bot:atlas|memory/dining.md"] [data-memory-row-open]') as HTMLButtonElement).dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); });
+    await wait();
+    await settle();
+    const page = host.querySelector("[data-memory-reading] [data-memory-note]")!;
+    expect(page).not.toBeNull();
+    expect(host.querySelector("[data-memory-content]")!.contains(page)).toBe(true);
+    expect(host.querySelector("[data-memory-sources]")).not.toBeNull();
+    await act(async () => { (page.querySelector("[data-memory-note-back]") as HTMLButtonElement).click(); });
+    expect((host.querySelector("[data-memory-list-scroll]") as HTMLDivElement).scrollTop).toBe(80);
+    expect(host.querySelector("[data-memory-list-title]")?.textContent).toBe("Atlas");
+  });
+
+  it("the note's page leaves on Escape too", async () => {
+    await render();
+    await act(async () => { (host.querySelector('[data-memory-row-key="perspicax|me/n1"] [data-memory-row-open]') as HTMLButtonElement).click(); });
+    await wait();
+    await settle();
+    await act(async () => { (host.querySelector("[data-memory-preview-panel] [data-memory-note-edit]") as HTMLButtonElement).click(); });
+    await wait();
+    await settle();
+    expect(host.querySelector("[data-memory-reading] [data-memory-note]")).not.toBeNull();
+    expect(host.querySelector("[data-memory-sources]")).not.toBeNull();
+    // Typed into a field, Escape stays in the editor.
+    const title = host.querySelector("[data-memory-rename]") as HTMLInputElement;
+    await act(async () => { title.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    expect(host.querySelector("[data-memory-note]")).not.toBeNull();
+    await act(async () => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); });
+    expect(host.querySelector("[data-memory-note]")).toBeNull();
+    expect(host.querySelector("[data-memory-list]")).not.toBeNull();
+  });
+
+  // JC 2026-11-03: the rail on every tab, and its selection scopes each one.
+  it("keeps the rail on Notes, Map, Tags and Quality", async () => {
+    await render();
+    for (const label of ["Notes", "Map", "Tags", "Quality"]) {
+      await act(async () => { segment(label).click(); });
+      await settle();
+      expect(host.querySelector("[data-memory-sources]"), label).not.toBeNull();
+    }
+  });
+
+  it("a folder of the rail scopes the Map, Tags and Quality, with a chip that clears it, kept across tabs and a reload", async () => {
+    await render();
+    await act(async () => { segment("Map").click(); });
+    await settle();
+    await radial();
+    expect(host.querySelector('[data-testid="memory-brain"]')?.getAttribute("data-nodes")).toBe("5");
+    expect(host.querySelector("[data-memory-scope-chip]")).toBeNull();
+    // Atlas (a bot folder of My memory), picked on the Map tab: the tab stays.
+    await act(async () => { (host.querySelector('[data-memory-source="bot:atlas"]') as HTMLButtonElement).click(); });
+    await settle();
+    expect(host.querySelector('[data-memory-map-layout="brain"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="memory-brain"]')?.getAttribute("data-nodes")).toBe("3");
+    expect(host.querySelector("[data-memory-scope-chip]")?.textContent).toBe("Scope: Atlas");
+    // Tags: only Atlas's notes (no "work", Brief's tag).
+    await act(async () => { segment("Tags").click(); });
+    await settle();
+    expect(host.querySelector("[data-memory-scope-chip]")?.textContent).toBe("Scope: Atlas");
+    expect(host.querySelector('[data-memory-tags-free-chip="work"]')).toBeNull();
+    expect(host.querySelector("[data-memory-tags-orphans]")?.textContent ?? "").not.toContain("area:plan");
+    // Quality: its tiles on Atlas's 3 notes, and its journal on Atlas's files.
+    await act(async () => { segment("Quality").click(); });
+    await settle();
+    expect(host.querySelector('[data-memory-stat="active"]')?.textContent).toContain("3");
+    expect(host.querySelector('[data-memory-stat="active"]')?.textContent).not.toContain("5");
+    // A Perspicax folder: Personal / notes.
+    await act(async () => { (host.querySelector('[data-memory-folder="me/notes"]') as HTMLButtonElement).click(); });
+    await settle();
+    expect(host.querySelector('[data-memory-stat="active"]')?.textContent).toContain("2");
+    expect(host.querySelector("[data-memory-scope-chip]")?.textContent).toMatch(/^Scope: .+ \/ notes$/);
+    // A reload keeps the tab and the scope.
+    act(() => root.unmount());
+    root = createRoot(host);
+    await render();
+    expect(host.querySelector('[data-memory-stat="aging"]')).not.toBeNull();
+    expect(host.querySelector('[data-memory-stat="active"]')?.textContent).toContain("2");
+    expect(host.querySelector("[data-memory-scope-chip]")).not.toBeNull();
+    // × clears it, on the same tab.
+    await act(async () => { (host.querySelector("[data-memory-scope-clear]") as HTMLButtonElement).click(); });
+    await settle();
+    expect(host.querySelector("[data-memory-scope-chip]")).toBeNull();
+    expect(host.querySelector('[data-memory-stat="active"]')?.textContent).toContain("5");
+  });
+  // Follow-up 2026-11-03: Collections scopes the views to its notes, not to nothing.
+  it("the Collections scope narrows Map, Tags and Quality to the collections' notes, loaded once and kept", async () => {
+    await render();
+    await act(async () => { segment("Map").click(); });
+    await settle();
+    await radial();
+    await act(async () => { (host.querySelector('[data-memory-nav="collections"]') as HTMLButtonElement).click(); });
+    await wait();
+    await settle();
+    // c1 holds Brief (me/n1): the union of the collections is that one note.
+    expect(host.querySelector('[data-testid="memory-brain"]')?.getAttribute("data-nodes")).toBe("1");
+    expect(host.querySelector("[data-memory-scope-chip]")?.textContent).toBe("Scope: Collections");
+    await act(async () => { segment("Tags").click(); });
+    await settle();
+    expect(host.querySelector("[data-memory-tags-top]")?.textContent).toContain("work");
+    await act(async () => { segment("Quality").click(); });
+    await settle();
+    expect(host.querySelector('[data-memory-stat="active"]')?.textContent).toContain("1");
+    expect(host.querySelector('[data-memory-stat="active"]')?.textContent).not.toContain("5");
+    const detailCalls = () => calls.filter((call) => call.path === "/api/me/memory/collections/c1" && call.method === "GET").length;
+    expect(detailCalls()).toBe(1);
+    // One collection opened on Notes: the scope is that collection, kept across tabs.
+    await act(async () => { segment("Notes").click(); });
+    await settle();
+    await act(async () => { (host.querySelector("[data-memory-collection-row]") as HTMLButtonElement).click(); });
+    await wait();
+    await settle();
+    expect(host.querySelector("[data-memory-scope-chip]")?.textContent).toBe("Scope: Collections / Onboarding book");
+    await act(async () => { segment("Map").click(); });
+    await settle();
+    await radial();
+    expect(host.querySelector('[data-testid="memory-brain"]')?.getAttribute("data-nodes")).toBe("1");
+    expect(host.querySelector("[data-memory-scope-chip]")?.textContent).toBe("Scope: Collections / Onboarding book");
+    // Back on Notes, the collection is open again.
+    await act(async () => { segment("Notes").click(); });
+    await wait();
+    await settle();
+    expect(host.querySelector("[data-memory-collection-items]")).not.toBeNull();
   });
 });

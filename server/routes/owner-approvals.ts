@@ -16,10 +16,10 @@
 // Every route is the caller's own: their rules, their bots. A local
 // service or a turn's token is never a person here (`manager` is null), so
 // a bot cannot widen its own leash.
-import type { RequestAuth } from "../request-auth.ts";
-import { isRuleBehavior, type OwnerRule } from "../owner-approval.ts";
-import type { OwnerApprovalStore } from "../owner-approval-store.ts";
-import { ORG_ALWAYS_ALLOW_OFF, standingGrantsAllowed } from "../custom-rules-org.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { isRuleBehavior, type OwnerRule } from "../approvals/owner-approval.ts";
+import type { OwnerApprovalStore } from "../approvals/owner-approval-store.ts";
+import { ORG_ALWAYS_ALLOW_OFF, standingGrantsAllowed } from "../rules/custom-rules-org.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface LegacyRule extends OwnerRule {
@@ -139,7 +139,7 @@ export function createOwnerApprovalRoutes(deps: OwnerApprovalRouteDeps): RouteHa
           if (refused) return json(res, refused.status, refused.body);
         }
         // 2026-10-21: no allow rule is made while the organization turned
-        // Always allow off (server/custom-rules-org.ts)
+        // Always allow off (server/rules/custom-rules-org.ts)
         if (method === "PATCH" && (body.behavior ?? "allow") === "allow" && !standingGrantsAllowed()) return json(res, 403, ORG_ALWAYS_ALLOW_OFF);
         if (method === "PATCH") {
           // editing an earlier rule makes it this person's own rule

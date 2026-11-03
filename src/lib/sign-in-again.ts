@@ -1,7 +1,7 @@
 // "Sign in again" (2026-10-18, real path since 2026-10-19): the actions that
 // need a sign-in younger than 15 minutes (the first security key, the vault
 // export in clear without a key) count only a "Sign in with Pulsatrix"
-// whose provider sign-in is itself recent (server/recent-sign-in.ts). An
+// whose provider sign-in is itself recent (server/auth/recent-sign-in.ts). An
 // email code never counts, so this is the server's Pulsatrix sign-in with
 // `fresh=1` (Perspicax asks for the factors again: `prompt=login`,
 // `max_age=0`), or nothing on a server without it. The desktop app opens it

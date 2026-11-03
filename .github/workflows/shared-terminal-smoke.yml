@@ -24,4 +24,4 @@ jobs:
       - uses: pnpm/action-setup@ff378ebe6b225b0680b81c1ad4498ae0d1d3a5e3 # v6.0.10
       - run: pnpm install --frozen-lockfile
       - name: Shared computer real connector
-        run: pnpm exec vitest run server/shared-computers.e2e.test.ts
+        run: pnpm exec vitest run server/computer/shared-computers.e2e.test.ts

@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
 
-import type { HistoryRow } from "../profile-versions.ts";
+import type { HistoryRow } from "../profiles/profile-versions.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { requiredScope } from "../auth/request-auth.ts";
 import { createBotVersionRoutes, versionRestorePlan, type BotVersionRouteDeps } from "./bot-versions.ts";

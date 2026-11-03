@@ -14,7 +14,7 @@
 // fields keep a one-line copy of at most 200 characters, and the working
 // folder is not restored from here: a value the history cannot give back
 // exactly is left as it is and named in the answer (`skipped`).
-import type { HistoryRow } from "../profile-versions.ts";
+import type { HistoryRow } from "../profiles/profile-versions.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { versionRestorePlan, type VersionRestorePatch } from "../../shared/bot-versions.ts";
 import { PASS, type RouteHandler } from "./table.ts";

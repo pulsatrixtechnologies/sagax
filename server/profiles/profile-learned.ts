@@ -7,10 +7,10 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { DATA_DIR } from "./config.ts";
-import { factIdentity } from "./memory/memory-entries.ts";
-import { redactSecretsInText } from "./redact.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { DATA_DIR } from "../config.ts";
+import { factIdentity } from "../memory/memory-entries.ts";
+import { redactSecretsInText } from "../redact.ts";
 
 const MAX_KEPT = 200;
 const MAX_REMOVED = 500;

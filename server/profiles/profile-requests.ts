@@ -5,17 +5,17 @@
 // store call, and staleness is a hash of the five fields instead of a
 // scheduler revision. Everything here is re-validated at confirm time —
 // a card can sit open for days.
-import { soulDiffLines } from "../shared/line-diff.ts";
-import { BOT_PROFILE_LIMITS } from "../shared/bot-profile.ts";
-import { PROFILE_REQUEST_FIELDS, type ProfileRequestCardData, type ProfileRequestChanges } from "../shared/profile-request.ts";
-import { parseBotProfilePatch, type BotProfilePatchInput } from "./bots/bot-profile.ts";
-import { validateBotCwd } from "./bots/bot-cwd.ts";
-import { newId } from "./contracts.ts";
-import { UNDO_STALE, type DirectApply, type DirectApplyCheck } from "./direct-apply.ts";
+import { soulDiffLines } from "../../shared/line-diff.ts";
+import { BOT_PROFILE_LIMITS } from "../../shared/bot-profile.ts";
+import { PROFILE_REQUEST_FIELDS, type ProfileRequestCardData, type ProfileRequestChanges } from "../../shared/profile-request.ts";
+import { parseBotProfilePatch, type BotProfilePatchInput } from "../bots/bot-profile.ts";
+import { validateBotCwd } from "../bots/bot-cwd.ts";
+import { newId } from "../contracts.ts";
+import { UNDO_STALE, type DirectApply, type DirectApplyCheck } from "../direct-apply.ts";
 import { profileRevision, profileSnapshot } from "./profile-revision.ts";
 import { recordProfileChange } from "./profile-versions.ts";
-import { redactSecretsInText } from "./redact.ts";
-import type { BotRecord } from "./store.ts";
+import { redactSecretsInText } from "../redact.ts";
+import type { BotRecord } from "../store.ts";
 
 const MAX_REASON = 500;
 const STALE = "This bot's profile changed after this card was prepared. Ask the bot to review it and propose again.";

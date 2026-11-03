@@ -9,7 +9,7 @@
 //     the next start;
 //   - About me: a durable fact about the person, from their own words, is
 //     added to the shared About me and listed in Settings with Remove
-//     (server/profile-learned.ts);
+//     (server/profiles/profile-learned.ts);
 //   - tidy-up: nightly, and on demand, expired entries are archived, exact
 //     duplicates merged (MEMORY.md and topic files) and contradictions in
 //     MEMORY.md struck (server/memory/memory-tidy.ts).

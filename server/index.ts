@@ -439,7 +439,7 @@ import { CompanyMemoryCache, companyTextForBots } from "./memory/memory-company.
 import { COMPANY_TOPIC } from "./memory/memory-dream.ts";
 import { procedureSignal, recordProcedure } from "./memory/memory-procedures.ts";
 import type { CaptureTurn } from "./memory/memory-capture.ts";
-import { appendAboutMe, commitLearned, planLearned } from "./profile-learned.ts";
+import { appendAboutMe, commitLearned, planLearned } from "./profiles/profile-learned.ts";
 import {
   archivedAgent,
   canAccessBot,
@@ -1282,13 +1282,13 @@ import { RoutineRequestService } from "./routines/routine-requests.ts";
 import { directApply, UNDO_STALE, type DirectApply } from "./direct-apply.ts";
 import { createAgentCard } from "./chat-widgets.ts";
 import { buildBotOverview, type BotOverview } from "./bots/bot-overview.ts";
-import { ProfileRequestService } from "./profile-requests.ts";
+import { ProfileRequestService } from "./profiles/profile-requests.ts";
 import { ModelRequestService } from "./models/model-requests.ts";
 import { RuleRequestService } from "./rules/rule-requests.ts";
 import { TeamSetupError, TeamSetupRequestService, teamSetupDirectApply } from "./team/team-setup-requests.ts";
 import type { TeamSetupRequest } from "../shared/team-setup.ts";
-import { profileRevision, profileSnapshot } from "./profile-revision.ts";
-import { flushAllProfileHistory, flushProfileHistory, readHistory, recordProfileChange } from "./profile-versions.ts";
+import { profileRevision, profileSnapshot } from "./profiles/profile-revision.ts";
+import { flushAllProfileHistory, flushProfileHistory, readHistory, recordProfileChange } from "./profiles/profile-versions.ts";
 import { BOT_PACKAGE_MAX_SKILLS, isBotPackage, packageSummary, parsePackageDocument, type PackageDocument } from "./bots/bot-package.ts";
 import { TeamMemory } from "./memory/team-memory.ts";
 import { teamMemoryReviewRefusal } from "./memory/team-memory-review.ts";

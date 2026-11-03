@@ -4,7 +4,7 @@
 // routine's expectedUpdatedAt (bots have no updatedAt of their own).
 import { createHash } from "node:crypto";
 
-import type { ProfileRequestChanges } from "../shared/profile-request.ts";
+import type { ProfileRequestChanges } from "../../shared/profile-request.ts";
 
 export function profileSnapshot(
   bot: { name: string; title: string; description: string; soul?: string; cwd?: string; notifications?: boolean; speakReplies?: boolean },

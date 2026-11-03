@@ -3,7 +3,7 @@ import { z } from "zod";
 import { soulDiffLines } from "../../shared/line-diff.ts";
 import { newId, type ModelSelection } from "../contracts.ts";
 import { fitsOnOneLine, parseBotProfilePatch } from "../bots/bot-profile.ts";
-import { profileSnapshot } from "../profile-revision.ts";
+import { profileSnapshot } from "../profiles/profile-revision.ts";
 import { validateBotCwd } from "../bots/bot-cwd.ts";
 import { harnessCapabilityLines, type DriverCapabilities } from "../capabilities/harness-capabilities.ts";
 import { redactSecretsInText } from "../redact.ts";

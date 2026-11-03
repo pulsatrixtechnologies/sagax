@@ -45,8 +45,8 @@ import {
   type OrgInstallStatus,
   type ResolvedPreset,
 } from "../presets.ts";
-import { profileRevision, profileSnapshot } from "../profile-revision.ts";
-import { recordProfileChange } from "../profile-versions.ts";
+import { profileRevision, profileSnapshot } from "../profiles/profile-revision.ts";
+import { recordProfileChange } from "../profiles/profile-versions.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { sessionPrincipal } from "../auth/request-auth.ts";
 import { fetchSkillFromSource } from "../skills/skill-fetch.ts";

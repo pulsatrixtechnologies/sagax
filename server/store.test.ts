@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { soulFile, soulHash } from "./bots/bot-folder.ts";
-import { flushProfileHistory, readHistory, recordProfileChange } from "./profile-versions.ts";
+import { flushProfileHistory, readHistory, recordProfileChange } from "./profiles/profile-versions.ts";
 import { DATA_DIR } from "./config.ts";
 import {
   beginMemoryTurn,

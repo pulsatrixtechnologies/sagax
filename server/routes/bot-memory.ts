@@ -32,7 +32,7 @@ import {
   type MemoryJournalEntry,
 } from "../memory/memory-journal.ts";
 import { upkeepEnabled, type MemoryUpkeep } from "../memory/memory-upkeep.ts";
-import { listLearnedFacts, removeLearned } from "../profile-learned.ts";
+import { listLearnedFacts, removeLearned } from "../profiles/profile-learned.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { BOT_ACT_ROUTE_HEADER } from "./remote-session-files.ts";
 import { PASS, type RouteHandler } from "./table.ts";

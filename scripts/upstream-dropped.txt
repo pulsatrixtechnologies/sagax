@@ -575,3 +575,9 @@ server/package-export.ts
 server/package-import.test.ts
 server/package-import.ts
 server/package-parts.ts
+server/profile-learned.ts
+server/profile-requests.test.ts
+server/profile-requests.ts
+server/profile-revision.ts
+server/profile-versions.test.ts
+server/profile-versions.ts

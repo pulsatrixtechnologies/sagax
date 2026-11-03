@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { botFolder } from "./bots/bot-folder.ts";
+import { botFolder } from "../bots/bot-folder.ts";
 import { profileRevision } from "./profile-revision.ts";
 import { flushProfileHistory, readHistory } from "./profile-versions.ts";
 import {
@@ -13,8 +13,8 @@ import {
   type OptionCardLike,
   type ProfileRequestStore,
 } from "./profile-requests.ts";
-import type { BotRecord } from "./store.ts";
-import { directApply, type DirectApplyCheck } from "./direct-apply.ts";
+import type { BotRecord } from "../store.ts";
+import { directApply, type DirectApplyCheck } from "../direct-apply.ts";
 
 interface StoredMessage {
   id: string;

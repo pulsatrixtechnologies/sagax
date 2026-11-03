@@ -120,7 +120,7 @@ case-insensitively or creating one with a `title` and `aliases` header; new
 aliases merge into an existing header. Deduplicated against the topic by the
 identity rule; a topic past 64 KB gains nothing more. One journal row per file.
 
-### About me (`server/profile-learned.ts`)
+### About me (`server/profiles/profile-learned.ts`)
 
 A candidate marked `aboutUser` (kind `preference` or `fact`, no `until`) from
 the owner's own messages is appended to *About me* as

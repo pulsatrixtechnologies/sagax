@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { LIST, parseDropped, trackedDropped } from "./upstream-drop.mjs";
+import { existsSync } from "node:fs";
+import { LIST, parseDropped, parseMoved, trackedDropped } from "./upstream-drop.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const directories = [];
@@ -50,4 +51,44 @@ describe("upstream-drop", () => {
     git(repo, "rm", "-q", "-f", "--", "gone.txt");
     expect(trackedDropped(["gone.txt"], repo)).toEqual([]);
   });
+
+  // 2026-11-03 (audit N-3): the ~404 old paths of the server/ regroup were
+  // plain dropped entries, so a rename git did not follow came back as a
+  // conflict that the script git rm'd silently: the upstream fix was lost.
+  it("keeps the moved files apart: each old path is gone, each new one is here", () => {
+    const text = readFileSync(LIST, "utf8");
+    const moved = parseMoved(text);
+    expect(moved.size).toBeGreaterThan(400);
+    expect(parseDropped(text).some((path) => moved.has(path) || path.includes("->"))).toBe(false);
+    expect(trackedDropped([...moved.keys()], root)).toEqual([]);
+    for (const to of moved.values()) expect(existsSync(join(root, to)), to).toBe(true);
+    expect(parseMoved("a/x.ts -> a/b/x.ts\nplain.ts\n")).toEqual(new Map([["a/x.ts", "a/b/x.ts"]]));
+  });
+
+  it("never removes a moved file's old path that came back: it says where to port it", () => {
+    const repo = mkdtempSync(join(tmpdir(), "sagax-upstream-moved-"));
+    directories.push(repo);
+    git(repo, "init", "-q", "-b", "main");
+    git(repo, "config", "user.email", "test@example.invalid");
+    git(repo, "config", "user.name", "Test");
+    const [from, to] = [...parseMoved(readFileSync(LIST, "utf8"))][0];
+    execFileSync("mkdir", ["-p", join(repo, dirname(from))]);
+    writeFileSync(join(repo, from), "an upstream fix\n");
+    git(repo, "add", ".");
+    git(repo, "commit", "-q", "-m", "upstream change to the old path");
+    for (const args of [[], ["--check"]]) {
+      let status = 0;
+      let output = "";
+      try {
+        output = execFileSync(process.execPath, [join(root, "scripts", "upstream-drop.mjs"), ...args], { cwd: repo, encoding: "utf8" });
+      } catch (error) {
+        status = error.status;
+        output = String(error.stdout);
+      }
+      expect(status).toBe(1);
+      expect(output).toContain(`${from}: port into ${to}`);
+      expect(existsSync(join(repo, from))).toBe(true);
+    }
+  });
 });
+

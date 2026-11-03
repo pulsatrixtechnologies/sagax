@@ -38,7 +38,7 @@ import {
   updateBotSkillByPerson as updateBotSkillBytes,
   type SkillListing,
 } from "./skills.ts";
-import { workspaceDir } from "../workspace.ts";
+import { workspaceDir } from "../workspace/workspace.ts";
 
 const SUPPORTING_TEXT_EXT = new Set([
   ".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".csv", ".tsv",

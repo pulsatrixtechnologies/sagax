@@ -2008,7 +2008,7 @@ export interface MemoryHit {
 export function recallMemory(query: string, botId: string, limit = 12, mode: SearchMode = "all", scope: "memory" | "docs" = "memory"): MemoryHit[] {
   const match = ftsQuery(query, mode);
   if (!match) return [];
-  // docs/ (server/workspace-files.ts) shares this index but is never
+  // docs/ (server/workspace/workspace-files.ts) shares this index but is never
   // memory: session_search and automatic recall keep to memory files,
   // workspace_search keeps to docs.
   const scopeSql = (scope === "docs" ? "AND f.path LIKE 'docs/%' " : "AND f.path NOT LIKE 'docs/%' ") +

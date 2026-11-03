@@ -30,7 +30,7 @@ import { createPerspicaxToolInternalRoutes } from "../routes/perspicax-tool-inte
 import { turnStartLogLine } from "../turns/turn-log.ts";
 import { sandboxPrincipalForTurn } from "../sandbox/user-sandbox-routing.ts";
 import { confidentialBackupPath, confidentialRoster, rosterWithoutConfidentialContent, stripConfidentialMessages, CONFIDENTIAL_BACKUP_TITLE } from "../workspace-backup.ts";
-import { workspaceLocationsPrompt } from "../workspace.ts";
+import { workspaceLocationsPrompt } from "../workspace/workspace.ts";
 
 const dirs: string[] = [];
 const temp = () => {

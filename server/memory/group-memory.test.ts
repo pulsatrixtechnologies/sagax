@@ -21,7 +21,7 @@ import {
 import type { RequestAuth } from "../request-auth.ts";
 import { createGroupMemoryRoutes, type GroupMemoryRouteDeps } from "../routes/group-memory.ts";
 import { dispatchRoutes } from "../routes/table.ts";
-import { readMemoryFile, updateMemory, workspaceDir } from "../workspace.ts";
+import { readMemoryFile, updateMemory, workspaceDir } from "../workspace/workspace.ts";
 
 let n = 0;
 const fresh = () => `gm-test-${process.pid}-${++n}`;

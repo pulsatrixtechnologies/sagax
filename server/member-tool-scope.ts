@@ -104,7 +104,7 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   memory_update: "memory",
   memory_log: "memory",
   group_memory_update: "memory",
-  // the bot's own RULES.md and docs/ (server/workspace-files.ts)
+  // the bot's own RULES.md and docs/ (server/workspace/workspace-files.ts)
   rules_update: "memory",
   docs_update: "memory",
   create_bot: "own-setup",

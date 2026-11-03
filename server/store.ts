@@ -24,10 +24,10 @@ import * as mdb from "./messages/message-db.ts";
 import { ThreadCache, type ThreadState } from "./threads/thread-cache.ts";
 import { forgetBotMemoryJournal, journalFile } from "./memory/memory-journal.ts";
 import { forgetLogMemory } from "./encryption/content-at-rest.ts";
-import { forgetWorkspaceUsage } from "./workspace-usage.ts";
+import { forgetWorkspaceUsage } from "./workspace/workspace-usage.ts";
 import { nextContext } from "./context-reading.ts";
 import { runCommand, type Command } from "./commands.ts";
-import { workspaceDir } from "./workspace.ts";
+import { workspaceDir } from "./workspace/workspace.ts";
 import { autoOnlyDestination, type Destination } from "./surface.ts";
 import { newId, type ModelSelection } from "./contracts.ts";
 import { pickBotName } from "./names.ts";
@@ -2459,7 +2459,7 @@ export class Store {
     } catch {}
     mdb.deleteBotMemoryFiles(id);
     forgetBotMemoryJournal(id);
-    // the Files list's usage record (server/workspace-usage.ts) is outside too
+    // the Files list's usage record (server/workspace/workspace-usage.ts) is outside too
     forgetWorkspaceUsage(id);
     // Generated task-workspaces are project files, not bot memory. Keep
     // them (and user-selected cwd folders) when deleting conversations.

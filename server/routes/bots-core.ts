@@ -60,7 +60,7 @@ import {
   parseThreadOrganization,
 } from "../threads/thread-folders.ts";
 import { titleConversationExcerpt } from "../threads/thread-title.ts";
-import { writeMemoryFile, writeMemoryTopic } from "../workspace.ts";
+import { writeMemoryFile, writeMemoryTopic } from "../workspace/workspace.ts";
 import {
   approvalModeFor,
   approvalModeWidens,

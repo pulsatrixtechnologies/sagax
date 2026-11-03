@@ -5,8 +5,8 @@ import { chmodSync, existsSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { DATA_DIR } from "./config.ts";
-import { closeMessageDb, recallMemory } from "./messages/message-db.ts";
+import { DATA_DIR } from "../config.ts";
+import { closeMessageDb, recallMemory } from "../messages/message-db.ts";
 
 import {
   appendMemoryLog,

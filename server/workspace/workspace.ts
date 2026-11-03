@@ -12,16 +12,16 @@ import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, open
 import { lstat as lstatAsync, open as openAsync } from "node:fs/promises";
 import { join } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { describeHandle, holdPlain, isAtRestRefusal, noteAtRestWrite, plainSizeFor, readAllFromHandle, readAtRest, readAtRestTextSync, registerAtRestRoot } from "./encryption/content-at-rest.ts";
-import { alwaysCore, isExpired, isMemoryDate, parseMemoryEntries, untilMark, withoutExpired, type MemoryEntryLine } from "./memory/memory-entries.ts";
-import { readersToken, withoutWiderAudience, type MemoryDestination, type MemoryReaders } from "./memory/memory-audience.ts";
-import { parseTopicHeader, readTopicHead, renderTopicIndex } from "./memory/memory-topics.ts";
-import { indexMemoryFile, indexedMemoryFiles, recallMemory, removeMemoryFile, type MemoryHit, type SearchMode } from "./messages/message-db.ts";
-import { redactSecretsInText } from "./redact.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { describeHandle, holdPlain, isAtRestRefusal, noteAtRestWrite, plainSizeFor, readAllFromHandle, readAtRest, readAtRestTextSync, registerAtRestRoot } from "../encryption/content-at-rest.ts";
+import { alwaysCore, isExpired, isMemoryDate, parseMemoryEntries, untilMark, withoutExpired, type MemoryEntryLine } from "../memory/memory-entries.ts";
+import { readersToken, withoutWiderAudience, type MemoryDestination, type MemoryReaders } from "../memory/memory-audience.ts";
+import { parseTopicHeader, readTopicHead, renderTopicIndex } from "../memory/memory-topics.ts";
+import { indexMemoryFile, indexedMemoryFiles, recallMemory, removeMemoryFile, type MemoryHit, type SearchMode } from "../messages/message-db.ts";
+import { redactSecretsInText } from "../redact.ts";
 
-import { DATA_DIR } from "./config.ts";
-import { engineWorksInFiles } from "../shared/capabilities.ts";
+import { DATA_DIR } from "../config.ts";
+import { engineWorksInFiles } from "../../shared/capabilities.ts";
 
 export const WORKSPACES_DIR = join(DATA_DIR, "workspaces");
 export const TASK_WORKSPACES_DIR = join(DATA_DIR, "task-workspaces");
@@ -742,7 +742,7 @@ export function isMemoryTopicName(name: string): boolean {
 }
 
 /** docs/: reference markdown the bot reads on demand (procedures,
- * templates, lists), never loaded into a prompt (server/workspace-files.ts
+ * templates, lists), never loaded into a prompt (server/workspace/workspace-files.ts
  * owns the rest). One flat folder, the same name gate as a topic file. */
 export const DOCS_DIR = "docs";
 

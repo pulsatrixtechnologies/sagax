@@ -31,10 +31,10 @@ import {
   ensureWorkspace,
   isMemoryTopicName,
   workspaceDir,
-} from "../workspace.ts";
+} from "../workspace/workspace.ts";
 
 export const MEMORY_INDEX = "MEMORY.md";
-/** RULES.md and docs/<name>.md (server/workspace-files.ts) go through this
+/** RULES.md and docs/<name>.md (server/workspace/workspace-files.ts) go through this
  * store too, so the editor, the journal and its revert treat them exactly
  * like memory files: same containment, scrub, modes and conflict check. */
 export const RULES_PATH = "RULES.md";

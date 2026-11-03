@@ -13,7 +13,7 @@ import { RoutineManager } from "./routines/routines.ts";
 import { botPluginsWithMarketplaces } from "./testing/plugin-stores.ts";
 import { BOT_FIELD_POLICY, BotZipError, importBotZip, inspectBotZip, planBotZip, previewBotZip, writeBotZip, type BotZipHost } from "./bot-zip.ts";
 import { installSkill, listSkills, setSkillEnabled } from "./skills/skills.ts";
-import { appendMemoryArchive, readMemoryFile, readMemoryLog, readMemoryTopic, workspaceDir, writeMemoryFile, writeMemoryLog, writeMemoryTopic } from "./workspace.ts";
+import { appendMemoryArchive, readMemoryFile, readMemoryLog, readMemoryTopic, workspaceDir, writeMemoryFile, writeMemoryLog, writeMemoryTopic } from "./workspace/workspace.ts";
 import { readAttachment, saveImage } from "./attachments.ts";
 import { botAvatarUrlFromStoredPath } from "../shared/bot-avatar.ts";
 import { botFolder } from "./bot-folder.ts";

@@ -3066,7 +3066,7 @@ for a bot or a conversation any more:
 - Test seam `SAGAX_TEST_FIXED_WORKSPACE=1` (with VITEST or
   `SAGAX_TEST_SEAMS=1`, never production): the suites that drive fixed
   places through the API keep them. Tests:
-  `server/workspace-auto-only.test.ts`, `server/workspace-auto-only.e2e.test.ts`,
+  `server/workspace/workspace-auto-only.test.ts`, `server/workspace/workspace-auto-only.e2e.test.ts`,
   `src/components/computer/WorksOnSetting.test.ts`.
 
 ## Workspace: Auto remembers no place (2026-10-16)

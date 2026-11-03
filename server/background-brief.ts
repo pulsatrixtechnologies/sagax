@@ -15,7 +15,7 @@ import { z } from "zod";
 import { writeFileAtomic } from "./atomic.ts";
 import { localClock, validTimeZone } from "../shared/reach-me.ts";
 import { memoryMayShow, type MemoryReaders } from "./memory/memory-audience.ts";
-import { memoryEntry } from "./workspace.ts";
+import { memoryEntry } from "./workspace/workspace.ts";
 
 export const BRIEF_MIN_HOURS = 1;
 export const BRIEF_MAX_HOURS = 168;

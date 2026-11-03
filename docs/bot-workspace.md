@@ -1,6 +1,6 @@
 # The bot workspace
 
-Every bot has a folder, `~/.sagax/workspaces/<botId>/` (`server/workspace.ts`). It is the
+Every bot has a folder, `~/.sagax/workspaces/<botId>/` (`server/workspace/workspace.ts`). It is the
 bot's desk and its long-term notes: plain markdown that a person can open, edit or delete
 in any editor, and that the persona editor shows under **Rules**, **Memory** and **Files**.
 

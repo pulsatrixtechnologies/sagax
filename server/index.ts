@@ -1101,8 +1101,8 @@ import {
   WITHHELD_HOST_TOOLS_PROMPT,
   TASK_WORKSPACES_DIR,
   workspaceDir
-} from "./workspace.ts";
-import { holdBotMemoryPlain, listMemoryTopics, memoryDate, onMemoryTopicWritten, readMemoryFile, readMemoryTopic, readMemoryTopicAsync, writeMemoryFile, writeMemoryTopic } from "./workspace.ts";
+} from "./workspace/workspace.ts";
+import { holdBotMemoryPlain, listMemoryTopics, memoryDate, onMemoryTopicWritten, readMemoryFile, readMemoryTopic, readMemoryTopicAsync, writeMemoryFile, writeMemoryTopic } from "./workspace/workspace.ts";
 import { holdPlain, noteAtRestWrite, readAtRestSync, registerAtRestRoot, releasePlain, setAtRestHolderCheck, setAtRestThreadFiles, waitPlain } from "./encryption/content-at-rest.ts";
 import {
   beginMemoryTurn,
@@ -2192,9 +2192,9 @@ import { createBotWorkspaceRoutes } from "./routes/bot-workspace.ts";
 import { createBotRulesRoutes } from "./routes/bot-rules.ts";
 import { createBotSkillUploadRoutes } from "./routes/bot-skill-upload.ts";
 import { createShownPathRoutes } from "./routes/shown-path.ts";
-import { docsIndexPrompt, readWorkspaceText, rulesSystemPrompt } from "./workspace-files.ts";
-import { updateDoc, updateRules } from "./workspace-tools.ts";
-import { markWorkspaceUse, promptSectionPaths } from "./workspace-usage.ts";
+import { docsIndexPrompt, readWorkspaceText, rulesSystemPrompt } from "./workspace/workspace-files.ts";
+import { updateDoc, updateRules } from "./workspace/workspace-tools.ts";
+import { markWorkspaceUse, promptSectionPaths } from "./workspace/workspace-usage.ts";
 import { createBotActivityRoutes, type ActivityChildRef } from "./routes/bot-activity.ts";
 import { createBotCodeBranchRoutes, type BranchCredentials } from "./routes/bot-code-branches.ts";
 import { createDevPullRoutes } from "./routes/dev-pull.ts";

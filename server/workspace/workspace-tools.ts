@@ -2,9 +2,9 @@
 // rename. Every write goes through the memory store (containment, secret
 // scrub, 0600, conflict hash) and the memory journal (an audit row the
 // person can read and revert in History), exactly like a memory edit.
-import { RULES_PATH, MemoryStoreError, readMemoryDoc } from "./memory/memory-store.ts";
-import { journalMemoryDelete, journalMemoryWrite, type MemoryActor, type MemoryJournalEntry } from "./memory/memory-journal.ts";
-import { redactSecretsInText } from "./redact.ts";
+import { RULES_PATH, MemoryStoreError, readMemoryDoc } from "../memory/memory-store.ts";
+import { journalMemoryDelete, journalMemoryWrite, type MemoryActor, type MemoryJournalEntry } from "../memory/memory-journal.ts";
+import { redactSecretsInText } from "../redact.ts";
 import {
   DEFAULT_RULE_SET_ID,
   RULE_MAX_CHARS,
@@ -19,7 +19,7 @@ import {
   rulesOverBudget,
   totalOverBudget,
   writeRuleSets,
-} from "./rule-sets.ts";
+} from "../rule-sets.ts";
 import { DOCS_DIR } from "./workspace-files.ts";
 import { MEMORY_FILE_MAX_BYTES, isMemoryTopicName, memoryLineCount } from "./workspace.ts";
 import { markWorkspaceUse } from "./workspace-usage.ts";

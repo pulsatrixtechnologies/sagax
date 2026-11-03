@@ -24,7 +24,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
 import { RULE_SETS_DIR, RULES_PATH } from "./memory/memory-store.ts";
-import { ensureWorkspace, memoryLineCount, readMemoryText, workspaceDir } from "./workspace.ts";
+import { ensureWorkspace, memoryLineCount, readMemoryText, workspaceDir } from "./workspace/workspace.ts";
 
 export { RULE_SETS_DIR };
 export const RULES_FILE = RULES_PATH;

@@ -3,7 +3,7 @@
 // A conversation is still not pinned to a place.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { launchVerificationServer, type VerificationServer } from "../scripts/control-omb.ts";
+import { launchVerificationServer, type VerificationServer } from "../../scripts/control-omb.ts";
 
 describe("Workspace is always Auto over HTTP", () => {
   let session: VerificationServer;

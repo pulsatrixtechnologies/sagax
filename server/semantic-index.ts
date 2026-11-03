@@ -37,7 +37,7 @@ import {
   type EmbeddingEndpoint, type QuantizedVector,
 } from "./semantic-encoder.ts";
 import type { SemanticHit, SemanticIndex, SemanticScope } from "./semantic-recall.ts";
-import { listMemoryTopics, memoryDate, readMemoryTopic, workspaceDir } from "./workspace.ts";
+import { listMemoryTopics, memoryDate, readMemoryTopic, workspaceDir } from "./workspace/workspace.ts";
 
 /** Characters of a message one passage holds. */
 export const MESSAGE_PASSAGE_CHARS = 480;

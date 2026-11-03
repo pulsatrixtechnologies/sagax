@@ -217,7 +217,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       { id: "rules", label: "Rules (RULES.md)", text: rulesSystemPrompt(state.bot.id, { writes: Boolean(state.integrations.agents) }) },
       { id: "memory", label: "Memory", text: memoryPromptFor(state.bot, { managedWrites: Boolean(state.integrations.agents), fileTools: state.worksInWorkspace, withholdHostTools: withholdHostToolsFor(state.instance) }) },
       { id: "host-tools", label: "Host tools", text: withholdHostToolsFor(state.instance) ? WITHHELD_HOST_TOOLS_PROMPT : "" },
-      // docs/: an index only, never the documents (server/workspace-files.ts)
+      // docs/: an index only, never the documents (server/workspace/workspace-files.ts)
       { id: "docs", label: "Documents index", text: docsIndexPrompt(state.bot.id, { tools: state.integrations.agents ? "agents" : state.worksInWorkspace && serverFiles ? "files" : "none" }) },
       // liveBot was captured before awaited setup work; an assignment PUT
       // in that window must still reach this turn's prompt.

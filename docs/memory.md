@@ -85,7 +85,7 @@ can only go red when the lines that never move fill the budget by themselves
 saved, and the bot asks you to trim `MEMORY.md`.
 
 Both limits are `MEMORY_MAX_LINES` and `MEMORY_MAX_BYTES` in
-`server/workspace.ts`; the panel, the loader, and the bot's prompt all read the
+`server/workspace/workspace.ts`; the panel, the loader, and the bot's prompt all read the
 same two constants.
 
 Two more things load with it:

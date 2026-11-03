@@ -13,7 +13,7 @@ import { flushMemoryJournal, readMemoryJournal } from "./memory-journal.ts";
 import { ORGANIZE_MARKER } from "./memory-organize.ts";
 import { CAPTURE_MAX_TURNS, createMemoryUpkeep, MODEL_TIMEOUT_MS, type UpkeepBot } from "./memory-upkeep.ts";
 import { closeMessageDb } from "../messages/message-db.ts";
-import { readMemoryTopic, workspaceDir, WORKSPACES_DIR } from "../workspace.ts";
+import { readMemoryTopic, workspaceDir, WORKSPACES_DIR } from "../workspace/workspace.ts";
 
 const TODAY = "2026-09-25";
 const ACK = "Got it, I'll keep that in mind.";

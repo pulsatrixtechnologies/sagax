@@ -11,7 +11,7 @@
 // are neutralised so a note cannot close the block; the block is capped.
 import { recallMessages, recallTerms, type MemoryHit, type RecallHit } from "./messages/message-db.ts";
 import { parseTopicHeader, readTopicHead, topicBody, topicWords } from "./memory/memory-topics.ts";
-import { listMemoryTopics, memoryDate, readMemoryFile, readMemoryLog, readMemoryTopic, searchMemoryFiles, workspaceDir } from "./workspace.ts";
+import { listMemoryTopics, memoryDate, readMemoryFile, readMemoryLog, readMemoryTopic, searchMemoryFiles, workspaceDir } from "./workspace/workspace.ts";
 import { withoutExpired } from "./memory/memory-entries.ts";
 import { memoryHitMayShow, memoryMayShow, memoryReadersOf, withoutWiderAudience, type MemoryDestination } from "./memory/memory-audience.ts";
 import { fusePassages, semanticPassages } from "./semantic-recall.ts";

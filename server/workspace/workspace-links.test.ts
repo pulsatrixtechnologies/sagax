@@ -1,5 +1,5 @@
 // On an OMB Cloud home a bot's memory is read only from regular files, never
-// through a link (server/workspace.ts readMemoryOnlyFromRegularFiles): the
+// through a link (server/workspace/workspace.ts readMemoryOnlyFromRegularFiles): the
 // lent-Mac memory check (server/lending-memory.ts) judges a link by where it
 // points, so no turn may read what is behind one. Elsewhere memory reads as
 // it always did. Its own file: the switch is process-wide.
@@ -7,8 +7,8 @@ import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { DATA_DIR } from "./config.ts";
-import { closeMessageDb } from "./messages/message-db.ts";
+import { DATA_DIR } from "../config.ts";
+import { closeMessageDb } from "../messages/message-db.ts";
 import {
   ensureWorkspace,
   listMemoryLogs,

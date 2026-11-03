@@ -95,7 +95,7 @@ On a disposable worktree stacked on #1708 and rebased onto Sagax main
 `0b132aec`: `pnpm typecheck`, `pnpm lint`, `pnpm i18n:check` and the files
 above passed. Before that rebase (main `0bb37982` plus #1708),
 `pnpm test:packaged-server` and `server/index.test.ts`,
-`server/independent-threads-api.test.ts`,
+`server/workspace/independent-threads-api.test.ts`,
 `server/notification-routing.e2e.test.ts`, `server/comms.test.ts`,
 `server/guarded-messages-api.test.ts`,
 `server/paired-thread-targets-api.test.ts`, `server/chief-rooms.e2e.test.ts`,

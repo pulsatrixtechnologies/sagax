@@ -9,7 +9,7 @@ import { createTeamBackup, importTeamBackup } from "./team-backup.ts";
 import { parseTeamBackup } from "../shared/team-backup.ts";
 import { WIDGET_SAMPLES } from "../shared/widget-samples.ts";
 import { soulFile, soulHash } from "./bot-folder.ts";
-import { appendMemoryLog, readMemoryFile, readMemoryLog, readMemoryTopic, searchMemoryFiles, updateMemory, workspaceDir, writeMemoryTopic } from "./workspace.ts";
+import { appendMemoryLog, readMemoryFile, readMemoryLog, readMemoryTopic, searchMemoryFiles, updateMemory, workspaceDir, writeMemoryTopic } from "./workspace/workspace.ts";
 
 const selection = () => ({ instanceId: "fixture", model: "fixture-model" });
 

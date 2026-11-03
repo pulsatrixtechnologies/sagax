@@ -41,7 +41,7 @@ import {
 } from "./skills.ts";
 import { parseSkillSource } from "./skill-fetch.ts";
 import { buildSystemPrompt } from "../system-prompt.ts";
-import { workspaceDir } from "../workspace.ts";
+import { workspaceDir } from "../workspace/workspace.ts";
 
 // skills.ts resolves storage through workspaceDir(botId) → DATA_DIR, which
 // reads SAGAX_DATA_DIR at import time — so point the suite at a scratch dir

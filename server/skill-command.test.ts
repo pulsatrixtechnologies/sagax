@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { join } from "node:path";
 
 import { enabledSkillFile, expandSkillCommandTurnText, installSkill, setSkillEnabled, skillCommandInline } from "./skills/skills.ts";
-import { workspaceDir } from "./workspace.ts";
+import { workspaceDir } from "./workspace/workspace.ts";
 import { BUILT_IN_SLASH_COMMANDS, offersSkillCommand, parseSkillCommand } from "../shared/skill-command.ts";
 
 const SKILL = (name: string) =>

@@ -11,7 +11,7 @@ import type { RequestAuth } from "../request-auth.ts";
 import type { RouteContext } from "../routes/table.ts";
 import { RoutineManager } from "../routines/routines.ts";
 import { Store, titleFromMessage } from "../store.ts";
-import { appendMemoryLog, writeMemoryFile, writeMemoryTopic } from "../workspace.ts";
+import { appendMemoryLog, writeMemoryFile, writeMemoryTopic } from "../workspace/workspace.ts";
 
 const SELF = "pr_11111111-1111-4111-8111-111111111111";
 const DANA = "pr_22222222-2222-4222-8222-222222222222";

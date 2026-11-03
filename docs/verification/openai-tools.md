@@ -51,7 +51,7 @@ Driver contract tests cover the three shared adapters, protocol errors,
 non-streaming responses, tool errors, and lifecycle edge cases:
 
 ```sh
-pnpm exec vitest run server/drivers/openai-chat-tools.test.ts server/workspace.test.ts
+pnpm exec vitest run server/drivers/openai-chat-tools.test.ts server/workspace/workspace.test.ts
 ```
 
 One turn stops after 64 model steps, or 200 tool calls in total (each reply

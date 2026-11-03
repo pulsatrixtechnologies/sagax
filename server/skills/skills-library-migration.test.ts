@@ -11,7 +11,7 @@ process.env.SAGAX_DATA_DIR = mkdtempSync(join(tmpdir(), "omb-skills-migration-")
 const library = await import("./skill-library.ts");
 const skills = await import("./skills.ts");
 const migration = await import("./skills-library-migration.ts");
-const { workspaceDir } = await import("../workspace.ts");
+const { workspaceDir } = await import("../workspace/workspace.ts");
 
 const SKILL = (name: string, body = "Do the thing.") =>
   `---\nname: ${name}\ndescription: Reviews a PR the way this team reviews PRs.\n---\n\n# ${name}\n\n${body}\n`;

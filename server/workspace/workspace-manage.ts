@@ -1,6 +1,6 @@
 // Manage any file or folder inside a bot's workspace from the Files UI:
 // create, upload, rename, move, delete. Path safety mirrors
-// server/workspace-files.ts (no traversal, no symlink escape). Core files
+// server/workspace/workspace-files.ts (no traversal, no symlink escape). Core files
 // SOUL.md, MEMORY.md and RULES.md cannot be deleted, renamed or moved.
 // Markdown that the memory store already seals goes through the journal;
 // other paths are plain workspace files (0600) with noteAtRestWrite when
@@ -18,11 +18,11 @@ import {
 } from "node:fs";
 import { dirname, join, sep } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { FILE_MAX_BYTES } from "./attachments.ts";
-import { noteAtRestWrite } from "./encryption/content-at-rest.ts";
-import { journalMemoryDelete, journalMemoryWrite } from "./memory/memory-journal.ts";
-import { MemoryStoreError, parseMemoryPath, readMemoryDoc } from "./memory/memory-store.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { FILE_MAX_BYTES } from "../attachments.ts";
+import { noteAtRestWrite } from "../encryption/content-at-rest.ts";
+import { journalMemoryDelete, journalMemoryWrite } from "../memory/memory-journal.ts";
+import { MemoryStoreError, parseMemoryPath, readMemoryDoc } from "../memory/memory-store.ts";
 import { ensureWorkspace } from "./workspace.ts";
 import { WorkspacePathError, normaliseWorkspacePath } from "./workspace-files.ts";
 

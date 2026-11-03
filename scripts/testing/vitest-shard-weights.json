@@ -129,7 +129,7 @@
   "server/idp-session.test.ts": 27,
   "server/incidents.e2e.test.ts": 65,
   "server/independent-task-store.test.ts": 7,
-  "server/independent-threads-api.test.ts": 92,
+  "server/workspace/independent-threads-api.test.ts": 92,
   "server/index.test.ts": 303,
   "server/ios-parity.e2e.test.ts": 6,
   "server/key-rejected.e2e.test.ts": 18,
@@ -282,7 +282,7 @@
   "server/workspace-backup-worker.test.ts": 14,
   "server/workspace-backup-workflow.e2e.test.ts": 23,
   "server/workspace-backup.test.ts": 54,
-  "server/workspace-links.test.ts": 5,
+  "server/workspace/workspace-links.test.ts": 5,
   "src/components/ChatMarkdown.test.ts": 5,
   "src/components/data/DataPanel.test.ts": 9,
   "src/lib/voice-mode/models.test.ts": 12

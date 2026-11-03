@@ -11,7 +11,7 @@ import { redactSecretsInText } from "./redact.ts";
 import {
   listMemoryLogs, listMemoryTopics, readMemoryFile, readMemoryLog, readMemoryTopic,
   writeMemoryFile, writeMemoryLog, writeMemoryTopic,
-} from "./workspace.ts";
+} from "./workspace/workspace.ts";
 
 /** A bot's memory as it travels: MEMORY.md, every topic file, every daily
  * log — scrubbed on the way out, because a file the bot's own file tools

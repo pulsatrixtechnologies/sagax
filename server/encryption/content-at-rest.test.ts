@@ -48,7 +48,7 @@ import { journalFile, readMemoryJournal, recordMemoryChange, flushMemoryJournal,
 import { readMemoryDoc } from "../memory/memory-store.ts";
 import { readRecentLines } from "../threads/thread-events.ts";
 import { createWorkspaceBackup, stageWorkspaceBackup } from "../workspace-backup.ts";
-import { holdBotMemoryPlain, readMemoryFile, searchMemoryFiles, workspaceDir, writeMemoryFile, writeMemoryTopic } from "../workspace.ts";
+import { holdBotMemoryPlain, readMemoryFile, searchMemoryFiles, workspaceDir, writeMemoryFile, writeMemoryTopic } from "../workspace/workspace.ts";
 import { open as openHandle } from "node:fs/promises";
 import { createSecretKey, randomBytes } from "node:crypto";
 

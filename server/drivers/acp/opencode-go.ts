@@ -628,7 +628,7 @@ function withinFolder(path: string, folder: string): boolean {
 }
 
 /** Whether a turn works in one of Sagax's own folders: a bot's shared
- * folder or a conversation's private one (server/workspace.ts). Everything in
+ * folder or a conversation's private one (server/workspace/workspace.ts). Everything in
  * them was written by bots, so none of it may become OpenCode configuration. */
 export function sagaxOwnsWorkingFolder(cwd: string): boolean {
   return [join(DATA_DIR, "workspaces"), join(DATA_DIR, "task-workspaces")].some((root) =>

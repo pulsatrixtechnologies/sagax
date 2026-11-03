@@ -141,7 +141,7 @@ export function buildSystemPrompt(
   extraVolatile?: ReadonlySet<string>,
 ): { text: string; sections: PromptSection[]; stable: string; volatile: string; volatileSections: Array<{ id: string; text: string }> } {
   const isVolatile = (id: string) => VOLATILE_SECTIONS.has(id) || extraVolatile?.has(id) === true;
-  // RULES.md (server/workspace-files.ts) rides right after the soul and
+  // RULES.md (server/workspace/workspace-files.ts) rides right after the soul and
   // before everything else, wherever a call site lists it: hard constraints
   // belong next to the standing instructions, ahead of memory.
   const ordered: PromptPart[] = [

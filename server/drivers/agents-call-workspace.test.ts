@@ -1,7 +1,7 @@
 // The bot's workspace tools as the model calls them: rules_update,
 // docs_update, workspace_read, workspace_search. The proxy validates the
 // shape, sends the internal route exactly what it needs, and words the
-// reply; the routes and their guard rails are in server/workspace-files.test.ts.
+// reply; the routes and their guard rails are in server/workspace/workspace-files.test.ts.
 import { describe, expect, it } from "vitest";
 import { callTool, type ToolCallContext } from "./agents-call.ts";
 

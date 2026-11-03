@@ -11,7 +11,7 @@ import { createBotSkillUploadRoutes } from "../routes/bot-skill-upload.ts";
 import { PASS } from "../routes/table.ts";
 import { readSkillUpload } from "./skill-upload.ts";
 import { installSkill, listSkills } from "./skills.ts";
-import { ensureWorkspace, workspaceDir } from "../workspace.ts";
+import { ensureWorkspace, workspaceDir } from "../workspace/workspace.ts";
 import { ZipWriter } from "../zip.ts";
 
 const skillMd = (name: string, description = `Does ${name}.`) => `---\nname: ${name}\ndescription: ${description}\n---\n\n# ${name}\n\nSteps.\n`;

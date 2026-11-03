@@ -132,7 +132,7 @@ export interface BotCapabilities {
 
 export const CAPABILITIES_PATH = (botId: string) => `/api/bots/${encodeURIComponent(botId)}/capabilities`;
 
-/** Engines with no local folder of their own (server/workspace.ts
+/** Engines with no local folder of their own (server/workspace/workspace.ts
  * supportsWorkspaceFiles): API engines, whose turn is a chat request. They
  * have no native file tools. Their chat request always receives whole
  * instructions within each capability's visible prompt budget (say then

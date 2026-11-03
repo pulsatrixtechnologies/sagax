@@ -1,12 +1,12 @@
 // Create, upload, rename, move and delete inside a bot's workspace
-// (server/workspace-manage.ts), with path safety and core-file guards.
+// (server/workspace/workspace-manage.ts), with path safety and core-file guards.
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { DATA_DIR } from "./config.ts";
-import { closeMessageDb } from "./messages/message-db.ts";
-import { flushMemoryJournal, readMemoryJournal, resetMemoryJournalState } from "./memory/memory-journal.ts";
+import { DATA_DIR } from "../config.ts";
+import { closeMessageDb } from "../messages/message-db.ts";
+import { flushMemoryJournal, readMemoryJournal, resetMemoryJournalState } from "../memory/memory-journal.ts";
 import {
   CORE_WORKSPACE_FILES,
   WORKSPACE_UPLOAD_MAX_BYTES,

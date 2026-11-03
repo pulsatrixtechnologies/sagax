@@ -457,7 +457,7 @@ function currentDocs(botId: string): Map<string, string> {
   const baseline = baselines.get(botId);
   let stats = baselineStats.get(botId);
   if (!stats) baselineStats.set(botId, (stats = new Map()));
-  // RULES.md and docs/ are journaled like memory (server/workspace-files.ts)
+  // RULES.md and docs/ are journaled like memory (server/workspace/workspace-files.ts)
   for (const path of [MEMORY_INDEX, ...overview.topics.map((t) => t.path), ...overview.logs.map((l) => l.path), ...workspaceDocPaths(botId)]) {
     let stat: { mtimeMs: number; bytes: number } | undefined;
     try {

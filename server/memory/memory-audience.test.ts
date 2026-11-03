@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { memoryMayShow, memoryReadersOf, readersToken, withoutWiderAudience } from "./memory-audience.ts";
 import { lineFactIdentity, parseMemoryEntries } from "./memory-entries.ts";
 import { closeMessageDb } from "../messages/message-db.ts";
-import { ensureWorkspace, loadMemory, memoryEntry, memorySystemPrompt, updateMemory, WORKSPACES_DIR } from "../workspace.ts";
+import { ensureWorkspace, loadMemory, memoryEntry, memorySystemPrompt, updateMemory, WORKSPACES_DIR } from "../workspace/workspace.ts";
 
 const BOT = "bot-memory-audience";
 

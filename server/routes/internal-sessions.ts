@@ -28,7 +28,7 @@ import {
   stageSkillWrite,
 } from "../skills/skills.ts";
 import { queuedThreadPosition } from "../turns/steer-queue.ts";
-import { searchMemoryFiles } from "../workspace.ts";
+import { searchMemoryFiles } from "../workspace/workspace.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 

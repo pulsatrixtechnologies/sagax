@@ -76,7 +76,7 @@ import { cleanBotGrants, cleanBotPerspicax, type BotRecord, type Message, type S
 import type { WebhookTrigger } from "./webhooks.ts";
 import { TRIGGER_SOURCES, type TriggerSourceConfig } from "../shared/trigger-sources.ts";
 import { storedTeamMemorySharing } from "../shared/team-memory-sharing.ts";
-import { syncMemoryIndex, workspaceDir } from "./workspace.ts";
+import { syncMemoryIndex, workspaceDir } from "./workspace/workspace.ts";
 import { ZipError, ZipReader, ZipWriter } from "./zip.ts";
 
 export class BotZipError extends Error {

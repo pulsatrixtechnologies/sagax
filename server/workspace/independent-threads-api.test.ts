@@ -6,12 +6,12 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { claudeLaunchLevel } from "./testing/claude-level.ts";
+import { claudeLaunchLevel } from "../testing/claude-level.ts";
 
-import { launchVerificationServer, runControlOmb, type VerificationServer } from "../scripts/control-omb.ts";
-import { handleToolCall, request } from "../scripts/mcp-server.ts";
-import { readHandoffs } from "./testing/handoff-rows.ts";
-import { handDesktopComputer } from "./testing/desktop-computer.ts";
+import { launchVerificationServer, runControlOmb, type VerificationServer } from "../../scripts/control-omb.ts";
+import { handleToolCall, request } from "../../scripts/mcp-server.ts";
+import { readHandoffs } from "../testing/handoff-rows.ts";
+import { handDesktopComputer } from "../testing/desktop-computer.ts";
 import { memoryDate } from "./workspace.ts";
 
 // Drives a fixed Works on through the HTTP API (scripts/control-omb.ts passes

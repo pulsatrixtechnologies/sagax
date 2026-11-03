@@ -15,10 +15,10 @@
 import { lstatSync, readdirSync, realpathSync, statSync, type Stats } from "node:fs";
 import { dirname, join, sep } from "node:path";
 
-import { readAtRestSync } from "./encryption/content-at-rest.ts";
-import { READABLE_HIDDEN_SEGMENTS } from "../shared/readable-hidden.ts";
+import { readAtRestSync } from "../encryption/content-at-rest.ts";
+import { READABLE_HIDDEN_SEGMENTS } from "../../shared/readable-hidden.ts";
 
-import { RULE_SETS_DIR, RULES_FILE, RULES_MAX_BYTES, RULES_MAX_LINES, effectiveRulesText, listRuleSets } from "./rule-sets.ts";
+import { RULE_SETS_DIR, RULES_FILE, RULES_MAX_BYTES, RULES_MAX_LINES, effectiveRulesText, listRuleSets } from "../rule-sets.ts";
 import {
   DOCS_DIR,
   MEMORY_MAX_BYTES,
@@ -46,7 +46,7 @@ export {
   rulesOverBudget,
   rulesSystemPrompt,
   type LoadedRules,
-} from "./rule-sets.ts";
+} from "../rule-sets.ts";
 /** How many documents the per-turn index names; the rest are counted. */
 export const DOCS_INDEX_MAX = 20;
 const DOC_SUMMARY_MAX = 120;

@@ -14,8 +14,8 @@
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { DATA_DIR } from "./config.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { DATA_DIR } from "../config.ts";
 
 export const USAGE_DIR = join(DATA_DIR, "workspace-usage");
 const BOT_ID = /^[\w-]{1,128}$/;

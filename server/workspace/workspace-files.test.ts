@@ -7,12 +7,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { DATA_DIR } from "./config.ts";
-import { beginMemoryTurn, endMemoryTurn, flushMemoryJournal, readMemoryJournal, resetMemoryJournalState } from "./memory/memory-journal.ts";
-import { closeMessageDb } from "./messages/message-db.ts";
-import { createBotWorkspaceRoutes } from "./routes/bot-workspace.ts";
-import { PASS } from "./routes/table.ts";
-import { buildSystemPrompt } from "./system-prompt.ts";
+import { DATA_DIR } from "../config.ts";
+import { beginMemoryTurn, endMemoryTurn, flushMemoryJournal, readMemoryJournal, resetMemoryJournalState } from "../memory/memory-journal.ts";
+import { closeMessageDb } from "../messages/message-db.ts";
+import { createBotWorkspaceRoutes } from "../routes/bot-workspace.ts";
+import { PASS } from "../routes/table.ts";
+import { buildSystemPrompt } from "../system-prompt.ts";
 import {
   DOCS_INDEX_MAX,
   RULES_MAX_BYTES,

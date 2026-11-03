@@ -27,7 +27,7 @@ import {
 import { ATTACHMENTS_DIR } from "../../attachments.ts";
 import { OPENCODE_PROVIDER_ENV } from "../../config.ts";
 import { hostedWorkspaceConfigured } from "../../enterprise.ts";
-import { TASK_WORKSPACES_DIR, workspaceDir } from "../../workspace.ts";
+import { TASK_WORKSPACES_DIR, workspaceDir } from "../../workspace/workspace.ts";
 import type { ModelCatalog, ProviderInstance, SendTurnInput } from "../../contracts.ts";
 
 const FAKE_CLI = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "testing", "fake-acp-cli.ts");

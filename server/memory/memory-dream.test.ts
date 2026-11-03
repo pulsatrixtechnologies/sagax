@@ -12,7 +12,7 @@ import { procedureLine, procedureSignal, recordProcedure, resetProcedureSignals 
 import { readMemoryDoc } from "./memory-store.ts";
 import { createMemoryUpkeep, type UpkeepBot } from "./memory-upkeep.ts";
 import { closeMessageDb } from "../messages/message-db.ts";
-import { loadMemory, readMemoryFile, readMemoryTopic, writeMemoryFile, writeMemoryTopic, WORKSPACES_DIR } from "../workspace.ts";
+import { loadMemory, readMemoryFile, readMemoryTopic, writeMemoryFile, writeMemoryTopic, WORKSPACES_DIR } from "../workspace/workspace.ts";
 
 const TODAY = "2026-10-27";
 const BOT: UpkeepBot = { id: "bot-dream-pass", name: "Note", memoryUpkeep: true };

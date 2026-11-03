@@ -5,9 +5,9 @@
 import { rmSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { DATA_DIR } from "./config.ts";
-import { Store } from "./store.ts";
-import { autoOnlyDestination } from "./surface.ts";
+import { DATA_DIR } from "../config.ts";
+import { Store } from "../store.ts";
+import { autoOnlyDestination } from "../surface.ts";
 
 describe("a Works on from a request", () => {
   it("keeps this computer, the cloud computer and Off, and reads the rest as Auto", () => {

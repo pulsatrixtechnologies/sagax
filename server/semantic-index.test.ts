@@ -13,7 +13,7 @@ import { cosine, embeddingsAddress, HASHED_MIN_SCORE, hashedVector } from "./sem
 import { LocalSemanticIndex, MESSAGE_PASSAGE_CHARS, MESSAGE_PASSAGES, memoryLines, messagePassages, semanticIndexFile } from "./semantic-index.ts";
 import { setSemanticIndex } from "./semantic-recall.ts";
 import type { Message } from "./store.ts";
-import { WORKSPACES_DIR, writeMemoryTopic } from "./workspace.ts";
+import { WORKSPACES_DIR, writeMemoryTopic } from "./workspace/workspace.ts";
 
 const BOT = "bot-semantic-test";
 const msg = (id: string, text: string, at = 1_000): Message => ({ id, role: "user", kind: "text", text, at });

@@ -11,7 +11,7 @@ as (a portable Bot Profile, a real connections surface, and a machine that stays
 **Why these seven and not the community's list verbatim:** the community proposal asks
 for a multi-engine architecture, harness-level memory, engine-independent learning, and
 a vendor-neutral control plane. Those exist today — `server/contracts.ts` makes the model
-a data value rather than a service binding, `server/workspace.ts` owns memory outside any
+a data value rather than a service binding, `server/workspace/workspace.ts` owns memory outside any
 engine, `server/skills/skills.ts` owns skills, and a mid-thread engine switch already replays the
 thread into the new engine (`server/branching.test.ts:253`). The gap is packaging and
 surface area, not architecture. Every plan below is scoped to that gap.

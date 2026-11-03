@@ -23,7 +23,7 @@ See [the roadmap](2026-08-31-00-control-plane-roadmap.md#global-constraints). Lo
 
 ## Background
 
-`server/workspace.ts` gives every bot a `MEMORY.md` and a `memory/` directory, budgeted
+`server/workspace/workspace.ts` gives every bot a `MEMORY.md` and a `memory/` directory, budgeted
 into the system prompt at 200 lines / 24_000 bytes and readable by the agent's own file
 tools. It is genuinely engine-independent — the community's "learning survives an engine
 switch" ask is already satisfied.
@@ -38,8 +38,8 @@ writes down something wrong on Tuesday is still acting on it in March.
 
 - Create `server/memory-proposals.ts`: the proposal store, diff computation, and apply/reject.
 - Create `server/memory-proposals.test.ts`.
-- Modify `server/workspace.ts`: typed entry parsing and a structured write path.
-- Modify `server/workspace.test.ts`.
+- Modify `server/workspace/workspace.ts`: typed entry parsing and a structured write path.
+- Modify `server/workspace/workspace.test.ts`.
 - Modify `server/drivers/agents-proxy.ts`: the `propose_memory` tool.
 - Modify `server/drivers/agents-proxy.test.ts`.
 - Modify `server/index.ts`: proposal endpoints and card wiring.
@@ -51,7 +51,7 @@ writes down something wrong on Tuesday is still acting on it in March.
 ### Task 1: Typed memory entries
 
 **Files:**
-- Modify: `server/workspace.ts`, `server/workspace.test.ts`
+- Modify: `server/workspace/workspace.ts`, `server/workspace/workspace.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -68,7 +68,7 @@ writes down something wrong on Tuesday is still acting on it in March.
 - [ ] Write failing round-trip tests: `renderMemoryEntries(parseMemoryEntries(md))` is stable for a document with all four sections, and stable for a document with only one.
 - [ ] Write a failing test that free-form Markdown with no recognized headings parses as a list of `fact` entries rather than throwing — every existing `MEMORY.md` in the wild predates this format and must keep working.
 - [ ] Write a failing test that an unknown heading's content is preserved verbatim through a round trip. Losing a person's hand-written section because it did not match a heading is unacceptable.
-- [ ] Run `pnpm vitest run server/workspace.test.ts`; expect FAIL.
+- [ ] Run `pnpm vitest run server/workspace/workspace.test.ts`; expect FAIL.
 - [ ] Implement. Leave `loadMemory`, `readMemoryFile`, `writeMemoryFile`, and `memorySystemPrompt` untouched — they operate on the raw text and must keep doing so.
 - [ ] Run; expect PASS.
 - [ ] Commit `feat(memory): typed entry parsing over the existing markdown`.
@@ -118,7 +118,7 @@ writes down something wrong on Tuesday is still acting on it in March.
 - [ ] Write a failing test that the tool's result tells the model the proposal is **pending a person** and that it must not assume the memory is written. A tool that returns "ok" teaches the model to act on memory it does not have.
 - [ ] Write a failing API test that `/api/internal/propose-memory` rejects a `botId` that does not match the calling bridge's bot — the internal routes are loopback but not unauthenticated by convention, and a bot proposing into a peer's memory is a real hazard.
 - [ ] Run; expect FAIL.
-- [ ] Implement. Extend the system-prompt guidance in `memorySystemPrompt` (`server/workspace.ts:155`) to tell the bot to propose rather than write directly when the tool is available, and to keep writing directly when it is not — engines without the agents MCP must not lose memory entirely.
+- [ ] Implement. Extend the system-prompt guidance in `memorySystemPrompt` (`server/workspace/workspace.ts:155`) to tell the bot to propose rather than write directly when the tool is available, and to keep writing directly when it is not — engines without the agents MCP must not lose memory entirely.
 - [ ] Run; expect PASS.
 - [ ] Commit `feat(memory): propose_memory tool on the agents proxy`.
 

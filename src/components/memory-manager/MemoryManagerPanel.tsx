@@ -170,14 +170,22 @@ async function pooled<T>(items: T[], limit: number, work: (item: T) => Promise<v
 
 // The rail's selection scopes the four views and lasts across a reload
 // (JC 2026-11-03), with the tab it was on.
+// 2026-11-03 (audit N-5): one key per person, so on a shared browser the
+// next person never inherits a selection (and an empty view): a person with
+// nothing kept gets All. Without a signed-in person (solo, one person per
+// machine) the plain key stays.
 const SCOPE_KEY = "sagax.memory.scope";
+export function memoryScopeKey(principalId: string | null | undefined): string {
+  const id = principalId?.trim();
+  return id ? `${SCOPE_KEY}:${id}` : SCOPE_KEY;
+}
 const VIEWS: readonly View[] = ["notes", "map", "tags", "quality"];
 const LIST_PLACES = ["all", "teams", "pinned", "recent", "review", "archived", "trash", "collections"];
 
-function readScope(): { view: View; place: Place } {
+export function readMemoryScope(key: string): { view: View; place: Place } {
   const fallback = { view: "notes" as View, place: { kind: "all" } as Place };
   try {
-    const value = JSON.parse(window.localStorage.getItem(SCOPE_KEY) ?? "null") as { view?: unknown; place?: { kind?: unknown; tier?: unknown; folder?: unknown } } | null;
+    const value = JSON.parse(window.localStorage.getItem(key) ?? "null") as { view?: unknown; place?: { kind?: unknown; tier?: unknown; folder?: unknown } } | null;
     if (!value || typeof value !== "object") return fallback;
     const view = VIEWS.includes(value.view as View) ? value.view as View : "notes";
     const raw = value.place;
@@ -193,21 +201,31 @@ function readScope(): { view: View; place: Place } {
   }
 }
 
-function writeScope(view: View, place: Place) {
-  try { window.localStorage.setItem(SCOPE_KEY, JSON.stringify({ view, place })); } catch { /* a private window: the scope lasts for this page */ }
+export function writeMemoryScope(key: string, view: View, place: Place) {
+  try { window.localStorage.setItem(key, JSON.stringify({ view, place })); } catch { /* a private window: the scope lasts for this page */ }
 }
 
 /** Full-page Memory (main column). */
 export function MemoryManagerPanel() {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   const { dragProps, noDragStyle, controlsShiftStyle } = useCaptionChrome();
   const close = useCallback(() => dispatch({ type: "toggleMemoryManager", open: false }), [dispatch]);
   const mac = useMemo(() => isMacPlatform(), []);
 
-  const [initialScope] = useState(readScope);
+  const scopeKey = memoryScopeKey(state.config?.viewer?.principalId);
+  const [initialScope] = useState(() => readMemoryScope(scopeKey));
   const [view, setView] = useState<View>(initialScope.view);
   const [place, setPlace] = useState<Place>(initialScope.place);
-  useEffect(() => { writeScope(view, place); }, [view, place]);
+  // the person became known (or changed): their own selection, else All
+  const scopeKeyRef = useRef(scopeKey);
+  useEffect(() => {
+    if (scopeKeyRef.current === scopeKey) return;
+    scopeKeyRef.current = scopeKey;
+    const mine = readMemoryScope(scopeKey);
+    setView(mine.view);
+    setPlace(mine.place);
+  }, [scopeKey]);
+  useEffect(() => { writeMemoryScope(scopeKeyRef.current, view, place); }, [view, place]);
   const [screen, setScreen] = useState<Screen>({ kind: "list" });
   const [sources, setSources] = useState<MemoryManagerSource[] | null>(null);
   const [overviews, setOverviews] = useState<Record<string, MemoryBrowse>>({});

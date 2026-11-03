@@ -5,7 +5,7 @@ import XCTest
 final class MemoryFoldersTests: XCTestCase {
     private let bots = [
         LinkBot(id: "ember", name: "Ember", color: "orange", section: ""),
-        LinkBot(id: "kat", name: "Katarina", section: "built-in"),
+        LinkBot(id: "kat", name: "Osprey", section: "built-in"),
         LinkBot(id: "old", name: "Old", section: "", hidden: true),
     ]
     private let routines = [LinkRoutine(name: "Morning tidy", botId: "ember"), LinkRoutine(name: "Report", botId: "kat")]
@@ -26,7 +26,7 @@ final class MemoryFoldersTests: XCTestCase {
     }
 
     func testLinksAPerspicaxSagaxBotFolderToThatBotWhileItExists() {
-        XCTAssertEqual(MemoryFolders.botNames(MemoryFolders.pxFolderLink("sagax-katarina", bots: bots, routines: routines)), "Katarina")
+        XCTAssertEqual(MemoryFolders.botNames(MemoryFolders.pxFolderLink("sagax-osprey", bots: bots, routines: routines)), "Osprey")
         XCTAssertFalse(MemoryFolders.isLinked(MemoryFolders.pxFolderLink("sagax-old", bots: bots, routines: routines)))
         XCTAssertFalse(MemoryFolders.isLinked(MemoryFolders.pxFolderLink("notes", bots: bots, routines: routines)))
     }
@@ -34,13 +34,13 @@ final class MemoryFoldersTests: XCTestCase {
     func testSaysWhichBotsReadATeamSectionsFoldersNoneOwningThem() {
         let link = MemoryFolders.teamFolderLink(section: "built-in", bots: bots)
         XCTAssertFalse(MemoryFolders.isLinked(link))
-        XCTAssertEqual(link.readBy, ["Katarina"])
+        XCTAssertEqual(link.readBy, ["Osprey"])
         XCTAssertEqual(MemoryFolders.teamFolderLink(section: "", bots: bots).readBy, ["Ember"])
     }
 
     func testDeleteFolderIsGreyedWithTheReason() {
-        let linked = MemoryFolders.pxFolderLink("sagax-katarina", bots: bots, routines: routines)
-        XCTAssertEqual(MemoryFolders.deleteBlock(link: linked, isTeam: false, mayWrite: true), .linked(bots: "Katarina"))
+        let linked = MemoryFolders.pxFolderLink("sagax-osprey", bots: bots, routines: routines)
+        XCTAssertEqual(MemoryFolders.deleteBlock(link: linked, isTeam: false, mayWrite: true), .linked(bots: "Osprey"))
         XCTAssertEqual(MemoryFolders.deleteBlock(link: .unlinked, isTeam: true, mayWrite: true), .teamKind)
         XCTAssertEqual(MemoryFolders.deleteBlock(link: .unlinked, isTeam: false, mayWrite: false), .readOnly)
         XCTAssertNil(MemoryFolders.deleteBlock(link: .unlinked, isTeam: false, mayWrite: true))

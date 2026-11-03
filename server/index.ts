@@ -10574,6 +10574,12 @@ if (!cfg.identityMigratedAt) { cfg.identityMigratedAt = Date.now(); saveConfig({
 let threadsWithActiveCoordination = (): ReadonlySet<string> => new Set<string>();
 /** Prompt-cache keep-warm status per thread; bound once keep-warm exists. */
 let cacheKeepWarmStatus = (_threadId: string): KeepWarmStatus | undefined => undefined;
+/** Threads whose settled turn has its one continuation scheduled
+ * (scheduleUnfinishedTurn). The store has them idle, so nothing on the
+ * server waits on them; a client sees them working until the continuation
+ * starts or is dropped, so its wait does not settle between the two turns. */
+const continuationHolds = new Set<string>();
+const HELD_ACTIVITY = { busy: true, activity: "working" } as const;
 /** One thread as a client sees it. `botModel` is its bot's model: a thread
  * without a model of its own runs on it (toWireTask). */
 const wireTask = (task: TaskRecord, botModel: ModelSelection, coordinated: ReadonlySet<string> = threadsWithActiveCoordination()): WireTask => {
@@ -10582,7 +10588,8 @@ const wireTask = (task: TaskRecord, botModel: ModelSelection, coordinated: Reado
   // time and survives reads; only a wake event in the store clears it.
   const { snoozedUntil, ...base } = toWireTask(task, botModel);
   const keepWarm = cacheKeepWarmStatus(task.threadId);
-  const wired = { ...base, waitingForTeammates: coordinated.has(task.threadId) && !task.busy, ...(keepWarm ? { cacheKeepWarm: keepWarm } : {}) };
+  const wired = { ...base, waitingForTeammates: coordinated.has(task.threadId) && !task.busy, ...(keepWarm ? { cacheKeepWarm: keepWarm } : {}),
+    ...(!task.busy && continuationHolds.has(task.threadId) ? HELD_ACTIVITY : {}) };
   const asleep = snoozedUntil === 0 || (snoozedUntil !== undefined && snoozedUntil > Date.now());
   return asleep ? { ...wired, snoozedUntil } : wired;
 };
@@ -10612,6 +10619,9 @@ const wireBot = (bot: BotRecord): WireBot => {
   if (shown) {
     rest.activity = shown.activity;
     rest.busy = shown.busy;
+  }
+  if (!rest.busy && allTasks?.some((task) => continuationHolds.has(task.threadId) && (task.hidden !== true || task.threadId === bot.threadId))) {
+    Object.assign(rest, HELD_ACTIVITY);
   }
   // An elevated selection is inert until the desktop confirms its exact
   // private reply. Every ordinary client sees the effective Ask state during
@@ -21915,9 +21925,16 @@ function scheduleUnfinishedTurn(botId: string, threadId: string, turnId: string 
     });
     if (!kind || !person) return;
     unfinishedTurns.mark(threadId, person.id);
+    continuationHolds.add(threadId);
+    const release = () => {
+      if (!continuationHolds.delete(threadId)) return;
+      const held = store.bot(botId);
+      if (held) broadcast({ kind: "bot", bot: wireBot(held) });
+    };
     appendStep(DATA_DIR, { ts: new Date().toISOString(), botId, threadId, tool: "sagax.unfinished_turn", ok: true, class: "guard", code: `unfinished_${kind}` });
     console.log(`[unfinished-turn] thread=${threadId.slice(0, 8)} kind=${kind}: continuing once`);
     const timer = setTimeout(() => {
+      let started = false;
       try {
         // The person wrote, stopped or another turn took the thread: theirs leads.
         const latest = store.activePath(threadId).findLast((message) => message.role === "user" && message.kind === "text");
@@ -21931,10 +21948,14 @@ function scheduleUnfinishedTurn(botId: string, threadId: string, turnId: string 
           return;
         }
         const speaker = turnSpeakers.get(threadId);
+        started = true;
         void startTurn(botId, unfinishedTurnPrompt(kind), { threadId, cardContinuation: true, ...(speaker ? { speaker } : {}) })
-          .catch((error) => console.warn(`[unfinished-turn] thread ${threadId}: the continuation could not start: ${error instanceof Error ? error.message : String(error)}`));
+          .catch((error) => console.warn(`[unfinished-turn] thread ${threadId}: the continuation could not start: ${error instanceof Error ? error.message : String(error)}`))
+          .finally(release);
       } catch (error) {
         console.warn("[unfinished-turn] continuation failed", error);
+      } finally {
+        if (!started) release();
       }
     }, UNFINISHED_TURN_DELAY_MS);
     timer.unref?.();
@@ -44071,7 +44092,22 @@ async function runPreAuth(req: IncomingMessage, res: ServerResponse, url: URL, p
 }
 
 /** #1388 wave 4 step 2: resolveRequestAuth, session/idp gates, visibility and request scopes. */
-async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL, path: string, method: string, state: { m?: RegExpMatchArray | null; releaseWorkspaceRequest?: () => void }): Promise<RequestAuth | null> {
+/** The request-scoped stores authenticate sets. enterWith after an await
+ * inside authenticate does not reach its caller's frame, so handleRequest
+ * enters them again from here before any route runs (enterRequestScopes). */
+type RequestScopes = {
+  viewer: string | null;
+  delegated: boolean;
+  continuation: ReturnType<typeof takeOwnerContinuation>;
+  actConfirmed: ReturnType<typeof takeActConfirmation> | null;
+};
+function enterRequestScopes(scopes: RequestScopes): void {
+  threadViewerScope.enterWith(scopes.viewer);
+  delegatedRequestScope.enterWith(scopes.delegated);
+  continuationThreadScope.enterWith(scopes.continuation);
+  actConfirmedScope.enterWith(scopes.actConfirmed);
+}
+async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL, path: string, method: string, state: { m?: RegExpMatchArray | null; releaseWorkspaceRequest?: () => void; scopes?: RequestScopes }): Promise<RequestAuth | null> {
   const gate = resolveRequestAuth(req, {
     sessions,
     cookieName: SESSION_COOKIE,
@@ -44270,7 +44306,9 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
   // without the request read who is asking from here. Set for every
   // request, so a kept-alive connection never inherits one.
   const scopedViewerId = serviceThreadViewer(serviceViewerClosed(auth, path, privateThreads()), viewerId);
-  threadViewerScope.enterWith(scopedViewerId ?? null);
+  const scopes: RequestScopes = { viewer: scopedViewerId ?? null, delegated: false, continuation: null, actConfirmed: null };
+  state.scopes = scopes;
+  threadViewerScope.enterWith(scopes.viewer);
   // On someone's behalf (act, an AI client): a confidential thread is not
   // there. Named in the path or query: 404; in an answer: cut out, and an
   // answer that still names one is withheld.
@@ -44283,14 +44321,17 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
   const continuation = takeOwnerContinuation(typeof continuationHeader === "string" ? continuationHeader : undefined, method, path);
   const delegated = !continuation && ((auth.kind === "session" && auth.session.ephemeral === true)
     || secureTokenMatch(typeof onBehalfHeader === "string" ? onBehalfHeader : undefined, ON_BEHALF_SECRET));
+  scopes.delegated = delegated;
+  scopes.continuation = continuation;
   delegatedRequestScope.enterWith(delegated);
   continuationThreadScope.enterWith(continuation);
   const confirmedHeader = req.headers[ACT_CONFIRMED_HEADER];
   // only this server's own replay carries it: a bot act copy of the
   // person's session, or the operator through the desktop owner header
-  actConfirmedScope.enterWith((auth.kind === "session" && isBotActSession(auth.session)) || (auth.kind === "loopback" && auth.trust !== "service")
+  scopes.actConfirmed = (auth.kind === "session" && isBotActSession(auth.session)) || (auth.kind === "loopback" && auth.trust !== "service")
     ? takeActConfirmation(typeof confirmedHeader === "string" ? confirmedHeader : undefined, method, path)
-    : null);
+    : null;
+  actConfirmedScope.enterWith(scopes.actConfirmed);
   if (delegated) {
     const confidentialIds = confidentialThreadIds();
     if (confidentialIds.size) {
@@ -47160,12 +47201,14 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
   if (!parsed) return;
   const { url, path, method } = parsed;
   /** Shared scratch for named handleRequest steps (#1388 wave 4 step 2). */
-  const state: { m: RegExpMatchArray | null; releaseWorkspaceRequest?: () => void } = { m: null };
+  const state: { m: RegExpMatchArray | null; releaseWorkspaceRequest?: () => void; scopes?: RequestScopes } = { m: null };
   try {
     if (await originGates(req, res, url, path, method)) return;
     if (await runPreAuth(req, res, url, path, method)) return;
     const auth = await authenticate(req, res, url, path, method, state);
     if (!auth) return;
+    // Set for every request, so a kept-alive connection never inherits one.
+    enterRequestScopes(state.scopes ?? { viewer: null, delegated: false, continuation: null, actConfirmed: null });
     if (await runRoutes(req, res, url, path, method, auth)) return;
     if (await runInternal(req, res, url, path, method, auth)) return;
     if (await fallback(req, res, url, path, method, auth, state)) return;

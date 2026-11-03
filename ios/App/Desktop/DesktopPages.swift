@@ -451,7 +451,7 @@ extension IPadParityScreen {
         switch self {
         case .routinesCalendar, .routinesList, .routinesLogs, .routineEdit: .automations
         case .teamMap: .teamMap
-        case .memoryPage, .memoryMap, .memoryTags, .memoryQuality: .memory
+        case .memoryPage, .memoryMap, .memoryTags, .memoryQuality, .memoryMapRadial, .memoryMapColumns: .memory
         default: nil
         }
     }

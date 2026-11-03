@@ -23,6 +23,8 @@ enum DesktopIcon: String, CaseIterable {
     case wand
     // the palette's bot rows (lucide Bot)
     case bot
+    // Automations header (List, Filters), the grouped list's folders, the bot panel's Suggestions
+    case list, slidersHorizontal, folder, sparkles, refresh
 
     /// Path data in the 24 pt viewBox.
     var paths: [String] {
@@ -129,6 +131,15 @@ enum DesktopIcon: String, CaseIterable {
             ["M16 14v2.2l1.6 1", "M16 2v4", "M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5", "M3 10h5", "M8 2v4", Self.circle(16, 16, 6)]
         case .fileText:
             ["M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z", "M14 2v4a2 2 0 0 0 2 2h4", "M10 9H8", "M16 13H8", "M16 17H8"]
+        case .list: ["M3 5h.01", "M3 12h.01", "M3 19h.01", "M8 5h13", "M8 12h13", "M8 19h13"]
+        case .slidersHorizontal:
+            ["M10 5H3", "M12 19H3", "M14 3v4", "M16 17v4", "M21 12h-9", "M21 19h-5", "M21 5h-7", "M8 10v4", "M8 12H3"]
+        case .refresh:
+            ["M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8", "M21 3v5h-5", "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16", "M8 16H3v5"]
+        case .folder: ["M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"]
+        case .sparkles:
+            ["M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z",
+             "M20 3v4", "M22 5h-4", "M4 17v2", "M5 18H3"]
         case .eye:
             ["M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0",
              Self.circle(12, 12, 3)]
@@ -189,6 +200,11 @@ enum DesktopIcon: String, CaseIterable {
         case .arrowLeftRight: "arrow.left.arrow.right"
         case .arrowUp: "arrow.up"
         case .arrowDown: "arrow.down"
+        case .list: "list.bullet"
+        case .slidersHorizontal: "slider.horizontal.3"
+        case .folder: "folder"
+        case .sparkles: "sparkles"
+        case .refresh: "arrow.clockwise"
         }
     }
 

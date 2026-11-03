@@ -19,8 +19,31 @@ struct DesktopBrainMap: View {
     /// Every tier the person reads, empty ones too (the chips show 0).
     let sources: [MemoryManagerSource]
 
+    /// The preview of a note chosen on the map (the desktop opens it in the
+    /// notes view on a double click).
+    var preview: ((DesktopMemoryPage.Entry) -> Void)?
+
+    enum Layout: String, CaseIterable { case graph, brain, columns }
+
     @State private var query = ""
     @State private var focus = "all"
+    @State private var layout: Layout = DesktopBrainMap.parityLayout
+    @State private var tag = ""
+    /// The timeline: 0...60, 60 is today.
+    @State private var step = 60
+    @State private var playing = false
+    private static let steps = 60
+
+    private static var parityLayout: Layout {
+        #if DEBUG
+        switch ParityLaunch.current?.iPadScreen {
+        case .memoryMapRadial?: return .brain
+        case .memoryMapColumns?: return .columns
+        default: break
+        }
+        #endif
+        return .graph
+    }
     @State private var zoom: Double = 1
     @State private var pinch: Double = 1
     @State private var pan: CGSize = .zero
@@ -50,96 +73,348 @@ struct DesktopBrainMap: View {
         return out
     }
 
-    private func brain(_ tiers: [MapTier]) -> MemoryBrain.Brain {
+    private func brain(_ tiers: [MapTier], hidden: Set<String>? = nil) -> MemoryBrain.Brain {
         let shown = focus == "all" ? tiers : tiers.filter { $0.id == focus }
         return MemoryBrain.build(tiers: shown.map { tier in
-            MemoryBrain.Tier(scope: tier.id, name: tier.name, notes: tier.entries.map { entry in
+            MemoryBrain.Tier(scope: tier.id, name: tier.name, notes: tier.entries.filter { !(hidden?.contains($0.id) ?? false) }.map { entry in
                 MemoryBrain.Note(id: entry.id, title: entry.row.title, topic: tier.topic(entry),
                                  tags: entry.row.tags ?? [], updated: entry.row.updatedAt)
             })
         }, rootLabel: String(localized: "All memory"), untitled: String(localized: "Untitled"))
     }
 
+    private var shownEntries: [DesktopMemoryPage.Entry] {
+        focus == "all" ? entries : (tiers.first { $0.id == focus }?.entries ?? [])
+    }
+
+    /// The notes the timeline's cursor has not reached yet.
+    private var hidden: Set<String>? {
+        guard step < Self.steps else { return nil }
+        let dates = shownEntries.compactMap(\.row.updatedAt)
+        let now = Date().timeIntervalSince1970 * 1000
+        let start = dates.min() ?? now
+        let cursor = start + (now - start) * Double(step) / Double(Self.steps)
+        return Set(shownEntries.filter { ($0.row.updatedAt ?? 0) > cursor }.map(\.id))
+    }
+
+    private var cursorDate: Date {
+        let dates = shownEntries.compactMap(\.row.updatedAt)
+        let now = Date().timeIntervalSince1970 * 1000
+        let start = dates.min() ?? now
+        return Date(timeIntervalSince1970: (start + (now - start) * Double(step) / Double(Self.steps)) / 1000)
+    }
+
+    /// The search and the tag: the notes they keep lit; nil, nothing dimmed.
+    private var matches: Set<String>? {
+        let words = query.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !words.isEmpty || !tag.isEmpty else { return nil }
+        return Set(shownEntries.filter { (words.isEmpty || $0.row.title.lowercased().contains(words)) && (tag.isEmpty || ($0.row.tags ?? []).contains(tag)) }.map(\.id))
+    }
+
+    private var graphNotes: [MemoryGraph.Note] {
+        tiers.flatMap { tier in
+            tier.entries.filter { _ in focus == "all" || tier.id == focus }.map { entry -> MemoryGraph.Note in
+                let folder = tier.id == "mine" ? [entry.source.name, entry.row.folder].compactMap { $0 }.joined(separator: " / ") : (entry.row.folder ?? "")
+                return MemoryGraph.Note(key: entry.id, title: entry.row.title, tier: tier.id, tierName: tier.name, folderPath: folder,
+                                        tags: entry.row.tags ?? [], body: entry.row.excerpt, path: entry.row.path, createdAt: entry.row.updatedAt)
+            }
+        }
+    }
+
     var body: some View {
         let tiers = self.tiers
-        let brain = self.brain(tiers)
+        let hidden = self.hidden
+        let brain = self.brain(tiers, hidden: hidden)
         let lit = MemoryBrain.spotlight(brain, query: query)
-        VStack(alignment: .leading, spacing: 10) {
-            // the toolbar: Find on the map, then a chip per tier
+        let shown = shownEntries
+        let tags = Array(Set(shown.flatMap { $0.row.tags ?? [] })).sorted()
+        VStack(alignment: .leading, spacing: 12) {
+            // the toolbar: Find on the map, a chip per tier, the layout, the count
             HStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    DesktopIconView(icon: .search, size: 13).foregroundStyle(theme.inkSecondary)
-                    TextField(text: $query, prompt: Text("Find on the map").foregroundColor(theme.inkSecondary)) { Text("Find on the map") }
-                        .font(theme.font(12.5))
+                HStack(spacing: 6) {
+                    DesktopIconView(icon: .search, size: 14).foregroundStyle(theme.inkSecondary)
+                    TextField(text: $query, prompt: Text("Find on the map").foregroundColor(theme.inkTertiary)) { Text("Find on the map") }
+                        .font(theme.font(13))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                 }
-                .padding(.horizontal, 10)
-                .frame(width: 220, height: 30)
-                .background(theme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        chip(id: "all", label: Text("All memory"), colour: nil, count: nil)
-                        ForEach(tiers) { tier in
-                            chip(id: tier.id, label: Text(verbatim: tier.name), colour: tier.colour, count: tier.entries.count)
-                        }
-                    }
+                .padding(.horizontal, 12)
+                .frame(width: 240, height: 32)
+                .background(theme.panel, in: Capsule())
+                .overlay(Capsule().strokeBorder(theme.hairline.opacity(0.6), lineWidth: 1))
+                chip(id: "all", label: Text("All memory"), colour: nil, count: nil)
+                ForEach(tiers) { tier in
+                    chip(id: tier.id, label: Text(verbatim: tier.name), colour: tier.colour, count: tier.entries.count)
                 }
+                layoutSwitch
+                Spacer(minLength: 0)
             }
             HStack {
                 Spacer()
-                Text("\(String(brain.notes)) notes, \(String(0)) links").font(theme.font(12)).foregroundStyle(theme.inkSecondary)
+                Text(countLine(brain: brain, shown: shown)).font(theme.font(12.5)).foregroundStyle(theme.inkSecondary).monospacedDigit()
             }
-            GeometryReader { geometry in
-                let base = MemoryBrain.fit(brain, width: geometry.size.width, height: geometry.size.height)
-                let s = base.scale * zoom * pinch
-                let tx = base.tx + pan.width + drag.width
-                let ty = base.ty + pan.height + drag.height
-                ZStack {
-                    Canvas { context, _ in
-                        draw(brain, lit: lit, colours: tiers, in: &context, s: s, tx: tx, ty: ty)
+            Group {
+                switch layout {
+                case .graph:
+                    if shown.isEmpty {
+                        empty
+                    } else {
+                        DesktopMemoryGraph(notes: graphNotes, tierColor: { id in tiers.first { $0.id == id }?.colour ?? theme.accent },
+                                           matches: matches, hidden: hidden,
+                                           onPreview: { key in if let entry = entries.first(where: { $0.id == key }) { (preview ?? open)(entry) } },
+                                           onOpen: { key in if let entry = entries.first(where: { $0.id == key }) { open(entry) } },
+                                           onAnimate: { step = 0; playing = true },
+                                           overlay: tags.isEmpty ? nil : AnyView(tagMenu(tags)))
                     }
-                    .gesture(SimultaneousGesture(
-                        MagnificationGesture().onChanged { pinch = $0 }.onEnded { zoom = min(6, max(0.3, zoom * $0)); pinch = 1 },
-                        DragGesture().onChanged { drag = $0.translation }.onEnded { pan.width += $0.translation.width; pan.height += $0.translation.height; drag = .zero }
-                    ))
-                    .simultaneousGesture(SpatialTapGesture().onEnded { value in
-                        tap(brain, at: value.location, s: s, tx: tx, ty: ty)
-                    })
-                    .accessibilityLabel(Text("Map of the memory"))
-                    if brain.notes == 0 {
-                        Text("No note on the map yet. Write the first one.").font(theme.font(13)).foregroundStyle(theme.inkSecondary)
-                    }
+                case .brain: radial(brain: brain, lit: lit, tiers: tiers, tags: tags)
+                case .columns: columns(tiers: tiers, hidden: hidden)
+                }
+            }
+            .frame(minHeight: 420)
+            if !shown.isEmpty { timeline(brain: brain, shown: shown, hidden: hidden) }
+            Text("Drag to move, scroll or pinch to zoom, press a note to open it.").font(theme.font(12)).foregroundStyle(theme.inkTertiary)
+        }
+        .padding(16)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("desktop-memory-map")
+        .task(id: playing) {
+            guard playing else { return }
+            while playing, step < Self.steps {
+                try? await Task.sleep(nanoseconds: 80_000_000)
+                step += 1
+            }
+            playing = false
+        }
+    }
+
+    private func countLine(brain: MemoryBrain.Brain, shown: [DesktopMemoryPage.Entry]) -> String {
+        if let matches { return String(localized: "\(String(matches.count)) notes found") }
+        return String(localized: "\(String(layout == .brain ? brain.notes : shown.count)) notes, \(String(0)) links")
+    }
+
+    private var empty: some View {
+        Text("No note on the map yet. Write the first one.").font(theme.font(13)).foregroundStyle(theme.inkSecondary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    /// MiniSegment: Graph, Radial, Columns.
+    private var layoutSwitch: some View {
+        HStack(spacing: 2) {
+            ForEach(Layout.allCases, id: \.self) { option in
+                Button { layout = option } label: {
+                    Text(layoutLabel(option)).font(theme.font(12, layout == option ? .medium : .regular))
+                        .foregroundStyle(layout == option ? theme.ink : theme.inkSecondary)
+                        .padding(.horizontal, 10).frame(height: 26)
+                        .background(layout == option ? theme.raised : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(layout == option ? .isSelected : [])
+                .accessibilityIdentifier("desktop-memory-map.layout.\(option.rawValue)")
+            }
+        }
+        .padding(2)
+        .accessibilityLabel(Text("Map layout"))
+    }
+
+    private func layoutLabel(_ layout: Layout) -> LocalizedStringKey {
+        switch layout {
+        case .graph: "Graph"
+        case .brain: "Radial"
+        case .columns: "Columns"
+        }
+    }
+
+    private func tagMenu(_ tags: [String]) -> some View {
+        Menu {
+            Button { tag = "" } label: { Text("All tags") }
+            ForEach(tags, id: \.self) { value in Button { tag = value } label: { Text(verbatim: value) } }
+        } label: {
+            HStack(spacing: 6) {
+                Text(tag.isEmpty ? String(localized: "All tags") : tag).font(theme.font(12.5)).foregroundStyle(theme.ink)
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 9)).foregroundStyle(theme.inkTertiary)
+            }
+            .padding(.horizontal, 10).frame(height: 32)
+            .background(theme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.6), lineWidth: 1))
+        }
+        .accessibilityLabel(Text("Tag on the map"))
+    }
+
+    /// The timeline under the map: play, the slider, "Today · n notes".
+    private func timeline(brain: MemoryBrain.Brain, shown: [DesktopMemoryPage.Entry], hidden: Set<String>?) -> some View {
+        let visible = shown.count - (hidden?.count ?? 0)
+        let when = step >= Self.steps ? String(localized: "Today") : cursorDate.formatted(date: .abbreviated, time: .omitted)
+        return HStack(spacing: 12) {
+            Button {
+                if !playing, step >= Self.steps { step = 0 }
+                playing.toggle()
+            } label: {
+                Image(systemName: playing ? "pause.fill" : "play.fill").font(.system(size: 11)).foregroundStyle(theme.ink)
+                    .frame(width: 32, height: 32).background(theme.raised, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(playing ? Text("Pause the timeline") : Text("Play the timeline"))
+            .accessibilityIdentifier("desktop-memory-map.play")
+            Slider(value: Binding(get: { Double(step) }, set: { playing = false; step = Int($0.rounded()) }), in: 0...Double(Self.steps))
+                .tint(theme.accent)
+                .accessibilityLabel(Text("Timeline"))
+            Text("\(when) · \(String(layout == .brain ? brain.notes : visible)) notes").font(theme.font(12.5)).foregroundStyle(theme.inkSecondary).monospacedDigit()
+                .fixedSize()
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
+    }
+
+    /// Radial: the console's brain (BrainMap.tsx).
+    private func radial(brain: MemoryBrain.Brain, lit: Set<Int>?, tiers: [MapTier], tags: [String]) -> some View {
+        GeometryReader { geometry in
+            let base = MemoryBrain.fit(brain, width: geometry.size.width, height: geometry.size.height)
+            let s = base.scale * zoom * pinch
+            let tx = base.tx + pan.width + drag.width
+            let ty = base.ty + pan.height + drag.height
+            ZStack(alignment: .topLeading) {
+                Canvas { context, _ in
+                    draw(brain, lit: lit, colours: tiers, in: &context, s: s, tx: tx, ty: ty)
+                }
+                .gesture(SimultaneousGesture(
+                    MagnificationGesture().onChanged { pinch = $0 }.onEnded { zoom = min(6, max(0.3, zoom * $0)); pinch = 1 },
+                    DragGesture().onChanged { drag = $0.translation }.onEnded { pan.width += $0.translation.width; pan.height += $0.translation.height; drag = .zero }
+                ))
+                .simultaneousGesture(SpatialTapGesture().onEnded { value in
+                    tap(brain, at: value.location, s: s, tx: tx, ty: ty)
+                })
+                .accessibilityLabel(Text("Map of the memory"))
+                if brain.notes == 0 {
+                    Text("No note on the map yet. Write the first one.").font(theme.font(13)).foregroundStyle(theme.inkSecondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                if !tags.isEmpty { tagMenu(tags).padding(8) }
+                HStack(alignment: .bottom, spacing: 8) {
+                    radialMinimap(brain: brain, tiers: tiers, s: s, tx: tx, ty: ty, size: geometry.size)
                     VStack(spacing: 4) {
                         zoomButton("plus") { zoom = min(6, zoom * 1.25) }
                         zoomButton("minus") { zoom = max(0.3, zoom / 1.25) }
                         zoomButton("arrow.up.left.and.arrow.down.right") { zoom = 1; pan = .zero }
                     }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 }
+                .padding(8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             }
-            .background(theme.panel.opacity(0.5))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
-            Text("Drag to move, scroll or pinch to zoom, press a note to open it.").font(theme.font(11.5)).foregroundStyle(theme.inkTertiary)
         }
-        .padding(.horizontal, 20).padding(.vertical, 14)
-        .accessibilityIdentifier("desktop-memory-map")
+        .background(theme.panel.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
+    }
+
+    private func radialMinimap(brain: MemoryBrain.Brain, tiers: [MapTier], s: Double, tx: Double, ty: Double, size: CGSize) -> some View {
+        Canvas { context, mini in
+            let fit = MemoryBrain.fit(brain, width: mini.width, height: mini.height, pad: 8)
+            for node in brain.nodes {
+                let colour = node.kind == .root ? theme.accent : (tiers.first { $0.id == node.scope }?.colour ?? theme.accent)
+                context.fill(Path(ellipseIn: CGRect(x: node.x * fit.scale + fit.tx - 1, y: node.y * fit.scale + fit.ty - 1, width: 2, height: 2)), with: .color(colour.opacity(0.9)))
+            }
+            let x0 = (0 - tx) / s * fit.scale + fit.tx, y0 = (0 - ty) / s * fit.scale + fit.ty
+            context.stroke(Path(CGRect(x: x0, y: y0, width: size.width / s * fit.scale, height: size.height / s * fit.scale)), with: .color(theme.accent), lineWidth: 1.5)
+        }
+        .frame(width: 96, height: 96)
+        .background(theme.panel.opacity(0.9), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.6), lineWidth: 1))
+        .accessibilityLabel(Text("Minimap"))
+    }
+
+    /// Columns (MemoryMapCanvas, Team map's look): the tier, its folders,
+    /// the notes as cards, joined by lines, zoomed to fit.
+    private func columns(tiers: [MapTier], hidden: Set<String>?) -> some View {
+        let cardW = 150.0, cardH = 34.0, gap = 12.0, colGap = 70.0
+        var cards: [(id: String, x: Double, y: Double, title: String, detail: String?, colour: Color, parent: String?)] = []
+        var y = 0.0
+        for tier in tiers where !tier.entries.isEmpty && (focus == "all" || focus == tier.id) {
+            let groups = Dictionary(grouping: tier.entries.filter { !(hidden?.contains($0.id) ?? false) }, by: { tier.topic($0) })
+            let keys = groups.keys.sorted()
+            let tierY = y
+            cards.append(("t:\(tier.id)", 0, tierY, tier.name, nil, tier.colour, nil))
+            for key in keys {
+                let notes = groups[key] ?? []
+                cards.append(("f:\(tier.id):\(key)", cardW + colGap, y, key, nil, tier.colour, "t:\(tier.id)"))
+                for (i, entry) in notes.enumerated() {
+                    cards.append(("n:\(entry.id)", (cardW + colGap) * 2, y + Double(i) * (cardH + gap), entry.row.title, entry.row.excerpt, tier.colour, "f:\(tier.id):\(key)"))
+                }
+                y += Double(max(1, notes.count)) * (cardH + gap)
+            }
+            y += 24
+        }
+        let width = (cardW + colGap) * 2 + cardW, height = max(cardH, y)
+        return GeometryReader { geometry in
+            let base = min(1, min((geometry.size.width - 48) / width, (geometry.size.height - 48) / height))
+            let s = max(0.2, base * zoom * pinch)
+            let tx = (geometry.size.width - width * s) / 2 + pan.width + drag.width
+            let ty = 24 + pan.height + drag.height
+            ZStack(alignment: .bottomTrailing) {
+                Canvas { context, _ in
+                    let byId = Dictionary(uniqueKeysWithValues: cards.map { ($0.id, $0) })
+                    for card in cards {
+                        guard let parentId = card.parent, let parent = byId[parentId] else { continue }
+                        var path = Path()
+                        path.move(to: CGPoint(x: tx + (parent.x + cardW) * s, y: ty + (parent.y + cardH / 2) * s))
+                        path.addLine(to: CGPoint(x: tx + card.x * s, y: ty + (card.y + cardH / 2) * s))
+                        context.stroke(path, with: .color(theme.inkTertiary.opacity(0.35)), lineWidth: 1)
+                    }
+                    for card in cards {
+                        let rect = CGRect(x: tx + card.x * s, y: ty + card.y * s, width: cardW * s, height: cardH * s)
+                        let shape = RoundedRectangle(cornerRadius: 6 * s, style: .continuous).path(in: rect)
+                        context.fill(shape, with: .color(theme.card))
+                        context.stroke(shape, with: .color(theme.hairline.opacity(0.5)), lineWidth: 1)
+                        context.fill(Path(ellipseIn: CGRect(x: rect.minX + 8 * s, y: rect.minY + 9 * s, width: 6 * s, height: 6 * s)), with: .color(card.colour))
+                        context.draw(Text(verbatim: card.title).font(theme.font(max(6, 11 * s), .medium)).foregroundColor(theme.ink),
+                                     at: CGPoint(x: rect.minX + 20 * s, y: rect.minY + 12 * s), anchor: .leading)
+                        if let detail = card.detail, !detail.isEmpty {
+                            context.draw(Text(verbatim: String(detail.prefix(28))).font(theme.font(max(5, 9 * s))).foregroundColor(theme.inkSecondary),
+                                         at: CGPoint(x: rect.minX + 20 * s, y: rect.minY + 25 * s), anchor: .leading)
+                        }
+                    }
+                }
+                .gesture(SimultaneousGesture(
+                    MagnificationGesture().onChanged { pinch = $0 }.onEnded { zoom = min(6, max(0.3, zoom * $0)); pinch = 1 },
+                    DragGesture().onChanged { drag = $0.translation }.onEnded { pan.width += $0.translation.width; pan.height += $0.translation.height; drag = .zero }
+                ))
+                .simultaneousGesture(SpatialTapGesture().onEnded { value in
+                    for card in cards where card.id.hasPrefix("n:") {
+                        let rect = CGRect(x: tx + card.x * s, y: ty + card.y * s, width: cardW * s, height: cardH * s)
+                        if rect.contains(value.location), let entry = entries.first(where: { "n:\($0.id)" == card.id }) { open(entry); return }
+                    }
+                })
+                .accessibilityLabel(Text("Map of the memory"))
+                HStack(spacing: 2) {
+                    zoomButton("minus") { zoom = max(0.3, zoom / 1.25) }
+                    Text(verbatim: "\(Int((s * 100).rounded())) %").font(theme.font(11.5)).foregroundStyle(theme.inkSecondary).frame(width: 48)
+                    zoomButton("arrow.up.left.and.arrow.down.right") { zoom = 1; pan = .zero }
+                    zoomButton("plus") { zoom = min(6, zoom * 1.25) }
+                }
+                .padding(4)
+                .background(theme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
+                .padding(12)
+            }
+        }
+        .background(theme.panel.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
     }
 
     private func chip(id: String, label: Text, colour: Color?, count: Int?) -> some View {
         let on = focus == id
-        return Button { focus = id; zoom = 1; pan = .zero } label: {
+        return Button { focus = focus == id && id != "all" ? "all" : id; zoom = 1; pan = .zero } label: {
             HStack(spacing: 6) {
                 if let colour { Circle().fill(colour).frame(width: 7, height: 7) }
-                label.font(theme.font(12, on ? .medium : .regular)).foregroundStyle(on ? theme.ink : theme.inkSecondary)
+                label.font(theme.font(12.5)).foregroundStyle(on ? theme.ink : theme.inkSecondary)
                 if let count { Text(verbatim: "\(count)").font(theme.font(11.5)).foregroundStyle(theme.inkTertiary) }
             }
-            .padding(.horizontal, 10).frame(height: 28)
+            .padding(.horizontal, 12).frame(height: 32)
+            .fixedSize()
             .background(on ? theme.raised : Color.clear, in: Capsule())
-            .overlay(Capsule().strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
+            .overlay(Capsule().strokeBorder(on ? theme.accent.opacity(0.6) : theme.hairline.opacity(0.6), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .hoverEffect(.highlight)

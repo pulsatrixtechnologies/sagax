@@ -370,6 +370,19 @@ for (const [id, label] of [["memory-map", "Map"], ["memory-tags", "Tags"], ["mem
       await ctx.sleep(1500);
     } });
 }
+for (const [id, layout] of [["memory-map-radial", "Radial"], ["memory-map-columns", "Columns"]]) {
+  add({ id, phase: "main", note: `Memory page, the Map view, ${layout} layout`,
+    open: async (ctx) => {
+      await ctx.dispatch({ type: "toggleMemoryManager", open: true });
+      await ctx.sleep(1500);
+      if (!(await ctx.exists({ text: /^Map$/ }))) return { skip: "Map tab not shown" };
+      await ctx.click({ text: /^Map$/ });
+      await ctx.sleep(1200);
+      if (!(await ctx.exists({ text: new RegExp(`^${layout}$`) }))) return { skip: `${layout} not shown` };
+      await ctx.click({ text: new RegExp(`^${layout}$`) });
+      await ctx.sleep(2000);
+    } });
+}
 add({ id: "capabilities", phase: "main", note: "Capabilities (centred modal)",
   open: async (ctx) => { await ctx.dispatch({ type: "togglePlugins", open: true }); await ctx.sleep(1500); } });
 add({ id: "routine-edit", phase: "main", note: "Automations list: a routine open in the side panel",

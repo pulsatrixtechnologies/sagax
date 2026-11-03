@@ -226,6 +226,17 @@ enum ConnectAppsRoute: Hashable {
     case pages
 }
 
+/// Drawn inside the iPad desktop's Capabilities window: the desktop's body
+/// (underlined tabs, category chips, 44 pt tiles, pill buttons) instead of
+/// the phone's segmented list.
+private struct CapabilitiesDesktopKey: EnvironmentKey { static let defaultValue = false }
+extension EnvironmentValues {
+    var capabilitiesDesktop: Bool {
+        get { self[CapabilitiesDesktopKey.self] }
+        set { self[CapabilitiesDesktopKey.self] = newValue }
+    }
+}
+
 /// The whole panel: the main view and what it pushes.
 struct ConnectAppsPage: View {
     /// the tab to open on (Settings > My connections' links); nil: Discover
@@ -281,6 +292,7 @@ struct ConnectAppsPage: View {
                 .modifier(BrowseBotsPresenters(model: bots, open: openBot))
         }
         .tint(Theme.textPrimary)
+        .environment(\.capabilitiesDesktop, embedded)
         .onValueChange(of: embeddedQuery?.wrappedValue ?? "") { value in
             if embedded { model.query = value }
         }
@@ -390,11 +402,61 @@ struct ConnectAppIcon: View {
 /// button (Add, Connect) or the status.
 struct ConnectAppRow: View {
     @Environment(\.themePalette) var themePalette
+    @Environment(\.capabilitiesDesktop) private var desktop
+    @Environment(\.desktopTheme) private var theme
     let item: ConnectAppItem
     let busy: Bool
     let act: () -> Void
 
     var body: some View {
+        if desktop { desktopBody } else { phoneBody }
+    }
+
+    /// The desktop's row: a 44 pt tile, the name 13 semibold over the
+    /// description 12 secondary, and the action as a raised pill.
+    private var desktopBody: some View {
+        HStack(spacing: 12) {
+            ConnectAppIcon(item: item, size: 44)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: item.name)
+                    .font(theme.font(13, .semibold))
+                    .foregroundStyle(theme.ink)
+                    .lineLimit(1)
+                if !item.description.isEmpty {
+                    Text(verbatim: item.description)
+                        .font(theme.font(12))
+                        .foregroundStyle(theme.inkSecondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: 440, alignment: .leading)
+            if busy {
+                ProgressView().controlSize(.small)
+            } else if let action = item.action {
+                Button(action: act) {
+                    Text(action == .add ? String(localized: "Add") : String(localized: "Connect"))
+                        .font(theme.font(13, .medium))
+                        .foregroundStyle(theme.ink)
+                        .padding(.horizontal, 14)
+                        .frame(height: 30)
+                        .background(theme.raised, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("connect-apps-action.\(item.key)")
+            } else {
+                Text(verbatim: ConnectAppsWords.status(item.status))
+                    .font(theme.font(12))
+                    .foregroundStyle(item.status == .connected ? theme.accent : theme.inkSecondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("connect-apps-row.\(item.key)")
+    }
+
+    private var phoneBody: some View {
         HStack(spacing: 12) {
             ConnectAppIcon(item: item)
             VStack(alignment: .leading, spacing: 2) {
@@ -448,6 +510,8 @@ struct ConnectAppsMain: View {
     /// The search's groups showing every hit.
     @State private var expandedResults: Set<ConnectAppsSearchGroup> = []
     @State private var tab: ConnectAppsTab
+    @Environment(\.capabilitiesDesktop) private var desktop
+    @Environment(\.desktopTheme) private var theme
 
     init(model: ConnectAppsModel, bots: BrowseBotsModel, botsShown: Bool, initialTab: ConnectAppsTab? = nil, openBot: @escaping (Bot) -> Void, push: @escaping (ConnectAppsRoute) -> Void) {
         _model = ObservedObject(wrappedValue: model)
@@ -473,7 +537,11 @@ struct ConnectAppsMain: View {
 
     var body: some View {
         // one search on every tab: it looks everywhere (ConnectAppsSearch)
-        list.searchable(text: $model.query, prompt: Text(String(localized: "Search plugins, skills, MCP servers, bots, templates and sources")))
+        Group {
+            if desktop { list } else {
+                list.searchable(text: $model.query, prompt: Text(String(localized: "Search plugins, skills, MCP servers, bots, templates and sources")))
+            }
+        }
             .onValueChange(of: model.query) { _ in expandedResults = [] }
             #if DEBUG
             .onAppear {
@@ -484,7 +552,20 @@ struct ConnectAppsMain: View {
     }
 
     private var list: some View {
-        ThemedList {
+        CapabilitiesList(desktop: desktop) {
+            if desktop {
+                if model.marketplaces.isEmpty {
+                    Text("No marketplace yet. Add one in Capabilities > Sources.")
+                        .font(theme.font(12))
+                        .foregroundStyle(theme.inkSecondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .padding(.bottom, 8)
+                }
+                desktopTabs
+            } else {
             Section {
                 connectedLink
                 Picker(String(localized: "Capabilities"), selection: $tab) {
@@ -492,6 +573,7 @@ struct ConnectAppsMain: View {
                 }
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("connect-apps-tabs")
+            }
             }
             if searching {
                 // the tab's own filters stay above the results and narrow
@@ -522,6 +604,81 @@ struct ConnectAppsMain: View {
             if botsShown { await bots.load(session) }
         }
         .accessibilityIdentifier("connect-apps")
+    }
+
+    // MARK: The desktop's tabs and chips
+
+    /// Underlined text tabs, the refresh at the right, a hairline under.
+    private var desktopTabs: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 24) {
+                ForEach(shownTabs, id: \.self) { item in
+                    Button { tab = item } label: {
+                        Text(verbatim: item.title)
+                            .font(theme.font(13.5, current == item ? .medium : .regular))
+                            .foregroundStyle(current == item ? theme.ink : theme.inkSecondary)
+                            .padding(.vertical, 10)
+                            .overlay(alignment: .bottom) {
+                                if current == item { Rectangle().fill(theme.ink).frame(height: 2) }
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(current == item ? .isSelected : [])
+                    .accessibilityIdentifier("connect-apps-tab.\(item.title)")
+                }
+                Spacer(minLength: 0)
+                Button { Task { await model.load(session) } } label: {
+                    DesktopIconView(icon: .refresh, size: 16).foregroundStyle(theme.inkSecondary)
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Refresh"))
+            }
+            Rectangle().fill(theme.hairlineWeak).frame(height: 1)
+        }
+        .padding(.top, 4)
+    }
+
+    /// The category chips of Discover: All, then each category with apps.
+    private var desktopChips: some View {
+        let present = ConnectAppCategory.order.filter { category in
+            model.items.contains { $0.category == category }
+        }
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                desktopChip(String(localized: "All"), selected: model.filter == .all && model.type == .any) {
+                    model.filter = .all
+                    model.type = .any
+                }
+                ForEach(present, id: \.self) { category in
+                    desktopChip(ConnectAppsWords.category(category), selected: model.filter == .category(category)) {
+                        model.filter = model.filter == .category(category) ? .all : .category(category)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 8)
+    }
+
+    private func desktopChip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(verbatim: title)
+                .font(theme.font(13, .medium))
+                .foregroundStyle(selected ? theme.accentInk : theme.ink)
+                .padding(.horizontal, 14)
+                .frame(height: 28)
+                .background(selected ? theme.accent : .clear, in: Capsule())
+                .overlay(Capsule().strokeBorder(selected ? .clear : theme.hairline.opacity(0.5), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(verbatim: title)
+            .font(desktop ? theme.font(14, .semibold) : nil)
+            .foregroundStyle(desktop ? theme.ink : Theme.textSecondary)
+            .textCase(nil)
     }
 
     // MARK: The one search
@@ -571,7 +728,7 @@ struct ConnectAppsMain: View {
                         .accessibilityIdentifier("connect-apps-search-show-all.\(section.group.rawValue)")
                 }
             } header: {
-                Text(verbatim: Self.groupTitle(section.group))
+                sectionTitle(Self.groupTitle(section.group))
             }
             .accessibilityIdentifier("connect-apps-search.\(section.group.rawValue)")
         }
@@ -640,7 +797,7 @@ struct ConnectAppsMain: View {
     @ViewBuilder
     private var discover: some View {
         Section {
-            filterBar
+            if desktop { desktopChips } else { filterBar }
         }
         if model.loading && model.items.isEmpty {
             Section { HStack { Spacer(); ProgressView(); Spacer() } }
@@ -664,7 +821,7 @@ struct ConnectAppsMain: View {
                     .accessibilityIdentifier("connect-apps-view-all")
                 }
             } header: {
-                Text(verbatim: ConnectAppsWords.section(section.id))
+                sectionTitle(ConnectAppsWords.section(section.id))
             }
         }
         if !model.loading, model.sections.isEmpty {
@@ -1457,4 +1614,28 @@ extension Notification.Name {
     /// The old way to Browse Bots' home: it now opens Connect apps on its
     /// Bots tab (`object`: a BotTemplatesDestination raw value).
     static let sagaxOpenBotTemplates = Notification.Name("sagax.openBotTemplates")
+}
+
+
+/// The Connect apps list: the phone's themed list, or the desktop window's
+/// flat page (no row chrome, no separators, the window's own background).
+struct CapabilitiesList<Content: View>: View {
+    let desktop: Bool
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        if desktop {
+            List {
+                Group(content: content)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .padding(.horizontal, 20)
+        } else {
+            ThemedList(content: content)
+        }
+    }
 }

@@ -19,6 +19,9 @@ public struct MemoryManagerSource: Codable, Hashable, Sendable, Identifiable {
     public var botId: String?
     public var section: String?
     public var scope: String?
+    /// Bot source: false when no current bot owns this memory (a temporary
+    /// agent's); nil from an older computer (treated as linked).
+    public var linked: Bool?
 
     public init(
         id: String,
@@ -29,7 +32,8 @@ public struct MemoryManagerSource: Codable, Hashable, Sendable, Identifiable {
         mayManage: Bool? = nil,
         botId: String? = nil,
         section: String? = nil,
-        scope: String? = nil
+        scope: String? = nil,
+        linked: Bool? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -40,6 +44,7 @@ public struct MemoryManagerSource: Codable, Hashable, Sendable, Identifiable {
         self.botId = botId
         self.section = section
         self.scope = scope
+        self.linked = linked
     }
 }
 

@@ -3354,7 +3354,7 @@ notifications), Sentry, PagerDuty, Linear. Rules, covered by
   Graph only; Graph's error text is never kept. The subscription record
   (`graphSubscription`) never leaves the server: not listed, not exported,
   stripped from a backup (a restore keeps the one this server already had).
-- Pollers (`server/triggers/trigger-pollers.ts`, `server/ics.ts`, covered by
+- Pollers (`server/triggers/trigger-pollers.ts`, `server/calendar/ics.ts`, covered by
   `trigger-pollers.test.ts`, `ics.test.ts`, `trigger-pollers.e2e.test.ts`):
   an Outlook trigger may read a mailbox over IMAP (implicit TLS, read only:
   EXAMINE and BODY.PEEK, headers only), an Outlook Calendar trigger a

@@ -1251,7 +1251,7 @@ import {
   type RoutineSuspendReason
 } from "./routines/routines.ts";
 import { RoutineConsents, routineRenewMs, type RoutineConsentEnd } from "./org/org-routine-consent.ts";
-import { CalendarCallManager, type CalendarCall } from "./calendar-calls.ts";
+import { CalendarCallManager, type CalendarCall } from "./calendar/calendar-calls.ts";
 import { BUILT_IN_BROWSER_SYSTEM_PROMPT, pauseBrowserStream } from "./browser/browser-engine.ts";
 import { BrowserRuntime, browserProfileChangeRefusal, browserRuntimeEnv } from "./browser/browser-runtime.ts";
 import { browserEgress, sameOwnerBots as sameOwnerBrowserBots } from "./browser/egress/registry.ts";

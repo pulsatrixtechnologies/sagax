@@ -34,7 +34,7 @@ import {
   type NormalizedTriggerEvent,
   type TriggerAutomationStatus,
 } from "../../shared/trigger-sources.ts";
-import { instancesBetween, parseIcs } from "../ics.ts";
+import { instancesBetween, parseIcs } from "../calendar/ics.ts";
 import { blockedAddressReason } from "../media-proxy-guard.ts";
 import type { PollerCredential } from "./trigger-poller-credentials.ts";
 import { openTriggerSeenStore, type TriggerSeenStore } from "./trigger-seen-store.ts";

@@ -24,6 +24,34 @@ const SETTLE_MS = 800;
 
 type Listing = { search: string; routines: Routine[]; runs: RoutineRun[]; info: RoutineScopeInfo };
 
+/** The new listing with the previous one's records kept wherever they read
+ * the same (2026-11-02): the listing is read again after every live frame,
+ * and fresh but equal objects used to redraw every calendar card. The
+ * previous listing itself comes back when nothing changed, so the reload
+ * renders nothing. */
+export function shareListing(previous: Listing | null, next: Listing): Listing {
+  if (!previous || previous.search !== next.search) return next;
+  const share = <T extends { id: string }>(before: T[], after: T[]): T[] => {
+    const byId = new Map(before.map((record) => [record.id, record]));
+    let same = before.length === after.length;
+    const out = after.map((record, index) => {
+      const old = byId.get(record.id);
+      if (old && JSON.stringify(old) === JSON.stringify(record)) {
+        if (before[index] !== old) same = false;
+        return old;
+      }
+      same = false;
+      return record;
+    });
+    return same ? before : out;
+  };
+  const routines = share(previous.routines, next.routines);
+  const runs = share(previous.runs, next.runs);
+  const info = JSON.stringify(previous.info) === JSON.stringify(next.info) ? previous.info : next.info;
+  if (routines === previous.routines && runs === previous.runs && info === previous.info) return previous;
+  return { search: next.search, routines, runs, info };
+}
+
 /** An organization server: the scope control only exists there (a solo
  * server's person already sees every routine). */
 export function routineScopeAvailable(config: ConfigStatus | null | undefined): boolean {
@@ -77,12 +105,13 @@ export function useRoutineScope({ config, routines, runs, ignoreStatus = false }
       const body = await api(`/api/routines?${asked}`);
       noteRoutinesListing(body);
       if (latest.current !== asked) return;
-      setListing({
+      const next: Listing = {
         search: asked,
         routines: Array.isArray(body.routines) ? body.routines : [],
         runs: Array.isArray(body.runs) ? body.runs : [],
         info: { scope: body.scope ?? "mine", allowed: body.allowed ?? fallbackAllowed, facets: body.facets ?? { teams: [], owners: [], botChoices: [] } },
-      });
+      };
+      setListing((previous) => shareListing(previous, next));
       setError(false);
     } catch {
       if (latest.current === asked) setError(true);
@@ -105,6 +134,10 @@ export function useRoutineScope({ config, routines, runs, ignoreStatus = false }
 
   const current = listing && listing.search === search ? listing : null;
   const statusFilter = ignoreStatus ? undefined : prefs.status;
+  // A merged record stays the same object while its store record and its
+  // server record do: one routine's change redraws that routine only.
+  const merged = useRef(new WeakMap<Routine, { found: Routine; value: Routine }>());
+  const lastShown = useRef<Routine[]>([]);
   const shownRoutines = useMemo(() => {
     let base: Routine[];
     if (live) {
@@ -112,12 +145,23 @@ export function useRoutineScope({ config, routines, runs, ignoreStatus = false }
       const extra = new Map((current?.routines ?? []).map((routine) => [routine.id, routine]));
       base = routines.map((routine) => {
         const found = extra.get(routine.id);
-        return found ? { ...found, ...routine, owner: routine.owner ?? found.owner, teamIds: routine.teamIds ?? found.teamIds, bot: routine.bot ?? found.bot, canRun: routine.canRun ?? found.canRun, canEdit: routine.canEdit ?? found.canEdit } : routine;
+        if (!found) return routine;
+        const held = merged.current.get(routine);
+        if (held && held.found === found) return held.value;
+        const value = { ...found, ...routine, owner: routine.owner ?? found.owner, teamIds: routine.teamIds ?? found.teamIds, bot: routine.bot ?? found.bot, canRun: routine.canRun ?? found.canRun, canEdit: routine.canEdit ?? found.canEdit };
+        merged.current.set(routine, { found, value });
+        return value;
       });
     } else {
       base = current?.routines ?? [];
     }
-    return base.filter((routine) => routineMatchesStatus(routine, statusFilter));
+    const next = base.filter((routine) => routineMatchesStatus(routine, statusFilter));
+    // The same records as last time: the same array, so the calendar's plans
+    // are not projected again for a listing that only brought new runs.
+    const previous = lastShown.current;
+    if (previous.length === next.length && previous.every((routine, index) => routine === next[index])) return previous;
+    lastShown.current = next;
+    return next;
   }, [live, current, routines, statusFilter]);
   const shownRuns = useMemo(() => {
     const base = live ? runs : current?.runs ?? [];

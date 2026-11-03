@@ -504,3 +504,30 @@ describe("calendar shows plans, not runs", () => {
     expect(groupCalendarSlots([mk("a"), mk("b")]).overflow).toEqual([]);
   });
 });
+
+describe("cronDayRuns (calendar performance, 2026-11-02)", () => {
+  it("asks croner for about the runs of the day, then serves the day from the cache", async () => {
+    const { cronDayRuns } = await import("./routine-calendar");
+    const { createCronRunPreview } = await import("../../shared/routine-schedule");
+    const schedule = { type: "cron" as const, expression: "7 8-17 * * *", timeZone: "UTC" };
+    const real = createCronRunPreview(schedule);
+    let asked = 0;
+    const preview = () => (after: number, count: number) => { asked += count; return real(after, count); };
+    const day = Date.UTC(2026, 10, 4);
+    const first = cronDayRuns(schedule, day, preview);
+    expect(first?.runs.length).toBe(10);
+    // 4 + 8 + 16: the day's ten runs and the next day's first, never 1000.
+    expect(asked).toBeLessThanOrEqual(28);
+    const again = cronDayRuns(schedule, day, preview);
+    expect(again).toBe(first);
+    expect(asked).toBeLessThanOrEqual(28);
+  });
+
+  it("leaves a dense day to the day by day walk", async () => {
+    const { cronDayRuns } = await import("./routine-calendar");
+    const { createCronRunPreview } = await import("../../shared/routine-schedule");
+    const schedule = { type: "cron" as const, expression: "* 9 * * *", timeZone: "UTC" };
+    const real = createCronRunPreview(schedule);
+    expect(cronDayRuns(schedule, Date.UTC(2026, 10, 4), () => real)).toBeNull();
+  });
+});

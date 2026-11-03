@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-import { activeLocale, t } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
+import { cachedDateFormat } from "@/lib/schedule-label";
 const WEEKDAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 
 function startOfMonth(value: number | Date) {
@@ -25,8 +26,13 @@ export interface MiniMonthProps {
   onSelect: (at: number) => void;
 }
 
-/** A compact, Monday-first month picker for the calendar sidebar. */
-export function MiniMonth({ anchor, onSelect }: MiniMonthProps) {
+const MONTH_OPTIONS: Intl.DateTimeFormatOptions = { month: "long", year: "numeric" };
+const DAY_OPTIONS: Intl.DateTimeFormatOptions = { weekday: "long", month: "long", day: "numeric", year: "numeric" };
+
+/** A compact, Monday-first month picker for the calendar sidebar. Memoized:
+ * it renders when the anchor or the shown month changes, never on a live
+ * run frame (2026-11-02). */
+export const MiniMonth = memo(function MiniMonth({ anchor, onSelect }: MiniMonthProps) {
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(anchor));
 
   useEffect(() => {
@@ -48,10 +54,8 @@ export function MiniMonth({ anchor, onSelect }: MiniMonthProps) {
 
   const selected = new Date(anchor);
   const today = new Date();
-  const monthLabel = visibleMonth.toLocaleDateString(activeLocale(), {
-    month: "long",
-    year: "numeric",
-  });
+  const monthLabel = cachedDateFormat(MONTH_OPTIONS).format(visibleMonth);
+  const dayLabel = cachedDateFormat(DAY_OPTIONS);
 
   return (
     <section aria-label={t("routineCalendar.mini")} className="select-none px-3 py-3">
@@ -93,12 +97,7 @@ export function MiniMonth({ anchor, onSelect }: MiniMonthProps) {
           const isSelected = sameDay(date, selected);
           const isToday = sameDay(date, today);
           const isOutsideMonth = date.getMonth() !== visibleMonth.getMonth();
-          const label = date.toLocaleDateString(activeLocale(), {
-            weekday: "long",
-            month: "long",
-            day: "numeric",
-            year: "numeric",
-          });
+          const label = dayLabel.format(date);
 
           return (
             <button
@@ -129,4 +128,4 @@ export function MiniMonth({ anchor, onSelect }: MiniMonthProps) {
       </div>
     </section>
   );
-}
+});

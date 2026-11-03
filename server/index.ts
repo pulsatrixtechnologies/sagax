@@ -633,7 +633,7 @@ import {
   type UsageTrigger
 } from "./usage/usage-ledger.ts";
 import type { PlanUsageReport } from "./usage/plan-usage.ts";
-import { newPlanUsageAlerts, planAccountsFromInstances, planUsageAlertText } from "./usage/plan-usage.ts";
+import { newPlanUsageAlerts, orgPlanAccounts, planAccountsFromInstances, planUsageAlertText, type PlanAccount } from "./usage/plan-usage.ts";
 import { GroupUsageReader } from "./groups/group-thread-usage.ts";
 import { ledgerCost, listPriceFor } from "./models/model-prices.ts";
 import type { PriceList } from "./usage/prices.ts";
@@ -751,7 +751,7 @@ import {
 import { RETRY_MAX_ATTEMPTS, USAGE_LIMIT } from "./drivers/retry.ts";
 import { recoveryCapabilityError } from "./automatic-recovery.ts";
 import { createCacheKeepWarm, type KeepWarmStatus, type KeepWarmTarget } from "./cache-keepwarm.ts";
-import { createLimitResetHost } from "./usage/limit-reset-host.ts";
+import { createLimitResetHost, SERVER_LIMIT_SCOPE } from "./usage/limit-reset-host.ts";
 import { engineLabel } from "./usage/limit-resets.ts";
 import { LimitFailoverStore } from "./usage/limit-failover.ts";
 import { createLimitFailoverHost, limitBackupRefusedText } from "./usage/limit-failover-host.ts";
@@ -16436,14 +16436,59 @@ bus.subscribe((event: RuntimeEvent) => {
 // each engine's reset from plan usage and refusals, so a routine with
 // schedule.type === "limit_reset" knows when to run. Routes: Continue card,
 // near-limit after-reset, and GET report (server/routes/limit-resets.ts).
+// #1918: a limit belongs to the account that pays. The server's own accounts
+// are one clock (solo, and an organization's turns on its own key); a person
+// whose own subscription or key pays their turns has a clock of their own,
+// read from their own sign-in, so one person's limit (or the server's) is
+// never shown to another, and a refusal is noted against the turn's payer.
+const limitPlanDriver = (account: PlanAccount) => account.driver === "claude" || account.driver === "codex" || account.driver === "grok";
+/** Whose limits a person's turns on this engine meet: their own, or the server's when the organization pays. */
+function limitScopeFor(principalId: string, instanceId: string): string {
+  if (IDENTITY.kind !== "perspicax") return SERVER_LIMIT_SCOPE;
+  const id = principalId.trim().toLowerCase();
+  return id && personPaysEngine(id, instanceId) ? personPayer(id) : SERVER_LIMIT_SCOPE;
+}
+/** Whose limits this thread's current turn met: the payer refusalPayerOf names (the organization is the server's accounts). */
+function limitScopeOfTurn(threadId: string): string {
+  const payer = refusalPayerOf(turnAccessByThread.get(threadId));
+  return payer === "org" ? SERVER_LIMIT_SCOPE : payer;
+}
+const LIMIT_DRIVER: Record<string, "claude" | "codex" | "grok"> = { claudeAgent: "claude", codex: "codex", grokAgent: "grok" };
 const limitReset = createLimitResetHost({
   accounts: () => {
+    // An organization server's own logins pay nobody's turns (its key runs
+    // with an empty home, engine-credentials.ts materializeEngineAccess), so
+    // their usage is no one's limit there.
+    if (IDENTITY.kind === "perspicax") return [];
     try {
-      return planAccountsFromInstances(providerConfigs()).filter((account) =>
-        account.driver === "claude" || account.driver === "codex" || account.driver === "grok");
+      return planAccountsFromInstances(providerConfigs()).filter(limitPlanDriver);
     } catch {
       return [];
     }
+  },
+  scopeAccounts: (scope) => {
+    const principalId = scope.startsWith("person:") ? scope.slice("person:".length) : "";
+    const logins = engineLogins;
+    if (IDENTITY.kind !== "perspicax" || !logins || !isPrincipalId(principalId)) return [];
+    try {
+      // The person's own sign-ins only, under the engine's instance id (the id the chat and the routines name).
+      return orgPlanAccounts(providerConfigs(), {
+        loginDir: (driver) => logins.loginDir(principalId, driver),
+        signedIn: (driver) => logins.signedIn(principalId, driver),
+      }).filter((account) => limitPlanDriver(account) && account.access !== "api-key" && !account.signedOut)
+        .map((account) => ({ ...account, id: account.instanceId ?? account.id }));
+    } catch {
+      return [];
+    }
+  },
+  describe: (engine) => {
+    const instance = registry.get(engine);
+    const driver = instance ? LIMIT_DRIVER[instance.driverKind] : undefined;
+    return instance && driver ? { name: engineLabel(engine, instance), driver } : undefined;
+  },
+  routineScope: (routine, engine) => {
+    const bot = routine.botId ? store.bot(routine.botId) : null;
+    return bot ? limitScopeFor(effectiveBotOwner(bot), engine) : SERVER_LIMIT_SCOPE;
   },
   routines: () => {
     try { return routines?.listRoutines() ?? []; }
@@ -16479,8 +16524,11 @@ bus.subscribe((event: RuntimeEvent) => {
   if (shouldIgnoreProviderEvent(event)) return;
   if (event.type === "runtime.error") {
     limitFailover.noteError(event.threadId, event.message, event.limitResetsAt, event.limitScope);
-    limitReset.noteRefusal(runningTurnEngines.get(event.threadId)?.instanceId, event.limitResetsAt);
-  } else if (event.type === "turn.completed" && event.ok) limitFailover.turnSucceeded(event.threadId);
+    limitReset.noteRefusal(runningTurnEngines.get(event.threadId)?.instanceId, event.limitResetsAt, limitScopeOfTurn(event.threadId));
+  } else if (event.type === "turn.completed" && event.ok) {
+    limitFailover.turnSucceeded(event.threadId);
+    limitReset.noteSuccess(runningTurnEngines.get(event.threadId)?.instanceId, limitScopeOfTurn(event.threadId));
+  }
 });
 /** Threads whose running turn a client abort ended (the abort sentence as
  * assistant text or as runtime.error), with that turn's id when known.
@@ -38373,7 +38421,12 @@ ROUTES.push(createPresenceRoutes({
 }));
 // "Only when I'm here" routines (server/routines/routine-away.ts, routes/routine-away.ts).
 ROUTES.push(createLimitResetRoutes({
-  clock: limitReset.clock,
+  limits: (auth) => {
+    if (IDENTITY.kind !== "perspicax") return limitReset.view(SERVER_LIMIT_SCOPE, () => SERVER_LIMIT_SCOPE);
+    const principalId = auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() || "" : "";
+    if (!isPrincipalId(principalId)) return limitReset.view(SERVER_LIMIT_SCOPE, () => SERVER_LIMIT_SCOPE);
+    return limitReset.view(personPayer(principalId), (engine) => limitScopeFor(principalId, engine));
+  },
   routines: routines!,
   requests: routineRequests,
   threadTitle: (botId, threadId) => store.taskByThread(botId, threadId)?.title ?? null,

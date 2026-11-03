@@ -412,7 +412,7 @@ function InstructionText({ text }: { text: string }) {
   }, [text]);
   if (!text.trim()) return <p data-routine-instruction-text className="text-[13.5px] text-ink-tertiary">{t("routineEditor.none")}</p>;
   return <div className="min-w-0">
-    <div ref={body} data-routine-instruction-text data-folded={!open && long ? "" : undefined} className={cn("relative min-w-0 break-words text-[13.5px] leading-relaxed text-ink [&_a]:no-underline", !open && "max-h-[60vh] overflow-hidden")}>
+    <div ref={body} data-routine-instruction-text data-folded={!open && long ? "" : undefined} className={cn("relative min-w-0 break-words text-[13.5px] leading-relaxed text-ink [&_a]:no-underline", !open && "max-h-[35vh] overflow-hidden")}>
       <ChatMarkdown text={text} />
       {!open && long && <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-panel to-transparent" />}
     </div>
@@ -1083,7 +1083,7 @@ function EventEditorBody({
               </div>
               {viewing
                 ? <InstructionText text={description} />
-                : <MarkdownEditor compact expandable toolbarOnFocus value={description} onChange={setDescription} minHeight={panel ? 120 : 160} maxHeight={panel ? "calc(100vh - 220px)" : "70vh"} dataField="routine-instructions" className="-mx-3 min-w-0" ariaLabel={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} placeholder={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} />}
+                : <MarkdownEditor compact expandable toolbarOnFocus value={description} onChange={setDescription} minHeight={panel ? 120 : 160} maxHeight={panel ? "40vh" : "70vh"} dataField="routine-instructions" className="-mx-3 min-w-0" ariaLabel={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} placeholder={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} />}
             </section>
 
             <section data-routine-editor-section="when" className="min-w-0 space-y-1">

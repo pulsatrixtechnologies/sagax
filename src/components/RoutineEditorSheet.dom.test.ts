@@ -242,7 +242,7 @@ describe("Format with AI (2026-11-03)", () => {
   it("shows the whole instruction in view mode, folding a long one behind Show more", () => {
     mount({ ...routine({ type: "cron", expression: "0 9 * * *", timeZone: "UTC" }), prompt: "Line.\n\n".repeat(200) });
     const text = host.querySelector<HTMLElement>("[data-routine-instruction-text]")!;
-    expect(text.className).toContain("max-h-[60vh]");
+    expect(text.className).toContain("max-h-[35vh]");
     expect(text.querySelector("textarea")).toBeNull();
   });
 });

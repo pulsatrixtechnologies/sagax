@@ -4,9 +4,9 @@
 // call through the entry the layer really reads them from, then compares.
 import { describe, expect, it } from "vitest";
 
-import { createAgentCardGuard } from "./agent-tool-card-guard.ts";
+import { createAgentCardGuard } from "./tools/agent-tool-card-guard.ts";
 import { autoVerdict } from "./approvals/auto-approve.ts";
-import { READ_ONLY_AGENT_TOOL_NAMES } from "./agent-tool-policy.ts";
+import { READ_ONLY_AGENT_TOOL_NAMES } from "./tools/agent-tool-policy.ts";
 import { reviewCustomRules } from "./custom-rules-review.ts";
 import { availableTools, catalogProfileFromEnv } from "./drivers/agents-catalog.ts";
 import { catalogBridgeOn, findCatalogTools, routeBridgeCall } from "./drivers/catalog-bridge.ts";
@@ -14,7 +14,7 @@ import { hookRuns } from "./lifecycle-hooks.ts";
 import { guardToolCall } from "./mcp/mcp-permissions.ts";
 import { memberOwnScopeTool } from "./people/member-tool-scope.ts";
 import { misuseToolFrameText } from "./safety/misuse-guardrails.ts";
-import { ToolGrantStore } from "./tool-grants.ts";
+import { ToolGrantStore } from "./tools/tool-grants.ts";
 import type { CustomRule } from "../shared/custom-rules.ts";
 import { readUseToolCall } from "../shared/mcp-gateway-call.ts";
 import { permissionRoute, readBridgeCall, searchedToolCall, unwrapAgentsBridge } from "../shared/searched-tool-call.ts";

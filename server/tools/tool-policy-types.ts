@@ -16,6 +16,6 @@ export interface ToolPolicy {
   destructive?: true;
   billing?: true;
   /** Admin because it deletes, but the resource belongs to one person: the
-   * guard allows that person (server/tool-guard.ts). */
+   * guard allows that person (server/tools/tool-guard.ts). */
   ownerScoped?: true;
 }

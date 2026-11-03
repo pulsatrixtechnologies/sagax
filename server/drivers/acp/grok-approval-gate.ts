@@ -28,7 +28,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { DATA_DIR } from "../../config.ts";
 import type { McpServerSpec } from "../../contracts.ts";
-import { READ_ONLY_AGENT_TOOL_NAMES } from "../../agent-tool-policy.ts";
+import { READ_ONLY_AGENT_TOOL_NAMES } from "../../tools/agent-tool-policy.ts";
 import { isPerspicaxBridge, PERSPICAX_READ_ONLY_TOOLS } from "./grok-read-only-tools.ts";
 import { AUTO_COMPUTER_MCP_NAME } from "../../computer/auto-computer.ts";
 import { cloudOnlyBot } from "../../bots/cloud-only-bots.ts";

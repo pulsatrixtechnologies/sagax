@@ -29,7 +29,7 @@ import type {
   ProviderSnapshot,
 } from "../contracts.ts";
 import { newId } from "../contracts.ts";
-import { askInputDetail, askInputSummary } from "../tool-summary.ts";
+import { askInputDetail, askInputSummary } from "../tools/tool-summary.ts";
 import { claudeAuthFailure } from "./claude-auth-recovery.ts";
 import { claudeSignInExpired } from "./claude-errors.ts";
 import { parseVersionTriple, versionAtLeast } from "./acp/core.ts";

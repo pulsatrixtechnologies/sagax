@@ -17,7 +17,7 @@ import { join, relative } from "node:path";
 import { availableTools, PERSPICAX_TOOLS, type CatalogProfile } from "../../server/drivers/agents-catalog.ts";
 import { MCP_PERMISSIONS } from "../../server/mcp/mcp-permissions.ts";
 import { HOST_LEVEL_AGENT_TOOLS, MEMBER_OWN_SCOPE_AGENT_TOOLS } from "../../server/people/member-tool-scope.ts";
-import { READ_ONLY_AGENT_TOOL_NAMES } from "../../server/agent-tool-policy.ts";
+import { READ_ONLY_AGENT_TOOL_NAMES } from "../../server/tools/agent-tool-policy.ts";
 import { TOOL_POLICY_ROWS } from "../../server/tool-policy.generated.ts";
 import type { KnowledgeBase, KnowledgeSection, PerspicaxSnapshot } from "../../server/self-knowledge-types.ts";
 import { clip, CUSTOMER_TAG_LEFT, docSections, plainText, scrub, slug } from "./markdown.ts";

@@ -37,10 +37,10 @@ import {
   writeFileSync
 } from "node:fs";
 import { homedir } from "node:os";
-import { ToolGrantStore } from "./tool-grants.ts";
+import { ToolGrantStore } from "./tools/tool-grants.ts";
 import { foreignToolSpelling, sagaxInternalSelfAnswers, sagaxInternalTool } from "./sagax-internal-tools.ts";
-import { createAgentCardGuard } from "./agent-tool-card-guard.ts";
-import { guardDecision, toolGuardMode } from "./tool-guard.ts";
+import { createAgentCardGuard } from "./tools/agent-tool-card-guard.ts";
+import { guardDecision, toolGuardMode } from "./tools/tool-guard.ts";
 import {
   auditSampleFromEnv,
   deniedResourcesFromEnv,
@@ -80,7 +80,7 @@ import { hideServerPathsInSections } from "./server-path-prompt.ts";
 import { rm as removeDirectory } from "node:fs/promises";
 import { hostname, userInfo } from "node:os";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { ToolResults } from "./tool-results.ts";
+import { ToolResults } from "./tools/tool-results.ts";
 import {
   basename,
   dirname,
@@ -41689,7 +41689,7 @@ ROUTES.push(createGroupBotPayerRoutes({
     actor: adminActorFor(auth, req)
   })
 }));
-// B2.1: the guard before the approval card (server/agent-tool-card-guard.ts).
+// B2.1: the guard before the approval card (server/tools/agent-tool-card-guard.ts).
 /** 2026-10-26: the person who owns an agent (a bot), lowercased, or null. */
 function agentOwnerPrincipal(agentId: string): string | null {
   const bot = store.bot(agentId);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { READ_ONLY_AGENT_TOOL_NAMES } from "../../agent-tool-policy.ts";
+import { READ_ONLY_AGENT_TOOL_NAMES } from "../../tools/agent-tool-policy.ts";
 import { SPAWNED_PROXIES } from "../../proxy-paths.ts";
 import { grokReadOnlyAllowRules, isPerspicaxBridge, PERSPICAX_FLOW_COMPUTE_TOOLS, PERSPICAX_READ_ONLY_TOOLS } from "./grok-read-only-tools.ts";
 

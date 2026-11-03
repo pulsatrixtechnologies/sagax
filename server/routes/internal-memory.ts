@@ -14,7 +14,7 @@ import { pageOwnerFor } from "../pages/published-pages.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { sectionContextKey } from "../rooms/section-context.ts";
 import { TEAM_MEMORY_KINDS, type TeamMemoryKind } from "../memory/team-memory.ts";
-import { TOOL_RESULT_MAX_CHARS } from "../tool-results.ts";
+import { TOOL_RESULT_MAX_CHARS } from "../tools/tool-results.ts";
 import { workspaceDir } from "../workspace/workspace.ts";
 import { WorkspacePathError } from "../workspace/workspace-files.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";

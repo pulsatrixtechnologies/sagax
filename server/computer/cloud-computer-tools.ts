@@ -4,7 +4,7 @@
 // capability, so the Boat credential never leaves this server. The same tools
 // and the same calls on a desktop, a headless server and an OMB Cloud.
 import type { ValidateFunction } from "ajv";
-import { boundToolResult } from "../tool-output-bound.ts";
+import { boundToolResult } from "../tools/tool-output-bound.ts";
 import { isolatedRemoteCommand, runCommand, screenshotBoat } from "./boat.ts";
 import type { AppConfig } from "../config.ts";
 import { controlRefusal, type ControlState } from "../control-client.ts";

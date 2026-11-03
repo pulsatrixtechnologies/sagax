@@ -551,3 +551,10 @@ server/group-thread-usage.ts
 server/attachments-startup.test.ts
 server/attachments.test.ts
 server/attachments.ts
+server/agent-tool-policy.test.ts
+server/agent-tool-policy.ts
+server/tool-results.e2e.test.ts
+server/tool-results.test.ts
+server/tool-results.ts
+server/tool-summary.test.ts
+server/tool-summary.ts

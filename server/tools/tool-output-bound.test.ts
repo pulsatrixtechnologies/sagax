@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleDesktopBridgeMcp } from "./desktop/desktop-bridge-tools.ts";
-import { handleUserSandboxMcp } from "./sandbox/user-sandbox-tools.ts";
+import { handleDesktopBridgeMcp } from "../desktop/desktop-bridge-tools.ts";
+import { handleUserSandboxMcp } from "../sandbox/user-sandbox-tools.ts";
 import { TOOL_RESULT_READ, TOOL_TEXT_BUDGET, boundToolResult, boundToolText } from "./tool-output-bound.ts";
 
 const scan = (lines: number) => Array.from({ length: lines }, (_, i) => `${i + 1}/tcp open service-${i + 1}`).join("\n");

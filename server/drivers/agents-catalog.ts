@@ -11,7 +11,7 @@
 // agents-catalog-wire.test.ts: change a description or a schema on purpose,
 // then update the goldens there.
 import { WATCHER_OPTIONS_CARD_BOT_ID } from "../../shared/options-card.ts";
-import { agentToolAnnotations } from "../agent-tool-policy.ts";
+import { agentToolAnnotations } from "../tools/agent-tool-policy.ts";
 import { PAGE_TOOL_DEFINITIONS } from "./agents-page-tools.ts";
 import { WIDGET_TOOL_DEFINITIONS } from "./agents-widget-tools.ts";
 import { APP_TOOL_DEFINITIONS } from "./agents-app-tools.ts";

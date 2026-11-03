@@ -77,7 +77,7 @@ Tool declaration and gating:
   - reserved server names live in `server/mcp/mcp-registry.ts` (`RESERVED_MCP_NAMES`).
 - **Per-bot tool scope.** `shared/tool-scope.ts` (`native:` / `mcp:<server>:<tool>` selectors, e.g.
   `mcp:agents:show_widget`).
-- **Read-only annotations.** `server/agent-tool-policy.ts` (`READ_ONLY_AGENT_TOOL_NAMES`, `openWorldHint: false`).
+- **Read-only annotations.** `server/tools/agent-tool-policy.ts` (`READ_ONLY_AGENT_TOOL_NAMES`, `openWorldHint: false`).
   `server/flow-tools.ts` has the same `READ_ONLY` shape.
 - **No-card list.** `server/sagax-internal-tools.ts` (`sagaxInternalTool`) is the reviewed exact-name list of
   Sagax's own tools that never ask for approval (today: Data, plus member-own-scope agents tools).

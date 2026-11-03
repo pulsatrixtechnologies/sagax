@@ -14,7 +14,7 @@ import type { RuntimeEvent, SteerOutcome } from "../contracts.ts";
 import { quoteInNote } from "../peers/peer-provenance.ts";
 import { RepeatDetector, callKey, toolItemKey } from "../safety/repeat-detector.ts";
 import { RepeatStreak, failureDigest } from "../safety/repeat-streak.ts";
-import { COMMAND_SUMMARY_MAX, previewIsPartial } from "../tool-summary.ts";
+import { COMMAND_SUMMARY_MAX, previewIsPartial } from "../tools/tool-summary.ts";
 
 const COUNT_MIN = 2;
 const COUNT_MAX = 1000;

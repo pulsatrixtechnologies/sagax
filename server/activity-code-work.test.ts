@@ -7,7 +7,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { codeWork, remoteRepo, repositoryInfo, type CodeWorkToolCall } from "./activity-code-work.ts";
 import { codingSignals, shellCommands } from "./activity-coding.ts";
-import { commandSummary, toolDetailPreview } from "./tool-summary.ts";
+import { commandSummary, toolDetailPreview } from "./tools/tool-summary.ts";
 
 const bash = (command: string, output: string, ok: boolean | "running" = true): CodeWorkToolCall => ({ name: "Bash", input: JSON.stringify({ command }), output, ...(ok === "running" ? {} : { ok }) });
 const at = (tools: CodeWorkToolCall[]) => tools.map((tool, index) => ({ at: 1_000 + index, tool }));

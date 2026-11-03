@@ -2,7 +2,7 @@
 // Authorize the live turn before using this cache; ownership is BOTH the bot
 // and conversation, so room speakers and sibling threads cannot share IDs.
 import { randomUUID } from "node:crypto";
-import { redactSecretsInText } from "./redact.ts";
+import { redactSecretsInText } from "../redact.ts";
 
 export const TOOL_RESULT_PREVIEW_CHARS = 16_000;
 export const TOOL_RESULT_MAX_CHARS = 128 * 1024;

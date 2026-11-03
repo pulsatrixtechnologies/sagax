@@ -1,10 +1,10 @@
-// B1: every route the server answers has a policy row (server/tool-policy.ts).
+// B1: every route the server answers has a policy row (server/tools/tool-policy.ts).
 // A new route fails here until `node scripts/tool-policy/generate.ts` writes
 // its row and the row is reviewed.
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { routeInventory } from "./route-inventory.ts";
-import { classifyRoute, personalProviderRoute, policyFor, policyKey, toolPolicyRows, UNKNOWN_ROUTE_POLICY } from "../../server/tool-policy.ts";
+import { classifyRoute, personalProviderRoute, policyFor, policyKey, toolPolicyRows, UNKNOWN_ROUTE_POLICY } from "../../server/tools/tool-policy.ts";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const inventory = routeInventory(root);

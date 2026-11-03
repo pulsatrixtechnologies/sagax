@@ -1,9 +1,9 @@
 // What a tool call is about to do, in words a chip or a permission card can
 // show. Redacted before it is cut: a command line is where credentials get
 // pasted, and a key sliced in half would slip past the shapes redaction knows.
-import { MAX_QUESTION_TEXT } from "../shared/ask-question.ts";
-import { cwResultText, isCwTool } from "../shared/cw-widgets/tool-call.ts";
-import { HELD_SECRET_MASK, redactSecrets, redactSecretsInText } from "./redact.ts";
+import { MAX_QUESTION_TEXT } from "../../shared/ask-question.ts";
+import { cwResultText, isCwTool } from "../../shared/cw-widgets/tool-call.ts";
+import { HELD_SECRET_MASK, redactSecrets, redactSecretsInText } from "../redact.ts";
 
 /** Display-only excerpt, never the raw protocol payload. Bound traversal and
  * omit binary bodies before redacting; truncate only AFTER redaction so a

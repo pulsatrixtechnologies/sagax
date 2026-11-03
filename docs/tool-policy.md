@@ -1,6 +1,6 @@
 # Tool policy (securable tool layer)
 
-Every HTTP route the server answers has one row in `server/tool-policy.generated.ts`. The types and the matcher are in `server/tool-policy.ts`.
+Every HTTP route the server answers has one row in `server/tool-policy.generated.ts`. The types and the matcher are in `server/tools/tool-policy.ts`.
 
 | field | meaning |
 |---|---|
@@ -37,9 +37,9 @@ Status: B1 declares the policy only and nothing enforces it yet. B2 adds grants 
 
 ## Grants and the guard (B2)
 
-`server/tool-grants.ts` stores grants in `<data>/tool-grants.json`. Each grant has a subject (a bot or a user), a scope, who granted it, an optional expiry and a revocation. A grant at a higher tier covers the lower tiers of the same area.
+`server/tools/tool-grants.ts` stores grants in `<data>/tool-grants.json`. Each grant has a subject (a bot or a user), a scope, who granted it, an optional expiry and a revocation. A grant at a higher tier covers the lower tiers of the same area.
 
-`server/tool-guard.ts` makes one decision per agent tool call:
+`server/tools/tool-guard.ts` makes one decision per agent tool call:
 
 1. A default-enabled read or write is allowed.
 2. Anything else needs a grant for the caller.

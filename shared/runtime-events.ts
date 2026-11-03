@@ -142,7 +142,7 @@ export type RuntimeEvent = RuntimeEventBase &
         itemType: "tool";
         ok: boolean;
         output?: string;
-        /** A ConnectWise call's whole result (server/tool-summary.ts
+        /** A ConnectWise call's whole result (server/tools/tool-summary.ts
          * cwToolResult), read once for its widget. Never broadcast, never
          * written to the event log. */
         resultText?: string;

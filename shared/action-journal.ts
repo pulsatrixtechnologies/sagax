@@ -47,7 +47,7 @@ export type JournalDecider =
   /** the engine ran it without a card at this level */
   | "no-card";
 
-/** The tool guard's verdict on an agent tool call (server/tool-guard.ts). */
+/** The tool guard's verdict on an agent tool call (server/tools/tool-guard.ts). */
 export interface JournalGuard {
   allow: boolean;
   /** default, grant, not_granted, speaker_not_granted */

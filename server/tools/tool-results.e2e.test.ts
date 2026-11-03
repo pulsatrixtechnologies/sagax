@@ -5,8 +5,8 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { expect, it } from "vitest";
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
-import { waitForExit } from "./testing/cleanup.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
+import { waitForExit } from "../testing/cleanup.ts";
 
 it("bounds a real roster, retrieves its tail, isolates owners and expires stopped capabilities", async () => {
   const fixture = await launchVerificationServer({ FAKE_CLAUDE_MODE: "hang" });

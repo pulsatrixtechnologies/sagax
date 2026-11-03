@@ -11,7 +11,7 @@
 // is `ownerScoped`, and the guard lets the owner (or a bot speaking for
 // them) through without a grant. Organization, admin, billing, keys and
 // rights routes are never owner-scoped.
-import { TOOL_POLICY_ROWS } from "./tool-policy.generated.ts";
+import { TOOL_POLICY_ROWS } from "../tool-policy.generated.ts";
 import type { PolicyMethod, ToolPolicy, ToolTier } from "./tool-policy-types.ts";
 
 export type { PolicyKind, PolicyMethod, ToolPolicy, ToolTier } from "./tool-policy-types.ts";

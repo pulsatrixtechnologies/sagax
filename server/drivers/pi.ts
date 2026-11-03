@@ -45,7 +45,7 @@ import type { PromptSplitReceipt } from "./prompt-split.ts";
 import { STABLE_END_MARKER } from "./pi-mcp-extension.ts";
 import { COMPACT_VOLATILE_LAST } from "../context/compact-prompt.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
-import { commandSummary, cwToolResult, toolDetailPreview } from "../tool-summary.ts";
+import { commandSummary, cwToolResult, toolDetailPreview } from "../tools/tool-summary.ts";
 import { filesField, writtenFilesFromToolInput } from "../threads/thread-files.ts";
 
 import type {

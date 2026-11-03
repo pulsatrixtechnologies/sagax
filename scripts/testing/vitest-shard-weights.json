@@ -261,7 +261,7 @@
   "server/thread-page-frames.e2e.test.ts": 6,
   "server/thread-snooze.test.ts": 5,
   "server/threads/thread-title-regenerate.e2e.test.ts": 10,
-  "server/tool-results.e2e.test.ts": 30,
+  "server/tools/tool-results.e2e.test.ts": 30,
   "server/tool-scope.e2e.test.ts": 51,
   "server/triggers/trigger-pollers.e2e.test.ts": 6,
   "server/auth/trust-controls.e2e.test.ts": 19,

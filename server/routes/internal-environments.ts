@@ -49,7 +49,7 @@ import { SMALL_TALK_CLOUD_REFUSAL } from "../small-talk.ts";
 import { DESKTOP_BRIDGE_MCP_NAME } from "../../shared/bot-workplace.ts";
 import { parseSurface, surfaceLabel } from "../surface.ts";
 import { teamComputerOwner } from "../computer/team-computers.ts";
-import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tool-output-bound.ts";
+import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tools/tool-output-bound.ts";
 import { USER_SANDBOX_MCP_NAME } from "../sandbox/user-sandbox-routing.ts";
 import { UserSandboxUnavailable } from "../sandbox/user-sandbox-manager.ts";
 import { handleUserSandboxMcp } from "../sandbox/user-sandbox-tools.ts";

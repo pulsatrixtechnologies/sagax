@@ -13,7 +13,7 @@ import type { RoutineRun } from "../../shared/routines.ts";
 import type { BotActivityDetail, BotActivityItem } from "../../shared/bot-activity.ts";
 import { createBotActivityRoutes, stepError, STEP_ERROR_CHARS, type ActivityMessage, type ActivityTask, type BotActivityRouteDeps } from "./bot-activity.ts";
 import { dispatchRoutes } from "./table.ts";
-import { commandSummary, toolDetailPreview } from "../tool-summary.ts";
+import { commandSummary, toolDetailPreview } from "../tools/tool-summary.ts";
 
 const NOW = 1_800_000_000_000;
 const servers: Server[] = [];

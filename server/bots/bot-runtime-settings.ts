@@ -7,7 +7,7 @@
 //   does by default).
 // - Automatic recovery: `automaticRecovery` ({ enabled, backup }), used with
 //   the bot's own `fallback` chain when one is set.
-// - Tool access: the bot's grants in server/tool-grants.ts (subject
+// - Tool access: the bot's grants in server/tools/tool-grants.ts (subject
 //   { kind: "bot", id }), through server/routes/bot-runtime-settings.ts.
 //
 // - Turn limits (#1098, 2026-10-27): `turnLimits`, the bot's per-turn

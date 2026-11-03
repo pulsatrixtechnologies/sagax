@@ -9,7 +9,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { childEnv } from "../testing/omb-env.ts";
-import { ToolResults } from "../tool-results.ts";
+import { ToolResults } from "../tools/tool-results.ts";
 import { waitForExit } from "../testing/cleanup.ts";
 import type { PeerDeliveryReceipt } from "../peers/peer-delivery.ts";
 

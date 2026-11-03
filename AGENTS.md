@@ -1067,7 +1067,7 @@ thrashing … use /clear", a prompt past the window, Codex's
 contextWindowExceeded). Three halves:
 
 - Machine tools Sagax serves are cut to 30,000 characters where the harness
-  answers them (`server/tool-output-bound.ts`): the person's computer
+  answers them (`server/tools/tool-output-bound.ts`): the person's computer
   (`desktop-bridge-tools.ts`), the server environment
   (`user-sandbox-tools.ts`), the cloud computer's `exec` and a lent computer
   (`boundSharedComputerResult`, index.ts). Start and end kept, the cut says
@@ -1089,7 +1089,7 @@ contextWindowExceeded). Three halves:
   the already-full native session. Tests: `server/drivers/claude.test.ts`
   ("fresh session"), `server/drivers/codex.test.ts` ("fresh Codex thread"),
   `server/drivers/acp/acp.test.ts` ("lightened Grok session"),
-  `server/tool-output-bound.test.ts`, `server/context/context-renewal.test.ts`.
+  `server/tools/tool-output-bound.test.ts`, `server/context/context-renewal.test.ts`.
 
 ## Recall by meaning, on by default (#1327, 2026-10-29)
 

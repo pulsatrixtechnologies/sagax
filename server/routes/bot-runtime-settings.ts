@@ -36,7 +36,7 @@ import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 
 import type { RequestAuth } from "../auth/request-auth.ts";
-import type { ToolGrantStore } from "../tool-grants.ts";
+import type { ToolGrantStore } from "../tools/tool-grants.ts";
 import {
   botRuntimeSettingsPatchSchema,
   effectiveBotRuntimeSettings,

@@ -54,7 +54,7 @@ async function serve(rows: AdminSessionInput[], orgAdmin: boolean) {
 
 describe("admin remote-sessions routes", () => {
   it("is admin-scoped in the tool policy (defaultEnabled false)", async () => {
-    const { policyFor } = await import("../tool-policy.ts");
+    const { policyFor } = await import("../tools/tool-policy.ts");
     const list = policyFor("GET", "/api/admin/remote-sessions");
     expect(list.tier).toBe("admin");
     expect(list.defaultEnabled).toBe(false);

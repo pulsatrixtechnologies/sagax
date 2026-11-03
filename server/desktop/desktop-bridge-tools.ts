@@ -10,7 +10,7 @@ import { localVmDesktopSpec } from "../computer/container-computer.ts";
 import { cleanCommandVariables } from "../vault/credential-command-env.ts";
 import type { DesktopBridgeOperation } from "./desktop-bridge.ts";
 import { localVmComputerCall, localVmComputerCatalogText } from "../computer/local-vm-computer.ts";
-import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tool-output-bound.ts";
+import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tools/tool-output-bound.ts";
 
 const where = "on the computer of the person you are working for (their own PC, through their Sagax desktop app), like their own terminal";
 

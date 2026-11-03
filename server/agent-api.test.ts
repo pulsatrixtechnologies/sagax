@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { ToolGrantStore } from "./tool-grants.ts";
-import { guardDecision } from "./tool-guard.ts";
+import { ToolGrantStore } from "./tools/tool-grants.ts";
+import { guardDecision } from "./tools/tool-guard.ts";
 import { describe, expect, it } from "vitest";
 
 import { createHmac } from "node:crypto";

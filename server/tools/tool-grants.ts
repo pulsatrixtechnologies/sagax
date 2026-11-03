@@ -4,7 +4,7 @@
 // for the audit trail. Stored as one JSON file in the data directory.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 
 export type GrantSubject = { kind: "bot" | "user"; id: string };
 export interface ToolGrant {

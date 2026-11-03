@@ -7,10 +7,10 @@
 //
 // Mode shadow (default): the decision is recorded and the card shows as
 // before. Mode enforce: a refused call is denied without a card.
-import { AGENT_TOOL_POLICY, agentToolGuardPolicy, isAgentToolName, type AgentToolName } from "./agent-api.ts";
+import { AGENT_TOOL_POLICY, agentToolGuardPolicy, isAgentToolName, type AgentToolName } from "../agent-api.ts";
 import { guardDecision, type GuardDecision, type ToolGuardMode } from "./tool-guard.ts";
 import type { ToolGrantStore } from "./tool-grants.ts";
-import { unwrapAgentsBridge } from "../shared/searched-tool-call.ts";
+import { unwrapAgentsBridge } from "../../shared/searched-tool-call.ts";
 
 export interface CardGuardRow {
   tool: AgentToolName;

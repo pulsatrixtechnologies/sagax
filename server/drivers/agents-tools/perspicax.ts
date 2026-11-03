@@ -1,7 +1,7 @@
 // Agents tool family: Perspicax gateway tools and claims.
 // Never import server/index.ts.
 
-import { agentToolAnnotations } from "../../agent-tool-policy.ts";
+import { agentToolAnnotations } from "../../tools/agent-tool-policy.ts";
 import { CLAIM_TOOL_NAMES } from "../../perspicax/perspicax-claims.ts";
 import { isClaimTool } from "../../perspicax/perspicax-claims.ts";
 import { handleRemoteSupportCall } from "../../remote-support/remote-support-local.ts";

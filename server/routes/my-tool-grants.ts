@@ -1,7 +1,7 @@
 // A person's own tool access (2026-10-26, docs/tool-policy.md): the grants
 // whose subject is the signed-in person themselves (`{ kind: "user", id:
 // <their principal> }`), which the tool guard checks as the "speaker" of a
-// bot's turn (server/tool-guard.ts). The person manages them without an
+// bot's turn (server/tools/tool-guard.ts). The person manages them without an
 // admin for everything that stays in their own environment; a scope that
 // reaches other people, the whole organization, the shared server or its
 // billing stays an admin's (shared/grant-reach.ts), on /api/tool-grants.
@@ -19,7 +19,7 @@ import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 
 import type { RequestAuth } from "../auth/request-auth.ts";
-import type { ToolGrantStore } from "../tool-grants.ts";
+import type { ToolGrantStore } from "../tools/tool-grants.ts";
 import { grantStaysInOwnEnvironment, ORG_REACH_AREAS } from "../../shared/grant-reach.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

@@ -25,7 +25,7 @@
 // agent (2026-10-29): its send lands in its own conversation with the bot,
 // drawn like a bot-to-bot one and silent for the person
 // (shared/agent-conversation.ts); the turn still runs as the person.
-import type { GuardDecision, GuardPolicy, GuardTarget, ToolGuardMode } from "./tool-guard.ts";
+import type { GuardDecision, GuardPolicy, GuardTarget, ToolGuardMode } from "./tools/tool-guard.ts";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import { parseWakePriority, planPriorityWake, releasePriorityNow, wakeSenderId, type PriorityDelivery } from "./proactive/priority-wake.ts";
@@ -322,7 +322,7 @@ export interface AgentApiDeps {
   /** Async mode: tell the caller the turn ended (a bot is woken with the reply). */
   notify?(caller: AgentCaller, agent: AgentSummary, result: TurnResult): void;
   audit(caller: AgentCaller, entry: AuditEntry): void;
-  /** The securable tool layer (server/tool-guard.ts): grants and the speaker.
+  /** The securable tool layer (server/tools/tool-guard.ts): grants and the speaker.
    * Absent, or mode "off", skips it; "shadow" records the decision only. */
   guard?(caller: AgentCaller, policy: GuardPolicy, target?: GuardTarget): GuardDecision;
   /** The person who owns this agent, lowercased, or null (tool-guard.ts ownerScoped). */

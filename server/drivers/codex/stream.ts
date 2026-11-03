@@ -2,7 +2,7 @@
 import { describeSpawnFailure } from "../../procs.ts";
 import { appendNative } from "../native.ts";
 import { classifyError, RETRY_MAX_ATTEMPTS } from "../retry.ts";
-import { commandSummary, cwToolResult, toolDetailPreview } from "../../tool-summary.ts";
+import { commandSummary, cwToolResult, toolDetailPreview } from "../../tools/tool-summary.ts";
 import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../../shared/phone-tools.ts";
 import { filesField, writtenFilesFromToolInput } from "../../threads/thread-files.ts";
 import { extractMcpImages } from "../../mcp/mcp-tool-images.ts";

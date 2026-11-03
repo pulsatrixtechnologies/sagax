@@ -93,4 +93,16 @@ final class ConnectAppsSearchTests: XCTestCase {
         let bots = ConnectAppsSearch.sections(query: "assistant", sources: twice).first { $0.group == .bots }
         XCTAssertEqual(bots?.hits.count, 1)
     }
+
+    func testNewSkillNameRuleAndSkillMarkdownAsTheDesktop() {
+        XCTAssertTrue(CompanionClient.isSkillName("weekly-report"))
+        XCTAssertTrue(CompanionClient.isSkillName("a1"))
+        XCTAssertFalse(CompanionClient.isSkillName("Weekly"))
+        XCTAssertFalse(CompanionClient.isSkillName("double--hyphen"))
+        XCTAssertFalse(CompanionClient.isSkillName("-lead"))
+        XCTAssertFalse(CompanionClient.isSkillName(""))
+        XCTAssertFalse(CompanionClient.isSkillName(String(repeating: "a", count: 65)))
+        XCTAssertEqual(CompanionClient.skillMarkdown(name: " notes ", description: "Takes\n notes  well", instructions: "Step one\r\nStep two\n\n"),
+                       "---\nname: notes\ndescription: Takes notes well\n---\n\nStep one\nStep two\n")
+    }
 }

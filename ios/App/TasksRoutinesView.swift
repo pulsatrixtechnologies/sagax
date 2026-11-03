@@ -37,6 +37,11 @@ struct TasksRoutinesView: View {
     @Environment(\.automationsDesktop) private var desktop
     /// Lot 5: the routine open in the desktop's side panel.
     @State private var panelRoutine: Routine?
+    /// The paused list (the ☰ menu's Paused routines) in the side panel.
+    @State private var pausedOpen = false
+    /// The run logs' bot (RoutineLogs.tsx keeps it in the logs).
+    @State private var logBotId: String?
+    @State private var confirmClearLogs = false
     @State private var scheduleView: ScheduleView
     @State private var agendaDay = RoutineCalendar.startOfDay(Date())
     @State private var quickSlot: AutomationsSlot?
@@ -162,9 +167,7 @@ struct TasksRoutinesView: View {
                 day: $agendaDay, routines: routines, runs: runs, bots: session.state.bots,
                 botId: botFilter.botId, loading: loading
             ) {
-                if desktop {
-                    desktopLeading
-                } else {
+                if !desktop {
                     sectionPicker
                     if organization {
                         scopePicker
@@ -174,24 +177,19 @@ struct TasksRoutinesView: View {
                     if section == .routines, showsPauseChrome { routinePauseChrome }
                 }
             } trailing: {
-                AnyView(desktop ? AnyView(desktopTrailing) : AnyView(EmptyView()))
+                AnyView(EmptyView())
             } onCreate: { at in
                 quickSlot = AutomationsSlot(at: at)
             } onAction: { action, item in
                 handle(action, item)
             }
+        } else if desktop && section == .logs {
+            desktopLogs
         } else {
             ThemedList {
                 if desktop {
-                    Section {
-                        HStack(spacing: 10) {
-                            desktopLeading
-                            Spacer(minLength: 0)
-                            desktopTrailing
-                        }
-                        .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                        if organization { scopePicker.listRowBackground(Color.clear); scopeNote.listRowBackground(Color.clear) }
+                    if organization {
+                        Section { scopePicker.listRowBackground(Color.clear); scopeNote.listRowBackground(Color.clear) }
                     }
                     if section == .routines {
                         Section {
@@ -231,121 +229,358 @@ struct TasksRoutinesView: View {
 
     // MARK: The desktop's header (RoutineCalendarPage.tsx PageHeader)
 
-    /// "Automations" with its mark, then List and Calendar.
-    private var desktopLeading: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "calendar").font(.system(size: 15))
-                Text("Automations").font(Theme.font(15, .semibold))
-            }
-            .foregroundStyle(Theme.textPrimary)
-            .accessibilityAddTraits(.isHeader)
-            // PageSegment: rounded-lg, hairline/50 border, panel fill, p-0.5
-            HStack(spacing: 0) {
-                desktopViewButton(.list, "List", .list)
-                desktopViewButton(.calendar, "Calendar", .calendarDays)
-            }
-            .padding(2)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.card))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.hairline.opacity(0.5), lineWidth: 1))
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(Text("Schedule view"))
+    /// The routines the ☰ menu counts as paused (`paused`): off, and not a
+    /// one-time run already past.
+    private var pausedRoutines: [Routine] {
+        let now = Date().timeIntervalSince1970 * 1_000
+        return routines.filter { routine in
+            !routine.enabled && !(routine.schedule.type == .once && (routine.schedule.at ?? 0) <= now)
         }
     }
 
-    private func desktopViewButton(_ view: ScheduleView, _ title: LocalizedStringKey, _ icon: DesktopIcon) -> some View {
-        let on = section == .routines && scheduleView == view
-        return Button {
-            section = .routines
-            scheduleView = view
-        } label: {
-            HStack(spacing: 6) {
-                DesktopIconView(icon: icon, size: 14)
-                Text(title).font(Theme.font(12))
+    /// One row: "Automations" (› Run logs), List | Calendar and, in the
+    /// calendar, ‹ Today › and the range; on the right Filters, ☰ and New.
+    private var desktopHeader: some View {
+        DesktopContentPageHeader(
+            icon: .calendarDays,
+            title: "Automations",
+            section: section == .logs ? "Run logs" : nil
+        ) { fit in
+            if section == .routines {
+                DesktopPageSegment(
+                    label: "Schedule view",
+                    value: scheduleView,
+                    options: [
+                        (ScheduleView.list, "List", .list, "automations-view.list"),
+                        (ScheduleView.calendar, "Calendar", .calendarDays, "automations-view.calendar"),
+                    ],
+                    folded: fit.folded
+                ) { scheduleView = $0 }
+                if scheduleView == .calendar {
+                    DesktopCalendarNavigation(
+                        range: AutomationsWeekView.rangeLabel(AutomationsWeekView.weekStart(agendaDay), desktop: true),
+                        previous: { agendaDay = RoutineCalendar.addDays(agendaDay, -7) },
+                        today: { agendaDay = RoutineCalendar.startOfDay(Date()) },
+                        next: { agendaDay = RoutineCalendar.addDays(agendaDay, 7) }
+                    )
+                }
             }
-            .foregroundStyle(on ? Theme.textPrimary : Theme.textSecondary)
-            .padding(.horizontal, 10)
-            .frame(minHeight: 32)
-            .background(RoundedRectangle(cornerRadius: 6).fill(on ? Theme.cardRaised : Color.clear))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(on ? .isSelected : [])
-        .accessibilityIdentifier("automations-view.\(view == .list ? "list" : "calendar")")
-    }
-
-    /// Filters, the logs (with their problem count), and New.
-    private var desktopTrailing: some View {
-        HStack(spacing: 8) {
+        } actions: { fit in
+            if seenAllowed && unseenFailures > 0 {
+                Button {
+                    section = .logs
+                    statusFilter = .problems
+                    routineFilter = nil
+                } label: {
+                    HStack(spacing: 4) {
+                        DesktopIconView(icon: .circleAlert, size: 14)
+                        Text(verbatim: "\(unseenFailures)").font(Theme.font(12, .medium))
+                    }
+                    .foregroundStyle(Theme.danger)
+                    .padding(.horizontal, 8)
+                    .frame(height: 36)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Open problem run logs"))
+                .accessibilityIdentifier("routines-problems-badge")
+            }
             Menu {
                 Picker(selection: $botFilter) {
                     Text("All bots").tag(RoutineBotFilter())
                     ForEach(visibleBots) { bot in Text(verbatim: bot.name).tag(RoutineBotFilter(botId: bot.id)) }
                 } label: { Label("Filter by bot", systemImage: "line.3.horizontal.decrease.circle") }
                 .pickerStyle(.menu)
-                Picker(selection: $groupBy) {
-                    Text("Bot").tag(RoutineGroupBy.bot)
-                    Text("Folder").tag(RoutineGroupBy.folder)
-                    Text("None").tag(RoutineGroupBy.none)
-                } label: { Text("Group by") }
-                .pickerStyle(.menu)
+                if section == .routines && scheduleView == .list {
+                    Picker(selection: $groupBy) {
+                        Text("Bot").tag(RoutineGroupBy.bot)
+                        Text("Folder").tag(RoutineGroupBy.folder)
+                        Text("None").tag(RoutineGroupBy.none)
+                    } label: { Text("Group by") }
+                    .pickerStyle(.menu)
+                }
                 if organization { scopeFilters }
+                if botFilter.botId != nil {
+                    Button("Clear filters", systemImage: "xmark.circle") { botFilter = RoutineBotFilter() }
+                }
+            } label: {
+                DesktopFiltersLabel(folded: fit.folded, activeCount: botFilter.botId != nil ? 1 : 0)
+            }
+            .accessibilityIdentifier("automations-filters")
+            Menu {
+                Button {
+                    section = .routines
+                } label: {
+                    Label { Text("Schedule") } icon: { Image(systemName: section == .routines ? "checkmark" : "calendar") }
+                }
+                .accessibilityIdentifier("automations-menu-schedule")
+                Button {
+                    section = .logs
+                    routineFilter = nil
+                } label: {
+                    Label { Text("Run logs") } icon: { Image(systemName: section == .logs ? "checkmark" : "doc.text") }
+                }
+                .accessibilityIdentifier("automations-logs")
+                Divider()
+                if !pausedRoutines.isEmpty {
+                    Button {
+                        panelRoutine = nil
+                        pausedOpen = true
+                    } label: {
+                        Label { Text("Paused routines") } icon: { Image(systemName: "pause") }
+                    }
+                    .accessibilityIdentifier("automations-menu-paused")
+                }
                 if seenAllowed {
                     Button("Mark all as read", systemImage: "checkmark.circle") { Task { await markAllSeen() } }
                 }
             } label: {
-                HStack(spacing: 6) {
-                    DesktopIconView(icon: .slidersHorizontal, size: 15)
-                    Text("Filters").font(Theme.font(12, .medium))
-                }
-                .foregroundStyle(Theme.textPrimary)
-                .padding(.horizontal, 10)
-                .frame(minHeight: 32)
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.hairline, lineWidth: 0.5))
+                DesktopPageMenuLabel(badge: pausedRoutines.count)
             }
-            .accessibilityIdentifier("automations-filters")
-            Button {
-                section = section == .logs ? .routines : .logs
-            } label: {
-                DesktopIconView(icon: .list, size: 16)
-                    .foregroundStyle(section == .logs ? Theme.accent : Theme.textPrimary)
-                    .frame(width: 32, height: 32)
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.hairline, lineWidth: 0.5))
-                    .overlay(alignment: .topTrailing) {
-                        if unseenFailures > 0 {
-                            Text(verbatim: "\(unseenFailures)").font(.system(size: 9, weight: .semibold)).foregroundStyle(Theme.textPrimary)
-                                .padding(.horizontal, 3).offset(x: 4, y: -4)
-                        }
-                    }
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text("Run logs"))
-            .accessibilityIdentifier("automations-logs")
+            .accessibilityLabel(Text("Automation menu"))
+            .accessibilityIdentifier("automations-menu")
             Menu {
                 Button {
+                    section = .routines
                     quickSlot = AutomationsSlot(at: RoutineScheduleForm.nextHour())
                 } label: {
                     Label { Text("Scheduled task") } icon: { Image(systemName: "clock") }
                     Text("Ask a bot to do something later.")
                 }
+                .accessibilityIdentifier("automations-new-task")
             } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "plus").font(.system(size: 12, weight: .semibold))
-                    Text("New").font(Theme.font(12.5, .medium))
+                DesktopHeaderButtonLabel(labelled: true, accent: true) {
+                    DesktopIconView(icon: .plus, size: 15)
+                    Text("New")
                 }
-                .foregroundStyle(Color.white)
-                .padding(.horizontal, 14)
-                .frame(minHeight: 32)
-                .background(Capsule().fill(Theme.accent))
             }
+            .accessibilityLabel(Text("Create an automation"))
             .accessibilityIdentifier("automations-new")
         }
     }
 
+    /// The paused list (`PausedList`) in the side panel: each routine, its
+    /// schedule, a tap opens it.
+    private var desktopPausedPanel: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Paused routines").font(Theme.font(15, .medium)).foregroundStyle(Theme.textPrimary)
+                Spacer()
+                Button { pausedOpen = false } label: {
+                    DesktopIconView(icon: .x, size: 16).foregroundStyle(Theme.textSecondary).frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Close"))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            Rectangle().fill(Theme.hairline.opacity(0.5)).frame(height: 0.5)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(pausedRoutines) { routine in
+                        Button {
+                            pausedOpen = false
+                            panelRoutine = routine
+                        } label: {
+                            HStack(spacing: 12) {
+                                if let bot = session.state.bot(routine.botId) {
+                                    BotMascotView(bot: bot, size: 36, state: .sleeping, animated: false).frame(width: 36, height: 36)
+                                }
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(verbatim: routine.name).font(Theme.font(13, .medium)).foregroundStyle(Theme.textPrimary).lineLimit(1)
+                                    Text(verbatim: RoutineWording.desktop(routine.schedule)).font(Theme.font(11)).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(12)
+            }
+        }
+        .accessibilityIdentifier("automations-paused-panel")
+    }
+
+    // MARK: The desktop's run logs (routines/RoutineLogs.tsx)
+
+    private var desktopLogBots: [(id: String, name: String)] {
+        let ids = Array(Set(runs.map(\.botId)))
+        return ids.map { id in (id, session.state.bot(id)?.name ?? String(localized: "Deleted agent")) }
+            .sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+    }
+
+    private func desktopSelect<Value: Hashable>(_ title: String, selection: Binding<Value>, id: String, @ViewBuilder options: () -> some View) -> some View {
+        Menu {
+            Picker(selection: selection) { options() } label: { EmptyView() }
+                .pickerStyle(.inline)
+        } label: {
+            HStack(spacing: 6) {
+                Text(verbatim: title).lineLimit(1)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+            }
+            .font(Theme.font(12))
+            .foregroundStyle(Theme.textPrimary)
+            .padding(.horizontal, 12)
+            .frame(height: 34)
+            .frame(maxWidth: 200)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.card))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.hairline.opacity(0.5), lineWidth: 1))
+            .fixedSize(horizontal: true, vertical: false)
+        }
+        .accessibilityIdentifier(id)
+    }
+
+    private var desktopLogs: some View {
+        let shown = filteredRuns.filter { logBotId == nil || $0.botId == logBotId }
+        let routineChoices = RoutineRunLog.routineChoices(botFilter.runs(runs))
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Run logs").font(Theme.font(17, .semibold)).foregroundStyle(Theme.textPrimary)
+                    Text("Recent saved runs across your bots. Open a run for its result, error, and execution thread.")
+                        .font(Theme.font(12)).foregroundStyle(Theme.textSecondary)
+                }
+                HStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        DesktopIconView(icon: .search, size: 14).foregroundStyle(Theme.textSecondary)
+                        TextField(String(localized: "Search run logs"), text: $query)
+                            .font(Theme.font(12))
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .accessibilityIdentifier("routines-logs-search")
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(minWidth: 180, maxWidth: .infinity, minHeight: 34)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.card))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.hairline.opacity(0.5), lineWidth: 1))
+                    desktopSelect(RoutineRunWording.status(statusFilter), selection: Binding(get: { statusFilter }, set: { statusFilter = $0; logLimit = 50 }), id: "routines-status-filter") {
+                        ForEach(RoutineRunStatusFilter.allCases, id: \.self) { filter in
+                            Text(verbatim: RoutineRunWording.status(filter)).tag(filter)
+                        }
+                    }
+                    if routineChoices.count > 1 {
+                        desktopSelect(routineChoices.first { $0.id == routineFilter }?.name ?? String(localized: "All routines"),
+                                      selection: Binding(get: { routineFilter }, set: { routineFilter = $0; logLimit = 50 }), id: "routines-routine-filter") {
+                            Text("All routines").tag(String?.none)
+                            ForEach(routineChoices, id: \.id) { choice in Text(verbatim: choice.name).tag(String?.some(choice.id)) }
+                        }
+                    }
+                    if desktopLogBots.count > 1 {
+                        desktopSelect(desktopLogBots.first { $0.id == logBotId }?.name ?? String(localized: "All bots"),
+                                      selection: $logBotId, id: "routines-bot-filter") {
+                            Text("All bots").tag(String?.none)
+                            ForEach(desktopLogBots, id: \.id) { bot in Text(verbatim: bot.name).tag(String?.some(bot.id)) }
+                        }
+                    }
+                    desktopSelect(periodLabel(logPeriod), selection: Binding(get: { logPeriod }, set: { logPeriod = $0; logLimit = 50 }), id: "routines-period-filter") {
+                        ForEach([RoutineRunLog.Period.all, .day, .week, .month], id: \.self) { period in
+                            Text(verbatim: periodLabel(period)).tag(period)
+                        }
+                    }
+                    Button { confirmClearLogs = true } label: {
+                        Text("Clear logs")
+                            .font(Theme.font(12))
+                            .foregroundStyle(Theme.textPrimary)
+                            .padding(.horizontal, 12)
+                            .frame(height: 34)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.card))
+                            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.hairline.opacity(0.5), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(runs.isEmpty)
+                    .opacity(runs.isEmpty ? 0.4 : 1)
+                    .accessibilityIdentifier("routines-clear-logs")
+                }
+                if routineFilter != nil {
+                    HStack(spacing: 8) {
+                        Text("Showing one routine's runs.").foregroundStyle(Theme.textSecondary)
+                        Button("Show all routines") { routineFilter = nil }.buttonStyle(.borderless).foregroundStyle(Theme.accent)
+                    }
+                    .font(Theme.font(12))
+                }
+                if loading && shown.isEmpty {
+                    HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Loading routines…") }
+                        .font(Theme.font(12)).foregroundStyle(Theme.textSecondary)
+                } else if shown.isEmpty {
+                    VStack(spacing: 12) {
+                        DesktopIconView(icon: .fileText, size: 24).opacity(0.5)
+                        Text(runs.isEmpty ? "No runs recorded yet. Results will appear here after a routine starts." : "No runs match these filters.")
+                            .multilineTextAlignment(.center)
+                    }
+                    .font(Theme.font(13))
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(40)
+                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.hairline.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("routines-logs-empty")
+                }
+                VStack(spacing: 8) {
+                    ForEach(shown.prefix(logLimit)) { run in
+                        Button { openRun = run } label: {
+                            RoutineLogRow(run: run, bot: session.state.bot(run.botId), showsUnseen: seenAllowed)
+                                .padding(16)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(RoundedRectangle(cornerRadius: 12).fill(Theme.card))
+                                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.hairline.opacity(0.4), lineWidth: 1))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                if shown.count > logLimit {
+                    Button("Show more runs") { logLimit += 50 }
+                        .font(Theme.font(12))
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.cardRaised))
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: 1024)
+            .frame(maxWidth: .infinity)
+        }
+        .confirmationDialog("Clear run logs?", isPresented: $confirmClearLogs, titleVisibility: .visible) {
+            Button("Clear logs", role: .destructive) { Task { await clearAllLogs() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes all the saved runs you can see. Runs in progress are kept.")
+        }
+    }
+
+    private func periodLabel(_ period: RoutineRunLog.Period) -> String {
+        switch period {
+        case .all: String(localized: "Any time")
+        case .day: String(localized: "Last 24 hours")
+        case .week: String(localized: "Last 7 days")
+        case .month: String(localized: "Last 30 days")
+        }
+    }
+
+    private func clearAllLogs() async {
+        guard let client = session.settingsClient else { return }
+        if let removed = try? await client.clearAllRoutineRuns() {
+            let gone = Set(removed)
+            runs.removeAll { gone.contains($0.id) }
+        }
+        await reload()
+    }
+
     var body: some View {
         HStack(spacing: 0) {
-            pageContent
-            if desktop, let routine = panelRoutine.flatMap({ open in routines.first { $0.id == open.id } ?? open }) {
+            VStack(spacing: 0) {
+                if desktop { desktopHeader }
+                pageContent
+            }
+            if desktop, pausedOpen {
+                Rectangle().fill(Theme.hairline).frame(width: 0.5)
+                desktopPausedPanel
+                    .frame(width: 476)
+                    .transition(.move(edge: .trailing))
+            } else if desktop, let routine = panelRoutine.flatMap({ open in routines.first { $0.id == open.id } ?? open }) {
                 Rectangle().fill(Theme.hairline).frame(width: 0.5)
                 DesktopRoutinePanel(
                     routine: routine, runs: runs,
@@ -361,7 +596,7 @@ struct TasksRoutinesView: View {
         }
         .navigationTitle(automations ? "Automations" : "Threads & Routines")
         .toolbar(desktop ? .hidden : .automatic, for: .navigationBar)
-        .modifier(LogsSearch(active: section == .logs, query: $query, limit: $logLimit))
+        .modifier(LogsSearch(active: section == .logs && !desktop, query: $query, limit: $logLimit))
         .toolbar {
             if seenAllowed && unseenFailures > 0 {
                 ToolbarItem(placement: .primaryAction) {
@@ -822,7 +1057,7 @@ struct TasksRoutinesView: View {
         .contentShape(Rectangle())
         .listRowSeparator(.hidden)
         .onTapGesture { panelRoutine = routine }
-        .listRowBackground(panelRoutine?.id == routine.id ? Theme.card : Color.clear)
+        .listRowBackground(Color.clear)
     }
 
     /// One routine row with its swipes and menu.

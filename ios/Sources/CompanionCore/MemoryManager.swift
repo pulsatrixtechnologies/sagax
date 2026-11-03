@@ -586,3 +586,31 @@ public enum MemoryJsonTree {
         }
     }
 }
+
+public extension MemoryManager {
+    /// A note's line in the list (src/lib/memory-page.ts `excerptFromBody`):
+    /// JSON as its first 160 characters, otherwise the first line of prose
+    /// past the front matter, headings, fences and rules, without its list,
+    /// quote or callout mark, its links and its emphasis; 160 at most.
+    static func excerpt(fromBody body: String) -> String {
+        let text = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("{") || text.hasPrefix("[") { return String(text.prefix(160)) }
+        let stripped = text.replacingOccurrences(of: #"^---\n[\s\S]*?\n---\n?"#, with: "", options: .regularExpression)
+        for raw in stripped.components(separatedBy: "\n") {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty || line.range(of: #"^#{1,6}\s"#, options: .regularExpression) != nil
+                || line.hasPrefix("```") || line.range(of: #"^[-*_]{3,}$"#, options: .regularExpression) != nil { continue }
+            var plain = line
+            plain = plain.replacingOccurrences(of: #"^>\s?(\[![A-Za-z]+\]\s*)?"#, with: "", options: .regularExpression)
+            plain = plain.replacingOccurrences(of: #"^[-*+]\s+(\[[ xX]\]\s+)?"#, with: "", options: .regularExpression)
+            plain = plain.replacingOccurrences(of: #"^\d+\.\s+"#, with: "", options: .regularExpression)
+            plain = plain.replacingOccurrences(of: #"\[\[([^\]|]+)\|([^\]]+)\]\]"#, with: "$2", options: .regularExpression)
+            plain = plain.replacingOccurrences(of: #"\[\[([^\]|]+)\]\]"#, with: "$1", options: .regularExpression)
+            plain = plain.replacingOccurrences(of: #"\[([^\]]+)\]\([^)]+\)"#, with: "$1", options: .regularExpression)
+            plain = plain.replacingOccurrences(of: #"[*_`~]+"#, with: "", options: .regularExpression)
+            plain = plain.trimmingCharacters(in: .whitespaces)
+            if !plain.isEmpty { return String(plain.prefix(160)) }
+        }
+        return ""
+    }
+}

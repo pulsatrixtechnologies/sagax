@@ -31,6 +31,9 @@ struct DesktopMemoryPage: View {
     @State private var tab: Tab = .notes
     @State private var place: Place = .all
     @State private var entries: [Entry] = []
+    /// The bots' notes' excerpts, read from their bodies in the background
+    /// (MemoryManagerPanel.tsx "Bodies, in the background", 400 at most).
+    @State private var excerpts: [String: String] = [:]
     @State private var loading = true
     @State private var query = ""
     @State private var sort: Sort = .changed
@@ -274,11 +277,11 @@ struct DesktopMemoryPage: View {
                     .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
                     .padding(.bottom, 6)
                     group(Text("Lists"))
-                    placeRow(.all, Text("All notes"), .fileText, count(.all))
+                    placeRow(.all, Text("All notes"), .notebookText, count(.all))
                     placeRow(.teams, Text("Teams"), .users, count(.teams))
                     placeRow(.pinned, Text("Pinned"), .pin, count(.pinned))
-                    placeRow(.recent, Text("Recent"), .calendarClock, count(.recent))
-                    placeRow(.review, Text("Review"), .eye, count(.review))
+                    placeRow(.recent, Text("Recent"), .clock3, count(.recent))
+                    placeRow(.review, Text("Review"), .circleCheck, count(.review))
                     group(Text("Tiers")).padding(.top, 10)
                     let bots = sources.filter { $0.kind == .bot }
                     if !bots.isEmpty {
@@ -562,19 +565,20 @@ struct DesktopMemoryPage: View {
                         .frame(width: 24, height: 24)
                 }
                 .buttonStyle(.plain)
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
-                        Text(verbatim: entry.row.title).font(theme.font(13.5, .medium)).foregroundStyle(theme.ink).lineLimit(1)
+                        Text(verbatim: entry.row.title).font(theme.font(14, .semibold)).foregroundStyle(theme.ink).lineLimit(1)
                         if pins.contains(entry.id) { DesktopIconView(icon: .pin, size: 11).foregroundStyle(theme.inkSecondary) }
                     }
-                    if let excerpt = entry.row.excerpt, !excerpt.isEmpty {
-                        Text(verbatim: excerpt).font(theme.font(12.5)).foregroundStyle(theme.inkSecondary).lineLimit(2)
+                    if let excerpt = excerpts[entry.id] ?? entry.row.excerpt, !excerpt.isEmpty {
+                        Text(verbatim: excerpt).font(theme.font(13)).lineSpacing(3).foregroundStyle(theme.inkSecondary).lineLimit(2)
+                            .accessibilityIdentifier("desktop-memory.note-excerpt")
                     }
                     HStack(spacing: 6) {
                         Circle().fill(tierColor(entry.source)).frame(width: 7, height: 7)
-                        Text(tierLabel(entry.source)).font(theme.font(11.5, .medium)).foregroundStyle(theme.inkSecondary)
+                        Text(tierLabel(entry.source)).font(theme.font(12, .medium)).foregroundStyle(theme.ink)
                         if entry.source.kind == .bot {
-                            Text(verbatim: entry.source.name).font(theme.font(11.5)).foregroundStyle(theme.inkTertiary)
+                            Text(verbatim: entry.source.name).font(theme.font(12)).foregroundStyle(theme.inkSecondary)
                         }
                         ForEach(entry.row.tags ?? [], id: \.self) { tag in
                             Text(verbatim: "#\(tag)").font(theme.font(11)).foregroundStyle(theme.accentText)
@@ -584,7 +588,7 @@ struct DesktopMemoryPage: View {
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 10)
+            .padding(.vertical, 12)
             .frame(minHeight: 56)
             .contentShape(Rectangle())
         }
@@ -631,7 +635,7 @@ struct DesktopMemoryPage: View {
     private var mapView: some View {
         DesktopBrainMap(entries: entries, colorOf: tierColor, open: { entry in
             tab = .notes; place = .source(entry.source.id); opened = entry
-        }, sources: tierSources)
+        }, sources: tierSources, excerpts: excerpts)
     }
 
     /// Tags (MemoryTagsView.tsx): a tag opens the notes filtered by it.
@@ -671,6 +675,30 @@ struct DesktopMemoryPage: View {
             all += (page?.notes ?? []).map { Entry(source: source, row: $0) }
         }
         entries = all
+        await loadExcerpts(client)
+    }
+
+    /// Six at a time, as the desktop's pool; a note that does not answer
+    /// keeps the others.
+    private func loadExcerpts(_ client: CompanionClient) async {
+        let wanted = entries.filter { $0.source.kind == .bot && $0.source.botId != nil && $0.row.path != nil && excerpts[$0.id] == nil }.prefix(400)
+        var queue = Array(wanted)
+        await withTaskGroup(of: (String, String)?.self) { group in
+            func next() {
+                guard !queue.isEmpty else { return }
+                let entry = queue.removeFirst()
+                group.addTask {
+                    guard let botId = entry.source.botId, let path = entry.row.path,
+                          let doc = try? await client.memoryDoc(botId: botId, path: path) else { return nil }
+                    return (entry.id, MemoryManager.excerpt(fromBody: doc.text))
+                }
+            }
+            for _ in 0..<6 { next() }
+            while let result = await group.next() {
+                if let (id, text) = result { excerpts[id] = text }
+                next()
+            }
+        }
     }
 
     private func entries(in place: Place) -> [Entry] {
@@ -773,8 +801,8 @@ struct DesktopMemoryPage: View {
         switch tab {
         case .notes: .fileText
         case .map: .network
-        case .tags: .pin
-        case .quality: .activity
+        case .tags: .tag
+        case .quality: .gauge
         }
     }
 

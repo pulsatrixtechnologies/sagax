@@ -249,10 +249,114 @@ struct DesktopReleaseNotesModal: View {
                     .foregroundStyle(theme.inkSecondary)
                     .padding(.horizontal, 4)
             } else {
-                MarkdownText(source: text)
+                DesktopReleaseMarkdown(source: text)
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("release-notes-text.\(version)")
+    }
+}
+
+/// `ReleaseNotesMarkdown` (ReleaseNotesMarkdown.tsx), drawn like Settings:
+/// a `#` or `##` heading is a small grey label (13/18, mt-6, mb-1.5), a
+/// `###` a 13 pt semibold title (mt-4, mb-1), the text 13.5/21 with its
+/// bullets (pl-6, 6 apart), a code span 12 pt on the control colour.
+struct DesktopReleaseMarkdown: View {
+    @Environment(\.desktopTheme) private var theme
+    let source: String
+
+    enum Block: Hashable {
+        case section(String), title(String), paragraph(String), bullet(String)
+    }
+
+    static func blocks(_ source: String) -> [Block] {
+        var out: [Block] = []
+        var paragraph: [String] = []
+        func flush() {
+            if !paragraph.isEmpty { out.append(.paragraph(paragraph.joined(separator: " "))); paragraph = [] }
+        }
+        for raw in source.components(separatedBy: "\n") {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty { flush(); continue }
+            if let match = line.range(of: #"^#{1,6}\s+"#, options: .regularExpression) {
+                flush()
+                let level = line[match].filter { $0 == "#" }.count
+                let text = String(line[match.upperBound...])
+                out.append(level <= 2 ? .section(text) : .title(text))
+            } else if let match = line.range(of: #"^[-*+]\s+"#, options: .regularExpression) {
+                flush()
+                out.append(.bullet(String(line[match.upperBound...])))
+            } else if case let .bullet(previous)? = out.last, paragraph.isEmpty, raw.hasPrefix("  ") {
+                // a bullet's wrapped line
+                out[out.count - 1] = .bullet(previous + " " + line)
+            } else {
+                paragraph.append(line)
+            }
+        }
+        flush()
+        return out
+    }
+
+    private func inline(_ text: String) -> Text {
+        var attributed = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+        for run in attributed.runs where run.inlinePresentationIntent?.contains(.code) == true {
+            attributed[run.range].font = DesktopFonts.geistMono(12)
+            attributed[run.range].backgroundColor = theme.control
+        }
+        return Text(attributed)
+    }
+
+    var body: some View {
+        let blocks = Self.blocks(source)
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { index, block in
+                switch block {
+                case let .section(text):
+                    Text(verbatim: text)
+                        .font(theme.font(13))
+                        .foregroundStyle(theme.inkSecondary)
+                        .frame(minHeight: 18, alignment: .leading)
+                        .padding(.horizontal, 4)
+                        .padding(.top, index == 0 ? 0 : 24)
+                        .padding(.bottom, 6)
+                        .accessibilityAddTraits(.isHeader)
+                case let .title(text):
+                    Text(verbatim: text)
+                        .font(theme.font(13, .semibold))
+                        .foregroundStyle(theme.ink)
+                        .frame(minHeight: 18, alignment: .leading)
+                        .padding(.horizontal, 4)
+                        .padding(.top, index == 0 ? 0 : 16)
+                        .padding(.bottom, 4)
+                        .accessibilityAddTraits(.isHeader)
+                case let .paragraph(text):
+                    inline(text)
+                        .font(theme.font(13.5))
+                        .lineSpacing(5)
+                        .foregroundStyle(theme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 8)
+                case let .bullet(text):
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(verbatim: "•").font(theme.font(13.5)).foregroundStyle(theme.inkTertiary)
+                        inline(text)
+                            .font(theme.font(13.5))
+                            .lineSpacing(5)
+                            .foregroundStyle(theme.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.leading, 12)
+                    .padding(.trailing, 4)
+                    .padding(.top, Self.isBullet(blocks, index - 1) ? 6 : 8)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private static func isBullet(_ blocks: [Block], _ index: Int) -> Bool {
+        guard index >= 0, index < blocks.count, case .bullet = blocks[index] else { return false }
+        return true
     }
 }

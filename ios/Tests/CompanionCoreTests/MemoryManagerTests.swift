@@ -143,4 +143,14 @@ final class MemoryManagerTests: XCTestCase {
         XCTAssertEqual(decoded.sources[0].kind, .bot)
         XCTAssertTrue(decoded.perspicax.available)
     }
+
+    func testExcerptFromBodyAsTheDesktopList() {
+        XCTAssertEqual(MemoryManager.excerpt(fromBody: "---\ntitle: x\n---\n# MEMORY\n\nDurable notes this bot keeps between tasks."), "Durable notes this bot keeps between tasks.")
+        XCTAssertEqual(MemoryManager.excerpt(fromBody: "## Head\n```\n- [x] **Done** with [[Note|the note]] and [link](https://x.y)"), "Done with the note and link")
+        XCTAssertEqual(MemoryManager.excerpt(fromBody: "> [!note] Quoted\n"), "Quoted")
+        XCTAssertEqual(MemoryManager.excerpt(fromBody: "1. First [[Target]]"), "First Target")
+        XCTAssertEqual(MemoryManager.excerpt(fromBody: "{\"a\": 1}"), "{\"a\": 1}")
+        XCTAssertEqual(MemoryManager.excerpt(fromBody: "# Only a heading\n---"), "")
+        XCTAssertEqual(MemoryManager.excerpt(fromBody: String(repeating: "a", count: 200)).count, 160)
+    }
 }

@@ -80,7 +80,7 @@ final class DesktopShellModel: ObservableObject {
         case releaseNotes, whatsNew
 
         /// Drawn in the shell as the desktop's modals, not as sheets.
-        var inShell: Bool { [.settings, .search, .plugins, .shortcuts, .about, .releaseNotes, .whatsNew].contains(self) }
+        var inShell: Bool { [.settings, .search, .plugins, .shortcuts, .about, .releaseNotes, .whatsNew, .newBot].contains(self) }
         var id: String { rawValue }
     }
 
@@ -162,6 +162,19 @@ final class DesktopShellModel: ObservableObject {
     /// The bot's computer window drawn in the shell (lot 6): the fallback
     /// where iPadOS has no second scene to give it, and the parity captures.
     @Published var computerWindow: String?
+    /// The chat column's notice (`state.notice`, ChatErrorBanner.tsx
+    /// ChatNotice): a dead thread link, a bot that is gone; it clears
+    /// itself after 6 s, as the desktop's store does.
+    @Published var notice: DesktopNotice?
+
+    func show(notice: DesktopNotice, clearsAfter seconds: Double = 6) {
+        self.notice = notice
+        let shown = notice
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            if self?.notice == shown { self?.notice = nil }
+        }
+    }
     /// The open "To:" picker's ⌘1 to ⌘9 (DesktopKeyCommands routes them).
     var composeActivate: ((Int) -> Void)?
     #if DEBUG
@@ -442,6 +455,13 @@ struct DesktopShell: View {
             } else if model.modal == .about {
                 AnyView(DesktopAboutModal(close: { model.modal = nil }, openReleaseNotes: { model.modal = .releaseNotes }))
                     .transition(.opacity)
+            } else if model.modal == .newBot {
+                // the desktop's New bot: the wizard's first page (BotWizard.tsx)
+                AnyView(DesktopNewBotModal(close: { model.modal = nil }) { bot in
+                    model.modal = nil
+                    model.open(.bot(bot))
+                })
+                .transition(.opacity)
             } else if model.modal == .releaseNotes || model.modal == .whatsNew {
                 AnyView(DesktopReleaseNotesModal(mode: model.modal == .whatsNew ? .current : .browse, close: { model.modal = nil }))
                     .transition(.opacity)
@@ -473,6 +493,9 @@ struct DesktopContent: View {
         } else if let chat = model.selected {
             AnyView(DesktopChatColumn(chat: chat))
                 .id(chat.threadId)
+                .overlay(alignment: .top) {
+                    if let notice = model.notice { DesktopChatNotice(notice: notice).padding(.top, 54) }
+                }
         } else {
             ZStack {
                 DesktopAppGlow()
@@ -705,6 +728,10 @@ private struct DesktopShellRouting: ViewModifier {
                 if screen == .keyboardShortcuts { model.modal = .shortcuts }
                 if screen == .aboutDialog { model.modal = .about }
                 if screen == .releaseNotesDialog { model.modal = .releaseNotes }
+                if screen == .newBot { model.modal = .newBot }
+                if screen == .noticeThreadGone {
+                    model.show(notice: DesktopNotice(kind: .threadGone, botName: "Helix"), clearsAfter: 600)
+                }
                 await applyParitySidebar(screen)
                 return
             }
@@ -787,10 +814,7 @@ private struct DesktopShellPresenter: ViewModifier {
         case .search:
             EmptyView()
         case .newBot:
-            CreateBotSheet(close: { model.modal = nil }) { bot in
-                model.modal = nil
-                model.open(.bot(bot))
-            }
+            EmptyView()
         case .newGroup:
             NewGroupSheet(close: { model.modal = nil }) { room in
                 model.modal = nil
@@ -858,5 +882,49 @@ private struct DesktopPanelResizeHandle: View {
                 @unknown default: break
                 }
             }
+    }
+}
+
+
+// MARK: - Notice
+
+/// `state.notice`: what the chat column says about a link that led nowhere.
+struct DesktopNotice: Equatable {
+    enum Kind: Equatable { case threadGone, botGone }
+    var kind: Kind
+    /// The bot shown instead (`thread.goneShowing`); nil: `thread.gone`.
+    var botName: String?
+    let id = UUID()
+}
+
+/// `ChatNotice` (ChatErrorBanner.tsx): px-5, a rounded-lg panel line with a
+/// 40 % hairline, 13 pt secondary text.
+struct DesktopChatNotice: View {
+    @Environment(\.desktopTheme) private var theme
+    let notice: DesktopNotice
+
+    var body: some View {
+        Group {
+            switch notice.kind {
+            case .botGone: Text("That bot is no longer here.")
+            case .threadGone:
+                if let name = notice.botName {
+                    Text("That thread is no longer here. Showing \(name) instead.")
+                } else {
+                    Text("That thread is no longer here.")
+                }
+            }
+        }
+        .font(theme.font(13))
+        .foregroundStyle(theme.inkSecondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
+        .padding(.horizontal, 20)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.updatesFrequently)
+        .accessibilityIdentifier("desktop-chat-notice")
     }
 }

@@ -5,7 +5,7 @@
 import http from "node:http";
 import https from "node:https";
 
-import { BlockedHostError, installFetchGuard, isBlockedHost, reportBlocked } from "../electron/upstream-hosts.mjs";
+import { BlockedHostError, installFetchGuard, isBlockedHost, reportBlocked } from "../../electron/upstream-hosts.mjs";
 
 type RequestFn = typeof http.request;
 

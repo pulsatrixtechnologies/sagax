@@ -106,7 +106,7 @@ export const FULL_ACCESS_SURFACES = {
   "question": "server/index.ts request.opened question card",
   /** The safety review's safer path and confirmation (shared/safety-review.ts)
    * on a permission request and before a server-side tool runs. */
-  "safety-review": "server/safety-review.ts safetyPermissionEffect and safetyToolHold",
+  "safety-review": "server/safety/safety-review.ts safetyPermissionEffect and safetyToolHold",
   /** The card a server-side safety hold waits on (index.ts confirmHeldCard). */
   "safety-confirm": "server/index.ts confirmHeldCard",
   /** The Sagax ask_choice tool (server/chat-widgets.ts createChoiceCard). */

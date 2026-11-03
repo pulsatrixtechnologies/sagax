@@ -12,7 +12,7 @@ import { drainHttpServers, isShuttingDown, markShuttingDown } from "./http-shutd
 import { citeAppFigures, noteAppRead, type AppPiece } from "./app-figure.ts";
 import { harnessMcpHttpKind, serveHarnessMcpHttp } from "./mcp/harness-mcp-http.ts";
 // Then the upstream/analytics network block (network-guard.ts).
-import "./network-guard.ts";
+import "./safety/network-guard.ts";
 // The console's server log tail captures from here on (server-log-ring.ts).
 import { serverLog } from "./server-log-capture.ts";
 import { startEventLoopLagMonitor } from "./event-loop-lag.ts";
@@ -57,7 +57,7 @@ import {
   misuseToolFrameText,
   setMisuseAlert,
   setMisuseOwnPaths
-} from "./misuse-guardrails.ts";
+} from "./safety/misuse-guardrails.ts";
 import { unwrapAgentsBridge } from "../shared/searched-tool-call.ts";
 import {
   openSafetyHold,
@@ -74,7 +74,7 @@ import {
   settleSafetyHold,
   stashSafetyNote,
   takeSafetyNote
-} from "./safety-review.ts";
+} from "./safety/safety-review.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import { hideServerPathsInSections } from "./server-path-prompt.ts";
 import { rm as removeDirectory } from "node:fs/promises";
@@ -1203,7 +1203,7 @@ import { LocalVmIdleTimer } from "./computer/local-vm-idle.ts";
 import { LocalVmLease, LocalVmLeasePool } from "./computer/local-vm-lease.ts";
 import { LocalVmSeatPool, type LocalVmSeatHolder } from "./computer/local-vm-seat-pool.ts";
 import { TurnReplyRepeats } from "./turns/turn-reply-repeats.ts";
-import { dispatchLoopStop, makeLoopStopSubscriber } from "./loop-detector.ts";
+import { dispatchLoopStop, makeLoopStopSubscriber } from "./safety/loop-detector.ts";
 import {
   wireLoopGuard,
   loopGuardSettingsFrom,
@@ -2245,7 +2245,7 @@ import { createGroupMemoryRoutes } from "./routes/group-memory.ts";
 import { createTtsProviderRoutes } from "./routes/tts-provider.ts";
 import { createPeopleDmRoutes } from "./routes/people-dms.ts";
 import { createModerationRoutes, isReportPath } from "./routes/moderation.ts";
-import { createModerationStore } from "./moderation.ts";
+import { createModerationStore } from "./safety/moderation.ts";
 import { createGroupFolderRoutes } from "./routes/group-folders.ts";
 import { createNudgeRoutes } from "./routes/nudges.ts";
 import { createRoutineAwayRoutes } from "./routes/routine-away.ts";
@@ -15168,7 +15168,7 @@ async function answerInboxCard(auth: RequestAuth, threadId: string, requestId: s
   }
   let answer: InboxAnswer = { ok: true };
   await answeringCardAs(auth, threadId, requestId, async () => {
-    // a safety hold (server/safety-review.ts) is settled where it waits
+    // a safety hold (server/safety/safety-review.ts) is settled where it waits
     if (settleSafetyHold(requestId, decision)) {
       const held = store.messagesFor(threadId).find((row) => row.card?.requestId === requestId);
       if (held?.card && !held.card.answered) store.patchMessage(threadId, held.id, { card: { ...held.card, answered: decision } });
@@ -21754,7 +21754,7 @@ function finalizeDelegationWatch(
 // 2026-11-02: the "Same call repeated" chip is the loop guard's alone
 // (server/host/loop-guard.ts). A second copy here wrote every chip twice and
 // counted an MCP ask by its bare tool name, so different calls read as one.
-// A run going in circles is stopped, not only flagged (server/loop-detector.ts):
+// A run going in circles is stopped, not only flagged (server/safety/loop-detector.ts):
 // the same call, the same result, the same error, or a short cycle of calls
 // whose results never change. A direct thread stops through stopDirectThread,
 // the same steps as the person's Stop. A room thread, including one several
@@ -33681,7 +33681,7 @@ ROUTES.push(createPeopleDmRoutes<GroupRecord>({
   // each person's own unread state and never the other's.
   project: (group, auth) => peopleDmForViewer({ ...publicGroupState(group), messages: store.messagesFor(group.threadId) }, auth ? groupReaderId(auth) : undefined)
 }));
-// Content between people (App Store 1.2, server/moderation.ts): reports to
+// Content between people (App Store 1.2, server/safety/moderation.ts): reports to
 // the admins, each person's own blocked people, the terms accepted once.
 const moderationStore = createModerationStore(DATA_DIR);
 /** Who acts for moderation: the session's principal, a solo server's older

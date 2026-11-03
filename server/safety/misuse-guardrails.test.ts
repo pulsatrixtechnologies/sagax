@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { adminActivityFileFor, flushAdminActivity } from "./admin-activity.ts";
+import { adminActivityFileFor, flushAdminActivity } from "../admin-activity.ts";
 import {
   misuseGuardrailMode,
   misusePathRefusal,
@@ -17,10 +17,10 @@ import {
   setMisuseDataDirForTests,
   setMisuseOwnPaths,
 } from "./misuse-guardrails.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
-import { callUserSandboxTool, type ToolExec } from "./sandbox/user-sandbox-tools.ts";
-import { serverPathAnswer, serverPathInCommand } from "./sandbox/sandbox-server-path.ts";
-import { misuseRefusalText } from "../shared/misuse-guardrails.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
+import { callUserSandboxTool, type ToolExec } from "../sandbox/user-sandbox-tools.ts";
+import { serverPathAnswer, serverPathInCommand } from "../sandbox/sandbox-server-path.ts";
+import { misuseRefusalText } from "../../shared/misuse-guardrails.ts";
 import {
   DEFAULT_EGRESS_DENY,
   DEFAULT_SANDBOX_LIMITS,
@@ -28,7 +28,7 @@ import {
   sandboxdConfigFromEnv,
   sandboxIsolationProblems,
   sandboxKeyForPrincipal,
-} from "./sandbox/user-sandbox-spec.ts";
+} from "../sandbox/user-sandbox-spec.ts";
 
 const dirs: string[] = [];
 

@@ -35,7 +35,7 @@ import { deleteGroupMemory } from "../memory/group-memory.ts";
 import type { HarnessCommandCatalog, HarnessCommandSource } from "../harness-commands.ts";
 import { typedCommandForTurn, unavailableCommandError } from "../harness-commands.ts";
 import { cancelledChatFollowup } from "../messages/message-db.ts";
-import { misuseRefusal } from "../misuse-guardrails.ts";
+import { misuseRefusal } from "../safety/misuse-guardrails.ts";
 import {
   peopleDmForViewer,
   peopleDmPatchRefusal,
@@ -49,7 +49,7 @@ import type { TurnSpeaker } from "../engines/engine-access.ts";
 import { speakerFor } from "../request-speaker.ts";
 import { roomMentionReadPatch } from "../rooms/room-mentions.ts";
 import { parseConversationTurnTimeout } from "../rooms/room-turn-timeout.ts";
-import { safetyHttpRefusal } from "../safety-review.ts";
+import { safetyHttpRefusal } from "../safety/safety-review.ts";
 import {
   acceptedSendMatch,
   parseSendId,

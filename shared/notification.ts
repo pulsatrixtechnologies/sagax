@@ -28,7 +28,7 @@ export type NotifyKind =
    * (server/org/org-bot-force.ts). Sent to the bot's owner only (`audience`). */
   | "admin-action"
   /** Someone reported a message another person wrote (App Store 1.2,
-   * server/moderation.ts). Sent to the organization's admins, or a solo
+   * server/safety/moderation.ts). Sent to the organization's admins, or a solo
    * server's owner, only (`audience`); `botId` and `threadId` are empty. */
   | "report"
   /** Someone commented on, or replied on, a published page (2026-10-28,

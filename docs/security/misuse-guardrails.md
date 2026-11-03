@@ -169,15 +169,15 @@ Perspicax is the exception):
 
 `shared/misuse-guardrails.test.ts` is the red-team suite (French, English,
 base64, split quotes, hex, octal, zero-width characters, jailbreaks, the
-triage permission, paths, the MCP gate). `server/misuse-guardrails.test.ts`
+triage permission, paths, the MCP gate). `server/safety/misuse-guardrails.test.ts`
 covers the flag, the lockout, the alert, and the container limits.
-`shared/safety-review.test.ts` and `server/safety-review.test.ts` cover the
+`shared/safety-review.test.ts` and `server/safety/safety-review.test.ts` cover the
 safer path, the explicit card, final denial, untrusted wrapping, and
 outbound drafts. None of these files boot the server, so CI runs them with
 the unit shards.
 
 ```
-pnpm exec vitest run shared/misuse-guardrails.test.ts server/misuse-guardrails.test.ts
+pnpm exec vitest run shared/misuse-guardrails.test.ts server/safety/misuse-guardrails.test.ts
 ```
 
 ## Safety review

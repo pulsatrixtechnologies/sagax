@@ -5,7 +5,7 @@
 // engine-independent: it is fed one settled tool call at a time and answers
 // whether the run is stuck, with a reason a person can read.
 //
-// RepeatDetector (server/repeat-detector.ts) only observes and shows a chip;
+// RepeatDetector (server/safety/repeat-detector.ts) only observes and shows a chip;
 // this one decides that the run stops (makeLoopStopSubscriber).
 //
 // Waits, status polls and transient retries are real agent work. They use a
@@ -13,8 +13,8 @@
 // endless one still does. An error counts only when the input matches too.
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { canonicalJson } from "../shared/canonical-json.ts";
-import type { RuntimeEvent } from "../shared/runtime-events.ts";
+import { canonicalJson } from "../../shared/canonical-json.ts";
+import type { RuntimeEvent } from "../../shared/runtime-events.ts";
 
 export { canonicalJson };
 

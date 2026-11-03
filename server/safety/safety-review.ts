@@ -13,8 +13,8 @@
 // block stays a block.
 
 import { randomUUID } from "node:crypto";
-import { appendAdminAction } from "./admin-activity.ts";
-import { DATA_DIR } from "./config.ts";
+import { appendAdminAction } from "../admin-activity.ts";
+import { DATA_DIR } from "../config.ts";
 import { misuseGuardrailMode, misuseOwnPaths } from "./misuse-guardrails.ts";
 import {
   SAFETY_REFUSAL_FINAL,
@@ -31,7 +31,7 @@ import {
   type SafetyMemory,
   type SafetySurface,
   type SafetyVerdict,
-} from "../shared/safety-review.ts";
+} from "../../shared/safety-review.ts";
 
 export interface SafetyHoldInput extends SafetyInput {
   principalId?: string;

@@ -34,7 +34,7 @@ const EMITTERS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
 const DECIDED_IN: Record<FullAccessSurface, string | null> = {
   "tool-approval": "server/index.ts",
   "question": "server/index.ts",
-  "safety-review": "server/safety-review.ts",
+  "safety-review": "server/safety/safety-review.ts",
   "safety-confirm": "server/index.ts",
   "ask-choice": "server/chat-widgets.ts",
   "peer-contact": "server/index.ts",
@@ -165,7 +165,7 @@ describe("every approval or choice card reads the Full access decision", () => {
     // after every block and after the triage approval, before the review steps
     expect(shared.indexOf('verdict("block", "credentials"')).toBeLessThan(shared.indexOf('"full_access", ""'));
     expect(shared.indexOf('"full_access", ""')).toBeLessThan(shared.indexOf("const next = step(memory"));
-    const server = readFileSync(join(SERVER, "safety-review.ts"), "utf8");
+    const server = readFileSync(join(SERVER, "safety", "safety-review.ts"), "utf8");
     expect(server).toMatch(/if \(verdict\.code === "full_access"\) return null;/);
     const auto = readFileSync(join(SERVER, "approvals", "auto-approve.ts"), "utf8");
     expect(auto.indexOf("fullAccessDecision(")).toBeLessThan(auto.indexOf('source: "safety-hold"'));

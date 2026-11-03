@@ -5171,7 +5171,7 @@ before an organization server accepts `{ groupId }`.
 ## Report, Block and the terms between people (App Store 1.2, 2026-10-26)
 
 Rooms with several people and direct messages between people carry content
-between users. Keep these rules, covered by `server/moderation.test.ts`,
+between users. Keep these rules, covered by `server/safety/moderation.test.ts`,
 `server/routes/moderation.test.ts`, `src/lib/moderation.test.ts` and
 `ios/Tests/CompanionCoreTests/ModerationTests.swift`:
 
@@ -5673,7 +5673,7 @@ a block. Details, the flag, and the French refusals:
   host `/proc` entries stay on regardless of the flag. The path allowlist
   follows the flag.
 - What a person reads is Québec French, with no anglicism. Tests:
-  `shared/misuse-guardrails.test.ts`, `server/misuse-guardrails.test.ts`.
+  `shared/misuse-guardrails.test.ts`, `server/safety/misuse-guardrails.test.ts`.
 - Safety review uses the same flag. Shadow writes `safety.shadow` and
   changes nothing. Enforce reviews shell, MCP, computer use, and routine
   writes before they run: a hard block stays a 403 refusal, never a card
@@ -5686,7 +5686,7 @@ a block. Details, the flag, and the French refusals:
   as `<<<UNTRUSTED>>>` and are not instructions. `security.triage` still
   covers defensive work only. The tool guard (`SAGAX_TOOL_GUARD`) and the
   agent card guard are unchanged. Tests: `shared/safety-review.test.ts`,
-  `server/safety-review.test.ts`.
+  `server/safety/safety-review.test.ts`.
 
 ## Bot actions
 
@@ -7246,7 +7246,7 @@ builds no Graph client, no Teams bot registration and no mailbox for this.
   Deletes and bulk operations keep their destructive classification;
   organization Ask/Deny, isolation and sensitive paths still apply.
   Reads, drafts and reply drafts send nothing. Full access and the primary
-  bot rule are unchanged. Regression: `server/safety-review.test.ts` uses
+  bot rule are unchanged. Regression: `server/safety/safety-review.test.ts` uses
   the measured Outlook catalog in `server/testing/`.
 - An outward card never offers "always for this session", and the ACP
   driver answers Grok's ask once, never `allow_always`
@@ -8970,7 +8970,7 @@ telemetry. Keep these rules, each covered by a test:
 - No analytics: `src/lib/analytics.ts` is a no-op and `posthog-js` is gone.
 - `electron/upstream-hosts.mjs` is the block list (every `openmausbot.*`
   domain, `posthog.com`, the upstream author's GitHub). Main guards its fetch
-  and every Electron session; the server imports `server/network-guard.ts`
+  and every Electron session; the server imports `server/safety/network-guard.ts`
   first. Upstream defaults stay empty: Cloud (`CLOUD_ORIGIN`, bridges behind
   `--sagax-cloud`), control plane (`SAGAX_CONTROL_PLANE_URL` of ours only),
   Admin portal, Pro link, team catalog (`SAGAX_TEAM_LIBRARY_URL`).

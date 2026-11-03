@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { RuntimeEvent } from "../shared/runtime-events.ts";
+import type { RuntimeEvent } from "../../shared/runtime-events.ts";
 import {
   DEFAULT_LOOP_THRESHOLDS, LoopDetector, POLL_CYCLE_BUDGET, POLL_REPEAT_BUDGET, TRANSIENT_RETRY_BUDGET,
   canonicalJson, digest, dispatchLoopStop, loopDetectorConfigSchema, loopStopRoute, loopThresholds, makeLoopStopSubscriber,

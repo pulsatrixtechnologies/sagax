@@ -1,7 +1,7 @@
 // Stuck means the same shell command failing the same way, back to back; a success ends the streak, since a poll is work.
 import { createHash } from "node:crypto";
 
-import { previewIsPartial } from "./tool-summary.ts";
+import { previewIsPartial } from "../tool-summary.ts";
 
 /** Muse Code cuts tool output at 4,000 characters without a marker, so an output this long may be a prefix. */
 export const OUTCOME_TEXT_MAX = 4_000;

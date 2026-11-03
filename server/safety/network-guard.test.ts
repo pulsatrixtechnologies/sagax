@@ -1,4 +1,4 @@
-// server/network-guard.ts refuses the blocked hosts on every Node path.
+// server/safety/network-guard.ts refuses the blocked hosts on every Node path.
 import http from "node:http";
 import https from "node:https";
 import { describe, expect, it } from "vitest";

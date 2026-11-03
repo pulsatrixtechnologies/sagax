@@ -19,7 +19,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 
 /** The version of the terms a person accepts (https://pulsatrix.ca/terms). */
 export const TERMS_VERSION = "2026-10-26";

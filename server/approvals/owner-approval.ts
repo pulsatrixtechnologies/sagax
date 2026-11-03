@@ -39,7 +39,7 @@ import { decodeGrokGatewayName, grokGatewayToolConnector } from "../../shared/gr
 import { connectorWriteKind } from "../../shared/engine-connectors.ts";
 import { screenAppTarget, type ScreenAppIdentity } from "../../shared/computer-app.ts";
 import { standingGrantsAllowed } from "../custom-rules-org.ts";
-import { sensitiveReadPath } from "../sensitive-path.ts";
+import { sensitiveReadPath } from "../safety/sensitive-path.ts";
 
 export const BOT_PERMISSION_MODES = ["approval", "auto", "bypass"] as const;
 export type BotPermissionMode = (typeof BOT_PERMISSION_MODES)[number];
@@ -212,7 +212,7 @@ const STRICT_KEY_SET: ReadonlySet<string> = new Set([...EXACT_KEY_SET, "to", "cc
  * normalized (normalizeFolderPath); it covers a call whose every path (a
  * file, both ends of a rename or a move, each file of a batch) is inside
  * that folder or its subfolders, never a path with `..`, never a sensitive
- * one (a dotfile, a credential, /proc: server/sensitive-path.ts), and never
+ * one (a dotfile, a credential, /proc: server/safety/sensitive-path.ts), and never
  * a call that carries any other exact argument (a command, a folder it runs
  * in). A folder rule made on a card that changes files (write, create,
  * rename, move, delete, recursive or in a batch) covers every such file

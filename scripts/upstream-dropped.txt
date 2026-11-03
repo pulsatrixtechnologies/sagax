@@ -490,3 +490,7 @@ server/room-turn-timeout.test.ts
 server/room-turn-timeout.ts
 server/section-context.test.ts
 server/section-context.ts
+server/repeat-detector.test.ts
+server/repeat-detector.ts
+server/repeat-streak.test.ts
+server/repeat-streak.ts

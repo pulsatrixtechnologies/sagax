@@ -16,7 +16,7 @@ import { flushAdminActivity } from "../admin-activity.ts";
 import { fullAccessActs, fullAccessChoiceAnswer } from "./full-access-gate.ts";
 import { ownerModeForLevel } from "./owner-autonomy.ts";
 import { ownerDecision, ownerVerdictOver, type OwnerRule } from "./owner-approval.ts";
-import { resetSafetyReviewForTests, safetyPermissionEffect, setSafetyDataDirForTests, setSafetyFullAccess } from "../safety-review.ts";
+import { resetSafetyReviewForTests, safetyPermissionEffect, setSafetyDataDirForTests, setSafetyFullAccess } from "../safety/safety-review.ts";
 import { Store } from "../store.ts";
 import type { Message } from "../store.ts";
 import { removeTempDir } from "../testing/cleanup.ts";

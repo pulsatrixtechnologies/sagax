@@ -12,8 +12,8 @@ import { failedTurnTool } from "../../shared/failed-turn.ts";
 import { nameIsCommand } from "../../shared/tool-name.ts";
 import type { RuntimeEvent, SteerOutcome } from "../contracts.ts";
 import { quoteInNote } from "../peers/peer-provenance.ts";
-import { RepeatDetector, callKey, toolItemKey } from "../repeat-detector.ts";
-import { RepeatStreak, failureDigest } from "../repeat-streak.ts";
+import { RepeatDetector, callKey, toolItemKey } from "../safety/repeat-detector.ts";
+import { RepeatStreak, failureDigest } from "../safety/repeat-streak.ts";
 import { COMMAND_SUMMARY_MAX, previewIsPartial } from "../tool-summary.ts";
 
 const COUNT_MIN = 2;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { OUTCOME_TEXT_MAX, RepeatStreak, failureDigest } from "./repeat-streak.ts";
-import { toolDetailPreview } from "./tool-summary.ts";
+import { toolDetailPreview } from "../tool-summary.ts";
 
 const FAILING = "FAIL src/x.test.ts\nexpected 1 to be 2";
 

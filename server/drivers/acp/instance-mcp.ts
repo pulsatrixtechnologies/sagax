@@ -7,7 +7,7 @@ import { randomBytes } from "node:crypto";
 
 import { newId } from "../../contracts.ts";
 import type { SendTurnInput } from "../../contracts.ts";
-import { takeSafetyNote } from "../../safety-review.ts";
+import { takeSafetyNote } from "../../safety/safety-review.ts";
 import { canUseMcpServer } from "../../../shared/tool-scope.ts";
 import { gateServer, mcpStdioServer } from "../../mcp/mcp-gate-config.ts";
 import type { GateAnswer, GateAsk } from "../../approvals/mcp-gate-approval.ts";

@@ -2,7 +2,7 @@
 // (cloud, accounts, admin, companion tunnels, the site, under every domain
 // below), third-party analytics, and the upstream author's GitHub repositories.
 // One list for the desktop app (electron/main.mjs installs it on every
-// session and on main's own fetch) and the server (server/network-guard.ts).
+// session and on main's own fetch) and the server (server/safety/network-guard.ts).
 // scripts/check-no-phone-home.mjs greps the built bundles for the same hosts.
 
 /** Registrable domains blocked with every subdomain. */

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { flushAdminActivity } from "./admin-activity.ts";
+import { flushAdminActivity } from "../admin-activity.ts";
 import {
   openSafetyHold,
   resetSafetyReviewForTests,
@@ -14,12 +14,12 @@ import {
   settleSafetyHold,
 } from "./safety-review.ts";
 import { resetMisuseGuardrailsForTests, setMisuseOwnPaths } from "./misuse-guardrails.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
-import { callUserSandboxTool, type ToolExec } from "./sandbox/user-sandbox-tools.ts";
-import { SAFER_GIT, SAFETY_REFUSAL_FINAL } from "../shared/safety-review.ts";
-import { isOutboundTool } from "../shared/outbound.ts";
-import { autoVerdict } from "./approvals/auto-approve.ts";
-import { destructiveKindOf, ownerDecision } from "./approvals/owner-approval.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
+import { callUserSandboxTool, type ToolExec } from "../sandbox/user-sandbox-tools.ts";
+import { SAFER_GIT, SAFETY_REFUSAL_FINAL } from "../../shared/safety-review.ts";
+import { isOutboundTool } from "../../shared/outbound.ts";
+import { autoVerdict } from "../approvals/auto-approve.ts";
+import { destructiveKindOf, ownerDecision } from "../approvals/owner-approval.ts";
 
 const dirs: string[] = [];
 let dataDir = "";
@@ -54,7 +54,7 @@ const exec = (): ToolExec => ({
 describe("safety review server", () => {
   it("uses the real Outlook connector catalog without treating mailbox organization as a send in enforce", () => {
     enforce();
-    const catalog = JSON.parse(readFileSync(new URL("./testing/grok-gateway-team-mcp-list.json", import.meta.url), "utf8")) as {
+    const catalog = JSON.parse(readFileSync(new URL("../testing/grok-gateway-team-mcp-list.json", import.meta.url), "utf8")) as {
       servers: Array<{ name: string; session: { tools: Array<{ name: string }> } }>;
     };
     const tools = catalog.servers.find((server) => server.name === "managed_gateway:outlook")!.session.tools.map((tool) => tool.name);

@@ -4,9 +4,9 @@
 // the mode, counts repeated attempts, writes the admin activity log and
 // tells the harness when a person should be notified. Shadow mode records
 // the same rows and refuses nothing.
-import { appendAdminAction } from "./admin-activity.ts";
-import { DATA_DIR } from "./config.ts";
-import { readBridgeCall } from "../shared/searched-tool-call.ts";
+import { appendAdminAction } from "../admin-activity.ts";
+import { DATA_DIR } from "../config.ts";
+import { readBridgeCall } from "../../shared/searched-tool-call.ts";
 import {
   classifyMisuse,
   classifySandboxPath,
@@ -15,7 +15,7 @@ import {
   type MisuseOwnPaths,
   type MisuseScope,
   type MisuseVerdict,
-} from "../shared/misuse-guardrails.ts";
+} from "../../shared/misuse-guardrails.ts";
 
 export type MisuseMode = "off" | "shadow" | "enforce";
 

@@ -59,7 +59,7 @@ import { recordHeldSteer } from "../turns/held-steers.ts";
 import { introAdvance } from "../intro-tour.ts";
 import { spokenLineFields } from "../voice/live-call-record.ts";
 import { cancelledChatFollowup } from "../messages/message-db.ts";
-import { misuseRefusal } from "../misuse-guardrails.ts";
+import { misuseRefusal } from "../safety/misuse-guardrails.ts";
 import { ORG_FULL_ACCESS_DISABLED } from "../org/org-full-access.ts";
 import { resolvePeerComms } from "../peers/peer-approval.ts";
 import { promptWithReply } from "../messages/replies.ts";
@@ -68,7 +68,7 @@ import {
   speakerFor,
 } from "../request-speaker.ts";
 import { SAFE_POINT_NOTE } from "../safe-point-preempt.ts";
-import { safetyHttpRefusal } from "../safety-review.ts";
+import { safetyHttpRefusal } from "../safety/safety-review.ts";
 import {
   acceptedSendMatch,
   parseSendId,

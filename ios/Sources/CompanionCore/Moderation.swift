@@ -1,4 +1,4 @@
-// Content between people (App Store guideline 1.2; server/moderation.ts,
+// Content between people (App Store guideline 1.2; server/safety/moderation.ts,
 // src/lib/moderation.ts): Report a message another person wrote (it goes
 // to the organization's admins, or a solo server's owner, through the
 // server), Block a person (personal: their lines fold away for me only, on

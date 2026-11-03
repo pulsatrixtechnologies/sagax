@@ -12,7 +12,7 @@ import { MISUSE_MAX_COMMAND_SECONDS } from "../../shared/misuse-guardrails.ts";
 import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tool-output-bound.ts";
 import { wrapUntrusted } from "../../shared/safety-review.ts";
 import type { SandboxExecInput, SandboxExecOutput } from "./sandboxd-core.ts";
-import { procSecretPath, resolvedReadRefusal, type ResolvedEnvironmentPath } from "../sensitive-path.ts";
+import { procSecretPath, resolvedReadRefusal, type ResolvedEnvironmentPath } from "../safety/sensitive-path.ts";
 import { botFolderNote } from "./sandbox-bot-folder.ts";
 
 export const USER_SANDBOX_TOOLS = [

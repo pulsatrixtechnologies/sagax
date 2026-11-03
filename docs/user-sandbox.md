@@ -56,7 +56,7 @@ the Sagax side), `server/sandboxd*.ts` (the provisioner), `server/sandbox/user-s
 the `fd`, `root` and `cwd` links, also under `task/<tid>`) is never read, a
 symbolic link in any component that leads to a credential location (`.ssh`,
 `.git-credentials`, `.config/gh`, `.aws`...) is refused, and so is an
-ordinary name whose real place is a dotfile (`server/sensitive-path.ts`,
+ordinary name whose real place is a dotfile (`server/safety/sensitive-path.ts`,
 2026-10-17).
 
 - **Hard links.** A regular file of the sandbox user with more than one

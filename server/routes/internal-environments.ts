@@ -36,7 +36,7 @@ import type { DesktopBridgeOperation } from "../desktop/desktop-bridge.ts";
 import { handleDesktopBridgeMcp } from "../desktop/desktop-bridge-tools.ts";
 import { handleMessagesMcp } from "../imessage/imessage-mcp.ts";
 import { messagesOnBotMac } from "../../shared/imessage.ts";
-import { misusePathRefusal, misuseRefusal, misuseToolFrameText } from "../misuse-guardrails.ts";
+import { misusePathRefusal, misuseRefusal, misuseToolFrameText } from "../safety/misuse-guardrails.ts";
 import { serverPathAnswer, serverPathInCommand } from "../sandbox/sandbox-server-path.ts";
 import { deliverableNotification } from "../notify.ts";
 import { enginePluginCommandRefusal } from "../person-integrations.ts";

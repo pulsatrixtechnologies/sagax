@@ -14,7 +14,7 @@ import { applyStoredEngineEnv } from "./engines/engine-api-keys.ts";
 import { migrateConfigPlaintextKeys, readOnboardingEngineKey } from "./engines/onboarding-engine-key.ts";
 import { withoutComputerEngine } from "./computer/computer-engine-removal.ts";
 import { newBotDefaultsSchema, type NewBotDefaults } from "./new-bot-defaults.ts";
-import { loopDetectorConfigSchema, type LoopDetectorConfig } from "./loop-detector.ts";
+import { loopDetectorConfigSchema, type LoopDetectorConfig } from "./safety/loop-detector.ts";
 import { loopGuardConfigSchema, type LoopGuardConfig } from "./host/loop-guard.ts";
 import { EFFORT_LEVELS, type LiveSettings } from "../shared/wire.ts";
 import { isModelVariant, type InstanceConfigMap, type ModelSelection } from "./contracts.ts";
@@ -716,7 +716,7 @@ const appConfigSchema = z.object({
     /** Minutes of quiet before the size check applies (default 60). */
     staleSessionColdMinutes: z.number().min(0).max(24 * 60 * 30).optional(),
   }).optional(),
-  /** Stops a run that repeats itself (server/loop-detector.ts). Absent
+  /** Stops a run that repeats itself (server/safety/loop-detector.ts). Absent
    * fields take the defaults; `enabled: false` turns it off. */
   loopDetector: loopDetectorConfigSchema.optional(),
   /** Opt-in shell-failure streak guard (server/host/loop-guard.ts). Separate

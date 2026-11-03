@@ -1,4 +1,4 @@
-// Content between people (App Store guideline 1.2, server/moderation.ts).
+// Content between people (App Store guideline 1.2, server/safety/moderation.ts).
 //
 //   POST   /api/threads/:threadId/messages/:messageId/report { reason, note? }
 //          Report a message someone else wrote. The author comes from the
@@ -26,7 +26,7 @@ import {
   moderationPersonKey,
   type ModerationReport,
   type ModerationStore,
-} from "../moderation.ts";
+} from "../safety/moderation.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

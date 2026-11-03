@@ -28,7 +28,7 @@
 // no-new-privileges, the runtime's seccomp profile): the only mounts are the
 // provisioner's own (docs/user-sandbox.md).
 
-import { sagaxFolder } from "../shared/human-id.ts";
+import { sagaxFolder } from "../../shared/human-id.ts";
 
 /** A file name that holds credentials even without a leading dot. */
 export const CREDENTIAL_NAME = /^(?:credentials?(?:\.[a-z]+)?|hosts\.yml|id_(?:rsa|dsa|ecdsa|ed25519)(?:\.pub)?|authorized_keys|known_hosts|[^/]*\.(?:pem|key|p12|pfx|kdbx|keychain(?:-db)?)|kubeconfig|secrets?(?:\.[a-z]+)?|token(?:s)?(?:\.[a-z]+)?)$/i;

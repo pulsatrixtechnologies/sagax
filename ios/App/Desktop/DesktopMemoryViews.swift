@@ -175,6 +175,7 @@ struct DesktopBrainMap: View {
             Text("Drag to move, scroll or pinch to zoom, press a note to open it.").font(theme.font(12)).foregroundStyle(theme.inkTertiary)
         }
         .padding(16)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("desktop-memory-map")
         .task(id: playing) {
             guard playing else { return }

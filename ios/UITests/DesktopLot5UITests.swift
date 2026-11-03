@@ -159,12 +159,14 @@ final class DesktopLot5UITests: XCTestCase {
         XCTAssertTrue(rail.waitForExistence(timeout: 5), "the rail again")
 
         element(app, "desktop-memory.tab.map").tap()
-        XCTAssertTrue(element(app, "desktop-memory-graph").waitForExistence(timeout: 15), "Graph by default")
+        XCTAssertTrue(element(app, "desktop-memory-map.layout.graph").waitForExistence(timeout: 15), "the Map view and its layouts")
+        XCTAssertTrue(element(app, "desktop-memory-map.layout.graph").isSelected, "Graph by default")
+        XCTAssertTrue(element(app, "desktop-memory-graph.settings-open").waitForExistence(timeout: 10), "the graph")
         element(app, "desktop-memory-graph.settings-open").tap()
         XCTAssertTrue(element(app, "desktop-memory-graph.settings").waitForExistence(timeout: 5), "the graph settings")
         app.buttons["Close the graph settings"].firstMatch.tap()
         element(app, "desktop-memory-map.layout.brain").tap()
-        XCTAssertFalse(element(app, "desktop-memory-graph").exists, "Radial in place of the graph")
+        XCTAssertFalse(element(app, "desktop-memory-graph.settings-open").exists, "Radial in place of the graph")
         element(app, "desktop-memory-map.layout.columns").tap()
         XCTAssertTrue(element(app, "desktop-memory-map.play").exists, "the timeline")
 

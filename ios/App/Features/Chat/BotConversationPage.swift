@@ -76,6 +76,7 @@ struct BotConversationPage: View {
         }
         .background(desktop ? theme.app : Color.clear)
         .task { await load() }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("bot-conversation-page")
     }
 

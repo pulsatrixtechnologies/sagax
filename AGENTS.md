@@ -7504,32 +7504,50 @@ so the card shows what the bot did to it until GitHub says more.
 Rules, none optional (`server/routes/bot-code-branches.ts`, git in
 `server/code-branches.ts`):
 
-- Where (2026-11-02, a branch the bot made on the owner's cloud computer read
-  "elsewhere" with every action greyed): a branch is acted on only if its
-  thread worked on it (its own calls; never the folder's checked-out branch
-  just because it is there), WHERE that thread's git ran for it
+- Where (2026-11-02, a branch the bot made on the person's cloud computer
+  read "elsewhere" with every action greyed): a branch is acted on only if
+  its thread worked on it (its own calls; never the folder's checked-out
+  branch just because it is there), WHERE that thread's git ran for it
   (`server/remote-support/branch-place.ts`: the newest call that created,
-  checked out, committed on or pushed it, its `cd`s and `git -C` followed).
-  On one of the bot's computers the actions run there, through the channel
-  the bot's own commands used (`branch-channels.ts`, `place: "remote"`,
-  `computer` says which): `sagax-environment` run_command, the viewer's own
-  cloud computer (server environment, in the bot's folder there);
-  `sagax-desktop` run_command and `local_vm`, the viewer's own computer and
-  its Local VM through their desktop app (its text answer framed: output
-  and errors come back base64 on one marker line, exact); `vm_exec`, a solo
-  server's Local VM (never an organization server's host); a remote
-  session. The folder is probed in one round trip (where the bot ran git,
-  else another folder it ran git in there) and used by its real path. Only
-  the viewer's own cloud computer and desktop are ever reached, never the
-  bot owner's. Else the thread's own folder (`task.cwd`) when it is a git
+  checked out, committed on or pushed it, its `cd`s and `git -C` followed;
+  `""` is the folder where that computer's commands start, a git run there
+  with no `cd`). On one of the bot's computers the actions run there,
+  through the channel the bot's own commands used (`branch-channels.ts`,
+  `place: "remote"`, `computer` says which): `sagax-environment`
+  run_command, the viewer's own cloud computer (server environment, in the
+  bot's folder there); `sagax-desktop` run_command and `local_vm`, the
+  viewer's own computer and its Local VM through their desktop app (its
+  text answer framed: output and errors come back base64 on one marker
+  line, exact); `vm_exec`, a solo server's Local VM (never an organization
+  server's host; the frame sized to its 20,000 characters); a remote
+  session. A tool's name is read the same way whatever engine wrote it
+  (`toolKey`: `mcp__server__tool`, `server__tool`, pi's own
+  `sagax_environment_run_command`, the ACP titles, Codex's bare name). The
+  ACP engines other than Grok name a run_command row by its command text
+  (`server/drivers/acp/session-stream.ts`), so their branch has no place
+  and the panel offers to ask the bot. The desktop's own shell (`$SHELL
+  -lc`) and a remote session's login shell get the command inside `/bin/sh
+  -c '...'` (fish and csh users too: no word holds a backslash, a `!` or a
+  line break, `q()`); the desktop app gets one panel command at a time per
+  person (it runs its jobs one at a time and keeps eight), on the desktop
+  the request named. One branch read is one script (one round trip after
+  the folder probe), and git there takes no optional lock
+  (`GIT_OPTIONAL_LOCKS=0`: no index.lock while the bot commits); the panel
+  reads again only the rows of the conversation the bot just worked in.
+  The folder is probed in one round trip (where the bot ran git, else
+  another folder it ran git in there) and used by its real path. Only the
+  viewer's own cloud computer and desktop are ever reached, never the bot
+  owner's. Else the thread's own folder (`task.cwd`) when it is a git
   repository on this server. A branch no channel reaches (no computer of
   the person's, a tool no channel names, Boat cloud computers) reads
   `place: "elsewhere"`; an offline computer, an unknown folder, Windows or
-  an unknown OS read as such. In each of those the menu says why in plain
-  words and what to do, and each action becomes one click that asks the bot
-  to do it ("Ask <bot> to do it", the request sent as the person's message
-  in the branch's own conversation; a delete asks to confirm first). Never
-  a silent grey menu, never "this server".
+  an unknown OS read as such, and a computer busy with other work (`busy`,
+  503) fails the read. In each of those the menu says why in plain words
+  and what to do (outside the menu, which it describes), and each action
+  becomes one click that asks the bot to do it ("Ask <bot> to do it", the
+  request sent as the person's message in the branch's own conversation; a
+  delete asks to confirm first). Never a silent grey menu, never "this
+  server".
 - Who: the thread must pass `thread.post` for the viewer (not theirs reads
   as 404). Their own branch asks no approval. Push and pull requests use
   their own credentials: on a solo server the host's git and gh are theirs;
@@ -7540,13 +7558,18 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
   (`github_not_connected`), never done with the server's or the
   organization's tokens. The token rides the push call only (and the
   remote HEAD read with it), never status, add, commit or diff. The
-  viewer's cloud computer follows the same rule: their GitHub connection
-  signs a push to `https://github.com/<repo>.git` and gh, through the
-  exec's `SAGAX_GH_TOKEN` variable (never a command line), else
-  `github_not_connected`; a remote elsewhere than GitHub takes that
-  environment's own sign-in. Their own computer, its Local VM and a
-  client's computer use that computer's own sign-in: no token is ever sent
-  there (a push or pull request on a client's computer asks to confirm). On an
+  viewer's cloud computer holds only their own credentials too: their
+  GitHub connection signs a push to `https://github.com/<repo>.git` and
+  gh, through the exec's `SAGAX_GH_TOKEN` variable (never a command line);
+  without a connection, or for a remote elsewhere than GitHub, that
+  environment's own sign-in, which only they made there (Sagax puts
+  nothing but their connection there, `github-connect.ts`), and a refusal
+  says to connect GitHub (`github_not_connected`). A commit there is
+  authored by them (their profile's name and email) when known, else by
+  that environment's identity (none: `no_author`). Their own computer, its
+  Local VM and a client's computer use that computer's own sign-in and
+  identity: no token is ever sent there (a push or pull request on a
+  client's computer asks to confirm). On an
   organization server: a request with no person is refused (`no_person`),
   never run as the server; git and gh get no `HOME`, ssh agent or config
   folder of the server's (`isolated`); a commit needs the person's name and
@@ -7584,7 +7607,10 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
 - Tests: `server/routes/bot-code-branches.e2e.test.ts` (real git, a bare
   local remote; each computer kind, each action through the remote path,
   the credential rule), `server/remote-support/branch-place.test.ts`,
-  `branch-channels.test.ts` (framing on sh, bash and zsh; reach per kind),
+  `branch-channels.test.ts` (framing, and a branch read, committed and
+  pushed through a login shell that is sh, bash, zsh, dash, ksh, csh or
+  tcsh; the solo Local VM's clip; one desktop job at a time; reach per
+  kind),
   `remote-code-branches.test.ts`,
   `src/components/bot-settings/CodeBranchList.test.ts`,
   `CodeBranchList.ask.test.ts` (the ask click), `ActivitySection.test.ts`,

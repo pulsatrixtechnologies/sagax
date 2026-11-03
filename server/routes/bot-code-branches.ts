@@ -27,12 +27,16 @@
 // an organization server only their own GitHub connection, never the
 // server's or the organization's (`credentials` returns none and the
 // action is refused with `github_not_connected`). On the person's cloud
-// computer the same rule holds: their own GitHub connection signs the push
-// and the pull request (server/remote-support/remote-code-branches.ts). Their
-// own computer, its Local VM and a client's computer use that computer's own
-// sign-in; no token is sent there. Only the viewer's own cloud computer and
-// own desktop are ever reached, never the bot owner's or anyone else's. On
-// an organization server a request with no person is refused (`no_person`),
+// computer only their own credentials are there too: their GitHub
+// connection signs the push and the pull request when they connected one,
+// else that environment's own sign-in, which only they made (Sagax puts
+// nothing else there; when GitHub refuses it, `github_not_connected`), and
+// a commit there is authored by them when their name and email are known
+// (server/remote-support/remote-code-branches.ts). Their own computer, its
+// Local VM and a client's computer use that computer's own sign-in; no
+// token is sent there. Only the viewer's own cloud computer and own desktop
+// are ever reached, never the bot owner's or anyone else's. On an
+// organization server a request with no person is refused (`no_person`),
 // never run with the server's identity, and no answer carries a full server
 // path.
 import type { RequestAuth } from "../request-auth.ts";
@@ -225,11 +229,14 @@ export function createBotCodeBranchRoutes(deps: BotCodeBranchRouteDeps): RouteHa
       };
       if (!reach.online) return blocked("offline");
       if (!reach.osKnown || reach.windows) return blocked("unknown_os");
-      const folders = [target.folder, ...target.others].filter((folder): folder is string => typeof folder === "string" && folder.trim() !== "");
+      // "" is a folder too: where that computer's commands start (a git run
+      // there with no cd)
+      const folders = [target.folder, ...target.others].filter((folder): folder is string => typeof folder === "string");
       if (!folders.length) return blocked("no_path");
       const exec = deps.remote!.exec(bot.id, threadId, viewerId, target);
-      // Their cloud computer: signed by the person, as on this server. Any
-      // other computer: its own sign-in, and no token is sent there.
+      // Their cloud computer: signed by the person (their GitHub connection,
+      // else that environment's own sign-in, theirs) and authored by them.
+      // Any other computer: its own sign-in, and no token is sent there.
       const token = computer === "sandbox" ? deps.githubToken?.(viewerId) : undefined;
       const credentials: RemoteBranchCredentials = computer === "sandbox" ? { mode: "person", ...(token ? { token } : {}) } : { mode: "computer" };
       const audited = { on: "bot_computer", computer };
@@ -244,9 +251,9 @@ export function createBotCodeBranchRoutes(deps: BotCodeBranchRouteDeps): RouteHa
         if (!action) {
           const state = await git.state();
           const repoName = await git.originRepo();
-          // Signed by the person (their cloud computer): a GitHub remote
-          // needs their own GitHub connection, as on this server.
-          const publishBlocked: BotBranchInfo["publishBlocked"] = credentials.mode === "person" && !credentials.token && repoName ? "github_not_connected" : undefined;
+          // Every computer here has a sign-in of the person's own to try
+          // (their cloud computer's falls back to its own when they connected
+          // no GitHub account): a refusal comes back from the action itself.
           const info: BotBranchInfo = {
             branch,
             ...where,
@@ -254,8 +261,7 @@ export function createBotCodeBranchRoutes(deps: BotCodeBranchRouteDeps): RouteHa
             ...(repoName ? { repo: repoName } : {}),
             state,
             proposedMessage: proposedMessage(state.changes, task.title),
-            canPublish: !publishBlocked,
-            ...(publishBlocked ? { publishBlocked } : {}),
+            canPublish: true,
           };
           return json(res, 200, info);
         }
@@ -267,7 +273,11 @@ export function createBotCodeBranchRoutes(deps: BotCodeBranchRouteDeps): RouteHa
         if (action === "commit") {
           const paths = Array.isArray(body.paths) ? body.paths.filter((entry): entry is string => typeof entry === "string").slice(0, 500) : undefined;
           const message = typeof body.message === "string" ? body.message : "";
-          const { sha } = await git.commit(message, paths);
+          // their cloud computer: authored by the person when their name and
+          // email are known, else that environment's own identity (none at
+          // all: no_author)
+          const author = computer === "sandbox" ? deps.credentials(viewerId).author : undefined;
+          const { sha } = await git.commit(message, paths, author?.name.trim() && author.email.trim() ? author : undefined);
           deps.audit(auth, "code.branch.commit", targetRow, { sha: sha.slice(0, 12), files: paths?.length ?? "all", ...audited });
           return json(res, 200, { ok: true, sha, state: await git.state() });
         }
@@ -286,7 +296,9 @@ export function createBotCodeBranchRoutes(deps: BotCodeBranchRouteDeps): RouteHa
         return json(res, 200, { ok: true });
       } catch (error) {
         if (error instanceof BranchActionError) {
-          // A read that finds the computer gone answers like an offline one.
+          // A read that finds the computer gone answers like an offline one;
+          // one that finds it busy fails (the panel offers to ask the bot,
+          // or to try again).
           if (!action && error.code === "offline") return blocked("offline");
           return json(res, error.status, { error: error.message, code: error.code });
         }

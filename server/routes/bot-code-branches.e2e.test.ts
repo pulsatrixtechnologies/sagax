@@ -23,6 +23,7 @@ import { BranchArchive, BranchPulls, hostGit, parseStatus, proposedMessage, reda
 import type { BotBranchInfo } from "../../shared/bot-code-branches.ts";
 import { createBotCodeBranchRoutes, type BotCodeBranchRouteDeps, type BranchCredentials, type RemoteBranchDeps, type RemoteBranchReach } from "./bot-code-branches.ts";
 import type { RemoteExec } from "../remote-support/remote-code-branches.ts";
+import { allocateToolName } from "../drivers/pi-mcp-extension.ts";
 import { dispatchRoutes } from "./table.ts";
 
 const NOW = 1_800_000_000_000;
@@ -489,33 +490,49 @@ describe("Coding branches: on the bot's own computer", () => {
     expect(routeDeps.audits).toEqual(["code.branch.commit", "code.branch.push", "code.branch.delete"]);
   });
 
-  it("signs a push and a pull request from the cloud computer with the person's own GitHub connection, and nothing else", async () => {
+  /** A branch read's origin line (one script, `@origin`) as a GitHub
+   * address, while the pushes still go to the bare local remote. */
+  const asGithub = (stdout: string) => stdout.replace(/^@origin \d+ [A-Za-z0-9+/=]*$/m, `@origin 0 ${Buffer.from("https://github.com/acme/web.git\n").toString("base64")}`);
+
+  it("signs a push and a pull request from the cloud computer with the person's own GitHub connection, else that environment's own sign-in, and nothing else", async () => {
     const commands: Array<{ command: string; env?: Record<string, string> }> = [];
+    let refused = false;
     const github: RemoteExec = async (command, timeoutMs, env) => {
       commands.push({ command, ...(env ? { env } : {}) });
-      if (/'remote' 'get-url' 'origin'/.test(command)) return { exitCode: 0, stdout: "https://github.com/acme/web.git\n", stderr: "" };
-      if (/'ls-remote'/.test(command)) return { exitCode: 0, stdout: "ref: refs/heads/main\tHEAD\n", stderr: "" };
+      if (/'ls-remote'/.test(command)) return refused ? { exitCode: 128, stdout: "", stderr: "fatal: Authentication failed for 'https://github.com/acme/web.git/'" } : { exitCode: 0, stdout: "ref: refs/heads/main\tHEAD\n", stderr: "" };
       if (/'push' '--porcelain'/.test(command)) return { exitCode: 0, stdout: "To https://github.com/acme/web.git\n", stderr: "" };
       if (/ gh 'pr' 'list'/.test(command)) return { exitCode: 0, stdout: "[]", stderr: "" };
-      if (/ gh 'pr' 'create'/.test(command)) return { exitCode: 0, stdout: "https://github.com/acme/web/pull/12\n", stderr: "" };
-      return shellExec(command, timeoutMs);
+      if (/ gh 'pr' 'create'/.test(command)) return refused ? { exitCode: 1, stdout: "", stderr: "HTTP 401: Bad credentials (https://api.github.com/graphql)" } : { exitCode: 0, stdout: "https://github.com/acme/web/pull/12\n", stderr: "" };
+      const result = await shellExec(command, timeoutMs);
+      return "error" in result ? result : { ...result, stdout: asGithub(result.stdout) };
     };
     const place = (token?: string) => deps({
       ...onComputer("mcp__sagax-environment__run_command", { command: `cd ${botRepo} && git checkout -b feat/on-bot` }, up),
       githubToken: () => token,
       remote: { reach: () => up, exec: () => github },
     });
-    // not connected: refused like on this server, never another credential
-    const none = await serve(place());
-    expect((await none.get(`/api/bots/pepper/code/branch?${qp()}`)).body).toMatchObject({ computer: "sandbox", canPublish: false, publishBlocked: "github_not_connected" });
-    const refused = await none.post("/api/bots/pepper/code/branch/push", { threadId: "t-pc", branch: "feat/on-bot" });
-    expect(refused).toMatchObject({ status: 403, body: { code: "github_not_connected" } });
-    expect((await none.post("/api/bots/pepper/code/branch/pr", { threadId: "t-pc", branch: "feat/on-bot" })).body.code).toBe("github_not_connected");
-    expect(commands.some((entry) => /'push'/.test(entry.command))).toBe(false);
+    // No GitHub connection: that environment's own git and gh sign-in, the
+    // person's own (Sagax puts nothing else there), and no token is sent.
+    const own = await serve(place());
+    expect((await own.get(`/api/bots/pepper/code/branch?${qp()}`)).body).toMatchObject({ computer: "sandbox", canPublish: true, repo: "acme/web" });
+    git(botRepo, "add", "."); git(botRepo, "commit", "-m", "work");
+    commands.length = 0;
+    expect((await own.post("/api/bots/pepper/code/branch/push", { threadId: "t-pc", branch: "feat/on-bot" })).status).toBe(200);
+    const pushes = commands.filter((entry) => /'ls-remote'|'push' '--porcelain'/.test(entry.command));
+    expect(pushes).toHaveLength(2);
+    expect(pushes.every((entry) => !entry.env && entry.command.includes("'--' 'origin'") && !entry.command.includes("SAGAX_GH_TOKEN"))).toBe(true);
+    // that sign-in refused: the answer is the person's own GitHub connection
+    refused = true;
+    expect(await own.post("/api/bots/pepper/code/branch/push", { threadId: "t-pc", branch: "feat/on-bot" })).toMatchObject({ status: 403, body: { code: "github_not_connected" } });
+    git(botRepo, "update-ref", "refs/remotes/origin/feat/on-bot", "HEAD");
+    expect((await own.post("/api/bots/pepper/code/branch/pr", { threadId: "t-pc", branch: "feat/on-bot" })).body.code).toBe("github_not_connected");
+    expect(commands.every((entry) => !entry.env)).toBe(true);
+    refused = false;
+    git(botRepo, "update-ref", "-d", "refs/remotes/origin/feat/on-bot");
 
+    // Connected: their connection signs the push and gh, nothing else does.
     const api = await serve(place("ghu_personToken000000000000000000000000"));
     expect((await api.get(`/api/bots/pepper/code/branch?${qp()}`)).body).toMatchObject({ canPublish: true, repo: "acme/web" });
-    git(botRepo, "add", "."); git(botRepo, "commit", "-m", "work");
     commands.length = 0;
     const push = await api.post("/api/bots/pepper/code/branch/push", { threadId: "t-pc", branch: "feat/on-bot" });
     expect(push.status).toBe(200);
@@ -536,6 +553,47 @@ describe("Coding branches: on the bot's own computer", () => {
     expect(gh.length).toBe(2);
     expect(gh.every((entry) => entry.command.includes("GH_TOKEN=\"$SAGAX_GH_TOKEN\"") && entry.env?.SAGAX_GH_TOKEN)).toBe(true);
     expect(commands.filter((entry) => !/ gh '/.test(entry.command)).every((entry) => !entry.env)).toBe(true);
+  });
+
+  it("authors a commit on the cloud computer as the person, and on another computer with its own identity", async () => {
+    const person = (): BranchCredentials => ({ isolated: true, git: {}, author: { name: "Sam Rivers", email: "sam@example.com" } });
+    const cloud = await serve(deps({ ...onComputer("mcp__sagax-environment__run_command", { command: `cd ${botRepo} && git checkout -b feat/on-bot` }, up), credentials: person }));
+    expect((await cloud.post("/api/bots/pepper/code/branch/commit", { threadId: "t-pc", branch: "feat/on-bot", message: "By the person" })).status).toBe(200);
+    expect(git(botRepo, "log", "-1", "--format=%an <%ae> / %cn <%ce>")).toBe("Sam Rivers <sam@example.com> / Sam Rivers <sam@example.com>");
+    // their own computer keeps its own git identity (the shell's here)
+    writeFileSync(join(botRepo, "y.ts"), "export const y = 1;\n");
+    const desktop = await serve(deps({ ...onComputer("mcp__sagax-desktop__run_command", { command: "git checkout -b feat/on-bot", cwd: botRepo }, up), credentials: person }));
+    expect((await desktop.post("/api/bots/pepper/code/branch/commit", { threadId: "t-pc", branch: "feat/on-bot", message: "On the desktop" })).status).toBe(200);
+    expect(git(botRepo, "log", "-1", "--format=%an <%ae>")).toBe("Bot <bot@example.com>");
+  });
+
+  it("finds a branch whose git ran where that computer's commands start, with no cd", async () => {
+    // the cloud computer's commands start in the bot's folder there (here, the repository)
+    const atStart: RemoteExec = async (command, timeoutMs) => shellExec(`cd '${botRepo}' && ${command}`, timeoutMs);
+    const api = await serve(deps({
+      ...onComputer("mcp__sagax-environment__run_command", { command: "git checkout -b feat/on-bot" }, up),
+      remote: { reach: () => up, exec: () => atStart },
+    }));
+    const { body } = await api.get(`/api/bots/pepper/code/branch?${qp()}`);
+    expect(body).toMatchObject({ place: "remote", computer: "sandbox", state: { exists: true, worktree: botRepo } });
+  });
+
+  it("places a pi bot's branch by pi's own name for the tool", async () => {
+    const name = allocateToolName("sagax-environment", "run_command", new Set());
+    expect(name).toBe("sagax_environment_run_command");
+    const record: Array<{ computer: string }> = [];
+    const api = await serve(deps(onComputer(name, { command: `cd ${botRepo} && git checkout -b feat/on-bot` }, up, record)));
+    const { body } = await api.get(`/api/bots/pepper/code/branch?${qp()}`);
+    expect(record).toEqual([{ computer: "sandbox" }]);
+    expect(body).toMatchObject({ place: "remote", computer: "sandbox", state: { exists: true, worktree: botRepo } });
+    expect((await api.post("/api/bots/pepper/code/branch/commit", { threadId: "t-pc", branch: "feat/on-bot", message: "From a pi bot" })).status).toBe(200);
+    expect(git(botRepo, "log", "-1", "--format=%s")).toBe("From a pi bot");
+  });
+
+  it("says a computer busy with other work is busy: a read fails (the panel offers to ask), an action says so", async () => {
+    const busy = await serve(deps({ ...onComputer("mcp__sagax-desktop__run_command", { command: "git checkout -b feat/on-bot", cwd: botRepo }, up), remote: { reach: () => up, exec: () => async () => ({ error: "That computer is busy with other work.", busy: true }) } }));
+    expect(await busy.get(`/api/bots/pepper/code/branch?${qp()}`)).toMatchObject({ status: 503, body: { code: "busy" } });
+    expect(await busy.post("/api/bots/pepper/code/branch/push", { threadId: "t-pc", branch: "feat/on-bot" })).toMatchObject({ status: 503, body: { code: "busy" } });
   });
 
   it("never sends a token to the person's own computer, its Local VM or a client's computer", async () => {

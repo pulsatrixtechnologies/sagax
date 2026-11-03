@@ -18,8 +18,17 @@
 //                                        session (a client's)
 //   Bash and the engines' own shells     this server (its `cd` carries over
 //                                        from one call to the next)
-// (`<server>__<tool>`, pi's `<server>_<tool>` and Codex's bare `<tool>`
-// alike.) Any other tool that ran git leaves the place unknown.
+// Each engine writes these names its own way, all read alike (toolKey):
+// `mcp__server__tool` (Claude, Grok's use_tool, pi's `mcp` gateway),
+// `server__tool` (a direct Grok call), pi's own
+// `sagax_environment_run_command` (pi-mcp-extension.ts allocateToolName:
+// lower case, every character outside [a-z0-9_] turned into `_`), the ACP
+// titles `server_tool` and `tool (server MCP Server)`, and Codex's bare
+// `tool`. The other ACP engines (Qwen, Kimi, OpenCode, Gemini and the rest)
+// name a call that carries a command by that command's text
+// (session-stream.ts: `rawInput.command` before the title), so their
+// run_command row has no tool name to read: like any other tool that ran
+// git, it leaves the place unknown, and the panel offers to ask the bot.
 //
 // A folder is absolute, home relative (`~`, `~/x`: the shell expands it on
 // that computer) or relative to where that computer's commands start ("" is
@@ -50,15 +59,28 @@ export interface BranchWorkPlace {
 /** A solo server's Local VM: where vm_exec runs (container-computer.ts). */
 const HOST_VM_FOLDER = "/home/cua/workspace";
 
-const SANDBOX_RUN = /^(?:mcp__)?sagax-environment_{1,2}run_command$/;
-const DESKTOP_RUN = /^(?:mcp__)?sagax-desktop_{1,2}run_command$/;
+/** A tool's name as one key, however the engine wrote it (see the header):
+ * Gemini's `tool (server MCP Server)` read as `server__tool`, lower case,
+ * every run of characters outside [a-z0-9] one `_`, a leading `mcp_`
+ * dropped. `mcp__sagax-environment__run_command`, pi's
+ * `sagax_environment_run_command` and OpenCode's
+ * `sagax-environment_run_command` are all `sagax_environment_run_command`. */
+export function toolKey(name: string): string {
+  const trimmed = name.trim();
+  const gemini = /^([\w.-]+) \(([\w.-]+) MCP Server\)$/.exec(trimmed);
+  const raw = gemini ? `${gemini[2]}__${gemini[1]}` : trimmed;
+  return raw.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").replace(/^mcp_/, "");
+}
+
+const SANDBOX_RUN = "sagax_environment_run_command";
+const DESKTOP_RUN = "sagax_desktop_run_command";
 /** Codex names an MCP call by its tool alone: `run_command` is the cloud
  * computer's, or the desktop's when it names a `cwd` (only the desktop's
  * takes one). */
 const BARE_RUN = "run_command";
-const DESKTOP_VM = /^(?:(?:mcp__)?sagax-desktop_{1,2})?local_vm$/;
-const HOST_VM = /^(?:(?:mcp__)?agents_{1,2})?vm_exec$/;
-const REMOTE_SESSION = /^(?:(?:mcp__)?agents_{1,2})?remote_session_exec$/;
+const DESKTOP_VM = new Set(["sagax_desktop_local_vm", "local_vm"]);
+const HOST_VM = new Set(["agents_vm_exec", "vm_exec"]);
+const REMOTE_SESSION = new Set(["agents_remote_session_exec", "remote_session_exec"]);
 const HOST_SHELL = /^(?:bash|shell|local_shell|exec_command|run_shell_command|run_terminal_cmd|terminal|commandexecution|command_execution|execute)$/i;
 const COMMIT_LINE = /^\[([^\]\s]+)(?: \([^)]*\))? [0-9a-f]{7,40}\] /gm;
 const CREATE_FLAGS = new Set(["-b", "-B", "-c", "-C", "--create", "--force-create", "--orphan"]);
@@ -219,17 +241,18 @@ interface ToolPlace {
 
 function toolPlace(tool: CodeWorkToolCall, options: { sandboxFolder?: string | null; hostFolder: string | null }): ToolPlace | null {
   const name = tool.name.trim();
+  const key = toolKey(name);
   const cwd = args(tool.input).cwd;
   const named = typeof cwd === "string" && cwd.trim() !== "";
-  if (SANDBOX_RUN.test(name) || (name === BARE_RUN && !named)) return { computer: "sandbox", start: options.sandboxFolder?.startsWith("/") ? options.sandboxFolder : "" };
-  if (DESKTOP_RUN.test(name) || name === BARE_RUN) return { computer: "desktop", start: named ? resolveFolder("~", cwd as string) : "~" };
-  if (DESKTOP_VM.test(name)) {
+  if (key === SANDBOX_RUN || (key === BARE_RUN && !named)) return { computer: "sandbox", start: options.sandboxFolder?.startsWith("/") ? options.sandboxFolder : "" };
+  if (key === DESKTOP_RUN || key === BARE_RUN) return { computer: "desktop", start: named ? resolveFolder("~", cwd as string) : "~" };
+  if (DESKTOP_VM.has(key)) {
     const input = args(tool.input);
     if (input.action !== "run") return null;
     return { computer: "local_vm", vm: "desktop", ...(typeof input.container === "string" && input.container.trim() ? { container: input.container.trim() } : {}), start: "" };
   }
-  if (HOST_VM.test(name)) return { computer: "local_vm", vm: "host", start: HOST_VM_FOLDER };
-  if (REMOTE_SESSION.test(name)) return { computer: "remote_session", start: "" };
+  if (HOST_VM.has(key)) return { computer: "local_vm", vm: "host", start: HOST_VM_FOLDER };
+  if (REMOTE_SESSION.has(key)) return { computer: "remote_session", start: "" };
   if (HOST_SHELL.test(name)) return { computer: "host", start: options.hostFolder };
   return null;
 }

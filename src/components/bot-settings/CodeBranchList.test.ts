@@ -27,7 +27,7 @@ import { branchActions, branchAskText, branchAway, branchCounts, branchStatus, b
 import type { BotActivityItem } from "../../../shared/bot-activity";
 import en from "@/locales/en.json";
 import fr from "@/locales/fr.json";
-import { BranchMenuItems, BranchRow, branchErrorText, CodeBranchList, CommitDialog } from "./CodeBranchList";
+import { BranchMenuItems, BranchMenuPanel, BranchRow, branchErrorText, CodeBranchList, CommitDialog } from "./CodeBranchList";
 import { RoutineList } from "../routines/RoutineList";
 
 const NOW = 1_800_000_000_000;
@@ -158,9 +158,16 @@ describe("Coding branches: the card", () => {
 
   it("offers, instead of a grey menu, one click per action that asks the bot to do it", () => {
     const offline: BotBranchInfo = { branch: local.name, place: "remote", computer: "sandbox", offline: true, canPublish: false, publishBlocked: "offline" };
-    const html = renderToStaticMarkup(createElement(BranchMenuItems, { branch: local, info: offline, archived: false, botName: "Scout", onPick: () => {} }));
+    const html = renderToStaticMarkup(createElement(BranchMenuPanel, { branch: local, info: offline, archived: false, botName: "Scout", onPick: () => {} }));
     expect(html).toContain('data-branch-away="botPanel.branch.away.sandboxOff"');
-    expect(html).toContain("Your cloud computer is stopped. Start it in the Computer tab, or ask Scout to do it.");
+    expect(html).toContain("Your cloud computer is stopped. Start it in the Computer tab and try again, or ask Scout to do this action: its commands start your cloud computer.");
+    // the reason is outside the menu (a menu holds only its items) and describes it
+    const reason = /<p id="([^"]+)" data-branch-away=/.exec(html)?.[1];
+    expect(reason).toBeTruthy();
+    const menu = /<div role="menu"[^>]*>/.exec(html)?.[0] ?? "";
+    expect(menu).toContain(`aria-describedby="${reason}"`);
+    expect(html.indexOf("data-branch-away")).toBeLessThan(html.indexOf('role="menu"'));
+    expect(html.slice(html.indexOf('role="menu"'))).not.toContain("data-branch-away");
     for (const id of ["commit", "push", "pr", "diff", "delete"]) {
       const row = new RegExp(`<button[^>]*data-menu-item="${id}"[^>]*>`).exec(html)?.[0] ?? "";
       expect(row, id).toContain("data-menu-item-ask");
@@ -171,9 +178,10 @@ describe("Coding branches: the card", () => {
     // archive and Open in Computer stay what they are
     expect(/<button[^>]*data-menu-item="archive"[^>]*>/.exec(html)?.[0]).not.toContain("data-menu-item-ask");
     // where the panel can act: the actions themselves, no asking
-    const here = renderToStaticMarkup(createElement(BranchMenuItems, { branch: local, info: info(), archived: false, botName: "Scout", onPick: () => {} }));
+    const here = renderToStaticMarkup(createElement(BranchMenuPanel, { branch: local, info: info(), archived: false, botName: "Scout", onPick: () => {} }));
     expect(here).not.toContain("data-menu-item-ask");
     expect(here).not.toContain("data-branch-away");
+    expect(here).not.toContain("aria-describedby");
     // while the branch is read, the actions wait and say so
     const reading = renderToStaticMarkup(createElement(BranchMenuItems, { branch: local, archived: false, botName: "Scout", onPick: () => {} }));
     expect(reading).toContain("Reading this branch…");
@@ -240,5 +248,25 @@ describe("Coding branches: the card", () => {
     expect(branchErrorText(new ApiError("x", 403, { code: "github_not_connected" }))).toBe("Connect your own GitHub account on the GitHub plugin's page (Capabilities > Sources > GitHub connection)");
     expect(branchErrorText(new ApiError("x", 409, { code: "rejected" }))).toContain("nothing is forced");
     expect(branchErrorText(new ApiError("Something else", 500, { code: "odd" }))).toBe("Something else");
+    // the computer is there but busy, in plain words; no "bot's computer" for the person's own
+    expect(branchErrorText(new ApiError("x", 503, { code: "busy" }))).toBe("The computer that holds this branch is busy with other work. Try again in a moment.");
+    expect(branchErrorText(new ApiError("x", 502, { code: "offline" }))).toBe("The computer that holds this branch cannot be reached right now");
+    expect(branchErrorText(new ApiError("x", 409, { code: "no_path" }))).toBe("The folder that holds this branch is not known");
+  });
+
+  it("asks the bot to do this action, naming it, and never says the bot's computer where it is the person's", () => {
+    for (const key of Object.keys(en).filter((entry) => entry.startsWith("botPanel.branch.away.")) as Array<keyof typeof en>) {
+      expect(en[key], key).toMatch(/ask \{bot\} to do this action/i);
+      expect((fr as Record<string, string>)[key], key).toMatch(/demandez à \{bot\} de faire cette action/i);
+      expect(en[key], key).not.toMatch(/\{bot\}'s computer|bot's computer/);
+    }
+    // a computer that is off: ask once it is back (the bot cannot reach it either)
+    for (const key of ["botPanel.branch.away.desktopOff", "botPanel.branch.away.vmOff", "botPanel.branch.away.remoteOff"] as const) {
+      expect(en[key], key).toMatch(/once it (?:is connected|runs|is back)/);
+    }
+    for (const key of ["botPanel.branch.hint.offline", "botPanel.branch.hint.noPath", "botPanel.branch.error.busy"] as const) {
+      expect(en[key], key).not.toMatch(/bot's computer/);
+      expect((fr as Record<string, string>)[key], key).not.toMatch(/ordinateur du bot/);
+    }
   });
 });

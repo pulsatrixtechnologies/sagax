@@ -59,7 +59,11 @@ describe("Coding branches: asking the bot when its computer cannot be reached", 
   it("says why and sends the bot the push, in the branch's own conversation", async () => {
     await mount(stopped);
     const menu = open();
-    expect(menu.querySelector("[data-branch-away]")?.textContent).toBe("Your cloud computer is stopped. Start it in the Computer tab, or ask Scout to do it.");
+    expect(menu.querySelector("[data-branch-away]")?.textContent).toBe("Your cloud computer is stopped. Start it in the Computer tab and try again, or ask Scout to do this action: its commands start your cloud computer.");
+    // the reason describes the menu from outside it
+    const list = menu.querySelector<HTMLElement>('[role="menu"]')!;
+    expect(list.querySelector("[data-branch-away]")).toBeNull();
+    expect(document.getElementById(list.getAttribute("aria-describedby") ?? "")?.textContent).toContain("Your cloud computer is stopped.");
     const push = menu.querySelector<HTMLButtonElement>('[data-menu-item="push"]')!;
     expect(push.disabled).toBe(false);
     expect(push.textContent).toContain("Ask Scout to do it");
@@ -92,10 +96,40 @@ describe("Coding branches: asking the bot when its computer cannot be reached", 
     expect(dispatch.mock.calls[0]![0]).toMatchObject({ type: "send", threadId: "t-work", text: "Delete the local branch fix/send-card. Keep its pushed copy, its pull request and its folder." });
   });
 
+  it("reads again only the rows of the conversation the bot worked in, not every row", async () => {
+    // each read is a command on the bot's computer (the desktop app runs one at a time)
+    api.mockImplementation(async () => stopped);
+    const other: CodingBranch = { name: "feat/other", repo: "acme/web", pushed: false, at: NOW - 7_200_000, threadId: "t-other" };
+    const sibling: CodingBranch = { ...branch, name: "fix/sibling" };
+    const host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+    const render = (rows: CodingBranch[]) => flushSync(() => root!.render(createElement(CodeBranchList, {
+      branches: rows,
+      now: NOW,
+      label: "Branches",
+      actions: { botId: "scout-id", botName: "Scout", onArchive: async () => {} },
+    })));
+    const reads = () => api.mock.calls.map(([path]) => String(path)).filter((path) => /\/code\/branch\?/.test(path)).map((path) => new URLSearchParams(path.split("?")[1]).get("branch"));
+    render([branch, sibling, other]);
+    await settle();
+    expect(reads().sort()).toEqual(["feat/other", "fix/send-card", "fix/sibling"]);
+    api.mockClear();
+    // the bot ran git again on fix/send-card: its conversation's rows are read again, the other is not
+    render([{ ...branch, at: NOW - 60_000 }, sibling, other]);
+    await settle();
+    expect(reads().sort()).toEqual(["fix/send-card", "fix/sibling"]);
+    api.mockClear();
+    // nothing changed: nothing is read
+    render([{ ...branch, at: NOW - 60_000 }, sibling, other]);
+    await settle();
+    expect(reads()).toEqual([]);
+  });
+
   it("offers to ask the bot when the branch could not be read at all", async () => {
     await mount(new Error("timeout"));
     const menu = open();
-    expect(menu.querySelector("[data-branch-away]")?.textContent).toBe("Sagax could not read this branch right now. Ask Scout to do it, or try again in a moment.");
+    expect(menu.querySelector("[data-branch-away]")?.textContent).toBe("Sagax could not read this branch right now. Try again in a moment, or ask Scout to do this action.");
     flushSync(() => menu.querySelector<HTMLButtonElement>('[data-menu-item="commit"]')!.click());
     expect(dispatch.mock.calls[0]![0]).toMatchObject({ text: "Commit the changes on the branch fix/send-card, with a clear message." });
   });

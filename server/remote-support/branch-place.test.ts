@@ -7,7 +7,11 @@
 // work ran on a computer this cannot name is not placed at all.
 import { describe, expect, it } from "vitest";
 
-import { branchWorkPlace, resolveFolder } from "./branch-place.ts";
+import { allocateToolName } from "../drivers/pi-mcp-extension.ts";
+import { branchWorkPlace, resolveFolder, toolKey } from "./branch-place.ts";
+
+/** The name pi gives an MCP tool, from pi's own allocator. */
+const pi = (server: string, tool: string) => allocateToolName(server, tool, new Set());
 
 const at = (n: number) => 1_800_000_000_000 + n * 1000;
 const call = (name: string, input: unknown, n: number, extra: { ok?: boolean; output?: string; setup?: boolean } = {}) =>
@@ -15,10 +19,40 @@ const call = (name: string, input: unknown, n: number, extra: { ok?: boolean; ou
 
 describe("branchWorkPlace: the computer and folder the bot's git ran in", () => {
   it("finds a branch made on the person's cloud computer, by every engine's name for the tool", () => {
-    for (const name of ["mcp__sagax-environment__run_command", "sagax-environment__run_command", "sagax-environment_run_command"]) {
+    const names: Array<[string, string]> = [
+      ["Claude, Grok's use_tool, pi's mcp gateway", "mcp__sagax-environment__run_command"],
+      ["a direct Grok call", "sagax-environment__run_command"],
+      ["an ACP title written server_tool", "sagax-environment_run_command"],
+      ["pi's own registered tool", pi("sagax-environment", "run_command")],
+      ["an ACP title written tool (server MCP Server)", "run_command (sagax-environment MCP Server)"],
+      ["an mcp_ prefix", "mcp_sagax_environment_run_command"],
+    ];
+    expect(pi("sagax-environment", "run_command")).toBe("sagax_environment_run_command");
+    for (const [engine, name] of names) {
       const place = branchWorkPlace([call(name, { command: "cd /workspace/bots/scout/web && git checkout -b fix/send-card" }, 1)], "fix/send-card");
-      expect(place, name).toEqual({ computer: "sandbox", folder: "/workspace/bots/scout/web", others: [] });
+      expect(place, engine).toEqual({ computer: "sandbox", folder: "/workspace/bots/scout/web", others: [] });
     }
+  });
+
+  it("reads pi's own names for the desktop, the Local VMs and a remote session", () => {
+    expect(branchWorkPlace([call(pi("sagax-desktop", "run_command"), { command: "git checkout -b feat/pi", cwd: "~/code" }, 1)], "feat/pi"))
+      .toEqual({ computer: "desktop", folder: "~/code", others: [] });
+    expect(branchWorkPlace([call(pi("sagax-desktop", "local_vm"), { action: "run", container: "vm-2", command: "cd web && git checkout -b feat/pi" }, 1)], "feat/pi"))
+      .toEqual({ computer: "local_vm", vm: "desktop", container: "vm-2", folder: "web", others: [] });
+    expect(branchWorkPlace([call(pi("agents", "vm_exec"), { command: "cd web && git checkout -b feat/pi" }, 1)], "feat/pi"))
+      .toMatchObject({ computer: "local_vm", vm: "host", folder: "/home/cua/workspace/web" });
+    expect(branchWorkPlace([call(pi("agents", "remote_session_exec"), { command: "cd ~/app && git checkout -b feat/pi" }, 1)], "feat/pi"))
+      .toMatchObject({ computer: "remote_session", folder: "~/app" });
+  });
+
+  it("keys a tool's name the same for every engine, and nothing else onto it", () => {
+    for (const name of ["mcp__sagax-desktop__local_vm", "sagax-desktop__local_vm", "sagax-desktop_local_vm", pi("sagax-desktop", "local_vm"), "local_vm (sagax-desktop MCP Server)"]) {
+      expect(toolKey(name), name).toBe("sagax_desktop_local_vm");
+    }
+    expect(toolKey("vm_exec")).toBe("vm_exec");
+    // an ACP engine other than Grok names a run_command row by its command
+    // text (session-stream.ts): no tool name, so no place (the panel asks the bot)
+    expect(branchWorkPlace([call("cd web && git checkout -b feat/cmd", { command: "cd web && git checkout -b feat/cmd" }, 1)], "feat/cmd")).toBeUndefined();
   });
 
   it("follows a clone and a relative cd from the bot's own folder there", () => {

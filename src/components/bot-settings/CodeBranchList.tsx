@@ -11,7 +11,7 @@
 // branch cannot be reached (off, not known, Windows, its folder not known),
 // the menu says why in plain words and what to do, and each action asks the
 // bot to do it instead, in the conversation the branch came from.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   Archive, ArchiveRestore, ExternalLink, FileDiff, FolderOpen, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest,
@@ -59,6 +59,7 @@ const ERROR_KEYS: Record<string, LocaleKey> = {
   no_person: "botPanel.branch.error.noPerson",
   no_author: "botPanel.branch.error.noAuthor",
   unsafe_config: "botPanel.branch.error.unsafeConfig",
+  busy: "botPanel.branch.error.busy",
 };
 
 /** The words for a refused action: ours for the known codes, else the
@@ -238,14 +239,11 @@ export function BranchMenu({ branch, info, pull, archived, botName, readFailed =
         <div
           ref={menuRef}
           data-branch-menu={branch.name}
-          role="menu"
-          aria-label={t("botPanel.branch.menu", { name: branch.name })}
-          onKeyDown={navigateThreadMenu}
           style={{ top: shown.y, left: shown.x }}
-          className={cn("fixed z-[60] flex max-h-[calc(100dvh-16px)] w-[260px] max-w-[calc(100vw-16px)] flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]", motion.className)}
+          className={cn("fixed z-[60] flex max-h-[calc(100dvh-16px)] w-[260px] max-w-[calc(100vw-16px)] flex-col overflow-y-auto overscroll-contain rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]", motion.className)}
           {...motion.exitProps}
         >
-          <BranchMenuItems branch={branch} info={info} pull={pull} archived={archived} botName={botName} readFailed={readFailed} onPick={(action) => { close(); onAct(action); }} />
+          <BranchMenuPanel branch={branch} info={info} pull={pull} archived={archived} botName={botName} readFailed={readFailed} onPick={(action) => { close(); onAct(action); }} />
         </div>,
         document.body,
       )}
@@ -253,10 +251,51 @@ export function BranchMenu({ branch, info, pull, archived, botName, readFailed =
   );
 }
 
+/** Why the panel cannot act on this branch itself (a locale key), or null:
+ * then each action asks the bot instead. */
+function menuAwayKey(info: BotBranchInfo | undefined, branch: CodingBranch, readFailed: boolean): LocaleKey | null {
+  return branchUnavailable(info, branch) ? null : branchAway(info, readFailed);
+}
+
+/** The open menu: where the panel cannot reach the branch's computer, one
+ * plain reason first (what is wrong and what to do), outside the menu that
+ * it describes (aria-describedby: a menu holds only its items), then the
+ * menu. */
+export function BranchMenuPanel({ branch, info, pull, archived, botName, readFailed = false, onPick }: {
+  branch: CodingBranch;
+  info?: BotBranchInfo;
+  pull?: BotBranchPull | null;
+  archived: boolean;
+  botName: string;
+  readFailed?: boolean;
+  onPick: (action: BranchMenuAction) => void;
+}) {
+  const reasonId = useId();
+  const awayKey = menuAwayKey(info, branch, readFailed);
+  return (
+    <>
+      {awayKey && (
+        <p id={reasonId} data-branch-away={awayKey} className="px-2 pb-1.5 pt-0.5 text-[12px] leading-[17px] text-ink-secondary">
+          {t(awayKey, { bot: botName })}
+        </p>
+      )}
+      <div
+        role="menu"
+        aria-label={t("botPanel.branch.menu", { name: branch.name })}
+        aria-describedby={awayKey ? reasonId : undefined}
+        onKeyDown={navigateThreadMenu}
+        className="flex flex-col gap-0.5"
+      >
+        <BranchMenuItems branch={branch} info={info} pull={pull} archived={archived} botName={botName} readFailed={readFailed} onPick={onPick} />
+      </div>
+    </>
+  );
+}
+
 /** The menu's rows. Where the panel can act: each action, or why not.
- * Where it cannot reach the branch's computer: one plain reason first (what
- * is wrong and what to do), then each action as one click that asks the bot
- * to do it. While the branch is read: the actions wait, saying so. */
+ * Where it cannot reach the branch's computer (BranchMenuPanel says why):
+ * each action as one click that asks the bot to do it. While the branch is
+ * read: the actions wait, saying so. */
 export function BranchMenuItems({ branch, info, pull, archived, botName, readFailed = false, onPick }: {
   branch: CodingBranch;
   info?: BotBranchInfo;
@@ -270,7 +309,7 @@ export function BranchMenuItems({ branch, info, pull, archived, botName, readFai
   const state = info?.state;
   const blocked = info?.publishBlocked;
   const unavailableKey = branchUnavailable(info, branch);
-  const awayKey = unavailableKey ? null : branchAway(info, readFailed);
+  const awayKey = menuAwayKey(info, branch, readFailed);
   const reading = !info && !readFailed && Boolean(branch.threadId);
   const unavailable = unavailableKey ? t(unavailableKey) : reading ? t("botPanel.branch.reading") : undefined;
   const publishHint = blocked === "github_not_connected" ? t("botPanel.branch.hint.githubNotConnected") : undefined;
@@ -315,11 +354,6 @@ export function BranchMenuItems({ branch, info, pull, archived, botName, readFai
 
   return (
     <>
-      {away && (
-        <p role="note" data-branch-away={awayKey} className="px-2 pb-1 pt-0.5 text-[12px] leading-[17px] text-ink-secondary">
-          {t(awayKey, { bot: botName })}
-        </p>
-      )}
       {item("commit", <GitCommitHorizontal />, `${t("botPanel.branch.commit")}${away ? "" : "…"}`, act(can.commit, commitHint))}
       {item("push", <Upload />, t("botPanel.branch.push"), act(can.push, pushHint))}
       {can.prUrl
@@ -388,8 +422,23 @@ export function CodeBranchList({ branches, archivedBranches = [], now, actions, 
 
   const listed = showArchived ? [...branches, ...archivedBranches] : branches;
   const readKeys = listed.map((branch) => `${codingBranchKey(branch)}@${branch.threadId ?? ""}:${branch.at}`).join("|");
+  // What each conversation's rows were last read at: a change (the bot ran
+  // git again) reads that conversation's rows again, never every row (each
+  // read is a command on the bot's computer, the desktop app runs one at a
+  // time). Its rows share a folder, so they are read together.
+  const readAt = useRef(new Map<string, string>());
   useEffect(() => {
-    for (const branch of listed) void read(branch);
+    const threads = new Map<string, CodingBranch[]>();
+    for (const branch of listed) {
+      const thread = `${botId ?? ""}\n${branch.threadId ?? ""}`;
+      threads.set(thread, [...(threads.get(thread) ?? []), branch]);
+    }
+    for (const [thread, rows] of threads) {
+      const signature = rows.map((branch) => `${codingBranchKey(branch)}:${branch.at}`).sort().join("|");
+      if (readAt.current.get(thread) === signature) continue;
+      readAt.current.set(thread, signature);
+      for (const branch of rows) void read(branch);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readKeys, read]);
 

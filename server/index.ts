@@ -33533,7 +33533,8 @@ ROUTES.push(createBotCodeBranchRoutes({
     } : {}),
     desktop: {
       current: (principalId) => desktopBridges.current(principalId),
-      request: (principalId, operation) => desktopBridges.request(principalId, operation, () => true)
+      // the desktop the panel's request named (its row says which)
+      request: (principalId, operation, desktopId) => desktopBridges.request(principalId, operation, () => true, undefined, desktopId)
     },
     hostVm: {
       running: async (botId, threadId) => (await containerComputerStatus(undefined, undefined, localVmTargetForStatus(botId, threadId), { probeDesktop: false })).container === "running",

@@ -6,13 +6,22 @@
 // that answers gh proves the success path. An offline transport refuses
 // plainly, and the branch name and paths reach the shell as quoted data.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { BranchActionError } from "../code-branches.ts";
-import { cdTo, locateBranchFolder, RemoteBranchGit, type RemoteExec } from "./remote-code-branches.ts";
+import { BranchFacts, cdTo, locateBranchFolder, q, RemoteBranchGit, type RemoteExec } from "./remote-code-branches.ts";
+
+/** The same computer, its origin read as a GitHub address (one branch read
+ * is one script: its `@origin` line says so), while the real origin stays
+ * the bare local remote the pushes go to. */
+const githubOrigin = (exec: RemoteExec, url = "https://github.com/acme/web.git"): RemoteExec => async (command, timeoutMs, env) => {
+  const result = await exec(command, timeoutMs, env);
+  if ("error" in result) return result;
+  return { ...result, stdout: result.stdout.replace(/^@origin \d+ [A-Za-z0-9+/=]*$/m, `@origin 0 ${Buffer.from(`${url}\n`).toString("base64")}`) };
+};
 
 let dir = "";
 let worktree = "";
@@ -125,11 +134,10 @@ describe("RemoteBranchGit: the same actions on the bot's computer", () => {
     await expect(branch.openPr("Add widgets")).rejects.toMatchObject({ code: "not_github" });
 
     // A repository whose origin is github.com, gh not installed on it.
-    const noGh: RemoteExec = async (command) => {
+    const noGh: RemoteExec = githubOrigin(async (command) => {
       if (/&& gh /.test(command)) return { exitCode: 127, stdout: "", stderr: "sh: gh: not found" };
-      if (/get-url/.test(command)) return { exitCode: 0, stdout: "https://github.com/acme/web.git\n", stderr: "" };
       return shell(command);
-    };
+    });
     const ghBranch = new RemoteBranchGit(noGh, repo, "feat/widgets");
     const out = await ghBranch.openPr("Add widgets");
     expect(out.pull).toBeUndefined();
@@ -138,13 +146,12 @@ describe("RemoteBranchGit: the same actions on the bot's computer", () => {
 
   it("opens the pull request through gh when it is available", async () => {
     const calls: string[] = [];
-    const withGh: RemoteExec = async (command) => {
+    const withGh: RemoteExec = githubOrigin(async (command) => {
       calls.push(command);
-      if (/get-url/.test(command)) return { exitCode: 0, stdout: "https://github.com/acme/web.git\n", stderr: "" };
       if (/'pr' 'list'/.test(command)) return { exitCode: 0, stdout: "[]", stderr: "" };
       if (/'pr' 'create'/.test(command)) return { exitCode: 0, stdout: "https://github.com/acme/web/pull/7\n", stderr: "" };
       return shell(command);
-    };
+    });
     const branch = new RemoteBranchGit(withGh, repo, "feat/widgets");
     await branch.commit("Add the widget");
     await branch.push();
@@ -162,7 +169,7 @@ describe("RemoteBranchGit: the same actions on the bot's computer", () => {
   it("reaches a folder written home relative or relative to where commands start, never as an option", () => {
     expect(cdTo("/workspace/web")).toBe("cd -- '/workspace/web'");
     expect(cdTo("~")).toBe('cd "$HOME"');
-    expect(cdTo("~/code/it's")).toBe(`cd "$HOME"/'code/it'\\''s'`);
+    expect(cdTo("~/code/it's")).toBe(`cd "$HOME"/'code/it'"'"'s'`);
     expect(cdTo("web")).toBe("cd -- 'web'");
     expect(cdTo("-x")).toBe("cd -- '-x'");
     expect(cdTo("")).toBe("cd -- '.'");
@@ -193,13 +200,121 @@ describe("RemoteBranchGit: the same actions on the bot's computer", () => {
     expect(sent.every((env) => env === undefined)).toBe(true);
   });
 
-  it("refuses a push or pull request to GitHub signed by the person when they connected no GitHub account", async () => {
-    const github: RemoteExec = async (command, timeoutMs) => (/get-url/.test(command) ? { exitCode: 0, stdout: "git@github.com:acme/web.git\n", stderr: "" } : shell(command, timeoutMs));
-    const branch = new RemoteBranchGit(github, repo, "feat/widgets", { mode: "person" });
-    await expect(branch.push()).rejects.toMatchObject({ code: "github_not_connected", status: 403 });
-    await expect(branch.openPr("Add widgets")).rejects.toMatchObject({ code: "github_not_connected" });
-    // the computer's own sign-in, by contrast, needs no connection
-    await expect(new RemoteBranchGit(github, repo, "feat/widgets").openPr("Add widgets")).rejects.toMatchObject({ code: "not_pushed" });
+  it("with no GitHub connection, pushes to GitHub with that environment's own sign-in, never a token, and says to connect GitHub when it is refused", async () => {
+    // the person's cloud computer, no connection in Sagax: its own git and gh sign-in, as the bot's own commands there
+    const sent: Array<Record<string, string> | undefined> = [];
+    const own: RemoteExec = githubOrigin(async (command, timeoutMs, env) => {
+      sent.push(env);
+      if (/&& gh /.test(command)) return { exitCode: 127, stdout: "", stderr: "sh: gh: not found" };
+      return shell(command, timeoutMs);
+    }, "git@github.com:acme/web.git");
+    const branch = new RemoteBranchGit(own, repo, "feat/widgets", { mode: "person" });
+    await branch.commit("Add the widget");
+    expect((await branch.push()).remote).toBe("git@github.com:acme/web.git");
+    expect(git(remote, "rev-parse", "refs/heads/feat/widgets")).toMatch(/^[0-9a-f]{40}$/);
+    expect(await branch.openPr("Add widgets")).toEqual({ compareUrl: "https://github.com/acme/web/compare/main...feat%2Fwidgets?expand=1" });
+    expect(sent.every((env) => env === undefined)).toBe(true);
+
+    // that sign-in refused: the answer is the person's own GitHub connection
+    const refused: RemoteExec = githubOrigin(async (command, timeoutMs) => {
+      if (/'ls-remote'/.test(command)) return { exitCode: 128, stdout: "", stderr: "fatal: Authentication failed for 'https://github.com/acme/web.git/'" };
+      if (/ gh 'pr' 'list'/.test(command)) return { exitCode: 1, stdout: "", stderr: "" };
+      if (/ gh 'pr' 'create'/.test(command)) return { exitCode: 1, stdout: "", stderr: "HTTP 401: Bad credentials (https://api.github.com/graphql)" };
+      return shell(command, timeoutMs);
+    });
+    git(repo, "commit", "--allow-empty", "-m", "more");
+    await expect(new RemoteBranchGit(refused, repo, "feat/widgets", { mode: "person" }).push()).rejects.toMatchObject({ code: "github_not_connected", status: 403 });
+    await expect(new RemoteBranchGit(refused, repo, "feat/widgets", { mode: "person" }).openPr("Add widgets")).rejects.toMatchObject({ code: "github_not_connected" });
+    // on a computer's own sign-in (the person's own computer, a client's), a refusal stays what it is
+    await expect(new RemoteBranchGit(refused, repo, "feat/widgets").push()).rejects.toMatchObject({ code: "auth" });
+  });
+
+  it("reads a branch in one round trip, and every git call takes no optional lock", async () => {
+    const commands: string[] = [];
+    const counted: RemoteExec = async (command, timeoutMs) => { commands.push(command); return shell(command, timeoutMs); };
+    const branch = new RemoteBranchGit(counted, repo, "feat/widgets");
+    const state = await branch.state();
+    expect(state).toMatchObject({ exists: true, base: "main", worktree: repo, changes: [{ path: "widget.ts", status: "untracked" }] });
+    expect(await branch.originRepo()).toBeUndefined();
+    expect(commands).toHaveLength(1);
+    await branch.commit("Add the widget");
+    await branch.diff();
+    expect(commands.length).toBeGreaterThan(1);
+    for (const command of commands) {
+      const calls = command.match(/(?:^|[;&|(] *)(?:\S+=\S+ )*git /g) ?? [];
+      expect(calls.every((call) => call.includes("GIT_OPTIONAL_LOCKS=0")), command).toBe(true);
+    }
+    // the read's ahead count against origin's branch once it is pushed
+    await branch.push();
+    git(repo, "commit", "--allow-empty", "-m", "one more");
+    expect(await new RemoteBranchGit(shell, repo, "feat/widgets").state()).toMatchObject({ pushed: true, ahead: 1, behind: 0, lastCommit: "one more" });
+  });
+
+  it("signs a commit with the person's name and email when given, and says plainly when no identity signs it", async () => {
+    await new RemoteBranchGit(shell, repo, "feat/widgets").commit("Signed by the person", undefined, { name: "Sam O'Neil", email: "sam@example.com" });
+    expect(git(repo, "log", "-1", "--format=%an <%ae> / %cn <%ce>")).toBe("Sam O'Neil <sam@example.com> / Sam O'Neil <sam@example.com>");
+    // a computer with no git identity at all, and none given
+    writeFileSync(join(repo, "more.ts"), "export const more = 1;\n");
+    const anonymous: RemoteExec = async (command) => {
+      try {
+        const stdout = execFileSync("/bin/sh", ["-c", command], { encoding: "utf8", env: { PATH: process.env.PATH, HOME: dir, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_PARAMETERS: "'user.useConfigOnly=true'" } });
+        return { exitCode: 0, stdout, stderr: "" };
+      } catch (error) {
+        const fail = error as { status?: number; stdout?: string; stderr?: string };
+        return { exitCode: fail.status ?? 1, stdout: String(fail.stdout ?? ""), stderr: String(fail.stderr ?? "") };
+      }
+    };
+    await expect(new RemoteBranchGit(anonymous, repo, "feat/widgets").commit("No one")).rejects.toMatchObject({ code: "no_author", status: 403 });
+    await new RemoteBranchGit(anonymous, repo, "feat/widgets").commit("By the person", undefined, { name: "Sam", email: "sam@example.com" });
+    expect(git(repo, "log", "-1", "--format=%s %ae")).toBe("By the person sam@example.com");
+  });
+
+  it("passes every word as data in sh, bash, zsh, dash and ksh, with no backslash, ! or line break on the command line", () => {
+    const words = ["it's", "a\\b", "two\nlines", "tab\there", "$HOME `id` $(id)", "\"quoted\"", "-n", "é ü", "fix!", "!x", "a!b"];
+    for (const shellPath of ["/bin/sh", "/bin/bash", "/bin/zsh", "/bin/dash", "/bin/ksh"].filter((path) => existsSync(path))) {
+      for (const word of words) {
+        const command = `printf '[%s]' ${q(word)}`;
+        expect(command, word).not.toMatch(/[\\\n\r!]/);
+        expect(execFileSync(shellPath, ["-c", command], { encoding: "utf8" }), `${shellPath} ${JSON.stringify(word)}`).toBe(`[${word}]`);
+      }
+    }
+    // a word that goes through base64 carries its data once (a long commit message stays short enough)
+    const data = Buffer.from("line one\nline two").toString("base64");
+    expect(q("line one\nline two").split(data)).toHaveLength(2);
+  });
+
+  it("keeps the whole entries of a status the channel cut short, and reads no other value cut short", async () => {
+    // the solo Local VM's channel keeps 20,000 characters: the read's last line, the status, is cut
+    for (let index = 0; index < 40; index++) writeFileSync(join(repo, `file-${String(index).padStart(2, "0")}-${"x".repeat(60)}.ts`), "x\n");
+    const cut: RemoteExec = async (command, timeoutMs) => {
+      const result = await shell(command, timeoutMs);
+      if ("error" in result || !/sgx_read status/.test(command)) return result;
+      const at = result.stdout.indexOf("@status ");
+      return { ...result, stdout: result.stdout.slice(0, at + 8 + 2 + 1500), truncated: true };
+    };
+    const state = await new RemoteBranchGit(cut, repo, "feat/widgets").state();
+    expect(state.exists).toBe(true);
+    expect(state.changes.length).toBeGreaterThan(5);
+    expect(state.changes.length).toBeLessThan(41);
+    // every entry kept is a whole file name
+    expect(state.changes.every((change) => /^(?:widget|file-\d\d-x{60})\.ts$/.test(change.path))).toBe(true);
+
+    const facts = new BranchFacts(`@sha 0 ${Buffer.from("abc\n").toString("base64")}\n@origin 0 ${Buffer.from("https://github.com/acme/web.git\n").toString("base64").slice(0, 10)}`);
+    expect(facts.ok("sha")).toBe("abc");
+    expect(facts.ok("origin")).toBeUndefined();
+    expect(facts.raw("origin")?.cut).toBe(true);
+  });
+
+  it("says a computer that is there but busy is busy, not offline", async () => {
+    const busy: RemoteExec = async () => ({ error: "That computer is busy with other work.", busy: true });
+    await expect(new RemoteBranchGit(busy, repo, "feat/widgets").state()).rejects.toMatchObject({ code: "busy", status: 503 });
+    await expect(locateBranchFolder(busy, "feat/widgets", [repo])).rejects.toMatchObject({ code: "busy" });
+    await expect(new RemoteBranchGit(async () => ({ error: "down" }), repo, "feat/widgets").state()).rejects.toMatchObject({ code: "offline", status: 502 });
+  });
+
+  it("finds a branch in the folder where that computer's commands start", async () => {
+    const atStart: RemoteExec = async (command, timeoutMs) => shell(`cd -- ${q(repo)} && ${command}`, timeoutMs);
+    expect(await locateBranchFolder(atStart, "feat/widgets", [""])).toEqual({ folder: repo, hasBranch: true });
   });
 
   it("keeps the whole files of a diff the channel cut, and says it was cut", async () => {

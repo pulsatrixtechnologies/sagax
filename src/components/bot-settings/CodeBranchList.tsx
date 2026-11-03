@@ -10,12 +10,14 @@
 // saying what happened or what went wrong. When the computer that holds the
 // branch cannot be reached (off, not known, Windows, its folder not known),
 // the menu says why in plain words and what to do, and each action asks the
-// bot to do it instead, in the conversation the branch came from.
+// bot to do it instead, in the conversation the branch came from. Where
+// reading it again can help (the computer was off or busy, its OS not known
+// yet), "Try again" reads it again: the row then acts, or says why not.
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   Archive, ArchiveRestore, ExternalLink, FileDiff, FolderOpen, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest,
-  GitPullRequestClosed, Loader2, Monitor, MoreHorizontal, Trash2, Upload,
+  GitPullRequestClosed, Loader2, Monitor, MoreHorizontal, RefreshCw, Trash2, Upload,
 } from "lucide-react";
 
 import { ApiError, useStore } from "@/state/store";
@@ -26,7 +28,7 @@ import { openExternalLink } from "@/lib/app-links";
 import { writeComputerPanelView } from "@/lib/computer-panel-view";
 import { GROUPED_CARD, GROUPED_ROW } from "@/lib/grouped-card";
 import {
-  branchAction, branchActions, branchAskText, branchAway, branchCounts, branchStatus, branchUnavailable, branchWhere, codingBranchKey, deleteNeedsSecondConfirm, loadBranchDiff, loadBranchInfo, loadBranchPull, remoteActionNeedsConfirm,
+  branchAction, branchActions, branchAskText, branchAway, branchCanReadAgain, branchCounts, branchStatus, branchUnavailable, branchWhere, codingBranchKey, deleteNeedsSecondConfirm, loadBranchDiff, loadBranchInfo, loadBranchPull, remoteActionNeedsConfirm,
   type BotBranchDiff, type BotBranchInfo, type BotBranchPull, type BranchAskAction, type BranchTone, type CodingBranch,
 } from "@/lib/code-branches";
 import { codeWorkWhen } from "@/lib/bot-activity";
@@ -58,8 +60,10 @@ const ERROR_KEYS: Record<string, LocaleKey> = {
   commit_failed: "botPanel.branch.error.commitFailed",
   no_person: "botPanel.branch.error.noPerson",
   no_author: "botPanel.branch.error.noAuthor",
+  no_git_identity: "botPanel.branch.error.noGitIdentity",
   unsafe_config: "botPanel.branch.error.unsafeConfig",
   busy: "botPanel.branch.error.busy",
+  too_long: "botPanel.branch.error.tooLong",
 };
 
 /** The words for a refused action: ours for the known codes, else the
@@ -164,7 +168,7 @@ export function BranchRow({ branch, now, info, pull, busy, note, archived = fals
   );
 }
 
-export type BranchMenuAction = "commit" | "push" | "pr" | "openPr" | "diff" | "reveal" | "computer" | "archive" | "unarchive" | "delete";
+export type BranchMenuAction = "retry" | "commit" | "push" | "pr" | "openPr" | "diff" | "reveal" | "computer" | "archive" | "unarchive" | "delete";
 
 function revealBridge(): ((path: string) => Promise<"shown" | "missing" | "invalid">) | undefined {
   const ogb = typeof window === "undefined" ? undefined : window.ogb;
@@ -294,8 +298,9 @@ export function BranchMenuPanel({ branch, info, pull, archived, botName, readFai
 
 /** The menu's rows. Where the panel can act: each action, or why not.
  * Where it cannot reach the branch's computer (BranchMenuPanel says why):
- * each action as one click that asks the bot to do it. While the branch is
- * read: the actions wait, saying so. */
+ * "Try again" first where reading it again can help, then each action as
+ * one click that asks the bot to do it. While the branch is read: the
+ * actions wait, saying so. */
 export function BranchMenuItems({ branch, info, pull, archived, botName, readFailed = false, onPick }: {
   branch: CodingBranch;
   info?: BotBranchInfo;
@@ -351,9 +356,12 @@ export function BranchMenuItems({ branch, info, pull, archived, botName, readFai
   const divider = (key: string) => <div key={key} className="mx-2 my-1 h-[0.5px] bg-border" aria-hidden="true" />;
   const away = awayKey !== null;
   const act = (enabled: boolean, hint: string | undefined) => (away ? { ask: true } : { disabled: !enabled, hint });
+  const readAgain = away && branchCanReadAgain(info, readFailed);
 
   return (
     <>
+      {readAgain && item("retry", <RefreshCw />, t("botPanel.branch.tryAgain"))}
+      {readAgain && divider("retry")}
       {item("commit", <GitCommitHorizontal />, `${t("botPanel.branch.commit")}${away ? "" : "…"}`, act(can.commit, commitHint))}
       {item("push", <Upload />, t("botPanel.branch.push"), act(can.push, pushHint))}
       {can.prUrl
@@ -404,19 +412,24 @@ export function CodeBranchList({ branches, archivedBranches = [], now, actions, 
   const botId = actions?.botId;
   const patch = useCallback((key: string, next: Partial<RowState>) => setRows((current) => ({ ...current, [key]: { ...current[key], ...next } })), []);
 
-  const read = useCallback(async (branch: CodingBranch) => {
-    if (!botId || !branch.threadId) return;
+  /** Read the branch now; its info, or undefined when the read failed. */
+  const read = useCallback(async (branch: CodingBranch): Promise<BotBranchInfo | undefined> => {
+    if (!botId || !branch.threadId) return undefined;
     try {
       const info = await loadBranchInfo(botId, branch.threadId, branch.name);
       patch(codingBranchKey(branch), { info, readFailed: false });
-      // The pull request as GitHub has it now (one opened by hand too).
-      if (info.state?.pushed && info.canPublish && (branch.repo ?? info.repo)) {
+      // The pull request as GitHub has it now (one opened by hand too). On
+      // the bot's computer there is no live read (nothing runs there for it):
+      // the row keeps what the bot's calls said.
+      if (info.place !== "remote" && info.state?.pushed && info.canPublish && (branch.repo ?? info.repo)) {
         const pull = await loadBranchPull(botId, branch.threadId, branch.name).catch(() => undefined);
         if (pull !== undefined) patch(codingBranchKey(branch), { pull });
       }
+      return info;
     } catch {
       // the row keeps what the bot's calls said; its menu offers to ask the bot
       patch(codingBranchKey(branch), { readFailed: true });
+      return undefined;
     }
   }, [botId, patch]);
 
@@ -498,10 +511,23 @@ export function CodeBranchList({ branches, archivedBranches = [], now, actions, 
     });
   };
 
+  /** "Try again": read the branch again (the row shows it working). Still
+   * out of reach: the row says why; not read at all: what the last read
+   * said (stopped, not known) may no longer hold, so the row says it could
+   * not be read now; readable: the menu acts itself. */
+  const readAgain = async (branch: CodingBranch) => {
+    const key = codingBranchKey(branch);
+    patch(key, { busy: true, note: undefined });
+    const info = await read(branch);
+    const reason = info ? (branchUnavailable(info, branch) ? null : branchAway(info)) : "botPanel.branch.away.unread";
+    patch(key, { busy: false, ...(info ? {} : { info: undefined }), ...(reason ? { note: { tone: "error", text: t(reason, { bot: actions?.botName ?? "" }) } } : {}) });
+  };
+
   const act = (branch: CodingBranch) => (action: BranchMenuAction) => {
     if (!actions || !botId) return;
     const key = codingBranchKey(branch);
     const row = rows[key];
+    if (action === "retry") { void readAgain(branch); return; }
     // The panel cannot reach the branch's computer: the bot is asked instead.
     const askable = ASKABLE[action];
     if (askable && !branchUnavailable(row?.info, branch) && branchAway(row?.info, row?.readFailed === true)) {

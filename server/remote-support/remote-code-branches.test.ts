@@ -6,7 +6,7 @@
 // that answers gh proves the success path. An offline transport refuses
 // plainly, and the branch name and paths reach the shell as quoted data.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -264,7 +264,12 @@ describe("RemoteBranchGit: the same actions on the bot's computer", () => {
         return { exitCode: fail.status ?? 1, stdout: String(fail.stdout ?? ""), stderr: String(fail.stderr ?? "") };
       }
     };
-    await expect(new RemoteBranchGit(anonymous, repo, "feat/widgets").commit("No one")).rejects.toMatchObject({ code: "no_author", status: 403 });
+    // the person's cloud computer: their profile is what names them there
+    await expect(new RemoteBranchGit(anonymous, repo, "feat/widgets", { mode: "person" }).commit("No one")).rejects.toMatchObject({ code: "no_author", status: 403 });
+    // their own computer, its Local VM, a client's: that computer's own git identity, set there
+    const own = new RemoteBranchGit(anonymous, repo, "feat/widgets");
+    await expect(own.commit("No one")).rejects.toMatchObject({ code: "no_git_identity", status: 409 });
+    await expect(own.commit("No one")).rejects.toThrow(/git config --global user\.name/);
     await new RemoteBranchGit(anonymous, repo, "feat/widgets").commit("By the person", undefined, { name: "Sam", email: "sam@example.com" });
     expect(git(repo, "log", "-1", "--format=%s %ae")).toBe("By the person sam@example.com");
   });
@@ -303,6 +308,28 @@ describe("RemoteBranchGit: the same actions on the bot's computer", () => {
     expect(facts.ok("sha")).toBe("abc");
     expect(facts.ok("origin")).toBeUndefined();
     expect(facts.raw("origin")?.cut).toBe(true);
+    // an answer the channel says it cut: its last value line is cut, even when the cut fell on a line end
+    const said = new BranchFacts(`@sha 0 ${Buffer.from("abc\n").toString("base64")}\n@status 0 ${Buffer.from("?? a.ts\0?? b").toString("base64")}\n`, true);
+    expect(said.ok("sha")).toBe("abc");
+    expect(said.raw("status")?.cut).toBe(true);
+    expect(new BranchFacts(`@sha 0 ${Buffer.from("abc\n").toString("base64")}\n`).ok("sha")).toBe("abc");
+  });
+
+  it("reads a branch whose answer the channel said it cut, keeping only whole status entries", async () => {
+    for (let index = 0; index < 30; index++) writeFileSync(join(repo, `cut-${String(index).padStart(2, "0")}-${"y".repeat(40)}.ts`), "y\n");
+    // a channel that cuts on a line end and says so (the status line's own end kept)
+    const cut: RemoteExec = async (command, timeoutMs) => {
+      const result = await shell(command, timeoutMs);
+      if ("error" in result || !/sgx_read status/.test(command)) return result;
+      const start = result.stdout.indexOf("@status ");
+      const data = result.stdout.slice(start).split(" ")[2]!.trim();
+      // the status line cut to a whole number of base64 groups, its line end kept
+      const kept = data.slice(0, 800 - (800 % 4));
+      return { ...result, stdout: `${result.stdout.slice(0, start)}@status 0 ${kept}\n`, truncated: true };
+    };
+    const state = await new RemoteBranchGit(cut, repo, "feat/widgets").state();
+    expect(state.changes.length).toBeGreaterThan(3);
+    expect(state.changes.every((change) => /^(?:widget|cut-\d\d-y{40})\.ts$/.test(change.path))).toBe(true);
   });
 
   it("says a computer that is there but busy is busy, not offline", async () => {
@@ -310,6 +337,20 @@ describe("RemoteBranchGit: the same actions on the bot's computer", () => {
     await expect(new RemoteBranchGit(busy, repo, "feat/widgets").state()).rejects.toMatchObject({ code: "busy", status: 503 });
     await expect(locateBranchFolder(busy, "feat/widgets", [repo])).rejects.toMatchObject({ code: "busy" });
     await expect(new RemoteBranchGit(async () => ({ error: "down" }), repo, "feat/widgets").state()).rejects.toMatchObject({ code: "offline", status: 502 });
+  });
+
+  it("acts from the repository's top folder when the bot's git ran in a folder inside it", async () => {
+    // status names paths from the top of the repository: a commit from a folder inside it would miss them
+    mkdirSync(join(repo, "src"), { recursive: true });
+    writeFileSync(join(repo, "src", "inner.ts"), "export const inner = 1;\n");
+    const located = await locateBranchFolder(shell, "feat/widgets", [join(repo, "src")]);
+    expect(located).toEqual({ folder: repo, hasBranch: true });
+    const remote = new RemoteBranchGit(shell, located!.folder, "feat/widgets");
+    expect((await remote.state()).changes.map((change) => change.path).sort()).toEqual(["src/inner.ts", "widget.ts"]);
+    await remote.commit("From the top", ["widget.ts", "src/inner.ts"]);
+    expect(git(repo, "status", "--porcelain")).toBe("");
+    // a folder that is no repository at all still reads as its own real path
+    expect(await locateBranchFolder(shell, "feat/widgets", [dir])).toBeNull();
   });
 
   it("finds a branch in the folder where that computer's commands start", async () => {

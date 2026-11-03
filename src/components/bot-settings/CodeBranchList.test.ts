@@ -252,6 +252,29 @@ describe("Coding branches: the card", () => {
     expect(branchErrorText(new ApiError("x", 503, { code: "busy" }))).toBe("The computer that holds this branch is busy with other work. Try again in a moment.");
     expect(branchErrorText(new ApiError("x", 502, { code: "offline" }))).toBe("The computer that holds this branch cannot be reached right now");
     expect(branchErrorText(new ApiError("x", 409, { code: "no_path" }))).toBe("The folder that holds this branch is not known");
+    // too long for that computer's connection: what to do, never "cannot be reached"
+    expect(branchErrorText(new ApiError("x", 413, { code: "too_long" }))).toBe("That is too long to send to that computer in one command. Commit fewer files at a time, or ask the bot to do it.");
+    // that computer's own git identity, not the person's profile
+    expect(branchErrorText(new ApiError("x", 409, { code: "no_git_identity" }))).toBe("Git has no name and email on that computer to sign the commit. Set them there (git config --global user.name and user.email), then try again, or ask the bot to commit.");
+    for (const key of ["botPanel.branch.error.tooLong", "botPanel.branch.error.noGitIdentity", "botPanel.branch.tryAgain"] as const) {
+      expect((fr as Record<string, string>)[key], key).toBeTruthy();
+      expect(`${en[key]} ${(fr as Record<string, string>)[key]}`, key).not.toMatch(/[\u2013\u2014]/);
+    }
+    expect((fr as Record<string, string>)["botPanel.branch.error.noGitIdentity"]).not.toMatch(/profil/);
+    expect(en["botPanel.branch.error.noGitIdentity"]).not.toMatch(/profile/);
+  });
+
+  it("offers to try again where trying again can help, never where it cannot", () => {
+    const remote = (extra: Partial<BotBranchInfo>): BotBranchInfo => ({ branch: local.name, place: "remote", canPublish: false, ...extra });
+    const items = (read: BotBranchInfo | undefined, readFailed = false) => renderToStaticMarkup(createElement(BranchMenuItems, { branch: local, info: read, archived: false, botName: "Scout", readFailed, onPick: () => {} }));
+    for (const read of [remote({ offline: true, computer: "sandbox" }), remote({ offline: true, computer: "desktop" }), remote({ offline: true, computer: "local_vm" }), remote({ offline: true, computer: "remote_session" }), remote({ publishBlocked: "unknown_os" })]) {
+      expect(items(read), JSON.stringify(read)).toContain('data-menu-item="retry"');
+    }
+    expect(items(undefined, true)).toContain('data-menu-item="retry"');
+    // the place or the folder is not known, or Windows: reading again changes nothing
+    for (const read of [{ branch: local.name, place: "elsewhere", canPublish: false } as BotBranchInfo, remote({ noPath: true }), remote({ publishBlocked: "unknown_os", windows: true }), info(), undefined]) {
+      expect(items(read), JSON.stringify(read)).not.toContain('data-menu-item="retry"');
+    }
   });
 
   it("asks the bot to do this action, naming it, and never says the bot's computer where it is the person's", () => {

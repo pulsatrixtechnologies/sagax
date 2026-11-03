@@ -20,9 +20,21 @@
 // The desktop runs a command with the person's login shell (`$SHELL -lc`)
 // and a remote session with the remote login shell, which may be fish or
 // csh: their command goes inside `/bin/sh -c '...'` (viaPosixShell), so only
-// sh reads it. The desktop app runs its jobs one at a time and keeps eight:
-// the panel sends it one command at a time per person (never more than one
-// of those slots), to the desktop it named on that request.
+// sh reads it.
+//
+// Light on the person's computers (2026-11-03, review): the panel reads
+// every row of the Coding list at once, and the person's bots need the
+// same computers. The person's cloud computer runs at most four commands of
+// theirs at a time (sandboxd-core.ts, shared by all their bots) and the
+// desktop app one job at a time (it keeps eight): the panel sends each of
+// them one command at a time per person, so it never holds more than one
+// slot. Each refusal says what it is: a full computer reads busy (never
+// stopped), and a desktop command that ran out of time while that desktop
+// stayed connected (a long job of its own ahead of it) reads busy too, and
+// the panel's next commands to it answer busy at once while it still works
+// instead of each waiting the bridge's whole timeout. A command longer than
+// a channel carries (each computer's own limit, below) is refused before it
+// is sent (`tooLong`), and a remote session's own cut mark is read as a cut.
 import type { RemoteBranchDeps, RemoteBranchReach } from "../routes/bot-code-branches.ts";
 import { EXEC_ENV_KEY_RE, type SandboxExecInput, type SandboxExecOutput } from "../sandboxd-core.ts";
 import type { RemoteExec, RemoteGitResult } from "./remote-code-branches.ts";
@@ -31,10 +43,33 @@ const SECOND = 1000;
 const DEFAULT_TIMEOUT_MS = 60 * SECOND;
 const seconds = (timeoutMs: number | undefined) => Math.min(600, Math.max(1, Math.ceil((timeoutMs ?? DEFAULT_TIMEOUT_MS) / SECOND)));
 
+/** The longest command line each channel carries: the cloud computer's one
+ * argument (Kubernetes passes it in the exec's address, Docker caps one
+ * argument at 128 KiB), the desktop app's (electron/desktop-bridge.mjs
+ * validBridgeOperation), a solo server's Local VM (containerExec) and a
+ * remote session (remote-sessions.ts exec, after trimming). */
+export const SANDBOX_MAX_COMMAND = 100_000;
+export const DESKTOP_MAX_COMMAND = 100_000;
+export const HOST_VM_MAX_COMMAND = 20_000;
+export const REMOTE_SESSION_MAX_COMMAND = 8000;
+
+const TOO_LONG = "That command is too long for that computer's connection, so it was not sent.";
+const tooLong = () => ({ error: TOO_LONG, tooLong: true as const });
+
+/** A refusal for a computer that is there but full: sandboxd's 429 "busy"
+ * (UserSandboxUnavailable or SandboxdRequestError), the desktop app's full
+ * queue (DesktopBridges.request), a desktop a job of its own holds
+ * (branchRemoteDeps). By its code only: another 429 is not this. */
+function refusedAsBusy(error: unknown): boolean {
+  return (error as { code?: unknown } | null)?.code === "busy";
+}
+
 /** The cloud computer: `run` is one exec in the person's own sandbox (in
- * the bot's folder there, as its run_command). */
+ * the bot's folder there, as its run_command). Full (the person's bots run
+ * four commands there): busy, not stopped. */
 export function sandboxBranchExec(run: (input: SandboxExecInput) => Promise<SandboxExecOutput>): RemoteExec {
   return async (command, timeoutMs, env) => {
+    if (command.length > SANDBOX_MAX_COMMAND) return tooLong();
     const variables = Object.fromEntries(Object.entries(env ?? {}).filter(([key, value]) => EXEC_ENV_KEY_RE.test(key) && typeof value === "string"));
     try {
       const out = await run({
@@ -50,7 +85,8 @@ export function sandboxBranchExec(run: (input: SandboxExecInput) => Promise<Sand
         ...(out.timedOut ? { timedOut: true } : {}),
         ...(out.truncated ? { truncated: true } : {}),
       };
-    } catch {
+    } catch (error) {
+      if (refusedAsBusy(error)) return { error: "The cloud computer is busy with other commands.", busy: true };
       return { error: "The cloud computer could not be reached." };
     }
   };
@@ -132,17 +168,21 @@ function resultText(value: unknown): { text: string; isError: boolean } {
 /** A channel that runs one command line and answers in text (the desktop
  * bridge's run_command or vm_run_command, a solo Local VM). `caps` bound the
  * output so the framed answer fits what the channel carries; `wrap` puts
- * the framed script in /bin/sh for a channel that runs a login shell.
+ * the framed script in /bin/sh for a channel that runs a login shell;
+ * `maxCommand`: the longest line it carries (a longer one is not sent).
  * Variables are never sent. */
-export function framedBranchExec(run: (command: string, timeoutSeconds: number) => Promise<unknown>, caps: FrameCaps, offline: string, options: { wrap?: boolean } = {}): RemoteExec {
+export function framedBranchExec(run: (command: string, timeoutSeconds: number) => Promise<unknown>, caps: FrameCaps, offline: string, options: { wrap?: boolean; maxCommand?: number } = {}): RemoteExec {
   return async (command, timeoutMs) => {
     const framed = framedCommand(command, caps);
+    const line = options.wrap ? viaPosixShell(framed) : framed;
+    if (options.maxCommand !== undefined && line.length > options.maxCommand) return tooLong();
     let answer: unknown;
     try {
-      answer = await run(options.wrap ? viaPosixShell(framed) : framed, seconds(timeoutMs));
+      answer = await run(line, seconds(timeoutMs));
     } catch (error) {
-      // the desktop app's queue is full (DesktopBridges.request): there, but busy
-      if ((error as { code?: unknown } | null)?.code === "busy") return { error: "That computer is busy with other work.", busy: true };
+      // there, but busy: the desktop app's queue is full (DesktopBridges.request),
+      // or a job of its own held it past the timeout (branchRemoteDeps)
+      if (refusedAsBusy(error)) return { error: "That computer is busy with other work.", busy: true };
       return { error: offline };
     }
     const { text } = resultText(answer);
@@ -183,6 +223,10 @@ export interface BranchChannels {
     current(principalId: string): { id: string; name: string; platform: string; capabilities: { shell: boolean; localVm: boolean } } | null;
     /** One operation on their desktop: `desktopId`, that one or nothing. */
     request(principalId: string, operation: { action: "run_command" | "vm_run_command"; command: string; timeout_seconds: number; container?: string }, desktopId?: string): Promise<unknown>;
+    /** That desktop of theirs now: connected, and running a job (a bot's or
+     * the panel's); null when they have no such desktop. Absent: only
+     * current() tells whether it is connected. */
+    state?(principalId: string, desktopId: string): { online: boolean; busy: boolean } | null;
   };
   /** A solo server's Local VM (a container on this machine). */
   hostVm?: {
@@ -211,13 +255,34 @@ export const HOST_VM_CAPS: FrameCaps = { output: 11 * 1024, errors: 2000 };
 
 const person = (viewerId: string | undefined) => viewerId?.trim().toLowerCase() || undefined;
 
+/** A remote session's own mark after a stream it cut (remote-sessions.ts
+ * capped(): `\n[cut at 64 KB]`): the text without it, and whether it was
+ * there. */
+function sessionText(text: string): { text: string; cut: boolean } {
+  const mark = /\n\[cut at \d+ KB\]$/.exec(text);
+  return mark ? { text: text.slice(0, mark.index), cut: true } : { text, cut: false };
+}
+
+/** How long, after a panel command to a desktop ran out of time while that
+ * desktop stayed connected, the next ones answer busy at once while it still
+ * works (then one is sent again). */
+const STALL_MS = 60 * SECOND;
+
+/** The busy refusal of a desktop that did not get to the panel's command. */
+const desktopBusy = () => Object.assign(new Error("That computer is busy with other work."), { code: "busy" });
+
 /** The route's reach and exec for each computer a branch can be on. Only
  * the viewer's own cloud computer and own desktop are ever reached (never
  * the bot owner's, never anyone else's): a branch the bot made in another
  * person's environment is simply not found there. */
 export function branchRemoteDeps(channels: BranchChannels): RemoteBranchDeps {
-  // one panel command at a time per person's desktop app
+  // one panel command at a time per person, on their cloud computer and on
+  // their desktop app (its Local VM goes through that same app)
   const inLane = serialLanes();
+  /** `person\ndesktop` -> until when that desktop counts as held by a job of
+   * its own (a panel command ran out of time there while it stayed
+   * connected). */
+  const stalled = new Map<string, number>();
   return {
     reach: async (botId, threadId, viewerId, place): Promise<RemoteBranchReach | null> => {
       const who = person(viewerId);
@@ -263,13 +328,17 @@ export function branchRemoteDeps(channels: BranchChannels): RemoteBranchDeps {
       const who = person(viewerId);
       const unreachable: RemoteExec = async () => ({ error: "That computer cannot be reached." });
       switch (place.computer) {
-        case "sandbox":
-          return channels.sandbox && who ? sandboxBranchExec((input) => channels.sandbox!.exec(who, input, botId)) : unreachable;
+        case "sandbox": {
+          const sandbox = channels.sandbox;
+          if (!sandbox || !who) return unreachable;
+          // one of the person's four command slots there at most: their bots keep the rest
+          return sandboxBranchExec((input) => inLane(`sandbox\n${who}`, () => sandbox.exec(who, input, botId)));
+        }
         case "desktop":
         case "local_vm": {
           if (place.computer === "local_vm" && place.vm === "host") {
             return !channels.organization && channels.hostVm
-              ? framedBranchExec(async (command, timeout) => ({ content: [{ type: "text", text: (await channels.hostVm!.exec(botId, threadId, command, timeout)).stdout }] }), HOST_VM_CAPS, "The Local VM is not running.")
+              ? framedBranchExec(async (command, timeout) => ({ content: [{ type: "text", text: (await channels.hostVm!.exec(botId, threadId, command, timeout)).stdout }] }), HOST_VM_CAPS, "The Local VM is not running.", { maxCommand: HOST_VM_MAX_COMMAND })
               : unreachable;
           }
           const desktop = channels.desktop;
@@ -277,11 +346,38 @@ export function branchRemoteDeps(channels: BranchChannels): RemoteBranchDeps {
           // the desktop this request named (its row says which), not one
           // that connects in the meantime
           const desktopId = desktop.current(who)?.id;
-          const send = (operation: Parameters<NonNullable<BranchChannels["desktop"]>["request"]>[1]) => inLane(`desktop\n${who}`, () => desktop.request(who, operation, desktopId));
+          const held = `${who}\n${desktopId ?? ""}`;
+          /** That desktop now (connected, running a job), as far as known. */
+          const now = () => {
+            if (!desktopId) return null;
+            if (desktop.state) return desktop.state(who, desktopId);
+            return desktop.current(who)?.id === desktopId ? { online: true, busy: false } : null;
+          };
+          const send = (operation: Parameters<NonNullable<BranchChannels["desktop"]>["request"]>[1]) => inLane(`desktop\n${who}`, async () => {
+            const until = stalled.get(held);
+            if (until !== undefined) {
+              // a job of its own still holds it: say so at once, nothing queued
+              if (Date.now() < until && now()?.busy) throw desktopBusy();
+              stalled.delete(held);
+            }
+            try {
+              return await desktop.request(who, operation, desktopId);
+            } catch (error) {
+              // out of time (the bridge's refusal carries no code) while that
+              // desktop stayed connected: busy (a job of its own was ahead of
+              // this one, the app runs one at a time, or this one ran long),
+              // not a closed app
+              if ((error as { code?: unknown } | null)?.code === undefined && now()?.online) {
+                stalled.set(held, Date.now() + STALL_MS);
+                throw desktopBusy();
+              }
+              throw error;
+            }
+          });
           if (place.computer === "desktop") {
-            return framedBranchExec((command, timeout) => send({ action: "run_command", command, timeout_seconds: timeout }), DESKTOP_CAPS, "Your computer is not connected.", { wrap: true });
+            return framedBranchExec((command, timeout) => send({ action: "run_command", command, timeout_seconds: timeout }), DESKTOP_CAPS, "Your computer is not connected.", { wrap: true, maxCommand: DESKTOP_MAX_COMMAND });
           }
-          return framedBranchExec((command, timeout) => send({ action: "vm_run_command", command, timeout_seconds: timeout, ...(place.container ? { container: place.container } : {}) }), DESKTOP_VM_CAPS, "The Local VM is not running.");
+          return framedBranchExec((command, timeout) => send({ action: "vm_run_command", command, timeout_seconds: timeout, ...(place.container ? { container: place.container } : {}) }), DESKTOP_VM_CAPS, "The Local VM is not running.", { maxCommand: DESKTOP_MAX_COMMAND });
         }
         case "remote_session": {
           const sessions = channels.remoteSessions;
@@ -290,9 +386,19 @@ export function branchRemoteDeps(channels: BranchChannels): RemoteBranchDeps {
           // a client's computer: no variable (no token) is ever sent there,
           // and its login shell only starts /bin/sh
           return async (command, timeoutMs) => {
-            const result = await sessions.exec({ principalId: principal, botId, threadId, command: viaPosixShell(command), ...(timeoutMs ? { timeoutMs } : {}) });
-            if ("error" in result) return { error: result.error };
-            return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, ...(result.timedOut ? { timedOut: true } : {}) };
+            const line = viaPosixShell(command);
+            if (line.trim().length > REMOTE_SESSION_MAX_COMMAND) return tooLong();
+            const result = await sessions.exec({ principalId: principal, botId, threadId, command: line, ...(timeoutMs ? { timeoutMs } : {}) });
+            if ("error" in result) return /under 8,000 characters/.test(result.error) ? tooLong() : { error: result.error };
+            // its own cut mark is a cut, never data (a status line cut short reads as cut)
+            const stdout = sessionText(result.stdout);
+            return {
+              exitCode: result.exitCode,
+              stdout: stdout.text,
+              stderr: sessionText(result.stderr).text,
+              ...(result.timedOut ? { timedOut: true } : {}),
+              ...(stdout.cut ? { truncated: true } : {}),
+            };
           };
         }
         default:

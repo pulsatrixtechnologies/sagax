@@ -133,4 +133,44 @@ describe("Coding branches: asking the bot when its computer cannot be reached", 
     flushSync(() => menu.querySelector<HTMLButtonElement>('[data-menu-item="commit"]')!.click());
     expect(dispatch.mock.calls[0]![0]).toMatchObject({ text: "Commit the changes on the branch fix/send-card, with a clear message." });
   });
+
+  it("tries again from the menu: reads the branch again, says so when it still cannot, acts once it can", async () => {
+    await mount(stopped);
+    const reads = () => api.mock.calls.filter(([path]) => /\/code\/branch\?/.test(String(path))).length;
+    expect(reads()).toBe(1);
+    const retry = open().querySelector<HTMLButtonElement>('[data-menu-item="retry"]')!;
+    expect(retry.textContent).toBe("Try again");
+    expect(retry.hasAttribute("data-menu-item-ask")).toBe(false);
+    flushSync(() => retry.click());
+    await settle();
+    await settle();
+    expect(reads()).toBe(2);
+    // still stopped: the row says why, nothing was sent to the bot
+    expect(document.querySelector("[data-branch-note]")?.textContent).toBe("Your cloud computer is stopped. Start it in the Computer tab and try again, or ask Scout to do this action: its commands start your cloud computer.");
+    expect(dispatch).not.toHaveBeenCalled();
+    // not read at all (busy, no answer): "stopped" may no longer hold, so the row says it could not read it
+    api.mockImplementation(async () => { throw new Error("busy"); });
+    flushSync(() => open().querySelector<HTMLButtonElement>('[data-menu-item="retry"]')!.click());
+    await settle();
+    await settle();
+    const unread = "Sagax could not read this branch right now. Try again in a moment, or ask Scout to do this action.";
+    expect(document.querySelector("[data-branch-note]")?.textContent).toBe(unread);
+    expect(open().querySelector("[data-branch-away]")?.textContent).toBe(unread);
+    flushSync(() => document.querySelector<HTMLButtonElement>('[data-branch-menu-button="fix/send-card"]')!.click());
+    // started: the next try reads it, and the menu acts itself
+    api.mockImplementation(async () => ({ branch: branch.name, place: "remote", computer: "sandbox", canPublish: true, state: { exists: true, pushed: true, ahead: 1, behind: 0, changes: [], worktree: "/workspace/web" } } satisfies BotBranchInfo));
+    flushSync(() => open().querySelector<HTMLButtonElement>('[data-menu-item="retry"]')!.click());
+    await settle();
+    await settle();
+    expect(document.querySelector("[data-branch-note]")).toBeNull();
+    const menu = open();
+    expect(menu.querySelector("[data-branch-away]")).toBeNull();
+    expect(menu.querySelector('[data-menu-item="retry"]')).toBeNull();
+    expect(menu.querySelector("[data-menu-item-ask]")).toBeNull();
+  });
+
+  it("reads no pull request on the bot's computer (nothing runs there for it)", async () => {
+    await mount({ branch: branch.name, place: "remote", computer: "sandbox", repo: "acme/web", canPublish: true, state: { exists: true, pushed: true, ahead: 0, behind: 0, changes: [] } });
+    expect(api.mock.calls.map(([path]) => String(path)).filter((path) => /\/branch\/pull\?/.test(path))).toEqual([]);
+  });
 });

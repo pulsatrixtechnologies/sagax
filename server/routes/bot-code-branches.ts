@@ -33,9 +33,11 @@
 // nothing else there; when GitHub refuses it, `github_not_connected`), and
 // a commit there is authored by them when their name and email are known
 // (server/remote-support/remote-code-branches.ts). Their own computer, its
-// Local VM and a client's computer use that computer's own sign-in; no
-// token is sent there. Only the viewer's own cloud computer and own desktop
-// are ever reached, never the bot owner's or anyone else's. On an
+// Local VM and a client's computer use that computer's own sign-in and git
+// identity (none set there: `no_git_identity`, not the profile's
+// `no_author`); no token is sent there. Only the viewer's own cloud
+// computer and own desktop are ever reached, never the bot owner's or
+// anyone else's. A pull request read there runs nothing. On an
 // organization server a request with no person is refused (`no_person`),
 // never run with the server's identity, and no answer carries a full server
 // path.
@@ -227,6 +229,10 @@ export function createBotCodeBranchRoutes(deps: BotCodeBranchRouteDeps): RouteHa
         }
         return json(res, code === "offline" ? 502 : 409, { error: REMOTE_BLOCKED[code], code });
       };
+      // A live pull request read needs gh on that computer: none is made
+      // there (nothing runs for it), and the card keeps what the bot's own
+      // calls said.
+      if (action === "pull") return json(res, 200, { pull: null });
       if (!reach.online) return blocked("offline");
       if (!reach.osKnown || reach.windows) return blocked("unknown_os");
       // "" is a folder too: where that computer's commands start (a git run
@@ -266,9 +272,6 @@ export function createBotCodeBranchRoutes(deps: BotCodeBranchRouteDeps): RouteHa
           return json(res, 200, info);
         }
         if (action === "diff") return json(res, 200, await git.diff(computer === "sandbox" ? 900 * 1024 : 2 * 1024 * 1024));
-        // A live pull request read needs gh on the computer; the card keeps
-        // what the bot's own calls said in the meantime.
-        if (action === "pull") return json(res, 200, { pull: null });
         if (!ACTIONS.has(action)) return json(res, 404, { error: "no such action" });
         if (action === "commit") {
           const paths = Array.isArray(body.paths) ? body.paths.filter((entry): entry is string => typeof entry === "string").slice(0, 500) : undefined;

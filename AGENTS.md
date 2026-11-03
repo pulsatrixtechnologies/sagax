@@ -7528,26 +7528,41 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
   and the panel offers to ask the bot. The desktop's own shell (`$SHELL
   -lc`) and a remote session's login shell get the command inside `/bin/sh
   -c '...'` (fish and csh users too: no word holds a backslash, a `!` or a
-  line break, `q()`); the desktop app gets one panel command at a time per
-  person (it runs its jobs one at a time and keeps eight), on the desktop
-  the request named. One branch read is one script (one round trip after
-  the folder probe), and git there takes no optional lock
-  (`GIT_OPTIONAL_LOCKS=0`: no index.lock while the bot commits); the panel
-  reads again only the rows of the conversation the bot just worked in.
-  The folder is probed in one round trip (where the bot ran git, else
-  another folder it ran git in there) and used by its real path. Only the
-  viewer's own cloud computer and desktop are ever reached, never the bot
-  owner's. Else the thread's own folder (`task.cwd`) when it is a git
-  repository on this server. A branch no channel reaches (no computer of
-  the person's, a tool no channel names, Boat cloud computers) reads
-  `place: "elsewhere"`; an offline computer, an unknown folder, Windows or
-  an unknown OS read as such, and a computer busy with other work (`busy`,
-  503) fails the read. In each of those the menu says why in plain words
-  and what to do (outside the menu, which it describes), and each action
-  becomes one click that asks the bot to do it ("Ask <bot> to do it", the
-  request sent as the person's message in the branch's own conversation; a
-  delete asks to confirm first). Never a silent grey menu, never "this
-  server".
+  line break, `q()`). The panel takes one command slot at a time per
+  person on their computers (2026-11-03, review: it reads every row at
+  once, and their bots need the same slots): the desktop app (it runs its
+  jobs one at a time and keeps eight), on the desktop the request named,
+  and their cloud computer (sandboxd runs four commands of one person at
+  once, shared by all their bots). A full computer reads busy, never
+  stopped; a desktop command that ran out of time while that desktop stayed
+  connected (a long job of its own ahead of it) reads busy, and the next
+  panel commands to it answer busy at once while it still works. A command
+  longer than its channel carries (a remote session's 8,000 characters, a
+  solo Local VM's 20,000, the desktop app's and the cloud computer's
+  100,000) is not sent (`too_long`, 413; a commit of every change is then
+  done unnamed, `git add --all`), and a remote session's own `[cut at 64
+  KB]` mark reads as a cut, never as data. One branch read is one script
+  (one round trip after the folder probe), and git there takes no optional
+  lock (`GIT_OPTIONAL_LOCKS=0`: no index.lock while the bot commits); the
+  panel reads again only the rows of the conversation the bot just worked
+  in. The folder is probed in one round trip (where the bot ran git, else
+  another folder it ran git in there) and used by the real path of its
+  repository's top folder (status names paths from there: a commit from a
+  folder inside it missed them). A pull request read there runs nothing
+  (`{ pull: null }`, and the panel does not ask). Only the viewer's own
+  cloud computer and desktop are ever reached, never the bot owner's. Else
+  the thread's own folder (`task.cwd`) when it is a git repository on this
+  server. A branch no channel reaches (no computer of the person's, a tool
+  no channel names, Boat cloud computers) reads `place: "elsewhere"`; an
+  offline computer, an unknown folder, Windows or an unknown OS read as
+  such, and a computer busy with other work (`busy`, 503) fails the read.
+  In each of those the menu says why in plain words and what to do
+  (outside the menu, which it describes), "Try again" first where reading
+  it again can help (the computer was off or busy, its OS not known yet:
+  the row then acts, or says why not), and each action becomes one click
+  that asks the bot to do it ("Ask <bot> to do it", the request sent as
+  the person's message in the branch's own conversation; a delete asks to
+  confirm first). Never a silent grey menu, never "this server".
 - Who: the thread must pass `thread.post` for the viewer (not theirs reads
   as 404). Their own branch asks no approval. Push and pull requests use
   their own credentials: on a solo server the host's git and gh are theirs;
@@ -7568,8 +7583,9 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
   authored by them (their profile's name and email) when known, else by
   that environment's identity (none: `no_author`). Their own computer, its
   Local VM and a client's computer use that computer's own sign-in and
-  identity: no token is ever sent there (a push or pull request on a
-  client's computer asks to confirm). On an
+  identity (none: `no_git_identity`, which says to set git's name and
+  email there, never the profile): no token is ever sent there (a push or
+  pull request on a client's computer asks to confirm). On an
   organization server: a request with no person is refused (`no_person`),
   never run as the server; git and gh get no `HOME`, ssh agent or config
   folder of the server's (`isolated`); a commit needs the person's name and
@@ -7610,10 +7626,12 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
   `branch-channels.test.ts` (framing, and a branch read, committed and
   pushed through a login shell that is sh, bash, zsh, dash, ksh, csh or
   tcsh; the solo Local VM's clip; one desktop job at a time; reach per
-  kind),
+  kind; five rows read at once against sandboxd's four-command gate; a
+  long job holding the real desktop bridge; a remote session's cut mark
+  and 8,000 characters; each channel's length),
   `remote-code-branches.test.ts`,
   `src/components/bot-settings/CodeBranchList.test.ts`,
-  `CodeBranchList.ask.test.ts` (the ask click), `ActivitySection.test.ts`,
+  `CodeBranchList.ask.test.ts` (the ask click, Try again), `ActivitySection.test.ts`,
   `server/activity-code-work.test.ts`.
   Screenshots: `node scripts/capture/bot-panel-coding.mjs` (headless, the
   gallery `src/gallery/bot-panel-coding.html`).

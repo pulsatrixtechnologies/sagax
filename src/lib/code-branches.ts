@@ -129,6 +129,17 @@ export function branchAway(info: BotBranchInfo | undefined, readFailed = false):
   return null;
 }
 
+/** Reading the branch again can change what the panel can do, so its menu
+ * offers "Try again" (the reasons say to): its computer was off, its OS
+ * not known yet, or the read failed (busy, no answer). Not where the
+ * computer or the folder is not known, nor on Windows: reading again
+ * changes nothing there. */
+export function branchCanReadAgain(info: BotBranchInfo | undefined, readFailed = false): boolean {
+  if (!info) return readFailed;
+  if (info.place !== "remote") return false;
+  return Boolean(info.offline) || (info.publishBlocked === "unknown_os" && !info.windows);
+}
+
 /** The actions the bot can be asked to do on a branch. */
 export type BranchAskAction = "commit" | "push" | "pr" | "diff" | "delete";
 

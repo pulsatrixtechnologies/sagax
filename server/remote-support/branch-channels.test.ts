@@ -8,14 +8,21 @@
 // only the viewer's own cloud computer and desktop; the desktop app gets one
 // panel command at a time, on the desktop the request named; no variable
 // (no token) ever travels through the desktop or a remote session.
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { BranchArchive } from "../code-branches.ts";
 import { clipExecOutput } from "../container-computer.ts";
-import type { SandboxExecInput } from "../sandboxd-core.ts";
+import { DesktopBridges } from "../desktop-bridge.ts";
+import { createBotCodeBranchRoutes } from "../routes/bot-code-branches.ts";
+import type { RouteHandler } from "../routes/table.ts";
+import type { SandboxExecInput, SandboxExecOutput } from "../sandboxd-core.ts";
+import { SandboxdRequestError } from "../user-sandbox-client.ts";
+import { UserSandboxUnavailable } from "../user-sandbox-errors.ts";
 import type { BranchWorkPlace } from "./branch-place.ts";
 import { branchRemoteDeps, DESKTOP_CAPS, framedBranchExec, framedCommand, HOST_VM_CAPS, parseFramed, sandboxBranchExec, serialLanes, viaPosixShell, type BranchChannels, type FrameCaps } from "./branch-channels.ts";
 import { locateBranchFolder, RemoteBranchGit, type RemoteExec } from "./remote-code-branches.ts";
@@ -277,5 +284,273 @@ describe("branchRemoteDeps: each computer through its own channel, the viewer's 
     expect(calls).toEqual(["hostVm"]);
     // a solo server has no viewer: the session owner's sessions are looked up (none here)
     expect(await solo.reach("pepper", "t1", undefined, place("remote_session"))).toBeNull();
+  });
+});
+
+/** One request through the route table's handler, answered in memory. */
+async function call(route: RouteHandler, method: string, path: string, body: Record<string, unknown> = {}): Promise<{ status: number; body: Record<string, any> }> {
+  let answer: { status: number; body: Record<string, any> } | undefined;
+  const url = new URL(`http://panel.test${path}`);
+  await route({
+    req: {} as never,
+    res: {} as never,
+    url,
+    path: url.pathname,
+    method,
+    auth: { kind: "session", scopes: ["client"] } as never,
+    json: ((_res: unknown, status: number, payload: Record<string, any>) => { answer = { status, body: payload }; }) as never,
+    readBody: (async () => body) as never,
+  });
+  return answer!;
+}
+
+/** A command run on this machine without blocking the event loop (the
+ * channels' calls overlap, as on a real computer). */
+const runAsync = (command: string, env: NodeJS.ProcessEnv) => new Promise<{ exitCode: number; stdout: string; stderr: string }>((resolve) => {
+  execFile("/bin/sh", ["-c", command], { encoding: "utf8", env, maxBuffer: 16 << 20 }, (error, stdout, stderr) => {
+    const code = (error as { code?: unknown } | null)?.code;
+    resolve({ exitCode: error ? (typeof code === "number" ? code : 1) : 0, stdout, stderr });
+  });
+});
+
+describe("the person's cloud computer: the panel takes one of their command slots, and a busy one reads busy", () => {
+  let dir = "";
+  const repos: string[] = [];
+  let env: NodeJS.ProcessEnv = {};
+  beforeAll(() => {
+    dir = realpathSync(mkdtempSync(join(tmpdir(), "sagax-branch-slots-")));
+    env = { ...process.env, GIT_CONFIG_GLOBAL: join(dir, "gitconfig") };
+    writeFileSync(join(dir, "gitconfig"), "[user]\n\tname = Test\n\temail = test@example.com\n[init]\n\tdefaultBranch = main\n");
+    const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    for (let index = 0; index < 5; index++) {
+      const repo = join(dir, `web-${index}`);
+      git(dir, "init", "--initial-branch=main", repo);
+      writeFileSync(join(repo, "a.txt"), "a\n");
+      git(repo, "add", ".");
+      git(repo, "commit", "-m", "first");
+      git(repo, "checkout", "-b", `feat/row-${index}`);
+      repos.push(repo);
+    }
+  });
+  afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }); });
+
+  /** sandboxd's own gate for one person (sandboxd-core.ts SandboxService.exec):
+   * four commands at once, a fifth refused 429 "busy" (surfaced by
+   * UserSandboxManager as UserSandboxUnavailable), counted before the
+   * environment is ensured. `bots` commands of the person's bots hold slots. */
+  function sandboxGate(bots: number) {
+    const seen = { panelAtOnce: 0, peak: 0, refused: 0 };
+    let held = bots;
+    const exec = async (_principal: string, input: SandboxExecInput): Promise<SandboxExecOutput> => {
+      if (held >= 4) { seen.refused++; throw new UserSandboxUnavailable("too many commands are running in this environment", "busy"); }
+      await new Promise((done) => setTimeout(done, 5)); // ensure()
+      held++;
+      seen.panelAtOnce++;
+      seen.peak = Math.max(seen.peak, seen.panelAtOnce);
+      try {
+        const out = await runAsync(input.argv[2]!, env);
+        await new Promise((done) => setTimeout(done, 20)); // the exec's own round trip
+        return { exitCode: out.exitCode, stdout: out.stdout, stderr: out.stderr, truncated: false, timedOut: false };
+      } finally {
+        held--;
+        seen.panelAtOnce--;
+      }
+    };
+    return { seen, exec };
+  }
+
+  const route = (exec: (principal: string, input: SandboxExecInput) => Promise<SandboxExecOutput>) => createBotCodeBranchRoutes({
+    bot: (id) => ({ id, name: "Scout" }),
+    tasks: () => repos.map((_, index) => ({ threadId: `t${index}`, title: `Task ${index}`, cwd: join(dir, "server-folder") })),
+    viewerId: () => "sam",
+    threadWritable: () => true,
+    messages: (threadId) => {
+      const index = Number(threadId.slice(1));
+      return { messages: [{ at: 1, tool: { name: "mcp__sagax-environment__run_command", ok: true, input: JSON.stringify({ command: `cd ${repos[index]} && git checkout -b feat/row-${index}` }) } }] };
+    },
+    repository: () => undefined,
+    organization: () => true,
+    credentials: () => ({ git: {} }),
+    archive: new BranchArchive(join(dir, `archive-${Math.random()}.json`)),
+    audit: () => {},
+    remote: branchRemoteDeps({ organization: true, sandbox: { status: async () => ({ state: "running" }), exec: (principal, input) => exec(principal, input) } }),
+  });
+
+  it("reads five rows at once, every one of them, while the person's bots hold three of the four slots", async () => {
+    const gate = sandboxGate(3);
+    const api = route(gate.exec);
+    const rows = await Promise.all(repos.map((_, index) => call(api, "GET", `/api/bots/scout/code/branch?threadId=t${index}&branch=${encodeURIComponent(`feat/row-${index}`)}`)));
+    for (const [index, row] of rows.entries()) {
+      expect(row.status, `row ${index}`).toBe(200);
+      expect(row.body.offline, `row ${index}`).toBeUndefined();
+      expect(row.body.state, `row ${index}`).toMatchObject({ exists: true, worktree: repos[index] });
+    }
+    // one panel command at a time for this person: the bots keep their slots
+    expect(gate.seen.peak).toBe(1);
+    expect(gate.seen.refused).toBe(0);
+  });
+
+  it("says busy, never stopped, when the person's bots hold every slot", async () => {
+    const api = route(sandboxGate(4).exec);
+    expect(await call(api, "GET", "/api/bots/scout/code/branch?threadId=t0&branch=feat%2Frow-0")).toMatchObject({ status: 503, body: { code: "busy" } });
+    expect(await call(api, "POST", "/api/bots/scout/code/branch/commit", { threadId: "t0", branch: "feat/row-0", message: "x" })).toMatchObject({ status: 503, body: { code: "busy" } });
+  });
+
+  it("answers a pull request read without running anything there", async () => {
+    let ran = 0;
+    const api = route(async () => { ran++; throw new Error("no command should run"); });
+    expect(await call(api, "GET", "/api/bots/scout/code/branch/pull?threadId=t0&branch=feat%2Frow-0")).toEqual({ status: 200, body: { pull: null } });
+    expect(ran).toBe(0);
+  });
+
+  it("maps the environment's busy refusal to busy, however it comes, and anything else to unreachable", async () => {
+    const busy = sandboxBranchExec(async () => { throw new UserSandboxUnavailable("too many commands are running in this environment", "busy"); });
+    expect(await busy("git status")).toMatchObject({ busy: true });
+    const refused = sandboxBranchExec(async () => { throw new SandboxdRequestError(429, "busy", "too many commands are running in this environment"); });
+    expect(await refused("git status")).toMatchObject({ busy: true });
+    const down = sandboxBranchExec(async () => { throw new UserSandboxUnavailable("The server environment could not be reached. Try again in a moment.", "unreachable"); });
+    expect(await down("git status")).toEqual({ error: "The cloud computer could not be reached." });
+  });
+});
+
+describe("the person's own computer: a long job of theirs holds the desktop app", () => {
+  const registration = () => ({ id: randomUUID(), name: "Studio", platform: "darwin" as const, attachmentsDir: "/tmp/sagax-attachments", capabilities: { shell: true, files: true, fetch: true, browser: true, computer: true, localVm: true } });
+  const secret = "a".repeat(64);
+  const place: BranchWorkPlace = { computer: "desktop", folder: "/repo", others: [] };
+
+  it("reads busy, not 'not connected', and the next panel commands do not each wait the whole timeout", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const people = new Map([["sam-session", "sam"]]);
+    // the desktop app keeps its lease (a heartbeat every 2 s): always seen
+    const bridges = new DesktopBridges((session) => people.get(session) ?? null, () => 1_800_000_000_000);
+    try {
+      const desktop = registration();
+      bridges.register(desktop, "sam-session", secret);
+      // the bot's build, ten minutes long, taken by the app (one job at a time)
+      const build = bridges.request("sam", { action: "run_command", command: "make build", timeout_seconds: 600 }, () => true);
+      build.catch(() => {});
+      const leased = await bridges.poll(desktop.id, "sam-session", secret, 10);
+      expect(leased?.operation).toMatchObject({ command: "make build" });
+
+      let requests = 0;
+      const remote = branchRemoteDeps({
+        organization: true,
+        desktop: {
+          current: (principal) => bridges.current(principal),
+          request: (principal, operation, desktopId) => { requests++; return bridges.request(principal, operation, () => true, undefined, desktopId); },
+          state: (principal, desktopId) => {
+            const entry = bridges.status(principal).find((item) => item.id === desktopId);
+            return entry ? { online: entry.online, busy: entry.busy } : null;
+          },
+        },
+      });
+      const exec = remote.exec("pepper", "t1", "sam", place);
+      const first = exec("git status", 30_000);
+      const second = exec("git log -1", 30_000);
+      // the bridge gives up on the queued read after its timeout and 60 s
+      await vi.advanceTimersByTimeAsync(90_000);
+      expect(await first).toMatchObject({ busy: true });
+      // queued behind it: busy at once while the build still runs, never sent
+      expect(await second).toMatchObject({ busy: true });
+      expect(requests).toBe(1);
+
+      // the build ends: the next panel command is sent and answered
+      bridges.complete(desktop.id, "sam-session", secret, leased!.id, { content: [{ type: "text", text: "built\n[exit 0]" }] });
+      const third = exec("printf ok", 30_000);
+      await vi.advanceTimersByTimeAsync(0);
+      const job = await bridges.poll(desktop.id, "sam-session", secret, 10);
+      expect(job).toBeTruthy();
+      bridges.complete(desktop.id, "sam-session", secret, job!.id, { content: [{ type: "text", text: shellText("/bin/sh", (job!.operation as { command: string }).command) }] });
+      expect(await third).toEqual({ exitCode: 0, stdout: "ok", stderr: "" });
+      expect(requests).toBe(2);
+
+      // the app closes while a panel command waits: not connected, as it is
+      const fourth = exec("git status", 30_000);
+      await vi.advanceTimersByTimeAsync(0);
+      people.delete("sam-session");
+      bridges.closeSession("sam-session");
+      expect(await fourth).toEqual({ error: "Your computer is not connected." });
+    } finally {
+      bridges.close();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("a remote session: its own cut mark and its 8,000 characters", () => {
+  let dir = "";
+  let repo = "";
+  let env: NodeJS.ProcessEnv = {};
+  const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  beforeAll(() => {
+    dir = realpathSync(mkdtempSync(join(tmpdir(), "sagax-branch-session-")));
+    env = { ...process.env, GIT_CONFIG_GLOBAL: join(dir, "gitconfig") };
+    writeFileSync(join(dir, "gitconfig"), "[user]\n\tname = Test\n\temail = test@example.com\n[init]\n\tdefaultBranch = main\n");
+    repo = join(dir, "web");
+    git(dir, "init", "--initial-branch=main", repo);
+    writeFileSync(join(repo, "a.txt"), "a\n");
+    git(repo, "add", ".");
+    git(repo, "commit", "-m", "first");
+    git(repo, "checkout", "-b", "feat/many");
+  });
+  afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }); });
+
+  /** remote-sessions.ts exec, as it answers: one command line under 8,000
+   * characters, each stream cut at 64 KiB with a mark after it. */
+  const sent: string[] = [];
+  const capped = (text: string) => (text.length > 64 * 1024 ? `${text.slice(0, 64 * 1024)}\n[cut at 64 KB]` : text);
+  const sessions: NonNullable<BranchChannels["remoteSessions"]> = {
+    principalFor: () => "sam",
+    reachFor: () => ({ host: "client-pc", os: "linux", known: true }),
+    list: () => [],
+    exec: async ({ command }) => {
+      const line = command.trim();
+      if (!line || line.length > 8000) return { error: "command: one command line, under 8,000 characters." };
+      sent.push(line);
+      const out = await runAsync(line, env);
+      return { exitCode: out.exitCode, stdout: capped(out.stdout), stderr: capped(out.stderr) };
+    },
+  };
+  const exec = () => branchRemoteDeps({ organization: true, remoteSessions: sessions }).exec("pepper", "t1", "sam", { computer: "remote_session", folder: repo, others: [] });
+  const longName = (index: number) => `generated-output-file-number-${String(index).padStart(4, "0")}-with-a-long-name-that-goes-on-and-on-like-a-deep-package-path.txt`;
+
+  it("reads its cut mark as a cut, not as data", async () => {
+    const answer = await exec()("head -c 70000 /dev/zero | tr '\\0' 'x'");
+    expect(answer).toMatchObject({ exitCode: 0, truncated: true });
+    expect("stdout" in answer && answer.stdout).toBe("x".repeat(64 * 1024));
+  });
+
+  it("never reads a status it cut as whole, and commits all of it in commands under its limit", async () => {
+    for (let index = 0; index < 450; index++) writeFileSync(join(repo, longName(index)), "x\n");
+    const remote = new RemoteBranchGit(exec(), repo, "feat/many");
+    const state = await remote.state();
+    expect(state.changes.length).toBeGreaterThan(100);
+    expect(state.changes.every((change) => /^generated-output-file-number-\d{4}-with-a-long-name-that-goes-on-and-on-like-a-deep-package-path\.txt$/.test(change.path))).toBe(true);
+    // a few of them: too long to name on that computer, said so, and nothing ran
+    const picked = state.changes.slice(0, 300).map((change) => change.path);
+    sent.length = 0;
+    await expect(remote.commit("Some of it", picked)).rejects.toMatchObject({ code: "too_long", status: 413 });
+    expect(sent.some((line) => /'commit'|'add'/.test(line))).toBe(false);
+    expect(git(repo, "diff", "--cached", "--name-only")).toBe("");
+    // all of it: every change, unnamed
+    const { sha } = await remote.commit("All of it");
+    expect(git(repo, "rev-parse", "HEAD")).toBe(sha);
+    expect(git(repo, "status", "--porcelain")).toBe("");
+    expect(Number(git(repo, "rev-list", "--count", "main..feat/many"))).toBe(1);
+    expect(git(repo, "show", "--name-only", "--format=", "HEAD").split("\n")).toHaveLength(450);
+    expect(sent.every((line) => line.length <= 8000)).toBe(true);
+  });
+});
+
+describe("each channel's own command length", () => {
+  it("refuses a command too long for the channel, plainly and without sending it", async () => {
+    let sent = 0;
+    const desktop = framedBranchExec(async () => { sent++; return { content: [] }; }, DESKTOP_CAPS, "Your computer is not connected.", { wrap: true, maxCommand: 100_000 });
+    expect(await desktop(`printf %s '${"x".repeat(100_000)}'`)).toMatchObject({ tooLong: true });
+    const cloud = sandboxBranchExec(async () => { sent++; throw new Error("not sent"); });
+    expect(await cloud(`printf %s '${"x".repeat(100_001)}'`)).toMatchObject({ tooLong: true });
+    const soloVm = branchRemoteDeps({ organization: false, hostVm: { running: async () => true, exec: async () => { sent++; return { stdout: "" }; } } }).exec("pepper", "t1", undefined, { computer: "local_vm", vm: "host", folder: "/repo", others: [] });
+    expect(await soloVm(`printf %s '${"x".repeat(20_000)}'`)).toMatchObject({ tooLong: true });
+    expect(sent).toBe(0);
   });
 });

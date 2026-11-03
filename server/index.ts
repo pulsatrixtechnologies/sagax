@@ -33534,7 +33534,13 @@ ROUTES.push(createBotCodeBranchRoutes({
     desktop: {
       current: (principalId) => desktopBridges.current(principalId),
       // the desktop the panel's request named (its row says which)
-      request: (principalId, operation, desktopId) => desktopBridges.request(principalId, operation, () => true, undefined, desktopId)
+      request: (principalId, operation, desktopId) => desktopBridges.request(principalId, operation, () => true, undefined, desktopId),
+      // connected, and running a job: a panel command that ran out of time
+      // there reads busy, not "not connected"
+      state: (principalId, desktopId) => {
+        const desktop = desktopBridges.status(principalId).find((entry) => entry.id === desktopId);
+        return desktop ? { online: desktop.online, busy: desktop.busy } : null;
+      }
     },
     hostVm: {
       running: async (botId, threadId) => (await containerComputerStatus(undefined, undefined, localVmTargetForStatus(botId, threadId), { probeDesktop: false })).container === "running",

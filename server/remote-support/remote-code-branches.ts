@@ -59,8 +59,11 @@ export interface RemoteGitResult {
  * a channel that must not carry them drops them. `{ error }` means the
  * computer could not be reached (no session, the tunnel is down, the OS is
  * unknown); the message never carries an address. `busy`: it is there but
- * refused more work for now (the desktop app's queue is full). */
-export type RemoteExec = (command: string, timeoutMs?: number, env?: Record<string, string>) => Promise<RemoteGitResult | { error: string; busy?: boolean }>;
+ * refused more work for now (the desktop app's queue is full, a job of its
+ * own holds it, the person's bots run every command their cloud computer
+ * takes at once). `tooLong`: the command is longer than that channel
+ * carries, so it was not sent. Nothing ran in any of these cases. */
+export type RemoteExec = (command: string, timeoutMs?: number, env?: Record<string, string>) => Promise<RemoteGitResult | { error: string; busy?: boolean; tooLong?: boolean }>;
 
 /** Who signs the push and the pull request (see the header). */
 export interface RemoteBranchCredentials {
@@ -123,20 +126,24 @@ function line(program: "git" | "gh", cwd: string, args: readonly string[], prefi
 
 /** The refusal for a computer the channel did not reach, worded for any
  * computer (the person's own cloud computer as much as a client's): offline,
- * or there but busy with other work (nothing ran either way). */
-function unreached(result: { busy?: boolean }): BranchActionError {
-  if (result.busy) return new BranchActionError("The computer that holds this branch is busy with other work right now, so nothing ran there. Try again in a moment.", "busy", 503);
+ * there but busy with other work, or a command longer than its connection
+ * carries. */
+function unreached(result: { busy?: boolean; tooLong?: boolean }): BranchActionError {
+  if (result.tooLong) return new BranchActionError("That is too long to send to that computer in one command. Commit fewer files at a time, or ask the bot to do it.", "too_long", 413);
+  if (result.busy) return new BranchActionError("The computer that holds this branch is busy with other work right now. Try again in a moment.", "busy", 503);
   return new BranchActionError("The computer that holds this branch cannot be reached, so nothing ran there.", "offline", 502);
 }
 
 /** Which of these folders on the bot's computer holds `branch` (the first
- * that does), else the first that is a git repository at all, as its real
- * path there; null when none is. "" is where that computer's commands
- * start. An offline computer is refused (`offline`). One round trip. */
+ * that does), else the first that is a git repository at all, as the real
+ * path of its repository's top folder there (git status names paths from
+ * the top: a commit run from a folder inside it would miss them); null when
+ * none is. "" is where that computer's commands start. An offline computer
+ * is refused (`offline`). One round trip. */
 export async function locateBranchFolder(exec: RemoteExec, branch: string, folders: readonly string[]): Promise<{ folder: string; hasBranch: boolean } | null> {
   const candidates = [...new Set(folders.filter((folder) => typeof folder === "string"))].slice(0, 8);
   if (!candidates.length || !validBranchName(branch)) return null;
-  const probe = (test: string, tag: string, folder: string) => `(${cdTo(folder)} 2>/dev/null && sgx_git ${test} >/dev/null 2>&1 && printf '%s ' ${tag} && pwd -P) && exit 0`;
+  const probe = (test: string, tag: string, folder: string) => `(${cdTo(folder)} 2>/dev/null && sgx_git ${test} >/dev/null 2>&1 && printf '%s ' ${tag} && { sgx_git rev-parse --show-toplevel 2>/dev/null || pwd -P; }) && exit 0`;
   const script = [
     GIT_FUNCTION,
     ...candidates.map((folder, index) => probe(`rev-parse --verify --quiet ${q(`refs/heads/${branch}^{commit}`)}`, `b${index}`, folder)),
@@ -158,15 +165,20 @@ const READ_CAP = 256 * 1024;
 
 /** The values one branch read takes, from one script on the computer. A
  * line the channel cut short (no line end: the solo Local VM keeps 20,000
- * characters) is kept only as `cut`, never read as a whole value. */
+ * characters) is kept only as `cut`, never read as a whole value; so is the
+ * last value line of an answer the channel says it cut (`truncated`: a
+ * remote session's 64 KiB, the cloud computer's 1 MiB), wherever the cut
+ * fell. */
 export class BranchFacts {
   private readonly results = new Map<string, { code: number; out: string; cut: boolean }>();
-  constructor(stdout: string) {
+  constructor(stdout: string, truncated = false) {
     const lines = stdout.split("\n");
-    lines.forEach((text, index) => {
-      const match = /^@(\w+) (\d+) ([A-Za-z0-9+/=]*)\r?$/.exec(text);
+    const matches = lines.map((text) => /^@(\w+) (\d+) ([A-Za-z0-9+/=]*)\r?$/.exec(text));
+    let last = -1;
+    matches.forEach((match, index) => { if (match) last = index; });
+    matches.forEach((match, index) => {
       if (!match) return;
-      const cut = index === lines.length - 1;
+      const cut = index === lines.length - 1 || (truncated && index === last);
       // a cut line decodes its whole groups only
       const data = cut ? match[3]!.slice(0, match[3]!.length - (match[3]!.length % 4)) : match[3]!;
       this.results.set(match[1]!, { code: Number(match[2]), out: Buffer.from(data, "base64").toString("utf8"), cut });
@@ -277,7 +289,7 @@ export class RemoteBranchGit {
       const result = await this.exec(script, 60_000);
       if ("error" in result) throw unreached(result);
       if (result.exitCode === 97) throw new BranchActionError("The branch's folder could not be opened on the computer.", "no_path", 409);
-      return new BranchFacts(result.stdout);
+      return new BranchFacts(result.stdout, result.truncated === true);
     })();
     this.facts = read;
     read.catch(() => { if (this.facts === read) this.facts = undefined; });
@@ -372,7 +384,12 @@ export class RemoteBranchGit {
    * never written to a file on the computer. `author`: the person's name and
    * email, who then authors and commits it (the cloud computer); without
    * it, that computer's own git identity, and none at all is refused
-   * plainly (`no_author`). */
+   * plainly: on the cloud computer their profile names them (`no_author`),
+   * elsewhere that computer's own git settings do (`no_git_identity`).
+   * Every change picked, named in more than that computer's connection
+   * carries in one command (a remote session's 8,000 characters): all of
+   * them, unnamed (`git add --all`, then the whole index). Some of them, too
+   * many to name: refused (`too_long`), nothing staged. */
   async commit(message: string, paths?: readonly string[], author?: { name: string; email: string }): Promise<{ sha: string }> {
     const text = message.trim();
     if (!text) throw new BranchActionError("Write a commit message first.", "empty_message", 400);
@@ -383,17 +400,39 @@ export class RemoteBranchGit {
     const known = new Set(changes.map((change) => change.path));
     const picked = paths?.length ? paths.filter((path) => known.has(path)) : [...known];
     if (paths?.length && picked.length !== paths.length) throw new BranchActionError("Some of those files have no changes any more. Refresh and try again.", "stale_files");
+    const all = new Set(picked).size === known.size;
     const renamedFrom = new Map(changes.flatMap((change) => (change.from ? [[change.path, change.from] as const] : [])));
     const chosen = [...new Set(picked.flatMap((path) => (renamedFrom.has(path) ? [path, renamedFrom.get(path)!] : [path])))];
     const pathspecs = chosen.map((path) => `:(literal)${path}`);
-    const add = await this.run("git", ["add", "--all", "--", ...pathspecs]);
+    /** Too long to name every path in one command there, every change picked. */
+    const unnamedFits = (error: unknown) => all && error instanceof BranchActionError && error.code === "too_long";
+    let named = true;
+    let add: RemoteGitResult;
+    try {
+      add = await this.run("git", ["add", "--all", "--", ...pathspecs]);
+    } catch (error) {
+      if (!unnamedFits(error)) throw error;
+      named = false;
+      add = await this.run("git", ["add", "--all"]);
+    }
     if (add.exitCode !== 0) throw new BranchActionError(firstLine(add.stderr) || "git could not stage those files.", "add_failed", 500);
     const name = author?.name.trim();
     const email = author?.email.trim();
     const identity = name && email ? `GIT_AUTHOR_NAME=${q(name)} GIT_AUTHOR_EMAIL=${q(email)} GIT_COMMITTER_NAME=${q(name)} GIT_COMMITTER_EMAIL=${q(email)}` : undefined;
-    const done = await this.run("git", ["commit", "--no-verify", "--no-gpg-sign", "-m", text, "--", ...pathspecs], { env: identity });
+    const commitArgs = ["commit", "--no-verify", "--no-gpg-sign", "-m", text];
+    let done: RemoteGitResult;
+    try {
+      done = await this.run("git", named ? [...commitArgs, "--", ...pathspecs] : commitArgs, { env: identity });
+    } catch (error) {
+      // every change is staged now: the whole index is exactly them
+      if (!named || !unnamedFits(error)) throw error;
+      done = await this.run("git", commitArgs, { env: identity });
+    }
     if (done.exitCode !== 0) {
-      if (IDENTITY_UNKNOWN.test(`${done.stderr}\n${done.stdout}`)) throw new BranchActionError("Your name and email are needed to sign a commit here. Add them to your profile first.", "no_author", 403);
+      if (IDENTITY_UNKNOWN.test(`${done.stderr}\n${done.stdout}`)) {
+        if (this.credentials.mode === "person") throw new BranchActionError("Your name and email are needed to sign a commit here. Add them to your profile first.", "no_author", 403);
+        throw new BranchActionError("Git has no name and email on that computer to sign the commit. Set them there (git config --global user.name and user.email), then try again, or ask the bot to commit.", "no_git_identity", 409);
+      }
       throw new BranchActionError(firstLine(done.stderr) || firstLine(done.stdout) || "git could not commit.", "commit_failed", 500);
     }
     this.facts = undefined;

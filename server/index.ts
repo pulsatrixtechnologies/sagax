@@ -20577,27 +20577,50 @@ function openPersonCard(threadId: string): { kind: "approval" | "question" | "re
 
 /** The conversation waiting on work that runs in this thread: a Chief's
  * delegate_bot task or coordinate_bots assignment. */
-function delegatorOf(threadId: string): { threadId: string; botId?: string } | undefined {
+function delegatorOf(threadId: string): Pick<HandoffView, "threadId" | "botId" | "groupId"> | undefined {
   const watch = delegationWatch.get(threadId);
-  if (watch?.sourceThreadId) return { threadId: watch.sourceThreadId, botId: watch.sourceBotId };
+  if (watch?.sourceThreadId) {
+    const botId = watch.sourceBotId ?? store.botByThread(watch.sourceThreadId)?.id;
+    if (botId) return { threadId: watch.sourceThreadId, botId };
+  }
   const parent = coordinator.assignerOf(threadId);
-  return parent ? { threadId: parent.threadId, botId: parent.botId } : undefined;
+  return parent ? { threadId: parent.threadId, botId: parent.botId, groupId: parent.groupId } : undefined;
 }
 
 // an earlier note: a delegated teammate's card used to live only in its own thread,
 // so the person talking to the Chief never saw that work was waiting on them.
 // A chip in the delegating conversation points at the card until it settles.
-const waitingOnPersonChips = new Map<string, { threadId: string; messageId: string; name: string; kind: string }>();
+const waitingOnPersonChips = new Map<string, {
+  threadId: string; messageId: string; botId: string; kind: "approval" | "answer";
+  parent: Pick<HandoffView, "threadId" | "botId" | "groupId">;
+}>();
 
 function showWaitingOnPersonChip(threadId: string, requestId: string, asker: BotRecord, kind: "approval" | "answer") {
   const delegator = delegatorOf(threadId);
   if (!delegator || delegator.threadId === threadId) return;
-  const chip = store.appendMessage(delegator.threadId, { role: "bot", kind: "activity",
-    from: { botId: asker.id, name: asker.name, color: asker.color },
-    tool: { name: `Waiting on your ${kind} in @${asker.name}` },
-    threadRef: { botId: asker.id, threadId, title: store.taskByThread(asker.id, threadId)?.title ?? asker.name }
-  });
-  waitingOnPersonChips.set(`${threadId}:${requestId}`, { threadId: delegator.threadId, messageId: chip.id, name: asker.name, kind });
+  // The reviewer may have awaited a verdict: only the current route and
+  // teammate record may contribute names or a link to the waiting thread.
+  const child = { botId: asker.id, threadId };
+  const current = store.bot(asker.id);
+  if (!current || roomHandoffProblem(child, delegator)) return;
+  const name = teammateNameFor(child, delegator);
+  const key = `${threadId}:${requestId}`;
+  const tracked = waitingOnPersonChips.get(key);
+  const messages = store.messagesFor(delegator.threadId);
+  // Runtime handoffs already have a linked dispatch chip (84841aeed).
+  // Evolve that link in place instead of leaving "Sent to" before a second
+  // waiting chip. Repeated events for this card update the same message.
+  const existing = tracked ? messages.find(message => message.id === tracked.messageId)
+    : messages.findLast(message => message.kind === "activity" && message.threadRef?.threadId === threadId
+      && message.threadRef.botId === current.id && message.tool?.name.startsWith("Sent to "));
+  const update = {
+    from: { botId: current.id, name, color: current.color },
+    tool: { name: `Waiting on your ${kind} in @${name}` },
+    threadRef: { botId: current.id, threadId, title: store.taskByThread(current.id, threadId)?.title ?? name }
+  };
+  const chip = existing ? store.patchMessage(delegator.threadId, existing.id, update)
+    : store.appendMessage(delegator.threadId, { role: "bot", kind: "activity", ...update });
+  if (chip) waitingOnPersonChips.set(key, { threadId: delegator.threadId, messageId: chip.id, botId: current.id, kind, parent: delegator });
 }
 
 /** Settle the chip for one answered card, or every chip for this thread once
@@ -20608,10 +20631,18 @@ function settleWaitingOnPersonChips(threadId: string, requestId?: string, resolu
     waitingOnPersonChips.delete(key);
     const existing = store.messagesFor(chip.threadId).find((message) => message.id === chip.messageId);
     if (!existing?.tool) continue;
+    const child = { botId: chip.botId, threadId };
+    const name = teammateNameFor(child, chip.parent);
+    const current = store.bot(chip.botId);
+    const readable = current && !roomHandoffProblem(child, chip.parent);
     store.patchMessage(chip.threadId, chip.messageId, {
+      // patchMessage replaces these fields: undefined clears the old name,
+      // color and private thread link instead of retaining stale metadata.
+      from: readable ? { botId: chip.botId, name, color: current.color } : undefined,
+      threadRef: readable ? { botId: chip.botId, threadId, title: store.taskByThread(chip.botId, threadId)?.title ?? name } : undefined,
       tool: {
         ...existing.tool,
-        name: requestId ? settledChipLabel(chip.name, chip.kind as "approval" | "answer", resolution) : `@${chip.name} is no longer waiting on your ${chip.kind}`,
+        name: requestId ? settledChipLabel(name, chip.kind, resolution) : `@${name} is no longer waiting on your ${chip.kind}`,
         ok: true
       }
     });
@@ -47957,11 +47988,18 @@ async function runtimeDelegationStatus(taskId: string, from: BotRecord, fromThre
       const status: DelegationReceipt["status"] = node.status === "completed" ? "done" : node.status === "cancelled" ? "cancelled" : "failed";
       return [200, { status, toBotName, result: node.result }];
     }
-    if (Date.now() >= deadline) {
+    // A person's card cannot advance while this caller waits. Preserve the
+    // legacy poll's immediate answer for runtime work too (MOCA-274).
+    const awaitingPerson = node.status === "queued" ? undefined : openPersonCard(node.threadId);
+    if (Date.now() >= deadline || awaitingPerson) {
       return [200, node.status === "queued"
         ? { status: "queued", toBotName, ...(target ? { targetStatus: peerStatus(target.activity, target.busy) } : {}) }
         : { status: "running", toBotName, elapsedMs: Math.max(0, Date.now() - (node.startedAt ?? node.createdAt)),
-          recentActivity: summarizeDelegatedActivity(store.messagesFor(node.threadId), node.startedAt ?? node.createdAt) }];
+          recentActivity: summarizeDelegatedActivity(store.messagesFor(node.threadId), node.startedAt ?? node.createdAt),
+          ...(awaitingPerson ? { awaitingPerson: {
+            ...awaitingPerson,
+            threadTitle: store.taskByThread(node.botId, node.threadId)?.title,
+          } } : {}) }];
     }
     await new Promise(resolve => setTimeout(resolve, 500));
   }

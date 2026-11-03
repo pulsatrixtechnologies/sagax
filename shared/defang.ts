@@ -622,4 +622,3 @@ export function defang(text: string): string {
   parts.push(text.slice(cursor));
   return parts.join("");
 }
-

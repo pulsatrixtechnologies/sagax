@@ -1,3 +1,34 @@
+import type { Place, TrashRow } from "./memory-manager-types";
+import { tierSource } from "./memory-manager-data";
+import { useMemoryRows } from "./useMemoryRows";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Archive, BookOpen, Brain, Check, CircleCheck, Clock3, FileText, FolderInput, Gauge, Loader2, Network, NotebookText, Pin, Plus, RefreshCw, Tag, Trash2, Users, X } from "lucide-react";
+import { cn } from "@/lib/cn";
+import { t } from "@/lib/i18n";
+import { isMacPlatform } from "@/lib/keyboard-shortcuts";
+import { readableError } from "@/lib/plain-error";
+import { fetchMemoryJournal, type MemoryJournalRow } from "@/lib/memory";
+import { api, ApiError, useStore } from "@/state/store";
+import { browseBotSource, browsePerspicax, browseTeamSource, deleteBotNotes, detectBodyKind, emptyBotFolder, fetchMemoryManagerSources, fetchPerspicaxArchived, fetchPerspicaxVocabulary, openBotNote, openPerspicaxNote, openTeamNote, pxMemory, restoreBotChange, saveBotNote, undoBotDeletes, type MemoryBrowse, type MemoryManagerSource, type MemoryNoteDetail, type MemoryNoteRow, type MemoryTierRow, type MemoryVocabulary } from "@/lib/memory-manager";
+import { activeSeries, backlinksTo, linksOut, qualityStats, rowKey, tagStats, writeSeries, type PageLink, type PageRow } from "@/lib/memory-page";
+import { MEMORY_INDEX } from "@/lib/memory";
+import { botNames, botSourceLink, isLinked, pxFolderLink, teamFolderLink, type FolderLink, type LinkBot } from "@/lib/memory-folders";
+import type { ImportWriters } from "@/lib/memory-import";
+import { swatchStyle, type MausColor } from "@/lib/mascot";
+import { useCaptionChrome } from "../DesktopCapabilities";
+import { PAGE_HEADER_BUTTON, PAGE_MENU_ITEM, PAGE_POPOVER, PageHeader, PageSegment, PageTopStrip, useDismissMenus } from "../content-page";
+import { confirmAsync } from "../ConfirmProvider";
+import { MemoryImportDialog, type ImportDestination } from "./MemoryImportDialog";
+import { addToCollection, fetchCollections, MemoryCollections, type CollectionItem, type CollectionSummary } from "./MemoryCollections";
+import { MemoryMapView } from "./MemoryMapView";
+import { MemoryNoteView, type NoteSave } from "./MemoryNoteView";
+import { MemoryNotesList, type ListTemplate } from "./MemoryNotesList";
+import { MemoryQualityView } from "./MemoryQualityView";
+import { RightRailStrip, useRightRailOpen } from "@/components/RightRail";
+import { MemorySidebar, type MemoryFolderMenu, type MemoryRowAction, type MemorySidebarFolder, type MemorySidebarNav, type MemorySidebarTier } from "./MemorySidebar";
+import { MemoryTagsView } from "./MemoryTagsView";
+import { FIELD, PRIMARY_BUTTON, Swatch } from "./memory-ui";
+
 // Tools > Memory: a full page of the main column (Automations / Team map
 // family), shaped like the Perspicax console's Memory (1.9.20, JC
 // 2026-11-02: "la page des mémoires devrait être presque identique"). The
@@ -11,100 +42,8 @@
 // My memory with its Topics and Logs), the team sections (General and its
 // built-in groups as folders) and, on a Perspicax organization server, the
 // Perspicax tiers. Every number is one Sagax reads; nothing is made up.
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import {
-  Archive,
-  BookOpen,
-  Brain,
-  Check,
-  CircleCheck,
-  Clock3,
-  FileText,
-  FolderInput,
-  Gauge,
-  Loader2,
-  Network,
-  NotebookText,
-  Pin,
-  Plus,
-  RefreshCw,
-  Tag,
-  Trash2,
-  Users,
-  X,
-} from "lucide-react";
-
-import { cn } from "@/lib/cn";
-import { t } from "@/lib/i18n";
-import { isMacPlatform } from "@/lib/keyboard-shortcuts";
-import { readableError } from "@/lib/plain-error";
-import { fetchMemoryDoc, fetchMemoryJournal, type MemoryJournalRow } from "@/lib/memory";
-import { api, ApiError, useStore } from "@/state/store";
-import {
-  browseBotSource,
-  browsePerspicax,
-  browseTeamSource,
-  deleteBotNotes,
-  detectBodyKind,
-  emptyBotFolder,
-  fetchMemoryManagerSources,
-  fetchPerspicaxArchived,
-  fetchPerspicaxVocabulary,
-  openBotNote,
-  openPerspicaxNote,
-  openTeamNote,
-  pxMemory,
-  restoreBotChange,
-  saveBotNote,
-  undoBotDeletes,
-  type MemoryBrowse,
-  type MemoryManagerSource,
-  type MemoryNoteDetail,
-  type MemoryNoteRow,
-  type MemoryTierRow,
-  type MemoryVocabulary,
-} from "@/lib/memory-manager";
-import {
-  activeSeries,
-  backlinksTo,
-  excerptFromBody,
-  journalFacts,
-  linksOut,
-  qualityStats,
-  RECENT_MS,
-  rowKey,
-  tagStats,
-  tierColor,
-  writeSeries,
-  type JournalFacts,
-  type PageLink,
-  type PageRow,
-  type PageTier,
-} from "@/lib/memory-page";
-import { MEMORY_INDEX } from "@/lib/memory";
-import { botNames, botSourceLink, isLinked, pxFolderLink, teamFolderLink, type FolderLink, type LinkBot } from "@/lib/memory-folders";
-import type { ImportWriters } from "@/lib/memory-import";
-import { swatchStyle, type MausColor } from "@/lib/mascot";
-import { useCaptionChrome } from "../DesktopCapabilities";
-import { PAGE_HEADER_BUTTON, PAGE_MENU_ITEM, PAGE_POPOVER, PageHeader, PageSegment, PageTopStrip, useDismissMenus } from "../content-page";
-import { confirmAsync } from "../ConfirmProvider";
-import { MemoryImportDialog, type ImportDestination } from "./MemoryImportDialog";
-import { addToCollection, fetchCollectionItems, fetchCollections, MemoryCollections, type CollectionItem, type CollectionSummary } from "./MemoryCollections";
-import { MemoryMapView } from "./MemoryMapView";
-import { MemoryNoteView, type NoteSave } from "./MemoryNoteView";
-import { MemoryNotesList, type ListTemplate } from "./MemoryNotesList";
-import { MemoryQualityView } from "./MemoryQualityView";
-import { RightRailStrip, useRightRailOpen } from "@/components/RightRail";
-import { MemorySidebar, type MemoryFolderMenu, type MemoryRowAction, type MemorySidebarFolder, type MemorySidebarNav, type MemorySidebarTier } from "./MemorySidebar";
-import { MemoryTagsView } from "./MemoryTagsView";
-import { FIELD, PRIMARY_BUTTON, Swatch } from "./memory-ui";
 
 type View = "notes" | "map" | "tags" | "quality";
-
-type Place =
-  | { kind: "all" | "teams" | "pinned" | "recent" | "review" | "archived" | "trash" | "collections" }
-  | { kind: "tier"; tier: string }
-  | { kind: "folder"; tier: string; folder: string };
 
 type Screen =
   | { kind: "list" }
@@ -115,17 +54,6 @@ type Screen =
 interface Notice {
   text: string;
   undo?: () => Promise<void>;
-}
-
-interface TrashRow {
-  id: string;
-  title: string;
-  scope: string;
-  topic?: string;
-  tags?: string[];
-  may_manage?: boolean;
-  deleted_at?: string;
-  author_name?: string | null;
 }
 
 /** A place a new note can go: a bot, a team section, a Perspicax tier. */
@@ -140,7 +68,6 @@ interface Target {
 
 const TEAM_KINDS = ["person", "place", "decision", "term"];
 const PINS = "sagax.memory.pins";
-const BODY_PREFETCH = 400;
 
 function slugify(value: string, fallback: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || fallback;
@@ -157,23 +84,6 @@ function readPins(): string[] {
 
 function writePins(pins: string[]): void {
   try { window.localStorage.setItem(PINS, JSON.stringify(pins)); } catch { /* a private window: the pins last for this page */ }
-}
-
-/** A Perspicax tier opened on its own: the personal tier is the source itself. */
-function tierSource(px: MemoryManagerSource, tier: MemoryTierRow): MemoryManagerSource {
-  if (tier.kind === "me") return px;
-  return { ...px, id: `perspicax:${tier.scope}`, name: tier.name, detail: undefined, scope: tier.scope, mayWrite: tier.mayWrite, mayManage: tier.mayManage };
-}
-
-/** Run `work` over `items`, `limit` at a time. */
-async function pooled<T>(items: T[], limit: number, work: (item: T) => Promise<void>): Promise<void> {
-  let next = 0;
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const item = items[next++]!;
-      await work(item);
-    }
-  }));
 }
 
 /** A linked folder's mark: the bot's picture, else its colour. */
@@ -361,232 +271,7 @@ export function MemoryManagerPanel() {
 
   // ---- tiers and rows ------------------------------------------------------------------
 
-  const pxSource = useMemo(() => sources?.find((source) => source.kind === "perspicax") ?? null, [sources]);
-  const pxTiers = useMemo(() => (pxSource ? overviews[pxSource.id]?.tiers ?? [] : []), [pxSource, overviews]);
-  // A temporary agent's memory folder stays until it is deleted; emptied, it leaves the page.
-  const allBotSources = useMemo(() => (sources ?? []).filter((source) => source.kind === "bot" && overviews[source.id]), [sources, overviews]);
-  const botSources = useMemo(() => allBotSources.filter((source) => {
-    if (source.linked !== false) return true;
-    const browse = overviews[source.id]!;
-    return (browse.indexBytes ?? 1) > 0 || browse.notes.some((row) => row.path !== MEMORY_INDEX);
-  }), [allBotSources, overviews]);
-  const teamSources = useMemo(() => (sources ?? []).filter((source) => source.kind === "team" && overviews[source.id]), [sources, overviews]);
-  const meTier = pxTiers.find((tier) => tier.kind === "me");
-
-  const tiers = useMemo<PageTier[]>(() => {
-    const out: PageTier[] = [];
-    if (botSources.length > 0 || meTier) out.push({ key: "mine", name: t("memoryManager.tierMine"), kind: "mine", color: tierColor("mine") });
-    let team = 0;
-    // A sidebar section with no team note is not a tier of its own (General always is).
-    for (const source of teamSources) {
-      if (source.section && !(overviews[source.id]?.notes.length)) continue;
-      out.push({ key: source.id, name: source.name, kind: "team", color: tierColor("team", team++) });
-    }
-    for (const tier of pxTiers) {
-      if (tier.kind === "me") continue;
-      const kind = tier.kind === "org" ? "org" : "team";
-      out.push({ key: `perspicax:${tier.scope}`, name: tier.kind === "org" ? t("memoryManager.tierOrg") : tier.name, kind, color: tierColor(kind, kind === "team" ? team++ : 0) });
-    }
-    return out;
-  }, [botSources.length, meTier, teamSources, pxTiers, overviews]);
-  const tierByKey = useMemo(() => new Map(tiers.map((tier) => [tier.key, tier])), [tiers]);
-  const pxTierKey = useCallback((scope: string | undefined) => {
-    const tier = pxTiers.find((entry) => entry.scope === scope);
-    return !tier || tier.kind === "me" ? "mine" : `perspicax:${tier.scope}`;
-  }, [pxTiers]);
-
-  const factsByBot = useMemo(() => {
-    const out: Record<string, Map<string, JournalFacts>> = {};
-    for (const [botId, rows] of Object.entries(journals)) out[botId] = journalFacts(rows);
-    return out;
-  }, [journals]);
-
-  const actorName = useCallback((actor: MemoryJournalRow["actor"] | undefined, botName: string) => {
-    if (!actor) return undefined;
-    if (actor === "person") return t("memoryManager.authorYou");
-    if (actor === "import") return t("memoryManager.authorImport");
-    return botName;
-  }, []);
-
-  const rows = useMemo<PageRow[]>(() => {
-    const out: PageRow[] = [];
-    for (const source of botSources) {
-      const facts = factsByBot[source.botId ?? ""];
-      for (const row of overviews[source.id]!.notes) {
-        if (source.linked === false && row.path === MEMORY_INDEX && (overviews[source.id]!.indexBytes ?? 1) === 0) continue;
-        const key = rowKey(source, row);
-        const fact = row.path ? facts?.get(row.path) : undefined;
-        const body = bodies[key];
-        const sub = row.folder === "logs" ? t("memoryManager.folderLogs") : row.folder ? t("memoryManager.folderTopics") : "";
-        out.push({
-          key,
-          source,
-          tier: "mine",
-          folderKey: row.folder ? `${source.id}/${row.folder}` : source.id,
-          folderPath: sub ? `${source.name} / ${sub}` : source.name,
-          row: {
-            ...row,
-            updatedAt: row.updatedAt ?? fact?.lastAt,
-            createdAt: fact?.createdAt,
-            author: actorName(fact?.lastActor, source.name),
-            excerpt: body != null ? excerptFromBody(body) || undefined : row.excerpt,
-          },
-        });
-      }
-    }
-    for (const source of teamSources) {
-      for (const row of overviews[source.id]!.notes) {
-        out.push({ key: rowKey(source, row), source, tier: source.id, folderKey: `${source.id}/${row.folder || "term"}`, folderPath: row.folder || "term", row });
-      }
-    }
-    if (pxSource && overviews[pxSource.id]) {
-      for (const row of overviews[pxSource.id]!.notes) {
-        const tier = pxTiers.find((entry) => entry.scope === row.scope);
-        const source = tier ? tierSource(pxSource, tier) : pxSource;
-        out.push({ key: rowKey(pxSource, { id: `${row.scope}/${row.id}` }), source, tier: pxTierKey(row.scope), folderKey: `px:${row.scope}/${row.folder}`, folderPath: row.folder ?? "", row });
-      }
-    }
-    return out;
-  }, [botSources, teamSources, pxSource, pxTiers, overviews, factsByBot, bodies, actorName, pxTierKey]);
-  const rowByKey = useMemo(() => new Map(rows.map((entry) => [entry.key, entry])), [rows]);
-
-  const pxRows = useCallback((list: MemoryNoteRow[], archived: boolean): PageRow[] => {
-    if (!pxSource) return [];
-    return list.map((row) => {
-      const tier = pxTiers.find((entry) => entry.scope === row.scope);
-      return {
-        key: `${archived ? "archived" : "trash"}|${row.scope}/${row.id}`,
-        source: tier ? tierSource(pxSource, tier) : pxSource,
-        tier: pxTierKey(row.scope),
-        folderKey: `px:${row.scope}/${row.folder}`,
-        folderPath: row.folder ?? "",
-        row,
-      };
-    });
-  }, [pxSource, pxTiers, pxTierKey]);
-  const archivedRows = useMemo(() => pxRows(archivedRaw, true), [pxRows, archivedRaw]);
-  // A bot's deleted notes: the journal keeps their text, a revert puts them back.
-  const botTrashRows = useMemo<PageRow[]>(() => {
-    const out: PageRow[] = [];
-    for (const source of allBotSources) {
-      const present = new Set(overviews[source.id]!.notes.map((row) => row.path));
-      const seen = new Set<string>();
-      for (const entry of journals[source.botId ?? ""] ?? []) {
-        if (seen.has(entry.path)) continue;
-        seen.add(entry.path);
-        if (entry.kind !== "deleted" || !entry.canRevert || present.has(entry.path)) continue;
-        const title = entry.path.split("/").pop()?.replace(/\.md$/i, "") || entry.path;
-        out.push({
-          key: `trash|bot:${source.botId}|${entry.id}`,
-          source,
-          tier: "mine",
-          folderKey: source.id,
-          folderPath: source.name,
-          row: { id: entry.id, title, path: entry.path, updatedAt: entry.at, archived: true },
-        });
-      }
-    }
-    return out;
-  }, [allBotSources, overviews, journals]);
-  const pxTrashRows = useMemo(() => pxRows(trashRaw.map((row) => ({
-    id: row.id,
-    title: row.title,
-    scope: row.scope,
-    folder: row.topic,
-    tags: row.tags ?? [],
-    author: row.author_name || undefined,
-    updatedAt: row.deleted_at ? Date.parse(row.deleted_at) : undefined,
-    archived: true,
-    status: row.may_manage === false ? "locked" : undefined,
-  })), false), [pxRows, trashRaw]);
-  const trashRows = useMemo(() => [...pxTrashRows, ...botTrashRows], [pxTrashRows, botTrashRows]);
-
-  // Bodies, in the background: excerpts of the bots' notes, [[links]] for the map and the backlinks.
-  useEffect(() => {
-    if (!overviewsReady) return;
-    const fromTeams: Record<string, string> = {};
-    for (const source of teamSources) {
-      const teamBodies = overviews[source.id]?.bodies ?? {};
-      for (const row of overviews[source.id]!.notes) if (teamBodies[row.id] != null) fromTeams[rowKey(source, row)] = teamBodies[row.id]!;
-    }
-    // Only a team text that changed is set again: an unchanged one would loop rows → bodies → rows.
-    if (Object.entries(fromTeams).some(([key, text]) => bodies[key] !== text)) setBodies((current) => ({ ...current, ...fromTeams }));
-    const wanted = rows.filter((entry) => entry.source.kind !== "team" && !bodiesRequested.current.has(entry.key)).slice(0, BODY_PREFETCH);
-    if (!wanted.length) return;
-    for (const entry of wanted) bodiesRequested.current.add(entry.key);
-    let batch: Record<string, string> = {};
-    const flush = () => {
-      if (!mounted.current || !Object.keys(batch).length) return;
-      const ready = batch;
-      batch = {};
-      setBodies((current) => ({ ...current, ...ready }));
-    };
-    void pooled(wanted, 6, async (entry) => {
-      try {
-        if (entry.source.kind === "bot" && entry.source.botId && entry.row.path) batch[entry.key] = (await fetchMemoryDoc(entry.source.botId, entry.row.path)).text;
-        else if (entry.source.kind === "perspicax" && entry.row.scope) batch[entry.key] = (await openPerspicaxNote(entry.row.scope, entry.row.id)).body;
-      } catch {
-        /* one note that does not answer keeps the others */
-      }
-      if (Object.keys(batch).length >= 24) flush();
-    }).then(flush);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `bodies` is read to skip a set, not a trigger
-  }, [overviewsReady, rows, teamSources, overviews]);
-
-  // ---- places --------------------------------------------------------------------------
-
-  const counts = useMemo(() => {
-    const cutoff = Date.now() - RECENT_MS;
-    return {
-      all: rows.length,
-      teams: rows.filter((entry) => tierByKey.get(entry.tier)?.kind === "team").length,
-      pinned: rows.filter((entry) => pins.includes(entry.key)).length,
-      recent: rows.filter((entry) => (entry.row.updatedAt ?? 0) >= cutoff).length,
-      review: rows.filter((entry) => entry.row.status === "proposed").length + pxTiers.reduce((sum, tier) => sum + (tier.pending ?? 0), 0),
-    };
-  }, [rows, tierByKey, pins, pxTiers]);
-
-  const placeRows = useMemo<PageRow[]>(() => {
-    if (place.kind === "all") return rows;
-    if (place.kind === "teams") return rows.filter((entry) => tierByKey.get(entry.tier)?.kind === "team");
-    if (place.kind === "pinned") return rows.filter((entry) => pins.includes(entry.key));
-    if (place.kind === "recent") {
-      const cutoff = Date.now() - RECENT_MS;
-      return rows.filter((entry) => (entry.row.updatedAt ?? 0) >= cutoff);
-    }
-    if (place.kind === "review") return rows.filter((entry) => entry.row.status === "proposed");
-    if (place.kind === "archived") return archivedRows;
-    if (place.kind === "trash") return trashRows;
-    if (place.kind === "collections") {
-      // The union of every collection's notes, or the opened collection's only.
-      const ids = openCollection ? [openCollection.id] : collections.map((entry) => entry.id);
-      const keys = new Set(ids.flatMap((id) => (collectionItems[id] ?? []).map((item) => `perspicax|${item.note_scope}/${item.note_id}`)));
-      return rows.filter((entry) => keys.has(entry.key));
-    }
-    if (place.kind === "tier") return rows.filter((entry) => entry.tier === place.tier);
-    if (place.kind !== "folder") return rows;
-    const folder = place.folder;
-    return rows.filter((entry) => entry.folderKey === folder || entry.folderKey.startsWith(`${folder}/`));
-  }, [place, rows, tierByKey, pins, archivedRows, trashRows, openCollection, collections, collectionItems]);
-
-  // The Collections scope: every collection's notes not loaded yet.
-  // 2026-11-03 (audit N-6): each collection is asked once, four at a time;
-  // a select while they load (it stores the picked one's items) used to
-  // cancel the batch and ask every missing collection again.
-  const collectionsLoading = useRef(new Set<string>());
-  useEffect(() => {
-    if (place.kind !== "collections") return;
-    const missing = collections.filter((entry) => !(entry.id in collectionItems) && !collectionsLoading.current.has(entry.id));
-    if (missing.length === 0) return;
-    for (const entry of missing) collectionsLoading.current.add(entry.id);
-    void pooled(missing, 4, async (entry) => {
-      const items = await fetchCollectionItems(entry.id).catch(() => [] as CollectionItem[]);
-      collectionsLoading.current.delete(entry.id);
-      // a select meanwhile stored a fresher copy: it stays
-      setCollectionItems((current) => (entry.id in current ? current : { ...current, [entry.id]: items }));
-    });
-  }, [place.kind, collections, collectionItems]);
-  useEffect(() => { if (place.kind !== "collections") setOpenCollection(null); }, [place.kind]);
+  const { pxSource, pxTiers, botSources, teamSources, meTier, tiers, tierByKey, pxTierKey, factsByBot, rows, rowByKey, archivedRows, pxTrashRows, trashRows, counts, placeRows } = useMemoryRows({ sources, overviews, journals, bodies, archivedRaw, trashRaw, pins, place, openCollection, collections, collectionItems, overviewsReady, setBodies, bodiesRequested, mounted, setCollectionItems, setOpenCollection });
 
   /** A row of the rail: its scope, on the tab in view (every tab is scoped). */
   const goPlace = (next: Place, toNotes = false) => {

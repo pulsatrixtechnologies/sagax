@@ -222,4 +222,3 @@ export function createSandboxdUpgradeHandler(service: SandboxService, verifier: 
     });
   };
 }
-

@@ -4,7 +4,7 @@ import { botNames, botSourceLink, isLinked, pxFolderLink, teamFolderLink } from 
 
 const bots = [
   { id: "ember", name: "Ember", color: "orange", section: "" },
-  { id: "kat", name: "Katarina", section: "built-in" },
+  { id: "kat", name: "Osprey", section: "built-in" },
   { id: "old", name: "Old", hidden: true, section: "" },
 ];
 const routines = [{ name: "Morning tidy", botId: "ember" }, { name: "Report", botId: "kat" }];
@@ -24,7 +24,7 @@ describe("memory folder links", () => {
   });
 
   it("links a Perspicax sagax-<bot> folder to that bot while it exists", () => {
-    expect(botNames(pxFolderLink("sagax-katarina", bots, routines))).toBe("Katarina");
+    expect(botNames(pxFolderLink("sagax-osprey", bots, routines))).toBe("Osprey");
     expect(isLinked(pxFolderLink("sagax-old", bots, routines))).toBe(false);
     expect(isLinked(pxFolderLink("notes", bots, routines))).toBe(false);
   });
@@ -32,7 +32,7 @@ describe("memory folder links", () => {
   it("says which bots read a team section's folders, none owning them", () => {
     const link = teamFolderLink("built-in", bots);
     expect(isLinked(link)).toBe(false);
-    expect(link.readBy).toEqual(["Katarina"]);
+    expect(link.readBy).toEqual(["Osprey"]);
     expect(teamFolderLink("", bots).readBy).toEqual(["Ember"]);
   });
 });

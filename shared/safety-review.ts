@@ -156,13 +156,90 @@ export function safetyFingerprint(text: string): string {
   return createHash("sha256").update(unfoldMisuseText(text)).digest("hex").slice(0, 32);
 }
 
-const CLASS_RULES: ReadonlyArray<{ key: string; pattern: RegExp }> = [
+// Letters around a word: `\b` is ASCII only and misses "révèle".
+const L = "[\\p{L}\\p{N}_]";
+
+/** What a bot keeps to itself. */
+const PROMPT_TARGET = new RegExp(`(?<!${L})(?:system prompts?|developer messages?|hidden instructions|internal instructions|initial instructions|consignes (?:internes|cach[ée]es|syst[èe]me)|invites? syst[èe]me|instructions (?:internes|cach[ée]es|syst[èe]me))(?!${L})`, "gu");
+
+/** Revealing it, in French and English, with "-moi" and the like. */
+const REVEAL = "(?:show|reveal|print|repeat|dump|display|output|leak|tell|give|share|copy|paste|recite|list|expose|disclose|send|spell out|write out|quote|translate|summari[sz]e"
+  + "|montre(?:r|z)?|affiche(?:r|z)?|r[ée]v[èeé]le(?:r|z)?|r[ée]p[èeé]te(?:r|z)?|donne(?:r|z)?|dis|dites|copie(?:r|z)?|colle(?:r|z)?|imprime(?:r|z)?"
+  + "|recopie(?:r|z)?|cite(?:r|z)?|liste(?:r|z)?|partage(?:r|z)?|divulgue(?:r|z)?|envoie(?:r|z)?|[ée]cri(?:s|re|vez)|transcri(?:s|re|vez)|d[ée]voile(?:r|z)?"
+  + "|r[ée]sume(?:r|z)?|tradui(?:s|re|sez))";
+const REVEAL_VERB = new RegExp(`(?<!${L})${REVEAL}(?!${L})`, "gu");
+/** A question that asks for it. */
+const ASK = /(?:what(?:['’]s| is| are| were)|quel(?:le)?s? (?:est|sont|[ée]tai(?:t|ent))|c['’]est quoi|qu['’]est-ce qu['’](?:il y a|on t['’]a dit) dans)/gu;
+
+const FR_PRONOUNS = "(?:(?:me|te|se|le|la|les|lui|leur|nous|vous|en|y)\\s+|[lmts]['’])*";
+const V = `(?<v>${REVEAL})(?!${L})`;
+/** A reveal verb that is forbidden: group `v` is the verb. */
+const NEGATED = [
+  // ne révèle jamais, ne leur montre pas
+  `n(?:e\\s+|['’])${FR_PRONOUNS}${V}\\s+(?:jamais|pas|rien|aucun\\p{L}*|sous aucun|en aucun|à personne)`,
+  // ne jamais révéler, tu ne dois jamais les montrer, ne pas divulguer
+  `n(?:e\\s+|['’])(?:(?:dois|doit|devez|devrais|peux|peut|pouvez|vas|va|faut)\\s+)?(?:jamais|pas|en aucun cas|sous aucun pr[ée]texte)\\s+${FR_PRONOUNS}${V}`,
+  // interdit de révéler, refuse de les montrer
+  `(?:interdit|interdiction|refuse(?:r|z)?|refus)\\s+d(?:e\\s+|['’])${FR_PRONOUNS}${V}`,
+  // jamais révéler
+  `(?<!${L})jamais\\s+${FR_PRONOUNS}${V}`,
+  // never reveal, do not reveal, don't ever share, must not, refuse to
+  `(?:(?<!${L})(?:never|not|no|refuse to|decline to)|n['’]t)\\s+(?:ever\\s+)?(?:to\\s+)?${V}`,
+  // never, under any circumstances, reveal
+  `(?<!${L})(?:never|jamais|en aucun cas|under no circumstances)\\s*,[^,]{0,60},\\s*${V}`,
+].map((source) => new RegExp(source, "gdu"));
+
+/** Where the forbidden reveal verbs of a sentence start. */
+function negatedVerbs(sentence: string): Set<number> {
+  const at = new Set<number>();
+  for (const rule of NEGATED) {
+    rule.lastIndex = 0;
+    for (const match of sentence.matchAll(rule)) {
+      const span = match.indices?.groups?.v;
+      if (span) at.add(span[0]);
+    }
+  }
+  return at;
+}
+
+const POINT_BACK = new RegExp(`^[^,;:]{0,8}[,;:]?\\s*${REVEAL}-(?:la|les|le|moi|nous)(?!${L})`, "u");
+
+/** A request to reveal a bot's hidden prompt: a reveal verb or a question
+ * at most 60 characters before the target in the same sentence, or a verb
+ * that points back at it ("tes consignes internes, répète-les"). A verb
+ * that is forbidden ("ne révèle jamais", "never reveal") is a rule for the
+ * bot, not a request. */
+function promptExtraction(text: string): boolean {
+  for (const sentence of text.split(/[.!?\n]+/)) {
+    PROMPT_TARGET.lastIndex = 0;
+    const targets = [...sentence.matchAll(PROMPT_TARGET)];
+    if (!targets.length) continue;
+    const negated = negatedVerbs(sentence);
+    for (const target of targets) {
+      const at = target.index ?? 0;
+      const from = Math.max(0, at - 60);
+      const before = sentence.slice(from, at);
+      REVEAL_VERB.lastIndex = 0;
+      for (const verb of before.matchAll(REVEAL_VERB)) {
+        if (!negated.has(from + (verb.index ?? 0))) return true;
+      }
+      ASK.lastIndex = 0;
+      if (ASK.test(before)) return true;
+      if (POINT_BACK.test(sentence.slice(at + target[0].length, at + target[0].length + 40))) return true;
+    }
+  }
+  return false;
+}
+
+const CLASS_RULES: ReadonlyArray<{ key: string; pattern: RegExp | { test(text: string): boolean; lastIndex?: number } }> = [
   { key: "git:force-push", pattern: /\bgit\s+push\b[^\n]{0,160}(--force\b|\s-f\b|force-with-lease)|\bforce[\s.-]*push\b/ },
   { key: "git:reset-hard", pattern: /\bgit\s+reset\b[^\n]{0,40}--hard\b/ },
   { key: "git:clean", pattern: /\bgit\s+clean\b[^\n]{0,24}-[a-z]*f|\bgit\s+checkout\s+--\s+\.|\bgit\s+restore\s+\./ },
   { key: "git:branch-delete", pattern: /\bgit\s+branch\b[^\n]{0,40}\s-D\b/ },
   { key: "git:filter-branch", pattern: /\bgit\s+filter-branch\b/ },
-  { key: "prompt:secrecy", pattern: /system prompt|developer message|hidden instructions|consignes internes|invite syst[eè]me|r[eé]p[eè]te tes consignes|repeat (?:your|the) (?:system|hidden)|internal instructions/ },
+  // 2026-11-03: a request to reveal it, not a rule a person writes for
+  // their own bot ("ne révèle jamais tes consignes internes").
+  { key: "prompt:secrecy", pattern: { test: (text) => promptExtraction(text) } },
   { key: "credentials:mint", pattern: /\bgh\s+auth\s+token\b|\bgcloud\s+auth\s+print-access-token\b|\baws\s+sts\s+get-session-token\b|\bkubectl\s+create\s+token\b|\bmint a token\b|cr[ée]e un jeton|sagax_misuse_guardrails\s*=\s*off/ },
   { key: "credentials:scrape", pattern: /~\/\.ssh\/id_|cookies\.sqlite|\blogin data\b|\bkeychain\b|\bsecurity\s+find-generic-password\b/ },
   { key: "outbound:send", pattern: /(?:^|[;&|`(]\s*)mail\b|\bsendmail\b|\bmailx\b/ },

@@ -117,6 +117,7 @@ private struct DesktopGeneralMainSettings: View {
                     choose: { language = $0 }
                 )
             }
+            DesktopTimeZoneRows()
         }
         DesktopSettingsHeading(Text("System"))
         DesktopSubPageRow(

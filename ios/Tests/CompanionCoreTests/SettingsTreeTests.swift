@@ -88,7 +88,7 @@ final class DesktopSettingsNavGroupTests: XCTestCase {
         let grouped = DesktopSettingsNavGroup.grouped(sections)
         XCTAssertEqual(Set(grouped.flatMap(\.sections)), Set(sections), "no section lost")
         XCTAssertEqual(grouped.map(\.group), [.personal, .ai, .installation, .app])
-        XCTAssertEqual(grouped.first?.sections, [.general, .appearance])
+        XCTAssertEqual(grouped.first?.sections, [.general, .security, .vault, .appearance, .notifications])
         XCTAssertEqual(grouped.last?.sections, [.experimental, .updates, .about])
     }
 

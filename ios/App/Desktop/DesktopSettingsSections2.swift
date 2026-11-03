@@ -671,6 +671,8 @@ struct DesktopEnginesSettings: View {
     @State private var error: String?
 
     @State private var toConnectOpen = false
+    /// The desktop's Show filter (`providers.filter.*`): All, Mine, This computer.
+    @State private var filter = "all"
 
     /// Settings > Providers (ProvidersSettings.tsx, 2026-10-30): "Providers"
     /// over one card, the connected providers as rows (their mark, the name,
@@ -680,6 +682,19 @@ struct DesktopEnginesSettings: View {
         HStack(spacing: 8) {
             DesktopSettingsHeading(Text("Providers"))
             Spacer(minLength: 0)
+            HStack(spacing: 4) {
+                ForEach([("all", String(localized: "All")), ("mine", String(localized: "Mine")), ("computer", String(localized: "This computer"))], id: \.0) { option in
+                    Button { filter = option.0 } label: {
+                        DesktopText(Text(verbatim: option.1), size: 12, line: 16, color: filter == option.0 ? \.ink : \.inkSecondary)
+                            .padding(.horizontal, 8)
+                            .frame(minHeight: 30)
+                            .background(filter == option.0 ? theme.selected : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(filter == option.0 ? .isSelected : [])
+                    .accessibilityIdentifier("desktop-settings.providers.filter.\(option.0)")
+                }
+            }
             Button { Task { await load() } } label: {
                 HStack(spacing: 6) {
                     DesktopSettingsIconView(icon: .refreshCw, size: 13)
@@ -692,7 +707,8 @@ struct DesktopEnginesSettings: View {
             .accessibilityIdentifier("desktop-settings.engines-refresh")
         }
         .task { if engines == nil { await load() } }
-        if let engines {
+        if let all = engines {
+            let engines = all.filter { filter == "all" || (filter == "computer") == Self.onThisComputer($0) }
             let ready = engines.filter(\.ready)
             let rest = engines.filter { !$0.ready }
             VStack(alignment: .leading, spacing: 0) {
@@ -745,6 +761,18 @@ struct DesktopEnginesSettings: View {
         }
     }
 
+    /// A model server of this computer (a local endpoint), not an account or a key.
+    static func onThisComputer(_ engine: DesktopEngine) -> Bool {
+        let kind = engine.driverKind.lowercased()
+        return kind.contains("ollama") || kind.contains("lmstudio") || kind.contains("local")
+    }
+
+    static func detail(_ engine: DesktopEngine) -> String {
+        if onThisComputer(engine) { return [String(localized: "This computer"), String(localized: "No key")].joined(separator: " · ") }
+        let whereKey = engine.access == "custom" ? String(localized: "Key on the Sagax server") : String(localized: "Signed-in session")
+        return [String(localized: "Me"), whereKey].joined(separator: " · ")
+    }
+
     private func providerRow(_ engine: DesktopEngine) -> some View {
         Button { withAnimation(.easeOut(duration: 0.15)) { open = open == engine.id ? nil : engine.id } } label: {
             HStack(spacing: 10) {
@@ -753,11 +781,8 @@ struct DesktopEnginesSettings: View {
                     .background(theme.raised, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 VStack(alignment: .leading, spacing: 1) {
                     DesktopText(Text(verbatim: engine.displayName ?? engine.driverKind), size: 13, weight: .medium, line: 18)
-                    if let email = engine.snapshot.account?.email {
-                        DesktopText(Text(verbatim: email), size: 12, line: 16, color: \.inkSecondary)
-                    } else if let version = engine.snapshot.version {
-                        DesktopText(Text(verbatim: "v\(version)"), size: 12, line: 16, color: \.inkSecondary)
-                    }
+                    // who pays · where its key is (ProvidersSettings.tsx rowDetail)
+                    DesktopText(Text(verbatim: Self.detail(engine)), size: 12, line: 16, color: \.inkSecondary)
                 }
                 Spacer(minLength: 0)
                 DesktopText(Text("Connected"), size: 12.5, weight: .medium, line: 18, color: \.success)

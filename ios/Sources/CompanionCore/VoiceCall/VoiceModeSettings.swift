@@ -102,6 +102,21 @@ public struct VoiceModeSettings: Codable, Equatable, Sendable {
         return out
     }
 
+    /// Settings > Voice > Bot's voice: the person's provider (`tts`), nil
+    /// for Auto. A bot's own choice stays as it is.
+    public func withTts(_ provider: String?) -> VoiceModeSettings {
+        var out = self
+        out.ttsProvider = nil
+        out.resolvedFor = nil
+        var record = extra
+        if let provider, Self.ttsProviders.contains(provider) { record["tts"] = provider } else { record["tts"] = nil }
+        out.extraJSON = Self.json(record)
+        return out
+    }
+
+    /// A voice for the person's own provider (no bot).
+    public func withPersonVoice(_ id: String) -> VoiceModeSettings { withVoice(id, forBot: nil) }
+
     public static func == (lhs: VoiceModeSettings, rhs: VoiceModeSettings) -> Bool {
         lhs.voice == rhs.voice && lhs.speed == rhs.speed && lhs.language == rhs.language && lhs.extraJSON == rhs.extraJSON
             && lhs.ttsProvider == rhs.ttsProvider && lhs.resolvedFor == rhs.resolvedFor

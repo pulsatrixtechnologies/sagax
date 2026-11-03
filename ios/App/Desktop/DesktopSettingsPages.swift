@@ -187,23 +187,44 @@ struct DesktopBotModelsTable: View {
 struct DesktopVoiceSettings: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
+    @EnvironmentObject private var model: DesktopSettingsModel
     @AppStorage(VoiceModeSettings.storageKey) private var voiceRaw = ""
+    /// `VOICE_DASHES_PREFERENCE` (shared/voice-dashes.ts): "on", "off", or
+    /// absent (on in French, off otherwise).
+    @AppStorage("sagax.voiceDashes.v1") private var dashesRaw = ""
     @State private var voices: [VoiceModeVoice]?
+    @State private var serverURL = ""
+    @State private var serverModel = ""
+    @State private var serverError: String?
 
     private var settings: VoiceModeSettings { VoiceModeSettings.decode(voiceRaw.isEmpty ? nil : voiceRaw) }
+    private var person: VoiceModeSettings { settings.forBot(nil) }
+
+    private var noDashes: Bool {
+        if dashesRaw == "on" { return true }
+        if dashesRaw == "off" { return false }
+        return Locale.current.language.languageCode?.identifier == "fr"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             DesktopSettingsHeading(Text("Who speaks and who listens"))
             DesktopSettingsGroup {
+                DesktopSettingRow(title: Text("Bot's voice")) {
+                    DesktopSelect(options: [("", String(localized: "Auto")), ("xai", "xAI"), ("openai", "OpenAI"), ("elevenlabs", "ElevenLabs")],
+                                  selection: settings.ttsChoice(botId: nil) ?? "", label: Text("Bot's voice"),
+                                  identifier: "desktop-settings.voice.tts") { value in
+                        voiceRaw = settings.withTts(value.isEmpty ? nil : value).encoded
+                        voices = nil
+                        Task { await loadVoices() }
+                    }
+                }
                 DesktopSettingRow(title: Text("Voice")) {
                     DesktopSelect(options: [("", String(localized: "Not set"))] + (voices ?? []).map { ($0.id, PhoneBotCallVoiceCard.capitalizedLabel($0.label)) },
-                                  selection: settings.voice,
+                                  selection: person.voice,
                                   shown: voices == nil ? String(localized: "Loading voices…") : nil,
                                   label: Text("Voice"), identifier: "desktop-settings.voice.voice") { value in
-                        var next = settings
-                        next.voice = value
-                        voiceRaw = next.encoded
+                        voiceRaw = settings.withPersonVoice(value).encoded
                     }
                 }
                 DesktopSettingRow(title: Text("Speed")) {
@@ -223,6 +244,57 @@ struct DesktopVoiceSettings: View {
                     }
                 }
             }
+            DesktopSettingsHeading(Text("Advanced"))
+                .padding(.top, 8)
+            DesktopSettingsGroup {
+                DesktopSettingRow(title: Text("Fish Audio model"),
+                                  help: Text("Pick the model your Fish Audio plan covers. It applies to every agent on this installation.")) {
+                    DesktopSelect(options: [("s2.1-pro", String(localized: "s2.1-pro (default)")), ("s2.1-pro-free", String(localized: "s2.1-pro-free (free for developers)"))],
+                                  selection: model.config?.tts?.fishModel ?? "s2.1-pro", label: Text("Fish Audio model"),
+                                  identifier: "desktop-settings.voice.fish", disabled: model.config == nil) { value in
+                        Task { _ = await model.apply(.fishModel(value), key: "fishModel") }
+                    }
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    DesktopText(Text("Chatterbox server"))
+                    HStack(spacing: 6) {
+                        Circle().fill(model.config?.tts?.baseUrl?.isEmpty == false ? theme.accent : theme.raisedHover).frame(width: 6, height: 6)
+                        DesktopText(model.config?.tts?.baseUrl?.isEmpty == false ? Text("Saved") : Text("Any OpenAI-compatible server running Chatterbox works. No key is needed."),
+                                    size: 12.5, line: 17, color: \.inkSecondary)
+                        Link(destination: URL(string: "https://github.com/resemble-ai/chatterbox")!) {
+                            DesktopText(Text("How to run one locally"), size: 12.5, weight: .medium, line: 17, color: \.accentText)
+                        }
+                    }
+                    HStack(spacing: 8) {
+                        TextField("http://127.0.0.1:4123", text: $serverURL)
+                            .font(theme.font(13))
+                            .keyboardType(.URL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .padding(.horizontal, 12).frame(minHeight: 36)
+                            .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .accessibilityIdentifier("desktop-settings.voice.chatterbox-url")
+                        Button("Save") { Task { await saveServer() } }
+                            .buttonStyle(DesktopButtonStyle(kind: .ghost, size: 12.5, weight: .medium, height: 36, horizontal: 12))
+                            .disabled(serverURL.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                    TextField(String(localized: "Model id, default chatterbox-turbo"), text: $serverModel)
+                        .font(theme.font(13))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .padding(.horizontal, 12).frame(minHeight: 36)
+                        .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    if let serverError { DesktopText(Text(verbatim: serverError), size: 12, line: 16, color: \.danger) }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                DesktopSettingRow(title: Text("No em or en dashes in replies"),
+                                  subtitle: Text("Replaces them in the final text of bot replies: a range word between times and numbers, a colon after a list label, a comma elsewhere. On by default in French.")) {
+                    DesktopSwitch(isOn: noDashes, label: Text("No em or en dashes in replies"), identifier: "desktop-settings.voice.no-dashes") {
+                        dashesRaw = noDashes ? "off" : "on"
+                    }
+                }
+            }
             DesktopSettingsHeading(Text("Audio"))
                 .padding(.top, 8)
             DesktopSettingsGroup {
@@ -232,12 +304,27 @@ struct DesktopVoiceSettings: View {
             }
         }
         .task {
-            guard voices == nil, let client = session.callClient, let bot = session.state.bots.first(where: { $0.hidden != true }) else {
-                if voices == nil { voices = [] }
-                return
-            }
-            voices = (try? await client.voiceModeVoices(botId: bot.id, provider: settings.ttsChoice(botId: nil))) ?? []
+            serverURL = model.config?.tts?.baseUrl ?? ""
+            serverModel = model.config?.tts?.model ?? ""
+            await loadVoices()
         }
+    }
+
+    private func loadVoices() async {
+        guard let client = session.callClient, let bot = session.state.bots.first(where: { $0.hidden != true }) else {
+            voices = []
+            return
+        }
+        voices = (try? await client.voiceModeVoices(botId: bot.id, provider: settings.ttsChoice(botId: nil))) ?? []
+    }
+
+    private func saveServer() async {
+        let url = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard url.lowercased().hasPrefix("http://") || url.lowercased().hasPrefix("https://") else {
+            serverError = String(localized: "The server address must start with http:// or https://")
+            return
+        }
+        serverError = await model.apply(.ttsServer(baseUrl: url, model: serverModel), key: "ttsServer")
     }
 }
 

@@ -256,6 +256,8 @@ enum IPadParityScreen: String, CaseIterable {
     case settingsAbout = "settings-about"
     case settingsProviders = "settings-providers"
     case settingsSecurity = "settings-security"
+    case settingsCredentials = "settings-credentials"
+    case settingsImport = "settings-import"
 
     /// Accepts the id, or a capture file stem ("03-main", "desktop-1366x1024-03-main").
     init?(argument: String) {

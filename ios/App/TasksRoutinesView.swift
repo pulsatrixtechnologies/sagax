@@ -40,6 +40,8 @@ struct TasksRoutinesView: View {
     @State private var scheduleView: ScheduleView
     @State private var agendaDay = RoutineCalendar.startOfDay(Date())
     @State private var quickSlot: AutomationsSlot?
+    /// The section header under the pointer: its + shows (RoutineGroupedList.tsx).
+    @State private var hoveredGroup: String?
     @State private var pendingSeed: RoutineEditorSeed?
     @State private var rescheduling: RoutineCalendarItem?
     /// AU20: Mine, My teams or Everyone, and their filters (organization
@@ -669,16 +671,38 @@ struct TasksRoutinesView: View {
             .accessibilityValue(Text(folded ? "Collapsed" : "Expanded"))
             .accessibilityIdentifier("routine-group.\(key)")
             if let botId {
+                // RoutineGroupedList.tsx: ⋯ and + show on hover; without a
+                // pointer the ⋯ stays and holds New routine too.
+                Menu {
+                    Button(String(format: String(localized: "New routine for %@"), name), systemImage: "plus") {
+                        quickSlot = AutomationsSlot(at: RoutineScheduleForm.nextHour(), botId: botId)
+                    }
+                    Button(String(localized: "New folder…"), systemImage: "folder.badge.plus") {
+                        folderController.askNewFolder(botId: botId)
+                    }
+                    .disabled(!foldersSupported)
+                } label: {
+                    DesktopIconView(icon: .ellipsis, size: 14)
+                        .foregroundStyle(Theme.textTertiary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel(Text(String(format: String(localized: "More for %@"), name)))
+                .accessibilityIdentifier("routine-group-more.\(botId)")
                 Button { quickSlot = AutomationsSlot(at: RoutineScheduleForm.nextHour(), botId: botId) } label: {
                     DesktopIconView(icon: .plus, size: 14)
                         .foregroundStyle(Theme.textTertiary)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .opacity(hoveredGroup == key ? 1 : 0)
+                .allowsHitTesting(hoveredGroup == key)
+                .accessibilityHidden(hoveredGroup != key)
                 .accessibilityLabel(Text(String(format: String(localized: "New routine for %@"), name)))
             }
         }
+        .onHover { inside in hoveredGroup = inside ? key : (hoveredGroup == key ? nil : hoveredGroup) }
         .textCase(nil)
     }
 

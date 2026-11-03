@@ -19,6 +19,8 @@ import CompanionCore
 /// A page the main column shows in place of the conversation.
 enum DesktopPage: String, Identifiable {
     case teamMap, automations
+    /// Lot 4: Memory, a full page of the main column (2026-11-02).
+    case memory
     var id: String { rawValue }
 }
 
@@ -433,6 +435,8 @@ struct DesktopAutomationsPage: View {
                 .navigationBarTitleDisplayMode(.inline)
                 // the desktop's week, not the phone's day
                 .environment(\.automationsGridDays, 7)
+                // lot 4: the desktop's header and right column
+                .environment(\.automationsDesktop, true)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.app)
@@ -447,6 +451,7 @@ extension IPadParityScreen {
         switch self {
         case .routinesCalendar, .routinesList, .routinesLogs: .automations
         case .teamMap: .teamMap
+        case .memoryPage: .memory
         default: nil
         }
     }

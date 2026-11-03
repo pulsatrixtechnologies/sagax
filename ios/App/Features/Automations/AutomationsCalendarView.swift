@@ -24,6 +24,17 @@ extension EnvironmentValues {
     }
 }
 
+/// The iPad desktop shell (lot 4): the page draws the desktop's own header
+/// (RoutineCalendarPage.tsx `PageHeader`) and right column instead of the
+/// phone's pickers and its navigation bar.
+private struct AutomationsDesktopKey: EnvironmentKey { static let defaultValue = false }
+extension EnvironmentValues {
+    var automationsDesktop: Bool {
+        get { self[AutomationsDesktopKey.self] }
+        set { self[AutomationsDesktopKey.self] = newValue }
+    }
+}
+
 /// What an event's long-press menu asks the page to do.
 enum AutomationsEventAction {
     case open, reschedule, edit, runNow, toggle, logs
@@ -40,6 +51,8 @@ struct AutomationsCalendarView<Header: View>: View {
     var loading = false
     /// The page's pickers above the day.
     @ViewBuilder var header: () -> Header
+    /// The desktop header's right end (Filters, the menu, New).
+    var trailing: () -> AnyView = { AnyView(EmptyView()) }
     /// A tap on an empty slot: create a routine there.
     let onCreate: (Date) -> Void
     let onAction: (AutomationsEventAction, RoutineCalendarItem) -> Void
@@ -58,7 +71,7 @@ struct AutomationsCalendarView<Header: View>: View {
         if gridDays > 1 {
             AnyView(AutomationsWeekView(
                 day: $day, routines: routines, runs: runs, bots: bots, botId: botId, loading: loading,
-                header: { AnyView(header()) }, onCreate: onCreate, onAction: onAction
+                header: { AnyView(header()) }, trailing: trailing, onCreate: onCreate, onAction: onAction
             ))
         } else {
             AnyView(dayBody)

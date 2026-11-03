@@ -68,6 +68,16 @@
         }
       }
     },
+    "%1$@ at %2$@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ à %2$@"
+          }
+        }
+      }
+    },
     "%@ %@ · %@": {
       "localizations": {
         "en": {
@@ -415,7 +425,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@ à %2$@"
+            "value": "%@ à %@"
           }
         },
         "pt-BR": {
@@ -1174,6 +1184,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ precisa da permissão %2$@. Peça a um administrador para adicioná-la no Perspicax."
+          }
+        }
+      }
+    },
+    "%@ notes · tap to open": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ notes · toucher pour ouvrir"
           }
         }
       }
@@ -8182,6 +8202,16 @@
         }
       }
     },
+    "All notes": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toutes les notes"
+          }
+        }
+      }
+    },
     "All owners": {
       "localizations": {
         "en": {
@@ -8238,6 +8268,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Todas as rotinas"
+          }
+        }
+      }
+    },
+    "All schedules, including paused and finished routines.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tous les horaires, y compris les routines en pause et terminées."
           }
         }
       }
@@ -14382,6 +14422,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Id du changement"
+          }
+        }
+      }
+    },
+    "Changed": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifiées"
+          }
+        }
+      }
+    },
+    "Changed in the last seven days.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifiées dans les sept derniers jours."
           }
         }
       }
@@ -24538,6 +24598,16 @@
         }
       }
     },
+    "Drag a bot from the left sidebar onto a time to schedule it.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glisse un bot de la barre de gauche sur une heure pour le planifier."
+          }
+        }
+      }
+    },
     "Drag bots here, or add existing bots from the team menu.": {
       "localizations": {
         "en": {
@@ -27044,6 +27114,16 @@
         }
       }
     },
+    "Everything you can read, every tier.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout ce que vous pouvez lire, tous paliers confondus."
+          }
+        }
+      }
+    },
     "Exact": {
       "localizations": {
         "en": {
@@ -28144,6 +28224,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Filtrar execuções por status"
+          }
+        }
+      }
+    },
+    "Filters": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filtres"
           }
         }
       }
@@ -37118,6 +37208,16 @@
         }
       }
     },
+    "Lists": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listes"
+          }
+        }
+      }
+    },
     "Live transcript": {
       "localizations": {
         "en": {
@@ -38587,13 +38687,23 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Manuelle"
+            "value": "Manuel"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
             "value": "Manual"
+          }
+        }
+      }
+    },
+    "Map": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carte"
           }
         }
       }
@@ -40986,6 +41096,16 @@
         }
       }
     },
+    "My memory": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ma mémoire"
+          }
+        }
+      }
+    },
     "My organization": {
       "localizations": {
         "en": {
@@ -41948,6 +42068,16 @@
         }
       }
     },
+    "New note here": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouvelle note ici"
+          }
+        }
+      }
+    },
     "New routine": {
       "localizations": {
         "fr": {
@@ -42404,6 +42534,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Prochaine mise à jour : %@"
+          }
+        }
+      }
+    },
+    "Next: %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prochaine : %@"
           }
         }
       }
@@ -43344,6 +43484,16 @@
         }
       }
     },
+    "No folders yet.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun dossier pour l'instant."
+          }
+        }
+      }
+    },
     "No group in common.": {
       "localizations": {
         "en": {
@@ -43692,6 +43842,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nenhum modelo corresponde"
+          }
+        }
+      }
+    },
+    "No notes here yet.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune note ici pour l'instant."
           }
         }
       }
@@ -44580,6 +44740,16 @@
         }
       }
     },
+    "No tags yet.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune étiquette pour l'instant."
+          }
+        }
+      }
+    },
     "No thread matches “%@”": {
       "localizations": {
         "en": {
@@ -45224,6 +45394,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pas d'appel."
+          }
+        }
+      }
+    },
+    "Not changed for 90 days": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas modifiées depuis 90 jours"
           }
         }
       }
@@ -46002,6 +46182,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Notas que este bot guarda entre tarefas. São arquivos markdown simples numa pasta do seu computador: abra-os em qualquer editor ou no Obsidian."
+          }
+        }
+      }
+    },
+    "Notes waiting for your review.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les notes qui attendent votre révision."
           }
         }
       }
@@ -48708,6 +48898,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abrir o WhatsApp"
+          }
+        }
+      }
+    },
+    "Open a note": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir une note"
           }
         }
       }
@@ -52985,7 +53185,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Épinglés"
+            "value": "Épinglées"
           }
         },
         "pt-BR": {
@@ -55050,6 +55250,16 @@
         }
       }
     },
+    "Quality": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qualité"
+          }
+        }
+      }
+    },
     "Quebec French, English, the language of each message…": {
       "localizations": {
         "en": {
@@ -56193,7 +56403,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Récents"
+            "value": "Récentes"
           }
         }
       }
@@ -59169,7 +59379,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Revoir"
+            "value": "À réviser"
           }
         },
         "pt-BR": {
@@ -60309,7 +60519,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Journal des exécutions"
+            "value": "Journaux d'exécution"
           }
         },
         "pt-BR": {
@@ -61938,6 +62148,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Buscar"
+          }
+        }
+      }
+    },
+    "Search (tag:, folder:, author:, tier:, has:)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher (tag:, folder:, author:, tier:, has:)"
           }
         }
       }
@@ -69824,6 +70044,16 @@
         }
       }
     },
+    "Tags": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Étiquettes"
+          }
+        }
+      }
+    },
     "Tags (comma separated)": {
       "localizations": {
         "en": {
@@ -72804,6 +73034,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "O orçamento mensal acabou. Os bots pausam novos trabalhos pagos até o próximo mês ou até o orçamento ser aumentado no computador."
+          }
+        }
+      }
+    },
+    "The notes you pinned on this iPad.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les notes épinglées sur cet iPad."
+          }
+        }
+      }
+    },
+    "The notes your teams share.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les notes que vos équipes partagent."
           }
         }
       }
@@ -77550,6 +77800,16 @@
         }
       }
     },
+    "Today at %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aujourd'hui à %@"
+          }
+        }
+      }
+    },
     "Together": {
       "localizations": {
         "en": {
@@ -77700,6 +77960,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tokens e custo por bot, somados de cada turno concluído. Só aparecem preços dos provedores que informam um."
+          }
+        }
+      }
+    },
+    "Tomorrow at %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demain à %@"
           }
         }
       }
@@ -79766,6 +80036,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Até"
+          }
+        }
+      }
+    },
+    "Upcoming": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À venir"
           }
         }
       }
@@ -83938,6 +84218,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Com o seu próprio número do WhatsApp Business. Responda com o código."
+          }
+        }
+      }
+    },
+    "Without a tag": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sans étiquette"
+          }
+        }
+      }
+    },
+    "Without text": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sans texte"
           }
         }
       }

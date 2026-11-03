@@ -619,7 +619,7 @@ struct DesktopSidebarMenus {
         }
         if shortcuts.contains(.memory) {
             tools.append(DesktopMenuEntry(id: "memory", title: String(localized: "Memory"), icon: .brain, kind: .action {
-                model.modal = .memory
+                model.show(.memory)
             }))
         }
         if shortcuts.contains(.teamMap) {

@@ -449,6 +449,7 @@ struct DesktopContent: View {
             switch page {
             case .teamMap: AnyView(DesktopTeamMapPage())
             case .automations: AnyView(DesktopAutomationsPage())
+            case .memory: AnyView(DesktopMemoryPage())
             }
         } else if let chat = model.selected {
             AnyView(DesktopChatColumn(chat: chat))

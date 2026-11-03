@@ -136,8 +136,17 @@ export function inBotFolder(input: SandboxExecInput, folder: string): SandboxExe
 }
 
 /** What the bot is told about the layout (tool descriptions, workplace note). */
-export function botFolderNote(folder: string): string {
-  return `In your server environment your own folder is ${folder}: your commands start there and relative paths resolve there. Keep your files in it, temporary files in ${folder}/tmp (emptied of files older than ${BOT_TMP_RETENTION_DAYS} days), and only what the person's other bots must share in ${SANDBOX_SHARED_DIR}. Never write loose files at the ${SANDBOX_WORKSPACE} root.`;
+export function botFolderNote(folder: string, serverDataDir?: string): string {
+  return `In your server environment your own folder is ${folder}: your commands start there and relative paths resolve there. Keep your files in it, temporary files in ${folder}/tmp (emptied of files older than ${BOT_TMP_RETENTION_DAYS} days), and only what the person's other bots must share in ${SANDBOX_SHARED_DIR}. Never write loose files at the ${SANDBOX_WORKSPACE} root.${serverDataDir ? ` ${serverFolderNote(folder, serverDataDir)}` : ""}`;
+}
+
+/** 2026-11-02 (GOX, Melonie): the engine itself runs on the Sagax server,
+ * in a working folder under the server's data folder (the CLI may report it
+ * as its current directory). That folder is not in the environment: a bot
+ * that took it for its own folder called list_files on it. Said plainly in
+ * the workplace note of every turn whose tools may run in the environment. */
+export function serverFolderNote(folder: string, serverDataDir: string): string {
+  return `Your engine itself runs on the Sagax server: its working folder and anything under ${serverDataDir} are on that server, not in your server environment. Never give such a path to your server environment tools (run_command, read_file, write_file, list_files); your files are in ${folder}.`;
 }
 
 export type { WorkspaceDisk };

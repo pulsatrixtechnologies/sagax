@@ -117,6 +117,11 @@ export interface ToolExec {
   pathRefusal?(path: string): string | null;
   /** A refusal for other tool text (a page address, file contents), or null. */
   textRefusal?(text: string): string | null;
+  /** 2026-11-02: one short line when a path (or a command) names this bot's
+   * own folder on the Sagax server, which is not in the environment
+   * (server/sandbox-server-path.ts). Checked before the misuse guard, so the
+   * bot reads where its folder is, never the policy refusal. */
+  serverPathAnswer?(value: string, kind: "path" | "command"): string | null;
   /** Safety review before the tool runs. A string stops the call. Plugin and
    * misuse refusals are checked first, so this cannot hide them. */
   beforeCall?(name: string, detail: string): Promise<string | null> | string | null;
@@ -145,6 +150,14 @@ function commandOutput(result: SandboxExecOutput): ToolResult {
 
 /** Plugin and misuse refusals win over the safety review. */
 function earlyRefusal(name: string, args: Record<string, unknown>, exec: ToolExec): string | null {
+  if (name === "run_command" && typeof args.command === "string") {
+    const onServer = exec.serverPathAnswer?.(args.command, "command");
+    if (onServer) return onServer;
+  }
+  if ((name === "read_file" || name === "write_file" || name === "list_files") && typeof args.path === "string") {
+    const onServer = exec.serverPathAnswer?.(args.path, "path");
+    if (onServer) return onServer;
+  }
   if (name === "run_command" && typeof args.command === "string") return exec.commandRefusal?.(args.command) ?? null;
   if ((name === "read_file" || name === "write_file" || name === "list_files") && typeof args.path === "string") {
     const pathRefused = exec.pathRefusal?.(args.path);

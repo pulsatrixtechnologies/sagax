@@ -7025,7 +7025,8 @@ function withWorkplaceNote(text: string, decision: WorkplaceDecision, auto?: Aut
   // 2026-11-02: the bot's own folder of the server environment, whenever
   // its tools may run there (server/sandbox-bot-folder.ts).
   const folder = botId && userSandbox && (decision.target === "user-sandbox" || (auto?.auto && auto.sandboxConfigured)) ? sandboxBotFolder(botId) : null;
-  const withFolder = (out: string) => folder ? `${out}\n\n<workplace>${botFolderNote(folder)}</workplace>` : out;
+  // 2026-11-02: and that the engine's own folder on the server is not it
+  const withFolder = (out: string) => folder ? `${out}\n\n<workplace>${botFolderNote(folder, DATA_DIR)}</workplace>` : out;
   return withFolder(workplaceNoteText(text, decision, auto));
 }
 
@@ -22726,6 +22727,18 @@ setMisuseOwnPaths(({ principalId, botId }) => {
   return { roots: spelled, attachmentsDir: ATTACHMENTS_DIR };
 });
 
+/** 2026-11-02: this bot's own folders on the Sagax server (its workspace
+ * and its task workspaces), as written and through a linked data folder.
+ * A tool of the server environment given one answers where the bot's
+ * folder in the environment is (server/sandbox-server-path.ts). */
+function serverBotRoots(botId: string): string[] {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(botId)) return [];
+  const roots = [workspaceDir(botId), join(TASK_WORKSPACES_DIR, botId)];
+  let real = DATA_DIR;
+  try { real = realpathSync(DATA_DIR); } catch { /* not created yet */ }
+  return roots.flatMap((root) => (real !== DATA_DIR && root.startsWith(`${DATA_DIR}/`) ? [root, real + root.slice(DATA_DIR.length)] : [root]));
+}
+
 // A risky call the engine will not ask about itself (a sandbox tool, a
 // desktop tool) waits on this card. Auto does not answer it. The respond
 // route settles it before any provider sees the request id.
@@ -22877,7 +22890,7 @@ async function acceptDirectSend(
 
       const messageActor = misuseActor(speaker?.origin === "person" || speaker?.origin === "owner-routine" || speaker?.origin === "peer" ? speaker.principalId : undefined, speaker?.origin);
       const misuse = misuseRefusal(text, { ...messageActor, surface: "message", botId, threadId });
-      if (misuse) throw Object.assign(new Error(misuse.message), { status: misuse.status, code: misuse.code });
+      if (misuse) throw Object.assign(new Error(misuse.message), { status: misuse.status, code: misuse.code, ...(misuse.reason ? { reason: misuse.reason } : {}) });
       const safetyMessage = safetyHttpRefusal({ text, surface: "message", triage: messageActor.triage, ...(messageActor.principalId ? { principalId: messageActor.principalId } : {}), botId, threadId });
       if (safetyMessage) throw Object.assign(new Error(safetyMessage.message), { status: safetyMessage.status, code: safetyMessage.code });
 
@@ -30873,6 +30886,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     userSandboxExec: (ownerId, input, botId) => userSandbox!.exec(ownerId, input as never, botId),
     userSandboxOverQuota: async (ownerId, botId) => userSandbox!.workspaceOverQuota(ownerId, botId),
     sandboxBotFolder,
+    serverBotRoots: (botId) => serverBotRoots(botId),
     sandboxTidy: async (ownerId, botId) => { await sandboxTidier?.ensure(ownerId, botId); },
     sandboxDiskWarning: (ownerId, folder) => workspaceDiskWarning(sandboxTidier?.disk(ownerId) ?? null, folder ?? undefined),
     enginePluginCommandRefusal,
@@ -47052,7 +47066,10 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
     const candidateCode = (e as { code?: unknown })?.code;
     const code = typeof candidateCode === "string" && ["guarded_busy", "guarded_branch", "guarded_permissions", "guarded_request_changed", "guarded_request_untracked", "outside_workspace", "org_full_access_disabled", "parallel_limit", "parallel_nested", "misuse_blocked", "misuse_approval_required", "misuse_locked", "safety_blocked", "no_engine"].includes(candidateCode)
       ? candidateCode : undefined;
-    return json(res, status, { error: e instanceof Error ? e.message : String(e), ...(code ? { code } : {}) });
+    // 2026-11-02: a misuse block names its one reason (a category id)
+    const candidateReason = (e as { reason?: unknown })?.reason;
+    const reason = code === "misuse_blocked" && typeof candidateReason === "string" && /^[a-z_]{1,40}$/.test(candidateReason) ? candidateReason : undefined;
+    return json(res, status, { error: e instanceof Error ? e.message : String(e), ...(code ? { code } : {}), ...(reason ? { reason } : {}) });
   } finally {
     state.releaseWorkspaceRequest?.();
   }

@@ -19,6 +19,8 @@ import {
 } from "./misuse-guardrails.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
 import { callUserSandboxTool, type ToolExec } from "./user-sandbox-tools.ts";
+import { serverPathAnswer, serverPathInCommand } from "./sandbox-server-path.ts";
+import { misuseRefusalText } from "../shared/misuse-guardrails.ts";
 import {
   DEFAULT_EGRESS_DENY,
   DEFAULT_SANDBOX_LIMITS,
@@ -80,7 +82,7 @@ describe("mode", () => {
     setMisuseAlert((alert) => alerts.push(alert.message));
     const refusal = misuseRefusal("sudo -i", context, 1_000);
     expect(refusal).toMatchObject({ status: 403, code: "misuse_blocked" });
-    expect(refusal?.message).toContain("élévation de privilèges");
+    expect(refusal?.message).toContain("droits d'administrateur");
     expect(alerts).toEqual([refusal?.message]);
   });
 
@@ -167,6 +169,44 @@ describe("paths, frames and the command clock", () => {
     const frame = { message: { method: "tools/call", params: { name: "flow_action", arguments: { command: "printenv" } } } };
     expect(misuseToolFrameText(frame)).toContain("printenv");
     expect(misuseToolFrameText({ message: { method: "tools/list" } })).toBeNull();
+  });
+
+  // 2026-11-02 (GOX, Melonie): list_files on the bot's own server workspace
+  // answers where its folder is, before the guard and the safety review
+  it("answers a path of the bot's own server folder with one line, and runs nothing", async () => {
+    const calls: unknown[] = [];
+    const guarded: string[] = [];
+    const root = "/data/.openmausbot/workspaces/e456bd60-1017-4b4b-b790-724d406c35a6";
+    const where = { roots: [root, "/data/.openmausbot/task-workspaces/e456bd60-1017-4b4b-b790-724d406c35a6"], folder: "/workspace/bots/melonie" };
+    const exec: ToolExec = {
+      exec: async (input) => {
+        calls.push(input);
+        return { exitCode: 0, stdout: "", stderr: "", truncated: false, timedOut: false };
+      },
+      overQuota: async () => false,
+      serverPathAnswer: (value, kind) => (kind === "path" ? serverPathAnswer(value, where) : serverPathInCommand(value, where)),
+      pathRefusal: (path) => { guarded.push(path); return misuseRefusalText("platform_exfiltration", "block"); },
+      commandRefusal: (command) => { guarded.push(command); return null; },
+      beforeCall: () => { guarded.push("review"); return "held"; },
+    };
+    const line = "That path is on the Sagax server, not in your environment. Your folder is /workspace/bots/melonie/.";
+    for (const [tool, args] of [
+      ["list_files", { path: root }],
+      ["read_file", { path: `${root}/MEMORY.md` }],
+      ["write_file", { path: `${root}/notes.md`, content: "x" }],
+      ["run_command", { command: `ls -la ${root}` }],
+    ] as const) {
+      const result = await callUserSandboxTool(tool, args as Record<string, unknown>, exec, where.folder);
+      expect(result).toEqual({ content: [{ type: "text", text: line }], isError: true });
+    }
+    expect(calls).toEqual([]);
+    expect(guarded).toEqual([]);
+    // another bot's folder, a climb out and a platform file still reach the guard
+    for (const path of ["/data/.openmausbot/workspaces/b2", `${root}/../b2`, "/data/.openmausbot/bots.json"]) {
+      const result = await callUserSandboxTool("list_files", { path }, exec, where.folder);
+      expect(result.content[0]).toMatchObject({ text: misuseRefusalText("platform_exfiltration", "block") });
+    }
+    expect(guarded).toEqual(["/data/.openmausbot/workspaces/b2", `${root}/../b2`, "/data/.openmausbot/bots.json"]);
   });
 
   it("stops a command at ten minutes", async () => {

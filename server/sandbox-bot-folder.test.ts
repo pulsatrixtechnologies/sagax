@@ -69,6 +69,18 @@ describe("inBotFolder", () => {
     expect(note).toContain("/workspace/bots/helper");
     expect(note).toContain("/workspace/shared");
     expect(note).toContain("Never write loose files at the /workspace root");
+    // the tool description keeps no server path
+    expect(note).not.toContain("Sagax server");
+  });
+
+  // 2026-11-02 (GOX, Melonie): the engine's working folder on the server
+  // (/data/.openmausbot/workspaces/<bot id>) was taken for the bot's folder
+  it("says plainly in the workplace note that the engine's server folder is not the environment", () => {
+    const note = botFolderNote("/workspace/bots/melonie", "/data/.openmausbot");
+    expect(note).toContain("your own folder is /workspace/bots/melonie");
+    expect(note).toContain("anything under /data/.openmausbot are on that server, not in your server environment");
+    expect(note).toContain("Never give such a path to your server environment tools (run_command, read_file, write_file, list_files)");
+    expect(note).toContain("your files are in /workspace/bots/melonie.");
   });
 });
 

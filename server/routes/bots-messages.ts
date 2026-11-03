@@ -373,7 +373,7 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
       const messageSpeaker = speakerFor(auth);
       const postedActor = misuseActor(messageSpeaker.origin === "person" ? messageSpeaker.principalId : undefined, messageSpeaker.origin);
       const messageMisuse = misuseRefusal(text, { ...postedActor, surface: "message", botId: bot.id, threadId });
-      if (messageMisuse) return json(res, messageMisuse.status, { error: messageMisuse.message, code: messageMisuse.code });
+      if (messageMisuse) return json(res, messageMisuse.status, { error: messageMisuse.message, code: messageMisuse.code, ...(messageMisuse.reason ? { reason: messageMisuse.reason } : {}) });
       const postedSafety = safetyHttpRefusal({ text, surface: "message", triage: postedActor.triage, ...(postedActor.principalId ? { principalId: postedActor.principalId } : {}), botId: bot.id, threadId });
       if (postedSafety) return json(res, postedSafety.status, { error: postedSafety.message, code: postedSafety.code });
       // "stop", "arrête", "attends", "wait" alone while this thread works:

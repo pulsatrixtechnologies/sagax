@@ -1,16 +1,17 @@
-// Tools > Memory: the explorer on the LEFT of the Notes view, the Perspicax
+// Tools > Memory: the explorer of the Notes view, the Perspicax
 // console's (notes-explorer.tsx, 2026-11-02): "Open a note" (Cmd+O, the
 // quick switcher), LISTS (All notes, Teams, Pinned, Recent, Review and its
 // dot), TIERS (each collapsible, its swatch and count, its folders hanging
 // from a hairline; a bot is a folder of My memory with its Topics and Logs),
 // then TIDY UP (Archived, Trash). A row shows its actions (new note, new
 // folder, rename, delete) on hover or focus, only the ones its source
-// really supports.
+// really supports. Since 2026-11-03 (JC) it is the page's RIGHT rail, the
+// same piece as Automations' calendar rail (RightRail.tsx): 280px, border on
+// its left, the "›" fold button at its top-left, open from 1280px.
 import { useState, type ReactNode } from "react";
 import {
   Bot,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   Folder,
   FolderPlus,
@@ -21,6 +22,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { RightRailPanel } from "@/components/RightRail";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { SECTION_LABEL, Swatch } from "./memory-ui";
@@ -229,7 +231,7 @@ export function MemorySidebar({ shortcut, onOpenSwitcher, switcher, lists, tiers
   onRenameDone: () => void;
   loading: ReactNode;
   footer: ReactNode;
-  /** Folds the explorer away (narrow windows). */
+  /** Folds the rail into its strip, as Automations' calendar rail does. */
   onCollapse?: () => void;
 }) {
   // A tier is unfolded unless the person folded it; a bot folder opens on demand.
@@ -244,8 +246,8 @@ export function MemorySidebar({ shortcut, onOpenSwitcher, switcher, lists, tiers
   const toggleTier = flip(setFolded);
   const toggleFolder = flip(setOpened);
   return (
-    <aside aria-label={t("memoryManager.sidebarLabel")} className="flex h-full w-[236px] shrink-0 flex-col overflow-hidden border-r border-hairline/50 bg-panel" data-memory-sources="">
-      <div className="relative flex shrink-0 items-center gap-1 px-2 pt-2.5">
+    <RightRailPanel label={t("memoryManager.sidebarLabel")} onCollapse={onCollapse} hideLabel={t("memoryManager.explorerHide")} data-memory-sources="">
+      <div className={cn("relative flex shrink-0 items-center gap-1 px-2", onCollapse ? "pt-1" : "pt-2.5")}>
         <button
           type="button"
           onClick={onOpenSwitcher}
@@ -258,11 +260,6 @@ export function MemorySidebar({ shortcut, onOpenSwitcher, switcher, lists, tiers
           <span className="min-w-0 flex-1 truncate">{t("memoryManager.openNote")}</span>
           <kbd className="shrink-0 rounded border border-hairline/60 px-1 font-sans text-[11px] leading-4 text-ink-tertiary" aria-hidden="true">{shortcut}</kbd>
         </button>
-        {onCollapse && (
-          <button type="button" onClick={onCollapse} aria-label={t("memoryManager.explorerHide")} title={t("memoryManager.explorerHide")} className="flex size-[34px] shrink-0 items-center justify-center rounded-lg text-ink-secondary hover:bg-hover hover:text-ink" data-memory-explorer-hide="">
-            <ChevronLeft size={16} aria-hidden="true" />
-          </button>
-        )}
         {switcher}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-6">
@@ -330,6 +327,6 @@ export function MemorySidebar({ shortcut, onOpenSwitcher, switcher, lists, tiers
         )}
         {footer}
       </div>
-    </aside>
+    </RightRailPanel>
   );
 }

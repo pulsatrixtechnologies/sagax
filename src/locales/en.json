@@ -2338,6 +2338,8 @@
   "memoryManager.sidebarLabel": "Memory sources",
   "memoryManager.explorerHide": "Hide memory sources",
   "memoryManager.explorerShow": "Show memory sources",
+  "memoryManager.scope": "Scope: {scope}",
+  "memoryManager.scopeClear": "Clear the scope",
   "memoryManager.viewsLabel": "Memory views",
   "memoryManager.nav.all": "All notes",
   "memoryManager.nav.teams": "Teams",

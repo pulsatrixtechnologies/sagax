@@ -2,11 +2,13 @@
 // (note-preview.tsx, 2026-11-02): "← Memory", the title, "tier / folder ·
 // changed <when> by <who>", the tier and tag chips, the body in a card (a
 // JSON body or block folds as a tree), then PROPERTIES, LINKS and
-// BACKLINKS, and the bar at the bottom right: More (pin, move, delete),
-// Neighbourhood (the note on the map) and Edit. Edit keeps the page: the
+// BACKLINKS. The note's bar heads it, inside the content (JC 2026-11-03: the
+// note takes the page's place, never over the right rail): "‹ Memory" on the
+// left, More (pin, move, delete), Neighbourhood (the note on the map) and
+// Edit on the right. Edit keeps the page: the
 // title, the tags and the Markdown editor in place of the body.
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowUpRight, MoreHorizontal, Network, Pencil, Pin, PinOff, FolderInput, Trash2 } from "lucide-react";
+import { ArrowUpRight, ChevronLeft, MoreHorizontal, Network, Pencil, Pin, PinOff, FolderInput, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -82,8 +84,8 @@ export function MemoryNoteView({
   onOpenLink: (key: string) => void;
   /** The swatch of the tier a linked note lives in. */
   linkColor: (key: string) => string | undefined;
-  /** "panel": the console's preview (a click on a row): no back link, and
-   * Edit opens the note's page in edit mode (`onEditPage`). */
+  /** "panel": the console's preview (a click on a row): Edit opens the
+   * note's page in edit mode (`onEditPage`). Both have "‹ Memory". */
   variant?: "page" | "panel";
   onEditPage?: () => void;
 }) {
@@ -160,12 +162,56 @@ export function MemoryNoteView({
   if (entry.row.path) props.push([t("memoryManager.note.propFile"), <code className="text-[12px]">{entry.row.path}</code>]);
 
   return (
-    <article className={cn("relative mx-auto flex w-full max-w-[920px] flex-col gap-4", panel ? "pb-4" : "pb-20")} {...(panel ? { "data-memory-preview": "" } : { "data-memory-note": "" })} data-memory-note-key={entry.key}>
-      {!panel && (
-        <button type="button" className="inline-flex items-center gap-1.5 self-start rounded-md text-[13px] text-ink-secondary hover:text-ink" onClick={onBack} data-memory-note-back="">
-          <ArrowLeft size={14} aria-hidden="true" />{t("memoryManager.title")}
+    <article className={"relative flex w-full min-w-0 flex-col gap-4 pb-6"} {...(panel ? { "data-memory-preview": "" } : { "data-memory-note": "" })} data-memory-note-key={entry.key}>
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2" data-memory-note-bar="">
+        <button type="button" className="inline-flex items-center gap-1 rounded-md text-[13px] text-ink-secondary hover:text-ink" onClick={onBack} data-memory-note-back="">
+          <ChevronLeft size={15} aria-hidden="true" />{t("memoryManager.title")}
         </button>
-      )}
+        <div className="relative flex shrink-0 items-center gap-1.5" data-memory-note-toolbar="">
+          {editing ? (
+            <>
+              <button type="button" className={GHOST_BUTTON} onClick={() => { setEditing(false); setDraft(detail.body); setDraftTitle(detail.title); setDraftTags(detail.tags.join(", ")); }}>{t("common.cancel")}</button>
+              <button type="button" className={PRIMARY_BUTTON} disabled={busy} onClick={() => void save()} data-memory-note-save="">{t("common.save")}</button>
+            </>
+          ) : (
+            <>
+              <div ref={moreRef} className="relative">
+                <button type="button" className={GHOST_BUTTON} aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)} data-memory-note-more="">
+                  <MoreHorizontal size={16} aria-hidden="true" />{t("memoryManager.note.more")}
+                </button>
+                {moreOpen && (
+                  <div role="menu" className="absolute right-0 top-full z-30 mt-2 flex w-[220px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 popover-surface">
+                    <button type="button" role="menuitem" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-ink hover:bg-hover" onClick={() => { setMoreOpen(false); onPin(); }} data-memory-note-pin="">
+                      {pinned ? <PinOff size={14} aria-hidden="true" /> : <Pin size={14} aria-hidden="true" />}{pinned ? t("memoryManager.unpin") : t("memoryManager.pin")}
+                    </button>
+                    {onMove && (
+                      <button type="button" role="menuitem" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-ink hover:bg-hover" onClick={() => { setMoreOpen(false); onMove(); }} data-memory-note-move="">
+                        <FolderInput size={14} aria-hidden="true" />{t("memoryManager.move")}
+                      </button>
+                    )}
+                    {onDelete && (
+                      <>
+                        <div role="separator" className="mx-1 my-1 h-px bg-hairline/50" />
+                        <button type="button" role="menuitem" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-danger hover:bg-hover" onClick={() => { setMoreOpen(false); onDelete(); }} data-memory-note-delete="">
+                          <Trash2 size={14} aria-hidden="true" />{t("memoryManager.delete")}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button type="button" className={OUTLINE_BUTTON} onClick={onNeighbourhood} data-memory-note-neighbourhood="">
+                <Network size={14} aria-hidden="true" />{t("memoryManager.note.neighbourhood")}
+              </button>
+              {detail.mayEdit && (
+                <button type="button" className={PRIMARY_BUTTON} onClick={() => (panel && onEditPage ? onEditPage() : setEditing(true))} data-memory-note-edit="">
+                  <Pencil size={14} aria-hidden="true" />{t("memoryManager.edit")}
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
       <header className="min-w-0">
         {editing ? (
           <input value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} className={cn(FIELD, "text-[20px] font-semibold")} aria-label={t("memoryManager.titleField")} data-memory-rename="" />
@@ -210,52 +256,6 @@ export function MemoryNoteView({
         {backlinks.length ? linkList(backlinks, "data-memory-note-backlinks") : <p className="text-[13px] text-ink-secondary">{t("memoryManager.note.noBacklinks")}</p>}
       </section>
 
-      <div className={cn("pointer-events-none sticky z-20 flex justify-end", panel ? "bottom-0" : "bottom-4")}>
-        <div className="pointer-events-auto relative flex items-center gap-1.5 rounded-full border border-hairline/60 bg-elevated p-1 shadow-sm" data-memory-note-toolbar="">
-          {editing ? (
-            <>
-              <button type="button" className={GHOST_BUTTON} onClick={() => { setEditing(false); setDraft(detail.body); setDraftTitle(detail.title); setDraftTags(detail.tags.join(", ")); }}>{t("common.cancel")}</button>
-              <button type="button" className={PRIMARY_BUTTON} disabled={busy} onClick={() => void save()} data-memory-note-save="">{t("common.save")}</button>
-            </>
-          ) : (
-            <>
-              <div ref={moreRef} className="relative">
-                <button type="button" className={GHOST_BUTTON} aria-expanded={moreOpen} onClick={() => setMoreOpen((open) => !open)} data-memory-note-more="">
-                  <MoreHorizontal size={16} aria-hidden="true" />{t("memoryManager.note.more")}
-                </button>
-                {moreOpen && (
-                  <div role="menu" className="absolute bottom-full right-0 mb-2 flex w-[220px] flex-col gap-0.5 rounded-xl border-[0.5px] border-border bg-elevated p-1.5 popover-surface">
-                    <button type="button" role="menuitem" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-ink hover:bg-hover" onClick={() => { setMoreOpen(false); onPin(); }} data-memory-note-pin="">
-                      {pinned ? <PinOff size={14} aria-hidden="true" /> : <Pin size={14} aria-hidden="true" />}{pinned ? t("memoryManager.unpin") : t("memoryManager.pin")}
-                    </button>
-                    {onMove && (
-                      <button type="button" role="menuitem" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-ink hover:bg-hover" onClick={() => { setMoreOpen(false); onMove(); }} data-memory-note-move="">
-                        <FolderInput size={14} aria-hidden="true" />{t("memoryManager.move")}
-                      </button>
-                    )}
-                    {onDelete && (
-                      <>
-                        <div role="separator" className="mx-1 my-1 h-px bg-hairline/50" />
-                        <button type="button" role="menuitem" className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-danger hover:bg-hover" onClick={() => { setMoreOpen(false); onDelete(); }} data-memory-note-delete="">
-                          <Trash2 size={14} aria-hidden="true" />{t("memoryManager.delete")}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-              <button type="button" className={OUTLINE_BUTTON} onClick={onNeighbourhood} data-memory-note-neighbourhood="">
-                <Network size={14} aria-hidden="true" />{t("memoryManager.note.neighbourhood")}
-              </button>
-              {detail.mayEdit && (
-                <button type="button" className={PRIMARY_BUTTON} onClick={() => (panel && onEditPage ? onEditPage() : setEditing(true))} data-memory-note-edit="">
-                  <Pencil size={14} aria-hidden="true" />{t("memoryManager.edit")}
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
     </article>
   );
 }

@@ -57,6 +57,7 @@ import { DetailPanel } from "@/components/DetailPanel";
 import { useBotEditor } from "./bot-settings/BotEditorContext";
 import { pathForFile } from "@/components/ComposerAttachments";
 import { CalendarSidebar } from "@/components/routines/CalendarSidebar";
+import { RightRailStrip, useRightRailOpen } from "@/components/RightRail";
 import { RoutineList } from "@/components/routines/RoutineList";
 import { RoutineGroupedList } from "@/components/routines/RoutineGroupedList";
 import { routineGroupBy, saveRoutineGroupBy, type RoutineGroupBy } from "@/lib/routine-grouping";
@@ -2684,7 +2685,7 @@ export const RoutinesPage = memo(function RoutinesPage({ onBack: _onBack, onOpen
   const [editor, setEditor] = useState<EventSeed | null>(null);
   const [selected, setSelected] = useState<CalendarEventItem | null>(null);
   const [pausedOpen, setPausedOpen] = useState(false);
-  const [botsOpen, setBotsOpen] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(min-width: 1280px)").matches);
+  const [botsOpen, setBotsOpen] = useRightRailOpen();
   const [webhookCreateRequest, setWebhookCreateRequest] = useState(0);
   const [error, setError] = useState("");
   const visibleBots = state.bots.filter((bot) => !bot.hidden);
@@ -3160,14 +3161,9 @@ export const RoutinesPage = memo(function RoutinesPage({ onBack: _onBack, onOpen
         <div className="flex min-h-0 flex-1">
           <CalendarGrid anchor={rangeStart} days={viewDays} items={items} bots={state.bots} groups={state.groups} onOpen={openGridItem} onCreate={openCreate} onMove={moveGridItem} onResize={resizeGridItem} markers={markers} onDropOnReset={dropGridReset} pending={pendingSlot} />
           {botsOpen ? (
-            <div className="hidden shrink-0 lg:block">
-              <CalendarSidebar anchor={anchor} onSelectDate={selectSidebarDate} routines={upcoming} runs={inFlightRuns} bots={state.bots} viewerPrincipalId={state.config?.viewer?.principalId ?? null} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && upcoming.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpenRoutine={openSidebarRoutine} filteredOut={filteredRoutines.length > 0} onCollapse={collapseSidebar} />
-            </div>
+            <CalendarSidebar anchor={anchor} onSelectDate={selectSidebarDate} routines={upcoming} runs={inFlightRuns} bots={state.bots} viewerPrincipalId={state.config?.viewer?.principalId ?? null} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && upcoming.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpenRoutine={openSidebarRoutine} filteredOut={filteredRoutines.length > 0} onCollapse={collapseSidebar} hideNarrow />
           ) : (
-            <button type="button" onClick={() => setBotsOpen(true)} aria-label={t("routines.upcoming.show")} title={t("routines.upcoming.title")} className="hidden w-10 shrink-0 flex-col items-center gap-2 border-l border-hairline/40 bg-panel px-1 py-4 text-[11px] text-ink-secondary hover:bg-raised hover:text-ink lg:flex">
-              <CalendarClock size={16} />
-              <span className="[writing-mode:vertical-rl]">{t("routines.upcoming.title")}</span>
-            </button>
+            <RightRailStrip onOpen={() => setBotsOpen(true)} showLabel={t("routines.upcoming.show")} title={t("routines.upcoming.title")} icon={<CalendarClock size={16} />} text={t("routines.upcoming.title")} hideNarrow />
           )}
         </div>
       )}

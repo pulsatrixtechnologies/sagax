@@ -1857,6 +1857,8 @@
   "memoryManager.sidebarLabel": "Sources de mémoire",
   "memoryManager.explorerHide": "Masquer les sources de mémoire",
   "memoryManager.explorerShow": "Afficher les sources de mémoire",
+  "memoryManager.scope": "Portée : {scope}",
+  "memoryManager.scopeClear": "Retirer la portée",
   "memoryManager.viewsLabel": "Vues de la mémoire",
   "memoryManager.nav.all": "Toutes les notes",
   "memoryManager.nav.teams": "Équipes",

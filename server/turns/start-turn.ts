@@ -49,7 +49,9 @@ export function createStartTurn(host: StartTurnHost) {
     void (async () => {
     state.warmOk = false;
     try {
-      await setupStartTurn(state);
+      // Setup can finish maintenance or an aborted warm without dispatch.
+      const setup = await setupStartTurn(state);
+      if (setup?.kind === "return") return;
 
       await computerWorkspaceStartTurn(state);
       await computerHelpersStartTurn(state);

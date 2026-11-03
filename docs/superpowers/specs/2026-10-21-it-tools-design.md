@@ -69,12 +69,12 @@ Tool declaration and gating:
   on every turn by `agents-catalog-wire.test.ts` (`BUDGET_BASELINE`). Ten new tools there would cost every
   turn of every bot.
 - **Built-in harness MCP servers.** `server/harness-mcp-proxy.ts` (`HarnessMcpKind = browser | computer | data`)
-  and `server/harness-mcp-http.ts` (path `/api/internal/(browser|computer|data)/mcp-http`). Supporting pieces:
+  and `server/mcp/harness-mcp-http.ts` (path `/api/internal/(browser|computer|data)/mcp-http`). Supporting pieces:
   - each driver declares the capability `dataMcp` (`server/contracts.ts`) and mounts the server in
     `server/drivers/claude.ts`, `codex.ts` and `acp/core.ts`;
   - the capability token is minted in `server/index.ts` (`mintInternalCapability`, `InternalCapability.kind`,
     `dataIntegration`);
-  - reserved server names live in `server/mcp-registry.ts` (`RESERVED_MCP_NAMES`).
+  - reserved server names live in `server/mcp/mcp-registry.ts` (`RESERVED_MCP_NAMES`).
 - **Per-bot tool scope.** `shared/tool-scope.ts` (`native:` / `mcp:<server>:<tool>` selectors, e.g.
   `mcp:agents:show_widget`).
 - **Read-only annotations.** `server/agent-tool-policy.ts` (`READ_ONLY_AGENT_TOOL_NAMES`, `openWorldHint: false`).
@@ -226,7 +226,7 @@ Chosen (decision 3) over adding tools to the agents catalog:
   when the feature is on;
 - add the driver capability `netToolsMcp` in `server/contracts.ts`, and mount it in `claude.ts`, `codex.ts` and
   `acp/core.ts`, exactly as `data` is mounted (`harnessHttp(..., "nettools")`, `mountSelected`);
-- add `"nettools"` to `RESERVED_MCP_NAMES` (`server/mcp-registry.ts`);
+- add `"nettools"` to `RESERVED_MCP_NAMES` (`server/mcp/mcp-registry.ts`);
 - per-bot off switch: tool scope `mcp:nettools:*` or one tool, for example deny `mcp:nettools:port_check`
   (`shared/tool-scope.ts`);
 - annotations on every tool: `{ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }`.
@@ -672,11 +672,11 @@ New:
 - this spec
 
 Edited:
-- `server/harness-mcp-proxy.ts`, `server/harness-mcp-http.ts`
+- `server/harness-mcp-proxy.ts`, `server/mcp/harness-mcp-http.ts`
 - `server/contracts.ts`
 - `server/drivers/claude.ts`, `codex.ts`, `acp/core.ts`
 - `server/index.ts` (capability kind, integration mount only; no route `if`)
-- `server/mcp-registry.ts`, `server/sagax-internal-tools.ts`, `server/confidential-threads.ts`
+- `server/mcp/mcp-registry.ts`, `server/sagax-internal-tools.ts`, `server/confidential-threads.ts`
 - `server/config.ts`, `src/lib/feature-flags.ts`
 - `server/request-auth.ts`, `server/tool-policy.generated.ts`
 - `shared/permissions.ts`, `shared/requested-views.ts`, `shared/harness-commands.ts`

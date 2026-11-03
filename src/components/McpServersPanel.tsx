@@ -65,7 +65,7 @@ export type McpServerListing = (StdioMcpListing | RemoteMcpListing) & {
 };
 
 /** A saved server whose name Sagax now reserves (`mcp`, `__`, `sagax-`...):
- * never mounted until it is renamed or removed (server/mcp-registry.ts
+ * never mounted until it is renamed or removed (server/mcp/mcp-registry.ts
  * reservedMcpServers). */
 export interface ReservedMcpListing {
   name: string;
@@ -94,7 +94,7 @@ export interface ProbeResult {
   tools?: Array<{ name: string; description?: string }>;
   /** how many tools the server advertised, when `tools` shows only the first */
   total?: number;
-  /** tools Grok registers under another name or cannot register (server/mcp-probe.ts) */
+  /** tools Grok registers under another name or cannot register (server/mcp/mcp-probe.ts) */
   engineNames?: { grok: { renamed: Array<{ upstream: string; registered: string; reason: string }>; unregistrable: Array<{ upstream: string; reason: string }> } };
   error?: string;
 }
@@ -591,7 +591,7 @@ export function useMcpServers() {
   };
 
   // Whop's card (an app tile): add the official server switched off, sign in
-  // with this server's own MCP sign-in (server/mcp-oauth.ts), list its tools
+  // with this server's own MCP sign-in (server/mcp/mcp-oauth.ts), list its tools
   // once, and only then switch it on.
   afterSignIn.current = async (name: string) => {
     if (!enableAfterSignIn.current.delete(name)) return;

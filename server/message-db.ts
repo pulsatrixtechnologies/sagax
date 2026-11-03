@@ -18,7 +18,7 @@ import { DATA_DIR } from "./config.ts";
 import { ContentSealError, fieldAad, messageAad, openField, openText, seal, sealField, sealedFieldKeyId } from "./content-crypto.ts";
 import { provideContentKeys, type ExportedContentKey } from "./content-export.ts";
 import { ContentKeyring, ContentKeyUnavailable, ensureContentKeySchema, localKekProvider, WORKSPACE_OWNER, type KekProvider, type LiveKey } from "./content-keys.ts";
-import { resolveVaultKey } from "./mcp-oauth.ts";
+import { resolveVaultKey } from "./mcp/mcp-oauth.ts";
 import { blindSnippet, indexColumns, indexSourcesOf, recallHolds, recallMatch, recallTermsFor, skeletonOf, type RecallTerm } from "./message-sealing.ts";
 import { peerProvenanceAuthor, WEBHOOK_AUTHOR, type WorkOrigin } from "./peer-provenance.ts";
 import type { ResolvedSender, SteerQueueReason, WireMessage as Message } from "../shared/wire.ts";

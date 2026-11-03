@@ -27,7 +27,7 @@ import { grokCatalogFor, grokCatalogSection, noteGrokAccountReach, rememberGrokC
 import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors.ts";
 import { turnReachFor } from "../../turn-reach.ts";
 import { allowsTool, canUseMcpServer, narrowsNativeTools, parseToolScope } from "../../../shared/tool-scope.ts";
-import { grokAliasBase, grokToolNameProblem } from "../../mcp-tool-names.ts";
+import { grokAliasBase, grokToolNameProblem } from "../../mcp/mcp-tool-names.ts";
 
 /** Fallback only, for when the engine cannot be asked (not installed, or no
  * answer). Grok 1.0.46 and 1.0.50 signed in to grok.com offer exactly these

@@ -22,7 +22,7 @@ import { DEFAULT_WINDOW_MINUTES, MAX_WINDOW_MINUTES } from "./cache-keepwarm.ts"
 import { PROVIDER_ICON_PRESETS, providerIconError } from "../shared/provider-icon.ts";
 import type { McpServerSpec } from "./contracts.ts";
 import type { MailSettings } from "./mail/mail-config.ts";
-import { isRemoteMcpServer, parseStoredMcpServer, reservedMcpServerLog, reservedMcpServerName } from "./mcp-registry.ts";
+import { isRemoteMcpServer, parseStoredMcpServer, reservedMcpServerLog, reservedMcpServerName } from "./mcp/mcp-registry.ts";
 import { parseJson, schemaIssue, type JsonObject, type JsonValue } from "./schema.ts";
 import { isPersonalBrowserProfileId } from "../shared/person-settings.ts";
 import { browserEgressConfigSchema, type BrowserEgressConfig } from "./browser/egress/policy.ts";
@@ -1693,7 +1693,7 @@ export const WORKSPACE_CREDENTIAL_ENV = [
   "SAGAX_JEV_API_KEY",
   "SAGAX_OPENAI_IMAGE_KEY",
   "SAGAX_CUSTOM_IMAGE_KEY",
-  // The key of the encrypted MCP sign-in vault (server/mcp-oauth.ts).
+  // The key of the encrypted MCP sign-in vault (server/mcp/mcp-oauth.ts).
   "SAGAX_MCP_OAUTH_KEY",
   // The client secret that signs in to Azure Key Vault for content
   // encryption (server/content-key-azure.ts).

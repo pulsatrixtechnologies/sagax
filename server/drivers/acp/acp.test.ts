@@ -105,7 +105,7 @@ const CONTROL_PLANE_FIXTURE = {
 };
 
 /** Grok mounts connector MCP servers through the gate (tool names Grok cannot
- * qualify, server/mcp-tool-names.ts); these tests check what is behind it. */
+ * qualify, server/mcp/mcp-tool-names.ts); these tests check what is behind it. */
 type AcpServer = { name: string; command: string; args: string[]; env: Array<{ name: string; value: string }> };
 function ungated<T>(value: T): T {
   const servers = value as unknown as AcpServer[];

@@ -43,7 +43,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
 import type { McpServerSpec } from "./contracts.ts";
-import { parseStoredMcpServer } from "./mcp-registry.ts";
+import { parseStoredMcpServer } from "./mcp/mcp-registry.ts";
 import { readPluginMcpServers } from "./plugin-mcp.ts";
 import { SANDBOX_PLUGINS_DIR } from "./sandbox/sandbox-plugins.ts";
 import { capabilityPluginRecordSchema as pluginRecord, capabilityPluginStateSchema as stateSchema } from "./capability-plugin-state.ts";

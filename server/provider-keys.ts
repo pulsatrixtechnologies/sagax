@@ -5,7 +5,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { writeFileAtomic } from "./atomic.ts";
-import { resolveVaultKey, type VaultKeySource } from "./mcp-oauth.ts";
+import { resolveVaultKey, type VaultKeySource } from "./mcp/mcp-oauth.ts";
 
 export const PROVIDER_KEYS_FILE = "provider-keys.enc";
 const AAD = "sagax provider-keys v1";

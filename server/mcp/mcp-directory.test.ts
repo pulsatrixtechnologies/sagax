@@ -24,7 +24,7 @@ import {
   type CatalogTool,
   type DirectoryResult,
 } from "./mcp-directory.ts";
-import { parameterHeavyCatalog, whopLikeCatalog } from "./testing/whop-like-catalog.ts";
+import { parameterHeavyCatalog, whopLikeCatalog } from "../testing/whop-like-catalog.ts";
 
 const catalog = whopLikeCatalog(300);
 const text = (result: DirectoryResult) => result.content[0].text;

@@ -18,7 +18,7 @@
 
 import { grantStaysInOwnEnvironment } from "../shared/grant-reach.ts";
 import { READ_ONLY_AGENT_TOOL_NAMES } from "./agent-tool-policy.ts";
-import { isOpenApiTool } from "./openapi-tools.ts";
+import { isOpenApiTool } from "./mcp/openapi-tools.ts";
 import { policyFor } from "./tool-policy.ts";
 
 /** Why an agents tool stays inside the member's own scope. */

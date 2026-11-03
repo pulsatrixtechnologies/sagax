@@ -28,7 +28,7 @@ import { WAIT_TOOL_DEFINITIONS, WAIT_TOOL_NAMES } from "./agents-wait-tools.ts";
 import { phoneToolDefinition, phoneToolsFromEnv } from "./agents-phone-tools.ts";
 import { videoToolDefinition } from "./agents-video.ts";
 import { WEB_SEARCH_TOOL_DEFINITION } from "./agents-web-search-tools.ts";
-import { isOpenApiTool, openApiToolDefinition, openApiToolsFromEnv } from "../openapi-tools.ts";
+import { isOpenApiTool, openApiToolDefinition, openApiToolsFromEnv } from "../mcp/openapi-tools.ts";
 import { VAULT_HTTP_TOOL } from "./agents-vault-http-tools.ts";
 import { PHONE_TOOLS, type PhoneToolId } from "../../shared/phone-tools.ts";
 import { CHIEF_PROFILE_TARGET } from "./agents-tools/shared.ts";
@@ -123,7 +123,7 @@ export interface CatalogProfile {
   /** vault_http_request (agents-vault-http-tools.ts): this bot may send an
    * API key of the person here. Absent is off, so the wire goldens stay. */
   vaultHttp?: boolean;
-  /** Operations from the person's own OpenAPI document (server/openapi-tools.ts).
+  /** Operations from the person's own OpenAPI document (server/mcp/openapi-tools.ts).
    * Absent is off, so the wire goldens stay. */
   openapiTools?: ReturnType<typeof openApiToolsFromEnv>;
 }

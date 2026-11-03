@@ -25,7 +25,7 @@
 //     Deliberate raise above the ~97 KB baselines that forced description
 //     cuts in #1655, #1649 and #1689. Still far under 1 MiB.
 import { COMPACT_CORE_AGENT_TOOL_NAMES } from "./agents-catalog.ts";
-import { isOpenApiTool } from "../openapi-tools.ts";
+import { isOpenApiTool } from "../mcp/openapi-tools.ts";
 import { BRIDGE_USE_TOOL } from "../../shared/searched-tool-call.ts";
 
 /** Most tools a chat-completions provider takes in one request. */

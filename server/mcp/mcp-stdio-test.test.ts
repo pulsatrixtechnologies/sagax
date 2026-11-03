@@ -10,10 +10,10 @@ import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { testStdioMcpCommand, testStdioMcpStream, type StdioTestServer } from "./mcp-stdio-test.ts";
-import { opsRoutes, type OpsDeps } from "./org/org-admin-ops.ts";
-import { fakeConsole } from "./testing/console-context.ts";
+import { opsRoutes, type OpsDeps } from "../org/org-admin-ops.ts";
+import { fakeConsole } from "../testing/console-context.ts";
 
-const FAKE = fileURLToPath(new URL("./testing/fake-stdio-mcp.mjs", import.meta.url));
+const FAKE = fileURLToPath(new URL("../testing/fake-stdio-mcp.mjs", import.meta.url));
 const SECRET = "sk-fake-secret-value-123456";
 const dir = mkdtempSync(join(tmpdir(), "sagax-stdio-test-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));

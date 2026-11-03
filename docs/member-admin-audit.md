@@ -64,7 +64,7 @@ ask first (Grok and the other ACP engines, Codex).
 | Same, from their own conversation with a bot someone shared with them | refused (not their bot) | allowed (the shell is theirs; answering someone else's card opens nothing) |
 | A host of the organization's server (the Sagax server, SSH, unRAID) | admin only, not delegable | admin, or `host.commands` given in Perspicax |
 
-## 3. MCP permission catalogue (`server/mcp-permissions.ts`)
+## 3. MCP permission catalogue (`server/mcp/mcp-permissions.ts`)
 
 Mode in production: `shadow` (unset): a denial is audited (`mcp.shadow`), nothing is
 refused. The tiers matter once a server runs `SAGAX_MCP_PERMISSIONS=enforce`.

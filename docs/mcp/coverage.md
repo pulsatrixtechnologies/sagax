@@ -3,7 +3,7 @@
 Inventory of what the Sagax server and the Perspicax gateway can do, against
 the tools the Sagax MCP ("agents" server, `server/drivers/agents-catalog.ts`)
 exposes to a bot or an AI client. The machine-readable form is the registry in
-`server/mcp-permissions.ts`; `server/mcp-permissions.test.ts` fails when a
+`server/mcp/mcp-permissions.ts`; `server/mcp/mcp-permissions.test.ts` fails when a
 catalog tool has no permission.
 
 Totals: capabilities 158, covered 158, gaps 0.

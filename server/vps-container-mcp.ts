@@ -3,7 +3,7 @@
 // user's normal SSH config and agent; this process stores no credentials.
 // The piping, drain-safe exit, and dead-transport watchdog live in
 // mcp-bridge.ts, shared with the Local VM entry point.
-import { runMcpBridge } from "./mcp-bridge.ts";
+import { runMcpBridge } from "./mcp/mcp-bridge.ts";
 import { vpsContainerMcpArgs, vpsDockerArgs } from "./vps-computer.ts";
 import { DATA_DIR } from "./config.ts";
 import { augmentedPath } from "./env-path.ts";

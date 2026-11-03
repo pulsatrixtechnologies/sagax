@@ -1,6 +1,6 @@
 // One rule for the MCP server names Sagax reserves (C-18, lot 1a of the
 // Capabilities migration). Before it, three rules disagreed: the
-// installation's servers (server/mcp-registry.ts), a person's own servers
+// installation's servers (server/mcp/mcp-registry.ts), a person's own servers
 // (server/index.ts PERSONAL_MCP_RESERVED_PREFIX) and the turn's Connectors
 // record (server/turn-connectors.ts). A name one refused is now refused by
 // all three, the strictest rule kept:

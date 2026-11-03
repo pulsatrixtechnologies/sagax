@@ -35,7 +35,7 @@ import {
   readSandboxTailnet,
   type SandboxTailscaleExec,
 } from "./bot-tailscale-sandbox.ts";
-import { resolveVaultKey, type VaultKeySource } from "./mcp-oauth.ts";
+import { resolveVaultKey, type VaultKeySource } from "./mcp/mcp-oauth.ts";
 
 const AAD = Buffer.from("sagax bot-tailscale v1");
 const FILE = "bot-tailscale.enc";

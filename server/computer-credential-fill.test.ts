@@ -12,7 +12,7 @@ import {
   parseComputerFillArguments,
 } from "./computer-credential-fill.ts";
 import { noteFilledSecret, redactFilledSecrets, resetFilledSecrets } from "./vault/filled-secret-guard.ts";
-import type { VaultKeySource } from "./mcp-oauth.ts";
+import type { VaultKeySource } from "./mcp/mcp-oauth.ts";
 
 const KEY: VaultKeySource = { kind: "key", key: Buffer.alloc(32, 7) };
 const FAKE_PASSWORD = "fake-Computer-Pa55-for-tests";

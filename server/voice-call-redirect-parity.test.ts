@@ -15,7 +15,7 @@ import { readUseToolCall } from "../shared/mcp-gateway-call.ts";
 import { isMessageSendTool, isOutboundTool } from "../shared/outbound.ts";
 import { placeArgsFromVoiceCall } from "../shared/outbound-call.ts";
 import type { OutboundCard } from "../shared/wire.ts";
-import { directoryCallTarget } from "./mcp-directory.ts";
+import { directoryCallTarget } from "./mcp/mcp-directory.ts";
 import { destructiveKindOf, ownerDecision } from "./approvals/owner-approval.ts";
 import { outboundWiring } from "./outbound-wiring.ts";
 import type { ExchangeResult } from "./perspicax-link.ts";

@@ -1260,7 +1260,7 @@ async function ensurePhoneSecretIdentity() {
 }
 
 /** One random key per installation for the server's encrypted MCP sign-in
- * vault (server/mcp-oauth.ts), kept in the OS-encrypted credential store. */
+ * vault (server/mcp/mcp-oauth.ts), kept in the OS-encrypted credential store. */
 async function ensureMcpOAuthKey() {
   const current = secureCredentialState?.read() ?? secureCredentials;
   if (typeof current?.mcpOAuthKey === "string" && /^[0-9a-f]{64}$/.test(current.mcpOAuthKey)) return;

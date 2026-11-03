@@ -4,7 +4,7 @@
 // server's vault key, the one mcp-oauth.enc uses), never shared with another
 // person, never listed with a secret (a token or an env value only reads as
 // configured). OAuth sign-ins of their remote servers live in their own
-// mcp-oauth.enc beside it (server/mcp-oauth.ts, one manager per person).
+// mcp-oauth.enc beside it (server/mcp/mcp-oauth.ts, one manager per person).
 //
 // Where a personal server runs: a remote one is reached by the engine like
 // any remote MCP server; a local command runs in the person's server
@@ -20,7 +20,7 @@ import { z } from "zod";
 import { writeFileAtomic } from "./atomic.ts";
 import { capabilityPluginStateSchema, capabilityPluginValuesSchema, type CapabilityPluginState, type CapabilityPluginValues } from "./capability-plugin-state.ts";
 import { isPublicDomainAddress } from "./custom-domain.ts";
-import { isReservedMcpEnvEntry, mcpServerNameError } from "./mcp-registry.ts";
+import { isReservedMcpEnvEntry, mcpServerNameError } from "./mcp/mcp-registry.ts";
 import type { VaultKeySource } from "./vault/vault-key-source.ts";
 
 export const MAX_PERSONAL_MCP_SERVERS = 20;

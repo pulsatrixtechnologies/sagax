@@ -55,7 +55,7 @@ export interface OpsDeps {
   connections(): Promise<ConnectionsView>;
   /** One check; `null` when this kind of line cannot be tested here. An
    * MCP server started by command (stdio) is started, answers the MCP
-   * handshake and lists its tools (server/mcp-stdio-test.ts). */
+   * handshake and lists its tools (server/mcp/mcp-stdio-test.ts). */
   test(kind: TestKind, id: string, principalId: string | null): Promise<TestResult | null>;
   logs(input: { level: LogLevel | null; limit: number; before: number | null }): { lines: LogLine[]; next: number | null };
   problems(from: number): ProblemRow[];

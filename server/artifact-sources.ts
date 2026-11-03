@@ -20,7 +20,7 @@
 // dependency comes from server/index.ts, so the rules are tested here.
 import { PERSPICAX_READ_ONLY_TOOLS } from "./drivers/acp/grok-read-only-tools.ts";
 import type { McpServerSpec, RemoteMcpSpec } from "./contracts.ts";
-import { RemoteMcpClient } from "./mcp-http.ts";
+import { RemoteMcpClient } from "./mcp/mcp-http.ts";
 import { parseToolId } from "../shared/approval-describe.ts";
 import type { Artifact } from "../shared/artifacts.ts";
 import type { ArtifactRun } from "./artifacts.ts";

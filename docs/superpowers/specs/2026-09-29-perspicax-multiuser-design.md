@@ -120,7 +120,7 @@ navigateur ──GET /auth/oidc/start──▶ Pulsa Bot
 - `resource` vaut l'origine publique du serveur Pulsa Bot, pas `/mcp`. Le jeton d'accès de connexion a donc l'audience de Pulsa Bot et **ne vaut rien sur `/mcp`**: `validate_access_token` compare l'audience (`lib.rs:1709`) et le connecteur valide contre `app.config.audience()` (`crates/connector/src/http/bearer.rs:240`). La séparation des jetons de connexion et des jetons MCP est structurelle.
 - Client `pulsa-bot`: client public premier parti, PKCE S256, redirection exacte `https://<origine Pulsa Bot>/auth/oidc/callback`. Pas de sélecteur de profil pour lui (section 7). `iss` (RFC 9207, déjà émis par Perspicax) est vérifié au retour.
 - Vérification de l'`id_token`: `alg` exactement `ES256` (jamais `none`), `kid` connu du JWKS (rechargé une fois sur `kid` inconnu), `iss` exact, `aud` = `pulsa-bot`, `exp`, `iat` avec 60 s de tolérance, `nonce` égal à celui de la tentative.
-- Pas de nouvelle dépendance npm: `node:crypto` importe une clé JWK (`createPublicKey({ key, format: "jwk" })`) et vérifie ES256 (`dsaEncoding: "ieee-p1363"`). Même style que `server/mcp-oauth.ts`, dont on réutilise `pkcePair`, `authorizationServerMetadataUrls`, `readBounded` et `safeEndpoint`.
+- Pas de nouvelle dépendance npm: `node:crypto` importe une clé JWK (`createPublicKey({ key, format: "jwk" })`) et vérifie ES256 (`dsaEncoding: "ieee-p1363"`). Même style que `server/mcp/mcp-oauth.ts`, dont on réutilise `pkcePair`, `authorizationServerMetadataUrls`, `readBounded` et `safeEndpoint`.
 
 ### Par client
 
@@ -232,7 +232,7 @@ Tranche: la tranche 3 livre le modèle (section = canal, migration, clic droit, 
 
 ### Recommandation: échange de jeton RFC 8693, pas un second OAuth par personne
 
-Le client OAuth MCP existant (`server/mcp-oauth.ts`) ferait refaire à chaque personne une connexion complète par profil: la page d'autorisation de Perspicax ne garde aucune session de navigateur (aucun cookie posé par `routes.rs` ni `page.rs`), donc chaque autorisation redemande mot de passe et TOTP. De plus son coffre est indexé par nom de serveur, pas par personne (`McpOAuthVault.get(name)`, `withAuthHeaders`, `mcp-oauth.ts:784`): sur un serveur partagé, la connexion d'une personne servirait à toutes.
+Le client OAuth MCP existant (`server/mcp/mcp-oauth.ts`) ferait refaire à chaque personne une connexion complète par profil: la page d'autorisation de Perspicax ne garde aucune session de navigateur (aucun cookie posé par `routes.rs` ni `page.rs`), donc chaque autorisation redemande mot de passe et TOTP. De plus son coffre est indexé par nom de serveur, pas par personne (`McpOAuthVault.get(name)`, `withAuthHeaders`, `mcp-oauth.ts:784`): sur un serveur partagé, la connexion d'une personne servirait à toutes.
 
 **Recommandation: le serveur Pulsa Bot échange le jeton de la personne contre un jeton MCP court, sur `/oauth/token`, en RFC 8693.**
 

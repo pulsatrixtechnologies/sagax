@@ -7,12 +7,12 @@ import type { SendTurnInput } from "../contracts.ts";
 import { augmentedPath } from "../env-path.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
 import { chatImage, type ChatImagePart } from "./chat-images.ts";
-import { CALL_TOOL, bm25Ranker, directoryCallTarget, inputSignature, isDirectoryTool, oneLine, type CatalogTool } from "../mcp-directory.ts";
-import { mcpStdioServer } from "../mcp-gate-config.ts";
-import { REMOTE_MCP_STARTUP_MS, remoteMcpSpec } from "../mcp-http.ts";
-import { compileToolSchema } from "../mcp-schema-validator.ts";
+import { CALL_TOOL, bm25Ranker, directoryCallTarget, inputSignature, isDirectoryTool, oneLine, type CatalogTool } from "../mcp/mcp-directory.ts";
+import { mcpStdioServer } from "../mcp/mcp-gate-config.ts";
+import { REMOTE_MCP_STARTUP_MS, remoteMcpSpec } from "../mcp/mcp-http.ts";
+import { compileToolSchema } from "../mcp/mcp-schema-validator.ts";
 import { allowsTool, canUseMcpServer, parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
-import { openApiWriteToolNames } from "../openapi-tools.ts";
+import { openApiWriteToolNames } from "../mcp/openapi-tools.ts";
 
 export interface ChatToolDefinition {
   type: "function";

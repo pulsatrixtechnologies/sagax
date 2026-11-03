@@ -41,7 +41,7 @@ comment tout fonctionne et comment en ajouter une.
 définition d'outil, appelable par un script, mais elle n'est plus branchée au
 catalogue. Pour remettre l'outil dans les bots, recréer l'entrée dans
 `server/drivers/agents-catalog.ts`, la ligne `shapes:generate` de
-`server/mcp-permissions.ts`, la branche d'appel dans `agents-call.ts` (elle
+`server/mcp/mcp-permissions.ts`, la branche d'appel dans `agents-call.ts` (elle
 appelait `runGenerateShapeAvatarAsync`), puis regénérer la politique d'outils
 et les goldens (voir plus bas).
 

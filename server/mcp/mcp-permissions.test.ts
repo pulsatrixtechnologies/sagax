@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { availableTools } from "./drivers/agents-catalog.ts";
+import { availableTools } from "../drivers/agents-catalog.ts";
 import {
   MCP_PERMISSIONS,
   MCP_ROLES,
@@ -312,7 +312,7 @@ describe("guardToolCall", () => {
 describe("coverage doc", () => {
   it("states the registry's totals", async () => {
     const { readFileSync } = await import("node:fs");
-    const doc = readFileSync(new URL("../docs/mcp/coverage.md", import.meta.url), "utf8");
+    const doc = readFileSync(new URL("../../docs/mcp/coverage.md", import.meta.url), "utf8");
     const covered = MCP_PERMISSIONS.filter((x) => x.tool).length;
     const gaps = MCP_PERMISSIONS.length - covered;
     expect(doc).toContain(`Totals: capabilities ${MCP_PERMISSIONS.length}, covered ${covered}, gaps ${gaps}.`);

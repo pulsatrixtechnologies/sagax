@@ -1,7 +1,7 @@
 // A person's own voice keys on an organization server (#1098, 2026-10-28,
 // shared/person-voice-keys.ts). One file per person,
 // `principals/<id>/voice-keys.enc`, sealed with the vault key
-// (AES-256-GCM, AAD `sagax voice-keys v1`, server/mcp-oauth.ts
+// (AES-256-GCM, AAD `sagax voice-keys v1`, server/mcp/mcp-oauth.ts
 // resolveVaultKey), mode 0600: the treatment of the person's web search key
 // (server/web-search/store.ts). Read back only by the server, at the moment
 // of a speech call; the settings view and the logs only learn whether one
@@ -18,7 +18,7 @@ import {
 } from "../../shared/person-voice-keys.ts";
 import { writeFileAtomic } from "../atomic.ts";
 import type { AppConfig } from "../config.ts";
-import { resolveVaultKey, type VaultKeySource } from "../mcp-oauth.ts";
+import { resolveVaultKey, type VaultKeySource } from "../mcp/mcp-oauth.ts";
 
 export const PERSON_VOICE_KEYS_FILE = "voice-keys.enc";
 const AAD = Buffer.from("sagax voice-keys v1");

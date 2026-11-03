@@ -11,7 +11,7 @@ import { None, logger, parse, View } from "vega";
 import { compile, type TopLevelSpec } from "vega-lite";
 import vegaLiteSchema from "vega-lite/vega-lite-schema.json" with { type: "json" };
 
-import { schemaProblems } from "../mcp-schema-validator.ts";
+import { schemaProblems } from "../mcp/mcp-schema-validator.ts";
 import { DataFailure, type VegaLiteValidator } from "./types.ts";
 
 type Json = Record<string, unknown>;

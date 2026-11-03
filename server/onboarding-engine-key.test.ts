@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { resolveVaultKey } from "./mcp-oauth.ts";
+import { resolveVaultKey } from "./mcp/mcp-oauth.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
 import {
   migrateConfigPlaintextKeys,

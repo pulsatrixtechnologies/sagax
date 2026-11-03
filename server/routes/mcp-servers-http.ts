@@ -12,13 +12,13 @@ import type { McpServerSpec } from "../contracts.ts";
 import {
   DEFAULT_MCP_ACCOUNT,
   isMcpAccountId,
-} from "../mcp-oauth.ts";
+} from "../mcp/mcp-oauth.ts";
 import {
   ambiguousPersonalHeaderRefusal,
   personalHeaderRefusal,
   skipPersonalInSharedProbe,
-} from "../mcp-personal-shared-guard.ts";
-import { probeMcpServer } from "../mcp-probe.ts";
+} from "../mcp/mcp-personal-shared-guard.ts";
+import { probeMcpServer } from "../mcp/mcp-probe.ts";
 import {
   isRemoteMcpServer,
   MAX_DISABLED_TOOLS,
@@ -28,7 +28,7 @@ import {
   parseStoredMcpServer,
   type StoredMcpServer,
   type StoredRemoteMcpServer,
-} from "../mcp-registry.ts";
+} from "../mcp/mcp-registry.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

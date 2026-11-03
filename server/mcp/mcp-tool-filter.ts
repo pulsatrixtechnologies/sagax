@@ -6,9 +6,9 @@
 // scope, the same proxy a bot's own tool selection uses: discovery leaves the
 // tools out and a call to one is refused before it reaches the server. A
 // server with every tool on is mounted unchanged.
-import type { McpServerSpec } from "./contracts.ts";
+import type { McpServerSpec } from "../contracts.ts";
 import { gateServer } from "./mcp-gate-config.ts";
-import type { ToolScope } from "../shared/tool-scope.ts";
+import type { ToolScope } from "../../shared/tool-scope.ts";
 
 type Gate = (input: { name: string; server: unknown; threadId: string; budget: number; toolScope?: ToolScope; nodeEnv?: Record<string, string> }) =>
   { command: string; args: string[]; env: Record<string, string> } | null;

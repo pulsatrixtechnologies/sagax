@@ -2,7 +2,7 @@
 // common provider store; model and voice consumers share the same key.
 // Organization requests are routed to the person's Perspicax account.
 import { FILE_PROVIDER_ENV, PROVIDER_KEYS_FILE, ProviderKeysStore, type ProviderKeyScope } from "./provider-keys.ts";
-import { resolveVaultKey, type VaultKeySource } from "./mcp-oauth.ts";
+import { resolveVaultKey, type VaultKeySource } from "./mcp/mcp-oauth.ts";
 
 export const ENGINE_API_KEYS_FILE = PROVIDER_KEYS_FILE;
 

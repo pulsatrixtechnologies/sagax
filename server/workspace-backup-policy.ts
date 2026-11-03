@@ -44,7 +44,7 @@ export function excludedWorkspaceAuthPath(path: string): boolean {
   // MCP sign-in tokens belong to this machine's browser sign-ins.
   if (/^mcp-oauth\.json(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
   // Sagax keeps them encrypted in mcp-oauth.enc, under the key in
-  // mcp-oauth.key on a headless server (server/mcp-oauth.ts).
+  // mcp-oauth.key on a headless server (server/mcp/mcp-oauth.ts).
   if (/^mcp-oauth\.(?:enc|key)(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
   // Organization GitHub access tokens (server/org/org-github-tokens.ts).
   if (/^org-github-tokens\.enc(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
@@ -60,7 +60,7 @@ export function excludedWorkspaceAuthPath(path: string): boolean {
   if (/^(?:principals\/[^/]+\/)?web-search\.enc(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
   // The private key of the bot's visit signature (server/web-bot-auth.ts).
   if (/^(?:principals\/[^/]+\/)?web-bot-auth-key\.json(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
-  // The person's OpenAPI document, headers included (server/openapi-connector.ts).
+  // The person's OpenAPI document, headers included (server/mcp/openapi-connector.ts).
   // The sealed file and a leftover plaintext copy.
   if (/^(?:principals\/[^/]+\/)?openapi\.(?:enc|json)(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
   // Hermes reads `.env` itself. A verification server's home is the data

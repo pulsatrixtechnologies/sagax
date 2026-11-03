@@ -8,7 +8,7 @@ import { boundToolResult } from "./tool-output-bound.ts";
 import { isolatedRemoteCommand, runCommand, screenshotBoat } from "./boat.ts";
 import type { AppConfig } from "./config.ts";
 import { controlRefusal, type ControlState } from "./control-client.ts";
-import { compileToolSchema } from "./mcp-schema-validator.ts";
+import { compileToolSchema } from "./mcp/mcp-schema-validator.ts";
 
 const coordinate = { type: "integer", minimum: 0, maximum: 32767 };
 const tool = (name: string, description: string, properties: Record<string, unknown> = {}, required: string[] = []) =>

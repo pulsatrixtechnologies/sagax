@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { ProviderKeysStore, PROVIDER_KEYS_FILE } from "./provider-keys.ts";
 
 import { writeFileAtomic } from "./atomic.ts";
-import { resolveVaultKey, type VaultKeySource } from "./mcp-oauth.ts";
+import { resolveVaultKey, type VaultKeySource } from "./mcp/mcp-oauth.ts";
 import { parseJson, type JsonObject, type JsonValue } from "./schema.ts";
 
 export const ONBOARDING_ENGINE_KEYS_FILE = PROVIDER_KEYS_FILE;

@@ -42,7 +42,7 @@ sealed row back to plain, a little at a time, and new rows are written plain.
 **Key-encryption key (KEK).**
 
 - `local`: the vault key the encrypted MCP sign-in store already uses
-  (`resolveVaultKey` in `server/mcp-oauth.ts`): on the desktop the OS
+  (`resolveVaultKey` in `server/mcp/mcp-oauth.ts`): on the desktop the OS
   keychain through Electron safeStorage (`SAGAX_MCP_OAUTH_KEY`), on a
   headless server a 0600 key file in the data folder. A derivation of its
   own (HKDF, `sagax content kek v1`) wraps the content keys (AES-256-GCM).

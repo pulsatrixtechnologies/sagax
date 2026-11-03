@@ -141,7 +141,7 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("credentials:login", "own", "request_login"),
   // an API call with a vault key Sagax adds itself (server/vault/credential-http.ts)
   p("credentials:http", "own", "vault_http_request"),
-  // the person's own OpenAPI operations (openapi_<operation>, server/openapi-tools.ts)
+  // the person's own OpenAPI operations (openapi_<operation>, server/mcp/openapi-tools.ts)
   p("openapi:call", "own", "openapi_*"),
   // Generates paid media in the person's conversation, on their own key
   // or the organization's existing explicit media grant.

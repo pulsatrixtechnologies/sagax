@@ -18,7 +18,7 @@ import { laterStartup, openStartupModelCatalog, writeStartupModelCache } from ".
 import { hostedWorkspaceConfigured } from "../enterprise.ts";
 import { ChatGptPlanAuthController } from "./chatgpt-plan-auth.ts";
 import { codexLaunchesStarting, codexLaunchSlot } from "./codex-process.ts";
-import { isReservedMcpEnvEntry } from "../mcp-registry.ts";
+import { isReservedMcpEnvEntry } from "../mcp/mcp-registry.ts";
 
 import type {
   DriverCreateInput,

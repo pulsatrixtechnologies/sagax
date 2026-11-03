@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { RemoteMcpSpec } from "./contracts.ts";
-import { requiredScope } from "./request-auth.ts";
+import type { RemoteMcpSpec } from "../contracts.ts";
+import { requiredScope } from "../request-auth.ts";
 import {
   authorizationServerMetadataUrls,
   callbackPage,
@@ -24,7 +24,7 @@ import {
   resolveVaultKey,
   type VaultKeySource,
 } from "./mcp-oauth.ts";
-import { startFakeOAuthMcp, type FakeOAuthMcp } from "./testing/fake-oauth-mcp-server.ts";
+import { startFakeOAuthMcp, type FakeOAuthMcp } from "../testing/fake-oauth-mcp-server.ts";
 
 const REDIRECT = "http://127.0.0.1:65000/api/mcp-oauth/callback";
 const FIXED_KEY: VaultKeySource = { kind: "key", key: Buffer.alloc(32, 7) };

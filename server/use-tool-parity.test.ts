@@ -11,7 +11,7 @@ import { reviewCustomRules } from "./custom-rules-review.ts";
 import { availableTools, catalogProfileFromEnv } from "./drivers/agents-catalog.ts";
 import { catalogBridgeOn, findCatalogTools, routeBridgeCall } from "./drivers/catalog-bridge.ts";
 import { hookRuns } from "./lifecycle-hooks.ts";
-import { guardToolCall } from "./mcp-permissions.ts";
+import { guardToolCall } from "./mcp/mcp-permissions.ts";
 import { memberOwnScopeTool } from "./member-tool-scope.ts";
 import { misuseToolFrameText } from "./misuse-guardrails.ts";
 import { ToolGrantStore } from "./tool-grants.ts";

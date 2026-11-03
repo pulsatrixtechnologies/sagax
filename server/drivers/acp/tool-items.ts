@@ -1,4 +1,4 @@
-import { extractMcpImages } from "../../mcp-tool-images.ts";
+import { extractMcpImages } from "../../mcp/mcp-tool-images.ts";
 import { toolDetailPreview } from "../../tool-summary.ts";
 
 export type AcpToolEndEvent = { type: "item.completed" } & (

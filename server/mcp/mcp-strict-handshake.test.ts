@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { mcpStdioServer, type StdioServer } from "./mcp-gate-config.ts";
 import { RemoteMcpClient } from "./mcp-http.ts";
-import { startFakeHttpMcp, unrecognizedField, STRICT_INITIALIZE_SCHEMAS, type FakeHttpMcp } from "./testing/fake-http-mcp-server.ts";
+import { startFakeHttpMcp, unrecognizedField, STRICT_INITIALIZE_SCHEMAS, type FakeHttpMcp } from "../testing/fake-http-mcp-server.ts";
 
 /** codex-cli 0.160.1 (also 0.144.4, 0.149.0) mounting a URL server natively */
 const CODEX = { protocolVersion: "2025-06-18", capabilities: { elicitation: { form: {}, url: {} } }, clientInfo: { name: "codex-mcp-client", title: "Codex", version: "0.160.1" } };

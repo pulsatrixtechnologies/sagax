@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
-import type { VaultKeySource } from "../mcp-oauth.ts";
+import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
 import { MAX_ORG_GITHUB_TOKENS, orgGithubTokenHint, type OrgGithubTokenPublic } from "../../shared/org-github-tokens.ts";
 
 const FILE = "org-github-tokens.enc";

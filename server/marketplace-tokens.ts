@@ -24,7 +24,7 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
-import type { VaultKeySource } from "./mcp-oauth.ts";
+import type { VaultKeySource } from "./mcp/mcp-oauth.ts";
 
 const FILE = "marketplace-tokens.enc";
 const AAD = Buffer.from("sagax marketplace-tokens v1");

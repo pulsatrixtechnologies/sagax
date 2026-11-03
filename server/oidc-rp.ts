@@ -21,7 +21,7 @@ import type { RevocationSink, RevokeAttempt } from "./idp-revoke-types.ts";
 
 export type { RevokeAttempt };
 import { TokenCallPacer, tokenBudget } from "./idp-token-pacer.ts";
-import { authorizationServerMetadataUrls, pkcePair, readBounded, safeEndpoint } from "./mcp-oauth.ts";
+import { authorizationServerMetadataUrls, pkcePair, readBounded, safeEndpoint } from "./mcp/mcp-oauth.ts";
 
 export const OIDC_PENDING_FLOW_TTL_MS = 10 * 60_000;
 export const OIDC_MAX_PENDING_FLOWS = 20;

@@ -31,7 +31,7 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
-import type { VaultKeySource } from "./mcp-oauth.ts";
+import type { VaultKeySource } from "./mcp/mcp-oauth.ts";
 import { MAX_ORG_GITHUB_TOKENS, orgGithubTokenHint } from "../shared/org-github-tokens.ts";
 import { MAX_PERSON_GITHUB_CREDENTIALS, type GithubCredentialPublic, type MarketplaceCredentialView } from "../shared/github-credentials.ts";
 

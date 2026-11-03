@@ -3,7 +3,7 @@
 //
 // Pre-auth (PRE_AUTH_ROUTES):
 //   GET /api/mcp-oauth/callback
-import type { CallbackResult } from "../mcp-oauth.ts";
+import type { CallbackResult } from "../mcp/mcp-oauth.ts";
 import { PASS, type PreAuthRouteHandler } from "./table.ts";
 
 export const MCP_OAUTH_CALLBACK_PATH = "/api/mcp-oauth/callback";

@@ -1,10 +1,10 @@
 // A real read of the apps already connected to a bot. List, then one read
 // call. No send, no change, no browser: a tool that is not a read is not called.
-import { probeEnvironment, probeMcpServer, type McpProbeResult } from "./mcp-probe.ts";
-import { RemoteMcpClient } from "./mcp-http.ts";
-import { isRemoteMcpServer, type StoredMcpServer } from "./mcp-registry.ts";
+import { probeEnvironment, probeMcpServer, type McpProbeResult } from "./mcp/mcp-probe.ts";
+import { RemoteMcpClient } from "./mcp/mcp-http.ts";
+import { isRemoteMcpServer, type StoredMcpServer } from "./mcp/mcp-registry.ts";
 import { killCliTree, spawnCli } from "./procs.ts";
-import { createLineSplitter } from "./mcp-bridge.ts";
+import { createLineSplitter } from "./mcp/mcp-bridge.ts";
 import type { McpServerSpec } from "./contracts.ts";
 import { briefReadTools, type BriefApp } from "./background-brief.ts";
 

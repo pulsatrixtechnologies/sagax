@@ -412,7 +412,7 @@ export interface RoutineRun {
 /** One tool however an engine titled the call: without the `mcp__` prefix
  * Claude-style titles carry, and with every run of `_` as one, so a
  * connector name (`cw_psa__query`) and the Grok alias the gate registers
- * for it (`cw_psa_query`, server/mcp-tool-names.ts) are the same tool. */
+ * for it (`cw_psa_query`, server/mcp/mcp-tool-names.ts) are the same tool. */
 export function troubleToolKey(title: string): string {
   return title.replace(/^mcp__/, "").replace(/_{2,}/g, "_");
 }

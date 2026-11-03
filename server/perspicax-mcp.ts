@@ -24,7 +24,7 @@
 //     a fresh subject; when that fails the call answers "Perspicax access
 //     for this turn ended" (a disabled person mid-turn, S5-10);
 //   - no token is ever logged or put in an error.
-import { guardToolCall, type GuardOptions } from "./mcp-permissions.ts";
+import { guardToolCall, type GuardOptions } from "./mcp/mcp-permissions.ts";
 import { telephonyRefusal, voiceToolCall } from "./telephony-guard.ts";
 import { placeArgsFromVoiceCall } from "../shared/outbound-call.ts";
 import type { SubjectTokenOutcome } from "./idp-session.ts";
@@ -110,7 +110,7 @@ export interface PerspicaxMcpOptions {
   keepWarm?(threadId: string): boolean;
   /** Pulsa Bot's version, sent in `clientInfo`. */
   version: string;
-  /** Permission check for tools/call frames (server/mcp-permissions.ts). Null
+  /** Permission check for tools/call frames (server/mcp/mcp-permissions.ts). Null
    * or absent: no check. The audit hook never carries arguments or results. */
   permissionGuard?(input: { botId: string; principalId: string }): GuardOptions | null;
   /** The scope a write of this turn is made once in (server/write-once.ts),

@@ -1,6 +1,6 @@
 /** Server-request (tools / approvals) handler for a Codex app-server session. */
 import { codexHostToolRequest } from "../host-tools.ts";
-import { CALL_TOOL, DESCRIBE_TOOL, SEARCH_TOOL, directoryCallTarget } from "../../mcp-directory.ts";
+import { CALL_TOOL, DESCRIBE_TOOL, SEARCH_TOOL, directoryCallTarget } from "../../mcp/mcp-directory.ts";
 import { parseProtocolAskQuestions, questionAnswersById, questionChoices } from "../../../shared/ask-question.ts";
 import { permissionCommand } from "../permission-command.ts";
 import {

@@ -10,7 +10,7 @@ import { ENVIRONMENT_PATHS, HEALTH_IDENTITY } from "../electron/legacy-names.mjs
 import { healthzBody, healthzUnreadyBody } from "./healthz.ts";
 import { drainHttpServers, isShuttingDown, markShuttingDown } from "./http-shutdown.ts";
 import { citeAppFigures, noteAppRead, type AppPiece } from "./app-figure.ts";
-import { harnessMcpHttpKind, serveHarnessMcpHttp } from "./harness-mcp-http.ts";
+import { harnessMcpHttpKind, serveHarnessMcpHttp } from "./mcp/harness-mcp-http.ts";
 // Then the upstream/analytics network block (network-guard.ts).
 import "./network-guard.ts";
 // The console's server log tail captures from here on (server-log-ring.ts).
@@ -50,7 +50,7 @@ import {
   permissionModeFromEnv,
   principalFromEnv,
   scopeOwnersFromEnv
-} from "./mcp-permissions.ts";
+} from "./mcp/mcp-permissions.ts";
 import {
   misusePathRefusal,
   misuseRefusal,
@@ -597,7 +597,7 @@ import {
 } from "./web-bot-auth.ts";
 import { createOpenApiRoutes } from "./routes/openapi-connector.ts";
 import { createOpenApiInternalRoutes } from "./routes/openapi-internal.ts";
-import { OpenApiStore, openApiScope } from "./openapi-connector.ts";
+import { OpenApiStore, openApiScope } from "./mcp/openapi-connector.ts";
 import { createWorkflowRoutes, resumeDueWorkflows } from "./routes/workflows.ts";
 import { WorkflowStore, workflowScope } from "./workflows.ts";
 import { createHealthReportRoutes } from "./routes/health-report.ts";
@@ -800,11 +800,11 @@ import {
   reservedMcpServers,
   type StoredMcpServer,
   type StoredRemoteMcpServer
-} from "./mcp-registry.ts";
-import { withDisabledTools } from "./mcp-tool-filter.ts";
+} from "./mcp/mcp-registry.ts";
+import { withDisabledTools } from "./mcp/mcp-tool-filter.ts";
 import { createMcpToolNameRoutes } from "./routes/mcp-tool-names.ts";
 import { createMcpServerRenameRoutes } from "./routes/mcp-server-rename.ts";
-import { attachCustomMcp } from "./mcp-result-budget.ts";
+import { attachCustomMcp } from "./mcp/mcp-result-budget.ts";
 import {
   callbackPage,
   DEFAULT_MCP_ACCOUNT,
@@ -817,7 +817,7 @@ import {
   phoneReturnLocation,
   resolveVaultKey,
   type VaultKeySource
-} from "./mcp-oauth.ts";
+} from "./mcp/mcp-oauth.ts";
 import {
   GROUP_GOAL_MAX_TURNS,
   groupGoalAssignmentKey,
@@ -2118,12 +2118,12 @@ import {
   personalSharedNameRefusal,
   sharedPersonalNameRefusal,
   skipPersonalInSharedProbe
-} from "./mcp-personal-shared-guard.ts";
+} from "./mcp/mcp-personal-shared-guard.ts";
 import { createPersonConnectionRoutes } from "./routes/person-connections.ts";
 import { readsGithubToken, githubServersAsPerson, githubWithheldPrompt } from "./github-mcp-token.ts";
 import { createGithubCredentialRoutes } from "./routes/github-credentials.ts";
 import { SandboxStdioRelay, StdioRelayError } from "./sandbox/sandbox-stdio-mcp.ts";
-import { testStdioMcpCommand, testStdioMcpStream } from "./mcp-stdio-test.ts";
+import { testStdioMcpCommand, testStdioMcpStream } from "./mcp/mcp-stdio-test.ts";
 import { roomMentionNotification } from "./room-mentions.ts";
 import { PERSONAL_STDIO_TOOL_SERVER } from "./user-sandbox-proxy.ts";
 import { PLUGIN_CATALOG } from "../shared/plugin-catalog.ts";
@@ -2281,7 +2281,7 @@ import {
   type WatchPlace,
   type WatchRoutine
 } from "./routines/routine-watch.ts";
-import { RemoteMcpClient } from "./mcp-http.ts";
+import { RemoteMcpClient } from "./mcp/mcp-http.ts";
 import { createMeetingService, type MeetingService } from "./meetings/meeting-requests.ts";
 import { parseEvalJson } from "./meetings/meet-scripts.ts";
 import type { MeetingBrowser } from "./meetings/meeting-session.ts";
@@ -4968,7 +4968,7 @@ function computerPlaceRefusal(kind: ComputerKind): { message: string; code: "clo
   return managed ? { message: managed, code: "managed_policy" } : undefined;
 }
 /** Cloud chosen with no Boat account: a Cloud home suggests the browser, not a Local VM. */
-// OAuth sign-ins for remote MCP servers (server/mcp-oauth.ts). Tokens live in
+// OAuth sign-ins for remote MCP servers (server/mcp/mcp-oauth.ts). Tokens live in
 // an encrypted vault beside config.json, never in it; the key comes from the
 // desktop's OS-encrypted store, or a 0600 key file on a headless server.
 let mcpOAuthKey: VaultKeySource | null = null;
@@ -5570,7 +5570,7 @@ function agentsIntegration(
           SAGAX_ORG_NAME: (process.env.SAGAX_ORG_NAME?.trim() || "Pulsatrix").slice(0, 80)
         };
       })(),
-      // Who the permission layer judges (server/mcp-permissions.ts).
+      // Who the permission layer judges (server/mcp/mcp-permissions.ts).
       ...mcpIdentityEnv(mcpIdentityOf(botId, threadId)),
       ...mcpPolicyEnv(process.env),
       // The claim tools (server/perspicax-claims.ts) while this turn has a
@@ -28643,7 +28643,7 @@ function engineMcpServers(bot: BotRecord, threadId?: string) {
     sign: (allowed) => mcpOAuth.withAuthHeaders(allowed, (name) => bot.mcpAccounts?.[name])
   });
   // A turn mounts a server with tools switched off through the gate
-  // (server/mcp-tool-filter.ts); listings only need the names.
+  // (server/mcp/mcp-tool-filter.ts); listings only need the names.
   return threadId === undefined ? servers : withDisabledTools(servers, mcpDisabledTools(cfg), threadId);
 }
 /** The bot's MCP servers as `person` (server/github-mcp-token.ts): on an
@@ -44569,7 +44569,7 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
   // discover peers and hand a message to one. Not part of the public API.
   if (path.startsWith("/api/internal/")) {
     // The harness's browser, cloud computer and Data servers over MCP
-    // streamable HTTP (server/harness-mcp-http.ts): each frame goes to the
+    // streamable HTTP (server/mcp/harness-mcp-http.ts): each frame goes to the
     // route below with its bearer, through every check that follows.
     const harnessHttpKind = harnessMcpHttpKind(path);
     if (harnessHttpKind) {

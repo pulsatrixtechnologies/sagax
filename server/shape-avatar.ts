@@ -3,7 +3,7 @@
  * shared/shape-avatar-generate.ts (desktop and server share it). This module
  * exports the agents-catalog tool and re-exports the shared runners.
  *
- * Note: server/mcp-shape.ts is the JMESPath "shape a tool result" helper; it
+ * Note: server/mcp/mcp-shape.ts is the JMESPath "shape a tool result" helper; it
  * is unrelated. Shape mascot generation is this file.
  */
 export {

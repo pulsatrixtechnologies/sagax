@@ -4,7 +4,7 @@
 // silence PLUS a failed liveness probe does, and traffic always vetoes.
 import { describe, expect, it, vi } from "vitest";
 
-import { CONTROL_REFUSAL_PLAIN, CONTROL_UNCONFIRMED, CONTROL_WAITED, type ControlState } from "./control-client.ts";
+import { CONTROL_REFUSAL_PLAIN, CONTROL_UNCONFIRMED, CONTROL_WAITED, type ControlState } from "../control-client.ts";
 import {
   createGateInterceptor,
   createInactivityWatchdog,

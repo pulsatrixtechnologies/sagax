@@ -41,7 +41,7 @@ and must merge after it.
    add rows to `server/tool-policy.generated.ts`), then
    `scripts/testing/index-route-ratchet.test.ts`,
    `scripts/tool-policy/tool-policy-coverage.test.ts`,
-   `server/mcp-permissions.test.ts` (it fails while a catalog tool has no
+   `server/mcp/mcp-permissions.test.ts` (it fails while a catalog tool has no
    permission) and `server/drivers/agents-catalog-wire.test.ts`. If a
    catalog golden moves, regenerate it with `UPDATE_AGENTS_CATALOG_GOLDENS=1`
    and set `BUDGET_BASELINE` by hand from the printed sizes.

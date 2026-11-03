@@ -24,7 +24,7 @@ import {
 import type { ProviderInstance } from "../contracts.ts";
 import { autoNewBotSelection } from "../default-model-selection.ts";
 import { githubSkillFetch, type GithubCredential } from "../github-access.ts";
-import { mcpServerNameError, MAX_MCP_SERVERS } from "../mcp-registry.ts";
+import { mcpServerNameError, MAX_MCP_SERVERS } from "../mcp/mcp-registry.ts";
 import { MEMBER_AUTO_NOT_ALLOWED } from "../approvals/member-auto-approval.ts";
 import { journalMemoryWrite } from "../memory/memory-journal.ts";
 import { pickBotName } from "../names.ts";

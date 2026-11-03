@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { parseCommandVariable, parseVaultInjection } from "../../shared/credential-vault.ts";
 import { commandVariablesDigest, commandVariablesScript, engineCommandVariables, withCommandVariables, withStdinCommandVariables } from "./credential-command-env.ts";
 import { CredentialVault, LOCAL_VAULT_PRINCIPAL } from "./credential-vault.ts";
-import type { VaultKeySource } from "../mcp-oauth.ts";
+import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
 
 // Every value below is fake test data.
 const FAKE_KEY = "fake-api-key-for-command-tests";

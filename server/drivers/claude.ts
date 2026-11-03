@@ -41,7 +41,7 @@ import {
   resolveInjectId,
 } from "./local-inject.ts";
 import { permissionCommand, permissionPaths, withAbsolutePaths } from "./permission-command.ts";
-import { extractMcpImages } from "../mcp-tool-images.ts";
+import { extractMcpImages } from "../mcp/mcp-tool-images.ts";
 import { availableTools, catalogProfileFromEnv } from "./agents-catalog.ts";
 import {
   ASK_USER_QUESTION_TOOL,

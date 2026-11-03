@@ -29,12 +29,12 @@ import { createInterface } from "node:readline";
 import { allowsTool, parseToolScope, type ToolScope } from "../shared/tool-scope.ts";
 
 import { resolveCliSpawn } from "./env-path.ts";
-import { DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, directoryCallTarget, isDirectoryTool, type CatalogTool, type DirectoryContext } from "./mcp-directory.ts";
-import { lenientToolValidator, schemaProblems } from "./mcp-schema-validator.ts";
-import { parseGateSearch, searchedCatalog } from "./mcp-gate-search.ts";
-import { QUERY_TOOL, QUERY_TOOL_NAME, ResultStore, answerQuery, describeShape, exampleQuery } from "./mcp-shape.ts";
-import { DEFAULT_RESULT_BUDGET, type HeldResult, trimResultText, trimStructured } from "./mcp-trim.ts";
-import { ToolNameAliases, mapJsonStrings } from "./mcp-tool-names.ts";
+import { DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, directoryCallTarget, isDirectoryTool, type CatalogTool, type DirectoryContext } from "./mcp/mcp-directory.ts";
+import { lenientToolValidator, schemaProblems } from "./mcp/mcp-schema-validator.ts";
+import { parseGateSearch, searchedCatalog } from "./mcp/mcp-gate-search.ts";
+import { QUERY_TOOL, QUERY_TOOL_NAME, ResultStore, answerQuery, describeShape, exampleQuery } from "./mcp/mcp-shape.ts";
+import { DEFAULT_RESULT_BUDGET, type HeldResult, trimResultText, trimStructured } from "./mcp/mcp-trim.ts";
+import { ToolNameAliases, mapJsonStrings } from "./mcp/mcp-tool-names.ts";
 import { killCliTree } from "./procs.ts";
 import { misuseGateBlockText } from "../shared/misuse-guardrails.ts";
 import { BRIDGE_FIND_TOOL, BRIDGE_SERVER, readBridgeCall } from "../shared/searched-tool-call.ts";

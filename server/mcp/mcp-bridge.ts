@@ -28,8 +28,8 @@
 import { spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 
-import { CONTROL_ACT_WITHIN_MS, CONTROL_UNCONFIRMED, CONTROL_WAITED, controlRefusal, createControlClient, type ControlState } from "./control-client.ts";
-import { augmentedPath, resolveCliSpawn } from "./env-path.ts";
+import { CONTROL_ACT_WITHIN_MS, CONTROL_UNCONFIRMED, CONTROL_WAITED, controlRefusal, createControlClient, type ControlState } from "../control-client.ts";
+import { augmentedPath, resolveCliSpawn } from "../env-path.ts";
 import { createToolListNormalizer } from "./mcp-tool-schema.ts";
 
 // 45s of TOTAL silence before the bridge even probes. An MCP session is

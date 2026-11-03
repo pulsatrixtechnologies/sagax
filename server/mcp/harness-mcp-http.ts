@@ -20,8 +20,8 @@
 //   per forwarded call, 16 MiB per answer (harnessMcpRequest).
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import type { RemoteMcpSpec, StdioMcpSpec } from "./contracts.ts";
-import { harnessMcpRequest, type HarnessMcpKind } from "./harness-mcp-proxy.ts";
+import type { RemoteMcpSpec, StdioMcpSpec } from "../contracts.ts";
+import { harnessMcpRequest, type HarnessMcpKind } from "../harness-mcp-proxy.ts";
 
 const MAX_INPUT_BYTES = 1_048_576;
 const MAX_PENDING = 16;

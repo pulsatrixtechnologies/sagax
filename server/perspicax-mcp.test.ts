@@ -1,7 +1,7 @@
 // Slice 5: Perspicax MCP for the person who speaks (server/perspicax-mcp.ts).
 import { describe, expect, it } from "vitest";
 
-import type { McpAuditRecord } from "./mcp-permissions.ts";
+import type { McpAuditRecord } from "./mcp/mcp-permissions.ts";
 import type { SubjectTokenOutcome } from "./idp-session.ts";
 import type { ExchangeResult } from "./perspicax-link.ts";
 import { PERSPICAX_ACCESS_ENDED, PERSPICAX_ROUTINE_RETRY_MS, PERSPICAX_SESSION_RESET, PERSPICAX_UNAVAILABLE_WHY, PerspicaxMcp, parseMcpBody, perspicaxReplayable, reviewedReadsOf, perspicaxSessionLost, perspicaxUnavailableRow, perspicaxUnavailableWhy, type PerspicaxMcpLink, type PerspicaxMcpOptions } from "./perspicax-mcp.ts";

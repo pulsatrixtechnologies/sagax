@@ -3,8 +3,8 @@
 // config to a turn: which servers set one, and handing them to the engine
 // beside the server specs. How a driver gates a server with it is
 // mcp-gate-config.ts (customServerGate).
-import type { AppConfig } from "./config.ts";
-import type { McpServerSpec, SendTurnInput } from "./contracts.ts";
+import type { AppConfig } from "../config.ts";
+import type { McpServerSpec, SendTurnInput } from "../contracts.ts";
 import { parseStoredMcpServer } from "./mcp-registry.ts";
 
 /** The per-server result budgets set on `names` (config.json

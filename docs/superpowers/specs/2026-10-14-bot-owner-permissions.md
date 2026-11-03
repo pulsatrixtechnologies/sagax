@@ -243,7 +243,7 @@ propriétaire.
 ## 11. Recouvrement avec la PR #508 (registre MCP `resource:verb`)
 
 La PR #508 (`feat/mcp-permissions-coverage`, ouverte le 2026-10-14, mode
-shadow) ajoute `server/mcp-permissions.ts` : une permission par outil
+shadow) ajoute `server/mcp/mcp-permissions.ts` : une permission par outil
 Sagax (`memory:save`, `api:write`), des rôles (viewer, member, operator,
 admin, service), des portées self/team/org, une liste de refus
 `SAGAX_MCP_DENY` par clé de ressource (`cw:ticket.*`) et un audit par appel.

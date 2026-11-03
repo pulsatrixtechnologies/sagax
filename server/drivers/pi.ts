@@ -77,8 +77,8 @@ import { localModelFailureMessage, providerReason } from "./engine-errors.ts";
 import { appendNative } from "./native.ts";
 import { piHostToolArgs } from "./host-tools.ts";
 import { canUseMcpServer, parseToolScope } from "../../shared/tool-scope.ts";
-import { customServerGate, gateServer, mcpStdioServer } from "../mcp-gate-config.ts";
-import { remoteMcpSpec } from "../mcp-http.ts";
+import { customServerGate, gateServer, mcpStdioServer } from "../mcp/mcp-gate-config.ts";
+import { remoteMcpSpec } from "../mcp/mcp-http.ts";
 import { readMcpGatewayCall } from "../../shared/mcp-gateway-call.ts";
 
 const DRIVER_KIND = "piAgent";

@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
-import type { VaultKeySource } from "./mcp-oauth.ts";
+import type { VaultKeySource } from "./mcp/mcp-oauth.ts";
 
 export const TRIGGER_POLLER_CREDENTIALS_FILE = "trigger-poller-credentials.enc";
 const AAD = Buffer.from("sagax trigger-poller-credentials v1");

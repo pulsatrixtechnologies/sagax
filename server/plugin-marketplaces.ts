@@ -52,7 +52,7 @@ import {
   type MarketplacePolicy,
   type MarketplacePluginEntry,
 } from "./bot-plugins.ts";
-import type { StoredMcpServer } from "./mcp-registry.ts";
+import type { StoredMcpServer } from "./mcp/mcp-registry.ts";
 import { parseSkillMd } from "../shared/skill-md.ts";
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;

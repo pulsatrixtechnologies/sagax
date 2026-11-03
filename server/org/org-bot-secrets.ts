@@ -18,7 +18,7 @@ import {
   type OrgBotSecretPublic,
 } from "../../shared/org-bot-secrets.ts";
 import { writeFileAtomic } from "../atomic.ts";
-import type { VaultKeySource } from "../mcp-oauth.ts";
+import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
 
 const FILE = "org-bot-secrets.enc";
 const AAD = Buffer.from("sagax org-bot-secrets v1");

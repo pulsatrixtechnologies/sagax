@@ -20,7 +20,7 @@ import {
   usesStablePrompt,
 } from "./compact-prompt.ts";
 import { availableTools, catalogProfileFromEnv, compactListed, compactToolsFromEnv } from "./drivers/agents-catalog.ts";
-import { parseGateSearch, searchedCatalog } from "./mcp-gate-search.ts";
+import { parseGateSearch, searchedCatalog } from "./mcp/mcp-gate-search.ts";
 import { searchedToolCall } from "../shared/searched-tool-call.ts";
 import { workspaceCwdPrompt, workspaceLocationsPrompt } from "./workspace.ts";
 

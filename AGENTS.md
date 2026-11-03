@@ -4237,7 +4237,7 @@ Tests: `server/org/org-flow-plugins.test.ts` (real HTTP/ZIP, no CLI).
 opens a stream and repeats initialize/initialized once, sharing concurrent
 handshakes. An interrupted request fails once and is never replayed. The
 opening request's signal stops controlling the persistent stream once its
-endpoint has arrived. Tests: `server/mcp-http.test.ts`.
+endpoint has arrived. Tests: `server/mcp/mcp-http.test.ts`.
 
 ## Organization capability declarations (lot 4, 2026-11-01)
 
@@ -7125,7 +7125,7 @@ index omits skills. Tests: `src/lib/capabilities*.test.ts`,
 ## Reserved MCP server names (2026-10-17, one rule since 2026-10-30)
 
 One rule, `reservedMcpName` (`shared/mcp-reserved-names.ts`), for this
-installation's servers (`server/mcp-registry.ts`), a person's own servers
+installation's servers (`server/mcp/mcp-registry.ts`), a person's own servers
 (`addPersonalMcpServer`, `personalMcpPrecheck`) and the turn's Connectors
 record (`server/turn-connectors.ts`): `mcp`, any name with `__`, the
 built-in names and the families `sagax`, `perspicax`, `openmausbot`,
@@ -7151,7 +7151,7 @@ list says, and is never switched on again under that name. It is not silent:
 - A personal connection (`server/person-connections.ts`) saved before #695
   under a name with `__` is no longer mounted (since 2026-10-30,
   `personalMcpPrecheck`) and the capabilities list shows it `reserved`.
-- Tests: `server/mcp-registry.test.ts`, `server/config.test.ts`
+- Tests: `server/mcp/mcp-registry.test.ts`, `server/config.test.ts`
   (customMcpServers), `server/routes/mcp-server-rename.test.ts`,
   `src/components/McpServersPanel.reserved.test.ts`,
   `server/mcp-reserved-rename.e2e.test.ts`.
@@ -8859,7 +8859,7 @@ apps, so those paths stay ours on every later merge. To repeat:
 - Run `pnpm install --frozen-lockfile`, typecheck, lint, the unit suites and
   `pnpm build`; compare failures with `origin/main` before pushing to
   `origin` only.
-- MCP sign-in is ours (`server/mcp-oauth.ts`, vault `mcp-oauth.enc` and
+- MCP sign-in is ours (`server/mcp/mcp-oauth.ts`, vault `mcp-oauth.enc` and
   `mcp-oauth.key`, both left out of workspace backups). Upstream's own
   MCP sign-in manager and routes were not taken.
 

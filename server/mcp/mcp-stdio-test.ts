@@ -18,9 +18,9 @@ import type { Duplex } from "node:stream";
 
 import { createLineSplitter } from "./mcp-bridge.ts";
 import { probeEnvironment, STDIO_PROBE_TIMEOUT_MS } from "./mcp-probe.ts";
-import type { TestResult } from "./org/org-admin-ops.ts";
-import { killCliTree, spawnCli } from "./procs.ts";
-import { redactSecretsInText } from "./redact.ts";
+import type { TestResult } from "../org/org-admin-ops.ts";
+import { killCliTree, spawnCli } from "../procs.ts";
+import { redactSecretsInText } from "../redact.ts";
 
 export interface StdioTestServer {
   command: string;

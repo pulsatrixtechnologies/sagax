@@ -5,8 +5,8 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, lstatSync } from "node:fs";
 import { join } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { addressClass } from "./browser/egress/policy.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { addressClass } from "../browser/egress/policy.ts";
 import { resolveVaultKey, type VaultKeySource } from "./mcp-oauth.ts";
 import { parseOpenApiSpec, type OpenApiOperation } from "./openapi-tools.ts";
 

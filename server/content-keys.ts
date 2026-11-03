@@ -16,7 +16,7 @@ import { createSecretKey, randomBytes, type KeyObject } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
 import { BlindTokenizer, deriveSubkey, keyAad, newContentKey, open, seal } from "./content-crypto.ts";
-import type { VaultKeySource } from "./mcp-oauth.ts";
+import type { VaultKeySource } from "./mcp/mcp-oauth.ts";
 
 /** The owner of rooms, unowned threads and receipts. Never a principal id. */
 export const WORKSPACE_OWNER = "@workspace";

@@ -143,7 +143,7 @@
   "server/mcp-gate.test.ts": 5,
   "server/mcp-remote-proxy.test.ts": 14,
   "server/mcp-selection.e2e.test.ts": 15,
-  "server/mcp-strict-handshake.test.ts": 9,
+  "server/mcp/mcp-strict-handshake.test.ts": 9,
   "server/member-identity.e2e.test.ts": 1,
   "server/memory/memory-capture-restart.e2e.test.ts": 1,
   "server/memory/memory-layer.e2e.test.ts": 21,

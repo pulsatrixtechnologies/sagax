@@ -16,7 +16,7 @@ import {
   isRemoteMcpServer as isRemoteMcpServerLeaf,
   type DisabledMcpServerAdd,
   type StoredMcpServer,
-} from "../mcp-registry.ts";
+} from "../mcp/mcp-registry.ts";
 import {
   personalMcpInputFromAgent,
   PersonConnectionsError,

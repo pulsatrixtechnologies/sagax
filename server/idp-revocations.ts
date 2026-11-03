@@ -24,7 +24,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
 import type { TokenCallPacer } from "./idp-token-pacer.ts";
-import type { VaultKeySource } from "./mcp-oauth.ts";
+import type { VaultKeySource } from "./mcp/mcp-oauth.ts";
 import type { RevocationHint, RevokeAttempt } from "./idp-revoke-types.ts";
 
 export type { RevocationHint, RevocationSink, RevokeAttempt } from "./idp-revoke-types.ts";

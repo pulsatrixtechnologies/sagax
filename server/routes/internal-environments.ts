@@ -188,7 +188,7 @@ export interface InternalEnvironmentsDeps {
     surface: "flow" | "mcp" | "shell" | "terminal" | "file",
     meta?: { botId: string; threadId: string; tool?: string },
   ): string | null;
-  misusePathRefusal(path: string, meta: { triage: boolean; principalId?: string; botId: string; threadId: string; tool: string }): { message: string } | null;
+  misusePathRefusal(path: string, meta: { triage: boolean; principalId?: string; botId: string; threadId: string; tool: string; cwd?: string }): { message: string } | null;
   misuseToolFrameText(frame: unknown): string | null;
   misuseRefusal(
     text: string,
@@ -514,16 +514,20 @@ export function createInternalEnvironmentsRoutes(deps: InternalEnvironmentsDeps)
             const where = { roots: deps.serverBotRoots?.(capability.botId) ?? [], folder };
             return kind === "path" ? serverPathAnswer(value, where) : serverPathInCommand(value, where);
           },
+          // a relative path resolves against the bot's own folder, where
+          // the tools run (inBotFolder); /workspace without one
           pathRefusal: (pathValue) => deps.misusePathRefusal(pathValue, {
             ...deps.misuseActor(ownerId),
             botId: capability.botId,
             threadId: capability.threadId,
             tool: "read_file",
+            ...(folder ? { cwd: folder } : {}),
           })?.message ?? misusePathRefusal(pathValue, {
             ...deps.misuseActor(ownerId),
             botId: capability.botId,
             threadId: capability.threadId,
             tool: "read_file",
+            ...(folder ? { cwd: folder } : {}),
           })?.message ?? null,
           textRefusal: (value) => deps.misuseTextRefusal(value, ownerId, "shell", {
             botId: capability.botId,

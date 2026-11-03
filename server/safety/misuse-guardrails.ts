@@ -196,8 +196,10 @@ export function misuseRefusal(text: string, context: MisuseContext, now = Date.n
  * follows the same mode as the classifier and still refuses platform and
  * host paths; the path text is read in the own-environment scope (a file
  * named `reboot-notes.md` is theirs). */
-export function misusePathRefusal(path: string, context: Omit<MisuseContext, "surface">, now = Date.now()): MisuseRefusal | null {
-  return misuseRefusal(path, { ...context, surface: "file" }, now, classifySandboxPath(path, context.triage, "own_environment", misuseOwnPaths(context)));
+export function misusePathRefusal(path: string, context: Omit<MisuseContext, "surface"> & { cwd?: string }, now = Date.now()): MisuseRefusal | null {
+  const { cwd, ...who } = context;
+  const own = misuseOwnPaths(who);
+  return misuseRefusal(path, { ...who, surface: "file" }, now, classifySandboxPath(path, who.triage, "own_environment", cwd ? { ...own, cwd } : own));
 }
 
 /** Text of a JSON-RPC tools/call, or null when the frame is not a call. */

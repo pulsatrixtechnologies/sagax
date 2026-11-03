@@ -852,6 +852,21 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     }
   });
 
+  it("a failed MCP call's completion carries its words, not the content envelope (2026-11-03)", async () => {
+    const refused = "Refusé : ce chemin ou ce fichier appartient au serveur Sagax, pas à votre environnement. Vos fichiers sont dans /workspace.";
+    process.env.FAKE_CLAUDE_TOOL_CALLS = JSON.stringify([
+      { name: "mcp__sagax-environment__read_file", input: { path: "../../notes/README.md" }, ok: false, output: [{ type: "text", text: refused }] },
+    ]);
+    try {
+      await create();
+      await instance.adapter.sendTurn({ threadId: "t-failed-mcp", text: "read it", model: "claude-sonnet-5" });
+      await recorder.until((e) => e.type === "turn.completed");
+      expect(recorder.events.find((e) => e.type === "item.completed" && e.itemType === "tool")).toMatchObject({ ok: false, output: refused });
+    } finally {
+      delete process.env.FAKE_CLAUDE_TOOL_CALLS;
+    }
+  });
+
   it("turns an Artifact publish into a visible page card, never leaking the host path", async () => {
     const htmlPath = join(scratch, "report.html");
     writeFileSync(htmlPath, "<p>Hi</p>");

@@ -8,7 +8,7 @@ import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../../shared
 import { searchedToolCall } from "../../../shared/searched-tool-call.ts";
 import { pushRenewalStep } from "../../context/context-renewal.ts";
 import { filesField, writtenFilesFromToolInput } from "../../threads/thread-files.ts";
-import { commandSummary, cwToolResult, toolDetailPreview } from "../../tools/tool-summary.ts";
+import { commandSummary, cwToolResult, toolDetailPreview, toolFailurePreview } from "../../tools/tool-summary.ts";
 import { withAbsolutePaths } from "../permission-command.ts";
 import { claudeAuthFailure } from "../claude-auth-recovery.ts";
 import { claudeSignInExpired as claudeSignInExpiredImport } from "../claude-errors.ts";
@@ -232,14 +232,16 @@ case "user": {
     if (b.type === "tool_result") {
       const toolName = typeof b.tool_use_id === "string" ? session.toolNames.get(b.tool_use_id) : undefined;
       const step = session.turn?.steps?.find((entry) => entry.id === b.tool_use_id);
+      // a failed call's own words, not its content envelope (shared/tool-failure-text.ts)
+      const preview = b.is_error ? toolFailurePreview(b.content) : toolDetailPreview(b.content);
       if (step) {
         step.ok = !b.is_error;
-        if (!isPhoneToolCallName(toolName)) step.output = toolDetailPreview(b.content)?.slice(0, 400);
+        if (!isPhoneToolCallName(toolName)) step.output = preview?.slice(0, 400);
       }
       emit({
         ...base(threadId, currentTurnId()), type: "item.completed", itemType: "tool", itemId: b.tool_use_id, ok: !b.is_error,
         // a phone's answer reaches the model, never the event log or the chat (phone_tool)
-        output: isPhoneToolCallName(toolName) ? PHONE_TOOL_OUTPUT_NOT_KEPT : toolDetailPreview(b.content),
+        output: isPhoneToolCallName(toolName) ? PHONE_TOOL_OUTPUT_NOT_KEPT : preview,
         ...(b.is_error ? {} : cwToolResult(toolName, b.content)),
       });
       // photos a phone sent go to the model only, never into the chat (phone_tool)

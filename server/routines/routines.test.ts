@@ -4828,8 +4828,26 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     tool(h, "thread-1", "a", "mcp__perspicax_profile__cw_psa__query", false, "Tool not found: perspicax_profile__cw_psa__query");
     tool(h, "thread-1", "b", "perspicax_profile__cw_psa_query", false, "upstream_error: 400");
     done(h, "thread-1");
-    expect(runOf(h).problems).toContain("mcp__perspicax_profile__cw_psa__query failed 2 times");
+    // 2026-11-03: the tool in words, as its card names it; no `__` id
+    expect(runOf(h).problems).toContain("Query failed 2 times");
+    expect(runOf(h).problems).not.toContain("__");
     expect(runOf(h).problems).toContain("upstream_error: 400");
+  });
+
+  it("a problem line names a connector tool in words and keeps its error (2026-11-03)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const graph = "Managed MCP gateway tool call failed: Microsoft Graph API error: 404 Not Found";
+    tool(h, "thread-1", "a", "mcp__outlook__get_message", false, graph);
+    tool(h, "thread-1", "b", "mcp__outlook__get_message", false, graph);
+    tool(h, "thread-1", "c", "user-Outlook-get_5fmail_5fmessage___12", false, graph);
+    tool(h, "thread-1", "d", "user-Outlook-get_5fmail_5fmessage___12", false, graph);
+    done(h, "thread-1");
+    const problems = runOf(h).problems ?? "";
+    expect(problems).toContain(`Get message failed 2 times and never succeeded after: ${graph}`);
+    expect(problems).toMatch(/Get mail message · Outlook[^\n]* failed 2 times/);
+    expect(problems).not.toMatch(/__|5f/);
   });
 
   it("one failed call the bot moved past (a search with no match, say) is not a problem: only a tool that kept failing is", async () => {

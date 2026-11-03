@@ -36,6 +36,7 @@
 // the card of a run refused on their credentials even when the run's thread
 // is another person's private one, and nothing else of that thread.
 import { redactSecretsInText } from "../redact.ts";
+import { toolFailureText } from "../../shared/tool-failure-text.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { WireAccessCard } from "../../shared/wire.ts";
 import type { RoutineRun } from "../../shared/routines.ts";
@@ -165,7 +166,8 @@ const SUBAGENT_RESULT_CHARS = 4_000;
 export const STEP_ERROR_CHARS = 600;
 export function stepError(output: unknown): string | undefined {
   if (typeof output !== "string" || !output.trim()) return undefined;
-  const text = redactSecretsInText(output.trim());
+  // its own words, not an envelope a driver stored before 2026-11-03
+  const text = redactSecretsInText(toolFailureText(output) ?? output.trim());
   return text.length > STEP_ERROR_CHARS ? `${text.slice(0, STEP_ERROR_CHARS - 1).trimEnd()}…` : text;
 }
 

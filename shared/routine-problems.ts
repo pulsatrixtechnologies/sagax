@@ -10,6 +10,8 @@
 // dropped, and a cut quote ends with an ellipsis. Read at render too, so
 // rows stored before this read right without touching them.
 
+import { humanizeToolIds } from "./tool-display-name.ts";
+
 const QUOTED = /Its last message, quoted: "((?:[^"\\]|\\.)*)("|\\?$)/g;
 
 /** A JSON string body (without its quotes) as text, even when it was cut
@@ -39,9 +41,11 @@ export function plainFromMarkdown(text: string): string {
     .trim();
 }
 
-/** The problems text with every quoted last message as plain text. */
+/** The problems text with every quoted last message as plain text, and
+ * every raw tool id (`mcp__outlook__get_message`) as the tool's name in
+ * words, the same as the step cards (2026-11-03: no `__` name is visible). */
 export function readableRoutineProblems(text: string): string {
-  return text.replace(QUOTED, (_, body: string, close: string) => {
+  return humanizeToolIds(text).replace(QUOTED, (_, body: string, close: string) => {
     const cut = close !== "\"";
     const words = plainFromMarkdown(unescapeJson(body));
     return words ? `Its last message:\n${words}${cut ? "…" : ""}` : "";

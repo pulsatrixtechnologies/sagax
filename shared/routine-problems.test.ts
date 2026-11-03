@@ -40,3 +40,10 @@ describe("plainFromMarkdown", () => {
     expect(plainFromMarkdown("## Title\n> quoted\n*one* and _two_ [doc](https://x.test) cw_psa_query\n1. step")).toBe("Title\nquoted\none and two doc cw_psa_query\n1. step");
   });
 });
+
+describe("readableRoutineProblems names tools in words", () => {
+  it("reads a raw tool id as its name, rows stored before 2026-11-03 included", () => {
+    expect(readableRoutineProblems("mcp__sagax-environment__read_file failed 2 times and never succeeded after: Refusé : ce chemin appartient au serveur Sagax"))
+      .toBe("Read file failed 2 times and never succeeded after: Refusé : ce chemin appartient au serveur Sagax");
+  });
+});

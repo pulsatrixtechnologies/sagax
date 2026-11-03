@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { askInputDetail, askInputSummary, commandSummary, toolDetailPreview } from "./tool-summary.ts";
+import { askInputDetail, askInputSummary, commandSummary, toolDetailPreview, toolFailurePreview } from "./tool-summary.ts";
 
 describe("toolDetailPreview", () => {
   it("keeps useful input and results while removing nested credentials and binary data", () => {
@@ -114,5 +114,19 @@ describe("askInputDetail", () => {
     expect(askInputDetail({})).toBeUndefined();
     expect(askInputDetail(undefined)).toBeUndefined();
     expect(askInputDetail("text")).toBeUndefined();
+  });
+});
+
+describe("toolFailurePreview", () => {
+  it("is the failure's own words, redacted", () => {
+    const key = "sk-ant-api03-" + "a".repeat(80);
+    const text = toolFailurePreview({ content: [{ type: "text", text: `upstream refused key ${key}` }], isError: true });
+    expect(text).toMatch(/^upstream refused key /);
+    expect(text).not.toContain(key);
+  });
+
+  it("falls back to the preview when the failure has no words", () => {
+    expect(toolFailurePreview({ output: null, exitCode: 2 })).toContain("exitCode");
+    expect(toolFailurePreview(undefined)).toBeUndefined();
   });
 });

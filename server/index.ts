@@ -2602,7 +2602,7 @@ import { attachedFilesInText, attachmentChunks, attachmentIsTheirs, stageTurnAtt
 import { OFFICE_IMAGE_MAX_COUNT, OFFICE_IMAGES_MAX_TOTAL_BYTES, officeKind, officeMediaFolder, officeNote, readOfficeMedia } from "./media/office-media.ts";
 import { archiveInlineTexts, archiveNote, extractedFolderName, localExtractedPath, recoverArchiveUpload, sandboxArchiveArgv, storedArchiveManifest } from "./attachments/attachment-archives.ts";
 import { BOT_WORKPLACE_PREFERENCE, DESKTOP_BRIDGE_MCP_NAME, parseBotWorkplace, type BotWorkplace } from "../shared/bot-workplace.ts";
-import { accessCardAudience, accessCardForViewer, engineNameForViewer, keyEngineProvider, orgKeyEngineName, signInExpiredCard, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberOwnedBot, resolveTurnSpeaker, routineAccessNotifications, routineLineage, speakerPrincipal, type EngineAccessRefusal, type MemberHostToolPlace, type TurnSpeaker } from "./engines/engine-access.ts";
+import { accessCardAudience, accessCardForViewer, engineNameForViewer, keyEngineProvider, orgKeyEngineName, signInExpiredCard, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, engineAccountConnectorCall, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberOwnedBot, resolveTurnSpeaker, routineAccessNotifications, routineLineage, speakerPrincipal, type EngineAccessRefusal, type MemberHostToolPlace, type TurnSpeaker } from "./engines/engine-access.ts";
 import {
   assignBotHost,
   channelTurnGate,
@@ -19029,6 +19029,8 @@ bus.subscribe((event: RuntimeEvent) => {
         workspaceRoot: join(realpathSync(DATA_DIR), "task-workspaces", asker.id),
         readRoots: [workspaceDir(asker.id)],
         ownerScopedMcpServer: ownerScopedMcpServerFor(asker, event.threadId),
+        // #1930: the speaker's own grok.com connector, like a claude.ai one
+        ownAccountConnector: engineAccountConnectorCall(event, turnAccessByThread.get(event.threadId)?.via),
         ownEnvironment,
         ownDestination,
         ownComputerChoice,

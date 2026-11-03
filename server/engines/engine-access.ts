@@ -191,6 +191,18 @@ export function claudeAiOwnerScopedServer(server: string, via: string | undefine
   return via === "subscription" && /^claude_ai_[A-Za-z0-9]/i.test(server);
 }
 
+/** #1930: a Grok call to the person's own grok.com connector (the
+ * driver's use_tool target, listed by this session's own catalog on a
+ * managed gateway server: session-permission.ts `accountConnector`). The
+ * driver loads those connectors only when the turn runs on the speaker's own
+ * xAI sign-in (harness-connectors.ts grokCloudConnectorsForTurn), so they are
+ * that person's own rights, like a claude.ai connector
+ * (claudeAiOwnerScopedServer): the owner answers the card, not an admin. On
+ * any other access they are nobody's. */
+export function engineAccountConnectorCall(event: { accountConnector?: boolean; engineConnector?: boolean }, via: string | undefined): boolean {
+  return via === "subscription" && event.accountConnector === true && event.engineConnector === true;
+}
+
 /** 2026-10-28 (a member does everything in their own environment):
  * where a host-level agents tool call lands, as the harness knows it. */
 export interface MemberHostToolPlace {
@@ -341,6 +353,10 @@ export function memberBotAdminApproval(input: {
   /** 2026-10-28: where a host-level agents tool lands for this turn
    * (memberOwnHostToolCall). Absent: none is the member's own. */
   hostPlace?: MemberHostToolPlace;
+  /** #1930: the call goes to the speaker's own engine account connector
+   * (engineAccountConnectorCall): it runs at the provider as that person,
+   * never on the organization's server, whatever its gateway name spells. */
+  ownAccountConnector?: boolean;
 }): boolean {
   if (input.ownEnvironment || input.ownDestination || input.ownComputerChoice || input.ownerRunsServerCommands) return false;
   const builtin = !foreignToolSpelling(input.tool, input.foreignMcpServers ?? []);
@@ -361,6 +377,10 @@ export function memberBotAdminApproval(input: {
   // 2026-10-28: vm_exec, shared_computer, attach_file and add_mcp_server
   // that stay in the member's own environment are the owner's card.
   if (!input.command && builtin && input.hostPlace && memberOwnHostToolCall(toolName, input.rawInput, input.hostPlace)) return false;
+  // #1930: a Grok gateway tool (`cursor__user-<Service>-<tool>___<n>`) names
+  // the gateway, not a server of the owner's list, and a connector tool name
+  // may read like a shell one: the driver's own reading decides it.
+  if (!input.command && input.ownAccountConnector) return false;
   if (serverCommandApproval(input)) return true;
   // 2026-10-16: the Data tools are the bot's own database, confined to its
   // own folders on an organization server (sagax-internal-tools.ts).

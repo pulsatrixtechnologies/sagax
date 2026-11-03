@@ -42,6 +42,8 @@ struct DesktopMemoryPage: View {
     @State private var railOpen: Bool?
     @State private var collapsed: Set<String> = []
     @State private var importing = false
+    @State private var pendingDelete: DesktopMemoryFolderRequest?
+    @State private var notice: String?
     enum ListView: String, CaseIterable { case active, all, archived, stale }
     @State private var listView: ListView = .active
     @AppStorage("sagax.memory.pins.v1") private var pinsRaw = ""
@@ -105,6 +107,33 @@ struct DesktopMemoryPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.app)
+        // Import (Tidy up, the page's ⋯): the centred window over the page
+        .overlay {
+            if importing {
+                DesktopMemoryImportSheet(sources: sources, onImported: { count in
+                    notice = String(localized: "\(String(count)) notes imported")
+                    Task { await load() }
+                }, onDone: { importing = false })
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if let notice {
+                Text(verbatim: notice).font(theme.font(12.5)).foregroundStyle(theme.ink)
+                    .padding(.horizontal, 14).frame(height: 36)
+                    .background(theme.menu, in: Capsule())
+                    .padding(.bottom, 20)
+                    .task { try? await Task.sleep(nanoseconds: 4_000_000_000); self.notice = nil }
+            }
+        }
+        .desktopMemoryFolderDeleteConfirmation($pendingDelete) { request in
+            Task {
+                guard let client = session.settingsClient else { return }
+                if let done = try? await request.perform(client: client) {
+                    notice = String(localized: "\(String(done.count)) notes deleted")
+                }
+                await load()
+            }
+        }
         .environmentObject(model)
         .task { await load() }
         .sheet(item: $creating, onDismiss: { Task { await load() } }) { source in
@@ -141,6 +170,7 @@ struct DesktopMemoryPage: View {
             .accessibilityIdentifier("desktop-memory.new")
             Menu {
                 Button("Refresh", systemImage: "arrow.clockwise") { Task { await load() } }
+                if !sources.isEmpty { Button { importing = true } label: { Label("Import", systemImage: "square.and.arrow.down") } }
                 if let trash = sources.first(where: { $0.kind == .perspicax }) {
                     Button("Trash", systemImage: "trash") { opened = nil; place = .source(trash.id) }
                 }
@@ -268,6 +298,10 @@ struct DesktopMemoryPage: View {
                                     .padding(.leading, 30).frame(height: 24)
                             }
                             ForEach(folders, id: \.self) { folder in
+                                let link = source.kind == .perspicax
+                                    ? MemoryFolders.pxFolderLink(folder, bots: linkBots, routines: [])
+                                    : MemoryFolders.teamFolderLink(section: source.section ?? "", bots: linkBots)
+                                let ids = entries.filter { $0.source.id == source.id && $0.row.folder == folder }.map(\.row.id)
                                 HStack(spacing: 8) {
                                     DesktopIconView(icon: .folderInput, size: 14).foregroundStyle(theme.inkSecondary)
                                     DesktopText(Text(verbatim: folder), size: 13, line: 18).lineLimit(1)
@@ -275,6 +309,12 @@ struct DesktopMemoryPage: View {
                                     DesktopText(Text(verbatim: "\(entries.filter { $0.source.id == source.id && $0.row.folder == folder }.count)"), size: 11.5, line: 16, color: \.inkSecondary)
                                 }
                                 .padding(.leading, 26).padding(.trailing, 8).frame(minHeight: 30)
+                                .contextMenu {
+                                    DesktopMemoryFolderMenu(link: link, name: folder,
+                                                            block: MemoryFolders.deleteBlock(link: link, isTeam: source.kind == .team, mayWrite: source.mayWrite)) {
+                                        pendingDelete = DesktopMemoryFolderRequest(name: folder, kind: .perspicax(scope: source.scope ?? "", ids: ids))
+                                    }
+                                }
                             }
                         }
                     }
@@ -324,20 +364,42 @@ struct DesktopMemoryPage: View {
         .background(target != nil && place == target ? theme.selected : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
-    /// A bot's folder of My memory: the bot's colour, its name, its count.
+    private var linkBots: [LinkBot] { session.state.bots.map(LinkBot.init) }
+
+    /// A bot's folder of My memory (MemorySidebar FolderRow): the bot's look
+    /// when it is linked, a plain folder and "Not linked" otherwise; its ⋯
+    /// (a long press too) says who uses it and offers Delete folder….
     private func folderRow(source: MemoryManagerSource, colour: Color) -> some View {
-        Button { place = .source(source.id); opened = nil; tab = .notes } label: {
-            HStack(spacing: 8) {
-                Circle().fill(colour).frame(width: 8, height: 8).frame(width: 14)
-                DesktopText(Text(verbatim: source.name), size: 13, line: 18).lineLimit(1)
-                Spacer(minLength: 0)
-                DesktopText(Text(verbatim: "\(count(.source(source.id)))"), size: 11.5, line: 16, color: \.inkSecondary)
-            }
-            .padding(.leading, 22).padding(.trailing, 8).frame(minHeight: 30)
-            .background(place == .source(source.id) ? theme.selected : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .contentShape(Rectangle())
+        let link = MemoryFolders.botSourceLink(source, bots: linkBots, routines: [])
+        let block = MemoryFolders.deleteBlock(link: link, isTeam: false, mayWrite: source.mayWrite)
+        let notes = entries.filter { $0.source.id == source.id }
+        let menu = DesktopMemoryFolderMenu(link: link, name: source.name, block: block) {
+            pendingDelete = DesktopMemoryFolderRequest(name: source.name, kind: .bot(
+                botId: source.botId ?? source.id,
+                paths: notes.compactMap(\.row.path).filter { $0 != "MEMORY.md" },
+                clearIndex: notes.contains { $0.row.path == "MEMORY.md" }))
         }
-        .buttonStyle(.plain)
+        return HStack(spacing: 0) {
+            Button { place = .source(source.id); opened = nil; tab = .notes } label: {
+                HStack(spacing: 8) {
+                    if MemoryFolders.isLinked(link) {
+                        DesktopMemoryLinkHint(link: link).frame(width: 14)
+                    } else {
+                        DesktopIconView(icon: .folderInput, size: 14).foregroundStyle(theme.inkSecondary)
+                    }
+                    DesktopText(Text(verbatim: source.name), size: 13, line: 18).lineLimit(1)
+                    Spacer(minLength: 0)
+                    if !MemoryFolders.isLinked(link) { DesktopMemoryLinkHint(link: link, showsMark: false) }
+                    DesktopText(Text(verbatim: "\(count(.source(source.id)))"), size: 11.5, line: 16, color: \.inkSecondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(verbatim: "\(source.name), \(desktopMemoryLinkTitle(link))"))
+        }
+        .padding(.leading, 22).padding(.trailing, 8).frame(minHeight: 30)
+        .background(place == .source(source.id) ? theme.selected : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .contextMenu { menu }
         .accessibilityIdentifier("desktop-memory.folder.\(source.id)")
     }
 

@@ -177,7 +177,6 @@ struct DesktopMemoryGraph: View {
                     if at >= 0, let key = engine.model.nodes[at].key { onPreview(key) }
                 })
                 .accessibilityLabel(Text("Graph of the notes"))
-                .accessibilityIdentifier("desktop-memory-graph")
                 if engine.model.nodes.isEmpty {
                     Text("No note matches these filters.").font(theme.font(13)).foregroundStyle(theme.inkSecondary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -201,6 +200,8 @@ struct DesktopMemoryGraph: View {
         .background(theme.panel)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("desktop-memory-graph")
         .onAppear { engine.update(notes: notes, focusKey: focusKey, depth: depth) }
         // the simulation's frames: a few ticks every 16 ms until it rests
         .task {

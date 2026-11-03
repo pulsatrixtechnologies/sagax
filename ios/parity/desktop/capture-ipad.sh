@@ -69,7 +69,7 @@ log() { printf '[capture-ipad] %s\n' "$*" >&2; }
 mkdir -p "$OUT"
 
 # ── the screen list: surfaces.mjs and ParityLaunch.swift must agree ──────
-LIST="$(node "$HERE/capture-desktop.mjs" --list | awk '/^[0-9][0-9]-/ {print $1}')"
+LIST="$(node "$HERE/capture-desktop.mjs" --list | awk '/^[0-9]+-/ {print $1}')"
 DESKTOP_IDS="$(printf '%s\n' "$LIST" | sed -E 's/^[0-9]+-//')"
 SWIFT_IDS="$(awk '/^enum IPadParityScreen/,/^}/' "$IOS/App/ParityLaunch.swift" | sed -nE 's/^ *case [A-Za-z0-9]+ = "([^"]+)".*/\1/p')"
 if [ "$DESKTOP_IDS" != "$SWIFT_IDS" ]; then

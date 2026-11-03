@@ -33,9 +33,13 @@ helpVerbs.add("help");
 const ROUTES_DIR = join(ROOT, "server", "routes");
 const routeModules = readdirSync(ROUTES_DIR).filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts")).sort();
 // Organization features register theirs from server/org/*-routes.ts and
-// server/org/org-export.ts, which server/index.ts mounts. Other domains may
-// keep *-routes.ts at the server root until they move.
-const featureRouteDirs = [join(ROOT, "server"), join(ROOT, "server", "org"), join(ROOT, "server", "mail")];
+// server/org/org-export.ts, which server/index.ts mounts. The other domains
+// keep their *-routes.ts in their folder (server/perspicax/, server/sandbox/,
+// server/desktop/...) or at the server root.
+const SERVER_DIR = join(ROOT, "server");
+const featureRouteDirs = [SERVER_DIR, ...readdirSync(SERVER_DIR, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && entry.name !== "routes")
+  .map((entry) => join(SERVER_DIR, entry.name))];
 const featureRouteModules = featureRouteDirs
   .flatMap((dir) => readdirSync(dir)
     .filter((name) => name.endsWith("-routes.ts") || name === "org-export.ts")

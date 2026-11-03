@@ -15,7 +15,7 @@ import { continueRoutineRunInConversation, useStore, type Bot } from "@/state/st
 import { useShowThreads } from "@/lib/thread-preferences";
 import { ExchangeSheet } from "../BotExchangeChip";
 import { PRIMARY_PILL } from "../SettingsPrimitives";
-import { ConnectedRunActivity } from "./RoutineRunDetail";
+import { RunActivityState as ConnectedRunActivity } from "./RunActivityState";
 
 function RoutineRunExchangeSheet({
   run,

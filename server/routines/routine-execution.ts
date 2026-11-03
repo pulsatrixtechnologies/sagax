@@ -1,4 +1,4 @@
-import type { RoutineRun } from "./routines.ts";
+import type { RoutineRun } from "./routine-run-types.ts";
 
 /** How long a routine may be held up before it acts: a deferred run tells the owner, a waiting run gives way. */
 export const ROUTINE_DEFERRAL_NOTICE_MS = 30 * 60_000;

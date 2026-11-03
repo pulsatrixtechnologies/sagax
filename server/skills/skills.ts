@@ -1,3 +1,5 @@
+import type { SkillPackageStamp } from "./skill-package-stamp.ts";
+export type { SkillPackageStamp } from "./skill-package-stamp.ts";
 // Imported Agent Skills, per bot.
 //
 // A skill is the open agentskills.io format: a folder named after the skill
@@ -101,19 +103,6 @@ interface SkillManifestEntry {
   /** Organization library only: which install added it, and the SKILL.md
    * hashes as released and as written. Never exposed to agents or clients. */
   package?: SkillPackageStamp;
-}
-
-export interface SkillPackageStamp {
-  installId: string;
-  /** The skill's name in the package. */
-  key: string;
-  release: string;
-  r: string;
-  w: string;
-  /** Additive to contract §3.2: "preset" when a bot made from one of the
-   * install's presets got it (server/presets.ts). Absent: the install itself
-   * put it there (a team's bot, or an offered skill). */
-  via?: "preset";
 }
 
 interface SkillManifest {

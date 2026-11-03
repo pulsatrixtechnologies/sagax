@@ -13,7 +13,7 @@ import { parseAppInput } from "../../shared/app.ts";
 import { PLACE_PHONE_CALL_TOOL } from "../../shared/outbound-call.ts";
 import { HANG_UP_TOOL, PLACE_CALL_TOOL, SEND_DTMF_TOOL, TRANSFER_CALL_TOOL } from "../../shared/phone-call-live.ts";
 
-import type { ToolCallContext, ToolCallResult } from "./agents-call.ts";
+import type { ToolCallContext, ToolCallResult } from "./agents-call-types.ts";
 import type { Json } from "./agents-client.ts";
 
 export const CARD_TOOL_NAMES: ReadonlySet<string> = new Set([

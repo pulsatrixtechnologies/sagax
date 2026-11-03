@@ -1,5 +1,5 @@
 // task_list (agents-task-tools.ts) carried to the internal route.
-import type { ToolCallContext, ToolCallResult } from "./agents-call.ts";
+import type { ToolCallContext, ToolCallResult } from "./agents-call-types.ts";
 import type { Json } from "./agents-client.ts";
 
 export { TASK_LIST_TOOL_NAMES } from "./agents-task-tools.ts";

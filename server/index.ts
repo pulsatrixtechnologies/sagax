@@ -1,3 +1,7 @@
+import { createBotAvatarGenerateRoutes } from "./routes/bot-avatar-generate.ts";
+import { createBotObservabilityRoutes } from "./routes/bot-observability.ts";
+import { createFleetRoutes } from "./routes/fleet.ts";
+import { createBotSecretCardRoutes } from "./routes/bot-secret-cards.ts";
 // Sagax server — the harness host. Clients hold no transports
 // (upstream rule): the React app dispatches typed commands over HTTP and
 // folds one SSE event stream; every provider process runs here.
@@ -237,7 +241,7 @@ import { createApprovalModeSupport } from "./capabilities/harness-capabilities.t
 import { escapeAttribute } from "../src/lib/composer-attachments.ts";
 import { threadRefUrl } from "../src/lib/thread-refs.ts";
 import { markDeadThreadChip } from "./threads/dead-thread-chips.ts";
-import { credentialResumeOutcome, credentialIsConfigured, isCredentialTargetId } from "../shared/credential-request.ts";
+import { credentialIsConfigured } from "../shared/credential-request.ts";
 import { VAULT_LOGIN_TARGET, ONE_PASSWORD_WAITING } from "../shared/credential-vault.ts";
 import { HOST_COMPUTER_RESOURCE, HOST_CONTROL_NOTICE } from "../shared/host-control.ts";
 import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL } from "./vault/credential-vault.ts";
@@ -329,11 +333,7 @@ import {
   type ThreadFileRef
 } from "./threads/thread-files.ts";
 import {
-  avatarGenerationRequestSchema,
-  avatarGenerationStateMatches,
-  generateAvatarImage,
-  avatarImageStatus,
-  snapshotAvatarGenerationState
+  avatarImageStatus
 } from "./media/avatar-image.ts";
 import { parseBotProfilePatch } from "./bots/bot-profile.ts";
 import { groupTurnCwd } from "./rooms/room-cwd.ts";
@@ -1299,7 +1299,7 @@ import {
   teamMemoryCardReachesMember,
   teamMemorySharingOf
 } from "../shared/team-memory-sharing.ts";
-import { readBotActivity, readToolRuns } from "./activity/activity.ts";
+import { readToolRuns } from "./activity/activity.ts";
 import {
   COMPACT_VOLATILE_SECTIONS,
   KNOWN_USE_CALLS,
@@ -1328,7 +1328,7 @@ import {
 } from "../shared/action-journal.ts";
 import { OutboundCounts } from "./outbound/outbound-counts.ts";
 import { OutboundRequestService } from "./outbound/outbound-requests.ts";
-import { DEFAULT_OUTBOUND_POLICY, isOutboundTool, normalizeOutboundPolicy } from "../shared/outbound.ts";
+import { isOutboundTool, normalizeOutboundPolicy } from "../shared/outbound.ts";
 import { normalizeAllowedRecipients, sendRecipientsAllowed } from "../shared/allowed-recipients.ts";
 import { standingGrantsAllowed } from "./rules/custom-rules-org.ts";
 import { bindThreadLogCapProvider } from "./threads/thread-log-rotation.ts";
@@ -1804,7 +1804,6 @@ import { browserNavigationRefusal } from "./browser/browser-navigation.ts";
 import { describeBrand, loadBrand } from "./brand.ts";
 import { deliverSseFrame } from "./streams/sse-fanout.ts";
 import {
-  PHONE_SECRET_PROTOCOL_VERSION,
   PhoneSecretBridge,
   PhoneSecretError,
   PhoneSecretSubmissionRegistry,
@@ -5388,16 +5387,7 @@ function peerHopTurn(depth: number, coordinated: boolean): boolean {
   return depth >= MAX_COMMS_DEPTH && !coordinated;
 }
 const MAX_WORKSPACE_BOTS = 100;
-const phoneSecretEnvelopeSchema = z.object({
-  version: z.literal(PHONE_SECRET_PROTOCOL_VERSION),
-  threadId: z.string().regex(/^[\w-]{1,128}$/),
-  keyId: z.string().regex(/^[A-Za-z0-9_-]{22}$/),
-  deviceId: z.string().regex(/^[\w-]{1,128}$/),
-  target: z.string().regex(/^[A-Za-z][A-Za-z0-9]{0,63}$/),
-  requestKey: z.string().regex(/^[\w-]{1,128}$/),
-  encapsulatedKey: z.string().regex(/^[A-Za-z0-9_-]{87}$/),
-  ciphertext: z.string().regex(/^[A-Za-z0-9_-]{23,5483}$/)
-}).strict();
+
 // Resolved from the server root — see server/proxy-paths.ts. This descending
 // path happened to survive bundling, but it goes through the same anchor so
 // there is exactly one way proxies are located.
@@ -44169,6 +44159,11 @@ const widgetRenderer = new WidgetRenderer({
   log: (line) => console.log(line)
 });
 const widgetCheckAttempts = new WidgetCheckAttempts();
+ROUTES.push(createBotAvatarGenerateRoutes({ store, ownerOrAdminOf, requesterPrincipal, orgAvatarImageConfig, orgXaiRefusal, wireBot, broadcast }));
+ROUTES.push(createBotObservabilityRoutes({ store, DATA_DIR, EVENTS_DIR, ownerOrAdminOf, computerOwner, outboundCounts }));
+ROUTES.push(createFleetRoutes({ entitled, fleetSocketPath, fleetAvailable, fleetRequest }));
+ROUTES.push(createBotSecretCardRoutes({ getConfig: () => cfg, provideSecretFromPhone, secretMessage, phoneSecretSubmissions, phoneSecretSubmissionKey, resumeSecretCard, currentSecretState }));
+
 /** #1388 wave 4 step 2: pages origin, hosted health, org/inbound/link gates, sign-in refusals. */
 async function originGates(req: IncomingMessage, res: ServerResponse, url: URL, path: string, method: string): Promise<boolean> {
   // The separate pages origin (SAGAX_PAGES_ORIGIN) serves the published
@@ -45062,63 +45057,6 @@ async function fallback(req: IncomingMessage, res: ServerResponse, url: URL, pat
       throw Object.assign(new Error("This bot has several conversations and the change did not say which one. Open the conversation to change, then try again."), { status: 409, code: "thread_required" });
     }
   };
-  m = path.match(/^\/api\/bots\/([\w-]+)\/avatar\/generate$/);
-  if (m && method === "POST") {
-    const existing = store.bot(m[1]);
-    if (!existing) {
-      json(res, 404, { error: "no such bot" });
-      return true;
-    }
-    // A chat-scoped session (a phone) generates only for a bot it owns or
-    // may edit; admins and the owner at this computer for any.
-    if (!ownerOrAdminOf(auth, existing)) {
-      json(res, 403, { error: "forbidden: only the bot owner or an admin can change its picture", code: "bot_picture_owner_only" });
-      return true;
-    }
-    // Generation is slow and both desktop and companion clients may edit or
-    // delete this bot while it is in flight. Snapshot the two fields this
-    // request owns before the first await so a late result cannot win.
-    const initialAvatar = snapshotAvatarGenerationState(existing);
-    // 2026-10-16: on the organization's xAI key only for the person asking.
-    const imageCfg = orgAvatarImageConfig(requesterPrincipal(auth));
-    if (!imageCfg) {
-      json(res, 403, orgXaiRefusal("image"));
-      return true;
-    }
-    const parsed = avatarGenerationRequestSchema.safeParse(await readBody(req));
-    if (!parsed.success) {
-      json(res, 400, { error: `prompt must be at most 400 characters` });
-      return true;
-    }
-    const generated = await generateAvatarImage(imageCfg, existing, parsed.data.prompt);
-    const current = store.bot(existing.id);
-    if (!current) {
-      json(res, 404, { error: "no such bot" });
-      return true;
-    }
-    if (!avatarGenerationStateMatches(initialAvatar, current)) {
-      json(res, 409, { error: "avatar changed while generation was in progress" });
-      return true;
-    }
-    const saved = saveImage(generated.bytes, generated.mime);
-    const avatarUrl = botAvatarUrlFromStoredPath(saved.path);
-    if (!avatarUrl) throw Object.assign(new Error("Could not store the generated avatar"), { status: 500 });
-    const avatarCrop = initialAvatar.avatarCrop && initialAvatar.avatarCrop !== "mascot"
-      ? initialAvatar.avatarCrop
-      : "circle";
-    const bot = store.patchBot(current.id, { avatarUrl, avatarCrop });
-    if (!bot) {
-      // There are no awaits between the refreshed lookup and this patch, but
-      // keep the attachment invariant explicit if the store ever changes.
-      deleteAttachment(saved.path);
-      json(res, 404, { error: "no such bot" });
-      return true;
-    }
-    const visible = wireBot(bot);
-    broadcast({ kind: "bot", bot: visible });
-    json(res, 201, { avatarUrl, bot: visible });
-    return true;
-  }
   m = path.match(/^\/api\/bots\/([\w-]+)\/model$/);
   if (m && method === "PATCH") {
     const body = await readBody(req);
@@ -46395,215 +46333,6 @@ async function fallback(req: IncomingMessage, res: ServerResponse, url: URL, pat
     handoffs.stoppedByPerson(threadId);
     await interruptDirectThread(m[1], threadId);
     json(res, 200, { ok: true, outcome: "stopped" });
-    return true;
-  }
-  const fleetRoute = /^\/api\/fleet(?:\/(workspaces(?:\/([a-z0-9-]+)(?:\/(users|suspend|resume))?)?|upgrade))?$/.exec(path);
-  if (fleetRoute) {
-    // Admin scope by default (server/auth/request-auth.ts), checked before this
-    // point; the socket's own permissions decide whether this workspace may
-    // drive the agent at all. The `admin` feature is always on in the
-    // open-source edition: only an enterprise layer that withholds it ends here.
-    if (!entitled("admin")) {
-      json(res, 403, { error: "Installations are off: the enterprise layer on this server does not grant its admin feature." });
-      return true;
-    }
-    const socket = fleetSocketPath();
-    if (!fleetAvailable(socket)) {
-      json(res, 404, { error: "No fleet agent on this server. Run `openmausbot fleet init --domain … --operator <this user>` as root." });
-      return true;
-    }
-    const [, resource, slug, sub] = fleetRoute;
-    let forward: { method: string; path: string; body?: unknown } | null = null;
-    if (method === "GET" && !resource) forward = { method: "GET", path: "/workspaces" };
-    else if (method === "POST" && resource === "workspaces") forward = { method: "POST", path: "/workspaces", body: await readBody(req, 256 * 1024) };
-    else if (method === "POST" && resource === "upgrade") forward = { method: "POST", path: "/upgrade" };
-    else if (slug && method === "POST" && (sub === "users" || sub === "suspend" || sub === "resume")) forward = { method: "POST", path: `/workspaces/${slug}/${sub}`, ...(sub === "users" ? { body: await readBody(req, 8192) } : {}) };
-    else if (slug && method === "DELETE" && !sub) forward = { method: "DELETE", path: `/workspaces/${slug}`, body: await readBody(req, 8192) };
-    if (!forward) {
-      json(res, 405, { error: "no such fleet operation" });
-      return true;
-    }
-    res.setHeader("cache-control", "no-store");
-    try {
-      const reply = await fleetRequest(socket, forward.method, forward.path, forward.body);
-      json(res, reply.status, reply.body ?? {});
-      return true;
-    } catch (error) {
-      json(res, 502, { error: error instanceof Error ? error.message : String(error) });
-      return true;
-    }
-  }
-
-
-  // ── a bot's activity: what it did, with the outcome ──
-  // Read-only over the same two logs as the inspector and the decision
-  // route above. The bot's own threads (its DM and every task) carry the
-  // tool runs; the decision log carries the bot's requests wherever they
-  // happened, since those rows name the bot.
-  m = path.match(/^\/api\/bots\/([\w-]+)\/activity$/);
-  if (m && method === "GET") {
-    const bot = store.bot(m[1]);
-    if (!bot) {
-      json(res, 404, { error: "no such bot" });
-      return true;
-    }
-    const rawLimit = url.searchParams.get("limit");
-    const parsedLimit = rawLimit === null ? undefined : Number(rawLimit);
-    if (parsedLimit !== undefined && (!Number.isInteger(parsedLimit) || parsedLimit <= 0)) {
-      json(res, 400, { error: "limit must be a positive whole number" });
-      return true;
-    }
-    const threadIds = [...new Set([bot.threadId, ...store.tasks(bot.id).map((task) => task.threadId)])];
-    json(res, 200, {
-      rows: readBotActivity({ dataDir: DATA_DIR, eventsDir: EVENTS_DIR, botId: bot.id, threadIds, limit: parsedLimit ?? 300 })
-    });
-    return true;
-  }
-
-  // ── a bot's outbound allowance: the policy, and how much of it is spent ──
-  m = path.match(/^\/api\/bots\/([\w-]+)\/outbound$/);
-  if (m && method === "GET") {
-    const bot = store.bot(m[1]);
-    if (!bot) {
-      json(res, 404, { error: "no such bot" });
-      return true;
-    }
-    // #1098: a client session (a member's served app or phone) reads it
-    // for a bot it owns or may edit, as it sets the policy (bots.tools).
-    if (!ownerOrAdminOf(auth, bot) && !computerOwner(auth)) {
-      json(res, 403, { error: "forbidden: only the bot owner or an admin can read its outbound allowance", code: "bot_outbound_owner_only" });
-      return true;
-    }
-    json(res, 200, { policy: bot.outbound ?? DEFAULT_OUTBOUND_POLICY, today: outboundCounts.today(bot.id) });
-    return true;
-  }
-
-
-  // /api/tts/* is handled by the shared voice-mode routes.
-
-  // Phone credential entry arrives as an HPKE envelope bound to the exact
-  // paired device, bot, task, card and allowlisted target. The companion
-  // authenticates the bearer and supplies the device id; only the embedded
-  // Electron server has the private key needed to open the envelope.
-  m = path.match(/^\/api\/bots\/([\w-]+)\/secret-cards\/([\w-]+)\/provide$/);
-  if (m && method === "POST") {
-    if (req.headers["x-openmausbot-companion"] !== "1") {
-      json(res, 403, { error: "Secure phone entry must come from a paired phone" });
-      return true;
-    }
-    const rawDeviceId = req.headers["x-openmausbot-companion-device"];
-    const authenticatedDeviceId = Array.isArray(rawDeviceId) ? "" : String(rawDeviceId ?? "");
-    if (!/^[\w-]{1,128}$/.test(authenticatedDeviceId)) {
-      json(res, 401, { error: "This paired phone could not be verified" });
-      return true;
-    }
-    if (!String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
-      json(res, 415, { error: "content-type must be application/json" });
-      return true;
-    }
-    const parsed = phoneSecretEnvelopeSchema.safeParse(await readBody(req, 16_384));
-    if (!parsed.success || !isCredentialTargetId(parsed.data?.target)) {
-      json(res, 400, { error: "The encrypted credential request is invalid" });
-      return true;
-    }
-    const state = await provideSecretFromPhone({
-      ...parsed.data,
-      botId: m[1],
-      messageId: m[2],
-      target: parsed.data.target
-    }, authenticatedDeviceId);
-    json(res, 200, state);
-    return true;
-  }
-
-  // Desktop credential cards never send the credential through this route.
-  // Electron saves it through the OS-backed store first; these actions only
-  // verify configured state, update card metadata, and resume the turn.
-  m = path.match(/^\/api\/bots\/([\w-]+)\/secret-cards\/([\w-]+)\/(provided|resume|dismiss)$/);
-  if (m && method === "POST") {
-    const body = await readBody(req);
-    const threadId = String(body.threadId ?? "");
-    const message = secretMessage(m[1], threadId, m[2]);
-    if (!message?.secret) {
-      json(res, 404, { error: "no such credential request" });
-      return true;
-    }
-    // A vault login card is answered on its own routes (server/routes/credential-vault.ts).
-    if (message.secret.target === VAULT_LOGIN_TARGET) {
-      json(res, 409, { error: "answer this login request on its card" });
-      return true;
-    }
-    if (phoneSecretSubmissions.has(
-      phoneSecretSubmissionKey(threadId, message.id, message.secret.requestKey),
-    )) {
-      json(res, 409, { error: "this credential is currently being saved from a phone" });
-      return true;
-    }
-    if (m[3] === "provided") {
-      if (message.secret.dismissed) {
-        json(res, 409, { error: "this credential request was dismissed" });
-        return true;
-      }
-      if (message.secret.superseded) {
-        json(res, 409, { error: "this credential request was superseded by a newer one" });
-        return true;
-      }
-      if (!credentialIsConfigured(cfg, message.secret.target)) {
-        json(res, 409, { error: `${message.secret.label} was not saved yet` });
-        return true;
-      }
-      if (!resumeSecretCard(m[1], threadId, message.id, "provided")) {
-        json(res, 409, { error: "this credential request is no longer available" });
-        return true;
-      }
-      const state = currentSecretState(m[1], threadId, message.id);
-      if (!state) {
-        json(res, 409, { error: "this credential request is no longer available" });
-        return true;
-      }
-      json(res, 200, state);
-      return true;
-    }
-    if (m[3] === "resume") {
-      if (message.secret.superseded) {
-        json(res, 409, { error: "this credential request was superseded by a newer one" });
-        return true;
-      }
-      const outcome = credentialResumeOutcome(message.secret);
-      if (!outcome) {
-        json(res, 409, { error: "this credential request is not ready to resume" });
-        return true;
-      }
-      if (outcome === "provided" && !credentialIsConfigured(cfg, message.secret.target)) {
-        json(res, 409, { error: `${message.secret.label} is no longer configured` });
-        return true;
-      }
-      if (!resumeSecretCard(m[1], threadId, message.id, outcome)) {
-        json(res, 409, { error: "this credential request is no longer available" });
-        return true;
-      }
-      const state = currentSecretState(m[1], threadId, message.id);
-      if (!state) {
-        json(res, 409, { error: "this credential request is no longer available" });
-        return true;
-      }
-      json(res, 200, { resumed: state.resumed });
-      return true;
-    }
-    if (message.secret.superseded) {
-      json(res, 409, { error: "this credential request was superseded by a newer one" });
-      return true;
-    }
-    if (!message.secret.provided && !resumeSecretCard(m[1], threadId, message.id, "dismissed")) {
-      json(res, 409, { error: "this credential request is no longer available" });
-      return true;
-    }
-    const state = currentSecretState(m[1], threadId, message.id);
-    if (!state) {
-      json(res, 409, { error: "this credential request is no longer available" });
-      return true;
-    }
-    json(res, 200, { dismissed: true, resumed: state.resumed });
     return true;
   }
   json(res, 404, { error: `no route: ${method} ${path}` });

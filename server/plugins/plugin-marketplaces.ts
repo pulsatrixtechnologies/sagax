@@ -51,7 +51,7 @@ import {
   type GitSource,
   type MarketplacePolicy,
   type MarketplacePluginEntry,
-} from "../bots/bot-plugins.ts";
+} from "./plugin-sources.ts";
 import type { StoredMcpServer } from "../mcp/mcp-registry.ts";
 import { parseSkillMd } from "../../shared/skill-md.ts";
 

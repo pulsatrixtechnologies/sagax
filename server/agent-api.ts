@@ -508,16 +508,25 @@ const BAD_HANDLE_MESSAGE: Record<BadHandleReason, string> = {
 /** The refusal of a handle. `threadId` is passed only when the handle was
  * authentic (its signature held) and names a conversation this caller may
  * read: the one-call recovery is then read_latest_page with it. */
-export function badHandleRefusal(reason: BadHandleReason, threadId?: string | null): Refusal {
+export function badHandleRefusal(reason: BadHandleReason, threadId?: string | null, agentId?: string | null): Refusal {
+  const named = { ...(threadId ? { thread_id: threadId } : {}), ...(threadId && agentId ? { agent_id: agentId } : {}) };
   return refuse(400, BAD_HANDLE_CODE[reason], BAD_HANDLE_MESSAGE[reason], {
-    details: { reason, family: "bad_handle", ...(threadId ? { thread_id: threadId } : {}) },
-    ...(threadId ? { thread_id: threadId } : {}),
+    details: { reason, family: "bad_handle", ...named },
+    ...named,
     hint: BAD_HANDLE_HINT,
   });
 }
 
 /** When a handle stops being valid (ms since the epoch). */
 export const handleExpiresAt = (issuedAt: number): number => issuedAt + HANDLE_TTL_MS;
+
+/** The lifetime fields every answer that carries a handle publishes (#1896):
+ * `expires_at` (unix ms, the contract since 0.8.24), the same instant as an
+ * ISO 8601 string, and the handle's whole lifetime in ms. */
+export function handleLifetime(issuedAt: number): { expires_at: number; expires_at_iso: string; ttl_ms: number } {
+  const expiresAt = handleExpiresAt(issuedAt);
+  return { expires_at: expiresAt, expires_at_iso: new Date(expiresAt).toISOString(), ttl_ms: HANDLE_TTL_MS };
+}
 
 export function verifyHandle(secret: Buffer, handle: string, now: number): VerifyHandleResult {
   if (typeof handle !== "string" || !handle.startsWith("turn_") || handle.length > 1_200) {
@@ -1105,7 +1114,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       const body: HandleBody = { a: agentId, t: threadId, m: posted.messageId, i: issuedAt, c: callerKey(caller) };
       const handle = signHandle(deps.secret, body);
       const accepted = {
-        handle, expires_at: handleExpiresAt(issuedAt), label: turnLabel(agent.name, prompt), agent_id: agentId, thread_id: threadId, mode, accepted: true, files: fileInputs.length,
+        handle, ...handleLifetime(issuedAt), label: turnLabel(agent.name, prompt), agent_id: agentId, thread_id: threadId, mode, accepted: true, files: fileInputs.length,
         ...(plan.reported ? { priority: plan.reported, ...(plan.downgraded ? { downgraded: true, priority_note: plan.note } : {}) } : {}),
       };
       if (mode === "fire_and_forget") return ok({ ...accepted, finished: false, status: "accepted" });
@@ -1145,9 +1154,20 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         // Altered or not a handle: nothing in it is trusted, nothing is read.
         if (!verified.ok && verified.reason !== "age") return badHandleRefusal(verified.reason);
         const body = verified.body;
-        if (body.a !== agentId) return badHandleRefusal("other_agent");
+        if (body.a !== agentId) {
+          // Authentic, but for another agent (the caller mixed up agent_id).
+          // Name the handle's conversation and agent only when it is one of
+          // the caller's own with an agent it still reaches: the one-call
+          // recovery is then read_latest_page with both (#1896).
+          const own = deps.threads(caller, body.a).some((thread) => thread.threadId === body.t)
+            && !isRefusal(await reachable(caller, body.a));
+          return own ? badHandleRefusal("other_agent", body.t, body.a) : badHandleRefusal("other_agent");
+        }
         const reason: BadHandleReason | null = !verified.ok ? "age" : body.c !== callerKey(caller) ? "other_caller" : null;
-        if (!reason) return ok({ ...resultBody(await waitTurn(body, args.handle, timeoutMs!, signal, after)), expires_at: handleExpiresAt(body.i) });
+        if (!reason) return ok({ ...resultBody(await waitTurn(body, args.handle, timeoutMs!, signal, after)), ...handleLifetime(body.i) });
+        // The caller key is the person's principal id (or the bot id), never
+        // the MCP session or AI client: a person who reconnects after an idle
+        // gap (new session, same person) matches and lands above (#1896).
         // The handle is authentic (its signature held). A conversation of the
         // caller's own (deps.threads) is one it may read anyway with
         // read_latest_page: naming it, or answering from it, discloses nothing.
@@ -1174,9 +1194,9 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       const handle = signHandle(deps.secret, body);
       if (deps.turnState(agentId, threadId) === "idle") {
         const last = [...entries].reverse().find((entry) => entry.thread_id === threadId && entry.role === "agent" && entry.kind === "text");
-        return ok({ handle, expires_at: handleExpiresAt(body.i), agent_id: agentId, thread_id: threadId, finished: true, status: "idle", reply: last?.text ?? "" });
+        return ok({ handle, ...handleLifetime(body.i), agent_id: agentId, thread_id: threadId, finished: true, status: "idle", reply: last?.text ?? "" });
       }
-      return ok({ ...resultBody(await waitTurn(body, handle, timeoutMs!, signal, after)), expires_at: handleExpiresAt(body.i) });
+      return ok({ ...resultBody(await waitTurn(body, handle, timeoutMs!, signal, after)), ...handleLifetime(body.i) });
     },
 
     async read_transcript(caller, args) {

@@ -21,7 +21,7 @@ names, parameters and limits as the reference design's agent tools, plus `get_ag
 | `get_agent` | read | `agents.read` | `agent_id`: the full profile for an audit (see below) |
 | `create_agent` | admin | `agents.create` | one temporary agent per call (see below), `name` (≤ 80 chars, one line), optional `description` and `idle_hours` (1 to 720, default 24); it greets the person itself. Only on the person's explicit ask |
 | `delete_agent` | admin | `agents.create` | `agent_id` of a temporary agent: archives it (see below). A lasting agent answers 409 `not_temporary` |
-| `send_prompt` | write | `agents.send` | `agent_id`, `prompt` (≤ 32,000 chars), `mode` `fire_and_forget` (default) / `blocking` / `async`, `timeout_ms` (1 s to 10 min, default 120 s; the live blocking wait is capped at 55 s so the handle returns as `still_working`), `on_busy` `queue` (default since 2026-10-17: waits its turn) / `reject` (409 `busy`, `retryable: true`, with `details.turn_state` and options) / `supersede` (stops the running turn this caller started and the approval it waits on; never the person's own turn or another caller's), optional `priority` `now` or `normal` (default `normal`), up to 8 `files` (workspace-relative, 25 MiB each), optional `thread_id` (one of the caller's own conversations, 404 `unknown_thread` otherwise). A bot's send lands in the agent's single chat with the person the caller works for (#1170); a person's AI client's send lands in its own conversation with the agent (2026-10-29, see Guarantees); `thread_id` continues one of the caller's conversations instead. Answers a `handle`, its `expires_at` (unix ms) and a short `label` (the agent's name and the prompt's first words). `now` wakes an idle agent at once or moves the prompt to the front of its queue, and never interrupts a running turn. Past 10 `now` sends an hour the answer is `priority: "normal"` with `downgraded: true` and `priority_note`. Refusals keep the unified envelope and set `retryable` |
+| `send_prompt` | write | `agents.send` | `agent_id`, `prompt` (≤ 32,000 chars), `mode` `fire_and_forget` (default) / `blocking` / `async`, `timeout_ms` (1 s to 10 min, default 120 s; the live blocking wait is capped at 55 s so the handle returns as `still_working`), `on_busy` `queue` (default since 2026-10-17: waits its turn) / `reject` (409 `busy`, `retryable: true`, with `details.turn_state` and options) / `supersede` (stops the running turn this caller started and the approval it waits on; never the person's own turn or another caller's), optional `priority` `now` or `normal` (default `normal`), up to 8 `files` (workspace-relative, 25 MiB each), optional `thread_id` (one of the caller's own conversations, 404 `unknown_thread` otherwise). A bot's send lands in the agent's single chat with the person the caller works for (#1170); a person's AI client's send lands in its own conversation with the agent (2026-10-29, see Guarantees); `thread_id` continues one of the caller's conversations instead. Answers a `handle`, its lifetime (`ttl_ms`, `expires_at` in unix ms and `expires_at_iso`) and a short `label` (the agent's name and the prompt's first words). `now` wakes an idle agent at once or moves the prompt to the front of its queue, and never interrupts a running turn. Past 10 `now` sends an hour the answer is `priority: "normal"` with `downgraded: true` and `priority_note`. Refusals keep the unified envelope and set `retryable` |
 | `await_turn` | read | `agents.read` | `agent_id`, `handle`, `timeout_ms` (0 to 55 s, default 15 s), optional `cursor` (a prior `wait_cursor`). The handle is the one `send_prompt` returned, or the `{threadId, handle}` a one-way `send_to_bot` included (copy it exactly). Never send the prompt again: wait again with the same handle. When the wait ends and the turn is not done, the answer is `still_working` (HTTP 200) with `thread_id`, `progress.summary`, `progress.steps`, `wait_cursor` and `recommended_wait_ms`; pass `wait_cursor` as `cursor` on the next call so steps are not repeated. Without a handle, waits the in-flight turn of your conversation, else its last message. An expired handle, or one of another session, on a conversation the caller reads answers that turn (`handle: null`, `recovered_from`). Else a 400 `handle_expired`, `handle_session_mismatch`, `handle_agent_mismatch` or `bad_handle` (altered), `details.reason` and `details.family: bad_handle`, and a `hint` to read `read_latest_page` with the `thread_id` `send_prompt` returned (see Handle lifecycle) |
 | `read_transcript` | read | `agents.read` | the whole transcript (the newest 2,000 entries; `truncated` says when there were more) |
 | `read_transcript_page` | read | `agents.read` | one bounded page: `limit` (1 to 200) and `before_ms` required, `after_ms` optional (inclusive unix ms), `cursor` for the next older page |
@@ -145,8 +145,10 @@ and the options (`queue`, `supersede`, `await_turn`).
   `docs/mcp-surface.md` ("Agent rosters per harness").
 - **Handles** are HMAC-signed with a server key (`agent-api.key`, mode 0600)
   and bound to the caller and the agent. They expire after 7 days:
-  `send_prompt` (and `await_turn`) answer `expires_at`, the expiry in unix
-  milliseconds, beside `thread_id`. A one-way `send_to_bot` answer includes
+  `send_prompt` (and `await_turn`) answer the lifetime beside `thread_id`
+  from the first answer (#1896): `ttl_ms` (the whole lifetime, 604800000),
+  `expires_at` (the expiry in unix milliseconds, unchanged since 0.8.24) and
+  `expires_at_iso` (the same instant in ISO 8601). A one-way `send_to_bot` answer includes
   the same kind of handle (`{threadId, handle}`). `await_turn` accepts it for
   that caller and agent. The fresh thread stays visible to the recipient.
 - **Handle lifecycle** (audit of 2026-10-29): `send_prompt` gives `handle`,
@@ -163,9 +165,22 @@ and the options (`queue`, `supersede`, `await_turn`).
   - `handle_agent_mismatch` (`other_agent`): issued for another `agent_id`
   - `handle_session_mismatch` (`other_caller`): issued to another caller
 
+  The caller a handle is bound to is the person (their principal id) or the
+  bot, never the MCP session, the transport or the AI client (#1896): a
+  person whose client reconnects after an idle gap (a phone in a car, a new
+  MCP session, another AI client) is the same caller, and the handle keeps
+  working. `handle_session_mismatch` means another person or another bot.
+  `thread_id` survives every refusal it may: on `handle_expired`,
+  `handle_session_mismatch` and `handle_agent_mismatch`, when the handle's
+  conversation is one of the caller's own (and, for `handle_agent_mismatch`,
+  with an agent it still reaches), the refusal carries `thread_id` (and
+  `agent_id` for the agent mismatch) at the top level and in `details`, for a
+  one-call `read_latest_page`. An altered handle (`bad_handle`) names
+  nothing, since nothing in it is trusted.
+
   `details.family` is `bad_handle` on all four, for a client that matched the
-  old single code. A refusal never returns the handle, nor the agent,
-  conversation or person it was issued for. The handle-free result is
+  old single code. A refusal never returns the handle, nor the person it was
+  issued for, nor an agent or conversation the caller cannot read. The handle-free result is
   `read_latest_page` with `agent_id` and `thread_id` (one conversation, no
   handle needed); `await_turn` without a handle waits the newest turn of the
   caller's conversation. There is no separate handle-free tool: those two
@@ -174,7 +189,22 @@ and the options (`queue`, `supersede`, `await_turn`).
   (never forged) and stays base64url readable, because nothing in it is
   secret (the agent, the conversation, the caller's own key); its layout is
   not an interface and may change. Every value a caller needs is a result
-  field: `agent_id`, `thread_id`, `expires_at`.
+  field: `agent_id`, `thread_id`, `expires_at`, `expires_at_iso`, `ttl_ms`.
+- **Decision: signed claims, no server-side lookup** (#1896, 2026-11-03).
+  The handle stays a self-contained HMAC-signed claims token rather than a
+  random id looked up in a server table. Why: the claims (agent,
+  conversation, prompt, issue time, caller) are all a turn needs, so
+  `await_turn` verifies one MAC and reads the conversation, with no store to
+  grow, purge or back up; a handle survives a server restart (the key
+  `agent-api.key` stays on disk; a workspace backup never carries it, so a
+  moved workspace signs with its new server's key); several replicas sharing
+  the key need no shared table; and a lookup would add no secrecy, since
+  nothing in the body is secret and the caller binding is checked either
+  way. Revoking one handle early is not offered: it expires after 7 days,
+  and `thread_id`, which is what a caller keeps, is guarded by the caller's
+  own conversations, not by the handle. Rotating `agent-api.key` revokes
+  every handle at once (they answer `bad_handle`, and `thread_id` still
+  recovers).
 - **Error envelope**: every refusal answers `{code, message, hint, details,
   retryable}` with `details.status` the HTTP status (never 0), plus `error`
   (the message, for older clients) and any field it carried before at the top

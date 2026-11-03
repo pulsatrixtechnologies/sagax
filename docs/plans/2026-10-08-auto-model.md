@@ -13,7 +13,7 @@ orchestration, and always spawn workers with the best model per task."
   `PATCH /api/bots/:id`, `PATCH .../tasks/:threadId` and the composer chip; team setup validates its
   own copy (`server/team-setup-requests.ts`, zod `.strict()`); `create_bot` goes through
   `POST /api/internal/create-bot` (`defaultSelection()` when no model is given).
-- Who pays a turn: `resolveEngineAccess` (`server/engine-credentials.ts`): solo mode the server's
+- Who pays a turn: `resolveEngineAccess` (`server/engines/engine-credentials.ts`): solo mode the server's
   own sign-in; organization mode the person who speaks (own subscription, own key in Perspicax,
   organization key), a routine's owner for routines. `orgEngineInput` builds its facts.
 

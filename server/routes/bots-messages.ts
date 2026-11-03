@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import type { BusySendRequest } from "../../shared/parallel-tasks.ts";
 import type { ResolvedSender } from "../../shared/wire.ts";
 import type { SteerOutcome } from "../contracts.ts";
-import type { TurnSpeaker } from "../engine-access.ts";
+import type { TurnSpeaker } from "../engines/engine-access.ts";
 import type { ReplyTarget } from "../replies.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import type { Message } from "../store.ts";
@@ -40,7 +40,7 @@ import {
   prepareWidgetPress,
   reopenCancelledPress,
 } from "../chat-widgets.ts";
-import { claudeActivityEvents } from "../claude-activity.ts";
+import { claudeActivityEvents } from "../engines/claude-activity.ts";
 import {
   cloudGuestSendRefusal,
   cloudThreadRefusal,

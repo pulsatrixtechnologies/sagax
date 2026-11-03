@@ -2,7 +2,7 @@
 // Install the engine CLIs pinned in engines.lock.json into the Sagax server
 // image (the Dockerfile's engines step), verify each one starts, and write
 // the manifest the server's startup self-check reads
-// (server/engines-self-check.ts, SAGAX_ENGINES_MANIFEST).
+// (server/engines/engines-self-check.ts, SAGAX_ENGINES_MANIFEST).
 //
 //   node scripts/install-engines.mjs --lock engines.lock.json --manifest /app/engines/manifest.json
 //   node scripts/install-engines.mjs --lock engines.lock.json --plan      (prints the selection, installs nothing)

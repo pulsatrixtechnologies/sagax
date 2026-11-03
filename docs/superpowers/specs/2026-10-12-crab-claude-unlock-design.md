@@ -121,9 +121,9 @@ Descriptions follow the condition column in the table. Icons: reuse lucide names
 
 `claudeAccountLinked(person)` is true when any of:
 
-- Org: `PrincipalEngineLogins.signedIn(person, "claudeAgent")` (`server/principal-engine-logins.ts:10-11, 30, 113-116`), the marker `.pulsabot-login.json` written from `onAuthenticated` (`:134, 172-176`).
+- Org: `PrincipalEngineLogins.signedIn(person, "claudeAgent")` (`server/engines/principal-engine-logins.ts:10-11, 30, 113-116`), the marker `.pulsabot-login.json` written from `onAuthenticated` (`:134, 172-176`).
 - Solo: the same marker in that install's Claude config dir. Today's solo `ClaudeLoginController` only refreshes models on success (`server/drivers/claude.ts:2842-2844`, `server/drivers/claude-login-auth.ts:80, 411`). Write the marker there too.
-- Own Anthropic key: solo `cfg.anthropic?.key` (the public flag is `config.anthropic.configured`, `server/index.ts:19978`); org the person's Perspicax `anthropic` key (`myKey` via `providersOfDriver("claudeAgent")` which is `["anthropic"]`, `server/engine-credentials.ts:91, 23256-23257`). `orgKey` / Settings > Connections does not count.
+- Own Anthropic key: solo `cfg.anthropic?.key` (the public flag is `config.anthropic.configured`, `server/index.ts:19978`); org the person's Perspicax `anthropic` key (`myKey` via `providersOfDriver("claudeAgent")` which is `["anthropic"]`, `server/engines/engine-credentials.ts:91, 23256-23257`). `orgKey` / Settings > Connections does not count.
 
 Record `{ type: "claude.linked" }` from those write paths (login success, own-key save). Idempotent: the achievement unlocks once (`server/achievements.ts:12, 352-353`).
 

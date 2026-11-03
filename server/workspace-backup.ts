@@ -21,7 +21,7 @@ import { removeThreadTrees } from "./runtime/store.ts";
 import {
   chatOfKeys, confidentialEngineSessionPath, dataEngineHomes, databaseSidecarOf, ENGINE_PURGE_DONE, ENGINE_PURGE_FILE,
   engineHomeOf, engineStoreFiltered, engineStoreKind, eventLogSessionIds, readPendingPurges, scrubEngineDatabase, taskEngineKeys, widenKeys,
-} from "./engine-transcripts.ts";
+} from "./engines/engine-transcripts.ts";
 import { escapeAttribute, splitTranscriptAttachments } from "../src/lib/composer-attachments.ts";
 import { WORKSPACE_BACKUP_CLIENT_KEYS } from "../shared/workspace-backup-client.ts";
 import {
@@ -50,7 +50,7 @@ const EXCLUDED = new Set([
   // dead data whose briefs and results may be a confidential thread's
   "confidential-forgotten", "room-handoffs.json.migrated",
   // engine transcript purges left to retry, and the one-time purge's mark
-  // (server/engine-transcripts.ts): this machine's bookkeeping
+  // (server/engines/engine-transcripts.ts): this machine's bookkeeping
   ENGINE_PURGE_FILE, ENGINE_PURGE_DONE,
   ".openmausbot-server-child", "environment-id", "sessions.json", "tunnel-account.json",
   "team-computers.json",
@@ -443,7 +443,7 @@ export function stripConfidentialRuntime(databasePath: string, threads: Readonly
 }
 
 /** The keys that find the engines' own transcripts of a data folder's
- * confidential threads (server/engine-transcripts.ts): each one's id, its
+ * confidential threads (server/engines/engine-transcripts.ts): each one's id, its
  * folder's hashes and its session ids (its record, its event log), the
  * purges left to retry, widened over the engine homes in that folder.
  * `sourceDataDir` is where the folder was when the engines ran (an
@@ -766,7 +766,7 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
           walk(source, path, [...chain, source]);
         } else if (stat.isFile()) {
           let copied: { size: number; mode: number; sha256: string };
-          // an engine home's own stores (server/engine-transcripts.ts): its
+          // an engine home's own stores (server/engines/engine-transcripts.ts): its
           // databases are copied as compacted snapshots whenever a confidential
           // thread exists or one was deleted (no free page or WAL frame of it),
           // its histories, logs and chat records without the threads' entries
@@ -1210,7 +1210,7 @@ function withoutConfidentialDataScopes(staged: string, manifest: Manifest): Mani
 }
 
 /** An archive from a release that exported the engines' own transcripts
- * of its confidential threads (server/engine-transcripts.ts) leaves them in
+ * of its confidential threads (server/engines/engine-transcripts.ts) leaves them in
  * the staged copy at once: the entries their names give away, the lines of
  * prompt histories and logs, the rows of engine databases and Gemini-style
  * chat records of their sessions. The manifest follows, so the preview

@@ -45,7 +45,7 @@ import {
 import { promptWithReply } from "../replies.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { clientGroupPatchViolation, requestSource } from "../request-auth.ts";
-import type { TurnSpeaker } from "../engine-access.ts";
+import type { TurnSpeaker } from "../engines/engine-access.ts";
 import { speakerFor } from "../request-speaker.ts";
 import { roomMentionReadPatch } from "../room-mentions.ts";
 import { parseConversationTurnTimeout } from "../room-turn-timeout.ts";

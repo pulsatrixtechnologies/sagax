@@ -10,8 +10,8 @@ import { z } from "zod";
 import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../shared/image-generation.ts";
 
 import { writeFileAtomic } from "./atomic.ts";
-import { applyStoredEngineEnv } from "./engine-api-keys.ts";
-import { migrateConfigPlaintextKeys, readOnboardingEngineKey } from "./onboarding-engine-key.ts";
+import { applyStoredEngineEnv } from "./engines/engine-api-keys.ts";
+import { migrateConfigPlaintextKeys, readOnboardingEngineKey } from "./engines/onboarding-engine-key.ts";
 import { withoutComputerEngine } from "./computer/computer-engine-removal.ts";
 import { newBotDefaultsSchema, type NewBotDefaults } from "./new-bot-defaults.ts";
 import { loopDetectorConfigSchema, type LoopDetectorConfig } from "./loop-detector.ts";
@@ -2174,7 +2174,7 @@ function injectedEnvironment(cfg: AppConfig, instanceId: string, driver: string)
   if (driver === "grok" && cfg.xai?.key) environment.set("XAI_API_KEY", cfg.xai.key);
   // Grok Build never runs on it in solo mode (acp/grok.ts strips it); on an
   // organization server it is the organization's key for Grok Build, after
-  // each person's own sign-in and key (server/engine-credentials.ts).
+  // each person's own sign-in and key (server/engines/engine-credentials.ts).
   if (driver === "grokAgent" && cfg.xai?.key && process.env.SAGAX_IDENTITY?.trim().toLowerCase() === "perspicax") environment.set("XAI_API_KEY", cfg.xai.key);
   // A provider key belongs only to its API instance. The retired global
   // switch is read once by the saved-selection migration, never at dispatch.
@@ -2235,7 +2235,7 @@ const DRIVER_CREDENTIAL_VARIABLES: Record<string, readonly string[]> = {
  * (Codex, ACP agents) never are, nor grokAgent outside an organization
  * server. On an organization server such a
  * key is the organization's key, the fallback after the speaker's own
- * subscription and key (server/engine-credentials.ts). */
+ * subscription and key (server/engines/engine-credentials.ts). */
 export function driverKeyBacked(cfg: AppConfig, driver: string, instanceId = ""): boolean {
   const variables = DRIVER_CREDENTIAL_VARIABLES[driver];
   if (!variables) return false;
@@ -2329,7 +2329,7 @@ export function instanceConfigs(cfg: AppConfig): InstanceConfigMap {
   // A fleet saved before the Computer engine was removed may still name it.
   const map: InstanceConfigMap = withoutComputerEngine(configured ? { ...configured } : { ...DEFAULT_FLEET });
   // An organization server serves Gemini CLI on each person's own Google key
-  // (Perspicax provider `google`, server/engine-credentials.ts): the retired
+  // (Perspicax provider `google`, server/engines/engine-credentials.ts): the retired
   // consumer login above is not what pays there, so the engine is listed.
   if (process.env.SAGAX_IDENTITY?.trim().toLowerCase() === "perspicax" && (!configured || Object.hasOwn(configured, "claude") || Object.hasOwn(configured, "grok") || Object.hasOwn(configured, "codex"))) {
     if (!Object.hasOwn(map, "gemini")) map.gemini = { driver: "geminiAgent" };

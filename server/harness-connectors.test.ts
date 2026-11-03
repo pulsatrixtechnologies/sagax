@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { resolveEngineAccess } from "./engine-credentials.ts";
+import { resolveEngineAccess } from "./engines/engine-credentials.ts";
 
 import {
   ClaudeAiConnectorInventory,

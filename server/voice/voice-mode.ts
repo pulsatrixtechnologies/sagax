@@ -72,7 +72,7 @@ import {
   type VoiceModeStatus,
   type VoiceModeVia,
 } from "../../shared/voice-mode.ts";
-import { accessCardVisibleTo } from "../engine-access.ts";
+import { accessCardVisibleTo } from "../engines/engine-access.ts";
 import { isSameOrigin } from "../request-auth.ts";
 import { websocketAccept } from "../ws-bridge.ts";
 import { webSocketSession } from "../ws-session.ts";

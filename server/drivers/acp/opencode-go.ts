@@ -15,7 +15,7 @@ import { createAcpDriver, offeredModels, type AccountErrorCode, type AcpSupport 
 import { MODEL_ACCESS_DISABLED_MESSAGE, MODEL_ACCESS_DISABLED_TEXT } from "../../../shared/model-access-disabled.ts";
 import type { ModelCatalog, ProviderErrorCode } from "../../contracts.ts";
 import { titleCaseModelId } from "../../contracts.ts";
-import { engineStartGate } from "../../engine-start-gate.ts";
+import { engineStartGate } from "../../engines/engine-start-gate.ts";
 import { execCli, killCliTree, spawnCli } from "../../procs.ts";
 
 /** Nothing is offered until OpenCode itself answers. An invented default is

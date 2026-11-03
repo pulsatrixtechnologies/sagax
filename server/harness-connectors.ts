@@ -1,4 +1,4 @@
-import type { AccessVia } from "./engine-credentials.ts";
+import type { AccessVia } from "./engines/engine-credentials.ts";
 // Connectors the engines already bring with the person's own account, so
 // Sagax builds no GitHub, Outlook or Calendar integration of its own.
 //
@@ -35,7 +35,7 @@ import { join } from "node:path";
 
 import { CLAUDE_AI_CONNECTORS_URL } from "../shared/connector-setup.ts";
 import { GROK_CLOUD_CONNECTORS, GROK_CONNECTORS_URL } from "../shared/grok-cloud-connectors.ts";
-import type { TurnSpeaker } from "./engine-access.ts";
+import type { TurnSpeaker } from "./engines/engine-access.ts";
 import { resolveCli } from "./procs.ts";
 import type { RequestAuth } from "./request-auth.ts";
 import { PASS, type RouteHandler } from "./routes/table.ts";

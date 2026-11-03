@@ -371,7 +371,7 @@ export const PROVIDER_KEY_CACHE_MS = 60_000;
  * anthropic (Claude Code, pi), openai (Codex, pi), xai (Grok Build, pi and
  * voice mode, server/voice/voice-mode.ts), google (Gemini CLI, pi) and moonshot
  * (Kimi Code, pi). Perspicax 1.8 lists the first three; google and moonshot
- * are read as soon as its directory lists them (server/engine-credentials.ts). */
+ * are read as soon as its directory lists them (server/engines/engine-credentials.ts). */
 export type ModelProvider = "anthropic" | "openai" | "xai" | "google" | "moonshot" | "openrouter" | "mistral" | "cerebras" | "opencode" | "cursor" | "factory" | "minimax" | "glm" | "zai" | "groq" | `compat:${string}`;
 export const MODEL_PROVIDERS: readonly ModelProvider[] = ["anthropic", "openai", "xai", "google", "moonshot", "openrouter", "mistral", "cerebras", "opencode", "cursor", "factory", "minimax", "glm", "zai", "groq"];
 export const KEY_PROVIDERS = ["anthropic", "openai", "xai", "google", "moonshot", "elevenlabs", "fish", "openrouter", "mistral", "cerebras", "opencode", "cursor", "factory", "minimax", "glm", "zai", "groq"] as const;

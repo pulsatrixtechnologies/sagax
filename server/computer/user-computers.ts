@@ -13,7 +13,7 @@
 // Each target is a provider; the router only decides WHOSE computer a call
 // may reach: the speaking person's, only while it is connected. Pure, so the
 // rules are tested on their own (user-computers.test.ts).
-import type { TurnSpeaker } from "../engine-access.ts";
+import type { TurnSpeaker } from "../engines/engine-access.ts";
 
 export const USER_COMPUTER_TARGETS = ["user-desktop", "user-sandbox"] as const;
 export type UserComputerTarget = (typeof USER_COMPUTER_TARGETS)[number];

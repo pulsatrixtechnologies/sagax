@@ -1,6 +1,6 @@
 import type { PersonalProviderServer } from "../../shared/provider-accounts.ts";
 import { PERSONAL_VOICE_KEY_PROVIDERS, isPersonalVoiceKeyProvider } from "../../shared/person-voice-keys.ts";
-import { ProviderAccountsError, type ProviderAccountOwner, type ProviderAccounts } from "../provider-accounts.ts";
+import { ProviderAccountsError, type ProviderAccountOwner, type ProviderAccounts } from "../engines/provider-accounts.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

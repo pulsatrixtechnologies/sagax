@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { EngineSelfCheck } from "../engines-self-check.ts";
+import { EngineSelfCheck } from "../engines/engines-self-check.ts";
 import { buildOverview, deployFacts, hostFacts, percentile, readBackupStatus, selfCheckEngines, type OverviewDeps } from "./org-admin-overview.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
 import type { ProblemRow } from "./org-problem-log.ts";

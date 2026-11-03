@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { DATA_DIR } from "../../config.ts";
-import { applyStoredEngineEnv } from "../../engine-api-keys.ts";
+import { applyStoredEngineEnv } from "../../engines/engine-api-keys.ts";
 import { applyEngineCommandVariables } from "../../vault/credential-command-env.ts";
 import { newId } from "../../contracts.ts";
 import type { SendTurnInput } from "../../contracts.ts";

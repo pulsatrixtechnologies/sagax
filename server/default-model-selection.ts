@@ -158,7 +158,7 @@ export function memberNewBotSelection(
 /** #1445: the engines as one organization member can use them. The server's
  * own sign-in says nothing about a member: what runs for them is what pays
  * for their turn (their subscription, their key, or the organization's key
- * when it was given to them, server/engine-credentials.ts). `runs` answers
+ * when it was given to them, server/engines/engine-credentials.ts). `runs` answers
  * that per engine. An engine they cannot run is left out of every level of
  * memberNewBotSelection; one they can run counts as signed in, even when the
  * server's own account is signed out. */

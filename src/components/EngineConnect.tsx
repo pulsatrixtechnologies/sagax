@@ -4,7 +4,7 @@
 // ChatGPT", "Connect Claude", ...) or "Connected" with Disconnect, and a small
 // "Manage my keys in Perspicax" link while no subscription is signed in on an
 // engine whose provider key a person can keep in Perspicax. The payer order
-// itself stays the server's (server/engine-credentials.ts, `myTurns` on
+// itself stays the server's (server/engines/engine-credentials.ts, `myTurns` on
 // GET /api/me/engines); the subscription signs in through
 // `/api/me/engines/<id>/login`, never the server's own engine login.
 import { useState } from "react";

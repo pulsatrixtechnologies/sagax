@@ -164,7 +164,7 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
    * (session.started), newest last, at most ENGINE_SESSIONS_KEPT: what
    * finds the engine's own files of the thread again when it turns
    * confidential or a confidential one is deleted, after a reset replaced
-   * the cursor (server/engine-transcripts.ts). Ids only. */
+   * the cursor (server/engines/engine-transcripts.ts). Ids only. */
   engineSessions?: string[];
 }
 
@@ -2193,7 +2193,7 @@ export class Store {
     return task;
   }
 
-  /** Forget a thread's native engine sessions (server/engine-transcripts.ts):
+  /** Forget a thread's native engine sessions (server/engines/engine-transcripts.ts):
    * its cursors, the bot's mirror of them and the ids it kept go, and the
    * next turn starts a new session with the thread's own transcript
    * replayed (`rewound`), never a resume of a session whose files are gone.

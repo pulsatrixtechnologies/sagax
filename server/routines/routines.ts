@@ -61,8 +61,8 @@ import {
   engineNameFromReconnectAttention,
   isEngineReconnectAttention,
   LOGIN_ENGINE_LABEL,
-} from "../engine-reconnect-ahead.ts";
-import type { LoginDriver } from "../principal-engine-logins.ts";
+} from "../engines/engine-reconnect-ahead.ts";
+import type { LoginDriver } from "../engines/principal-engine-logins.ts";
 import {
   dispatchRefusal, engineFacts, loadOwnerNotices, recoverRun, retryNote, weekRuns,
   type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,

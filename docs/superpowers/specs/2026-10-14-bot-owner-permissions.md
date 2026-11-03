@@ -13,7 +13,7 @@ des choses ; là, TOUT ce qu'un bot fait spamme un admin d'approbations. »
   (`server/approvals/approval-audience.ts` : `approvalAudience` = `ownerUserId`).
 - Mais sur un serveur d'organisation, un bot dont le propriétaire n'est pas
   admin (`memberOwnedBot`) passe chaque carte par
-  `memberBotAdminApproval` (`server/engine-access.ts`). Cette fonction
+  `memberBotAdminApproval` (`server/engines/engine-access.ts`). Cette fonction
   marquait `adminApproval: true` **tout** sauf deux cas : un outil de
   fichier qui reste dans l'espace de travail du bot, et un outil `agents`
   de la liste revue (`server/member-tool-scope.ts`). Donc chaque outil MCP
@@ -233,7 +233,7 @@ possible (hors de ce chantier) : un approbateur `bot_owner` dans
 
 ## 10. Tests
 
-`server/approvals/owner-approval.test.ts` (pur) et `server/engine-access.test.ts` :
+`server/approvals/owner-approval.test.ts` (pur) et `server/engines/engine-access.test.ts` :
 Toujours / Une fois / Refuser, retenu par personne, pas partagé entre
 personnes, destructif exige une règle explicite, mode auto, mode bypass
 journalisé, rien ne contourne la route admin ni les holds, admin sollicité

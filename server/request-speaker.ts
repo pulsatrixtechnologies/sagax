@@ -3,7 +3,7 @@
 // (#1388). Never import index.ts from here.
 import { createHash } from "node:crypto";
 
-import type { TurnSpeaker } from "./engine-access.ts";
+import type { TurnSpeaker } from "./engines/engine-access.ts";
 import type { RequestAuth } from "./request-auth.ts";
 import type { SessionRecord } from "./sessions.ts";
 

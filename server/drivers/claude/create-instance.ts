@@ -19,7 +19,7 @@ import {
   claudeSubscriptionHomeKey,
   ensureClaudeSubscriptionFresh,
   onClaudeSubscriptionRenew,
-} from "../../claude-subscription-refresh.ts";
+} from "../../engines/claude-subscription-refresh.ts";
 import { sessionIdlePolicy } from "../session-idle.ts";
 import { claudeAuthRecovery } from "../claude-auth-recovery.ts";
 import { probeClaudeCommands } from "../harness-command-probe.ts";

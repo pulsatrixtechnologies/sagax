@@ -6,7 +6,7 @@ import { DATA_DIR, instanceConfigs, loadConfig, PROVIDER_CREDENTIAL_ENV, WORKSPA
 import { acquireDataDirLease } from "./data-dir-lease.ts";
 import { SetupCancelled, type SetupIo } from "./cli-prompts.ts";
 import { isSetupComplete, readCliStartup, runSetup, saveCliStartup } from "./cli-setup.ts";
-import { ONBOARDING_ENGINE_KEYS_FILE, readOnboardingEngineKey } from "./onboarding-engine-key.ts";
+import { ONBOARDING_ENGINE_KEYS_FILE, readOnboardingEngineKey } from "./engines/onboarding-engine-key.ts";
 import { OpenAICompatDriver } from "./drivers/openai-compat.ts";
 
 /** The key the running driver resolves for an instance — read from the

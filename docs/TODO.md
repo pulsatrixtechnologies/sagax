@@ -10,7 +10,7 @@ Today (fix/routine-run-rpc-error): a thread whose own model has no credentials o
 
 Still open:
 
-1. `resolveEngineAccess` (`server/engine-credentials.ts`) asks pi for a provider key (anthropic, openai, xai, google, moonshot) even when the picked model is a desktop local model that needs none. A desktop inject model on pi should get its own access (the desktop model grant) instead of `no_credentials`.
+1. `resolveEngineAccess` (`server/engines/engine-credentials.ts`) asks pi for a provider key (anthropic, openai, xai, google, moonshot) even when the picked model is a desktop local model that needs none. A desktop inject model on pi should get its own access (the desktop model grant) instead of `no_credentials`.
 2. When the bot's own model is refused too, the turn is still refused with the access card. Falling back to the payer's connected cloud engine, or to the Auto pick for that payer, needs a rule for who pays and a notice in the thread.
 3. Incident reports (`reportIncident`) could skip a Primary Bot whose engine cannot run for its owner on the server, and notify the person instead.
 

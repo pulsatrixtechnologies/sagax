@@ -110,7 +110,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       ? callTurnEffort({ driverKind: state.instance.driverKind, levels: state.instance.adapter.capabilities.effortLevels, effort: state.effort })
       : resolveEngineTurnEffort(state.effort, state.instance.driverKind, state.instance.adapter.capabilities.effortLevels);
     // A routine run while the server boots waits for an engine start slot
-    // (server/engine-start-gate.ts): the runs that came due during a
+    // (server/engines/engine-start-gate.ts): the runs that came due during a
     // restart start two at a time instead of every engine at once.
     // After boot, routine turns keep a steady limit (SAGAX_ROUTINE_ENGINE_SLOTS)
     // and wait while memory is critical (server/engine-memory-guard.ts).

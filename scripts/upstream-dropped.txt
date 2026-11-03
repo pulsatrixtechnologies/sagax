@@ -352,3 +352,15 @@ server/turn-route.test.ts
 server/turn-route.ts
 server/turn-watchdog.test.ts
 server/turn-watchdog.ts
+server/claude-account-api.test.ts
+server/claude-accounts.test.ts
+server/claude-accounts.ts
+server/claude-update.test.ts
+server/claude-update.ts
+server/engine-install.test.ts
+server/engine-install.ts
+server/provider-auth-sessions.test.ts
+server/provider-auth-sessions.ts
+server/provider-icon.ts
+server/provider-key-check.test.ts
+server/provider-key-check.ts

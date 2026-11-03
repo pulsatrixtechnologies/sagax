@@ -8,7 +8,7 @@ import { APPROVAL_MODES, type ApprovalMode } from "../shared/approval-mode.ts";
 import { DESKTOP_BRIDGE_MCP_NAME } from "../shared/bot-workplace.ts";
 import { ADMIN_ONLY_PERMISSIONS, can, isPermissionKey, normalizePermissions } from "../shared/permissions.ts";
 import { autoVerdict } from "./approvals/auto-approve.ts";
-import { memberBotAdminApproval, memberOwnedBot } from "./engine-access.ts";
+import { memberBotAdminApproval, memberOwnedBot } from "./engines/engine-access.ts";
 import { decide } from "./mcp/mcp-permissions.ts";
 import { HOST_LEVEL_AGENT_TOOLS } from "./member-tool-scope.ts";
 import { ownComputerChoiceCall, ownDestinationCall } from "./member-environment.ts";

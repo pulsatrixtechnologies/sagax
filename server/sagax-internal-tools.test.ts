@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { autoVerdict } from "./approvals/auto-approve.ts";
-import { memberBotAdminApproval } from "./engine-access.ts";
+import { memberBotAdminApproval } from "./engines/engine-access.ts";
 import { gateReadOnlyTools } from "./drivers/acp/grok-approval-gate.ts";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

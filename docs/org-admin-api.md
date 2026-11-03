@@ -169,7 +169,7 @@ backup are server facts.
 ```
 
 - `engines`: the boot self-check of the image's engines
-  (`server/engines-self-check.ts`); without an image manifest, the configured
+  (`server/engines/engines-self-check.ts`); without an image manifest, the configured
   instances as their probes found them (`checkedAt` null).
 - `presence`: Sagax knows online, away and offline; `idle` is always 0.
   Hidden presence counts as offline.

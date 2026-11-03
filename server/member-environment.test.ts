@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { autoVerdict } from "./approvals/auto-approve.ts";
 import { gateReadOnlyTools } from "./drivers/acp/grok-approval-gate.ts";
-import { memberBotAdminApproval } from "./engine-access.ts";
+import { memberBotAdminApproval } from "./engines/engine-access.ts";
 import { mcpServerNameError } from "./mcp/mcp-registry.ts";
 import {
   memberEnvironmentAutonomyAllowed,

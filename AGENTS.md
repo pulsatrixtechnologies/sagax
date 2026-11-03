@@ -446,11 +446,11 @@ person's key, then the organization's, else `no_access` `sign_in_expired`;
 `GET /api/me/engines` answers `myTurns: "expired"`, never Ready
 (`myTurnsReady`, shared/org-engine-readiness.ts), counted under Needs
 setup. `#1759`: `signInExpiredCard` / `subscriptionSignInRefused`
-(`server/engine-access.ts`) also match Codex (`codexSignInRefused`,
+(`server/engines/engine-access.ts`) also match Codex (`codexSignInRefused`,
 `CODEX_SIGN_IN_EXPIRED`) and Grok ACP (`invalid_credentials`,
 `inactive_subscription`) so the chat shows Reconnect and
 `PrincipalEngineLogins.markExpired` sets Reconnexion requise, not a healthy
-Connected. Tests: `server/engine-access.test.ts`.
+Connected. Tests: `server/engines/engine-access.test.ts`.
  The picker says "This choice applies to every thread of this bot."
 (`data-model-scope`), lists an OpenAI-compatible server's own `/models`
 rows on an organization server, and the person's computer models are
@@ -462,7 +462,7 @@ OpenAI-compatible server" (`OpenAiCompatServers`), each an engine
 `POST/PATCH/DELETE /api/instances/openai-compat-servers[/id]`
 (`server/routes/openai-compat-servers.ts`), an
 organization admin's only. Tests: `shared/offered-engines.test.ts`,
-`shared/org-engine-readiness.test.ts`, `server/engine-credentials.test.ts`,
+`shared/org-engine-readiness.test.ts`, `server/engines/engine-credentials.test.ts`,
 `server/openai-compat-servers.test.ts`, `server/desktop/desktop-local-models.test.ts`,
 `src/lib/model-payers.test.ts`, `ModelPicker.interaction.test.ts`, C5 in
 `server/org/org-admin-console.e2e.test.ts`.
@@ -3779,7 +3779,7 @@ remembered, exported, logged or shared beyond its owner
   `CONFIDENTIAL_FORGOTTEN_MARKER` note (cleared by that backup).
   `room-handoffs.json.migrated` is never backed up. `deleteThread` drops the
   thread's `command_receipts` too.
-- Engine transcripts (2026-10-18, `server/engine-transcripts.ts`): the
+- Engine transcripts (2026-10-18, `server/engines/engine-transcripts.ts`): the
   engines' own session files (Claude Code `projects/*.jsonl` and
   `history.jsonl`, Codex rollouts and `state_*.sqlite`, Hermes `state.db`,
   Grok, pi, Cursor, Gemini, Qwen, OpenCode) are found by keys only: the
@@ -3808,7 +3808,7 @@ remembered, exported, logged or shared beyond its owner
   sensitive work.
 - Tests: `server/threads/confidential-threads.test.ts`,
   `server/threads/confidential-threads.e2e.test.ts` (CT-1 to CT-17),
-  `server/engine-transcripts.test.ts`,
+  `server/engines/engine-transcripts.test.ts`,
   `server/runtime/store.test.ts`, `server/workspace-backup.test.ts`,
   `server/message-db.test.ts`,
   `server/bot-zip.test.ts`, `src/components/ConfidentialBanner.test.ts`,
@@ -4304,7 +4304,7 @@ it for one of its bots.
 - "Le propriétaire" (`owner`): the owner's engine, subscription, key or the
   local model of the owner's computer serve every known person who writes to
   the bot, and the hops that speak for them (`turnPayer` in
-  `server/engine-credentials.ts`, plan `ownerPays`). The owner's model is
+  `server/engines/engine-credentials.ts`, plan `ownerPays`). The owner's model is
   used, never a viewer's own pin. An unknown person never makes the owner
   pay. Routines are unchanged (always the owner).
 - "Chaque personne" (`speaker`): each person pays (the 2026-10-01 rule).
@@ -4342,9 +4342,9 @@ it for one of its bots.
   turnPayer }`, the bot's owner or an admin (`server/routes/group-bot-payer.ts`,
   `GroupBotPayers.tsx` in the group panel's Details). `sagax_settings`:
   `bot.turnPayer`, `group.botPayer`.
-- Tests: `shared/turn-payer.test.ts`, `server/engine-credentials.test.ts`
+- Tests: `shared/turn-payer.test.ts`, `server/engines/engine-credentials.test.ts`
   (owner pays), `server/desktop/desktop-local-models.test.ts` (owner's grant, offline),
-  `server/engine-access.test.ts`, `server/harness-connectors.test.ts`
+  `server/engines/engine-access.test.ts`, `server/harness-connectors.test.ts`
   (isolation), `server/routes/bot-runtime-settings.test.ts`,
   `server/routes/group-bot-payer.test.ts`, `src/components/AccessCard.payer.test.ts`,
   S4-9 in `server/org/org-rights.e2e.test.ts` (owner's subscription by default,
@@ -4385,7 +4385,7 @@ keep the owner's credentials and model.
   bot's approval level must hold on that engine (`modelSwitchNeedsAsk`:
   Custom stays on its engine), as for Auto and the limit backup.
 - Tests: `shared/payable-model.test.ts`, `server/turns/turn-model-routing.test.ts`,
-  `server/model-auto.test.ts`, `server/principal-engine-logins.test.ts`,
+  `server/model-auto.test.ts`, `server/engines/principal-engine-logins.test.ts`,
   `server/turns/turn-run.test.ts`, `src/components/TurnRunLine.test.ts`, S4-9 in
   `server/org/org-rights.e2e.test.ts` (another engine, starred model, a group).
 
@@ -4788,7 +4788,7 @@ and `server/store.org-approval-default.test.ts`:
 A bot acts with its owner's rights (spec
 `docs/superpowers/specs/2026-10-14-bot-owner-permissions.md`). Keep these
 rules, covered by `server/approvals/owner-approval.test.ts`,
-`server/engine-access.test.ts` and `server/org/org-sharing.e2e.test.ts` (S3-7d):
+`server/engines/engine-access.test.ts` and `server/org/org-sharing.e2e.test.ts` (S3-7d):
 
 - Only what goes beyond the owner's rights is an admin card
   (`memberBotAdminApproval`): a server command, a file outside the bot's
@@ -5496,7 +5496,7 @@ Thread scope stays out of both. On an organization server the window shows
 the speaker's engine card, the same minimal one as Settings
 (`ModelPickerPayers.tsx` around `EngineConnect.tsx`, 2026-10-08): one "Pays
 with" line from the server's `myTurns` (the order of
-`server/engine-credentials.ts`, never recomputed and no longer drawn as a
+`server/engines/engine-credentials.ts`, never recomputed and no longer drawn as a
 list; a routine thread shows the owner's credentials), one Connect button or
 Connected with Disconnect, signing in their own subscription through
 `/api/me/engines/<id>/login`, never the server's engine login; the server's
@@ -5715,7 +5715,7 @@ Besides Claude Code and Codex, the server image can carry Grok Build, pi,
 Gemini CLI and Kimi Code (Dockerfile: npm ones in `ENGINES`, pinned; Grok
 Build through `NATIVE_ENGINES=grok`, the official x.ai release binary pinned
 by version and SHA-256). Each person pays with their own credentials
-(`server/engine-credentials.ts`, the order above), never the server's login:
+(`server/engines/engine-credentials.ts`, the order above), never the server's login:
 
 - Grok Build (`grokAgent`): their own `grok login --device-auth`
   (`server/drivers/device-login.ts`, HOME `principals/<pid>/grok`), else
@@ -5745,9 +5745,9 @@ A key turn always runs in an empty home of the payer's
 (`principals/<pid>/<driver>-key`), an org-key turn in `org/<driver>-key`
 (`applyAccess` in `acp/core.ts`, `piAccessEnvironment`). Perspicax 1.8 lists
 anthropic, openai and xai keys; google and moonshot are read as soon as its
-directory lists them. Tests: `server/engine-credentials.test.ts`,
+directory lists them. Tests: `server/engines/engine-credentials.test.ts`,
 `server/drivers/acp/org-access.test.ts`, `server/drivers/device-login.test.ts`,
-`server/principal-engine-logins.test.ts`.
+`server/engines/principal-engine-logins.test.ts`.
 
 Plan usage (Settings > Usage, `GET /api/plan-usage`, 2026-10-08) reads
 the windows of whoever pays, from where their login really is. On an
@@ -5778,7 +5778,7 @@ server image are pinned: npm package and version, native download URL and
 SHA-256 per architecture, the Python engine's source archive and SHA-256,
 licence, `redistributable`, plus the engines deliberately not preinstalled
 (`notPreinstalled`, with the reason) and the API engines that need no
-install (`noInstall`). `server/engines-self-check.test.ts` fails when a
+install (`noInstall`). `server/engines/engines-self-check.test.ts` fails when a
 built-in driver is missing from the lock or a pin's `bin` differs from the
 driver's default `cli`.
 
@@ -5808,7 +5808,7 @@ driver's default `cli`.
   it runs its own tools), mmx-cli (not needed by the MiniMax engine, no
   licence published). API engines (Grok API, OpenAI-compatible, Mistral,
   Cerebras, MiniMax), Boat and custom ACP need no install.
-- Startup self-check (`server/engines-self-check.ts`, `SAGAX_ENGINES_MANIFEST`):
+- Startup self-check (`server/engines/engines-self-check.ts`, `SAGAX_ENGINES_MANIFEST`):
   the image build already ran each CLI's `--version` and stored it as
   `reported`. At boot the server checks that binary is on PATH and logs that
   recorded line (`[engines] claude: ...`); it does not spawn the CLI again.
@@ -8729,7 +8729,7 @@ and model probes, then every routine that came due while the server was down
 (each one a full engine process, an OpenCode ACP child near 550 MiB, kept
 idle in the pool for ten minutes afterwards). On an organization server (5 GiB container) the
 kernel OOM-killed engine children within two minutes of each start.
-`server/engine-start-gate.ts` bounds it. Keep these rules:
+`server/engines/engine-start-gate.ts` bounds it. Keep these rules:
 
 - During the first 5 minutes after start (`SAGAX_BOOT_ENGINE_WINDOW_MS`) at
   most 2 engine processes (`SAGAX_BOOT_ENGINE_SLOTS`, 0 = off) run at a time
@@ -8744,7 +8744,7 @@ kernel OOM-killed engine children within two minutes of each start.
   then closed (`releaseWarmSession`) instead of idling ten minutes. A
   person's own turn, a voice call and peer or delegated turns never wait
   here (a parent waiting on its child must not deadlock the slots).
-- Covered by `server/engine-start-gate.test.ts`. Measured in a 5 GiB
+- Covered by `server/engines/engine-start-gate.test.ts`. Measured in a 5 GiB
   container with 16 overdue routines: peak 5.25 GB and 37 engine processes
   before, 1.40 GB and 3 after.
 - After boot, routine turns keep a steady limit (`routineEngineGate`,

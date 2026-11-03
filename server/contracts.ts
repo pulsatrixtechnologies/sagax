@@ -173,7 +173,7 @@ export interface SendTurnInput {
   /** When the person's message behind this turn was stored (epoch ms), for
    * the driver's per-turn latency line (drivers/acp/turn-latency.ts). */
   receivedAt?: number;
-  /** Organization server (slice 4, server/engine-credentials.ts): which
+  /** Organization server (slice 4, server/engines/engine-credentials.ts): which
    * credentials this one turn runs with. Absent in solo mode: the instance's
    * own configuration, as always. */
   access?: TurnAccessInput;

@@ -13,7 +13,7 @@ import { parse as parseYaml } from "yaml";
 import type { ModelCatalog, ProviderErrorCode, TurnAccessInput } from "../../contracts.ts";
 import { harnessHome, splitCliString } from "../../env-path.ts";
 import { resolveCli } from "../../procs.ts";
-import { engineStartGate } from "../../engine-start-gate.ts";
+import { engineStartGate } from "../../engines/engine-start-gate.ts";
 import type { DeviceSignIn } from "../device-auth.ts";
 import { decodeInjectId, hostApiKey, localHost, mergeLocalInject } from "../local-inject.ts";
 import { createAcpDriver, type AccountErrorCode, type AcpSupport } from "./core.ts";

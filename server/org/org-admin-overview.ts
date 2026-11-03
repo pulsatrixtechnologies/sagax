@@ -6,7 +6,7 @@ import { cpus, freemem, loadavg, totalmem } from "node:os";
 import { readFileSync } from "node:fs";
 import { statfs } from "node:fs/promises";
 
-import type { EngineSelfCheck } from "../engines-self-check.ts";
+import type { EngineSelfCheck } from "../engines/engines-self-check.ts";
 import { ok, type ConsoleContext, type ConsoleRoute } from "./org-admin-console.ts";
 import { reasonLabel, type ProblemRow } from "./org-problem-log.ts";
 import type { UsageRow } from "../usage-ledger.ts";

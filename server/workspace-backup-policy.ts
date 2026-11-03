@@ -53,7 +53,7 @@ export function excludedWorkspaceAuthPath(path: string): boolean {
   if (/^(?:github-credentials|marketplace-tokens)\.enc(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
   // Team secrets of the organization (server/org/org-bot-secrets.ts).
   if (/^org-bot-secrets\.enc(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
-  // File-backed provider keys (server/engine-api-keys.ts), solo and per person.
+  // File-backed provider keys (server/engines/engine-api-keys.ts), solo and per person.
   if (/^engine-api-keys\.(?:enc|json)(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
   if (/^principals\/[^/]+\/engine-api-keys\.enc(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
   // The person's web search provider and key (server/web-search/store.ts).
@@ -132,7 +132,7 @@ export function confidentialDataScopePath(path: string): boolean {
   return /^data-scopes\/[^/]+\/t-[^/]*(?:\/|$)/i.test(path);
 }
 
-/** The engine homes inside the data folder (server/engine-transcripts.ts
+/** The engine homes inside the data folder (server/engines/engine-transcripts.ts
  * dataEngineHomes): a person's engine folders (`principals/<id>/<engine>`,
  * `principals/<id>/<driver>-key`), the organization's key homes
  * (`org/<driver>-key`) and the homes Sagax owns for withheld turns
@@ -151,7 +151,7 @@ const ENGINE_HOME = /^(?:principals\/[^/]+\/[^/]+|org\/[^/]+|engine-policies\/[^
  *   `auth.encrypted` (Droid).
  * - `.env`: Hermes, Gemini and Qwen read provider keys from it.
  * - `.pulsabot-login.json`: Sagax's own « signed in » marker
- *   (server/principal-engine-logins.ts). It goes with the sign-in it vouches
+ *   (server/engines/principal-engine-logins.ts). It goes with the sign-in it vouches
  *   for, so a restored person shows « Sign in » rather than a dead login.
  * - `.claude.json.backup*`: Claude Code's copies of `.claude.json`, which
  *   hold the account and any API key (`.claude.json` itself is copied

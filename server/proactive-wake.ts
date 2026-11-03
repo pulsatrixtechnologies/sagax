@@ -38,7 +38,7 @@ import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import { writeFileAtomic } from "./atomic.ts";
-import { isEngineReconnectCondition } from "./engine-reconnect-ahead.ts";
+import { isEngineReconnectCondition } from "./engines/engine-reconnect-ahead.ts";
 import { ProactiveBudget, type ProactiveBudgetOptions } from "./proactive.ts";
 import { ROUTINE_REPORT_CONTRACT } from "./routines/routine-report.ts";
 import { ROUTINE_RESTARTED } from "./routines/routines.ts";

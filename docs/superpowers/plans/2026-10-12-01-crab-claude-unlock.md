@@ -50,18 +50,18 @@
 | `src/components/crab.test.ts` | Invert line 116: crab is not a default character. |
 | `src/lib/achievements.ts` | `surpriseRewardLabel`, `displayReward`; crab waits like Shapes. |
 | `src/lib/achievements.test.ts` | Crab locked by default; surprise labels; toast reveal. |
-| `server/claude-account.ts` | Create: `claudeAccountLinked(input: ClaudeAccountInput): boolean`. |
-| `server/claude-account.test.ts` | Create: login marker, own key, org key false. |
-| `server/claude-activity.ts` | Create: `claudeTide`, `isClaudeComputerTool`, `claudeActivityEvents`, `claudeFrameEvents`. |
-| `server/claude-activity.test.ts` | Create: tides, Fable, Auto, computer names, non-anthropic empty. |
+| `server/engines/claude-account.ts` | Create: `claudeAccountLinked(input: ClaudeAccountInput): boolean`. |
+| `server/engines/claude-account.test.ts` | Create: login marker, own key, org key false. |
+| `server/engines/claude-activity.ts` | Create: `claudeTide`, `isClaudeComputerTool`, `claudeActivityEvents`, `claudeFrameEvents`. |
+| `server/engines/claude-activity.test.ts` | Create: tides, Fable, Auto, computer names, non-anthropic empty. |
 | `server/achievements.ts` | `PersonRecord.migratedCrab`, `grandfatherCrab` option, recordOf second pass. |
 | `server/achievements.test.ts` | Client POST refuses `claude.linked`; `migratedCrab` once; GET reconcile. |
 | `server/routes/achievements.ts` | `AchievementRouteDeps.linked`; GET records `claude.linked` then snapshots. |
-| `server/principal-engine-logins.ts` | `onAuthenticated` also records `claude.linked` for `claudeAgent`. |
+| `server/engines/principal-engine-logins.ts` | `onAuthenticated` also records `claude.linked` for `claudeAgent`. |
 | `server/drivers/claude.ts` | Solo login success writes `LOGIN_MARKER` and records `claude.linked`. |
 | `server/drivers/claude-login-auth.ts` | Unchanged contract; callers pass the new `onAuthenticated` body. |
 | `server/index.ts` | Wire `linked`, solo key save, `observeAchievementFrame` Claude events, `grandfatherCrab`. |
-| `server/achievements-mastery.ts` | Unchanged. Task 4 imports `modelFamily` from here into `server/claude-activity.ts`, where `claudeTide` is defined. |
+| `server/achievements-mastery.ts` | Unchanged. Task 4 imports `modelFamily` from here into `server/engines/claude-activity.ts`, where `claudeTide` is defined. |
 | `src/components/floating-bots/MascotLookEditor.tsx` | `listed` = unlocked or worn; drop `grokLinked` preview injection; no lock hint on a missing tile. |
 | `src/components/floating-bots/wardrobe.ts` | Drop the locked chip when no listed row is locked. |
 | `src/components/floating-bots/wardrobe.test.ts` | Locked chip absent when `lockedOf` is all false. |
@@ -471,16 +471,16 @@ git commit -m "feat(achievements): Claude category, crab unlock, eventStreak"
 ### Task 3: Server Claude link detection
 
 **Files:**
-- Create: `server/claude-account.ts`, `server/claude-account.test.ts`
+- Create: `server/engines/claude-account.ts`, `server/engines/claude-account.test.ts`
 - Modify: `server/routes/achievements.ts` (`AchievementRouteDeps` 19-25, GET 44-46)
 - Modify: `server/achievements.test.ts` (route helper 288-301, GET tests 303-326)
-- Modify: `server/principal-engine-logins.ts` (`onAuthenticated` 172)
+- Modify: `server/engines/principal-engine-logins.ts` (`onAuthenticated` 172)
 - Modify: `server/drivers/claude.ts` (solo login 2844; `resolveClaudeConfigDir` 149)
 - Modify: `server/index.ts` (route wiring 21072-21076; PUT `/api/config` after `saveConfig(patch)` 36404)
-- Test: `server/claude-account.test.ts`, `server/achievements.test.ts`
+- Test: `server/engines/claude-account.test.ts`, `server/achievements.test.ts`
 
 **Interfaces:**
-- Consumes: `LOGIN_MARKER` from `server/principal-engine-logins.ts:30`; `AchievementStore.record`; `isServerEvent`
+- Consumes: `LOGIN_MARKER` from `server/engines/principal-engine-logins.ts:30`; `AchievementStore.record`; `isServerEvent`
 - Produces:
   - `export interface ClaudeAccountInput { signedIn?: boolean; loginMarker?: boolean; anthropicConfigured?: boolean; myKey?: boolean; orgKey?: boolean }`
   - `export function claudeAccountLinked(input: ClaudeAccountInput): boolean`
@@ -489,7 +489,7 @@ git commit -m "feat(achievements): Claude category, crab unlock, eventStreak"
 
 - [ ] **Step 1: Write the failing tests**
 
-`server/claude-account.test.ts`:
+`server/engines/claude-account.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -549,11 +549,11 @@ it("records claude.linked on GET when the person is already linked, and does not
 });
 ```
 
-- [ ] **Step 2: Run** `pnpm exec vitest run server/claude-account.test.ts server/achievements.test.ts`: expect FAIL (module missing; `linked` unknown; `claude.linked` not a server event until Task 2 is merged; this task sits on Task 2).
+- [ ] **Step 2: Run** `pnpm exec vitest run server/engines/claude-account.test.ts server/achievements.test.ts`: expect FAIL (module missing; `linked` unknown; `claude.linked` not a server event until Task 2 is merged; this task sits on Task 2).
 
 - [ ] **Step 3: Implement**
 
-`server/claude-account.ts`:
+`server/engines/claude-account.ts`:
 
 ```ts
 export interface ClaudeAccountInput {
@@ -647,12 +647,12 @@ recordAchievements(localPrincipalId(), [{ type: "claude.linked" }]);
 
 Org own-key saves live on Perspicax; GET `linked` covers `myKey`.
 
-- [ ] **Step 4: Run** `pnpm exec vitest run server/claude-account.test.ts server/achievements.test.ts server/principal-engine-logins.test.ts server/drivers/claude-login-auth.test.ts`: expect PASS. Unlink is "do not delete counters": add a store test that after `claude.linked` the rewards still contain `character:crab` even if `linked()` becomes false on the next GET (the GET only records when linked, it never removes). That is the "no second toast / unlink keeps crab" Review Focus case.
+- [ ] **Step 4: Run** `pnpm exec vitest run server/engines/claude-account.test.ts server/achievements.test.ts server/engines/principal-engine-logins.test.ts server/drivers/claude-login-auth.test.ts`: expect PASS. Unlink is "do not delete counters": add a store test that after `claude.linked` the rewards still contain `character:crab` even if `linked()` becomes false on the next GET (the GET only records when linked, it never removes). That is the "no second toast / unlink keeps crab" Review Focus case.
 
 - [ ] **Step 5: Commit**
 
 ```
-git add server/claude-account.ts server/claude-account.test.ts server/routes/achievements.ts server/achievements.test.ts server/principal-engine-logins.ts server/drivers/claude.ts server/index.ts
+git add server/engines/claude-account.ts server/engines/claude-account.test.ts server/routes/achievements.ts server/achievements.test.ts server/engines/principal-engine-logins.ts server/drivers/claude.ts server/index.ts
 git commit -m "feat(achievements): server-detect Claude link"
 ```
 
@@ -661,9 +661,9 @@ git commit -m "feat(achievements): server-detect Claude link"
 ### Task 4: Server Claude activity hooks
 
 **Files:**
-- Create: `server/claude-activity.ts`, `server/claude-activity.test.ts`
+- Create: `server/engines/claude-activity.ts`, `server/engines/claude-activity.test.ts`
 - Modify: `server/index.ts` (`observeAchievementFrame` 1194-1216, `achievementSendEvents` call site ~33920, `masteryThreadModel` 1076). Import `modelFamily` from `server/achievements-mastery.ts`; do not edit that file.
-- Test: `server/claude-activity.test.ts`
+- Test: `server/engines/claude-activity.test.ts`
 
 **Interfaces:**
 - Consumes: `modelFamily(model: string | undefined | null): ModelFamily | null`; `AchievementEvent`; `FrameLookups.threadModel`
@@ -734,9 +734,9 @@ it("three-tides needs opus, sonnet and haiku keys; a Fable turn does not count a
 });
 ```
 
-- [ ] **Step 2: Run** `pnpm exec vitest run server/claude-activity.test.ts server/achievements.test.ts`: expect FAIL (module missing).
+- [ ] **Step 2: Run** `pnpm exec vitest run server/engines/claude-activity.test.ts server/achievements.test.ts`: expect FAIL (module missing).
 
-- [ ] **Step 3: Implement** `server/claude-activity.ts`:
+- [ ] **Step 3: Implement** `server/engines/claude-activity.ts`:
 
 ```ts
 import { modelFamily, type ModelFamily } from "./achievements-mastery.ts";
@@ -815,12 +815,12 @@ recordAchievements(person, claudeActivityEvents({ family, kind: "voice" }));
 
 Org-key Review Focus: `claudeActivityEvents` does not read credentials; an anthropic turn records `claude.turn` even when `claudeAccountLinked` is false. Cover that in `claude-activity.test.ts` with a comment, not a second linker.
 
-- [ ] **Step 4: Run** `pnpm exec vitest run server/claude-activity.test.ts server/achievements.test.ts`: expect PASS.
+- [ ] **Step 4: Run** `pnpm exec vitest run server/engines/claude-activity.test.ts server/achievements.test.ts`: expect PASS.
 
 - [ ] **Step 5: Commit**
 
 ```
-git add server/claude-activity.ts server/claude-activity.test.ts server/index.ts server/achievements.test.ts
+git add server/engines/claude-activity.ts server/engines/claude-activity.test.ts server/index.ts server/achievements.test.ts
 git commit -m "feat(achievements): record Claude turns, tools, voice"
 ```
 

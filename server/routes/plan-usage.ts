@@ -9,7 +9,7 @@
 // (request-auth.ts CLIENT_ALLOW, orgDirectory).
 import type { AppConfig } from "../config.ts";
 import { driverKeyBacked, instanceConfigs } from "../config.ts";
-import { providersOfInstance } from "../engine-credentials.ts";
+import { providersOfInstance } from "../engines/engine-credentials.ts";
 import {
   loadPlanUsage,
   orgPlanAccounts,

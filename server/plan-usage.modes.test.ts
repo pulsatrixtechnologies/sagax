@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LOGIN_MARKER, PrincipalEngineLogins } from "./principal-engine-logins.ts";
+import { LOGIN_MARKER, PrincipalEngineLogins } from "./engines/principal-engine-logins.ts";
 import {
   API_KEY_NO_WINDOWS,
   NOT_SIGNED_IN,

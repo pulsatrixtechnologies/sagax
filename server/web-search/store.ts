@@ -2,7 +2,7 @@
 // and key, sealed with the vault key (AES-256-GCM, AAD
 // `sagax web-search v1`, the key from server/mcp/mcp-oauth.ts resolveVaultKey:
 // the OS credential store on the desktop, a 0600 key file on a headless
-// server), mode 0600, the same treatment as server/engine-api-keys.ts.
+// server), mode 0600, the same treatment as server/engines/engine-api-keys.ts.
 // Solo: `<data>/web-search.enc`. Organization: one file per person,
 // `principals/<id>/web-search.enc`. The key is read back only by the server,
 // at the moment of the HTTP call (server/web-search/providers.ts); the

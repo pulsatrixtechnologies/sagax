@@ -9,7 +9,7 @@ import {
   engineNeedsReconnecting,
   engineReconnectAheadDetail,
   isEngineReconnectCondition,
-} from "../engine-reconnect-ahead.ts";
+} from "../engines/engine-reconnect-ahead.ts";
 import { classifyError, USAGE_LIMIT } from "../drivers/retry.ts";
 import { isEngineEmptyFailure } from "../incidents.ts";
 import type { RoutineRun } from "./routines.ts";

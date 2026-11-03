@@ -22,8 +22,8 @@ import {
   createClaudeAccountSchema,
   instanceSettingsSchema,
   newClaudeAccount,
-} from "../claude-accounts.ts";
-import { pinnedClaudeUpdateRefusal, updateClaudeCli } from "../claude-update.ts";
+} from "../engines/claude-accounts.ts";
+import { pinnedClaudeUpdateRefusal, updateClaudeCli } from "../engines/claude-update.ts";
 import {
   engineLaunches,
   persistableInstanceConfigs,
@@ -40,12 +40,12 @@ import {
   hermesProviderEnv,
   normalizeEngineKey,
   writeFileEngineKey,
-} from "../engine-api-keys.ts";
-import { providersOfInstance } from "../engine-credentials.ts";
+} from "../engines/engine-api-keys.ts";
+import { providersOfInstance } from "../engines/engine-credentials.ts";
 import { HOSTED_PROVIDER_SETTINGS_ERROR } from "../hosted-models.ts";
 import { cliCommandRefusal } from "../procs.ts";
-import type { ProviderAccountOwner } from "../provider-accounts.ts";
-import { providerIconPatchSchema, withInstanceIcon } from "../provider-icon.ts";
+import type { ProviderAccountOwner } from "../engines/provider-accounts.ts";
+import { providerIconPatchSchema, withInstanceIcon } from "../engines/provider-icon.ts";
 import { isLoopbackHost, isProxied, type RequestAuth } from "../request-auth.ts";
 import { permissionRefusal, type PermissionKey } from "../../shared/permissions.ts";
 import { providerIconError } from "../../shared/provider-icon.ts";

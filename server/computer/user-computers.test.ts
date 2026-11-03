@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { HOST_COMPUTER_REFUSAL, ManagedDesktopPolicy } from "../managed-policy.ts";
 import { SharedComputers } from "./shared-computers.ts";
 import { createUserComputerRouter, speakingPerson, USER_COMPUTER_MESSAGES, type UserComputerProvider } from "./user-computers.ts";
-import type { TurnSpeaker } from "../engine-access.ts";
+import type { TurnSpeaker } from "../engines/engine-access.ts";
 
 const ADA = "pr_11111111-1111-4111-8111-111111111111";
 const BOB = "pr_22222222-2222-4222-8222-222222222222";

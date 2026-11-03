@@ -1,4 +1,4 @@
-import type { RoutineOwnerAuthorization } from "../engine-access.ts";
+import type { RoutineOwnerAuthorization } from "../engines/engine-access.ts";
 
 /** Verify the live records behind a webhook routine's permission grant.
  * The webhook payload contributes no identity or authorization. */

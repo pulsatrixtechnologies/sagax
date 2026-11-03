@@ -16,7 +16,7 @@ import { ProviderRegistry } from "./harness/registry.ts";
 import { BUILT_IN_DRIVERS } from "./drivers/builtIn.ts";
 import { defaultSetupIo, SetupCancelled, type SetupIo } from "./cli-prompts.ts";
 import { API_ENDPOINTS, fetchSetupModels, normalizeApiUrl, verifySetupCompletion } from "./cli-api-setup.ts";
-import { onboardingKeyStorageNote, readOnboardingEngineKey, storeOnboardingEngineKey } from "./onboarding-engine-key.ts";
+import { onboardingKeyStorageNote, readOnboardingEngineKey, storeOnboardingEngineKey } from "./engines/onboarding-engine-key.ts";
 import { readEnvName } from "../electron/legacy-names.mjs";
 
 type Inspection = { snapshot: ProviderSnapshot; models: ModelCatalog };

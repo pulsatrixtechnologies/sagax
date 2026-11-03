@@ -33,7 +33,7 @@ import { augmentedPath } from "../env-path.ts";
 import { describeSpawnFailure, execCli, killCliTree, spawnCli } from "../procs.ts";
 import { SEARCH_CALL_TOOL, searchedToolCall } from "../../shared/searched-tool-call.ts";
 import { PERSPICAX_TOKEN_ENV, warmCommsEnv, warmPerspicaxEnv, withoutTurnTokens } from "./spawn-contract.ts";
-import { engineStartGate } from "../engine-start-gate.ts";
+import { engineStartGate } from "../engines/engine-start-gate.ts";
 import {
   deletePromptSplitReceipt,
   promptHalves,

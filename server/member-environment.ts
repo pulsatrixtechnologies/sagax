@@ -54,7 +54,7 @@
 // (Claude), `<server>__<tool>` (ACP titles, Codex, chat engines' mcpTool).
 import type { ApprovalMode } from "../shared/approval-mode.ts";
 import { DESKTOP_BRIDGE_MCP_NAME } from "../shared/bot-workplace.ts";
-import type { TurnSpeaker } from "./engine-access.ts";
+import type { TurnSpeaker } from "./engines/engine-access.ts";
 import { ownerLineageOrigin } from "./approvals/owner-autonomy.ts";
 import { sensitiveReadPath } from "./sensitive-path.ts";
 import { USER_SANDBOX_MCP_NAME } from "./sandbox/user-sandbox-routing.ts";

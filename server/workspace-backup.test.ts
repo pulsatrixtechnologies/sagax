@@ -584,7 +584,7 @@ describe("encrypted full workspace backups", () => {
     expect(readFileSync(second).includes("freepageterm")).toBe(false);
   });
 
-  // The engines' own transcripts of a confidential thread (server/engine-transcripts.ts).
+  // The engines' own transcripts of a confidential thread (server/engines/engine-transcripts.ts).
   const SECRET_T = "5ec5ec5e-1111-4111-8111-111111111111";
   const SECRET_SID = "aaaaaaaa-3333-4333-8333-333333333333";
   const OLD_SID = "abababab-3333-4333-8333-444444444444";

@@ -224,7 +224,7 @@ optional folders, and group-history navigation checks.
 ## CLI Stop regression
 
 ```sh
-pnpm exec vitest run server/kill-tree.test.ts server/engine-install.test.ts server/cli-stop.e2e.test.ts
+pnpm exec vitest run server/kill-tree.test.ts server/engines/engine-install.test.ts server/cli-stop.e2e.test.ts
 ```
 
 The Stop fixture wraps only the isolated launcher's fake Claude CLI with an

@@ -958,7 +958,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["PATCH", "DELETE"], path: /^\/api\/org\/sections\/(?:sec_[0-9a-f-]{36}|general)$/, feature: "orgDirectory" },
   { methods: ["PUT"], path: /^\/api\/org\/sections\/(?:sec_[0-9a-f-]{36}|general)\/(?:members|bots)$/, feature: "orgDirectory" },
   // A person's own engines: what their own turns run on, and their own
-  // subscription sign-in (server/principal-engine-logins.ts).
+  // subscription sign-in (server/engines/principal-engine-logins.ts).
   { methods: ["GET"], path: /^\/api\/me\/engines$/, feature: "orgDirectory" },
   // On an organization server this legacy form writes the person's own
   // Perspicax key, without changing the shared engine configuration.

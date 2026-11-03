@@ -286,7 +286,7 @@ Exigence de the owner: un bot créé en mode organisation fonctionne depuis le s
 
 ### Où vivent les accès aux engines
 
-Aujourd'hui les accès sont communs à tout le serveur: comptes Claude nommés (`server/claude-accounts.ts`, « provider credentials are server-wide »), connexions en cours rattachées à la session admin (`server/provider-auth-sessions.ts`), clés API posées dans Réglages > Connections et passées dans l'environnement de l'instance (`drivers/claude.ts:182-206`, qui retire toute clé qui ne vient pas de l'instance). En organisation:
+Aujourd'hui les accès sont communs à tout le serveur: comptes Claude nommés (`server/engines/claude-accounts.ts`, « provider credentials are server-wide »), connexions en cours rattachées à la session admin (`server/engines/provider-auth-sessions.ts`), clés API posées dans Réglages > Connections et passées dans l'environnement de l'instance (`drivers/claude.ts:182-206`, qui retire toute clé qui ne vient pas de l'instance). En organisation:
 
 | Accès | Où | Qui le pose | Pour quels tours |
 |---|---|---|---|
@@ -298,7 +298,7 @@ Révision du 2026-10-01 (décision de the owner, remplace la décision 7 du 2026
 | Clé API de la personne (Anthropic, OpenAI) | coffre de Perspicax, identifiant `scope: user` lié à la personne (P10) | la personne, dans la console Perspicax | les mêmes tours que son abonnement, quand elle n'en a pas pour cet engine |
 | Clé d'organisation | Réglages > Connections du serveur (existant), posée par un admin | un admin | repli automatique après l'abonnement et la clé de la personne, sur un engine à clé; plus d'interrupteur |
 
-Ordre de résolution pour un tour (`server/engine-credentials.ts`): engine absent, payeur désactivé (refus), abonnement du payeur, clé du payeur dans Perspicax (`owner-key` s'il est propriétaire du bot, sinon `speaker-key`), clé d'organisation, sinon refus avec la carte « connectez-vous avec votre abonnement ou ajoutez votre clé, ou demandez à un admin ». Le payeur est la personne qui parle; pour une routine du bot, toujours son **propriétaire**, quelle que soit la personne qui l'a créée, modifiée ou lancée (son `runAs` ne sert qu'à l'identité MCP). Les connexions et clés propres au serveur ne servent plus les bots des admins. La clé est lue au moment du tour, injectée dans l'environnement de l'instance de ce seul tour, jamais écrite dans `config.json`.
+Ordre de résolution pour un tour (`server/engines/engine-credentials.ts`): engine absent, payeur désactivé (refus), abonnement du payeur, clé du payeur dans Perspicax (`owner-key` s'il est propriétaire du bot, sinon `speaker-key`), clé d'organisation, sinon refus avec la carte « connectez-vous avec votre abonnement ou ajoutez votre clé, ou demandez à un admin ». Le payeur est la personne qui parle; pour une routine du bot, toujours son **propriétaire**, quelle que soit la personne qui l'a créée, modifiée ou lancée (son `runAs` ne sert qu'à l'identité MCP). Les connexions et clés propres au serveur ne servent plus les bots des admins. La clé est lue au moment du tour, injectée dans l'environnement de l'instance de ce seul tour, jamais écrite dans `config.json`.
 
 ### Quand B parle au bot de A
 
@@ -430,8 +430,8 @@ Rappels de ce dépôt: versions les plus récentes vérifiées sur crates.io au 
 | `server/authz.ts` | `can()` (section 3) |
 | `server/perspicax-mcp-bridge.ts` | le pont stdio (section 4), sur le patron de `connector-proxy.ts` et `mcp-bridge.ts` |
 | Routes | `GET /auth/oidc/start`, `GET /auth/oidc/callback`, `POST /api/auth/oidc/backchannel-logout`, `POST /api/org/import`, `/api/org/admin/*` (assertion de la console), `POST /api/org/routine-delegation` |
-| `server/engine-credentials.ts` | résolution de l'accès d'un tour (section 4 bis): clé de routine, `credentialRef`, abonnement du propriétaire qui lance, clé du propriétaire lue dans le coffre de Perspicax par le lien, clé d'organisation si permise |
-| Connexions par principal | `server/claude-accounts.ts` et `server/provider-auth-sessions.ts`: en organisation, un dossier de connexion par principal sous `/data/principals/<id>/`, au lieu du dossier commun |
+| `server/engines/engine-credentials.ts` | résolution de l'accès d'un tour (section 4 bis): clé de routine, `credentialRef`, abonnement du propriétaire qui lance, clé du propriétaire lue dans le coffre de Perspicax par le lien, clé d'organisation si permise |
+| Connexions par principal | `server/engines/claude-accounts.ts` et `server/engines/provider-auth-sessions.ts`: en organisation, un dossier de connexion par principal sous `/data/principals/<id>/`, au lieu du dossier commun |
 | Cartes d'échec | engine absent, aucun accès, clé refusée, profil non détenu, délégation expirée (section 4 bis); au lieu d'un tour vide |
 | Création de bot par un membre | `POST /api/bots` et `memberBotFieldViolation` de la branche `fix/member-identity`; le formulaire ne propose que les engines installés et les options qui existent sur le serveur |
 | Santé | `/api/health` liste les engines installés et leur version |

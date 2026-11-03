@@ -217,7 +217,7 @@ by hand.
 ### Automated (fake provider)
 
 ```sh
-pnpm exec vitest run server/perspicax-link.test.ts server/engine-access.test.ts server/direct-grants.test.ts \
+pnpm exec vitest run server/perspicax-link.test.ts server/engines/engine-access.test.ts server/direct-grants.test.ts \
   server/principals.test.ts server/oidc-rp.test.ts server/oidc-login.test.ts server/idp-session.test.ts \
   server/request-auth.test.ts server/channel-visibility.test.ts server/org/org-sharing.e2e.test.ts \
   server/oidc-session.e2e.test.ts server/oidc-login.e2e.test.ts server/environment.test.ts server/wire.test.ts \
@@ -235,7 +235,7 @@ and `directoryTeams`, and `setDirectoryStatus(sub, status)`.
   never cleared, a disabled or vanished person logged out once, a demotion
   narrowed, 304, a 401 followed by a rotated file, single flight, a timeout
   or a 5xx keeping the last data).
-- `server/engine-access.test.ts`: who a turn speaks for, the refusal
+- `server/engines/engine-access.test.ts`: who a turn speaks for, the refusal
   notices (the speaker's, a routine's, a disabled payer's), the
   key_refused card and who sees its detail, and who answers a server
   command of a member's bot.
@@ -286,10 +286,10 @@ backstop when the back-channel push cannot arrive, and the engines in
 ### Automated (fake provider)
 
 ```sh
-pnpm exec vitest run server/authz.test.ts server/bot-grants.test.ts server/engine-credentials.test.ts \
-  server/section-channels.test.ts server/principal-engine-logins.test.ts server/org/org-teams.test.ts \
+pnpm exec vitest run server/authz.test.ts server/bot-grants.test.ts server/engines/engine-credentials.test.ts \
+  server/section-channels.test.ts server/engines/principal-engine-logins.test.ts server/org/org-teams.test.ts \
   server/principals.test.ts server/perspicax-link.test.ts server/oidc-rp.test.ts server/idp-session.test.ts \
-  server/engine-access.test.ts server/direct-grants.test.ts server/channel-visibility.test.ts \
+  server/engines/engine-access.test.ts server/direct-grants.test.ts server/channel-visibility.test.ts \
   server/request-auth.test.ts server/drivers/claude.test.ts server/drivers/codex.test.ts \
   server/org/org-rights.e2e.test.ts server/org/org-sharing.e2e.test.ts server/oidc-session.e2e.test.ts \
   server/oidc-login.e2e.test.ts src/components/bot-settings
@@ -311,7 +311,7 @@ disabled person).
   default levels capped at run, rooms with `team:` entries, section roles.
 - `server/bot-grants.test.ts`: GET, PUT and DELETE `/api/bots/:id/grants`
   with every answer code, and the new `CLIENT_ALLOW` rows.
-- `server/engine-credentials.test.ts` (revised 2026-10-01, the person who
+- `server/engines/engine-credentials.test.ts` (revised 2026-10-01, the person who
   speaks pays): the whole decision table (speaker owner or someone shared
   with, x subscription, key, org key or nothing, x Claude, Codex or another
   engine, disabled people, unknown people), the bot's routines on the

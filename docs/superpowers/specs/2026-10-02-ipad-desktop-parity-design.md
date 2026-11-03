@@ -476,7 +476,7 @@ Changed by this audit (`feat/ipad-phone-api`):
 - Tests: `companion/test/routes.test.ts` ("desktop remote-client parity"),
   `companion/test/proxy.test.ts` (the new routes reach a real harness),
   `server/request-auth.test.ts` (scopes, `clientInstanceView`),
-  `server/claude-account-api.test.ts` (a client session's `/api/instances`).
+  `server/engines/claude-account-api.test.ts` (a client session's `/api/instances`).
 - `docs/ios-companion.md`: "Intentionally refused" rewritten (routines and connected
   apps cross; webhooks do not) and a "Same surface as the desktop remote client" table.
 

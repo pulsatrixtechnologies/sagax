@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { DATA_DIR, stripWorkspaceCredentialEnv } from "../config.ts";
-import { claudeProtectedDenyRules } from "../engine-protected-paths.ts";
+import { claudeProtectedDenyRules } from "../engines/engine-protected-paths.ts";
 import { augmentedPath } from "../env-path.ts";
 import { brokerSocketPath, execCli } from "../procs.ts";
 import { rebuiltSessionNotice } from "../resume-recovery.ts";

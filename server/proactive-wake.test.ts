@@ -307,7 +307,7 @@ describe("which failed runs wake the bot (2026-11-01)", () => {
   it("never wakes for a known engine auth-expired or Claude credits reconnect condition", async () => {
     const { CLAUDE_NEEDS_RECONNECTING, claudeSignInExpired } = await import("./drivers/claude-errors.ts");
     const { codexSignInExpired } = await import("./drivers/codex-errors.ts");
-    const { engineNeedsReconnecting } = await import("./engine-reconnect-ahead.ts");
+    const { engineNeedsReconnecting } = await import("./engines/engine-reconnect-ahead.ts");
     const expired = claudeSignInExpired("OAuth session expired and could not be refreshed");
     const credits = "Claude refused this turn because this model runs on extra usage for your account, and those credits are used up.";
     expect(runFailureWakesBot({ status: "failed", error: expired })).toBe(false);

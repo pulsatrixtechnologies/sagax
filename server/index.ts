@@ -142,8 +142,8 @@ import {
   resolveClaudeConfigDir,
   setSoloClaudeLinkedHandler
 } from "./drivers/claude.ts";
-import { claudeAccountLinked, soloClaudeAccountLinked, type SoloClaudeLinkCache } from "./claude-account.ts";
-import { claudeActivityEvents, isClaudeComputerTool } from "./claude-activity.ts";
+import { claudeAccountLinked, soloClaudeAccountLinked, type SoloClaudeLinkCache } from "./engines/claude-account.ts";
+import { claudeActivityEvents, isClaudeComputerTool } from "./engines/claude-activity.ts";
 import {
   provenRequestPerson,
   SharedComputers,
@@ -262,7 +262,7 @@ import {
 } from "./approvals/auto-approve.ts";
 import { CommandAllowlistStore, commandAllowlistCandidate, sandboxCommandCandidate } from "./command-allowlist.ts";
 import type { CommandAllowlistCandidate, CommandAllowlistResponse } from "../shared/command-allowlist.ts";
-import { claudeAccountInfo } from "./claude-accounts.ts";
+import { claudeAccountInfo } from "./engines/claude-accounts.ts";
 import {
   BrowserCleanupCoordinator,
   BrowserSweep,
@@ -407,7 +407,7 @@ import {
   ownSubagentThreads,
   toolRowOpen
 } from "./threads/subagent-cleanup.ts";
-import { reapOrphanEngineGroups } from "./engine-groups.ts";
+import { reapOrphanEngineGroups } from "./engines/engine-groups.ts";
 import { BOT_ACTIVITY_WINDOW_MS as SUBAGENT_SWEEP_WINDOW_MS } from "../shared/bot-activity.ts";
 import type { TeamComputersPayload } from "../shared/team-computer.ts";
 import { boatCreateRecoverySnapshot, retireDeletedBoatCreate } from "./computer/boat-create-idempotency.ts";
@@ -427,7 +427,7 @@ import {
   type RecallBudget
 } from "./recall.ts";
 import { prepareSemanticRecall, setSemanticIndex } from "./semantic-recall.ts";
-import { prepareEveryClaudeRetirement, retireEveryClaudeBot } from "./retire-every-claude.ts";
+import { prepareEveryClaudeRetirement, retireEveryClaudeBot } from "./engines/retire-every-claude.ts";
 import { LocalSemanticIndex, semanticIndexFile } from "./semantic-index.ts";
 import { withoutWiderAudience, type MemoryDestination } from "./memory/memory-audience.ts";
 import { BriefStore, type BriefAppCall } from "./background-brief.ts";
@@ -556,14 +556,14 @@ import {
 import { sweepThreadEventLogsPaced, type ThreadLogRetentionCandidate } from "./threads/thread-retention.ts";
 import { ComputerControl } from "./computer/computer-control.ts";
 import { augmentedPath, resetPathCache } from "./env-path.ts";
-import { registerEnginesBinDir } from "./engine-install.ts";
+import { registerEnginesBinDir } from "./engines/engine-install.ts";
 import {
   EngineSelfCheck,
   readEngineManifest,
   runEngineSelfCheck,
   type EngineCheck
-} from "./engines-self-check.ts";
-import { engineStartGate, routineEngineGate, type EngineSlot } from "./engine-start-gate.ts";
+} from "./engines/engines-self-check.ts";
+import { engineStartGate, routineEngineGate, type EngineSlot } from "./engines/engine-start-gate.ts";
 import {
   IdleEnginePool,
   markOomVictim,
@@ -647,7 +647,7 @@ import {
 } from "../shared/permissions.ts";
 import { isMemberBotField } from "../shared/viewer-capabilities.ts";
 import { effectivePermissions, permissionList, type EffectivePermissions } from "./org/org-permissions.ts";
-import { PROVIDER_KEY_KINDS } from "./provider-key-check.ts";
+import { PROVIDER_KEY_KINDS } from "./engines/provider-key-check.ts";
 import { forgetKey, onKeyRejectionChange } from "./key-rejections.ts";
 import { personalCapNotice, setPersonalCapOrganization } from "./personal-spend-cap.ts";
 import { startLowDiskWatch } from "./low-disk-alert.ts";
@@ -1511,7 +1511,7 @@ import {
   taskEngineKeys,
   threadKeys,
   writePendingPurges
-} from "./engine-transcripts.ts";
+} from "./engines/engine-transcripts.ts";
 import { createCustomDomainVerifier, customDomainIpv4, normalizeCustomDomain } from "./custom-domain.ts";
 import { allowedScopes, createServerEmailSignIn, parseAllowList } from "./account-signin.ts";
 import { EmailOtpStore } from "./mail/email-otp.ts";
@@ -1677,7 +1677,7 @@ import {
   type GroupCommandRoute
 } from "../shared/harness-commands.ts";
 import type { HarnessCommandScope, TurnImageInput } from "./contracts.ts";
-import { ProviderAuthSessions } from "./provider-auth-sessions.ts";
+import { ProviderAuthSessions } from "./engines/provider-auth-sessions.ts";
 import {
   capabilitiesForAuth,
   clearSessionCookie,
@@ -1736,8 +1736,8 @@ import {
   type EngineCredentialPlan,
   type NoAccessCause,
   type TurnAccess
-} from "./engine-credentials.ts";
-import { fileKeyConfigured } from "./engine-api-keys.ts";
+} from "./engines/engine-credentials.ts";
+import { fileKeyConfigured } from "./engines/engine-api-keys.ts";
 import {
   isLoginDriver,
   LOGIN_MARKER,
@@ -1747,8 +1747,8 @@ import {
   secondLoginSupported,
   type LoginDriver,
   type LoginSlot
-} from "./principal-engine-logins.ts";
-import { LOGIN_ENGINE_LABEL } from "./engine-reconnect-ahead.ts";
+} from "./engines/principal-engine-logins.ts";
+import { LOGIN_ENGINE_LABEL } from "./engines/engine-reconnect-ahead.ts";
 import {
   createSectionChannelRoutes,
   migrationOwner,
@@ -1878,9 +1878,9 @@ import {
 } from "./viewer-identity.ts";
 import { PersonSettingsStore, personSettingsPrincipal, personalProfilePartition } from "./person-settings.ts";
 import { withPersonalVoiceKeys } from "./voice/person-voice-keys.ts";
-import { PersonalProviderInstances } from "./personal-provider-instances.ts";
+import { PersonalProviderInstances } from "./engines/personal-provider-instances.ts";
 import type { ProviderAccountsView } from "../shared/provider-accounts.ts";
-import { ProviderAccounts, type ProviderAccountOwner } from "./provider-accounts.ts";
+import { ProviderAccounts, type ProviderAccountOwner } from "./engines/provider-accounts.ts";
 import { createProviderAccountsRoutes } from "./routes/provider-accounts.ts";
 import { createPersonSettingsRoutes } from "./routes/person-settings.ts";
 import { isPersonalBrowserProfileId, type PersonalFeature } from "../shared/person-settings.ts";
@@ -2233,7 +2233,7 @@ import {
   claudeSubscriptionHomeKey,
   ensureClaudeSubscriptionFresh,
   onClaudeSubscriptionRenewed
-} from "./claude-subscription-refresh.ts";
+} from "./engines/claude-subscription-refresh.ts";
 import { cloudAgentInternalAction, handleCloudAgentInternal } from "./routes/cloud-agents-internal.ts";
 import { cloudAgentWakePrompt } from "./cloud-agents/wake.ts";
 import { cloudAgentWireItem } from "./cloud-agents/activity.ts";
@@ -2602,7 +2602,7 @@ import { attachedFilesInText, attachmentChunks, attachmentIsTheirs, stageTurnAtt
 import { OFFICE_IMAGE_MAX_COUNT, OFFICE_IMAGES_MAX_TOTAL_BYTES, officeKind, officeMediaFolder, officeNote, readOfficeMedia } from "./office-media.ts";
 import { archiveInlineTexts, archiveNote, extractedFolderName, localExtractedPath, recoverArchiveUpload, sandboxArchiveArgv, storedArchiveManifest } from "./attachment-archives.ts";
 import { BOT_WORKPLACE_PREFERENCE, DESKTOP_BRIDGE_MCP_NAME, parseBotWorkplace, type BotWorkplace } from "../shared/bot-workplace.ts";
-import { accessCardAudience, accessCardForViewer, engineNameForViewer, keyEngineProvider, orgKeyEngineName, signInExpiredCard, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberOwnedBot, resolveTurnSpeaker, routineAccessNotifications, routineLineage, speakerPrincipal, type EngineAccessRefusal, type MemberHostToolPlace, type TurnSpeaker } from "./engine-access.ts";
+import { accessCardAudience, accessCardForViewer, engineNameForViewer, keyEngineProvider, orgKeyEngineName, signInExpiredCard, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberOwnedBot, resolveTurnSpeaker, routineAccessNotifications, routineLineage, speakerPrincipal, type EngineAccessRefusal, type MemberHostToolPlace, type TurnSpeaker } from "./engines/engine-access.ts";
 import {
   assignBotHost,
   channelTurnGate,
@@ -2700,7 +2700,7 @@ const STATIC_DIR = process.env.SAGAX_STATIC_DIR || null;
 ensureDirs();
 initMediaProxy(DATA_DIR);
 // Engine process groups an earlier run left running (a crash, a kill): their
-// sub-agents, MCP servers and commands stop now (server/engine-groups.ts).
+// sub-agents, MCP servers and commands stop now (server/engines/engine-groups.ts).
 void reapOrphanEngineGroups(join(DATA_DIR, "engine-groups.json"), { log: (line) => console.log(line) })
   .catch((error) => console.warn(`[engines] leftover process groups not checked: ${error instanceof Error ? error.message : String(error)}`));
 /** Public share links for bot templates (server/template-links.ts). */
@@ -3494,7 +3494,7 @@ const supportsApprovalMode = createApprovalModeSupport(registry);
 registerEnginesBinDir();
 // The engines baked into this image (engines.lock.json): the version the
 // image build recorded, logged, then their installed state for good
-// (server/engines-self-check.ts). A manifest entry with no recorded version
+// (server/engines/engines-self-check.ts). A manifest entry with no recorded version
 // is probed one at a time. No manifest: nothing changes.
 let engineSelfCheck = new EngineSelfCheck(null);
 /** When the boot self-check finished (the console's Overview). */
@@ -3502,7 +3502,7 @@ let engineSelfCheckAt: number | null = null;
 const SERVER_STARTED_AT = Date.now();
 // From here engine processes started by the boot itself (version and model
 // probes, routines caught up after the restart) share a small limit for the
-// first minutes (server/engine-start-gate.ts). A person's own turn does not.
+// first minutes (server/engines/engine-start-gate.ts). A person's own turn does not.
 engineStartGate.beginBoot();
 void runEngineSelfCheck(readEngineManifest())
   .then((result) => { engineSelfCheck = result; engineSelfCheckAt = Date.now(); })
@@ -14456,12 +14456,12 @@ function makeThreadConfidential(botId: string, threadId: string): void {
   void scrubThreadDecisions(DATA_DIR, threadId);
   // its settled teammate work (runtime.db) keeps no words of it
   forgetConfidentialCoordination(threadId);
-  // the engines' own transcripts of it so far (server/engine-transcripts.ts):
+  // the engines' own transcripts of it so far (server/engines/engine-transcripts.ts):
   // the next turn starts a new session, its own transcript replayed
   forgetThreadEngineSessions(botId, threadId, "made confidential");
 }
 
-// ── engine transcripts of confidential threads (server/engine-transcripts.ts)
+// ── engine transcripts of confidential threads (server/engines/engine-transcripts.ts)
 // The engines keep their own copy of a conversation (Claude Code's
 // projects/*.jsonl, Codex's rollouts and state database, Hermes's state.db
 // …) in their homes. A confidential thread's leave no workspace backup and
@@ -47464,7 +47464,7 @@ warnReservedMcpServers(cfg);
 // already confidential (an older release kept them, the words from before a
 // thread turned confidential included). Their next turn starts a new session
 // with the thread's own transcript replayed. Then every start retries the
-// purges a held database left (server/engine-transcripts.ts).
+// purges a held database left (server/engines/engine-transcripts.ts).
 {
   const done = join(DATA_DIR, ENGINE_PURGE_DONE);
   if (!existsSync(done)) {

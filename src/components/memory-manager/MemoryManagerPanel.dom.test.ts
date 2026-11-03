@@ -32,14 +32,14 @@ vi.mock("@/state/store", async () => {
           sources: [
             { id: "bot:atlas", kind: "bot", name: "Atlas", detail: "Bot memory", mayWrite: true, botId: "atlas" },
             // A bot the memory routes refuse (an older server still lists it).
-            { id: "bot:alubar", kind: "bot", name: "Alubar", detail: "Bot memory", mayWrite: true, botId: "alubar" },
+            { id: "bot:northwind", kind: "bot", name: "Northwind", detail: "Bot memory", mayWrite: true, botId: "northwind" },
             ...(wide ? [{ id: "team:general", kind: "team", name: "General", detail: "1 team note", mayWrite: true, section: "" }] : []),
             { id: "perspicax", kind: "perspicax", name: "Perspicax", mayWrite: true, mayManage: true, scope: "me" },
           ],
           perspicax: { available: true },
         };
       }
-      if (path.startsWith("/api/bots/alubar/")) throw new actual.ApiError("no such bot", 404);
+      if (path.startsWith("/api/bots/northwind/")) throw new actual.ApiError("no such bot", 404);
       if (path.startsWith("/api/team-memory")) {
         return { entries: [{ id: "tm1", kind: "term", name: "OMB", detail: "Open MAUS Bot", status: "proposed", updatedAt: Date.now() }] };
       }
@@ -257,8 +257,8 @@ describe("MemoryManagerPanel page", () => {
     });
     const settle = async () => { await act(async () => { for (let i = 0; i < 6; i += 1) await Promise.resolve(); }); };
     await settle();
-    expect(host.querySelector('[data-memory-source="bot:alubar"]')).toBeNull();
-    expect(host.textContent).not.toContain("Alubar");
+    expect(host.querySelector('[data-memory-source="bot:northwind"]')).toBeNull();
+    expect(host.textContent).not.toContain("Northwind");
     const navIds = Array.from(host.querySelectorAll("[data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"));
     expect(navIds).toEqual(["all", "teams", "recent", "review", "trash"]);
     const rows = [

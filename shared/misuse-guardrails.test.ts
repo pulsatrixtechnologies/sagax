@@ -287,7 +287,7 @@ describe("what a person reads", () => {
     expect(MISUSE_REFUSAL_APPROVAL).toContain("Perspicax");
   });
 
-  // 2026-11-02 (GOX): the refusal listed every forbidden action at once and
+  // 2026-11-02 (production): the refusal listed every forbidden action at once and
   // read as an accusation; it names the one reason, then what to do
   it("names one reason per category, never the whole list, and says what to do instead", () => {
     const phrases = ["droits d'administrateur", "environnement isolé", "protection", "attaquer", "programme malveillant", "serveur Sagax", "serveur partagé", "épuiserait"];

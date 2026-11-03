@@ -151,14 +151,14 @@ describe("step detail helpers", () => {
     expect(stepJson({ name: "mcp__outlook__get_message", ok: false, input: JSON.stringify({ message_id: messageId }) })).toContain(messageId);
   });
 
-  // 2026-11-02 (GOX, Melonie): a server path named after the bot's id
+  // 2026-11-02 (production): a server path named after the bot's id
   it("shows a path with a bot's id as the bot's name, else as the folder it is, the path in the tooltip", () => {
-    const botId = "e456bd60-1017-4b4b-b790-724d406c35a6";
+    const botId = "5a1d0c3e-7b42-4c8e-9f10-2d3e4f5a6b7c";
     const path = `/data/.openmausbot/workspaces/${botId}/docs`;
-    const nameOf = (id: string) => (id === botId ? "Melonie" : undefined);
-    expect(stepArgs(JSON.stringify({ path }), nameOf)).toEqual([{ key: "path", value: "/data/.openmausbot/workspaces/Melonie/docs", full: path }]);
+    const nameOf = (id: string) => (id === botId ? "Nova" : undefined);
+    expect(stepArgs(JSON.stringify({ path }), nameOf)).toEqual([{ key: "path", value: "/data/.openmausbot/workspaces/Nova/docs", full: path }]);
     expect(stepArgs(JSON.stringify({ path }))).toEqual([{ key: "path", value: "The bot's own folder/docs", full: path }]);
-    expect(stepArgs(JSON.stringify({ path: "/workspace/bots/melonie" }))).toEqual([{ key: "path", value: "/workspace/bots/melonie" }]);
+    expect(stepArgs(JSON.stringify({ path: "/workspace/bots/nova" }))).toEqual([{ key: "path", value: "/workspace/bots/nova" }]);
   });
 
   it("names a tool in words in its detail, never its raw id (2026-11-02)", () => {

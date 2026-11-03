@@ -171,13 +171,13 @@ describe("paths, frames and the command clock", () => {
     expect(misuseToolFrameText({ message: { method: "tools/list" } })).toBeNull();
   });
 
-  // 2026-11-02 (GOX, Melonie): list_files on the bot's own server workspace
+  // 2026-11-02 (production): list_files on the bot's own server workspace
   // answers where its folder is, before the guard and the safety review
   it("answers a path of the bot's own server folder with one line, and runs nothing", async () => {
     const calls: unknown[] = [];
     const guarded: string[] = [];
-    const root = "/data/.openmausbot/workspaces/e456bd60-1017-4b4b-b790-724d406c35a6";
-    const where = { roots: [root, "/data/.openmausbot/task-workspaces/e456bd60-1017-4b4b-b790-724d406c35a6"], folder: "/workspace/bots/melonie" };
+    const root = "/data/.openmausbot/workspaces/5a1d0c3e-7b42-4c8e-9f10-2d3e4f5a6b7c";
+    const where = { roots: [root, "/data/.openmausbot/task-workspaces/5a1d0c3e-7b42-4c8e-9f10-2d3e4f5a6b7c"], folder: "/workspace/bots/nova" };
     const exec: ToolExec = {
       exec: async (input) => {
         calls.push(input);
@@ -189,7 +189,7 @@ describe("paths, frames and the command clock", () => {
       commandRefusal: (command) => { guarded.push(command); return null; },
       beforeCall: () => { guarded.push("review"); return "held"; },
     };
-    const line = "That path is on the Sagax server, not in your environment. Your folder is /workspace/bots/melonie/.";
+    const line = "That path is on the Sagax server, not in your environment. Your folder is /workspace/bots/nova/.";
     for (const [tool, args] of [
       ["list_files", { path: root }],
       ["read_file", { path: `${root}/MEMORY.md` }],

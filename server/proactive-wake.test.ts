@@ -335,7 +335,7 @@ describe("a yes whose wake cannot start (2026-11-01)", () => {
 
 describe("teammates' messages (peer inbox, 2026-11-02)", () => {
   const notice = (receiverId: string, n: number, extra: Partial<Parameters<typeof peerNoticeEvent>[0]> = {}) => peerNoticeEvent({
-    receiverId, noticeId: `node-${n}`, threadId: `th-${n}`, title: `Alubar write ${n}`, status: "completed",
+    receiverId, noticeId: `node-${n}`, threadId: `th-${n}`, title: `Northwind write ${n}`, status: "completed",
     text: `Dry run done for write ${n}; GO needed.`, result: `Checked write ${n}; it needs JC's GO.`,
     senderId: "katarina", senderName: "Katarina", ...extra,
   });
@@ -368,7 +368,7 @@ describe("teammates' messages (peer inbox, 2026-11-02)", () => {
     expect(prompt).toContain(PEER_WAKE_RULES);
     expect(prompt).toContain("ONE card for all of these messages");
     expect(wakeLine(h.woken[0]!)).toContain("Message from Katarina (x3)");
-    expect(wakeLine(h.woken[0]!)).not.toContain("Alubar");
+    expect(wakeLine(h.woken[0]!)).not.toContain("Northwind");
   });
 
   it("the same notice reported twice (a restart's reconcile) wakes once", () => {
@@ -416,10 +416,10 @@ describe("teammates' messages (peer inbox, 2026-11-02)", () => {
   });
 });
 
-describe("teammates' messages, second pass (GOX Melonie, 2026-11-02)", () => {
+describe("teammates' messages, second pass (production, 2026-11-02)", () => {
   const notice = (receiverId: string, n: number, extra: Partial<Parameters<typeof peerNoticeEvent>[0]> = {}) => peerNoticeEvent({
     receiverId, noticeId: `node-${n}`, threadId: `th-${n}`, title: `Urgent Northwind ${n}`, status: "completed",
-    text: `Carl answered on ${n}.`, senderId: "katarina", senderName: "Katarina", ...extra,
+    text: `Sam answered on ${n}.`, senderId: "katarina", senderName: "Katarina", ...extra,
   });
 
   it("the wake is told the person never sees the notice threads and never ends quiet on them", () => {

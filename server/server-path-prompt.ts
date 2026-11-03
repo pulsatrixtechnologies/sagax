@@ -1,4 +1,4 @@
-// 2026-11-02 (GOX, Melonie): a turn whose engine has no file tools on the
+// 2026-11-02 (production): a turn whose engine has no file tools on the
 // Sagax server (an organization turn withholds them) must never be given a
 // path of that server. The bot took /data/.openmausbot/workspaces/<id> (the
 // "File locations" block) for its own folder and listed it with the tools of

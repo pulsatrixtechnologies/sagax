@@ -140,7 +140,7 @@ export function botFolderNote(folder: string, serverDataDir?: string): string {
   return `In your server environment your own folder is ${folder}: your commands start there and relative paths resolve there. Keep your files in it, temporary files in ${folder}/tmp (emptied of files older than ${BOT_TMP_RETENTION_DAYS} days), and only what the person's other bots must share in ${SANDBOX_SHARED_DIR}. Never write loose files at the ${SANDBOX_WORKSPACE} root.${serverDataDir ? ` ${serverFolderNote(folder, serverDataDir)}` : ""}`;
 }
 
-/** 2026-11-02 (GOX, Melonie): the engine itself runs on the Sagax server,
+/** 2026-11-02 (production): the engine itself runs on the Sagax server,
  * in a working folder under the server's data folder (the CLI may report it
  * as its current directory). That folder is not in the environment: a bot
  * that took it for its own folder called list_files on it. Said plainly in

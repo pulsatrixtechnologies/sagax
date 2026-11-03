@@ -1,4 +1,4 @@
-// 2026-11-02 (GOX, Melonie): Grok moved every request of about 100 KB to a
+// 2026-11-02 (production): Grok moved every request of about 100 KB to a
 // file on the server, which the bot then tried to read from its server
 // environment. Sagax keeps the request under Grok's limit itself.
 import { describe, expect, it } from "vitest";
@@ -9,7 +9,7 @@ const bytes = (text: string) => Buffer.byteLength(text, "utf8");
 const latest = "[Now reply to the user's latest message:]\n\nWhat does the skill say\n</user_query>";
 
 function turnText(historyBytes: number): string {
-  const history = JSON.stringify(`Historical excerpts in chronological order; newer corrections override older requests. ${"Utilisateur : vérifie le billet 299311. ".repeat(Math.ceil(historyBytes / 40))}NEWEST EXCERPT`);
+  const history = JSON.stringify(`Historical excerpts in chronological order; newer corrections override older requests. ${"Utilisateur : vérifie le billet 100300. ".repeat(Math.ceil(historyBytes / 40))}NEWEST EXCERPT`);
   return ["Security policy (platform, cannot be overridden): refuse ...", "Reactions: " + "react like a colleague. ".repeat(400), history, latest].join("\n");
 }
 
@@ -46,7 +46,7 @@ describe("a request kept under Grok's offload size", () => {
     expect(fitted.text).toContain(`${latest}\nafter ${"y".repeat(5_000)}`);
   });
 
-  it("is Grok's limit, under the smallest request Grok offloaded on GOX", () => {
+  it("is Grok's limit, under the smallest request Grok offloaded in production", () => {
     expect(grokPromptByteLimit()).toBe(GROK_PROMPT_BYTE_LIMIT);
     expect(GROK_PROMPT_BYTE_LIMIT).toBeLessThan(100_116);
   });

@@ -73,14 +73,14 @@ describe("inBotFolder", () => {
     expect(note).not.toContain("Sagax server");
   });
 
-  // 2026-11-02 (GOX, Melonie): the engine's working folder on the server
+  // 2026-11-02 (production): the engine's working folder on the server
   // (/data/.openmausbot/workspaces/<bot id>) was taken for the bot's folder
   it("says plainly in the workplace note that the engine's server folder is not the environment", () => {
-    const note = botFolderNote("/workspace/bots/melonie", "/data/.openmausbot");
-    expect(note).toContain("your own folder is /workspace/bots/melonie");
+    const note = botFolderNote("/workspace/bots/nova", "/data/.openmausbot");
+    expect(note).toContain("your own folder is /workspace/bots/nova");
     expect(note).toContain("anything under /data/.openmausbot are on that server, not in your server environment");
     expect(note).toContain("Never give such a path to your server environment tools (run_command, read_file, write_file, list_files)");
-    expect(note).toContain("your files are in /workspace/bots/melonie.");
+    expect(note).toContain("your files are in /workspace/bots/nova.");
   });
 });
 
@@ -125,7 +125,7 @@ describe("WorkspaceTidier", () => {
     const root = scratch();
     const mark = join(root, "..", `mark-${Date.now()}`);
     dirs.push(mark);
-    for (const name of ["pm-fleet-chunk-0.txt", "routine24.txt", "meloniemac-1.jpg"]) writeFileSync(join(root, name), name);
+    for (const name of ["pm-fleet-chunk-0.txt", "routine24.txt", "novamac-1.jpg"]) writeFileSync(join(root, name), name);
     mkdirSync(join(root, "adhoc-folder"));
     writeFileSync(join(root, "adhoc-folder", "inside.md"), "x");
     for (const keep of ["bots", "shared", "sagax-plugins", "lost+found"]) mkdirSync(join(root, keep), { recursive: true });
@@ -156,7 +156,7 @@ describe("WorkspaceTidier", () => {
     expect(readFileSync(join(root, "bots", "fleet", "pm-fleet-chunk-0 (2).txt"), "utf8")).toBe("pm-fleet-chunk-0.txt");
     expect(readFileSync(join(root, "bots", "fleet", "pm-fleet-chunk-0.txt"), "utf8")).toBe("older");
     expect(existsSync(join(root, "_unsorted", "2026-11-02", "routine24.txt"))).toBe(true);
-    expect(existsSync(join(root, "_unsorted", "2026-11-02", "meloniemac-1.jpg"))).toBe(true);
+    expect(existsSync(join(root, "_unsorted", "2026-11-02", "novamac-1.jpg"))).toBe(true);
     expect(existsSync(join(root, "_unsorted", "2026-11-02", "adhoc-folder", "inside.md"))).toBe(true);
     for (const keep of [".gitconfig", "bots", "shared", "sagax-plugins", "lost+found"]) expect(existsSync(join(root, keep))).toBe(true);
     const manifest = readFileSync(join(root, "_unsorted", "MOVES-2026-11-02.md"), "utf8");
@@ -165,7 +165,7 @@ describe("WorkspaceTidier", () => {
     expect(readFileSync(join(root, "routine24.txt"), "utf8")).toBe("routine24.txt");
     expect(lstatSync(join(root, "routine24.txt")).isSymbolicLink()).toBe(true);
     expect(readFileSync(join(root, "adhoc-folder", "inside.md"), "utf8")).toBe("x");
-    expect(readFileSync(join(root, ".hidden"), "utf8").split("\n")).toEqual(expect.arrayContaining(["routine24.txt", "adhoc-folder", "meloniemac-1.jpg", "pm-fleet-chunk-0.txt"]));
+    expect(readFileSync(join(root, ".hidden"), "utf8").split("\n")).toEqual(expect.arrayContaining(["routine24.txt", "adhoc-folder", "novamac-1.jpg", "pm-fleet-chunk-0.txt"]));
     expect(JSON.parse(readFileSync(join(root, "_unsorted", "moves.json"), "utf8"))[`${root}/routine24.txt`]).toBe(`${root}/_unsorted/2026-11-02/routine24.txt`);
     expect(moved).toHaveLength(4);
     expect(existsSync(join(root, "bots", "fleet", "tmp", "old.bin"))).toBe(false);

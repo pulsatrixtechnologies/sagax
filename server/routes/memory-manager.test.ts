@@ -67,14 +67,14 @@ describe("GET /api/memory-manager/sources", () => {
     const invoke = setup({
       bots: () => [
         { id: "atlas", name: "Atlas", mayWrite: true },
-        { id: "alubar", name: "Alubar", mayWrite: true },
+        { id: "northwind", name: "Northwind", mayWrite: true },
       ],
-      botReachable: (_auth, botId) => { asked.push(botId); return botId !== "alubar"; },
+      botReachable: (_auth, botId) => { asked.push(botId); return botId !== "northwind"; },
       teamSections: () => [],
       perspicax: () => ({ available: true }),
     });
     const out = await invoke();
-    expect(asked).toEqual(["atlas", "alubar"]);
+    expect(asked).toEqual(["atlas", "northwind"]);
     const ids = (out.body as { sources: Array<{ id: string }> }).sources.map((source) => source.id);
     expect(ids).toEqual(["bot:atlas", "perspicax"]);
   });

@@ -70,18 +70,18 @@ describe("workspace", () => {
     expect(workspaceLocationsPrompt(BOT, undefined)).toContain("inspect the working directory");
   });
 
-  // 2026-11-02 (GOX, Melonie): an engine with no file tools on the Sagax
+  // 2026-11-02 (production): an engine with no file tools on the Sagax
   // server took sharedBotFolder for its folder
   it("names no server path when the engine has no file tools on the server, only how it reaches each thing", () => {
     ensureWorkspace(BOT);
     const thread = ensureTaskWorkspace(BOT, "thread-first");
-    const prompt = workspaceLocationsPrompt(BOT, thread, "/projects/app", { serverFiles: false, environmentFolder: "/workspace/bots/melonie", attachFile: true });
+    const prompt = workspaceLocationsPrompt(BOT, thread, "/projects/app", { serverFiles: false, environmentFolder: "/workspace/bots/nova", attachFile: true });
     expect(prompt).not.toContain(DATA_DIR);
     expect(prompt).not.toContain(WORKSPACES_DIR);
     expect(prompt).not.toContain("sharedBotFolder");
     expect(prompt).toContain("workspace_read by its relative path (MEMORY.md, memory/<topic>.md, RULES.md, docs/<name>.md");
     expect(prompt).toContain("memory_update");
-    expect(prompt).toContain("your server environment folder /workspace/bots/melonie");
+    expect(prompt).toContain("your server environment folder /workspace/bots/nova");
     expect(prompt).toContain("Never give a path of the Sagax server to your server environment tools.");
     expect(prompt).toContain("attach_file");
     const confidential = workspaceLocationsPrompt(BOT, thread, undefined, { serverFiles: false, confidential: true });

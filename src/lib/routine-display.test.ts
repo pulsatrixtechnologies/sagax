@@ -99,10 +99,10 @@ describe("routineQueuePosition (2026-11-01)", () => {
   });
 });
 
-describe("a run's problems as stored before 2026-11-03 (GOX, Catch-up and manager copy)", () => {
+describe("a run's problems as stored before 2026-11-03 (production, a catch-up routine)", () => {
   it("reads a teammate's cut quote as plain text", () => {
-    const problems = "Harrie's work failed: The turn did not complete (tool_error).\nIts last message, quoted: \"FAIL\\n\\nThe two-message archive plan is **not";
-    expect(routineRunProblems({ status: "completed", problems })).toBe("Harrie's work failed: The turn did not complete (tool_error).\nIts last message:\nFAIL\n\nThe two-message archive plan is not…");
+    const problems = "Robin's work failed: The turn did not complete (tool_error).\nIts last message, quoted: \"FAIL\\n\\nThe two-message archive plan is **not";
+    expect(routineRunProblems({ status: "completed", problems })).toBe("Robin's work failed: The turn did not complete (tool_error).\nIts last message:\nFAIL\n\nThe two-message archive plan is not…");
     expect(routineRunProblems({ status: "failed", problems })).toBe("");
   });
 });

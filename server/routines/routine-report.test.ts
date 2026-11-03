@@ -121,10 +121,10 @@ describe("the bot's own run status (2026-11-01)", () => {
   });
 });
 
-describe("a wake on teammates' messages is never quiet (GOX Melonie, 2026-11-02)", async () => {
+describe("a wake on teammates' messages is never quiet (production, 2026-11-02)", async () => {
   const { peerWakeOutcome } = await import("./routines.ts");
   const { routineReportOutcome } = await import("./routine-report.ts");
-  const peer = { proactive: { mode: "proactive" as const, hops: 1, sources: ["peer"], peerDigest: "Messages from teammates:\n- Katarina: Urgent 299372" } };
+  const peer = { proactive: { mode: "proactive" as const, hops: 1, sources: ["peer"], peerDigest: "Messages from teammates:\n- Katarina: Urgent 100200" } };
 
   it("keeps the bot's words without the marker", () => {
     const outcome = peerWakeOutcome(peer, routineReportOutcome("Already told you at 1:32 p.m. ET. Nothing new.\n\nNOTHING_TO_REPORT"));

@@ -486,7 +486,7 @@ export function wakeAlwaysReports(events: readonly ProactiveEvent[]): boolean {
 
 export const PEER_WAKE_RULES = [
   "Teammates' messages: each one below already ran once in its own thread of yours; its outcome is part of the event.",
-  // 2026-11-02 (second pass): five wakes of six went quiet on GOX, the bot
+  // 2026-11-02 (second pass): five wakes of six went quiet in production, the bot
   // reasoning "already told you": that thread is one the person never sees.
   "The person never sees those threads: nothing said there reached them, so never answer that it was already said or handled there.",
   "Handle what is left that your level allows, then ALWAYS tell the person in one short report what came in, from whom, and what you did or what is left; a wake on teammates' messages never ends with NOTHING_TO_REPORT.",

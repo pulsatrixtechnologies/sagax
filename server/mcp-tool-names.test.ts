@@ -147,10 +147,10 @@ describe("connector names in what the bot reads (2026-11-02)", () => {
   it("a name without an alias stays as it is", () => {
     const aliases = new ToolNameAliases(PERSPICAX);
     aliases.catalog(catalog);
-    for (const text of ["memory_search and api_describe", "sentinelone__query is not served here", "xcw_psa__query", "cw_psa__queryx", "__init__"]) {
+    for (const text of ["memory_search and api_describe", "endpointsec__query is not served here", "xcw_psa__query", "cw_psa__queryx", "__init__"]) {
       expect(aliases.toAliases(text)).toBe(text);
     }
-    expect(aliases.argumentsToUpstream({ name: "memory_search", other: "sentinelone_query" })).toEqual({ name: "memory_search", other: "sentinelone_query" });
+    expect(aliases.argumentsToUpstream({ name: "memory_search", other: "endpointsec_query" })).toEqual({ name: "memory_search", other: "endpointsec_query" });
     // before any catalog, nothing is rewritten in results or arguments
     const fresh = new ToolNameAliases(PERSPICAX);
     expect(fresh.toAliases("cw_psa__query")).toBe("cw_psa__query");
@@ -158,7 +158,7 @@ describe("connector names in what the bot reads (2026-11-02)", () => {
   });
 
   it("no tool registered with the engine keeps a second __ after its server prefix, on any API", () => {
-    const names = ["cw_psa__query", "cw_psa_time__entries_write", "sentinelone__read_action", "twilio_lookups__PhoneNumbers_Overrides",
+    const names = ["cw_psa__query", "cw_psa_time__entries_write", "endpointsec__read_action", "twilio_lookups__PhoneNumbers_Overrides",
       "x360recover__d2c_agent_write", "a____b", "bookstack__query", "cw_psa_query", "api_list", "files.read", "_private"];
     const out = new ToolNameAliases(PERSPICAX).catalog(names.map((name) => ({ name })));
     for (const tool of out.tools) {

@@ -64,15 +64,15 @@ describe("ToolActivity", () => {
     expect(opened).not.toContain(`>${id}<`);
   });
 
-  // 2026-11-02 (GOX, Melonie): the card showed mcp__sagax-environment__list_files
+  // 2026-11-02 (production): the card showed mcp__sagax-environment__list_files
   // and /data/.openmausbot/workspaces/<bot id> as they were
   it("names a server environment tool in words and shows a bot's id as its name", () => {
-    const botId = "e456bd60-1017-4b4b-b790-724d406c35a6";
+    const botId = "5a1d0c3e-7b42-4c8e-9f10-2d3e4f5a6b7c";
     const path = `/data/.openmausbot/workspaces/${botId}`;
     const tool = { name: "mcp__sagax-environment__list_files", ok: false, input: JSON.stringify({ path }), output: "That path is on the Sagax server, not in your environment." };
-    const named = renderToStaticMarkup(createElement(ToolActivity, { tool, defaultOpen: true, nameOf: (id: string) => (id === botId ? "Melonie" : undefined) }));
+    const named = renderToStaticMarkup(createElement(ToolActivity, { tool, defaultOpen: true, nameOf: (id: string) => (id === botId ? "Nova" : undefined) }));
     expect(named).toContain(">List files · Your server environment<");
-    expect(named).toContain(">/data/.openmausbot/workspaces/Melonie<");
+    expect(named).toContain(">/data/.openmausbot/workspaces/Nova<");
     expect(named).toContain(`title="${path}"`);
     // visible text: no raw id, no GUID (the folded JSON is not drawn)
     const visible = named.replace(/title="[^"]*"/g, "");

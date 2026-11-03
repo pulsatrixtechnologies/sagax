@@ -4,7 +4,7 @@
 // the cause, what it did, then `Its last message, quoted: "<JSON string>"`.
 // That quote is data for prompts; shown as is, a person read literal `\n`,
 // `**` and an unclosed quote where the run's 1,000-character cut fell
-// (GOX 2026-11-03 00:10 UTC, "Catch-up and manager copy": Harrie's last
+// (production 2026-11-03 00:10 UTC, a catch-up routine: a teammate's last
 // message `"FAIL\n\nThe two-message archive plan is **not`). Here the quote
 // becomes plain text: escapes turned into real line breaks, markdown marks
 // dropped, and a cut quote ends with an ellipsis. Read at render too, so

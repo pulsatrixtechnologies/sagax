@@ -1,9 +1,9 @@
-// 2026-11-02 (GOX, Melonie): no path of the Sagax server in the prompt of an
+// 2026-11-02 (production): no path of the Sagax server in the prompt of an
 // engine that has no file tools there.
 import { describe, expect, it } from "vitest";
 import { SERVER_KEPT, hideServerPaths, hideServerPathsInSections, namesServerPath } from "./server-path-prompt.ts";
 
-const BOT = "e456bd60-1017-4b4b-b790-724d406c35a6";
+const BOT = "5a1d0c3e-7b42-4c8e-9f10-2d3e4f5a6b7c";
 const view = { dataDirs: ["/data/.openmausbot", "/mnt/real/openmausbot"], botWorkspaces: [`/data/.openmausbot/workspaces/${BOT}`, `/mnt/real/openmausbot/workspaces/${BOT}`] };
 
 describe("server paths in a prompt without server file tools", () => {
@@ -29,7 +29,7 @@ describe("server paths in a prompt without server file tools", () => {
   });
 
   it("leaves other paths and lookalikes alone", () => {
-    for (const text of ["/workspace/bots/melonie", "/data/.openmausbot2/x", "/data/other", "see docs/a.md"]) {
+    for (const text of ["/workspace/bots/nova", "/data/.openmausbot2/x", "/data/other", "see docs/a.md"]) {
       expect(hideServerPaths(text, view)).toBe(text);
     }
   });

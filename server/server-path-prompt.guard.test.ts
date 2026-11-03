@@ -1,4 +1,4 @@
-// 2026-11-02 (GOX, Melonie): every builder of a turn's system prompt runs
+// 2026-11-02 (production): every builder of a turn's system prompt runs
 // the server-path net when the engine has no file tools on the server.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

@@ -1,9 +1,9 @@
-// 2026-11-02 (GOX, Melonie): Grok 1.0.x moves a prompt of about 100 KB or
+// 2026-11-02 (production): Grok 1.0.x moves a prompt of about 100 KB or
 // more to a file under its own session folder on the Sagax server
 // (.../.grok/sessions/<cwd>/<session>/prompts/prompt_0.txt) and sends the
 // model an excerpt with "Lines of that file not in this message: user query
 // line 415. Read only those lines from that file". Every offloaded prompt
-// seen on GOX was 100,116 bytes or more; the line left out was the long
+// seen in production was 100,116 bytes or more; the line left out was the long
 // "Historical excerpts" line of the conversation's earlier context.
 //
 // On an organization turn Grok has no file tools on the server, so the bot

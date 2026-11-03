@@ -1,5 +1,5 @@
 // A Sagax server path given to a tool of the person's server environment
-// (2026-11-02, GOX: Melonie called sagax-environment list_files on
+// (2026-11-02, production: a bot called sagax-environment list_files on
 // /data/.openmausbot/workspaces/<its id>). That folder is the bot's own
 // workspace ON THE SAGAX SERVER (the engine's working folder, its memory and
 // docs); the environment is another machine, where the path does not exist.

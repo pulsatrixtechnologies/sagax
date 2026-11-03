@@ -171,7 +171,7 @@ export function workspaceCwdPrompt(cwd: string | undefined): string {
  * independent working directories; the same bot can find its earlier output
  * without assuming that a file absent from the current directory was lost. */
 export function workspaceLocationsPrompt(botId: string, cwd: string | undefined, botCwd?: string, opts: { attachFile?: boolean; confidential?: boolean; relativePaths?: boolean; cwdElsewhere?: boolean; serverFiles?: boolean; environmentFolder?: string | null } = {}): string {
-  // 2026-11-02 (GOX, Melonie): an engine with no file tools on the Sagax
+  // 2026-11-02 (production): an engine with no file tools on the Sagax
   // server (an organization turn withholds them) is never given a server
   // path: it took /data/.../workspaces/<id> for its folder and listed it
   // with the environment's tools. It is told how it reaches each thing.

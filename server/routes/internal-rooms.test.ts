@@ -277,7 +277,7 @@ describe("POST /run-with-engine: who may run a part on another engine", () => {
     botId: BOT.id, threadId: "t-1", generation: "g1", depth, openedThreads: 0, createdBots: 0, createdRooms: 0, roomPosts: 0,
   });
 
-  // GOX 2026-11-03 00:09 UTC: Harrie, given work by Katarina (depth 1) on an
+  // production 2026-11-03 00:09 UTC: Robin, given work by a teammate (depth 1) on an
   // engine without Outlook, was refused run_with_engine to its Grok sign-in.
   it("a teammate's work turn (depth 1) runs its part on another engine, one level deeper", async () => {
     const askBotAndWait = vi.fn<InternalRoomsDeps["askBotAndWait"]>(async () => ({ status: "reply", text: "mail read" }));

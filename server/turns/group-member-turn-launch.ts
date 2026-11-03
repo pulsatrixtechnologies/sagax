@@ -890,7 +890,7 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     ? compactPromptFor(readyBot, roomSpeakerId || effectiveBotOwner(readyBot))
     : undefined;
   const roomPromptLevel = roomTurnApprovalMode(readyBot, threadId, orchestration);
-  // 2026-11-02 (GOX, Melonie): no server path for an engine without file
+  // 2026-11-02 (production): no server path for an engine without file
   // tools on the Sagax server (server/server-path-prompt.ts)
   const roomServerFiles = !withholdHostToolsFor(instance);
   const roomEnvironmentFolder = roomServerFiles ? null : sandboxFolderFor?.(bot.id) ?? null;

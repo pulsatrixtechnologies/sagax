@@ -532,7 +532,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
       }
       // The part itself never hands a part on again. A teammate's work turn
       // (depth 1, coordinate_bots) is no part: it may run its own part on
-      // another engine, as its prompt says (GOX 2026-11-03 00:09 UTC: Harrie,
+      // another engine, as its prompt says (production 2026-11-03 00:09 UTC: a teammate,
       // on an engine without Outlook, was refused this in 6 ms and its turn
       // ended in tool_error). Its part runs one level deeper and stops there.
       if (isRelayPart(fromThreadId) || internalCapability.depth > MAX_COMMS_DEPTH) {

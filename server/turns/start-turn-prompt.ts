@@ -143,7 +143,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
     // Cold / automation turns (routines, webhooks, proactive): tighter
     // per-section budgets, lazy skill index, short rich-output (V1/R3).
     state.coldPrompt = state.opts?.automationSource !== undefined;
-    // 2026-11-02 (GOX, Melonie): an engine without file tools on the Sagax
+    // 2026-11-02 (production): an engine without file tools on the Sagax
     // server is never given a path of it (server/server-path-prompt.ts)
     const serverFiles = !withholdHostToolsFor(state.instance);
     const environmentFolder = serverFiles ? null : sandboxFolderFor?.(state.bot.id) ?? null;

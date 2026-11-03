@@ -2564,7 +2564,7 @@ import {
   USER_SANDBOX_MCP_NAME
 } from "./sandbox/user-sandbox-routing.ts";
 import { handleUserSandboxMcp } from "./sandbox/user-sandbox-tools.ts";
-import { BotFolderRegistry, WorkspaceTidier, botFolderNote, botFolderPath, inBotFolder, rewriteMovedPaths, workspaceDiskWarning, type TidyMove } from "./sandbox/sandbox-bot-folder.ts";
+import { BotFolderRegistry, WorkspaceTidier, attributeEntries, attributionFragments, botFolderNote, botFolderPath, inBotFolder, rewriteMovedPaths, workspaceDiskWarning, type TidyMove } from "./sandbox/sandbox-bot-folder.ts";
 import { enginePluginCommandRefusal } from "./people/person-integrations.ts";
 import { SandboxControlHolds } from "./sandbox/sandbox-control.ts";
 import { DesktopBridges, resolveBotWorkplace, type WorkplaceDecision } from "./desktop/desktop-bridge.ts";
@@ -8557,30 +8557,28 @@ function sandboxBotFolder(botId: string): string | null {
 /** Which bot made each loose root entry: the bots whose conversations
  * (messages and tool calls) name /workspace/<entry>, else the bare name
  * when it is distinctive. Exactly one bot, or nobody. */
-async function attributeSandboxEntries(_principalId: string, names: readonly string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
+async function attributeSandboxEntries(principalId: string, names: readonly string[]): Promise<Map<string, string>> {
   // The first 200 entries only, the rest go to _unsorted (a root that messy
   // is mostly one bot's output). 2026-11-03 (audit S-5): every fragment in
   // ONE pass over messages, in the search worker, where this used to run up
   // to 400 synchronous full scans and block the server at its first start.
   const listed = names.slice(0, 200);
-  const bare = (name: string) => name.length >= 8 && /[._-]/.test(name);
-  const fragments = listed.flatMap((name) => [`/workspace/${name}`, ...(bare(name) ? [name] : [])]);
   let threads: Map<string, string[]>;
   try {
-    threads = await threadsReferencingAsync(fragments);
+    threads = await threadsReferencingAsync(attributionFragments(listed));
   } catch (error) {
     // busy or interrupted: nothing is attributed, the entries go to _unsorted
     console.warn(`[workspace-tidy] attribution skipped: ${error instanceof Error ? error.message : String(error)}`);
-    return out;
+    return new Map();
   }
-  const botsFor = (fragment: string) => new Set((threads.get(fragment) ?? []).map((threadId) => store.botByThread(threadId)?.id).filter((id): id is string => Boolean(id)));
-  for (const name of listed) {
-    let bots = botsFor(`/workspace/${name}`);
-    if (bots.size === 0 && bare(name)) bots = botsFor(name);
-    if (bots.size === 1) out.set(name, [...bots][0]!);
-  }
-  return out;
+  // 2026-11-03 (audit S-6): only this person's threads (the thread's owner,
+  // else the bot owner) attribute an entry of this person's environment
+  return attributeEntries(principalId, listed, threads, (threadId) => {
+    const bot = store.botByThread(threadId);
+    if (!bot) return undefined;
+    const person = store.taskByThread(bot.id, threadId)?.ownerPrincipalId || effectiveBotOwner(bot);
+    return person ? { botId: bot.id, person } : undefined;
+  });
 }
 /** After a tidy: routines whose prompt or watched path named a moved file
  * now name its new place (the move breaks nothing they do). */

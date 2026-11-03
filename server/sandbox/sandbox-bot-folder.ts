@@ -459,6 +459,46 @@ export class WorkspaceTidier {
   }
 }
 
+/** The fragments the attribution looks up for these root entries: the
+ * absolute path, and the bare name when it is distinctive enough. */
+export function attributionFragments(names: readonly string[]): string[] {
+  return names.flatMap((name) => [`${SANDBOX_WORKSPACE}/${name}`, ...(distinctiveName(name) ? [name] : [])]);
+}
+
+function distinctiveName(name: string): boolean {
+  return name.length >= 8 && /[._-]/.test(name);
+}
+
+/** 2026-11-03 (audit S-6): which bot made each root entry of a person's
+ * environment, from the threads naming it (threadsReferencing). Only the
+ * person's own threads count (threadOf answers the thread's bot and its
+ * person: its owner, else the bot owner): a file named only in another
+ * person's conversations never goes to that person's bot folder, and that
+ * bot's name never appears in this environment. One bot or none. */
+export function attributeEntries(
+  principalId: string,
+  names: readonly string[],
+  threads: ReadonlyMap<string, readonly string[]>,
+  threadOf: (threadId: string) => { botId: string; person: string } | undefined,
+): Map<string, string> {
+  const person = principalId.trim().toLowerCase();
+  const botsFor = (fragment: string) => {
+    const bots = new Set<string>();
+    for (const threadId of threads.get(fragment) ?? []) {
+      const thread = threadOf(threadId);
+      if (thread && thread.person.trim().toLowerCase() === person) bots.add(thread.botId);
+    }
+    return bots;
+  };
+  const out = new Map<string, string>();
+  for (const name of names) {
+    let bots = botsFor(`${SANDBOX_WORKSPACE}/${name}`);
+    if (bots.size === 0 && distinctiveName(name)) bots = botsFor(name);
+    if (bots.size === 1) out.set(name, [...bots][0]!);
+  }
+  return out;
+}
+
 /** Replace each moved path in a text (a routine's prompt, a watched path):
  * only whole paths, so /workspace/a.txt never touches /workspace/a.txt.bak. */
 export function rewriteMovedPaths(text: string, moves: readonly TidyMove[]): string {

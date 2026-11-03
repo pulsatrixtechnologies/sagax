@@ -9,6 +9,8 @@ import {
   SANDBOX_ROOT_KEEP,
   TIDY_SCRIPT,
   WorkspaceTidier,
+  attributeEntries,
+  attributionFragments,
   botFolderNote,
   inBotFolder,
   rewriteMovedPaths,
@@ -119,6 +121,37 @@ function scriptExec(root: string, mark: string) {
   };
   return { calls, exec };
 }
+
+// 2026-11-03 (audit S-6): the attribution ignored the person, so a file of
+// A's environment named only in B's bot's threads went to B's bot folder.
+describe("attributeEntries", () => {
+  const threadOf = (threadId: string) => ({
+    "a-thread": { botId: "bot-a", person: "Person-A" },
+    "b-thread": { botId: "bot-b", person: "person-b" },
+    "a-on-b": { botId: "bot-b", person: "person-a" },
+  } as Record<string, { botId: string; person: string }>)[threadId];
+
+  it("counts only the person's own threads: another person's bot never claims a file", () => {
+    const names = ["only-b.csv", "shared-name.txt", "mine-and-b.pdf", "a-on-shared-bot.md"];
+    const threads = new Map<string, string[]>([
+      ["/workspace/only-b.csv", ["b-thread"]],
+      ["/workspace/mine-and-b.pdf", ["a-thread", "b-thread"]],
+      ["shared-name.txt", ["b-thread", "gone-thread"]],
+      ["/workspace/a-on-shared-bot.md", ["a-on-b"]],
+    ]);
+    const owners = attributeEntries("person-a", names, threads, threadOf);
+    expect(owners.has("only-b.csv")).toBe(false);
+    expect(owners.has("shared-name.txt")).toBe(false);
+    expect(owners.get("mine-and-b.pdf")).toBe("bot-a");
+    // A's own private thread with B's shared bot is A's work
+    expect(owners.get("a-on-shared-bot.md")).toBe("bot-b");
+    expect(attributeEntries("person-b", names, threads, threadOf).get("only-b.csv")).toBe("bot-b");
+  });
+
+  it("looks up the absolute path, and the bare name only when distinctive", () => {
+    expect(attributionFragments(["report.pdf", "a"])).toEqual(["/workspace/report.pdf", "report.pdf", "/workspace/a"]);
+  });
+});
 
 describe("WorkspaceTidier", () => {
   it("moves loose root entries to their bot or to _unsorted, writes the manifest, deletes nothing, once per start", async () => {

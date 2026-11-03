@@ -1,7 +1,7 @@
 // Typed triggers in Automations > Webhooks: a provider (GitHub, Slack, Teams,
 // Outlook, Sentry, PagerDuty, Linear...) whose events Sagax verifies by the
 // provider's own signature, normalizes, filters and deduplicates before a
-// run is queued (server/trigger-sources.ts). This file holds the builder's
+// run is queued (server/triggers/trigger-sources.ts). This file holds the builder's
 // fields and the row each typed trigger gets: setup steps with the URL and
 // (once) the secret, the secret's state, events and filters, test-fire and
 // the recent events log.

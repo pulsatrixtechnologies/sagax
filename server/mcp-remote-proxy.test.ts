@@ -9,8 +9,8 @@ import { createInterface } from "node:readline";
 import { build } from "esbuild";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
-import { CALL_TOOL, DESCRIBE_TOOL, INSTRUCTIONS_CHARS, SEARCH_TOOL, SIGNATURE_CHARS } from "./mcp-directory.ts";
-import { gateServer, mcpStdioServer } from "./mcp-gate-config.ts";
+import { CALL_TOOL, DESCRIBE_TOOL, INSTRUCTIONS_CHARS, SEARCH_TOOL, SIGNATURE_CHARS } from "./mcp/mcp-directory.ts";
+import { gateServer, mcpStdioServer } from "./mcp/mcp-gate-config.ts";
 import { SERVER_ROOT } from "./proxy-paths.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
 import { startFakeHttpMcp, type FakeHttpMcp } from "./testing/fake-http-mcp-server.ts";

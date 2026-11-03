@@ -8,8 +8,8 @@
 //
 //   GET  /api/org/interim-people          { until, people: [...] }
 //   POST /api/org/interim-people/attach   { interimPrincipalId, principalId }
-import type { Principal } from "./principals.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import type { Principal } from "./auth/principals.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./routes/table.ts";
 
 export const INTERIM_WINDOW_DAYS = 30;

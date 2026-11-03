@@ -38,7 +38,7 @@ configured providers remain unchanged.
 ## Verification
 
 ```sh
-pnpm exec vitest run server/drivers/chatgpt-plan-auth.test.ts server/drivers/codex.test.ts server/chatgpt-plan-api.test.ts
+pnpm exec vitest run server/drivers/chatgpt-plan-auth.test.ts server/drivers/codex.test.ts server/backup/chatgpt-plan-api.test.ts
 pnpm exec vitest run src/components/ChatGptPlanSignIn.interaction.test.ts src/components/DeviceSignIn.test.ts src/components/CodexAccountSettings.test.ts src/components/EngineSetup.test.ts src/components/ModelPicker.interaction.test.ts src/components/ChatView.controls.test.ts
 pnpm typecheck
 pnpm i18n:check

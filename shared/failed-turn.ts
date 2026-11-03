@@ -63,7 +63,7 @@ function flat(text: string): string {
 /** Whether a failed-turn row's cause is only the bot's own reply, already in
  * the conversation as a message: a turn the engine flagged after it answered
  * stored its reply as the cause (in full, cut at FAILED_TURN_MAX_CHARS, or as
- * the start of a requester's account, server/turn-outcome.ts). The reply is
+ * the start of a requester's account, server/turns/turn-outcome.ts). The reply is
  * the answer; the row repeats it as an error and is not drawn. Read at render,
  * so rows stored that way read right without touching them. */
 export function failedTurnRepeatsReply(cause: string, replies: readonly string[]): boolean {

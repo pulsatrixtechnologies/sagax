@@ -257,7 +257,7 @@ posixOnly("Perspicax organization: a bot and a group shared with someone who own
     expect(room.status, room.text).toBe(201);
     const scoutRoom = room.body.group.id as string;
     // carol does not own the room: she brings her own bot in
-    // (server/group-ownership.ts), but cannot take alice's out or change
+    // (server/groups/group-ownership.ts), but cannot take alice's out or change
     // the room's settings
     const joined = await api("PATCH", `/api/groups/${scoutRoom}`, carol, { memberIds: [scoutId, botId, yuki.body.bot.id] });
     expect(joined.status, joined.text).toBe(200);

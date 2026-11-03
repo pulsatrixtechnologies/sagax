@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteContext } from "./table.ts";
 import { createMemoryManagerRoutes, MEMORY_MANAGER_SOURCES } from "./memory-manager.ts";
 

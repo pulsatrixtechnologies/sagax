@@ -3,7 +3,7 @@
 // is the first set ("Rules"); every other set is rules/<id>.md. Each set has
 // a name, a place in the order and an on/off switch; the ones that are on
 // load in order, each under its own budget and all of them under a total
-// (server/rule-sets.ts). Everything goes through /api/bots/:id/rules (the
+// (server/rules/rule-sets.ts). Everything goes through /api/bots/:id/rules (the
 // Soul's gate: owner or admin), so a save refuses to overwrite a rule the
 // bot added meanwhile (rules_update) and every change lands in the journal.
 //
@@ -45,7 +45,7 @@ import { HelpTip, PILL, Switch } from "../SettingsPrimitives";
 import { inputCls } from "./field";
 import { readableError } from "@/lib/plain-error";
 
-/** The starter template. Mirrors server/rule-sets.ts RULES_TEMPLATE (a test
+/** The starter template. Mirrors server/rules/rule-sets.ts RULES_TEMPLATE (a test
  * keeps them equal). */
 export const RULES_TEMPLATE = `# Rules
 

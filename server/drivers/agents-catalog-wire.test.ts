@@ -130,7 +130,7 @@ const FULL = { direct: "direct+skills+shared+voice", room: "room+own-thread+skil
 // Artifacts (save_artifact, update_artifact, list_artifacts, delete_artifact,
 // agents-artifact-tools.ts, 2026-10-16) add about 3.3 KB to every
 // non-external profile; the baselines were moved to the measured bytes.
-// check_widget (the ```widget self-check, server/widget-check.ts, 2026-10-19)
+// check_widget (the ```widget self-check, server/widgets/widget-check.ts, 2026-10-19)
 // is added to every profile; the baselines were moved to the measured bytes.
 // sagax_settings (every setting as an action, server/settings-actions.ts,
 // 2026-10-19) adds 1744 B to every non-external profile, on purpose: one

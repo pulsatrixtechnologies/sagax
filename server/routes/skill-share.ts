@@ -3,13 +3,13 @@
 // installation and needs skills.library (or the solo computer owner).
 import { z } from "zod";
 
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   sharePrivateSkillToMe,
   sharePrivateSkillToOrganization,
   unshareSkillForBot,
   type ShareBotRef,
-} from "../skill-share.ts";
+} from "../skills/skill-share.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 const shareBody = z.object({

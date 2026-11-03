@@ -34,7 +34,7 @@
 | 一覧検査 | `ThreadNavigationTest.kt` の当該関数 | テスト | 一覧順 + `orderedThreads` |
 | シートの並び | `TaskRules.kt` の KDoc と `TaskRulesTest.kt` | コメントとテスト | 実装は `listedThreads` のまま。期待を帯の中の保存順 / 更新順に合わせる |
 | handoff の busy | `server/index.ts` の `recipientAwaitingPerson` | 機能 | fresh work だけ、他スレッドの `waiting-on-you` で待つ。resume と、兄弟が `working` の空き枠は変えない |
-| handoff 検査 | `server/independent-threads-api.test.ts` の当該 `it` | テスト | 枠が 3 でも承認中は `queued` |
+| handoff 検査 | `server/workspace/independent-threads-api.test.ts` の当該 `it` | テスト | 枠が 3 でも承認中は `queued` |
 
 `listedThreads` / `orderedThreads` / `roomHandoffs` の busy 実装は変更しない。呼び出し元の挙動は変わらない。
 

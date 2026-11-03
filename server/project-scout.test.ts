@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { parseTeamManifest } from "./team-manifest.ts";
+import { parseTeamManifest } from "./team/team-manifest.ts";
 import { scoutProject, suggestTeam, type ProjectProfile } from "./project-scout.ts";
 
 let dirs: string[] = [];

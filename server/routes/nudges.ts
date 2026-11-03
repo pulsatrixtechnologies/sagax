@@ -17,7 +17,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { groupNudgeKey, groupNudgeTargets, nudgeCooldownError, type NudgeConversation, type NudgeCooldown, type NudgeDirectoryPerson } from "../nudge.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface NudgeGroupRoom {

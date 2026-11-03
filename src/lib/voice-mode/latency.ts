@@ -1,7 +1,7 @@
 // One call turn's latency timeline, the page's side (docs/voice-mode-xai.md,
 // "Latency"): from the person's last voiced frame to the first sample of the
 // answer, stage by stage. The server logs its own stages of the same turn
-// under the same utterance id (server/voice-latency.ts). Pure, and free of
+// under the same utterance id (server/voice/voice-latency.ts). Pure, and free of
 // the words: ids and milliseconds only, so it can be logged and shown.
 
 /** Timestamps of one turn (performance.now()). */

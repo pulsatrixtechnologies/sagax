@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import type { McpServerSpec, StdioMcpSpec } from "../../contracts.ts";
 import { canUseMcpServer } from "../../../shared/tool-scope.ts";
-import { gateServer, mcpStdioServer } from "../../mcp-gate-config.ts";
+import { gateServer, mcpStdioServer } from "../../mcp/mcp-gate-config.ts";
 import { codexConfigMcpServerNames, mountedMcpServerName } from "../codex-mcp-names.ts";
 import { codexHostToolArgs } from "../host-tools.ts";
 import { codexLocalProviderArgs } from "../local-inject.ts";

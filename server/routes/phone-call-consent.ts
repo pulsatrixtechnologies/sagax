@@ -3,8 +3,8 @@
 // live-proposal path as a dep, same shape as resolveAndSendMeeting.
 import type { ServerResponse } from "node:http";
 
-import { isPrincipalId } from "../principals.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import { isPrincipalId } from "../auth/principals.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 
 export interface PhoneCallConsentResolveDeps {
   store: {

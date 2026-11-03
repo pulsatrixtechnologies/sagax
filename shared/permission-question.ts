@@ -1,7 +1,7 @@
 // A question that asks for permission (#1819, #1905): "May I continue?",
 // "Should I contact the verifier?", "Go ahead with the merge?", "Puis-je
 // envoyer le message?". Under Full access the person already answered it
-// (server/full-access-gate.ts), so the recommended option, which the model
+// (server/approvals/full-access-gate.ts), so the recommended option, which the model
 // is told to put first, is taken without a card. A real product decision
 // ("Which client is this for?") and a missing fact only the person can
 // supply (a password, an account) are never read as permission.

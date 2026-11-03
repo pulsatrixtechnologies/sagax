@@ -4,7 +4,7 @@
 // One entry per setting of the app: where it is on screen, the route the
 // screen calls and how its value is read back. A change is the same route
 // the screen calls, replayed with the person's own session by the act engine
-// (server/bot-act.ts), so the person's rights and every route check apply
+// (server/bots/bot-act.ts), so the person's rights and every route check apply
 // as they do by hand. shared/settings-actions-policy.ts decides whether it
 // runs now or waits on a card; server/settings-actions.ts ties both.
 //
@@ -160,7 +160,7 @@ function nest(path: string, value: unknown): Record<string, unknown> {
 }
 
 /** A GitHub skill source from {repo, path?, ref?} or a link, as Persona >
- * Skills takes it (server/skill-fetch.ts parseSkillSource). */
+ * Skills takes it (server/skills/skill-fetch.ts parseSkillSource). */
 export function skillSourceOf(value: unknown): string | undefined {
   if (typeof value === "string") return value.trim() || undefined;
   const r = value && typeof value === "object" ? value as { repo?: unknown; path?: unknown; ref?: unknown; source?: unknown } : {};
@@ -258,7 +258,7 @@ add({
   approvalTo: (v) => String(v),
 });
 // 2026-10-30: how the bot acts on emails, calendar entries, failed runs,
-// bots' posts and webhooks on its own (server/proactive-wake.ts). Absent
+// bots' posts and webhooks on its own (server/proactive/proactive-wake.ts). Absent
 // reads as proactive; off stays off.
 botField("bot.proactiveMode", "proactiveMode", "enum:off|proactive",
   "Proactive on/off (off = no wakes; proactive = wakes on email, calendar, failed run, bot mention or webhook and acts at its approval level and rules, with a dry run recorded before writes; absent = proactive)",
@@ -348,7 +348,7 @@ add({
   },
 });
 // 2026-10-30 (Capabilities, lot 1a): the one resolved list of what a bot
-// receives (server/capabilities.ts), read only; the actions that change it
+// receives (server/capabilities/capabilities.ts), read only; the actions that change it
 // are bot.plugin, bot.skill, bot.mcpServers and bot.perspicaxProfiles
 add({
   key: "bot.capabilities", family: "bot", target: "bot", value: "object",
@@ -863,7 +863,7 @@ pref("models.voiceMode", "models", "omb.voiceMode.v1", "object", "Voice mode (vo
 // #1545: read back as {place, routines, network}, the default filled in
 pref("computer.botWorkplace", "computer", "sagax.botWorkplace.v1", "object", "Where bots work for you ({place: computer|server, routines: boolean, network: all|lan}; organization server)", "Settings > Computer > Bot workplace", always("rule-change"),
   (value) => parseBotWorkplace(value === undefined || value === null ? null : typeof value === "string" ? value : JSON.stringify(value)));
-// the person's other computers (organization server; server/desktop-bridge.ts):
+// the person's other computers (organization server; server/desktop/desktop-bridge.ts):
 // named by the computer's name or id, never offline-only for a rename
 add({
   key: "computer.rename", family: "computer", target: "none", value: "object", label: "Rename one of your other computers ({computer: its name, name: the new name})", where: "Settings > Computer > Other computers",

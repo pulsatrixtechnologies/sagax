@@ -3,7 +3,7 @@
 // at app level (not in a chat view), so switching chats keeps the call.
 // Everything else about the call — what the bot is asked, what the voice is
 // told, approvals, idle hang-up — runs on the harness
-// (server/live-call-controller.ts). This module never sends appends:
+// (server/voice/live-call-controller.ts). This module never sends appends:
 // its data channel may only send session.close.
 import { useSyncExternalStore } from "react";
 import { getUserMediaWithFallback, withPreferredInput } from "./audio-input";

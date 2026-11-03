@@ -318,8 +318,8 @@ describe("mailer", () => {
 ### Task 3: Connexion par courriel émise par le serveur
 
 **Files:**
-- Modify: `server/account-signin.ts` (add `createServerEmailSignIn`), `server/index.ts` (construction at ~698, `/api/auth/email/start|verify` routes ~13964-13994, org invites ~wire at `createOrgRoutes`)
-- Test: `server/account-signin.test.ts` (append; create the file if it does not exist), `server/org/org-identity.e2e.test.ts` (append one case)
+- Modify: `server/auth/account-signin.ts` (add `createServerEmailSignIn`), `server/index.ts` (construction at ~698, `/api/auth/email/start|verify` routes ~13964-13994, org invites ~wire at `createOrgRoutes`)
+- Test: `server/auth/account-signin.test.ts` (append; create the file if it does not exist), `server/org/org-identity.e2e.test.ts` (append one case)
 
 **Interfaces:**
 - Consumes: `EmailOtpStore` (Task 1); `Mailer`, `createMailer`, `resolveMailSettings`, `mailReady` (Task 2); the existing `EmailSignIn` interface and `allowedScopes` in `account-signin.ts`.
@@ -387,7 +387,7 @@ For the last test: when sending fails, `start` voids the issued code. Call `otp.
   - read the code from the captured message;
   - `POST /api/auth/email/verify`;
   - expect a session whose `principalId` is the local operator's principal (profile email owner@example.com).
-- [ ] **Step 4:** Run `npx vitest run server/account-signin.test.ts server/mail/email-otp.test.ts server/org/org-identity.e2e.test.ts server/org/org-routes.test.ts` and `pnpm -s typecheck`.
+- [ ] **Step 4:** Run `npx vitest run server/auth/account-signin.test.ts server/mail/email-otp.test.ts server/org/org-identity.e2e.test.ts server/org/org-routes.test.ts` and `pnpm -s typecheck`.
 - [ ] **Step 5: Commit** `feat: sign in by email with codes this server sends`, followed by the Co-Authored-By line.
 
 ---

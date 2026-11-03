@@ -1,12 +1,12 @@
 // A person's own preferences on an organization server
-// (server/user-preferences.ts, shared/user-preferences.ts). GET answers the
+// (server/people/user-preferences.ts, shared/user-preferences.ts). GET answers the
 // signed-in person's record; PUT replaces it with the known keys; PATCH
 // changes only the keys it names ({ set, remove }), so two devices saving
 // different keys never undo each other. Only a
 // session that acts as a person, only on an organization server: anywhere
 // else the preferences stay in the browser, as they always were. Member
 // scope (request-auth.ts CLIENT_ALLOW): everyone keeps their own.
-import type { UserPreferenceStore } from "../user-preferences.ts";
+import type { UserPreferenceStore } from "../people/user-preferences.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const USER_PREFERENCES_PATH = "/api/me/preferences";

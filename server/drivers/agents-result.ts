@@ -1,5 +1,5 @@
 import { redactSecretsInText } from "../redact.ts";
-import { TOOL_RESULT_MAX_CHARS, TOOL_RESULT_PREVIEW_CHARS, toolResultPrefix } from "../tool-results.ts";
+import { TOOL_RESULT_MAX_CHARS, TOOL_RESULT_PREVIEW_CHARS, toolResultPrefix } from "../tools/tool-results.ts";
 
 /** The operation already happened. Saving overflow must never retry it or
  * turn a successful operation into a failed MCP call. Only cache I/O is timed. */

@@ -1,7 +1,7 @@
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import type { Stats } from "node:fs";
 import { dirname, isAbsolute } from "node:path";
-import { desktopComputerRecord } from "./desktop-computer.ts";
+import { desktopComputerRecord } from "./computer/desktop-computer.ts";
 import { SPAWNED_PROXIES } from "./proxy-paths.ts";
 
 export const REQUIRED_LINUX_TOOLS = ["click", "get_window_state", "list_apps", "type_text"];
@@ -328,7 +328,7 @@ export function validateLinuxDescriptorRuntime(
 }
 
 /** This computer's driver connection, as the desktop app handed it to the
- * server it launched (server/desktop-computer.ts). A server the app did not
+ * server it launched (server/computer/desktop-computer.ts). A server the app did not
  * launch has no such record and cannot use this computer: no file, folder
  * or environment variable stands in for it. */
 export function readCuaConnection({

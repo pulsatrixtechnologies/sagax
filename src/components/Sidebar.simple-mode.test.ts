@@ -129,7 +129,7 @@ describe("bot-first sidebar", () => {
   it.each(densities)("opens the bot's own conversation when threads are hidden, %s density", (density) => {
     // Threads were on once: this window sits on the topic the person last
     // wrote in, which is the bot's conversation (the main thread,
-    // server/main-thread.ts; one conversation per bot since #1586). With the
+    // server/threads/main-thread.ts; one conversation per bot since #1586). With the
     // tree hidden the row opens that conversation as it is, no switch to an
     // older selection, and no fresh topic over it (#763).
     const used = { ...bot, threadId: "idle-history", mainThreadId: "idle-history" };

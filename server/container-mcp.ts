@@ -2,8 +2,8 @@
 // Local VM. This process defines no tools and parses no MCP messages; the
 // piping, drain-safe exit, and watchdog live in mcp-bridge.ts, shared with
 // the VPS entry point.
-import { cuaExecArgs } from "./container-computer.ts";
-import { runMcpBridge } from "./mcp-bridge.ts";
+import { cuaExecArgs } from "./computer/container-computer.ts";
+import { runMcpBridge } from "./mcp/mcp-bridge.ts";
 
 const [runtime, container, socket] = process.argv.slice(2);
 if (!runtime || !["docker", "podman", "container"].includes(runtime)) {

@@ -2,7 +2,7 @@
 // whole workspace as a tree, with when each file reaches the bot, its size
 // against a budget, its dates and its last use; a download of any file;
 // create / upload / rename / move / delete for any file or folder inside
-// the bot folder (server/workspace-manage.ts). Markdown RULES.md and
+// the bot folder (server/workspace/workspace-manage.ts). Markdown RULES.md and
 // docs/<name>.md still read and save through /workspace/file and the
 // memory journal. MEMORY.md and memory/ stay on the admin memory routes
 // for their text editor, and are also reachable for delete/rename guards
@@ -11,14 +11,14 @@
 // The same gate as the Soul edit (2026-10-09: members manage their own
 // bots): an admin, the bot's owner, or someone granted edit on it; a person
 // who may only use shared bots is refused. The scope rule
-// (server/request-auth.ts CLIENT_ALLOW) lets a client session reach the
+// (server/auth/request-auth.ts CLIENT_ALLOW) lets a client session reach the
 // handler; `mayEdit` decides.
 import { basename } from "node:path";
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 
-import { readAtRestSync } from "../content-at-rest.ts";
-import { MEMORY_MAX_BYTES, MEMORY_MAX_LINES, workspaceDir } from "../workspace.ts";
+import { readAtRestSync } from "../encryption/content-at-rest.ts";
+import { MEMORY_MAX_BYTES, MEMORY_MAX_LINES, workspaceDir } from "../workspace/workspace.ts";
 import {
   FORGOTTEN_AFTER_MS,
   RULES_MAX_BYTES,
@@ -31,7 +31,7 @@ import {
   isForgotten,
   resolveWorkspaceFile,
   workspaceTree,
-} from "../workspace-files.ts";
+} from "../workspace/workspace-files.ts";
 import {
   CORE_WORKSPACE_FILES,
   WORKSPACE_UPLOAD_MAX_BYTES,
@@ -42,12 +42,12 @@ import {
   renameWorkspaceEntry,
   writeWorkspaceBytes,
   type WorkspaceManageResult,
-} from "../workspace-manage.ts";
+} from "../workspace/workspace-manage.ts";
 import { MemoryStoreError, RULES_PATH, parseMemoryPath, readMemoryDoc } from "../memory/memory-store.ts";
 import { journalMemoryDelete, journalMemoryWrite } from "../memory/memory-journal.ts";
-import type { RequestAuth } from "../request-auth.ts";
-import { renameDoc } from "../workspace-tools.ts";
-import { workspaceUsage } from "../workspace-usage.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { renameDoc } from "../workspace/workspace-tools.ts";
+import { workspaceUsage } from "../workspace/workspace-usage.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface BotWorkspaceRouteDeps {

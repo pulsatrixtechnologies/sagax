@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createOrgLinkRoutes, DIRECTORY_REFRESH_MAX_PER_MINUTE, DIRECTORY_REFRESH_PATH, DirectoryRefreshScheduler, type OrgLinkRoutesOptions } from "./org-link-routes.ts";
-import { AuthFailureLimiter } from "../webhook-ingress.ts";
+import { AuthFailureLimiter } from "../triggers/webhook-ingress.ts";
 
 const TOKEN = `pxat1.${"a".repeat(43)}`;
 

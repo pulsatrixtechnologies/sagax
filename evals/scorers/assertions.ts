@@ -17,7 +17,7 @@ const fmt = (value: unknown): string => JSON.stringify(value, null, 2);
 
 /** Only a leading Claude update wrapped around captured raw user input is
  * an instruction surface. User copies and unproven inputs fail closed. */
-// Sagax starts each turn's user text with a "[Current time: ...]" note (server/turn-clock.ts).
+// Sagax starts each turn's user text with a "[Current time: ...]" note (server/turns/turn-clock.ts).
 function withoutTurnClock(suffix: string): string {
   const marker = "\n\n[Current time:";
   if (!suffix.startsWith(marker)) return suffix;

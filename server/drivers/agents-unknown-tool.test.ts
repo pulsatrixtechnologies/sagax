@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { knownAgentToolName } from "./agents-catalog.ts";
-import { builtinAgentToolName, unknownAgentToolRefusal } from "../member-tool-scope.ts";
+import { builtinAgentToolName, unknownAgentToolRefusal } from "../people/member-tool-scope.ts";
 
 // #1426: a member's bot on an organization server called `agents__image_gen`,
 // a name the model made up once Grok's own image tool was withheld; it got an

@@ -4,5 +4,5 @@
  * though those names stay refused otherwise. On a member's bot, the hidden
  * names that can hold commands or credentials (.git, .claude, .mcp.json,
  * .env...) wait for an admin and every other one is the owner's
- * (server/engine-access.ts sensitiveHiddenSegment, #1098). */
+ * (server/engines/engine-access.ts sensitiveHiddenSegment, #1098). */
 export const READABLE_HIDDEN_SEGMENTS: ReadonlySet<string> = new Set([".revisions", ".claude-plugin"]);

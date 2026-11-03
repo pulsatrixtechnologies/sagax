@@ -16,11 +16,11 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { conversationDisclosure, parseOutboundCall } from "../shared/outbound-call.ts";
 import type { CustomRule } from "../shared/custom-rules.ts";
 import type { OutboundCallResult, OutboundCard, OutboundTranscriptLine } from "../shared/wire.ts";
-import { TELEPHONY_PATH, createBotInboundTelephonyRoute, type TelephonyRouteDeps } from "./bot-inbound-telephony.ts";
-import { reviewCustomRules } from "./custom-rules-review.ts";
-import type { ConsoleAssertion } from "./oidc-rp.ts";
-import { TRANSCRIPT_RETENTION_MS } from "./outbound-calls.ts";
-import { outboundWiring } from "./outbound-wiring.ts";
+import { TELEPHONY_PATH, createBotInboundTelephonyRoute, type TelephonyRouteDeps } from "./bots/bot-inbound-telephony.ts";
+import { reviewCustomRules } from "./rules/custom-rules-review.ts";
+import type { ConsoleAssertion } from "./auth/oidc-rp.ts";
+import { TRANSCRIPT_RETENTION_MS } from "./outbound/outbound-calls.ts";
+import { outboundWiring } from "./outbound/outbound-wiring.ts";
 import type { Message } from "./store.ts";
 
 const ORIGIN = "https://sagax.example";

@@ -11,7 +11,7 @@ import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
-import type { VaultKeySource } from "../mcp-oauth.ts";
+import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
 
 export const REACH_ME_SECRETS_FILE = "reach-me-secrets.enc";
 const AAD = Buffer.from("sagax reach-me secrets v1");

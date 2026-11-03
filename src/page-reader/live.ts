@@ -1,4 +1,4 @@
-// Live updates of the reader's bar (2026-10-28, server/page-live.ts): who
+// Live updates of the reader's bar (2026-10-28, server/pages/page-live.ts): who
 // has the page open, and a nudge to read the annotations again when someone
 // changes them. Only for a reader who may annotate (the stream answers 404
 // to anyone else); the browser reconnects a dropped stream by itself.

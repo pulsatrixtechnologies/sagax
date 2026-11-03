@@ -22,7 +22,7 @@ import { expect, it } from "vitest";
 
 import { launchVerificationServer, runControlOmb, verificationServerArgs, verificationServerEnvironment } from "../scripts/control-omb.ts";
 import { CONTROL_WAITED } from "./control-client.ts";
-import { CONSENT_RULE } from "./peer-provenance.ts";
+import { CONSENT_RULE } from "./peers/peer-provenance.ts";
 import { ENVELOPE_MARK } from "./runtime/envelope.ts";
 import { waitForExit } from "./testing/cleanup.ts";
 import { handDesktopComputer } from "./testing/desktop-computer.ts";
@@ -311,7 +311,7 @@ it("carries a consult-and-implement job over several teammate turns, through a s
   }
   // With threads hidden the job is still one conversation: every resume
   // landed in it and it stays the Chief's main thread, and no teammate's
-  // work became that teammate's main thread (server/main-thread.ts).
+  // work became that teammate's main thread (server/threads/main-thread.ts).
   const mainThreads = Object.fromEntries(((await f.api("GET", "/api/bots?messages=0")).body.bots as any[]).map((bot) => [bot.id, bot.mainThreadId]));
   expect(mainThreads).toMatchObject({ [f.clive.id]: job, [f.mira.id]: f.mira.activeTaskId, [f.eli.id]: f.eli.activeTaskId });
 }), hostTimeout(120_000));
@@ -355,7 +355,7 @@ it("tells the Chief what happened to each approval: allowed, denied, or never an
   expect(f.turns(f.mira.id).map((record: any) => [record.planKey, record.approval?.behavior])).toEqual([["MA", "allow"], ["MB", "deny"], ["MC", "deny"]]);
   // Each chip says what happened to its card, once.
   const settled = (await f.rows(job)).filter((name: string) => name.includes("@Mira"));
-  // Sagax's chip wording (server/waiting-chip.ts settledChipLabel)
+  // Sagax's chip wording (server/waits/waiting-chip.ts settledChipLabel)
   expect(settled).toEqual(["@Mira got your approval", "You declined @Mira's request", "@Mira's approval request expired"]);
   // The step nobody answered for is named on the result the Chief reads,
   // ahead of the teammate's own words; a step the person denied is not.

@@ -6,12 +6,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { parseOrgImportDocument } from "../../shared/org-import.ts";
 import { DATA_DIR } from "../config.ts";
 import { createLinkedSubjectsRoute, createOrgImportDocument, parseOrgExportChoices } from "./org-export.ts";
-import { PrincipalRegistry } from "../principals.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import { PrincipalRegistry } from "../auth/principals.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { RouteContext } from "../routes/table.ts";
 import { RoutineManager } from "../routines/routines.ts";
 import { Store, titleFromMessage } from "../store.ts";
-import { appendMemoryLog, writeMemoryFile, writeMemoryTopic } from "../workspace.ts";
+import { appendMemoryLog, writeMemoryFile, writeMemoryTopic } from "../workspace/workspace.ts";
 
 const SELF = "pr_11111111-1111-4111-8111-111111111111";
 const DANA = "pr_22222222-2222-4222-8222-222222222222";

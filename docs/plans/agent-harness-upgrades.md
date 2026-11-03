@@ -61,8 +61,8 @@ drift as `server/index.ts` grows; the symbol names are the stable reference.
 **The main conversation path has no retry.**
 
 - Zero occurrences of retry in `server/drivers/claude.ts`, `codex.ts`, `grok.ts`.
-- Retry exists in `server/boat.ts`, `server/computer-proxy.ts`,
-  `server/drivers/acp/core.ts`, `server/webhooks.ts`, `server/drivers/antigravity.ts`.
+- Retry exists in `server/computer/boat.ts`, `server/computer-proxy.ts`,
+  `server/drivers/acp/core.ts`, `server/triggers/webhooks.ts`, `server/drivers/antigravity.ts`.
 - The peripheral systems are resilient; the conversation path is not.
 
 **No liveness, and one coarse state.**
@@ -138,7 +138,7 @@ it differs from the selected instance. Tasks from before the field existed fall
 back to the cursor map: a lone cursor that is ours keeps resuming, anything
 ambiguous replays. Ship this before item 7; a 40-message text replay is better
 than no context, and the rebuild path is where item 7 later plugs in.
-*(As built in #180: `engineIsFresh()` in `server/turn-context.ts`,
+*(As built in #180: `engineIsFresh()` in `server/turns/turn-context.ts`,
 `store.markTaskDispatched()`; the naive missing-cursor rule was tried first and
 failed the A → B → A case in manual testing.)*
 
@@ -364,7 +364,7 @@ model on every subsequent turn — and after item 7, into every rebuild too. One
 accidental `.env` read becomes permanent.
 
 **Design.** A result-side hook running before the message is written. Reuse the
-patterns already in `server/auto-approve.ts` (`SENSITIVE` covers `.env`, ssh keys,
+patterns already in `server/approvals/auto-approve.ts` (`SENSITIVE` covers `.env`, ssh keys,
 AWS credentials, netrc, npmrc, keychain, service accounts). Replace matches with a
 marker that says something was redacted, so behaviour stays explainable. Redact
 the stored copy, not just the displayed one.

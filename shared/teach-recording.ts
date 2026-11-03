@@ -54,7 +54,7 @@ export interface TeachStep {
   secret?: boolean;
   /** press: Enter, Tab, Escape. */
   key?: string;
-  /** Recorded on the bot's computer screen (server/computer-teach.ts), not
+  /** Recorded on the bot's computer screen (server/computer/computer-teach.ts), not
    * in its browser: no page, no field, typed text never kept. */
   screen?: boolean;
   /** screen click: where, as fractions of the screen (0 left/top, 1 right/bottom). */

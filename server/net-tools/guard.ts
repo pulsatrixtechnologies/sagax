@@ -6,7 +6,7 @@ import { isIP } from "node:net";
 
 import { isIpv4Literal, isIpv6Literal } from "../../shared/net-tools/target.ts";
 import { isPublicDomainAddress } from "../custom-domain.ts";
-import { blockedAddressReason } from "../media-proxy-guard.ts";
+import { blockedAddressReason } from "../media/media-proxy-guard.ts";
 
 export interface ConnectGuardOk {
   ok: true;

@@ -6,14 +6,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { IDP_VAULT_FILE, IdpGrantVault, isSessionGrant, type IdpRelyingParty } from "../idp-session.ts";
-import type { OidcIdentity, RefreshOutcome } from "../oidc-rp.ts";
-import type { SubjectTokenOutcome } from "../idp-session.ts";
+import { IDP_VAULT_FILE, IdpGrantVault, isSessionGrant, type IdpRelyingParty } from "../auth/idp-session.ts";
+import type { OidcIdentity, RefreshOutcome } from "../auth/oidc-rp.ts";
+import type { SubjectTokenOutcome } from "../auth/idp-session.ts";
 import {
   ROUTINE_CONSENT_LIFE_MS, ROUTINE_CONSENT_RENEW_MS, ROUTINE_DELEGATION_ISSUE_RETRY_MS, ROUTINE_DELEGATION_KEEPALIVE_MS,
   ROUTINE_DELEGATION_UNSUPPORTED_RETRY_MS, RoutineConsents, routineRenewMs, type RoutineConsentEnd, type RoutineDelegationIssue,
 } from "./org-routine-consent.ts";
-import { PrincipalRegistry } from "../principals.ts";
+import { PrincipalRegistry } from "../auth/principals.ts";
 
 const ISS = "https://px.example.test";
 const KEY = "c".repeat(64);

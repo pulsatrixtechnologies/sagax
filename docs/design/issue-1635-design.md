@@ -85,7 +85,7 @@
 |---|---|
 | `shared/wire.ts` `WireTask` / `GroupTask` | `pinned?: true`、`updatedAt?: number` |
 | `server/store.ts` `TaskRecord`（`WireTask` を extends）、`GroupTaskRecord` | 同じフィールド。作成・追記・起動時の埋め |
-| `server/message-db.ts` | スレッドごとの `MAX(at)` |
+| `server/messages/message-db.ts` | スレッドごとの `MAX(at)` |
 | `server/index.ts` タスク PATCH | `pinned` の許可と検証 |
 | `src/state/store.tsx` `Task` / `GroupTask` | 同じフィールド。メッセージ受信で `updatedAt` を進める |
 | `src/components/SidebarThreadRow.tsx` | 順序と比較、メニュー |

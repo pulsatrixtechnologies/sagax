@@ -1,5 +1,5 @@
 // Plugins > Manage > Marketplaces: the installation's own plugin
-// marketplaces (server/plugin-marketplaces.ts).
+// marketplaces (server/plugins/plugin-marketplaces.ts).
 //
 //   GET    /api/marketplaces                              { marketplaces }
 //   POST   /api/marketplaces { source, ref?, credential?, visibility? }  add or fetch again
@@ -21,9 +21,9 @@
 // carries a token (`hasToken` only says there is one).
 import type { IncomingMessage } from "node:http";
 
-import { setCapabilityDeprecationHeaders } from "../capability-route-deprecation.ts";
-import { MarketplaceError, type MarketplaceView, type MarketplaceViewer, type MarketplaceVisibility, type PluginMarketplaces } from "../plugin-marketplaces.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import { setCapabilityDeprecationHeaders } from "../capabilities/capability-route-deprecation.ts";
+import { MarketplaceError, type MarketplaceView, type MarketplaceViewer, type MarketplaceVisibility, type PluginMarketplaces } from "../plugins/plugin-marketplaces.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { MarketplaceCredentialView } from "../../shared/github-credentials.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -46,7 +46,7 @@ export interface MarketplaceRouteDeps {
     Promise<{ status: number; body: Record<string, unknown> }>;
   /** One admin activity row for a plugin updated (written on success). */
   audit: (auth: RequestAuth, row: { action: string; target: { kind: string; id: string; name: string }; before?: Record<string, unknown>; after?: Record<string, unknown> }) => void;
-  /** The installation's pick per marketplace (server/bot-plugins.ts). */
+  /** The installation's pick per marketplace (server/bots/bot-plugins.ts). */
   workspace?: {
     addWorkspaceMarketplace(input: { source: string; ref?: string; credential?: string; visibility?: MarketplaceVisibility }, actor: string | undefined): Promise<MarketplaceView>;
     refreshWorkspaceMarketplace(name: string, actor: string | undefined): Promise<unknown>;

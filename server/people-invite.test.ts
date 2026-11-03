@@ -1,6 +1,6 @@
 // End to end: adding people to a hosted workspace. The owner bootstraps the
 // first admin from the box, that admin signs in with a code this server
-// emails itself (server/account-signin.ts, server/mail/email-otp.ts) and, through
+// emails itself (server/auth/account-signin.ts, server/mail/email-otp.ts) and, through
 // the same requests Settings → People sends, invites a member, promotes them
 // and removes them, immediately ending their account sessions. Everything
 // the People card reads answers in the shape it renders.

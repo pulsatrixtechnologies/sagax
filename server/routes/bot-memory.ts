@@ -1,6 +1,6 @@
 // The bot-memory family, extracted from server/index.ts's inline routes
 // into the route table (server/routes/README.md). The table runs after the
-// auth gate; scope rules stay keyed by path in server/request-auth.ts.
+// auth gate; scope rules stay keyed by path in server/auth/request-auth.ts.
 //
 // The files already belong to the person (plain markdown in the bot's
 // workspace). server/memory/memory-store.ts decides which paths can be reached
@@ -32,8 +32,8 @@ import {
   type MemoryJournalEntry,
 } from "../memory/memory-journal.ts";
 import { upkeepEnabled, type MemoryUpkeep } from "../memory/memory-upkeep.ts";
-import { listLearnedFacts, removeLearned } from "../profile-learned.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import { listLearnedFacts, removeLearned } from "../profiles/profile-learned.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { BOT_ACT_ROUTE_HEADER } from "./remote-session-files.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -43,7 +43,7 @@ export interface BotMemoryRouteDeps {
   /** The task a thread belongs to; its title names the chat in a journal row. */
   taskByThread(botId: string, threadId: string): { title?: string } | undefined;
   upkeep: Pick<MemoryUpkeep, "status" | "tidy">;
-  /** Recall by meaning for this bot (server/semantic-index.ts): the
+  /** Recall by meaning for this bot (server/recall/semantic-index.ts): the
    * encoder and how many passages are indexed. Absent: not offered. */
   semantic?(botId: string): unknown;
   aboutMe(): string;

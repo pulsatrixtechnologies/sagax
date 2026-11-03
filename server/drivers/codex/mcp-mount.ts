@@ -1,8 +1,8 @@
 /** MCP mount helpers for Codex app-server argv and env. */
 import { createHash } from "node:crypto";
 import type { McpServerSpec, StdioMcpSpec } from "../../contracts.ts";
-import { USER_SANDBOX_MCP_NAME } from "../../user-sandbox-routing.ts";
-import { AUTO_COMPUTER_MCP_NAME } from "../../auto-computer.ts";
+import { USER_SANDBOX_MCP_NAME } from "../../sandbox/user-sandbox-routing.ts";
+import { AUTO_COMPUTER_MCP_NAME } from "../../computer/auto-computer.ts";
 import { DESKTOP_BRIDGE_MCP_NAME } from "../../../shared/bot-workplace.ts";
 import { SPAWNED_PROXIES } from "../../proxy-paths.ts";
 
@@ -38,7 +38,7 @@ export const PROXY_ENV_PREFIX_VARIABLE = "SAGAX_PROXY_ENV_PREFIX";
 
 export function isSagaxWorkplaceProxy(name: string, server: McpServerSpec): boolean {
   // A person's own MCP server command relayed to their server environment
-  // (server/sandbox-stdio-mcp.ts) is the same proxy under the person's name.
+  // (server/sandbox/sandbox-stdio-mcp.ts) is the same proxy under the person's name.
   return !("url" in server) && (SAGAX_WORKPLACE_PROXIES.has(name) || server.env?.SAGAX_TOOL_SERVER === "sagax-stdio");
 }
 

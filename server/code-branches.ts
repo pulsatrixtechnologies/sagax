@@ -1,7 +1,7 @@
 // The bot panel's Coding branches, acted on by the person (Details >
 // Coding: commit, push, open a pull request, diff, archive, delete). The
 // git work runs where the repository is: a folder on this server (the
-// thread's own `cwd` read by server/activity-code-work.ts), with the
+// thread's own `cwd` read by server/activity/activity-code-work.ts), with the
 // person's own credentials, never the server's or another person's
 // (server/routes/bot-code-branches.ts picks them). Nothing here force
 // pushes, rewrites history or touches the default branch.

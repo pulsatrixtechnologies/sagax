@@ -11,7 +11,7 @@
 // publish committed state afterward. A receipt does not make external
 // side effects exactly-once.
 //
-import { readCommandReceipt, withCommandReceipt } from "./message-db.ts";
+import { readCommandReceipt, withCommandReceipt } from "./messages/message-db.ts";
 
 export interface Command {
   /** Stable, dotted name of the mutation: "digest.append", "hook.ingest". */

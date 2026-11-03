@@ -1,4 +1,4 @@
-// A conversation with a person has threads like a bot (server/people-dms.ts).
+// A conversation with a person has threads like a bot (server/people/people-dms.ts).
 // In the client state: a live frame names the conversation's default thread,
 // so the thread this person has open stays open; reading reads the open
 // thread only; organizing a thread shows at once; the sidebar line says

@@ -394,7 +394,7 @@ describe("surface pin provenance against the real server", () => {
   });
 
   // A line relayed from Slack was written there, not in this conversation,
-  // so it never makes this the thread the person is in (server/main-thread.ts):
+  // so it never makes this the thread the person is in (server/threads/main-thread.ts):
   // nor when select_computer continues its turn on another computer, a turn
   // that carries the same line.
   it("never takes a relayed line's conversation for where the person writes, when select_computer continues its turn", async () => {

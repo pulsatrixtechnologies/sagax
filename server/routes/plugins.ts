@@ -4,7 +4,7 @@
 //   GET  /api/plugins/search?q=&cursor=
 //        { featured: [listing], results: [listing], nextCursor, registryAvailable }
 //        featured (shared/plugin-catalog.json) on the first page only, then the
-//        official MCP Registry's community servers (server/plugin-registry.ts).
+//        official MCP Registry's community servers (server/plugins/plugin-registry.ts).
 //        Each listing says whether it is installed (an MCP server with its URL).
 //   GET  /api/plugins/installed
 //        { plugins: [{ kind: "mcp", name, url, domain, enabled, auth, icon?, catalogId? }], count }
@@ -22,8 +22,8 @@
 import type { IncomingMessage } from "node:http";
 
 import { PLUGIN_CATALOG } from "../../shared/plugin-catalog.ts";
-import { featuredListing, featuredMatching, listingInRegion, type PluginListing, type RegistrySearch } from "../plugin-registry.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import { featuredListing, featuredMatching, listingInRegion, type PluginListing, type RegistrySearch } from "../plugins/plugin-registry.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export type InstalledPlugin =

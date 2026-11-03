@@ -3,7 +3,7 @@
 // Perspicax access: someone who does not hold a profile does not get its
 // tools. An editor adds only the profiles they hold; a profile someone else
 // put on the bot stays checked, shown as not held, and may be removed.
-// GET and PUT /api/bots/:id/perspicax (server/bot-perspicax.ts).
+// GET and PUT /api/bots/:id/perspicax (server/bots/bot-perspicax.ts).
 import { cn } from "@/lib/cn";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";

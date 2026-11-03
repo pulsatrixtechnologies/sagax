@@ -60,7 +60,7 @@ export interface BotsDeps {
   /** The package document v2 of one bot, secrets redacted. */
   exportPackage(botId: string): { document: unknown; filename: string; redacted: string[]; skipped: unknown[] };
   importPackage(document: unknown, input: { ownerPrincipalId: string; name?: string }): Promise<{ botId: string; warnings: string[] }>;
-  /** The bot as a sagax.bot zip (server/bot-zip.ts): its size before
+  /** The bot as a sagax.bot zip (server/bots/bot-zip.ts): its size before
    * compression and a writer that streams it. */
   exportZip?(botId: string, options: { conversations: boolean; sharing: boolean }): { filename: string; bytes: number; write(sink: (chunk: Buffer) => Promise<void>): Promise<{ bytes: number; redacted: number }> };
   /** A zip (or an older package file) uploaded as the request body: its

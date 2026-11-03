@@ -36,7 +36,7 @@ const SHELL_HEAD = /^(?:sudo\s+)?(?:cd|ls|cat|rg|grep|sed|awk|find|tree|head|tai
 const CODE_FILE = /\.(?:tsx?|jsx?|mjs|cjs|mts|cts|py|rs|go|swift|kt|kts|java|scala|rb|php|cs|c|cc|cpp|h|hpp|m|mm|css|scss|less|html|vue|svelte|astro|dart|lua|sql|sh|bash|zsh|ps1|ya?ml|toml|json|md|mdx|gradle|proto|graphql|tf)$/i;
 const CODE_NAME = /(?:^|\/)(?:Makefile|Dockerfile|Gemfile|Podfile|CMakeLists\.txt)$/;
 const PROFILE_FOLDER = /(?:^|\/)\.(?:sagax|openmausbot)\/bots\//i;
-/** The bot's own instructions and memory (server/activity-coding.ts). */
+/** The bot's own instructions and memory (server/activity/activity-coding.ts). */
 const PROFILE_NAME = /(?:^|\/)(?:soul|identity|memory|user|directives?|persona|personality|skill|heartbeat|tools)\.md$/i;
 
 function writesCode(files: readonly string[] | undefined): boolean {

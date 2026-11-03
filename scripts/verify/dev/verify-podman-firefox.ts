@@ -16,7 +16,7 @@ const fixtureHome = mkdtempSync(resolve(output, "home-"));
 process.env.HOME = fixtureHome;
 process.env.USERPROFILE = fixtureHome;
 process.env.SAGAX_DATA_DIR = resolve(fixtureHome, "app-data");
-const { containerRunArgs, perBotLocalVmTarget, IMAGE } = await import("../../../server/container-computer.ts");
+const { containerRunArgs, perBotLocalVmTarget, IMAGE } = await import("../../../server/computer/container-computer.ts");
 const run = (args: string[]) => execFileSync(podman, ["--connection", machine, ...args], { env: engineEnv, encoding: "utf8", timeout: 90_000 }).trim();
 const sandboxProbe = readFileSync(new URL("../../testing/firefox-sandbox.py", import.meta.url), "utf8");
 const assertSandboxEnabled = (report: { effectiveContentSandboxLevel: number }) => {

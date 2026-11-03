@@ -7,7 +7,7 @@ export interface SavedStepsRouteDeps {
 
 const RECIPE_ID = /^[\w-]{1,64}$/;
 
-/** Not in CLIENT_ALLOW (server/request-auth.ts): only the owner and admins forget a saved recipe. */
+/** Not in CLIENT_ALLOW (server/auth/request-auth.ts): only the owner and admins forget a saved recipe. */
 export function createSavedStepsRoutes(deps: SavedStepsRouteDeps): RouteHandler {
   return async ({ res, path, method, json }) => {
     const m = path.match(/^\/api\/bots\/([\w-]+)\/saved-steps\/([^/]+)$/);

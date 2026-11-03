@@ -13,13 +13,13 @@ import type {
   TurnAccessInput,
 } from "../../contracts.ts";
 import { newEventId } from "../../contracts.ts";
-import { openStartupModelCatalog, writeStartupModelCache } from "../../startup-model-catalog.ts";
+import { openStartupModelCatalog, writeStartupModelCache } from "../../models/startup-model-catalog.ts";
 import { cliVersionReader, execCli, killCliTree } from "../../procs.ts";
 import {
   claudeSubscriptionHomeKey,
   ensureClaudeSubscriptionFresh,
   onClaudeSubscriptionRenew,
-} from "../../claude-subscription-refresh.ts";
+} from "../../engines/claude-subscription-refresh.ts";
 import { sessionIdlePolicy } from "../session-idle.ts";
 import { claudeAuthRecovery } from "../claude-auth-recovery.ts";
 import { probeClaudeCommands } from "../harness-command-probe.ts";

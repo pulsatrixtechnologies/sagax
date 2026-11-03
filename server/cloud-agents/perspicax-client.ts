@@ -31,7 +31,7 @@ import type {
 import { commitsFrom, diffFilesFrom, type CodeArtifact, type CodeCommit, type CodeFileEntry, type DiffFile, type FollowUpMode } from "../../shared/code-runs.ts";
 import { createHash } from "node:crypto";
 
-import { SUBJECT_TOKEN_HEADER } from "../perspicax-link.ts";
+import { SUBJECT_TOKEN_HEADER } from "../perspicax/perspicax-link.ts";
 import { ProviderHttpError } from "./providers/http.ts";
 import type { HttpFetch } from "./providers/types.ts";
 

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "./harness/http.ts";
 import { createDeviceSettingsBroker } from "./device-settings.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import { createDeviceSettingRoutes } from "./routes/device-settings.ts";
 import { dispatchRoutes } from "./routes/table.ts";
 import { deviceSettingsFrameAllowed } from "../shared/device-settings.ts";

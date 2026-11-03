@@ -35,7 +35,7 @@ import { readableError } from "@/lib/plain-error";
 type Action = "pull" | "run" | "start" | "stop" | "remove" | "recreate";
 
 /** The automatic Local VM care's state, as the desktop app's own server
- * reports it (a mirror of server/local-vm-auto.ts's LocalVmAutoSnapshot). */
+ * reports it (a mirror of server/computer/local-vm-auto.ts's LocalVmAutoSnapshot). */
 export interface LocalVmAutoState {
   phase: "idle" | "checking" | "starting" | "running" | "stopped" | "waiting" | "problem";
   step: "runtime" | "image" | "container" | "start" | null;

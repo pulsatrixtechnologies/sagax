@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "./harness/http.ts";
 import { parsePackageDocument, type PackageDocument } from "../shared/package-format.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import { createTemplateLinkRoutes, handleTemplateLinkPublic, templateLinkToken } from "./routes/template-links.ts";
 import { cardLanguage, publicTemplateDocument, TemplateLinks, templateCardHtml } from "./template-links.ts";
 

@@ -121,9 +121,9 @@ Descriptions follow the condition column in the table. Icons: reuse lucide names
 
 `claudeAccountLinked(person)` is true when any of:
 
-- Org: `PrincipalEngineLogins.signedIn(person, "claudeAgent")` (`server/principal-engine-logins.ts:10-11, 30, 113-116`), the marker `.pulsabot-login.json` written from `onAuthenticated` (`:134, 172-176`).
+- Org: `PrincipalEngineLogins.signedIn(person, "claudeAgent")` (`server/engines/principal-engine-logins.ts:10-11, 30, 113-116`), the marker `.pulsabot-login.json` written from `onAuthenticated` (`:134, 172-176`).
 - Solo: the same marker in that install's Claude config dir. Today's solo `ClaudeLoginController` only refreshes models on success (`server/drivers/claude.ts:2842-2844`, `server/drivers/claude-login-auth.ts:80, 411`). Write the marker there too.
-- Own Anthropic key: solo `cfg.anthropic?.key` (the public flag is `config.anthropic.configured`, `server/index.ts:19978`); org the person's Perspicax `anthropic` key (`myKey` via `providersOfDriver("claudeAgent")` which is `["anthropic"]`, `server/engine-credentials.ts:91, 23256-23257`). `orgKey` / Settings > Connections does not count.
+- Own Anthropic key: solo `cfg.anthropic?.key` (the public flag is `config.anthropic.configured`, `server/index.ts:19978`); org the person's Perspicax `anthropic` key (`myKey` via `providersOfDriver("claudeAgent")` which is `["anthropic"]`, `server/engines/engine-credentials.ts:91, 23256-23257`). `orgKey` / Settings > Connections does not count.
 
 Record `{ type: "claude.linked" }` from those write paths (login success, own-key save). Idempotent: the achievement unlocks once (`server/achievements.ts:12, 352-353`).
 
@@ -147,7 +147,7 @@ Extend `observeAchievementFrame` (`server/index.ts:1194-1216`) and the send site
 - `runtime` `turn.completed` with `modelFamily(threadModel) ?? modelFamily(provider) === "anthropic"` (`server/achievements-mastery.ts:111-126`): `claude.turn`, `key` from a small `claudeTide(model)` (`opus` / `sonnet` / `haiku` by id substring; other anthropic ids still count the turn).
 - `activityEvents` already emits `subagent.used` (`server/achievements.ts:518-523`): when the thread's family is anthropic, also `claude.subagent`.
 - `routine.run` completed (`:513-516, 1202-1211`): when that run's bot/thread family is anthropic, also `claude.routine`.
-- Tool line named `computer_use` / `computer_exec` / `mcp__computer__*` (`server/desktop-bridge-tools.ts:81-85`, `server/achievements-mastery.ts:61`) on an anthropic turn: `claude.computer`. This is not `computer.control` (`server/achievements.ts:462`).
+- Tool line named `computer_use` / `computer_exec` / `mcp__computer__*` (`server/desktop/desktop-bridge-tools.ts:81-85`, `server/achievements-mastery.ts:61`) on an anthropic turn: `claude.computer`. This is not `computer.control` (`server/achievements.ts:462`).
 - `achievementSendEvents` when `voiceCall` is set (`:500-508`) and the thread family is anthropic: `claude.voice`.
 
 Auto-picked Claude counts (the completed turn's model, not the bot's fallback).

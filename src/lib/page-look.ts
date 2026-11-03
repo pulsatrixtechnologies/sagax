@@ -7,7 +7,7 @@
 // keeps only the token names it knows and only values safeTokenValue
 // accepts (the same rule as #1551's `skin=`), and draws with them:
 //
-// - the reader's bar (server/published-pages-render.ts readerBar): a small
+// - the reader's bar (server/pages/published-pages-render.ts readerBar): a small
 //   stylesheet of `--sb-*` variables, light, and dark by the reader's
 //   system, the same rule #1551 gives a reading link's frame;
 // - the page's frame (pageThemeCss `schemes`), so a reader always sees the

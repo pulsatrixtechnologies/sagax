@@ -245,7 +245,7 @@ export function describeQuiet(name: string, state: QuietState, quietMs: number, 
       return `${name} ${why} and is retrying${attempt}.${next} It is still working.`;
     }
     // An engine compacting its own history is Sagax's business, never the
-    // person's (server/context-budget.ts): the notice says only that the
+    // person's (server/context/context-budget.ts): the notice says only that the
     // bot is still working, the way any long model step reads.
     case "compressing":
       return `${name} is still working. This step can take a few minutes.`;

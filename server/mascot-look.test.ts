@@ -1,7 +1,7 @@
 import { rmSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { parseBotProfilePatch } from "./bot-profile.ts";
+import { parseBotProfilePatch } from "./bots/bot-profile.ts";
 import { DATA_DIR } from "./config.ts";
 import type { ModelSelection } from "./contracts.ts";
 import { Store } from "./store.ts";

@@ -4,7 +4,7 @@
  * is authenticated by that provider's own signature scheme on its own path
  * (`/sources/<endpointId>`), its events are normalized to one shape, filtered
  * and deduplicated before a run is queued, and the event reaches the routine
- * as fenced, untrusted data. See server/trigger-sources.ts. */
+ * as fenced, untrusted data. See server/triggers/trigger-sources.ts. */
 
 export const TRIGGER_SOURCE_TYPES = [
   "github",
@@ -195,7 +195,7 @@ export const TRIGGER_SOURCES: Record<TriggerSourceType, TriggerSourceDefinition>
   },
   // 2026-10-26 (Perspicax Voice, phase 2): a text or a call on the owner's
   // phone line, answered by Perspicax (IVR, PIN) and relayed to this server
-  // (server/bot-inbound-telephony.ts). It only wakes a routine; the caller's
+  // (server/bots/bot-inbound-telephony.ts). It only wakes a routine; the caller's
   // words are data, never instructions.
   telephony: {
     type: "telephony",

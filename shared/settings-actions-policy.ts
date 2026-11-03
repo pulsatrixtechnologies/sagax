@@ -6,7 +6,7 @@
 // speaking to it, whether it runs now or waits for that person's card. It
 // performs nothing: server/settings-actions.ts builds the change from the
 // registry (shared/settings-actions.ts) and hands it to the act engine
-// (server/bot-act.ts), which replays the same route the screen calls with
+// (server/bots/bot-act.ts), which replays the same route the screen calls with
 // the person's own session. The person's rights are the route's: a bot never
 // does what its person could not do by hand.
 //
@@ -41,7 +41,7 @@
 // 2026-10-20 ("le bot principal doit pouvoir absolument tout faire"):
 // when the person's own Primary Bot makes the change because the person
 // asked for it in this turn's message (`personAsked`, proved by a quote of
-// their words, server/primary-approvals.ts), rules 4 and 5 do not apply and
+// their words, server/approvals/primary-approvals.ts), rules 4 and 5 do not apply and
 // a deletion runs too: approval levels (Full included), Always allow rules
 // and their removal run at once, on any of the person's own bots. A key the
 // person chose, a secret, another person, several records and the

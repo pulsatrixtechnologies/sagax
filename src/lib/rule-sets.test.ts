@@ -2,7 +2,7 @@
 // the total with unsaved drafts, and a move in the order.
 import { describe, expect, it } from "vitest";
 
-import * as server from "../../server/rule-sets.ts";
+import * as server from "../../server/rules/rule-sets.ts";
 import {
   RULE_SET_MAX_BYTES,
   RULE_SET_MAX_LINES,

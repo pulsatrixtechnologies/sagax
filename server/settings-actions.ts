@@ -2,7 +2,7 @@
 // person speaking to it (2026-10-19). The registry
 // (shared/settings-actions.ts) names the route the screen calls; the policy
 // (shared/settings-actions-policy.ts) decides run or card; the act engine
-// (server/bot-act.ts) replays the route with the person's own session, so
+// (server/bots/bot-act.ts) replays the route with the person's own session, so
 // the person's rights, the route's checks, security keys and the audit
 // journal apply exactly as by hand. Nothing here writes a setting itself.
 
@@ -17,7 +17,7 @@ import { decodePreference, isAppearancePreference, isSyncedPreference, pickValue
 import { DEVICE_APPLY_PATH } from "../shared/device-settings.ts";
 import { BULK_TARGETS_MAX, splitBulkTargets } from "../shared/bulk-bot-edit.ts";
 import { STEP_UP_CLASSES, botActClasses, type StepUpClass } from "../shared/step-up.ts";
-import { valueDigest, type ActRuleCandidate, type BotActResult, type BotActService } from "./bot-act.ts";
+import { valueDigest, type ActRuleCandidate, type BotActResult, type BotActService } from "./bots/bot-act.ts";
 
 export type SettingsActionDeps = {
   organization: () => boolean;

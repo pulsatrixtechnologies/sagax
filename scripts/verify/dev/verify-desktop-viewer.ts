@@ -10,7 +10,7 @@ import { launchVerificationServer, runControlOmb, type VerificationServer } from
 import { agentBrowser, ensureUiBrowser, sessionEnv } from "../../testing/control-omb-ui.ts";
 import { fixtureApi } from "../../testing/preview-fixture.ts";
 import { fakeVnc } from "../../testing/fake-vnc.ts";
-import { BASE_IMAGE_DIGEST, CUA_DRIVER_VERSION, IMAGE, IMAGE_LAYER_VERSION } from "../../../server/container-computer.ts";
+import { BASE_IMAGE_DIGEST, CUA_DRIVER_VERSION, IMAGE, IMAGE_LAYER_VERSION } from "../../../server/computer/container-computer.ts";
 import { jsLiteral } from "../../testing/js-literal.mjs";
 
 const root = fileURLToPath(new URL("../../..", import.meta.url));

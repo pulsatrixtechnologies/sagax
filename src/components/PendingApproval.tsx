@@ -385,7 +385,7 @@ export function PendingApprovalActions({
   const { dispatch } = useStore();
   const ownerOrAdmin = useOwnerOrAdmin();
   // 2026-10-21: the organization may keep every approval to one card
-  // (server/custom-rules-org.ts): no Always allow, and the card says why
+  // (server/rules/custom-rules-org.ts): no Always allow, and the card says why
   const orgPolicy = useOrgApprovalPolicy();
   const isRoutineRequest = isRoutineApproval(pending);
   const isSkillRequest = isSkillApproval(pending);

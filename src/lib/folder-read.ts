@@ -55,7 +55,7 @@ async function markThreadsRead(
 }
 
 /** The same for a conversation with a person: each unread thread of the
- * folder is read for this person only (server/people-dms.ts). */
+ * folder is read for this person only (server/people/people-dms.ts). */
 export async function markGroupFolderRead(
   group: FolderGroup,
   projectId: string,

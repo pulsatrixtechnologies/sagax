@@ -3,9 +3,9 @@
 // never forwarded. Screenshots come back inline. A path, a shell line and
 // the person's own screen are not in this list.
 //
-// The same rules are copied in server/local-vm-computer.ts. The packaged
+// The same rules are copied in server/computer/local-vm-computer.ts. The packaged
 // app only ships electron/, and the server image only ships dist-server, so
-// neither side can import the other. server/local-vm-computer.test.ts runs
+// neither side can import the other. server/computer/local-vm-computer.test.ts runs
 // one list of calls through both and fails when they disagree.
 
 const NUMBER = { type: "number", min: 0, max: 10000 };

@@ -1,7 +1,7 @@
 // The runner's side of the cloud agents control protocol (MVP phase 1):
 // plain outbound HTTPS to Perspicax, never a listening port (CA-3). One
 // client per Pod, authenticated by the run token the provisioner mounts
-// (server/sandboxd-runs-spec.ts, PX_RUN_TOKEN_FILE).
+// (server/sandbox/sandboxd-runs-spec.ts, PX_RUN_TOKEN_FILE).
 //
 // Routes, all under PX_CONTROL_URL:
 //   GET  /api/v1/agents/runner/bootstrap

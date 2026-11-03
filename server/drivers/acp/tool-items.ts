@@ -1,5 +1,5 @@
-import { extractMcpImages } from "../../mcp-tool-images.ts";
-import { toolDetailPreview } from "../../tool-summary.ts";
+import { extractMcpImages } from "../../mcp/mcp-tool-images.ts";
+import { toolDetailPreview } from "../../tools/tool-summary.ts";
 
 export type AcpToolEndEvent = { type: "item.completed" } & (
   | { itemType: "tool"; itemId: string | undefined; ok: boolean; output?: string; [field: string]: unknown }

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CALL_MARK, ENDED_MARK, INTERRUPTED_MARK, voiceCallTurn } from "../testing/voice-call-turns.ts";
 import { recordEvents } from "../testing/events.ts";
-import { buildTurnContext, replaysNatively } from "../turn-context.ts";
+import { buildTurnContext, replaysNatively } from "../turns/turn-context.ts";
 import { instanceConfigs } from "../config.ts";
 import { OpenAICompatDriver } from "./openai-compat.ts";
 

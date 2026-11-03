@@ -14,7 +14,7 @@ description is in [self-hosting](../self-hosting.md#loopback-trust-owner-or-serv
   `SAGAX_LOOPBACK_TRUST=owner|service` overrides (anything else means
   `service`); the desktop app always keeps `owner` behind its per-launch
   capability. Under `service` a session-less loopback request may use only
-  `SERVICE_ALLOW` (`server/request-auth.ts`): health, who-am-I, edition,
+  `SERVICE_ALLOW` (`server/auth/request-auth.ts`): health, who-am-I, edition,
   brand, and the bots' capability routes under `/api/internal/*` (plus the
   test-only capability mint). Everything else answers 403 unless the request
   also presents the worker relay token. That token opens `WORKER_RELAY_ALLOW`
@@ -65,13 +65,13 @@ description is in [self-hosting](../self-hosting.md#loopback-trust-owner-or-serv
 ## Driving it
 
 ```sh
-pnpm exec vitest run server/request-auth.test.ts server/decision-log.test.ts \
+pnpm exec vitest run server/auth/request-auth.test.ts server/decision-log.test.ts \
   server/card-answerers.e2e.test.ts server/cli-service-trust.e2e.test.ts \
-  server/hosted-access.test.ts server/decision-log-wiring.test.ts server/hosted-models-api.test.ts \
+  server/hosted-access.test.ts server/decision-log-wiring.test.ts server/models/hosted-models-api.test.ts \
   src/components/PeopleSection.test.ts src/components/ServerPairingCard.test.ts src/lib/session.test.ts
 ```
 
-- `server/request-auth.test.ts` runs the service routes and a list of admin
+- `server/auth/request-auth.test.ts` runs the service routes and a list of admin
   calls through the resolver under each trust level, the worker data plane
   with the relay token and without it, sessions under `service`, the desktop
   capability overriding `service`, the serving CLI's secret opening the

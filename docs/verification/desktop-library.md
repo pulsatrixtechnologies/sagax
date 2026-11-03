@@ -79,7 +79,7 @@ Workspace and company backups leave out `org-library/catalog.json` and
 `org-library/blobs/` and keep the runtime's `state.json` and `presets.json`:
 
 ```sh
-pnpm exec vitest run server/workspace-backup-policy.test.ts server/workspace-backup.test.ts
+pnpm exec vitest run server/backup/workspace-backup-policy.test.ts server/workspace-backup.test.ts
 ```
 
 ## Mutation checks (2026-09-24)

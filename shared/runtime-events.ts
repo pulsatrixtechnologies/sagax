@@ -1,7 +1,7 @@
 /** Canonical runtime-event shapes, as they ride the live wire and the
  * inspector log. Single home in shared/ so the server contracts, the client
  * store, and the inspector panel cannot drift; server/contracts.ts and
- * server/thread-events.ts re-export these under their historical names. */
+ * server/threads/thread-events.ts re-export these under their historical names. */
 import type { AskQuestion } from "./ask-question.ts";
 
 export type DriverKind = string;
@@ -89,7 +89,7 @@ export type RuntimeEvent = RuntimeEventBase &
         /** A resumable terminal: the turn exhausted its model/tool budget,
          * and a structured handoff was persisted. The harness may start a
          * `Continue:` thread automatically; an assigned turn's requester gets
-         * the handoff with the stop instead (server/turn-continuation.ts). */
+         * the handoff with the stop instead (server/turns/turn-continuation.ts). */
         type: "cap.exhausted";
         /** Absolute path to the persisted handoff for the dead turn. */
         handoffPath: string;
@@ -142,7 +142,7 @@ export type RuntimeEvent = RuntimeEventBase &
         itemType: "tool";
         ok: boolean;
         output?: string;
-        /** A ConnectWise call's whole result (server/tool-summary.ts
+        /** A ConnectWise call's whole result (server/tools/tool-summary.ts
          * cwToolResult), read once for its widget. Never broadcast, never
          * written to the event log. */
         resultText?: string;
@@ -164,14 +164,14 @@ export type RuntimeEvent = RuntimeEventBase &
          * does not already say so (an ACP agent reports a kind such as
          * "other", Codex the bare tool name). Never taken from the model's
          * arguments. The organization admin gate reads it
-         * (server/member-tool-scope.ts). */
+         * (server/people/member-tool-scope.ts). */
         mcpTool?: string;
         /** Complete native shell input and its effective working directory.
          * Used for exact-command grants; never reconstructed from a display
          * summary, tool title, or argv. Absent when either value is unknown. */
         command?: { command: string; cwd: string };
         /** 2026-10-21 (parité R10, ligne 80): the app of this Mac a screen
-         * action acts on, as the SERVER read it (server/computer-app.ts),
+         * action acts on, as the SERVER read it (server/computer/computer-app.ts),
          * set only by the bus's publish gate; the bus drops any value an
          * adapter put there. */
         screenApp?: { label: string; bundleId: string; team: string };
@@ -254,7 +254,7 @@ export type RuntimeEvent = RuntimeEventBase &
       /** The engine went silent and the turn was stopped as stuck. */
       stalled?: boolean;
       /** A usage limit refused the turn: epoch ms when it resets, when the
-       * engine said (server/limit-failover-host.ts). */
+       * engine said (server/usage/limit-failover-host.ts). */
       limitResetsAt?: number;
       /** The refusal binds this model only (its extra-usage credits, or its
        * own weekly window): the engine stays free for its other models. */

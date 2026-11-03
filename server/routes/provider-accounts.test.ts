@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ProviderAccountsError } from "../provider-accounts.ts";
+import { ProviderAccountsError } from "../engines/provider-accounts.ts";
 import { createProviderAccountsRoutes } from "./provider-accounts.ts";
 
 describe("the person's provider routes", () => {

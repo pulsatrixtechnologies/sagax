@@ -1,4 +1,4 @@
-// The desktop's look on a personal computer (server/desktop-appearance.ts,
+// The desktop's look on a personal computer (server/desktop/desktop-appearance.ts,
 // shared/desktop-appearance.ts). GET answers the record; PUT replaces it
 // with the valid keys. The desktop renderer keeps it in step with its own
 // localStorage (src/lib/desktop-appearance-sync.ts); the paired phone reads it
@@ -7,7 +7,7 @@
 // /api/me/preferences there. Client scope (request-auth.ts CLIENT_ALLOW,
 // companion/src/routes.ts): a look carries no secret.
 import { DESKTOP_APPEARANCE_PATH } from "../../shared/desktop-appearance.ts";
-import type { DesktopAppearanceStore } from "../desktop-appearance.ts";
+import type { DesktopAppearanceStore } from "../desktop/desktop-appearance.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface DesktopAppearanceRouteDeps {

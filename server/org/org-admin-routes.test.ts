@@ -6,7 +6,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { OidcError, type ConsoleAssertion } from "../oidc-rp.ts";
+import { OidcError, type ConsoleAssertion } from "../auth/oidc-rp.ts";
 import {
   AssertionReplayCache,
   botInReach,
@@ -20,7 +20,7 @@ import {
   type OrgAdminRouteDeps,
   type OrgAdminViewer,
 } from "./org-admin-routes.ts";
-import type { UsageRow } from "../usage-ledger.ts";
+import type { UsageRow } from "../usage/usage-ledger.ts";
 import { botLook, botPersona } from "./org-admin-look.ts";
 import { fail, ok, type ConsoleAuditEntry } from "./org-admin-console.ts";
 

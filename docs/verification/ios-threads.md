@@ -12,7 +12,7 @@ runtime projection and loading full history after a background SSE tail.
 From the repository root:
 
 ```sh
-pnpm exec vitest run server/paired-thread-targets-api.test.ts server/independent-threads-api.test.ts server/bot-projects-api.test.ts server/thread-capacity-api.test.ts
+pnpm exec vitest run server/paired-thread-targets-api.test.ts server/workspace/independent-threads-api.test.ts server/bot-projects-api.test.ts server/thread-capacity-api.test.ts
 ```
 
 These server tests launch isolated fake-provider fixtures. They cover thread

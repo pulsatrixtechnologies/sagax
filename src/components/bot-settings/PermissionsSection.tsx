@@ -140,7 +140,7 @@ export function PermissionsSection({
   };
   // How autonomously this bot may act on its own. A level next to the approval
   // level, not a Chief orchestrator: the server enforces it per bot
-  // (shared/proactive-mode.ts, server/proactive.ts).
+  // (shared/proactive-mode.ts, server/proactive/proactive.ts).
   const proactiveMode: ProactiveMode = proactiveModeFor(bot);
   const setProactiveMode = (mode: ProactiveMode) => {
     if (bot.busy || (mode === proactiveMode && !proactiveMixed)) return;

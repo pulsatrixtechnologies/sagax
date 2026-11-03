@@ -1,5 +1,5 @@
 // GET and PUT /api/settings/bot: the phone's Settings > Bot rows
-// (server/bot-settings.ts says what each one does).
+// (server/bots/bot-settings.ts says what each one does).
 //
 //   GET -> { settings: { autoReviewDefault, timeZone, timeZoneAuto },
 //            scope: "server" | "person", hostTimeZone, effectiveTimeZone }
@@ -9,8 +9,8 @@
 // operator at the server's console the server's. Personal server: the
 // server's own, which only its owner (this computer, a paired phone, an
 // admin session) changes. Member scope (request-auth.ts CLIENT_ALLOW).
-import type { BotSettings, BotSettingsStore } from "../bot-settings.ts";
-import { botSettingsPatchSchema, hostTimeZone } from "../bot-settings.ts";
+import type { BotSettings, BotSettingsStore } from "../bots/bot-settings.ts";
+import { botSettingsPatchSchema, hostTimeZone } from "../bots/bot-settings.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const BOT_SETTINGS_PATH = "/api/settings/bot";

@@ -17,7 +17,7 @@
 //   parameter {{1}} that carries the card's words). Every message is billed
 //   by Meta to the person's account: no retry.
 // - Back: Meta posts the person's messages to the webhook receiver
-//   (`/reach-me/whatsapp/<endpoint>`, server/webhook-ingress.ts). The
+//   (`/reach-me/whatsapp/<endpoint>`, server/triggers/webhook-ingress.ts). The
 //   subscription check answers the verify token; every message must carry
 //   Meta's signature with the person's app secret (X-Hub-Signature-256), be
 //   for their Phone Number ID and come from their proven number. It goes to

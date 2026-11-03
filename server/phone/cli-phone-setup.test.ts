@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CliOptions } from "../cli.ts";
-import { SetupCancelled, type SetupIo } from "../cli-prompts.ts";
+import { SetupCancelled, type SetupIo } from "../cli/cli-prompts.ts";
 import { normalizePhoneOrigin, phonePairingInstructions, runPhoneSetup, type PhoneSetupDependencies } from "./cli-phone-setup.ts";
 
 const options: CliOptions = {

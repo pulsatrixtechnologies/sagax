@@ -9,7 +9,7 @@ Run the isolated regression:
 
 ```sh
 pnpm exec vitest run server/local-computer.test.ts \
-  server/local-computer-proxy.test.ts server/mcp-bridge.test.ts \
+  server/local-computer-proxy.test.ts server/mcp/mcp-bridge.test.ts \
   server/system-prompt.test.ts server/local-routing.test.ts
 ```
 

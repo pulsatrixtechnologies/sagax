@@ -8,7 +8,7 @@ Three layers work together.
 
 ## 1. Server graceful shutdown
 
-On `SIGTERM` / `SIGINT` (`server/graceful-shutdown.ts`, wired in
+On `SIGTERM` / `SIGINT` (`server/process/graceful-shutdown.ts`, wired in
 `server/index.ts`):
 
 1. Mark probes unready (`markShuttingDown`): `/healthz` and `/api/health`
@@ -19,11 +19,11 @@ On `SIGTERM` / `SIGINT` (`server/graceful-shutdown.ts`, wired in
    (`SAGAX_SHUTDOWN_DRAIN_MS`, default 5 s on a server, 0 under the
    desktop app).
 4. Stop accepting and finish in-flight HTTP
-   (`server/http-shutdown.ts`), then flush durable state (bus, sessions,
+   (`server/process/http-shutdown.ts`), then flush durable state (bus, sessions,
    ledgers) and exit.
 
 Runtime state is already durable on disk. Interrupted turns resume once
-at the next start (`server/interrupted-turns.ts`).
+at the next start (`server/turns/interrupted-turns.ts`).
 
 Raise `SAGAX_SHUTDOWN_DRAIN_MS` together with the container stop grace
 period (Compose `stop_grace_period`, k8s `terminationGracePeriodSeconds`)
@@ -32,7 +32,7 @@ when turns need longer to land.
 ## 2. Caddy holds requests during the restart
 
 Every Caddyfile we ship (`deploy/Caddyfile`, `install.sh`,
-`server/caddy.ts`, `server/fleet.ts`, helm configmap, local/podman)
+`server/caddy.ts`, `server/fleet/fleet.ts`, helm configmap, local/podman)
 configures the reverse proxy to **wait** instead of 502 while the single
 upstream is gone:
 
@@ -112,9 +112,9 @@ a rendered manifest.
 
 ## Tests
 
-- `server/http-shutdown.test.ts`, `server/graceful-shutdown.test.ts`,
-  `server/healthz.test.ts`
-- `server/caddy.test.ts`, `server/fleet.test.ts`
+- `server/process/http-shutdown.test.ts`, `server/process/graceful-shutdown.test.ts`,
+  `server/process/healthz.test.ts`
+- `server/caddy.test.ts`, `server/fleet/fleet.test.ts`
 - `src/lib/deploy-reconnect.test.ts`, `src/components/ChatErrorBanner.test.ts`
 - `companion/test/upstream-failure.test.ts`
 - iOS: `FailoverTests.testDeployOutageShowsCalmReconnectingWithoutAnotherRoute`

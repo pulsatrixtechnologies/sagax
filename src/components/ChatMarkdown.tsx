@@ -320,7 +320,7 @@ export function chatUrlTransform(value: string, key?: string): string {
   return defaultUrlTransform(value);
 }
 
-/** Parse link destinations exactly as server/message-file.ts does. */
+/** Parse link destinations exactly as server/messages/message-file.ts does. */
 function remarkWindowsPathDestinations(this: { data(): object }) {
   const data = this.data() as { fromMarkdownExtensions?: unknown[] };
   (data.fromMarkdownExtensions ??= []).push(windowsPathDestinations);

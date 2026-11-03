@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
 import { createPresetStore, type OrgInstallStatus } from "../presets.ts";
-import { requiredScope } from "../request-auth.ts";
+import { requiredScope } from "../auth/request-auth.ts";
 import { parsePackageDocument } from "../../shared/package-format.ts";
 import { createBotPresetRoutes } from "./bot-presets.ts";
 import { dispatchRoutes } from "./table.ts";

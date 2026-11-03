@@ -125,7 +125,7 @@ async function start() {
 }
 
 /** The speaker's own thread on a bot. Private threads (#13,
- * server/thread-privacy.ts): each person talks to a shared bot in their own
+ * server/threads/thread-privacy.ts): each person talks to a shared bot in their own
  * thread, started the first time they open it; nobody reads another's. */
 async function ownThread(auth: Auth, botId: string): Promise<string> {
   const bots = (await api("GET", "/api/bots?messages=0", auth)).body.bots as Array<{ id: string; threadId: string }>;

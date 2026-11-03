@@ -41,10 +41,10 @@ Rendering surfaces:
   - Android: no widget renderer, so it shows the `text` fallback.
 
   A button press comes back as an ordinary user message that replies to the widget row
-  (`server/chat-widgets.ts` `prepareWidgetPress`, `server/replies.ts` `promptWithReply`). Widgets are refused in
-  rooms (`ROOM_REFUSAL` in `server/chat-widgets.ts`).
+  (`server/widgets/chat-widgets.ts` `prepareWidgetPress`, `server/messages/replies.ts` `promptWithReply`). Widgets are refused in
+  rooms (`ROOM_REFUSAL` in `server/widgets/chat-widgets.ts`).
 - **Tool-result widgets (PSA precedent).** `shared/cw-widgets/tool-call.ts` (`cwWidgetFromToolCall`,
-  `isCwViewTool`, `shownCwWidget`) maps a tool call's result to a typed widget. `server/cw-widget-actions.ts`
+  `isCwViewTool`, `shownCwWidget`) maps a tool call's result to a typed widget. `server/widgets/cw-widget-actions.ts`
   (`cwToolRowWidget`) attaches it to the tool row (`tool.widget` in `shared/wire.ts`). Desktop draws it in
   `src/components/cw/CwWidgetView.tsx` and iOS in `ios/App/Features/Chat/CwWidgetCard.swift`. A change asked from
   the widget becomes an approval card, never a direct write.
@@ -69,43 +69,43 @@ Tool declaration and gating:
   on every turn by `agents-catalog-wire.test.ts` (`BUDGET_BASELINE`). Ten new tools there would cost every
   turn of every bot.
 - **Built-in harness MCP servers.** `server/harness-mcp-proxy.ts` (`HarnessMcpKind = browser | computer | data`)
-  and `server/harness-mcp-http.ts` (path `/api/internal/(browser|computer|data)/mcp-http`). Supporting pieces:
+  and `server/mcp/harness-mcp-http.ts` (path `/api/internal/(browser|computer|data)/mcp-http`). Supporting pieces:
   - each driver declares the capability `dataMcp` (`server/contracts.ts`) and mounts the server in
     `server/drivers/claude.ts`, `codex.ts` and `acp/core.ts`;
   - the capability token is minted in `server/index.ts` (`mintInternalCapability`, `InternalCapability.kind`,
     `dataIntegration`);
-  - reserved server names live in `server/mcp-registry.ts` (`RESERVED_MCP_NAMES`).
+  - reserved server names live in `server/mcp/mcp-registry.ts` (`RESERVED_MCP_NAMES`).
 - **Per-bot tool scope.** `shared/tool-scope.ts` (`native:` / `mcp:<server>:<tool>` selectors, e.g.
   `mcp:agents:show_widget`).
-- **Read-only annotations.** `server/agent-tool-policy.ts` (`READ_ONLY_AGENT_TOOL_NAMES`, `openWorldHint: false`).
+- **Read-only annotations.** `server/tools/agent-tool-policy.ts` (`READ_ONLY_AGENT_TOOL_NAMES`, `openWorldHint: false`).
   `server/flow-tools.ts` has the same `READ_ONLY` shape.
 - **No-card list.** `server/sagax-internal-tools.ts` (`sagaxInternalTool`) is the reviewed exact-name list of
   Sagax's own tools that never ask for approval (today: Data, plus member-own-scope agents tools).
-- **Confidential threads.** `server/confidential-threads.ts` never trusts a tool's own `readOnlyHint`.
+- **Confidential threads.** `server/threads/confidential-threads.ts` never trusts a tool's own `readOnlyHint`.
 - **HTTP routes.** Route modules live in `server/routes/` (README: `createXRoutes(deps)`, no new `if` blocks in
   `server/index.ts`, enforced by `scripts/testing/index-route-ratchet.test.ts`). Route scopes are in
-  `server/request-auth.ts` (`CLIENT_ALLOW` for client and member sessions, `PERMISSION_ROUTES`). Each route also
+  `server/auth/request-auth.ts` (`CLIENT_ALLOW` for client and member sessions, `PERMISSION_ROUTES`). Each route also
   needs a row in `server/tool-policy.generated.ts` (`scripts/tool-policy/generate.ts`, `docs/tool-policy.md`).
 - **Org permissions.** `shared/permissions.ts` (`PermissionDefinition`, `memberDefault`, `adminOnly`, labels
   `{en, fr}`).
 
 Network-safety helpers already in the tree:
 
-- `server/media-proxy-guard.ts`: `blockedAddressReason(address)` returns typed reasons (loopback, private,
+- `server/media/media-proxy-guard.ts`: `blockedAddressReason(address)` returns typed reasons (loopback, private,
   link-local, metadata, cgnat, ula, ipv4-mapped, ...). `checkMediaDestination` resolves every address and
   connects to the checked one.
 - `server/custom-domain.ts`: `isPublicDomainAddress` (BlockList that includes 169.254/16, 100.64/10 and the
   cloud host-agent address `168.63.129.16`; for IPv6 only global 2000::/3 passes).
 - `server/public-fetch.ts`: `guardedFetch` re-checks every redirect and pins the resolved address. Note that its
   **first** request is not guarded, so callers must guard hop 0 themselves.
-- `server/person-connections.ts`: the "all resolved addresses must be public" rule.
+- `server/people/person-connections.ts`: the "all resolved addresses must be public" rule.
 - `server/browser/browser-navigation.ts`: blocks `localhost`, `metadata.google.internal` and non-public IP literals.
 
 Environment facts:
 
 - Node ≥ 24 (`package.json` engines).
 - The server image is `node:24-trixie-slim` with no `iputils-ping` (`Dockerfile`).
-- Engine egress may go through the person's computer (`server/desktop-egress.ts`), but harness-side code such
+- Engine egress may go through the person's computer (`server/desktop/desktop-egress.ts`), but harness-side code such
   as the Data tools runs **in the server process**. The IT tools will too, so their vantage point is the Sagax
   server and never the person's LAN.
 
@@ -113,7 +113,7 @@ Language:
 
 - `src/locales/*.json` packs are partial and fall back to English (`src/locales/index.ts`). `pt-br.json` also
   serves `pt`. Check with `pnpm i18n:check` (`scripts/generate-locale.mjs`).
-- The server-side language precedent is `cwActionLanguage(cfg.language)` in `server/cw-widget-actions.ts`.
+- The server-side language precedent is `cwActionLanguage(cfg.language)` in `server/widgets/cw-widget-actions.ts`.
 
 Tests:
 
@@ -226,7 +226,7 @@ Chosen (decision 3) over adding tools to the agents catalog:
   when the feature is on;
 - add the driver capability `netToolsMcp` in `server/contracts.ts`, and mount it in `claude.ts`, `codex.ts` and
   `acp/core.ts`, exactly as `data` is mounted (`harnessHttp(..., "nettools")`, `mountSelected`);
-- add `"nettools"` to `RESERVED_MCP_NAMES` (`server/mcp-registry.ts`);
+- add `"nettools"` to `RESERVED_MCP_NAMES` (`server/mcp/mcp-registry.ts`);
 - per-bot off switch: tool scope `mcp:nettools:*` or one tool, for example deny `mcp:nettools:port_check`
   (`shared/tool-scope.ts`);
 - annotations on every tool: `{ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }`.
@@ -235,7 +235,7 @@ Chosen (decision 3) over adding tools to the agents catalog:
   family `"nettools"`, so they never raise a card (decision 6). They read only public data about a target the
   person or bot names, and the guard (§3.3) is the boundary. `port_check` is the exception, with its own rule in
   §3.3;
-- confidential threads: classify `nettools` as Sagax-internal reads in `server/confidential-threads.ts`. The only
+- confidential threads: classify `nettools` as Sagax-internal reads in `server/threads/confidential-threads.ts`. The only
   thing that leaves the server is the target name, sent to DNS, RDAP or the target itself. A test pins this;
 - result size: keep the model text under 6 KB (`netCheckModelText`). The full raw output stays in the result, and
   `mcp-result-budget.ts` trims as a backstop.
@@ -279,7 +279,7 @@ Port policy (`port_check`, `tcp_ping`, `tls_check` port):
   rule (`cwToolRowWidget(..., personText)` and the lookup near `slimMessage` in `server/index.ts`). Otherwise the
   call is refused with "Ask the person to type the host to check." In the panel and `/check`, the person typed
   it by definition;
-- every port check is appended to the admin activity log (`server/admin-activity.ts` `appendAdminAction`,
+- every port check is appended to the admin activity log (`server/activity/admin-activity.ts` `appendAdminAction`,
   category `security`): who, target and ports. No other check is logged beyond its normal tool row (decision 13).
 
 Limits (`limits.ts`, in memory, starting values to tune):
@@ -322,7 +322,7 @@ Abuse notes for the spec:
   Chosen (decision 19): do not trust a client-supplied result. `post` takes `{ threadId, check, input }`
   and runs the check again, hitting the cache when it just ran. A client can then never post a fabricated
   verdict as if it came from the server.
-- Auth: add both paths to `CLIENT_ALLOW` in `server/request-auth.ts` so member sessions and paired clients reach
+- Auth: add both paths to `CLIENT_ALLOW` in `server/auth/request-auth.ts` so member sessions and paired clients reach
   them. On an organization server, gate them in `PERMISSION_ROUTES` with a new key (§3.8).
 - Tool policy: add reviewed rows to `server/tool-policy.generated.ts` (`tier: "read"`, `readOnly: true` for
   `run`, `write` for `post`), then rerun `scripts/tool-policy/generate.ts`.
@@ -672,13 +672,13 @@ New:
 - this spec
 
 Edited:
-- `server/harness-mcp-proxy.ts`, `server/harness-mcp-http.ts`
+- `server/harness-mcp-proxy.ts`, `server/mcp/harness-mcp-http.ts`
 - `server/contracts.ts`
 - `server/drivers/claude.ts`, `codex.ts`, `acp/core.ts`
 - `server/index.ts` (capability kind, integration mount only; no route `if`)
-- `server/mcp-registry.ts`, `server/sagax-internal-tools.ts`, `server/confidential-threads.ts`
+- `server/mcp/mcp-registry.ts`, `server/sagax-internal-tools.ts`, `server/threads/confidential-threads.ts`
 - `server/config.ts`, `src/lib/feature-flags.ts`
-- `server/request-auth.ts`, `server/tool-policy.generated.ts`
+- `server/auth/request-auth.ts`, `server/tool-policy.generated.ts`
 - `shared/permissions.ts`, `shared/requested-views.ts`, `shared/harness-commands.ts`
 - `src/lib/composer-commands.ts`
 - `src/components/bot-settings/panel-tabs.ts`, `src/components/BotSettingsDialog.tsx`

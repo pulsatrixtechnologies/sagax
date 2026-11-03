@@ -167,7 +167,7 @@ object LiveCallRules {
      * The desktop's `endNotice` (`src/lib/live-call-media.ts`) for every
      * harness `LiveEndReason`, and OpenAI's own `session.closed` reasons on
      * this phone's data channel mapped the way the harness maps them
-     * (`CLOSE_REASONS` in `server/live-call-controller.ts`).
+     * (`CLOSE_REASONS` in `server/voice/live-call-controller.ts`).
      */
     fun endNotice(reason: String?): EndNotice = when (reason) {
         "idle" -> EndNotice("Call ended after a long silence.", dropped = false)

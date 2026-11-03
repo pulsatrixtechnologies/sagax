@@ -4,7 +4,7 @@
 // answer is spoken and the steer queue is empty. Flag off: A then
 // B stack, which is today's typed-chat-on-a-call behaviour.
 import { INITIAL_CALL, step, type CallEffect, type CallEvent, type CallState } from "../src/lib/voice-mode/call-machine.ts";
-import { admitDuplexSend } from "../server/voice-call-duplex.ts";
+import { admitDuplexSend } from "../server/voice/voice-call-duplex.ts";
 import {
   cancelSpeech,
   createSpeechFence,

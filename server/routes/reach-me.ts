@@ -27,12 +27,12 @@
 //
 // Each person chooses for themself, for each bot they can see: no admin,
 // no owner check (the setting only says how THIS person is reached about
-// the cards that wait on them). Client-scoped in server/request-auth.ts;
+// the cards that wait on them). Client-scoped in server/auth/request-auth.ts;
 // the bot visibility check every client route passes answers a hidden bot
 // as missing first. Tokens and the app secret are write only: never in an
 // answer.
 import { parseReachMe, type ReachChannelId } from "../../shared/reach-me.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { ReachMeStore } from "../reach-me/store.ts";
 import type { ReachTelegram } from "../reach-me/telegram.ts";
 import type { ReachWhatsApp, WhatsAppView } from "../reach-me/whatsapp.ts";

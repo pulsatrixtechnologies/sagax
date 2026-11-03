@@ -28,7 +28,7 @@ import { createHash } from "node:crypto";
 
 import type { PerspicaxRun } from "../../shared/cloud-agents.ts";
 import type { CodeSubscription } from "../../shared/code-runs.ts";
-import type { SubscriptionTokenBody, SubscriptionTokenDeposit } from "../perspicax-link.ts";
+import type { SubscriptionTokenBody, SubscriptionTokenDeposit } from "../perspicax/perspicax-link.ts";
 import { ENGINE_DRIVER, ENGINE_PROVIDER, runEngine, type RunEngine, type SubscriptionAccess, type SubscriptionDriver } from "./subscription-access.ts";
 
 /** What the Code view says about a personal run's subscription: `ok`

@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
 
-import type { CallbackResult } from "../mcp-oauth.ts";
+import type { CallbackResult } from "../mcp/mcp-oauth.ts";
 import type { json, readBody } from "../harness/http.ts";
 import {
   createMcpOAuthCallbackRoutes,

@@ -13,7 +13,7 @@ is reported.
 
 ## What Add does
 
-The package goes through the same importer as a file (`server/package-import.ts`),
+The package goes through the same importer as a file (`server/packages/package-import.ts`),
 called with `trust: "org"` from `server/org/org-library.ts` and nowhere else.
 Compared with a file:
 
@@ -30,7 +30,7 @@ Compared with a file:
   The hashes live on bots (`packageBase`), group chats (`installedPackage`),
   routines (`installedPackage`) and skill state (`package`). The later
   automatic update uses them to tell your edits from the publisher's changes.
-  Value shapes are in `server/package-parts.ts`.
+  Value shapes are in `server/packages/package-parts.ts`.
 - **A skills-only package** creates no records. Its skills are *offered*:
   **Bot → Skills → From {Organization}** lists them, and **Add** there puts
   one on that bot, switched on and stamped. A team's skills that no bot

@@ -1,7 +1,7 @@
 // Keep installed voices on the voice-mode path too. Buffered WAV from a
 // local engine becomes the same 24 kHz PCM that live calls already read.
 import type { AppConfig } from "../config.ts";
-import type { VoiceProviderAdapter } from "../voice-mode.ts";
+import type { VoiceProviderAdapter } from "../voice/voice-mode.ts";
 import * as system from "./system-voices.ts";
 import * as chatterbox from "./chatterbox.ts";
 import type { Audio } from "./elevenlabs.ts";

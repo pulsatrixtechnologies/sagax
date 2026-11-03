@@ -1,7 +1,7 @@
 // The one status line a conversation keeps when its engine's usage limit
 // sends a turn to another engine, and when it comes back (port of
 // OpenMausBot #3074, "continue on the backup engine", adapted:
-// server/limit-failover.ts). The row is a `recovery:` activity whose
+// server/usage/limit-failover.ts). The row is a `recovery:` activity whose
 // English words every client can show; the app draws `tool.limitFailover`
 // in the reader's language instead (src/lib/activity-runs.ts).
 

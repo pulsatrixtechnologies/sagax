@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { boundedAgentResult } from "./agents-result.ts";
-import { TOOL_RESULT_MAX_CHARS } from "../tool-results.ts";
+import { TOOL_RESULT_MAX_CHARS } from "../tools/tool-results.ts";
 
 const id = "r-37a58e8d-4411-4a9c-bc1a-00c4278201db";
 

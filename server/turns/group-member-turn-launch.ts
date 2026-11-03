@@ -361,7 +361,7 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
   const resolvedLatestImages = latestUser?.text && !cardContinuation && !latestInBurst
     ? extractTurnImages(latestUser.text)
     : { text: latestUser?.text ?? "", images: [] };
-  // stored files sealed at rest go plain for the engine (server/content-at-rest.ts)
+  // stored files sealed at rest go plain for the engine (server/encryption/content-at-rest.ts)
   const roomAttachmentsHold = cardContinuation ? undefined : holdTurnAttachments(threadId, [latestUser?.text], [...burstImages, ...resolvedLatestImages.images], { picturesByPath: instance.driverKind === "codex" });
   if (roomAttachmentsHold) await roomAttachmentsHold;
   // Organization server: where this room turn's tools run (the person whose

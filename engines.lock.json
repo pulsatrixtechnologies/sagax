@@ -2,7 +2,7 @@
   "_comment": [
     "The one place the engine CLIs baked into the Sagax server image are pinned.",
     "Read by scripts/install-engines.mjs (the Dockerfile's engines step), by the",
-    "server's startup self-check (server/engines-self-check.ts, through the",
+    "server's startup self-check (server/engines/engines-self-check.ts, through the",
     "manifest the install step writes) and by Perspicax's infra/scripts/build-push.sh.",
     "Bump a version and its hashes together; docs/custom-engines.md lists the set.",
     "redistributable false: the vendor's licence is not an open-source one, so the",

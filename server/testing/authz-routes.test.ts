@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { CLIENT_ALLOW } from "../request-auth.ts";
+import { CLIENT_ALLOW } from "../auth/request-auth.ts";
 import { expandPattern, fakeId, fillShape, memberRouteShapes, OWNED_KINDS } from "./authz-routes.ts";
 
 const ALL = { orgDirectory: true, orgPairing: true, sharedComputers: true, serverCatalogue: true } as const;
 
-describe("authorization matrix route list (server/authz-matrix.e2e.test.ts)", () => {
+describe("authorization matrix route list (server/auth/authz-matrix.e2e.test.ts)", () => {
   it("expands every CLIENT_ALLOW row and names every id in it", () => {
     // throws, naming the row, on an id SLOT_KINDS does not name
     const shapes = memberRouteShapes(ALL);

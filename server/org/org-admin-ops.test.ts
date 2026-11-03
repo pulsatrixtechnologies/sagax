@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { ConsoleRefusal } from "./org-admin-console.ts";
 import { opsRoutes, timed, type OpsDeps, type SettingsChanges } from "./org-admin-ops.ts";
 import type { ProblemRow } from "./org-problem-log.ts";
-import { ServerLogRing } from "../server-log-ring.ts";
+import { ServerLogRing } from "../process/server-log-ring.ts";
 import { fakeConsole } from "../testing/console-context.ts";
 
 const NOW = Date.UTC(2026, 9, 8, 12);

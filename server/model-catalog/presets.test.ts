@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { normalizeApiUrl } from "../cli-api-setup.ts";
+import { normalizeApiUrl } from "../cli/cli-api-setup.ts";
 import { PROVIDER_PRESETS, codexModels, codexVerdict, providerPreset, type ResponsesCheck } from "./presets.ts";
 import { containsBrace, trimModelsDevCatalog, unpackCatalog } from "./trim.ts";
 

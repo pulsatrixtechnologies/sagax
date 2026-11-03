@@ -1,6 +1,6 @@
 // Capabilities lot 4: Perspicax declares the organization's capabilities,
 // this linked server executes them. The declarations come from the
-// directory (server/perspicax-link.ts `capabilities`, configuration
+// directory (server/perspicax/perspicax-link.ts `capabilities`, configuration
 // included on that authenticated channel only); this module turns them into
 // what a turn mounts, once for the whole installation:
 //
@@ -20,7 +20,7 @@
 // on in their own Me state (PersonCapabilities `orgCapabilities`), never a
 // global switch. Imposed: on, a member cannot turn it off. A declaration
 // switched off in Perspicax is served to nobody. Organization wins over Me,
-// then This bot, for the same mount (server/capability-plugin-mounts.ts
+// then This bot, for the same mount (server/capabilities/capability-plugin-mounts.ts
 // selectPluginScopes, and the personal MCP names it claims). The single Flow
 // identity is kept: a declaration whose mount belongs to Pulsatrix Flow or
 // names a plugin of `flow_plugins` is never mounted a second time.
@@ -33,11 +33,11 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
-import { copySanitizedPlugin, readPluginContents, type PluginContents } from "../bot-plugins.ts";
+import { copySanitizedPlugin, readPluginContents, type PluginContents } from "../bots/bot-plugins.ts";
 import type { McpServerSpec } from "../contracts.ts";
-import { installationCapabilityBridge } from "../installation-capability-bridge.ts";
-import { applyPluginConfig, readPluginConfigFields } from "../plugin-config.ts";
-import type { OrgCapabilityDeclaration } from "../perspicax-link.ts";
+import { installationCapabilityBridge } from "../capabilities/installation-capability-bridge.ts";
+import { applyPluginConfig, readPluginConfigFields } from "../plugins/plugin-config.ts";
+import type { OrgCapabilityDeclaration } from "../perspicax/perspicax-link.ts";
 
 export const ORG_FLOW_MOUNT_PREFIX = "pulsatrix-flow";
 /** The key prefix of an organization declaration's MCP server on a turn

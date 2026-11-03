@@ -5,7 +5,7 @@
 //   POST /api/cli-test         { cli, driver } → spawn `<cli> --version`
 import { BUILT_IN_DRIVERS } from "../drivers/builtIn.ts";
 import { findCliCandidates, resetPathCache } from "../env-path.ts";
-import { HOSTED_PROVIDER_SETTINGS_ERROR } from "../hosted-models.ts";
+import { HOSTED_PROVIDER_SETTINGS_ERROR } from "../models/hosted-models.ts";
 import { cliCommandRefusal } from "../procs.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

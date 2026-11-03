@@ -1,5 +1,5 @@
 // End to end: a hosted server with a sign-in allow-list lets a remote browser
-// sign in with a code the server emails itself (server/account-signin.ts,
+// sign in with a code the server emails itself (server/auth/account-signin.ts,
 // server/mail/email-otp.ts) and ends up with the same cookie session a pairing
 // code would give. SAGAX_MAIL_CAPTURE_FILE (server/index.ts) stands in for a
 // real mail provider: the spawned server appends each message it would have

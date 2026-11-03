@@ -6,7 +6,7 @@ import { approvalModeFor } from "../shared/approval-mode.ts";
 import { DATA_DIR } from "./config.ts";
 import type { ModelSelection } from "./contracts.ts";
 import { isProjectEmoji, Store, type BotRecord, type GroupRecord, type TaskPatch } from "./store.ts";
-import { ensureTaskWorkspace } from "./workspace.ts";
+import { ensureTaskWorkspace } from "./workspace/workspace.ts";
 
 const selection = (): ModelSelection => ({ instanceId: "claude", model: "default" });
 const savedBots = (): BotRecord[] => JSON.parse(readFileSync(join(DATA_DIR, "bots.json"), "utf8"));

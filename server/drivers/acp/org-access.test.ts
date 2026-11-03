@@ -1,5 +1,5 @@
 // Organization server: what Grok Build, Kimi Code, Gemini CLI and pi run on
-// for one turn (SendTurnInput.access, server/engine-credentials.ts): the
+// for one turn (SendTurnInput.access, server/engines/engine-credentials.ts): the
 // payer's own home and key, never the server's own login or key.
 import { mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";

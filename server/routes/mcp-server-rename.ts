@@ -9,9 +9,9 @@
 // Only a reserved name moves here. The entry is re-read under its new name,
 // saved off (the person turns it on again), its sign-ins are forgotten, the
 // bots that listed the old name list the new one and drop their account
-// choice for it. Admin scope (server/request-auth.ts: not a client path).
-import type { RequestAuth } from "../request-auth.ts";
-import { renameReservedMcpServer, type StoredMcpServer } from "../mcp-registry.ts";
+// choice for it. Admin scope (server/auth/request-auth.ts: not a client path).
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { renameReservedMcpServer, type StoredMcpServer } from "../mcp/mcp-registry.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 const RENAME_PATH = /^\/api\/mcp\/servers\/([a-z][a-z0-9_-]{0,31})\/rename$/;

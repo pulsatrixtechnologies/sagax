@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Entry point of the `sagax-run` image (deploy/run/Dockerfile): the runner of
 // one cloud agent run, started as the Pod's only process by the provisioner
-// (server/sandboxd-runs-spec.ts). It sits at the server root so the drivers'
+// (server/sandbox/sandboxd-runs-spec.ts). It sits at the server root so the drivers'
 // spawned helpers resolve beside it once bundled (server/proxy-paths.ts).
 //
 // Environment, set by the provisioner:

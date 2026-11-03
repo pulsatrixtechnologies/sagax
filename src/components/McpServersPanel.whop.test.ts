@@ -26,7 +26,7 @@ vi.mock("@/lib/mcp-servers", () => ({ updateMcpServers: vi.fn() }));
 
 import { WhopAction, WhopBelow, useMcpServers } from "./McpServersPanel";
 
-// Sagax signs in with its own MCP sign-in (server/mcp-oauth.ts, covered by
+// Sagax signs in with its own MCP sign-in (server/mcp/mcp-oauth.ts, covered by
 // its own tests), so here Whop is already signed in and Connect goes
 // straight to the tools check this file is about.
 const whop = { name: "whop", type: "http", url: "https://mcp.whop.com/mcp", headerKeys: [], enabled: false, auth: "connected" };

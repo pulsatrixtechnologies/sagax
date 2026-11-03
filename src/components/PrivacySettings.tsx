@@ -1,6 +1,6 @@
 // Settings > Notifications > Privacy (organization server): what other
 // people learn about this person from Sagax: read receipts
-// (server/read-receipts.ts) and presence, online / away / offline
+// (server/messages/read-receipts.ts) and presence, online / away / offline
 // (src/lib/presence.ts). Rows of the Privacy group; each keeps one grey line
 // saying what turning it off costs.
 import { t } from "@/lib/i18n";

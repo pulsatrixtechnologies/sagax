@@ -1,6 +1,6 @@
 // The default theme of a bot's page (2026-10-28): "les pages que les bots
 // créent doivent avoir un style qui s'accorde à l'app". Every page the
-// server serves in its sandboxed frame (server/published-pages-render.ts
+// server serves in its sandboxed frame (server/pages/published-pages-render.ts
 // pageDocument) carries this stylesheet inline, so it needs no request and
 // keeps the same CSP: the person's skin tokens (light and dark), the app's
 // Geist face as a data: font, plain content styled (headings, lists,

@@ -1,5 +1,5 @@
 // The Context card's breakdown in tokens. The server measures sizes in bytes
-// (server/context-buckets.ts): the prompt it assembled (memory and skills are
+// (server/context/context-buckets.ts): the prompt it assembled (memory and skills are
 // parts of it), the tool definitions it mounted and the messages it handed
 // over. A byte size reads as tokens at about 4 bytes a token: every share
 // derived this way is shown as an estimate (≈). The total stays the model's

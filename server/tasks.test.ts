@@ -23,7 +23,7 @@ async function freshStore() {
 afterEach(async () => {
   // freshStore resets the module graph, so this closes the same SQLite
   // module instance that the freshly imported Store used.
-  const { closeMessageDb } = await import("./message-db.ts");
+  const { closeMessageDb } = await import("./messages/message-db.ts");
   closeMessageDb();
   vi.unstubAllEnvs();
   rmSync(home, { recursive: true, force: true });

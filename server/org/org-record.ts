@@ -1,5 +1,5 @@
 import { INVITE_TTL_MS, type OrgInvite } from "./org-directory.ts";
-import { isPrincipalId } from "../principals.ts";
+import { isPrincipalId } from "../auth/principals.ts";
 
 export interface OrgRecord {
   name: string;

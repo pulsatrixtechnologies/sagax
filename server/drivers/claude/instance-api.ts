@@ -2,7 +2,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { LOGIN_MARKER } from "../../principal-engine-logins.ts";
+import { LOGIN_MARKER } from "../../engines/principal-engine-logins.ts";
 import { DATA_DIR } from "../../config.ts";
 import { writeFileAtomic } from "../../atomic.ts";
 import { killCliTree, spawnCli } from "../../procs.ts";

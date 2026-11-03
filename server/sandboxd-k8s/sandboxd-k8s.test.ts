@@ -8,18 +8,18 @@ import type { Duplex } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 
-import { createSandboxAudit } from "../sandbox-audit.ts";
-import { SANDBOX_STARTING_CODE } from "../sandbox-k8s-wake.ts";
-import { SandboxError, SandboxService } from "../sandboxd-core.ts";
+import { createSandboxAudit } from "../sandbox/sandbox-audit.ts";
+import { SANDBOX_STARTING_CODE } from "../sandbox/sandbox-k8s-wake.ts";
+import { SandboxError, SandboxService } from "../sandbox/sandboxd-core.ts";
 import { createSandboxdHandler } from "../sandboxd.ts";
-import { SandboxdVerifier } from "../sandboxd-auth.ts";
+import { SandboxdVerifier } from "../sandbox/sandboxd-auth.ts";
 import { kubeconfigFileFromEnv, kubernetesClient, type K8sClient, type K8sResponse } from "./sandboxd-k8s-client.ts";
 import { kubernetesApi, withExecEnv } from "./sandboxd-k8s.ts";
 import { PAUSED_ANNOTATION, kubernetesSandboxConfigFromEnv, sandboxEgress } from "./sandboxd-k8s-spec.ts";
 import { FakeDocker } from "../testing/fake-docker.ts";
-import { sandboxdClient } from "../user-sandbox-client.ts";
-import { SANDBOX_INSTANCE_LABEL, SANDBOX_LABEL, SANDBOX_USER_LABEL, sandboxContainerSpec, sandboxKeyForPrincipal, sandboxNames, sandboxdConfigFromEnv } from "../user-sandbox-spec.ts";
-import { callUserSandboxTool, type ToolExec } from "../user-sandbox-tools.ts";
+import { sandboxdClient } from "../sandbox/user-sandbox-client.ts";
+import { SANDBOX_INSTANCE_LABEL, SANDBOX_LABEL, SANDBOX_USER_LABEL, sandboxContainerSpec, sandboxKeyForPrincipal, sandboxNames, sandboxdConfigFromEnv } from "../sandbox/user-sandbox-spec.ts";
+import { callUserSandboxTool, type ToolExec } from "../sandbox/user-sandbox-tools.ts";
 
 const DIGEST = "cd".repeat(32);
 const REGISTRY = "ghcr.io/pulsatrixtechnologies";

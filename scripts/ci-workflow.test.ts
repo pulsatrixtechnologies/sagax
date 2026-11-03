@@ -218,7 +218,7 @@ describe("CI concurrency", () => {
     expect(smoke.on).toEqual({ workflow_dispatch: null });
     const commands = smoke.jobs.windows.steps.map((step: { run?: string }) => step.run);
     expect(commands).toContain("node --test electron/shared-computer-access.node-test.mjs");
-    expect(commands).toContain("pnpm exec vitest run server/shared-computers.e2e.test.ts");
+    expect(commands).toContain("pnpm exec vitest run server/computer/shared-computers.e2e.test.ts");
   });
 });
 

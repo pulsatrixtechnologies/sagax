@@ -12,7 +12,7 @@
 // is the direction the assignee works from; the result is JSON-encoded
 // because it is evidence, and a string literal cannot start a line that
 // reads as the harness or the user.
-import { CONSENT_RULE, escapeNotes, quoteInNote } from "../peer-provenance.ts";
+import { CONSENT_RULE, escapeNotes, quoteInNote } from "../peers/peer-provenance.ts";
 import type { Assignment, EnvelopeNames, Level, OriginSource, TurnEvidence } from "./types.ts";
 
 /** Every envelope opens with this; model text that imitates it is escaped. */

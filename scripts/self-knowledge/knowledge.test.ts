@@ -11,7 +11,7 @@ import { GUIDES } from "./guides.ts";
 import { slug, splitHeadings } from "./markdown.ts";
 import type { KnowledgeBase, KnowledgeSection } from "../../server/self-knowledge-types.ts";
 import { availableTools } from "../../server/drivers/agents-catalog.ts";
-import { MCP_PERMISSIONS } from "../../server/mcp-permissions.ts";
+import { MCP_PERMISSIONS } from "../../server/mcp/mcp-permissions.ts";
 
 /** AGENTS.md notes left out of the committed base (see build.ts). */
 const AGENTS_NOTES_LEFT_OUT = new Set(["doc:AGENTS.md#misuse-guardrails-2026-10-12"]);

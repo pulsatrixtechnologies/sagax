@@ -3,14 +3,14 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { AUTO_COMPUTER_MCP_NAME } from "../../auto-computer.ts";
+import { AUTO_COMPUTER_MCP_NAME } from "../../computer/auto-computer.ts";
 import { cleanCommandVariables } from "../../vault/credential-command-env.ts";
-import { adoptLegacyAutoMemory, legacyClaudeAutoMemoryDir } from "../../compact-prompt.ts";
+import { adoptLegacyAutoMemory, legacyClaudeAutoMemoryDir } from "../../context/compact-prompt.ts";
 import { writeFileAtomicIfChanged } from "../../atomic.ts";
 import { commandVariablesDigest } from "../../vault/credential-command-env.ts";
-import { customServerGate, gateQueryTools, gateServer } from "../../mcp-gate-config.ts";
+import { customServerGate, gateQueryTools, gateServer } from "../../mcp/mcp-gate-config.ts";
 import { canUseMcpServer } from "../../../shared/tool-scope.ts";
-import { harnessMcpHttpSpec, loopbackNoProxy } from "../../harness-mcp-http.ts";
+import { harnessMcpHttpSpec, loopbackNoProxy } from "../../mcp/harness-mcp-http.ts";
 import { isPerspicaxBridge, PERSPICAX_FLOW_COMPUTE_TOOLS } from "../acp/grok-read-only-tools.ts";
 import { networkProxyEnvironment } from "../network-proxy.ts";
 import { permissionLaunchCwd } from "../permission-command.ts";
@@ -41,7 +41,7 @@ let systemPromptPath: string | null = null;
 const mcpServers: Record<string, unknown> = {};
 const allowed: string[] = [];
 // The harness's browser, cloud computer and Data servers over HTTP
-// (server/harness-mcp-http.ts) instead of a Node proxy each. A turn
+// (server/mcp/harness-mcp-http.ts) instead of a Node proxy each. A turn
 // with a tool selection keeps the stdio proxy: its gate wraps a stdio
 // upstream exactly as before.
 const harnessHttp = (spec: Parameters<typeof harnessMcpHttpSpec>[0], kind: Parameters<typeof harnessMcpHttpSpec>[1]) =>
@@ -49,7 +49,7 @@ const harnessHttp = (spec: Parameters<typeof harnessMcpHttpSpec>[0], kind: Param
 if (turn.integrations?.localComputer) {
   const local = turn.integrations.localComputer;
   // The cloud computer's harness proxy is reached over HTTP directly
-  // (server/harness-mcp-http.ts): no Node process per session.
+  // (server/mcp/harness-mcp-http.ts): no Node process per session.
   mcpServers.computer = harnessHttp(local, "computer") ?? {
     command: local.command,
     args: local.args,
@@ -166,7 +166,7 @@ for (const [name, server] of Object.entries(turn.integrations?.custom ?? {})) {
   botOwned.add(name);
 }
 // computer_select only chooses among the computers this turn may
-// already reach (server/auto-computer.ts): no card for the choice
+// already reach (server/computer/auto-computer.ts): no card for the choice
 // itself; every tool it routes to still rides the approval mode.
 if (mcpServers[AUTO_COMPUTER_MCP_NAME]) allowed.push(`mcp__${AUTO_COMPUTER_MCP_NAME}`);
 // Pure Flow compute now lives in the signed Perspicax pack. Keep

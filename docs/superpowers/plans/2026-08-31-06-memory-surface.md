@@ -4,7 +4,7 @@
 
 **Goal:** Make what a bot believes visible, editable, and auditable — a memory browser with a real capacity gauge, and a journal that records every change an agent makes to its own memory so the user can read it back and revert it.
 
-**Architecture:** No new source of truth. `server/workspace.ts` already owns `MEMORY.md` and `memory/<topic>.md` as plain markdown under `~/.sagax/workspaces/<botId>/`. This plan adds a read/write module over those files with hard path containment, a change journal kept **outside** the workspace (so a bot cannot edit its own audit trail with the file tools it already has), a diff taken at turn boundaries, and one bot-scoped UI panel.
+**Architecture:** No new source of truth. `server/workspace/workspace.ts` already owns `MEMORY.md` and `memory/<topic>.md` as plain markdown under `~/.sagax/workspaces/<botId>/`. This plan adds a read/write module over those files with hard path containment, a change journal kept **outside** the workspace (so a bot cannot edit its own audit trail with the file tools it already has), a diff taken at turn boundaries, and one bot-scoped UI panel.
 
 **Tech Stack:** TypeScript strict, Node 24, Vitest, React 19, Tailwind, zod.
 
@@ -28,7 +28,7 @@ See [the roadmap](2026-08-31-00-control-plane-roadmap.md#global-constraints). Th
 
 ## Background: what exists and what does not
 
-`server/workspace.ts` is 172 lines and already owns the whole storage story:
+`server/workspace/workspace.ts` is 172 lines and already owns the whole storage story:
 
 | Thing | Where | Status |
 |---|---|---|
@@ -67,7 +67,7 @@ The security boundary of the whole feature. A memory `file` parameter arrives fr
 - Create: `server/memory/memory-store.ts`, `server/memory/memory-store.test.ts`
 
 **Interfaces:**
-- Consumes: `workspaceDir`, `ensureWorkspace`, `MEMORY_MAX_LINES`, `MEMORY_MAX_BYTES` from `server/workspace.ts`; `writeFileAtomic` from `server/atomic.ts`; `redactSecrets` from `server/redact.ts`.
+- Consumes: `workspaceDir`, `ensureWorkspace`, `MEMORY_MAX_LINES`, `MEMORY_MAX_BYTES` from `server/workspace/workspace.ts`; `writeFileAtomic` from `server/atomic.ts`; `redactSecrets` from `server/redact.ts`.
 - Produces:
   ```ts
   export interface MemoryTopic { file: string; bytes: number; updatedAt: number }

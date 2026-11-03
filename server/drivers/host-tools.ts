@@ -2,7 +2,7 @@
 // the machine is the Sagax server (a container), never anyone's computer, so
 // a turn withholds them (SendTurnInput.withholdHostTools) and shell and files
 // go through the person's server environment instead
-// (server/user-sandbox-tools.ts, docs/user-sandbox.md).
+// (server/sandbox/user-sandbox-tools.ts, docs/user-sandbox.md).
 import { chmodSync, lstatSync, mkdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 

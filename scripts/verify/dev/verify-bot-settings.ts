@@ -22,7 +22,7 @@ try {
   const atlas = bots.find((bot) => bot.name === "Settings Atlas")!;
   // The installer writes only to this launcher's disposable data directory.
   execFileSync(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", `
-    import { installSkill, setSkillEnabled } from './server/skills.ts';
+    import { installSkill, setSkillEnabled } from './server/skills/skills.ts';
     const result = installSkill(${JSON.stringify(atlas.id)}, 'fixture:settings', [{path:'SKILL.md',content:'---\\nname: fixture-check\\ndescription: Check fixture settings reliably\\n---\\nRead the fixture state and summarize it.\\n'}]);
     if ('error' in result) throw new Error(result.error);
     setSkillEnabled(${JSON.stringify(atlas.id)}, 'fixture-check', true);

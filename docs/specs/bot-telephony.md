@@ -111,10 +111,10 @@ approbations et ses règles de payeur.
 
 | Pièce | Où | Ce qu'elle fait | Réutilisable au téléphone |
 | --- | --- | --- | --- |
-| Mode Voix (barre flottante) | `server/voice-mode.ts`, `src/lib/voice-mode/*` | xAI en STT (`/v1/stt` en WebSocket) et TTS (`/v1/tts` en PCM streamé) ; le bot écrit la réponse | Oui : les routes serveur `listen` et `speech` sont déjà des ponts serveur vers xAI ; il faut un adaptateur mu-law 8 kHz |
-| Session d'appel | `server/voice-call-session.ts`, `voice-call-prompt.ts`, `voice-call-watchdog.ts`, `voice-call-duplex.ts` | `voiceCall` sur chaque tour, section cachée « Phone call » du prompt, `end_call`, chien de garde, duplex (#292) | Oui, tel quel : un appel PSTN est un `voiceCall` avec `channel: "pstn"` |
+| Mode Voix (barre flottante) | `server/voice/voice-mode.ts`, `src/lib/voice-mode/*` | xAI en STT (`/v1/stt` en WebSocket) et TTS (`/v1/tts` en PCM streamé) ; le bot écrit la réponse | Oui : les routes serveur `listen` et `speech` sont déjà des ponts serveur vers xAI ; il faut un adaptateur mu-law 8 kHz |
+| Session d'appel | `server/voice/voice-call-session.ts`, `voice-call-prompt.ts`, `voice-call-watchdog.ts`, `voice-call-duplex.ts` | `voiceCall` sur chaque tour, section cachée « Phone call » du prompt, `end_call`, chien de garde, duplex (#292) | Oui, tel quel : un appel PSTN est un `voiceCall` avec `channel: "pstn"` |
 | Lecture française | `server/tts/french-reading.ts`, `speech-text.ts` | Heures, prix, ordinaux lus à voix haute ; markdown retiré | Oui |
-| Appel Live (GPT-Live) | `server/live-call.ts` | OpenAI Realtime en « client delegation » : la voix mène la conversation, chaque vraie demande devient un tour du bot | Oui en phase avancée (OpenAI Realtime accepte aussi SIP) |
+| Appel Live (GPT-Live) | `server/voice/live-call.ts` | OpenAI Realtime en « client delegation » : la voix mène la conversation, chaque vraie demande devient un tour du bot | Oui en phase avancée (OpenAI Realtime accepte aussi SIP) |
 | Moteurs TTS | `server/tts/` : `grok.ts`, `elevenlabs.ts`, `fish.ts`, `chatterbox.ts` (local), `system-voices.ts` (Mac) | Synthèse par fournisseur, clé côté serveur | xAI, ElevenLabs, Fish : oui. Chatterbox et voix Mac : non pour un serveur d'org |
 | Détection de tour | Silero VAD v5 dans la page (`turns.ts`), CAM++ « Seulement ma voix » | Tour, barge-in, écho | À porter côté serveur pour Media Streams (ou laisser Twilio le faire avec ConversationRelay) |
 | Clés de voix (#533) | Réglages > Modèles et voix > Clés | Une seule gestion des clés : `xai.key`, `tts.key` (ElevenLabs), `tts.fishKey` | Oui : la voix du téléphone choisit parmi les clés déjà saisies |
@@ -135,7 +135,7 @@ Speech-to-Speech (rejeté : il remplacerait le cerveau).
 - **Aucun code de téléphonie** : aucune occurrence de voice webhook, TwiML,
   Media Streams, SIP, PSTN ni SMS entrant. Les « phone » du code sont le
   téléphone compagnon (iOS, appairage, `phone-secret.ts`), pas la téléphonie.
-- **Garde-fou existant utile** : `server/owner-approval.ts`,
+- **Garde-fou existant utile** : `server/approvals/owner-approval.ts`,
   `destructiveKindOf()` classe `external-message` tout outil d'envoi ou toute
   ressource `messages|mail|emails|sms|calls` en création. Une telle action
   ouvre toujours une carte, même en mode `auto` (test
@@ -165,7 +165,7 @@ Speech-to-Speech (rejeté : il remplacerait le cerveau).
   vous, bot terminé) ; la livraison est un cadre écouté par le bureau, le
   téléphone appairé et APNs. Le SMS et l'appel deviennent deux canaux de
   livraison de plus, derrière les mêmes règles.
-- Webhooks entrants : `server/webhooks.ts` et `webhook-ingress.ts` écoutent
+- Webhooks entrants : `server/triggers/webhooks.ts` et `webhook-ingress.ts` écoutent
   sur un port à part (`SAGAX_WEBHOOK_PORT`, défaut PORT+1) avec
   `SAGAX_WEBHOOK_PUBLIC_URL`, authentifiés par jeton porteur. Twilio
   n'envoie pas de jeton porteur : il signe (`X-Twilio-Signature`). Il faut
@@ -284,7 +284,7 @@ partagé auquel l'admin Perspicax lui a donné accès : pour Sagax, c'est le mê
 cas, « le profil Twilio que cette personne détient ».
 
 Comment Sagax obtient les droits, en réutilisant le mécanisme existant
-(`server/perspicax-mcp.ts`, `perspicax-link.ts`, spec
+(`server/perspicax/perspicax-mcp.ts`, `perspicax-link.ts`, spec
 `2026-09-29-perspicax-multiuser-design.md`) :
 
 | Situation | Identité utilisée | Mécanisme |
@@ -325,7 +325,7 @@ Deux chemins mènent à Twilio, avec les mêmes garde-fous (R9) :
   (`twilio_api_write` : `CreateCall`, `CreateMessage`), permis par R9.
 
 Les deux passent par la **garde téléphonique** de Sagax (6.5), placée dans le
-relais MCP Perspicax du serveur (`server/perspicax-mcp.ts`, qui voit déjà
+relais MCP Perspicax du serveur (`server/perspicax/perspicax-mcp.ts`, qui voit déjà
 chaque trame) : liste blanche, heures, plafonds, carte pour un tiers,
 divulgation, interdiction d'acheter un numéro.
 
@@ -821,7 +821,7 @@ réservé à un choix explicite (R3).
 Les bots **peuvent** créer des appels et des SMS par `twilio_api_write`
 (`CreateCall`, `CreateMessage`), en plus des outils du service téléphonique.
 Pour que ce chemin n'échappe à aucun garde-fou, la **garde téléphonique**
-s'insère dans le relais MCP Perspicax de Sagax (`server/perspicax-mcp.ts`,
+s'insère dans le relais MCP Perspicax de Sagax (`server/perspicax/perspicax-mcp.ts`,
 fonction `relay`), avant l'envoi à Perspicax :
 
 | Appel d'outil du bot | Décision de la garde |
@@ -876,7 +876,7 @@ Partie interne sûre, sans compte ni infrastructure nouvelle, en **pilote
 interne** (conditions de l'ÉFVP Loi 25 du 2026-10-22) :
 
 - **Garde téléphonique** (`server/telephony-guard.ts`, branchée dans le relais
-  `server/perspicax-mcp.ts`) : liste blanche. Avec les outils Twilio, un bot
+  `server/perspicax/perspicax-mcp.ts`) : liste blanche. Avec les outils Twilio, un bot
   lit, et envoie un texto (`Messages` create, qui garde sa carte
   `external-message`, sans aucun champ `*Url` ni `*Callback`). Les recettes de
   lecture (`read_action`, `find_*`) passent ; une action de lecture sur un outil
@@ -891,7 +891,7 @@ interne** (conditions de l'ÉFVP Loi 25 du 2026-10-22) :
   Organisation > Appels téléphoniques, y saisit le **numéro de rappel**
   (obligatoire : sans numéro, aucun appel) et tient la liste **« Ne pas
   appeler »**, vérifiée à la carte et de nouveau au départ de l'appel.
-- **`place_phone_call`** (`shared/outbound-call.ts`, `server/outbound-calls.ts`) :
+- **`place_phone_call`** (`shared/outbound-call.ts`, `server/outbound/outbound-calls.ts`) :
   Canada seulement (R10, sans N11, 976 ni central 0 ou 1), ouverture fixe
   construite par Sagax (assistant IA, au nom de qui, numéro de rappel, « pour
   ne plus recevoir d'appels, dites-le au numéro de rappel »), puis objectif et
@@ -952,8 +952,8 @@ peux l'entendre, dialoguer avec lui et me revenir avec un résumé. »
   mot dit ; journaux et audit gardent le numéro masqué.
 - **Règles** : le pilote d'organisation, la liste « Ne pas appeler » et les
   règles Refuser et Demander d'abord s'appliquent comme pour le mode message.
-- Code : `shared/outbound-call.ts`, `server/outbound-calls.ts`,
-  `server/outbound-wiring.ts`, `server/bot-inbound-telephony.ts`. Tests :
+- Code : `shared/outbound-call.ts`, `server/outbound/outbound-calls.ts`,
+  `server/outbound/outbound-wiring.ts`, `server/bots/bot-inbound-telephony.ts`. Tests :
   `server/outbound-conversation.test.ts` (cycle complet, faux Twilio et fausse
   voix temps réel).
 

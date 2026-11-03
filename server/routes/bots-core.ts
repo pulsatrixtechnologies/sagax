@@ -8,24 +8,24 @@
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 
-import type { ApprovalViewer } from "../approval-audience.ts";
+import type { ApprovalViewer } from "../approvals/approval-audience.ts";
 import type { LookRefusal } from "../achievements-mastery.ts";
-import { atLeast, type Level } from "../authz.ts";
-import { generateAvatarImage, avatarGenerationRequestSchema } from "../avatar-image.ts";
-import { validateBotCwd, validateBotCwdFor, type RemoteCwdDeps } from "../bot-cwd.ts";
-import { soulFile, readSoulDrift, writeSoulMirror } from "../bot-folder.ts";
-import { parseBotProfilePatch } from "../bot-profile.ts";
-import { memberBot, memberGroup, parseVisibility } from "../bot-visibility.ts";
+import { atLeast, type Level } from "../auth/authz.ts";
+import { generateAvatarImage, avatarGenerationRequestSchema } from "../media/avatar-image.ts";
+import { validateBotCwd, validateBotCwdFor, type RemoteCwdDeps } from "../bots/bot-cwd.ts";
+import { soulFile, readSoulDrift, writeSoulMirror } from "../bots/bot-folder.ts";
+import { parseBotProfilePatch } from "../bots/bot-profile.ts";
+import { memberBot, memberGroup, parseVisibility } from "../bots/bot-visibility.ts";
 import { cloudThreadRefusal } from "../cloud-thread-refusal.ts";
 import {
   confidentialPatch,
   newThreadConfidential,
-} from "../confidential-threads.ts";
+} from "../threads/confidential-threads.ts";
 import type { ProviderInstance } from "../contracts.ts";
-import { autoNewBotSelection } from "../default-model-selection.ts";
-import { githubSkillFetch, type GithubCredential } from "../github-access.ts";
-import { mcpServerNameError, MAX_MCP_SERVERS } from "../mcp-registry.ts";
-import { MEMBER_AUTO_NOT_ALLOWED } from "../member-auto-approval.ts";
+import { autoNewBotSelection } from "../models/default-model-selection.ts";
+import { githubSkillFetch, type GithubCredential } from "../github/github-access.ts";
+import { mcpServerNameError, MAX_MCP_SERVERS } from "../mcp/mcp-registry.ts";
+import { MEMBER_AUTO_NOT_ALLOWED } from "../approvals/member-auto-approval.ts";
 import { journalMemoryWrite } from "../memory/memory-journal.ts";
 import { pickBotName } from "../names.ts";
 import {
@@ -33,11 +33,11 @@ import {
   newBotDefaultsSchema,
   resolveBotCreationDefaults,
   type NewBotDefaults,
-} from "../new-bot-defaults.ts";
+} from "../bots/new-bot-defaults.ts";
 import { newConversationFullAllowed } from "../org/org-full-access.ts";
 import { orgXaiRefusal } from "../org/org-xai-media.ts";
-import { peopleDmForViewer } from "../people-dms.ts";
-import { isPrincipalId } from "../principals.ts";
+import { peopleDmForViewer } from "../people/people-dms.ts";
+import { isPrincipalId } from "../auth/principals.ts";
 import {
   applyPresetToBot,
   presetOffered,
@@ -45,12 +45,12 @@ import {
   type OrgInstallStatus,
   type ResolvedPreset,
 } from "../presets.ts";
-import { profileRevision, profileSnapshot } from "../profile-revision.ts";
-import { recordProfileChange } from "../profile-versions.ts";
-import type { RequestAuth } from "../request-auth.ts";
-import { sessionPrincipal } from "../request-auth.ts";
-import { fetchSkillFromSource } from "../skill-fetch.ts";
-import { installOrgSkill, installSkill, setSkillEnabled } from "../skills.ts";
+import { profileRevision, profileSnapshot } from "../profiles/profile-revision.ts";
+import { recordProfileChange } from "../profiles/profile-versions.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { sessionPrincipal } from "../auth/request-auth.ts";
+import { fetchSkillFromSource } from "../skills/skill-fetch.ts";
+import { installOrgSkill, installSkill, setSkillEnabled } from "../skills/skills.ts";
 import type { BotRecord, GroupRecord, Message, TaskRecord } from "../store.ts";
 import { parseSurface } from "../surface.ts";
 import type { TemporaryAgent } from "../temporary-agents.ts";
@@ -58,9 +58,9 @@ import {
   parseFolderBody,
   parseFolderOrder,
   parseThreadOrganization,
-} from "../thread-folders.ts";
-import { titleConversationExcerpt } from "../thread-title.ts";
-import { writeMemoryFile, writeMemoryTopic } from "../workspace.ts";
+} from "../threads/thread-folders.ts";
+import { titleConversationExcerpt } from "../threads/thread-title.ts";
+import { writeMemoryFile, writeMemoryTopic } from "../workspace/workspace.ts";
 import {
   approvalModeFor,
   approvalModeWidens,
@@ -1023,7 +1023,7 @@ export function createBotsCoreRoutes(deps: BotsCoreRouteDeps): RouteHandler {
       // nothing on their screens moves to it.
       const startedAside = body.hidden === true;
       const hidden = false;
-      // A confidential thread (server/confidential-threads.ts): the person's
+      // A confidential thread (server/threads/confidential-threads.ts): the person's
       // choice, else the organization's default. Its files stay in its own
       // folder, so no other working folder is taken with it.
       const confidentialChoice = newThreadConfidential(body.confidential, confidentialThreadsByDefault());
@@ -1054,7 +1054,7 @@ export function createBotsCoreRoutes(deps: BotsCoreRouteDeps): RouteHandler {
       if (creator && !startedAside) selectViewerThread(bot.id, creator, task.threadId);
       // "New topic" in a single stream (threads off): a stream segment from
       // the start, and the topic it closes gets its digest written now, in
-      // the background, while the person types (server/single-stream.ts).
+      // the background, while the person types (server/streams/single-stream.ts).
       if (body.stream === true && !hidden && !confidentialChoice.confidential) {
         noteStreamSend(bot.id, task.threadId, true);
         refreshStreamDigests(bot.id, task.threadId);
@@ -1108,7 +1108,7 @@ export function createBotsCoreRoutes(deps: BotsCoreRouteDeps): RouteHandler {
       if (Object.keys(body).some((key) => !allowed.has(key))) return json(res, 400, { error: "unsupported thread setting" });
       const notYours = cloudThreadRefusal(auth, m[2]);
       if (notYours) return json(res, 403, { error: notYours });
-      // Confidential is one way (server/confidential-threads.ts): on with the
+      // Confidential is one way (server/threads/confidential-threads.ts): on with the
       // person's confirmation that it is permanent, never off again.
       const confidentialChange = confidentialPatch(store.taskByThread(m[1], m[2]) ?? {}, body);
       if (confidentialChange.kind === "refused") {
@@ -1196,7 +1196,7 @@ export function createBotsCoreRoutes(deps: BotsCoreRouteDeps): RouteHandler {
         return json(res, 200, { task: wireTask(task, store.bot(profile.id)!.modelSelection), bot: publicBot(store.bot(profile.id)!) });
       }
       // Archive, snooze, pin and folder: the same rules as a group thread
-      // (server/thread-folders.ts).
+      // (server/threads/thread-folders.ts).
       const organization = parseThreadOrganization(body, (projectId) => Boolean(store.project(current.id, projectId)), "projectId must belong to this bot, or null to ungroup the thread");
       if (!organization.ok) return json(res, 400, { error: organization.error });
       const patch: Record<string, unknown> = { ...organization.patch };
@@ -1314,7 +1314,7 @@ export function createBotsCoreRoutes(deps: BotsCoreRouteDeps): RouteHandler {
       const stagedSkillCleanups = stagedSkillCleanupsForThread(m[2]);
       coordinator.cancelDirect(m[2], THREAD_DELETED);
       cancelTeamSetupResumesForThread(m[2]);
-      // A confidential thread leaves nothing behind (server/confidential-threads.ts):
+      // A confidential thread leaves nothing behind (server/threads/confidential-threads.ts):
       // its files are listed before its messages go.
       const confidentialFiles = store.isConfidentialThread(m[2]) ? confidentialThreadAttachments(m[1], m[2]) : null;
       // and the keys of its engine transcripts, before its record and logs go

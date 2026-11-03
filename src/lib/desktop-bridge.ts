@@ -1,6 +1,6 @@
 // Where bots work for the signed-in person on an organization server: their
 // own computer through this desktop app (the desktop bridge), or their server
-// environment (server/desktop-bridge-routes.ts, shared/bot-workplace.ts).
+// environment (server/desktop/desktop-bridge-routes.ts, shared/bot-workplace.ts).
 // The preference is a synced localStorage key (src/lib/user-preferences-sync.ts
 // saves it for the person); the status comes from GET /api/me/desktop-bridge,
 // which a solo server answers 404 (then nothing here shows).
@@ -17,7 +17,7 @@ export interface DesktopBridgeActivity {
   error?: string;
 }
 
-/** Coarse facts the desktop app reports about itself (server/desktop-bridge.ts). */
+/** Coarse facts the desktop app reports about itself (server/desktop/desktop-bridge.ts). */
 export interface DesktopSystemInfo {
   os: string;
   arch: string;
@@ -144,7 +144,7 @@ export function chosenComputer(choices: ComputerChoice[], source: "server" | "lo
 }
 
 /** Settings > Computer > Other computers: the answer's code says why a
- * rename or a removal was refused (server/desktop-bridge.ts). */
+ * rename or a removal was refused (server/desktop/desktop-bridge.ts). */
 export class ComputerChangeError extends Error {
   constructor(message: string, readonly code: string | undefined) {
     super(message);

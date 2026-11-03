@@ -1,7 +1,7 @@
 // Published pages (2026-10-16, parity with the reference design's canvases): a bot
 // proposes a page (HTML, Markdown or a small one-file static app) from a
 // conversation; the person reviews it on its card and publishes it, choosing
-// who can see it. Shared by the server (server/published-pages.ts) and the
+// who can see it. Shared by the server (server/pages/published-pages.ts) and the
 // app (src/components/PagePublishCard.tsx, PublishedPagesSettings.tsx).
 //
 // The isolation rules live here so both sides read the same words: a page is
@@ -14,7 +14,7 @@
 // nested frames are not covered by CSP everywhere. The server neuters them
 // in every stored HTML version (neuterPageHtml) and a synchronous prelude
 // neuters them before a script can insert them (FRAME_PRELUDE), both in
-// server/published-pages-render.ts. Residual, by browser: a blocked
+// server/pages/published-pages-render.ts. Residual, by browser: a blocked
 // navigation still makes Chromium resolve the name (and open a TCP
 // connection) once; WebKit pre-connects TCP on a target=_blank click.
 
@@ -262,7 +262,7 @@ export function parsePageOpenMessage(data: unknown): string | null {
  * and `connect-src 'none'` stop every request (no fetch, no beacon, no remote
  * image, script or font). WebRTC, resource hints, speculation rules and
  * nested frames are outside CSP: neutered by the server and the prelude
- * (server/published-pages-render.ts). A Markdown page runs only our nonce'd
+ * (server/pages/published-pages-render.ts). A Markdown page runs only our nonce'd
  * scripts (open-link bridge and optional annotation / place-keeping).
  * `frameAncestors` names who may frame it: the wrapper's origin. */
 export function pageCsp(kind: PageKind, options: { meta?: boolean; frameAncestors?: string; annotateNonce?: string } = {}): string {

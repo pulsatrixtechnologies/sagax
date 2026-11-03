@@ -65,7 +65,7 @@ public struct MyEnginesList: Decodable, Hashable, Sendable {
     public var keysUrl: String?
 }
 
-/// A personal sign-in in progress (`server/principal-engine-logins.ts`).
+/// A personal sign-in in progress (`server/engines/principal-engine-logins.ts`).
 public struct EngineLoginState: Decodable, Hashable, Sendable {
     public var flowId: String?
     public var authorizationUrl: String?

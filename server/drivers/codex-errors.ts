@@ -1,6 +1,6 @@
-import { hostTimeZone } from "../turn-clock.ts";
+import { hostTimeZone } from "../turns/turn-clock.ts";
 import { USAGE_LIMIT } from "./retry.ts";
-import { contextFullMessage, isContextFullText } from "../context-renewal.ts";
+import { contextFullMessage, isContextFullText } from "../context/context-renewal.ts";
 import { CODEX_USAGE_LIMIT_REACHED } from "../../shared/codex-usage-limit.ts";
 
 /** How a Codex turn reaches OpenAI: Sagax's ChatGPT plan, Codex's own sign-in, or any other provider. */

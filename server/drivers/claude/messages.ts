@@ -1,5 +1,5 @@
 /** Claude stream-json user message builders and volatile-half notes (#1383). */
-import { readAtRestSync } from "../../content-at-rest.ts";
+import { readAtRestSync } from "../../encryption/content-at-rest.ts";
 import type { SendTurnInput } from "../../contracts.ts";
 import { volatileSectionsUpdate } from "../prompt-split.ts";
 

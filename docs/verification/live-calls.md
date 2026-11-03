@@ -39,14 +39,14 @@ The server paths, including steer, queue, restart and late answers, need a
 scripted voice, so their recipe is the end-to-end test:
 
 ```sh
-pnpm exec vitest run server/live-call.e2e.test.ts server/chat-followups-restart.test.ts
-pnpm exec vitest run server/live-call-record.test.ts server/live-call-controller.test.ts server/steer-queue.test.ts server/thread-title.test.ts server/delta-context.test.ts server/live-call.test.ts server/store.test.ts
+pnpm exec vitest run server/voice/live-call.e2e.test.ts server/chat-followups-restart.test.ts
+pnpm exec vitest run server/voice/live-call-record.test.ts server/voice/live-call-controller.test.ts server/turns/steer-queue.test.ts server/threads/thread-title.test.ts server/context/delta-context.test.ts server/voice/live-call.test.ts server/store.test.ts
 pnpm exec vitest run src/lib/call-record.test.ts src/lib/live-activity.test.ts src/lib/activity-runs.test.ts src/components/CallRecordRow.test.ts src/components/ChatView.via-call.test.ts src/components/ChatView.rows.test.ts
 pnpm typecheck
 pnpm i18n:check
 ```
 
-`server/live-call.e2e.test.ts` boots the real harness in a disposable home with
+`server/voice/live-call.e2e.test.ts` boots the real harness in a disposable home with
 fake engines and the fake GPT-Live, starts calls the way a client does
 (`POST /api/live/session`), plays the voice's side over the sideband (some
 `session.input_transcript.delta` events, then a `session.delegation.created`)
@@ -167,7 +167,7 @@ repository, that called `startFakeOpenAiLive` and `emit` the way the e2e does.
   nor the key anywhere.
 - Ctrl-C stopped the fixture and removed its data directory; no fixture, preview
   or driver process was left. The log stays at its printed path.
-- `pnpm exec vitest run server/live-call.e2e.test.ts server/chat-followups-restart.test.ts`:
+- `pnpm exec vitest run server/voice/live-call.e2e.test.ts server/chat-followups-restart.test.ts`:
   2 files, 18 tests passed in 258 s with the machine's load average above 150.
   The 13 unit files in the second and third commands above: 404 passed.
 - Since that run the final fix wave changed what the renderer draws: the record

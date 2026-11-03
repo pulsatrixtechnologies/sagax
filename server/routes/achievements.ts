@@ -11,7 +11,7 @@
 //   PUT  /api/me/achievements/settings  { settings: { showPoints, toasts, native, public, title, tzOffset } }
 //   GET  /api/achievements/public?ids=  { points: { <person>: { points, level, title?, unlocked } } }
 import type { AchievementEvent, AchievementStore, AchievementUnlock } from "../achievements.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const ACHIEVEMENTS_PATH = "/api/me/achievements";

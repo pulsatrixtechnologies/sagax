@@ -6,14 +6,14 @@
 // startTurn and other turn runners are injected; this module never imports index.ts.
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { asideEnvelope, recordInjectedAside } from "../aside.ts";
+import { asideEnvelope, recordInjectedAside } from "../peers/aside.ts";
 import type { HandoffView } from "../coordinator.ts";
 import type { SteerOutcome } from "../contracts.ts";
-import { findDelegationReceipt, summarizeDelegatedActivity } from "../delegation-receipts.ts";
-import { isEngineEmptyFailure } from "../incidents.ts";
-import { peerApprovalFailure, requestPeerApproval, type ApprovalBus } from "../peer-approval.ts";
-import { peerDeliveryReceipt, type PeerDeliveryReceipt } from "../peer-delivery.ts";
-import { quoteInNote } from "../peer-provenance.ts";
+import { findDelegationReceipt, summarizeDelegatedActivity } from "../peers/delegation-receipts.ts";
+import { isEngineEmptyFailure } from "../peers/incidents.ts";
+import { peerApprovalFailure, requestPeerApproval, type ApprovalBus } from "../peers/peer-approval.ts";
+import { peerDeliveryReceipt, type PeerDeliveryReceipt } from "../peers/peer-delivery.ts";
+import { quoteInNote } from "../peers/peer-provenance.ts";
 import {
   PEER_ACCESS_HELP,
   canAccessBot,
@@ -24,9 +24,9 @@ import {
   reachablePeers,
   resolveTeammate,
   type RosterMember,
-} from "../peer-roster.ts";
+} from "../peers/peer-roster.ts";
 import { requiresDecisionCard } from "../runtime/done-when.ts";
-import { queuedThreadPosition } from "../steer-queue.ts";
+import { queuedThreadPosition } from "../turns/steer-queue.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 
@@ -424,7 +424,7 @@ export function createInternalBotChatRoutes(deps: InternalBotChatDeps): Internal
         await new Promise((wake) => setTimeout(wake, 500));
       }
     }
-    // A Primary Bot resumes a teammate's broken thread (server/incidents.ts): the
+    // A Primary Bot resumes a teammate's broken thread (server/peers/incidents.ts): the
     // same thread, its conversation and files, one more turn, with a line
     // saying who asked and why. Primary Bot-only, for a teammate it can reach,
     // never a room (coordinate there) and never a thread still running.

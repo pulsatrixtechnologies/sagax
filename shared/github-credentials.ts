@@ -2,7 +2,7 @@
 // Sources > GitHub (2026-10-28). A person's own labeled tokens and the
 // organization's shared ones live together; each marketplace picks one of
 // them, or "Automatic". A client sees a label and a redacted hint, never the
-// token (server/github-credentials.ts).
+// token (server/github/github-credentials.ts).
 import { orgGithubTokenHint } from "./org-github-tokens.ts";
 
 export { orgGithubTokenHint as githubCredentialHint };

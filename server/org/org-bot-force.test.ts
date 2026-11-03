@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { createOrgBotForceRoutes, type ForceBot, type OrgBotForceDeps } from "./org-bot-force.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteContext } from "../routes/table.ts";
-import type { SessionRecord } from "../sessions.ts";
+import type { SessionRecord } from "../auth/sessions.ts";
 
 const ADMIN = "pr_11111111-1111-4111-8111-111111111111";
 const OWNER = "pr_22222222-2222-4222-8222-222222222222";

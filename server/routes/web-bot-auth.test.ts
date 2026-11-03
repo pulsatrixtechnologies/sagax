@@ -5,9 +5,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { json, readBody } from "../harness/http.ts";
-import { requiredScope, type RequestAuth } from "../request-auth.ts";
+import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
 import { createWebBotAuthRoutes } from "./web-bot-auth.ts";
-import { WebBotAuthStore, webBotAuthScope } from "../web-bot-auth.ts";
+import { WebBotAuthStore, webBotAuthScope } from "../auth/web-bot-auth.ts";
 
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });

@@ -3,7 +3,7 @@
 // marketplace as the workspace install. The bot's owner, or a person who
 // manages it, installs, switches, updates and removes it; anyone else who
 // uses the bot reads it. Hooks and the plugin's MCP servers are left out at
-// install (server/bot-plugins.ts): they would run on the server.
+// install (server/bots/bot-plugins.ts): they would run on the server.
 import { Loader2 } from "lucide-react";
 
 import { t } from "@/lib/i18n";

@@ -15,11 +15,11 @@ import { readUseToolCall } from "../shared/mcp-gateway-call.ts";
 import { isMessageSendTool, isOutboundTool } from "../shared/outbound.ts";
 import { placeArgsFromVoiceCall } from "../shared/outbound-call.ts";
 import type { OutboundCard } from "../shared/wire.ts";
-import { directoryCallTarget } from "./mcp-directory.ts";
-import { destructiveKindOf, ownerDecision } from "./owner-approval.ts";
-import { outboundWiring } from "./outbound-wiring.ts";
-import type { ExchangeResult } from "./perspicax-link.ts";
-import { PerspicaxMcp, VOICE_CALL_REDIRECTED, VOICE_CALL_UNAVAILABLE, type PerspicaxMcpLink } from "./perspicax-mcp.ts";
+import { directoryCallTarget } from "./mcp/mcp-directory.ts";
+import { destructiveKindOf, ownerDecision } from "./approvals/owner-approval.ts";
+import { outboundWiring } from "./outbound/outbound-wiring.ts";
+import type { ExchangeResult } from "./perspicax/perspicax-link.ts";
+import { PerspicaxMcp, VOICE_CALL_REDIRECTED, VOICE_CALL_UNAVAILABLE, type PerspicaxMcpLink } from "./perspicax/perspicax-mcp.ts";
 import type { Message } from "./store.ts";
 import { telephonyRefusal, voiceToolCall } from "./telephony-guard.ts";
 

@@ -34,8 +34,8 @@
 ### Task 1: OAuth metadata discovery
 
 **Files:**
-- Create: `server/mcp-oauth-discovery.ts`
-- Test: `server/mcp-oauth-discovery.test.ts`
+- Create: `server/mcp/mcp-oauth-discovery.ts`
+- Test: `server/mcp/mcp-oauth-discovery.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -46,7 +46,7 @@
 
 - [ ] **Step 1: Write the failing tests** — cover: `resource_metadata="…"` parsed from a Bearer challenge; discovery via header hint; fallback to `/.well-known/oauth-protected-resource`; fallback to MCP origin when no PRM; OIDC fallback; `null` when S256 missing; `null` for non-https metadata endpoints on non-loopback hosts. Use a `fetch` stub mapping URL → JSON.
 
-- [ ] **Step 2: Run** `npx vitest run server/mcp-oauth-discovery.test.ts` — expect FAIL (module missing).
+- [ ] **Step 2: Run** `npx vitest run server/mcp/mcp-oauth-discovery.test.ts` — expect FAIL (module missing).
 
 - [ ] **Step 3: Implement** — PRM lookup order: header hint, then `${origin}/.well-known/oauth-protected-resource${path}`, then `${origin}/.well-known/oauth-protected-resource`. Authorization-server metadata: `${issuer}/.well-known/oauth-authorization-server`, then `/.well-known/openid-configuration`. Require `authorization_endpoint`, `token_endpoint`, and `code_challenge_methods_supported` containing `S256` (treat absence as unsupported). Each fetch: 5 s timeout, `accept: application/json`, response ≤ 64 KB. `resource` = MCP URL without hash.
 
@@ -57,10 +57,10 @@
 ### Task 2: Probe reports "needs sign-in"
 
 **Files:**
-- Modify: `server/mcp-http.ts` (`McpHttpError` gains `wwwAuthenticate`; `post()` and the SSE GET pass it on 401)
-- Modify: `server/mcp-probe.ts` (`McpProbeResult` failure gains `auth?: "required"`; 401 → `discoverMcpAuth`)
+- Modify: `server/mcp/mcp-http.ts` (`McpHttpError` gains `wwwAuthenticate`; `post()` and the SSE GET pass it on 401)
+- Modify: `server/mcp/mcp-probe.ts` (`McpProbeResult` failure gains `auth?: "required"`; 401 → `discoverMcpAuth`)
 - Modify: `server/testing/fake-http-mcp-server.ts` (options `wwwAuthenticate?: string`, `acceptBearer?: (header: string | undefined) => boolean`)
-- Test: `server/mcp-probe.test.ts`
+- Test: `server/mcp/mcp-probe.test.ts`
 
 **Interfaces:**
 - Consumes: `discoverMcpAuth` (Task 1)
@@ -75,8 +75,8 @@
 ### Task 3: Token store
 
 **Files:**
-- Create: `server/mcp-oauth-store.ts`
-- Test: `server/mcp-oauth-store.test.ts`
+- Create: `server/mcp/mcp-oauth-store.ts`
+- Test: `server/mcp/mcp-oauth-store.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -101,9 +101,9 @@
 ### Task 4: Sign-in flow and refresh (`McpOAuthManager`)
 
 **Files:**
-- Create: `server/mcp-oauth.ts`
+- Create: `server/mcp/mcp-oauth.ts`
 - Create: `server/testing/fake-oauth-server.ts` (PRM, AS metadata, `/register`, `/authorize` → 302 to `redirect_uri?code&state`, `/token` for `authorization_code` + `refresh_token`, `/revoke`; configurable `expiresIn`, `rejectRefresh`)
-- Test: `server/mcp-oauth.test.ts`
+- Test: `server/mcp/mcp-oauth.test.ts`
 
 **Interfaces:**
 - Consumes: Tasks 1, 3.
@@ -135,7 +135,7 @@
 
 **Files:**
 - Modify: `server/index.ts` — construct `mcpOAuth = new McpOAuthManager({ file: join(DATA_DIR, "mcp-oauth.json") })`; routes; listing field; token injection; URL-change/delete cleanup; Test route.
-- Modify: `server/mcp-registry.ts` — `RemoteMcpServerListing.auth?: "signed-in" | "needs-sign-in"`.
+- Modify: `server/mcp/mcp-registry.ts` — `RemoteMcpServerListing.auth?: "signed-in" | "needs-sign-in"`.
 - Test: `server/index.test.ts` (new `it` beside the URL-server test)
 
 **Routes (all behind the existing `/api/mcp/servers` auth):**

@@ -4,7 +4,7 @@
 // file. Nothing here is sent to a training service.
 import { factIdentity, lineFactIdentity } from "./memory-entries.ts";
 import { recordMemoryChange } from "./memory-journal.ts";
-import { readMemoryTopic, writeMemoryTopic } from "../workspace.ts";
+import { readMemoryTopic, writeMemoryTopic } from "../workspace/workspace.ts";
 
 export const PROCEDURES_TOPIC = "procedures.md";
 

@@ -15,7 +15,7 @@ import type { ServerResponse } from "node:http";
 import { z } from "zod";
 
 import { DATA_LIMITS, type DataError, type DataErrorCode } from "../../shared/data-surface.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteContext, type RouteHandler } from "../routes/table.ts";
 import type { DataSheetRegistry } from "./sheet.ts";
 import { cancelCardRun, exportData, renderCard, resultRelation, showCard, toDataError, type DataContext } from "./tools.ts";

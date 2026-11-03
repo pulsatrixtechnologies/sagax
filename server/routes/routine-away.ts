@@ -14,7 +14,7 @@
 import { z } from "zod";
 
 import type { AwayVerdict } from "../routines/routine-away.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { SYSTEM_IDLE_STATES } from "../../shared/presence.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

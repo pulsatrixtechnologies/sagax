@@ -88,7 +88,7 @@ it("creates and manages an own-section room through the mounted Chief MCP proxy"
     expect(peerMount.env.SAGAX_CHIEF_OF_STAFF).toBe("0");
     const peerTools = await toolNames(connect(peerMount));
     expect(peerTools).toContain("list_rooms");
-    // 2026-10-17 (server/bot-creation.ts): any bot of the person may
+    // 2026-10-17 (server/bots/bot-creation.ts): any bot of the person may
     // create one bot (create_bot); the rest stays the Chief's.
     expect(peerMount.env.SAGAX_CREATE_BOTS).toBe("1");
     expect(CHIEF_ONLY_TOOLS.filter((name) => peerTools.includes(name))).toEqual(["create_bot"]);

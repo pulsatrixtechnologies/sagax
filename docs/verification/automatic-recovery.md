@@ -29,7 +29,7 @@ runner changes require a manual choice. Backup provider charges may apply.
 ## Repeatable checks
 
 ```sh
-pnpm exec vitest run server/automatic-recovery.test.ts server/automatic-recovery.e2e.test.ts server/drivers/acp/acp.test.ts server/drivers/retry.test.ts server/turn-dispatch-guard.test.ts server/config.test.ts src/components/bot-settings/BotRecoverySettings.test.ts src/state/store.test.ts
+pnpm exec vitest run server/automatic-recovery.test.ts server/automatic-recovery.e2e.test.ts server/drivers/acp/acp.test.ts server/drivers/retry.test.ts server/turns/turn-dispatch-guard.test.ts server/config.test.ts src/components/bot-settings/BotRecoverySettings.test.ts src/state/store.test.ts
 pnpm exec vitest run server/drivers/claude-auth-recovery.test.ts server/drivers/claude.test.ts
 pnpm exec vitest run server/direct-coordination.e2e.test.ts server/guarded-messages-api.test.ts server/acp-recovery.e2e.test.ts --maxWorkers=2
 pnpm typecheck

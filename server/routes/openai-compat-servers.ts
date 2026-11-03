@@ -8,7 +8,7 @@
 // An address the server connects to: on an organization server, an
 // organization admin's only (`allowed`).
 import type { AppConfig } from "../config.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   addCompatServer,
   editCompatServer,

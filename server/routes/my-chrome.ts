@@ -19,7 +19,7 @@
 // (server/tool-policy.generated.ts keeps /api/my-chrome admin and off).
 import type { MyChromeService, MyChromeStatus } from "../browser/my-chrome/service.ts";
 import { MyChromeSettingsError } from "../browser/my-chrome/settings.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface MyChromeRouteDeps {

@@ -25,10 +25,10 @@
 // agent (2026-10-29): its send lands in its own conversation with the bot,
 // drawn like a bot-to-bot one and silent for the person
 // (shared/agent-conversation.ts); the turn still runs as the person.
-import type { GuardDecision, GuardPolicy, GuardTarget, ToolGuardMode } from "./tool-guard.ts";
+import type { GuardDecision, GuardPolicy, GuardTarget, ToolGuardMode } from "./tools/tool-guard.ts";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
-import { parseWakePriority, planPriorityWake, releasePriorityNow, wakeSenderId, type PriorityDelivery } from "./priority-wake.ts";
+import { parseWakePriority, planPriorityWake, releasePriorityNow, wakeSenderId, type PriorityDelivery } from "./proactive/priority-wake.ts";
 import { TEMP_AGENT_IDLE_HOURS_MAX } from "./temporary-agents.ts";
 
 export const AGENT_TOOL_NAMES = [
@@ -139,7 +139,7 @@ export const AGENT_NAME_MAX = 80;
 export const AGENT_DESCRIPTION_MAX = 1_000;
 export const ENTRY_TEXT_MAX = 16_000;
 export const REPLY_MAX_CHARS = 32_000;
-/** create_agent's workspace: where its Auto turns start (server/auto-computer.ts). */
+/** create_agent's workspace: where its Auto turns start (server/computer/auto-computer.ts). */
 export type AgentWorkspace = "this_computer" | "browser" | "cloud" | "local_vm";
 const AGENT_WORKSPACES: readonly AgentWorkspace[] = ["this_computer", "browser", "cloud", "local_vm"];
 /** create_agent's idle_hours (server/temporary-agents.ts). */
@@ -322,7 +322,7 @@ export interface AgentApiDeps {
   /** Async mode: tell the caller the turn ended (a bot is woken with the reply). */
   notify?(caller: AgentCaller, agent: AgentSummary, result: TurnResult): void;
   audit(caller: AgentCaller, entry: AuditEntry): void;
-  /** The securable tool layer (server/tool-guard.ts): grants and the speaker.
+  /** The securable tool layer (server/tools/tool-guard.ts): grants and the speaker.
    * Absent, or mode "off", skips it; "shadow" records the decision only. */
   guard?(caller: AgentCaller, policy: GuardPolicy, target?: GuardTarget): GuardDecision;
   /** The person who owns this agent, lowercased, or null (tool-guard.ts ownerScoped). */

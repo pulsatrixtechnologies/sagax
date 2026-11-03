@@ -42,7 +42,7 @@ export interface BotActivityItem {
   startedBy?: BotActivityActor;
   /** Sub-agents and hops this one started, counted for the card. */
   childCount?: number;
-  /** Coding work (server/activity-coding.ts): its newest turn edited code,
+  /** Coding work (server/activity/activity-coding.ts): its newest turn edited code,
    * ran version control or changed files inside a repository (a thread
    * whose folder is a repository: any turn). Read off its tool calls and
    * folder, never its title. Absent for everything else, an ordinary
@@ -59,7 +59,7 @@ export interface BotActivityItem {
    * person can steer it (send it a message) and stop it on its own. */
   parallel?: boolean;
   /** The code work of an entry that did coding work in any turn read
-   * (server/activity-code-work.ts): its repository folder and branch, and
+   * (server/activity/activity-code-work.ts): its repository folder and branch, and
    * the pull requests, branches and commits its own git, gh and GitHub tool
    * calls produced. Present even when its newest turn is not coding, so the
    * Coding section's code work keeps it. Absent for everything else. */

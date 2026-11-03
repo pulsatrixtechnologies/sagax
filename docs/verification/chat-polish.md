@@ -37,8 +37,8 @@ No personal provider account, real credentials, or user workspace is used.
 ## Regression checks
 
 ```sh
-pnpm exec vitest run src/components/AttachmentGallery.test.ts src/components/AttachmentPreview.test.ts src/components/ToolActivity.test.ts src/components/SettingsPrimitives.test.ts src/components/ShortcutHint.test.ts server/message-file.test.ts scripts/testing/verification-docs.test.ts
-pnpm exec vitest run server/tool-summary.test.ts server/control-omb.test.ts server/drivers/claude.test.ts server/drivers/codex.test.ts server/drivers/pi.test.ts server/drivers/acp/acp.test.ts
+pnpm exec vitest run src/components/AttachmentGallery.test.ts src/components/AttachmentPreview.test.ts src/components/ToolActivity.test.ts src/components/SettingsPrimitives.test.ts src/components/ShortcutHint.test.ts server/messages/message-file.test.ts scripts/testing/verification-docs.test.ts
+pnpm exec vitest run server/tools/tool-summary.test.ts server/control-omb.test.ts server/drivers/claude.test.ts server/drivers/codex.test.ts server/drivers/pi.test.ts server/drivers/acp/acp.test.ts
 pnpm typecheck
 pnpm lint
 pnpm check:contrast

@@ -6,7 +6,7 @@ const claude = (patch: Partial<Parameters<typeof payerOrder>[0]> = {}): Paramete
   driver: "claudeAgent", installed: true, subscription: { supported: true, signedIn: false }, myKey: false, orgKey: false, myTurns: "none", ...patch,
 });
 
-describe("payerOrder (server/engine-credentials.ts, the speaker pays)", () => {
+describe("payerOrder (server/engines/engine-credentials.ts, the speaker pays)", () => {
   it("lists the subscription, the person's key, then the organization key; never the server's own sign-in", () => {
     expect(payerOrder(claude()).rows.map((row) => row.id)).toEqual(["subscription", "key", "org-key"]);
   });

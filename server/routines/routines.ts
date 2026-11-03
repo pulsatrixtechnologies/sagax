@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { turnTrace } from "../turn-trace.ts";
+import { turnTrace } from "../turns/turn-trace.ts";
 import { readableRoutineProblems } from "../../shared/routine-problems.ts";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -53,7 +53,7 @@ import {
   ROUTINE_FOLDERS_PER_BOT,
   type RoutineFolderUndo,
 } from "../../shared/routine-folders.ts";
-import { ROUTINE_PARTS, type PartPair, type RoutinePart } from "../package-parts.ts";
+import { ROUTINE_PARTS, type PartPair, type RoutinePart } from "../packages/package-parts.ts";
 import {
   engineNeedsReconnecting,
   engineReconnectAhead,
@@ -61,8 +61,8 @@ import {
   engineNameFromReconnectAttention,
   isEngineReconnectAttention,
   LOGIN_ENGINE_LABEL,
-} from "../engine-reconnect-ahead.ts";
-import type { LoginDriver } from "../principal-engine-logins.ts";
+} from "../engines/engine-reconnect-ahead.ts";
+import type { LoginDriver } from "../engines/principal-engine-logins.ts";
 import {
   dispatchRefusal, engineFacts, loadOwnerNotices, recoverRun, retryNote, weekRuns,
   type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,
@@ -278,7 +278,7 @@ export function routineAdmitDelayMs(retryAfterMs: number, attempts: number): num
 }
 
 /** Which organization install a routine came from, its key in the package,
- * and each part's release and written hashes (server/package-parts.ts). */
+ * and each part's release and written hashes (server/packages/package-parts.ts). */
 export interface RoutinePackageStamp {
   installId: string;
   key: string;
@@ -381,7 +381,7 @@ export interface RoutineRun {
   memoryHint?: RoutineMemoryHint;
   /** 2026-10-26: this failure paused its routine (failed runs in a row). */
   autoPaused?: { failures: number };
-  /** 2026-10-30: a proactive wake (server/proactive-wake.ts), not a routine:
+  /** 2026-10-30: a proactive wake (server/proactive/proactive-wake.ts), not a routine:
    * the mode it was started in, the hops of the chain that led to it,
    * confined when an email woke it, accepted when a legacy proposal was
    * answered yes, dryRuns the write plans recorded before ordinary approval. */
@@ -412,7 +412,7 @@ export interface RoutineRun {
 /** One tool however an engine titled the call: without the `mcp__` prefix
  * Claude-style titles carry, and with every run of `_` as one, so a
  * connector name (`cw_psa__query`) and the Grok alias the gate registers
- * for it (`cw_psa_query`, server/mcp-tool-names.ts) are the same tool. */
+ * for it (`cw_psa_query`, server/mcp/mcp-tool-names.ts) are the same tool. */
 export function troubleToolKey(title: string): string {
   return title.replace(/^mcp__/, "").replace(/_{2,}/g, "_");
 }
@@ -504,10 +504,10 @@ export interface RoutineRunProactive {
   dryRuns?: ProactiveDryRunEntry[];
   /** 2026-11-02 (peer inbox, second pass): a wake on teammates' messages
    * (source peer) is never quiet; this is its report when the bot gave
-   * none (who wrote, about what: server/proactive-wake.ts peerWakeDigest). */
+   * none (who wrote, about what: server/proactive/proactive-wake.ts peerWakeDigest). */
   peerDigest?: string;
   /** 2026-11-02: never quiet (a teammate's message or a post in a two-bot
-   * DM: server/proactive-wake.ts wakeAlwaysReports). */
+   * DM: server/proactive/proactive-wake.ts wakeAlwaysReports). */
   alwaysReport?: true;
 }
 
@@ -665,7 +665,7 @@ export interface RoutineManagerOptions {
   goalState?: (groupId: string, coordinatorBotId: string) => "ready" | "busy" | "missing";
   /** A task for one run (it may name who the run is for). `run.runAs`: the
    * person the run acts for, who owns its thread on an organization server
-   * (server/thread-privacy.ts); else the bot owner. */
+   * (server/threads/thread-privacy.ts); else the bot owner. */
   createTask: (botId: string, title: string, activate?: boolean, run?: RoutineRun) => { threadId: string } | null;
   /** The zone a routine's daily times, windows and weekdays are read in (the
    * person's on an organization server), or undefined for the default. */
@@ -679,7 +679,7 @@ export interface RoutineManagerOptions {
   prewake?: (routine: Routine, dueAt: number) => void;
   /** A bot routine is due within PREWARM_ENGINE_LEAD_MS: start the engine
    * of the conversation its run will use, so the run is not a cold start
-   * (server/thread-prewarm.ts). `threadId` is a task this manager reserved
+   * (server/threads/thread-prewarm.ts). `threadId` is a task this manager reserved
    * for the run (createTask, below), or the joined conversation. Once per
    * occurrence, best effort. */
   prewarmEngine?: (routine: Routine, dueAt: number, threadId: string) => void;
@@ -1278,7 +1278,7 @@ export function intervalHasRestrictions(
 
 // ── the zone routines read wall clocks in ──────────────────────────────
 // Daily times, interval windows and weekdays are wall-clock rules. They are
-// read in the zone the person chose (server/bot-settings.ts) when there is
+// read in the zone the person chose (server/bots/bot-settings.ts) when there is
 // one, else in the host's, as they always were. Cron schedules carry their
 // own zone and never use this.
 let routineZoneResolver: () => string | undefined = () => undefined;
@@ -2594,7 +2594,7 @@ export class RoutineManager {
     return cloneRun(run);
   }
 
-  /** 2026-10-30: a proactive wake (server/proactive-wake.ts) in its own
+  /** 2026-10-30: a proactive wake (server/proactive/proactive-wake.ts) in its own
    * lane: one active wake per bot, never blocking the person's routines.
    * Its own hidden task; reports into the bot's one conversation only when
    * it has something for the person. `runAs` is the person whose identity

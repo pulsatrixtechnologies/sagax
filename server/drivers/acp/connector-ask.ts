@@ -10,7 +10,7 @@
 //   - an outward ask is answered once, never "allow always".
 import { connectorCallReads } from "../../../shared/engine-connectors.ts";
 import { isOutboundTool } from "../../../shared/outbound.ts";
-import { askInputDetail } from "../../tool-summary.ts";
+import { askInputDetail } from "../../tools/tool-summary.ts";
 
 export interface ConnectorAsk {
   /** The tool the engine names (use_tool's target, else the title). */

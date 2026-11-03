@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { json, readBody } from "../harness/http.ts";
-import { requiredScope, type RequestAuth } from "../request-auth.ts";
+import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
 import { createWebSearchStore, webSearchScope } from "../web-search/store.ts";
 import { createWebSearchInternalRoutes } from "./web-search-internal.ts";
 import { createWebSearchRoutes } from "./web-search.ts";

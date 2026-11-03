@@ -3,7 +3,7 @@
 // sentence keeps the words classifyError (retry.ts) reads, so retries, account switching and health codes are unchanged.
 import { redactSecretsInText } from "../redact.ts";
 import { USAGE_LIMIT } from "./retry.ts";
-import { contextFullMessage, isContextFullText } from "../context-renewal.ts";
+import { contextFullMessage, isContextFullText } from "../context/context-renewal.ts";
 
 export type EngineFailureKind = "credits" | "usage_limit" | "context_full" | "rate_limit" | "overloaded" | "server" | "refused";
 

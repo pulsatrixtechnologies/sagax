@@ -1,5 +1,5 @@
 // The proxy-side half of computer control. The harness keeps the record of
-// who is driving (server/computer-control.ts); the per-turn computer
+// who is driving (server/computer/computer-control.ts); the per-turn computer
 // processes consult it through this client before acting, because the
 // action paths themselves never traverse the harness — a boat click goes
 // straight to the boat's REST API, and a Local VM / VPS click rides a

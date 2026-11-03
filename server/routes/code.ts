@@ -27,7 +27,7 @@ import type { CloudAgentManager } from "../cloud-agents/manager.ts";
 import type { PerspicaxAccess, PerspicaxAgentsClient } from "../cloud-agents/perspicax-client.ts";
 import { ProviderHttpError } from "../cloud-agents/providers/http.ts";
 import { personalEnvironment, type PersonalSubscriptions } from "../cloud-agents/providers/perspicax.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export type CodeAccess =

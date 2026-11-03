@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DATA_DIR } from "../config.ts";
-import { readStartupModelCache, startupModelCachePath, writeStartupModelCache } from "../startup-model-catalog.ts";
+import { readStartupModelCache, startupModelCachePath, writeStartupModelCache } from "../models/startup-model-catalog.ts";
 import { ClaudeDriver, readClaudeModelCatalog, STATIC_CLAUDE_MODELS } from "./claude.ts";
 
 const scratchDirs: string[] = [];

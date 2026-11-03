@@ -21,7 +21,7 @@
 // not ask for it keeps getting the one call for every bot, as before (there
 // `complete` speaks for the whole server, so it never gets one owner's list
 // marked complete).
-import { isSubjectRefusal, type LinkPostLimits, type LinkPostResult } from "../perspicax-link.ts";
+import { isSubjectRefusal, type LinkPostLimits, type LinkPostResult } from "../perspicax/perspicax-link.ts";
 
 export const BOT_MAIL_ADDRESSES_PATH = "/api/v1/pulsabot/inbound-mail/addresses";
 export const BOT_MAIL_CACHE_MS = 5 * 60_000;

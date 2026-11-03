@@ -1,11 +1,11 @@
-// Pre-warm (server/thread-prewarm.ts): the person opened a bot's
+// Pre-warm (server/threads/thread-prewarm.ts): the person opened a bot's
 // conversation or started typing in it.
 //
 //   POST /api/bots/:id/warm   { threadId }   -> 200 { warm: started | extended | limited | skipped }
 //
 // Same access as a send to that thread; starts nothing visible and answers
 // at once. The checks live in server/index.ts (threadWarmRequest).
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 type Answer = { status: number; body: Record<string, unknown> };

@@ -19,13 +19,19 @@ container limits that were already on the server environment.
 | Escape from the server environment | `nsenter`, the Docker socket, `/proc/1/root`, `--privileged`, the cloud metadata address `169.254.169.254` |
 | Security evasion | Turning off antivirus or endpoint protection, clearing logs, wiping shell history |
 | Offensive hacking | Port scans, exploit frameworks, a reverse shell, password guessing against a third party |
-| Malware | Ransomware, a botnet, a keylogger, a crypto miner |
+| Malware | Writing, building or running ransomware, a botnet, a keylogger, a credential stealer, a crypto miner (`xmrig` as a command) |
 | Platform exfiltration | `bots.json`, `messages.db`, `idp_key`, `mcp-oauth.key`, `webhooks.json`, `printenv`, `/etc/shadow`, `~/.sagax`, another tenant's data |
 | Destruction | `rm -rf /`, a fork bomb, `mkfs`, `shutdown`, `kill -9 1` |
 | Resource abuse | Filling the disk, `stress-ng`, writing from `/dev/zero` onto a device |
 
 Ordinary work stays allowed: reading a project `.env`, summarizing mail,
 editing files in the working folder, `kill` used as an English verb.
+A malware name alone is not a request to make it: "signal a suspected
+ransomware", "ransomware incident response" or a dispatcher prompt that
+lists ransomware among incidents to escalate is allowed. The name counts
+when a verb that makes or runs it comes first in the same sentence, with
+no defensive word (detect, report, incident, response, anti, a ticket...)
+in between (2026-11-03).
 
 ## Who may do defensive security work
 

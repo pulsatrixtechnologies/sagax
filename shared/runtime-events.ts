@@ -1,7 +1,7 @@
 /** Canonical runtime-event shapes, as they ride the live wire and the
  * inspector log. Single home in shared/ so the server contracts, the client
  * store, and the inspector panel cannot drift; server/contracts.ts and
- * server/thread-events.ts re-export these under their historical names. */
+ * server/threads/thread-events.ts re-export these under their historical names. */
 import type { AskQuestion } from "./ask-question.ts";
 
 export type DriverKind = string;

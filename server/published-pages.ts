@@ -10,7 +10,7 @@
 // and expiry.
 //
 // Whose page it is: the person the conversation belongs to (threadOwner in
-// server/thread-privacy.ts: the thread's recorded owner, else the bot
+// server/threads/thread-privacy.ts: the thread's recorded owner, else the bot
 // owner), never simply the bot's owner, so a member's private conversation
 // with someone else's team bot gives the member the page.
 //
@@ -33,7 +33,7 @@ import { join } from "node:path";
 
 import { writeFileAtomic } from "./atomic.ts";
 import { sanitizePageLook, type PageLook } from "../src/lib/page-look.ts";
-import { threadOwner } from "./thread-privacy.ts";
+import { threadOwner } from "./threads/thread-privacy.ts";
 import { pageAudienceOf, samePageAudience, type PageAudience } from "../shared/page-audience.ts";
 import { ANON_STATE_LIMITS, anonymousBy, STATE_LIMITS, stateRulesOf, stateValueJson, type PageStateEntry, type StateRules } from "../shared/page-state.ts";
 import { THREAD_LIMITS, type PageQuote, type PageSuggestion, type PageThread, type PageThreadReply } from "../shared/page-threads.ts";

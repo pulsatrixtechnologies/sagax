@@ -665,7 +665,7 @@ export interface RoutineManagerOptions {
   goalState?: (groupId: string, coordinatorBotId: string) => "ready" | "busy" | "missing";
   /** A task for one run (it may name who the run is for). `run.runAs`: the
    * person the run acts for, who owns its thread on an organization server
-   * (server/thread-privacy.ts); else the bot owner. */
+   * (server/threads/thread-privacy.ts); else the bot owner. */
   createTask: (botId: string, title: string, activate?: boolean, run?: RoutineRun) => { threadId: string } | null;
   /** The zone a routine's daily times, windows and weekdays are read in (the
    * person's on an organization server), or undefined for the default. */
@@ -679,7 +679,7 @@ export interface RoutineManagerOptions {
   prewake?: (routine: Routine, dueAt: number) => void;
   /** A bot routine is due within PREWARM_ENGINE_LEAD_MS: start the engine
    * of the conversation its run will use, so the run is not a cold start
-   * (server/thread-prewarm.ts). `threadId` is a task this manager reserved
+   * (server/threads/thread-prewarm.ts). `threadId` is a task this manager reserved
    * for the run (createTask, below), or the joined conversation. Once per
    * occurrence, best effort. */
   prewarmEngine?: (routine: Routine, dueAt: number, threadId: string) => void;

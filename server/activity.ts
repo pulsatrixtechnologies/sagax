@@ -12,7 +12,7 @@
 import { join } from "node:path";
 
 import { readDecisions, type DecisionKind, type DecisionRow } from "./decision-log.ts";
-import { isRuntimeEvent, readRecentLines } from "./thread-events.ts";
+import { isRuntimeEvent, readRecentLines } from "./threads/thread-events.ts";
 
 import type { ActivityOutcome, ActivityRow } from "../shared/activity.ts";
 

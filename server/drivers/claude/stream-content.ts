@@ -7,7 +7,7 @@ import {
 import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../../shared/phone-tools.ts";
 import { searchedToolCall } from "../../../shared/searched-tool-call.ts";
 import { pushRenewalStep } from "../../context-renewal.ts";
-import { filesField, writtenFilesFromToolInput } from "../../thread-files.ts";
+import { filesField, writtenFilesFromToolInput } from "../../threads/thread-files.ts";
 import { commandSummary, cwToolResult, toolDetailPreview } from "../../tool-summary.ts";
 import { withAbsolutePaths } from "../permission-command.ts";
 import { claudeAuthFailure } from "../claude-auth-recovery.ts";

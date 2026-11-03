@@ -273,7 +273,7 @@ describe("the upkeep loop", () => {
     expect(aboutMeAdded).toEqual(["The person is vegetarian"]);
   });
 
-  it("writes nothing for a thread that turned confidential while the model answered (server/confidential-threads.ts)", async () => {
+  it("writes nothing for a thread that turned confidential while the model answered (server/threads/confidential-threads.ts)", async () => {
     ensureWorkspace(BOT.id);
     let confidential = false;
     const service = createMemoryUpkeep({

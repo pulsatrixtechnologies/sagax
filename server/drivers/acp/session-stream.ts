@@ -2,7 +2,7 @@
 import { isCwTool } from "../../../shared/cw-widgets/tool-call.ts";
 import { readUseToolCall } from "../../../shared/mcp-gateway-call.ts";
 import { cwToolResult, commandSummary, toolDetailPreview } from "../../tool-summary.ts";
-import { acpWrittenFiles, filesField } from "../../thread-files.ts";
+import { acpWrittenFiles, filesField } from "../../threads/thread-files.ts";
 import { acpToolEndEvents } from "./tool-items.ts";
 import { allocUnkeyedToolSeq, nextUnkeyedToolId, trackRunningTool } from "./helpers.ts";
 import { noteTurnActivity } from "./turn-latency.ts";

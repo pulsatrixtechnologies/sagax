@@ -2766,7 +2766,7 @@ routines at once, no card, several bots in one order (one call per bot):
 - A new default model (`withDefaultModel`, store.ts) also moves a thread
   whose own model was only a copy of the old default; a person's different
   pick stays. Routine threads and the main thread follow the bot. Test:
-  `server/primary-scope.e2e.test.ts`, `server/thread-model.test.ts`.
+  `server/primary-scope.e2e.test.ts`, `server/threads/thread-model.test.ts`.
 - A waiting proposal never blocks: past eight open cards the oldest is
   replaced (`proposalPersistence`), nothing applied, journaled; a card under
   a safety hold (`safetyIsArmed`) is never replaced.
@@ -3702,7 +3702,7 @@ for themself, for every bot they can see: no admin, no owner check.
 
 Decision: a « Fil confidentiel » is a 1:1 bot thread nothing of which is
 remembered, exported, logged or shared beyond its owner
-(`server/confidential-threads.ts`, full table in
+(`server/threads/confidential-threads.ts`, full table in
 `docs/confidential-threads.md`). Rules, none optional:
 
 - `WireTask.confidential: true`, set at creation (`POST .../tasks`
@@ -3806,8 +3806,8 @@ remembered, exported, logged or shared beyond its owner
   backups outside Sagax (Velero, 30 days) and the model provider still get
   the content; a local (solo) Sagax is the recommendation for the most
   sensitive work.
-- Tests: `server/confidential-threads.test.ts`,
-  `server/confidential-threads.e2e.test.ts` (CT-1 to CT-17),
+- Tests: `server/threads/confidential-threads.test.ts`,
+  `server/threads/confidential-threads.e2e.test.ts` (CT-1 to CT-17),
   `server/engine-transcripts.test.ts`,
   `server/runtime/store.test.ts`, `server/workspace-backup.test.ts`,
   `server/message-db.test.ts`,
@@ -6762,7 +6762,7 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
   Caddy's `encode`, Cloudflare and other proxies never compress a body whose
   Content-Length and Content-Range describe stored bytes; Caddy already skips
   206. Tests:
-  `server/thread-files.e2e.test.ts`, `server/attachments-resume-org.e2e.test.ts`,
+  `server/threads/thread-files.e2e.test.ts`, `server/attachments-resume-org.e2e.test.ts`,
   `server/media-proxy.test.ts`, `src/components/AttachmentGallery.test.ts`,
   `src/components/bot-settings/FilesSection.media.dom.test.ts`,
   `server/turn-images.test.ts`, `src/lib/attachment-uploads.test.ts`,
@@ -7806,14 +7806,14 @@ and `ios/Tests/CompanionCoreTests/SingleStreamTests.swift`.
 
 - Server: `conversationThreadFor(bot, person)` (`server/index.ts`) is the
   only reader. It feeds `WireBot.mainThreadId` (per viewer on an organization
-  server, `server/thread-privacy.ts`), `personMainThread`,
+  server, `server/threads/thread-privacy.ts`), `personMainThread`,
   `agentUnifiedThread` (`send_prompt`, `sagax_send`), `peerThreadFor`
   (`ask_bot`, `delegate_bot`, asides), a routine's report
   (`resolveResultsThread`; a run whose destination is gone reports there
   too, `syncRoutineRunToSource`), a webhook's post (`resolvePostThread`), a
   call that names no thread (voice `target`), a send without a thread
   (`routeThreadId`), and the Primary Bot's incident answer (mirrored into
-  its conversation at turn end, `incidentsReport`). `server/main-thread.ts`
+  its conversation at turn end, `incidentsReport`). `server/threads/main-thread.ts`
   delegates to it. A webhook's run works in its own task like a scheduled
   run (never the live chat); a run's task is tagged `routineRunId` at
   creation; a turn continuation is a bot-opened job; a legacy "<name> ·
@@ -9585,7 +9585,7 @@ Keep these rules, covered by `server/published-pages.test.ts`,
   `POST /api/pages/:id/publish` needs an explicit `access`. Not available in
   rooms. Choosing "Toute personne ayant le lien" asks a second press.
 - Whose page it is: the conversation's person (`pageOwnerFor` =
-  `threadOwner` of `server/thread-privacy.ts`: the thread's recorded owner,
+  `threadOwner` of `server/threads/thread-privacy.ts`: the thread's recorded owner,
   else the bot owner), never simply the bot's owner. A member's private
   conversation with someone else's team bot gives the member the page; the
   bot owner gets 404. Who manages pages: on an organization server the

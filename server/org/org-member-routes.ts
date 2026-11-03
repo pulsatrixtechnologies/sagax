@@ -156,7 +156,7 @@ export interface OrgMemberRouteDeps {
   approvalAnswerer?(threadId: string, requestId: string): ApprovalAnswerer | null;
   /** The bot whose thread this is, or null (a room, or gone). */
   botOfThread?(threadId: string): string | null;
-  /** A confidential thread (server/confidential-threads.ts): an AI client
+  /** A confidential thread (server/threads/confidential-threads.ts): an AI client
    * never reads, streams, writes or answers a card in one; it reads as
    * missing. */
   confidential?(threadId: string): boolean;

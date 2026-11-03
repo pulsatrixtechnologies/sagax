@@ -88,7 +88,7 @@ export interface UpkeepDeps {
   restoreTurn?: (botId: string, threadId: string, turnId: string) => CaptureTurn | null;
   /** Whether a thread may still be captured when its batch goes out: false
    * for a thread that became confidential while its turns waited
-   * (server/confidential-threads.ts). Absent: every thread. */
+   * (server/threads/confidential-threads.ts). Absent: every thread. */
   capturable?: (threadId: string) => boolean;
   quietMs: () => number;
   tidyHour: () => number;

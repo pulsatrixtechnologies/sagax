@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
 import { requiredScope, type RequestAuth } from "../request-auth.ts";
-import type { ThreadFile } from "../thread-files.ts";
+import type { ThreadFile } from "../threads/thread-files.ts";
 import { createBotLibraryRoutes, type BotLibraryRouteDeps } from "./bot-library.ts";
 import { dispatchRoutes } from "./table.ts";
 

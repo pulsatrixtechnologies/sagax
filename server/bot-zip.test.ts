@@ -544,7 +544,7 @@ describe("older packages", () => {
   });
 });
 
-describe("bot zip and confidential threads (server/confidential-threads.ts)", () => {
+describe("bot zip and confidential threads (server/threads/confidential-threads.ts)", () => {
   it("never exports a confidential thread: not its messages, files, record or id", () => {
     const fx = fixture({ organization: true });
     const bot = richBot(fx);

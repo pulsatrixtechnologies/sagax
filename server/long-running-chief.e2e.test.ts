@@ -311,7 +311,7 @@ it("carries a consult-and-implement job over several teammate turns, through a s
   }
   // With threads hidden the job is still one conversation: every resume
   // landed in it and it stays the Chief's main thread, and no teammate's
-  // work became that teammate's main thread (server/main-thread.ts).
+  // work became that teammate's main thread (server/threads/main-thread.ts).
   const mainThreads = Object.fromEntries(((await f.api("GET", "/api/bots?messages=0")).body.bots as any[]).map((bot) => [bot.id, bot.mainThreadId]));
   expect(mainThreads).toMatchObject({ [f.clive.id]: job, [f.mira.id]: f.mira.activeTaskId, [f.eli.id]: f.eli.activeTaskId });
 }), hostTimeout(120_000));

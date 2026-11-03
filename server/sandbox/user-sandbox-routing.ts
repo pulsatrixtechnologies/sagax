@@ -37,7 +37,7 @@ export function resolveExecutionTarget(input: {
  *   ever asked for falls back to the room's creator. A bot's follow-up after
  *   a person's message keeps that person's environment: the work they asked
  *   for, and their files, stay together instead of moving to the creator's.
- * - A confidential thread (server/confidential-threads.ts) always works in
+ * - A confidential thread (server/threads/confidential-threads.ts) always works in
  *   its OWNER's environment, whoever or whatever started the turn.
  * - Null when nobody is known: nothing is mounted (fail closed). */
 export function sandboxPrincipalForTurn(input: {

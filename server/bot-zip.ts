@@ -499,7 +499,7 @@ export function planBotZip(host: BotZipHost, botId: string, options: BotZipExpor
 
   // conversations, messages and their files
   if (options.conversations) {
-    // A confidential thread (server/confidential-threads.ts) never leaves in
+    // A confidential thread (server/threads/confidential-threads.ts) never leaves in
     // an export, whoever asks: not its messages, its files, nor its record.
     const tasks = (bot.tasks ?? []).filter((task) => task.confidential !== true);
     let messages = 0;
@@ -1064,7 +1064,7 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
           ...(typeof raw.archivedAt === "number" ? { archivedAt: raw.archivedAt } : {}),
           ...(raw.pinned === true ? { pinned: true } : {}),
           // confidential is permanent: exports leave such threads out, and an
-          // import never makes one ordinary (server/confidential-threads.ts)
+          // import never makes one ordinary (server/threads/confidential-threads.ts)
           ...(raw.confidential === true ? { confidential: true as const } : {}),
           ...(typeof raw.updatedAt === "number" ? { updatedAt: raw.updatedAt } : {}),
           ...(typeof raw.snoozedUntil === "number" ? { snoozedUntil: raw.snoozedUntil } : {}),

@@ -16,7 +16,7 @@
 // CLIENT_ALLOW); the export checks the owner itself.
 import { collectBotLinks, mergeBotFiles, pageOf, readPageQuery, type BotFileKind, type LinkSourceMessage } from "../bot-library.ts";
 import type { RequestAuth } from "../request-auth.ts";
-import type { ThreadFile } from "../thread-files.ts";
+import type { ThreadFile } from "../threads/thread-files.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface BotLibraryBot {

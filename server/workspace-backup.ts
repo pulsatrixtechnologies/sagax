@@ -318,7 +318,7 @@ function hashFile(path: string): string {
     }
   } finally { closeSync(fd); }
 }
-// ── confidential threads (server/confidential-threads.ts) ───────────────
+// ── confidential threads (server/threads/confidential-threads.ts) ───────────────
 // A workspace backup is an export an admin downloads: a confidential
 // thread's content never rides in it. Its task record stays (id, dates, the
 // flag) so the roster restores whole, with its title replaced and nothing

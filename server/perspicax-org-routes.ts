@@ -45,7 +45,7 @@ export interface OrgSettings {
    * on by default, an admin turns it off. */
   memberEnvironmentAutonomy: boolean;
   /** 2026-10-16: new threads start confidential unless the person says
-   * otherwise (server/confidential-threads.ts): off by default. */
+   * otherwise (server/threads/confidential-threads.ts): off by default. */
   confidentialThreadsByDefault?: boolean;
   /** 2026-10-16: a bot a member owns runs its Auto and Auto-accept edits
    * levels as such (server/approvals/member-auto-approval.ts): on by default, an

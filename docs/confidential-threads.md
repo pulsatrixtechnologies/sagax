@@ -6,7 +6,7 @@ or shown to anyone else through Sagax, including the bot's owner and the
 organization's admins. It exists for the work a person would not want to
 land in a shared bot's memory, an export or an admin console.
 
-Code: `server/confidential-threads.ts` (the rules), with the enforcement in
+Code: `server/threads/confidential-threads.ts` (the rules), with the enforcement in
 `server/index.ts`, `server/bot-zip.ts`, `server/org/org-admin-files.ts`,
 `server/decision-log.ts`, `server/workspace-backup.ts`,
 `server/turn-log.ts`, `server/sandbox/user-sandbox-routing.ts`,

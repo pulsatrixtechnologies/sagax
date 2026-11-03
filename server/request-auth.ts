@@ -578,7 +578,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // 2026-10-30: a person's answer to a proactive proposal in their own
   // conversation (the handler checks they may write there)
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/proactive\/[\w-]+$/ },
-  // pre-warm the engine of a conversation the person opened (server/thread-prewarm.ts)
+  // pre-warm the engine of a conversation the person opened (server/threads/thread-prewarm.ts)
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/warm$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/active-branch$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/compact$/ },

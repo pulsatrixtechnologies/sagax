@@ -90,7 +90,7 @@ export type DecisionSource =
   /** the ask's own timeout (an `expired` row) */
   | "timeout"
   /** refused in a confidential thread: only its owner may answer, and could not
-   * (server/confidential-threads.ts) */
+   * (server/threads/confidential-threads.ts) */
   | "confidential"
   /** a member bot's command would run on the shared organization server, which
    * only an admin may use: it runs on the bot's own computer instead, or is
@@ -199,7 +199,7 @@ let retentionDays: () => number = () => DEFAULT_DECISION_RETENTION_DAYS;
 let confidentialThread: (threadId: string) => boolean = () => false;
 
 /** The server binds which threads are confidential
- * (server/confidential-threads.ts): their rows are written metadata only. */
+ * (server/threads/confidential-threads.ts): their rows are written metadata only. */
 export function bindConfidentialDecisions(isConfidential: (threadId: string) => boolean): void {
   confidentialThread = isConfidential;
 }

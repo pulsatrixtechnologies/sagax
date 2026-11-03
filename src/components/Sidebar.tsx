@@ -1857,7 +1857,7 @@ export function BotListItem({
   // Threads off: an untouched extra thread never strands the person; the row
   // lands back on their latest conversation (see thread-home.ts).
   // With threads hidden a server that names the bot's main thread decides
-  // (openBot, server/main-thread.ts); an older one without it keeps that rule.
+  // (openBot, server/threads/main-thread.ts); an older one without it keeps that rule.
   const openConversation = () => navigate(() => {
     if (showThreads || bot.mainThreadId) openBot(dispatch, bot, showThreads);
     else for (const action of openBotConversationActions(bot, showThreads)) dispatch(action);

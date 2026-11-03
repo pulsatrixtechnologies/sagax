@@ -1,4 +1,4 @@
-// Pre-warm (server/thread-prewarm.ts): ask the server to start a bot
+// Pre-warm (server/threads/thread-prewarm.ts): ask the server to start a bot
 // conversation's engine when the person opens it or starts typing, so the
 // first message does not pay the cold start. Best effort and silent: a
 // failure changes nothing. One call per thread per REFRESH_MS; the server

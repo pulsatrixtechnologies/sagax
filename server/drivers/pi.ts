@@ -46,7 +46,7 @@ import { STABLE_END_MARKER } from "./pi-mcp-extension.ts";
 import { COMPACT_VOLATILE_LAST } from "../compact-prompt.ts";
 import { SPAWNED_PROXIES } from "../proxy-paths.ts";
 import { commandSummary, cwToolResult, toolDetailPreview } from "../tool-summary.ts";
-import { filesField, writtenFilesFromToolInput } from "../thread-files.ts";
+import { filesField, writtenFilesFromToolInput } from "../threads/thread-files.ts";
 
 import type {
   DriverCreateInput,

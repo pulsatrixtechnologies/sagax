@@ -13,7 +13,7 @@ import { createdByBotMark, type BotCreationRefusal } from "../bot-creation.ts";
 import { validateBotCwd } from "../bot-cwd.ts";
 import { recordedBotOwner } from "../bot-owner.ts";
 import { botMaxConcurrentThreads, botMaxParallelPerPerson, type GlobalRuntimeSettings } from "../bot-runtime-settings.ts";
-import { CONFIDENTIAL_PEER_REFUSED } from "../confidential-threads.ts";
+import { CONFIDENTIAL_PEER_REFUSED } from "../threads/confidential-threads.ts";
 import type { HandoffView } from "../coordinator.ts";
 import { newId } from "../contracts.ts";
 import { appendDecision } from "../decision-log.ts";
@@ -37,7 +37,7 @@ import {
   type RelayEngine,
 } from "../run-with-engine.ts";
 import { sectionKey, type Message } from "../store.ts";
-import { resumeOpening, resumeRefusal, subagentRequest } from "../subagent-threads.ts";
+import { resumeOpening, resumeRefusal, subagentRequest } from "../threads/subagent-threads.ts";
 import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { fitsOnOneLine } from "../../shared/bot-profile.ts";
 import type { ModelSelection } from "../../shared/model-selection.ts";
@@ -634,7 +634,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
       }
       const title = String(body.title ?? "").trim();
       const message = String(body.message ?? "").trim();
-      // sub-agents (parity D1, server/subagent-threads.ts): resume one by id, or run one read-only
+      // sub-agents (parity D1, server/threads/subagent-threads.ts): resume one by id, or run one read-only
       const resumeId = typeof body.resumeThreadId === "string" ? body.resumeThreadId.trim() : "";
       const readOnly = body.readOnly === true;
       if (!message || (!title && !resumeId)) return json(res, 400, { error: "title and message are required" });

@@ -10,7 +10,7 @@ import {
   isPendingCredentialRequest,
   type CredentialTargetId,
 } from "../../shared/credential-request.ts";
-import { CONFIDENTIAL_PEER_REFUSED } from "../confidential-threads.ts";
+import { CONFIDENTIAL_PEER_REFUSED } from "../threads/confidential-threads.ts";
 import {
   botAddedMcpServerEnabled,
   isRemoteMcpServer as isRemoteMcpServerLeaf,

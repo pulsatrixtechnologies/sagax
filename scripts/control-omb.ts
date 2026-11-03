@@ -414,7 +414,7 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   // (POST /api/testing/org-library); the route does not exist without it.
   if (parentEnv.SAGAX_TEST_ORG_LIBRARY_KEY) childEnv.SAGAX_TEST_ORG_LIBRARY_KEY = parentEnv.SAGAX_TEST_ORG_LIBRARY_KEY;
   // A pre-warm window short enough for a test to see the idle engine closed
-  // (server/thread-prewarm.ts).
+  // (server/threads/thread-prewarm.ts).
   if (parentEnv.SAGAX_PREWARM_WINDOW_MS) childEnv.SAGAX_PREWARM_WINDOW_MS = parentEnv.SAGAX_PREWARM_WINDOW_MS;
   // The Code section's fake Perspicax (server/testing/fake-perspicax-agents.ts),
   // started inside the fixture; a solo server only, never real Perspicax.

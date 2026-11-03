@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { cleanUrl, collectBotLinks, fileKind, linksInText, mergeBotFiles, pageOf, readPageQuery } from "./bot-library.ts";
-import type { ThreadFile } from "./thread-files.ts";
+import type { ThreadFile } from "./threads/thread-files.ts";
 
 describe("bot links", () => {
   it("finds bare and Markdown links, trimming sentence punctuation", () => {

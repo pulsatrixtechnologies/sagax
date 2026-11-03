@@ -375,7 +375,7 @@ describe("additive portable team backups", () => {
   });
 });
 
-describe("confidential threads in portable backups (server/confidential-threads.ts)", () => {
+describe("confidential threads in portable backups (server/threads/confidential-threads.ts)", () => {
   beforeEach(() => rmSync(DATA_DIR, { recursive: true, force: true }));
 
   it("leave a confidential thread out, and an import keeps the flag should one arrive", () => {

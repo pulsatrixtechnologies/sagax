@@ -180,7 +180,7 @@ export function workspaceLocationsPrompt(botId: string, cwd: string | undefined,
   // message (workspaceCwdPrompt), so this text is the same in every
   // conversation of the bot and stays in the cached system prompt.
   if (opts.cwdElsewhere) cwd = CWD_ELSEWHERE;
-  // A confidential thread (server/confidential-threads.ts) keeps its work in
+  // A confidential thread (server/threads/confidential-threads.ts) keeps its work in
   // its own folder: no shared or project folder to write to, no other
   // thread's files to reach for.
   if (opts.confidential) {

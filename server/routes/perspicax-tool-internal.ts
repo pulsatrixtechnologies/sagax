@@ -14,7 +14,7 @@ export interface PerspicaxToolInternalDeps {
   /** The misuse and safety review of a Perspicax MCP call: the refusal to
    * answer with, or null to go on. */
   review(text: string, capability: InternalCapabilityView): Promise<unknown>;
-  /** A confidential thread's refusal (server/confidential-threads.ts): the
+  /** A confidential thread's refusal (server/threads/confidential-threads.ts): the
    * text to answer with, or null to go on. */
   confidential?(capability: InternalCapabilityView, tool: string, args: Record<string, unknown>): string | null;
   /** Whose credentials made this turn's call and which bot. A remote_support_*

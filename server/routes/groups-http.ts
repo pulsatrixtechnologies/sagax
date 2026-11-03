@@ -57,7 +57,7 @@ import {
 } from "../send-idempotency.ts";
 import type { BotRecord, GroupRecord, Message } from "../store.ts";
 import { sectionKey } from "../store.ts";
-import { parseThreadOrganization } from "../thread-folders.ts";
+import { parseThreadOrganization } from "../threads/thread-folders.ts";
 import { extractTurnImages } from "../turn-images.ts";
 import { personDisplayName } from "../viewer-identity.ts";
 import { permissionRefusal } from "../../shared/permissions.ts";
@@ -393,7 +393,7 @@ export function createGroupsHttpRoutes(deps: GroupsHttpDeps): RouteHandler {
       if (!body || typeof body !== "object" || Array.isArray(body)) {
         return json(res, 400, { error: "body must be a JSON object" });
       }
-      // Archive, snooze and folder are a bot thread's too (server/thread-folders.ts).
+      // Archive, snooze and folder are a bot thread's too (server/threads/thread-folders.ts).
       const allowed = new Set(["title", "pinned", "turnTimeoutMinutes", "archivedAt", "snoozedUntil", "projectId"]);
       if (Object.keys(body).some((key) => !allowed.has(key))) return json(res, 400, { error: "unsupported channel thread setting" });
       // A person conversation has no turns, so no turn limit.

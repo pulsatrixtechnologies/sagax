@@ -1,5 +1,5 @@
 // Folders of a person conversation's threads (server/people-dms.ts), the
-// same requests a bot's folders take (server/thread-folders.ts):
+// same requests a bot's folders take (server/threads/thread-folders.ts):
 //
 //   POST   /api/groups/:id/projects            { name, emoji? }
 //   PATCH  /api/groups/:id/projects/:folder    { name?, emoji? }
@@ -9,7 +9,7 @@
 // The folders are the pair's: both people see and change the same ones. The
 // auth gate in front already narrowed a person conversation to its two
 // people. A room or a bot-to-bot channel has no folders (400).
-import { parseFolderBody, parseFolderOrder } from "../thread-folders.ts";
+import { parseFolderBody, parseFolderOrder } from "../threads/thread-folders.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

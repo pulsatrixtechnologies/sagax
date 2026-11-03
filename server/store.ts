@@ -21,7 +21,7 @@ import type { BotProfilePatch } from "./bot-profile.ts";
 import { peerAllowKey, type PeerAction } from "./peer-approval-key.ts";
 import { DATA_DIR, EVENTS_DIR, NATIVE_DIR, loadBrowserProfileIdAliases } from "./config.ts";
 import * as mdb from "./message-db.ts";
-import { ThreadCache, type ThreadState } from "./thread-cache.ts";
+import { ThreadCache, type ThreadState } from "./threads/thread-cache.ts";
 import { forgetBotMemoryJournal, journalFile } from "./memory/memory-journal.ts";
 import { forgetLogMemory } from "./content-at-rest.ts";
 import { forgetWorkspaceUsage } from "./workspace-usage.ts";
@@ -147,7 +147,7 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
   autoWorkspace?: SelectedComputer;
   /** Epoch ms a person last wrote here: never a teammate, a routine, a
    * webhook, the bot itself or a line relayed from Slack. The newest open
-   * one is the bot's main thread (server/main-thread.ts), which clients get
+   * one is the bot's main thread (server/threads/main-thread.ts), which clients get
    * worked out (WireBot.mainThreadId). Absent until someone writes. */
   askedAt?: number;
   /** Single stream (thread mode off, server/single-stream.ts): a person
@@ -1299,7 +1299,7 @@ export class Store {
   /** Where a person last wrote in a thread from before builds kept it
    * (TaskRecord.askedAt) is only in its transcript: once, a thread without
    * the stamp takes its newest line a person sent from an app. Without it a
-   * bot's main thread (server/main-thread.ts) is whichever thread is
+   * bot's main thread (server/threads/main-thread.ts) is whichever thread is
    * selected until someone writes again: often the oldest one, where
    * v0.1.98 to v0.1.107 reported, left selected by its activity row. */
   private fillTaskAskedAts(): void {
@@ -1906,7 +1906,7 @@ export class Store {
   }
 
   /** The conversations with a turn running, whose cached transcript stays
-   * however long ago it was read (server/thread-cache.ts). */
+   * however long ago it was read (server/threads/thread-cache.ts). */
   private busyThreadIds(): Set<string> {
     const busy = new Set<string>();
     for (const bot of this.bots) {
@@ -2160,7 +2160,7 @@ export class Store {
     return this.bots.find((b) => b.threadId === threadId || b.tasks?.some((t) => t.threadId === threadId)) ?? null;
   }
 
-  /** A confidential thread (server/confidential-threads.ts): a bot thread
+  /** A confidential thread (server/threads/confidential-threads.ts): a bot thread
    * whose record carries `confidential: true`. Rooms never are. */
   isConfidentialThread(threadId: string): boolean {
     if (!threadId) return false;
@@ -2721,7 +2721,7 @@ export class Store {
   /** The bot-wide activity (the same fold as `bot.activity`/`bot.busy`)
    * over the threads `include` keeps, plus the bot's room activity. An
    * organization viewer gets it over their own threads only
-   * (server/thread-privacy.ts), never over someone else's. */
+   * (server/threads/thread-privacy.ts), never over someone else's. */
   activityOf(botId: string, include: (task: TaskRecord) => boolean): { activity: BotActivity; busy: boolean } {
     const bot = this.bot(botId);
     const activities = [
@@ -3655,7 +3655,7 @@ export class Store {
     return task;
   }
 
-  /** Organization server, once (server/thread-privacy.ts migration): give
+  /** Organization server, once (server/threads/thread-privacy.ts migration): give
    * each listed thread its owner. Never reachable from the HTTP task PATCH:
    * ownerPrincipalId is not a TASK_PATCH_FIELD. Returns how many bots changed. */
   assignTaskOwners(assignments: readonly { botId: string; threadId: string; ownerPrincipalId: string }[]): number {

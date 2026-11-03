@@ -87,7 +87,7 @@ export function createTeamBackup(store: Store, routines: Routine[], name: string
       return [{ key: record.threadId, title: "Conversation", createdAt: record.createdAt, activeLeafId: null, messages: [] }];
     }
     const all = record.tasks?.length ? record.tasks : [{ threadId: record.threadId, title: "Conversation", createdAt: record.createdAt }];
-    // A confidential thread (server/confidential-threads.ts) never leaves in
+    // A confidential thread (server/threads/confidential-threads.ts) never leaves in
     // a backup or a package: not its messages, title nor id.
     const tasks = all.filter((task) => !("confidential" in task && task.confidential === true));
     if (!tasks.length) return [{ key: `conversation-${record.id}`, title: "Conversation", createdAt: record.createdAt, activeLeafId: null, messages: [] }];

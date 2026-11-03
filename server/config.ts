@@ -476,7 +476,7 @@ const appConfigSchema = z.object({
      * on; an admin turns it off in Settings > Organization. */
     memberEnvironmentAutonomy: z.boolean().optional(),
     /** 2026-10-16: new threads start confidential unless the person
-     * says otherwise (server/confidential-threads.ts). Absent means off; an
+     * says otherwise (server/threads/confidential-threads.ts). Absent means off; an
      * admin turns it on in Settings > Organization. */
     confidentialThreadsByDefault: z.boolean().optional(),
     /** 2026-10-16: a bot a member owns runs its Auto and Auto-accept edits
@@ -520,7 +520,7 @@ const appConfigSchema = z.object({
   }).optional(),
   /** When stored person references became principal ids (server/identity-migration.ts). */
   identityMigratedAt: z.number().optional(),
-  /** When every bot thread got its owner (server/thread-privacy.ts). */
+  /** When every bot thread got its owner (server/threads/thread-privacy.ts). */
   privateThreadsMigratedAt: z.number().optional(),
   invites: z.array(z.object({
     token: z.string().min(1),
@@ -808,7 +808,7 @@ export interface AppConfig {
   };
   /** When stored person references became principal ids (server/identity-migration.ts). */
   identityMigratedAt?: number;
-  /** When every bot thread got its owner (server/thread-privacy.ts). */
+  /** When every bot thread got its owner (server/threads/thread-privacy.ts). */
   privateThreadsMigratedAt?: number;
   invites?: Array<{
     token: string;

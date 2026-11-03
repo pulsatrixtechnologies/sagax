@@ -15,9 +15,9 @@ import { basename, join } from "node:path";
 
 import { EVENTS_DIR } from "../config.ts";
 import { appendLog, logAppended, registerSealedLog, sealLogLines } from "../content-at-rest.ts";
-import { threadLogsForgotten } from "../forgotten-threads.ts";
+import { threadLogsForgotten } from "../threads/forgotten-threads.ts";
 import { redactSecrets } from "../redact.ts";
-import { capThreadLog, currentThreadLogCap } from "../thread-log-rotation.ts";
+import { capThreadLog, currentThreadLogCap } from "../threads/thread-log-rotation.ts";
 import { newId, type ProviderInstance, type RuntimeEvent, type RuntimeEventListener } from "../contracts.ts";
 
 const INCOMPLETE_LOG_MESSAGE =

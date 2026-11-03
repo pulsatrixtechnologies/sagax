@@ -8,8 +8,8 @@ import { basename, join } from "node:path";
 import { NATIVE_DIR } from "../config.ts";
 import { logAppended, registerSealedLog, sealLogLines } from "../content-at-rest.ts";
 import { redactSecrets } from "../redact.ts";
-import { threadLogsForgotten } from "../forgotten-threads.ts";
-import { capThreadLog, currentThreadLogCap } from "../thread-log-rotation.ts";
+import { threadLogsForgotten } from "../threads/forgotten-threads.ts";
+import { capThreadLog, currentThreadLogCap } from "../threads/thread-log-rotation.ts";
 
 // Port de OpenMausBot #3129 : screenshots and files that ride inline as
 // base64 tell nothing about the protocol, only their size. Kept out of the

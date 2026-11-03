@@ -85,7 +85,7 @@ mode.
   threads are off; ⌘N opens the compose picker. Threads still get created
   behind the scenes (an older build, another device, a teammate, a bot's
   `start_thread`, a routine, an AI client's hidden conversation). The app
-  opens the bot's main thread (`server/main-thread.ts`, the open thread the
+  opens the bot's main thread (`server/threads/main-thread.ts`, the open thread the
   person last wrote in) and, when a deep link or notification lands on
   another one, shows "Back to conversation" (`ThreadsOffReturnLink`,
   `src/components/thread-home.ts`). That is the "where did it go" problem.

@@ -180,7 +180,7 @@ export interface WireTask {
    * in the sidebar, previews, typing dots, unread or notifications; reached
    * from the bot's Activity panel or a thread link. Only `true` is stored. */
   hidden?: true;
-  /** A confidential thread (server/confidential-threads.ts): nothing of it
+  /** A confidential thread (server/threads/confidential-threads.ts): nothing of it
    * is remembered, exported, logged or shared beyond its owner. Permanent
    * once set: only deleting the thread ends it. Only `true` is stored. */
   confidential?: true;
@@ -190,7 +190,7 @@ export interface WireTask {
   parallelOf?: TaskParallelOf;
   /** Organization server: the person this 1:1 thread belongs to (who
    * started it; a routine's runAs; else the bot owner when absent). Only
-   * they read or write it (server/thread-privacy.ts). */
+   * they read or write it (server/threads/thread-privacy.ts). */
   ownerPrincipalId?: string;
   /** Set by close_thread; absent while the thread is open. */
   closedBy?: TaskClosedBy;
@@ -369,7 +369,7 @@ export interface WireBot {
   id: string;
   /** The task selected in the UI; running turns keep their own thread id. */
   threadId: string;
-  /** The bot's main thread (server/main-thread.ts): where a routine without
+  /** The bot's main thread (server/threads/main-thread.ts): where a routine without
    * a thread of its own reports, and what a bot opens to while threads are
    * hidden. Server-derived; absent only for a bot without threads. */
   mainThreadId?: string;
@@ -1182,7 +1182,7 @@ export interface OptionCardData extends WaitCardField {
    * The card stores no body and no query. */
   botActRequest?: { id: string };
   /** A confidential thread's write to its owner's own memory, waiting for
-   * their Allow (server/confidential-threads.ts). The id matches requestId. */
+   * their Allow (server/threads/confidential-threads.ts). The id matches requestId. */
   confidentialMemoryRequest?: { id: string };
   /** Interactive shell on a terminal-capable resource (approval required). */
   terminalRequest?: TerminalRequestCardData;

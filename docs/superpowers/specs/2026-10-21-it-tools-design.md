@@ -81,7 +81,7 @@ Tool declaration and gating:
   `server/flow-tools.ts` has the same `READ_ONLY` shape.
 - **No-card list.** `server/sagax-internal-tools.ts` (`sagaxInternalTool`) is the reviewed exact-name list of
   Sagax's own tools that never ask for approval (today: Data, plus member-own-scope agents tools).
-- **Confidential threads.** `server/confidential-threads.ts` never trusts a tool's own `readOnlyHint`.
+- **Confidential threads.** `server/threads/confidential-threads.ts` never trusts a tool's own `readOnlyHint`.
 - **HTTP routes.** Route modules live in `server/routes/` (README: `createXRoutes(deps)`, no new `if` blocks in
   `server/index.ts`, enforced by `scripts/testing/index-route-ratchet.test.ts`). Route scopes are in
   `server/request-auth.ts` (`CLIENT_ALLOW` for client and member sessions, `PERMISSION_ROUTES`). Each route also
@@ -235,7 +235,7 @@ Chosen (decision 3) over adding tools to the agents catalog:
   family `"nettools"`, so they never raise a card (decision 6). They read only public data about a target the
   person or bot names, and the guard (§3.3) is the boundary. `port_check` is the exception, with its own rule in
   §3.3;
-- confidential threads: classify `nettools` as Sagax-internal reads in `server/confidential-threads.ts`. The only
+- confidential threads: classify `nettools` as Sagax-internal reads in `server/threads/confidential-threads.ts`. The only
   thing that leaves the server is the target name, sent to DNS, RDAP or the target itself. A test pins this;
 - result size: keep the model text under 6 KB (`netCheckModelText`). The full raw output stays in the result, and
   `mcp-result-budget.ts` trims as a backstop.
@@ -676,7 +676,7 @@ Edited:
 - `server/contracts.ts`
 - `server/drivers/claude.ts`, `codex.ts`, `acp/core.ts`
 - `server/index.ts` (capability kind, integration mount only; no route `if`)
-- `server/mcp/mcp-registry.ts`, `server/sagax-internal-tools.ts`, `server/confidential-threads.ts`
+- `server/mcp/mcp-registry.ts`, `server/sagax-internal-tools.ts`, `server/threads/confidential-threads.ts`
 - `server/config.ts`, `src/lib/feature-flags.ts`
 - `server/request-auth.ts`, `server/tool-policy.generated.ts`
 - `shared/permissions.ts`, `shared/requested-views.ts`, `shared/harness-commands.ts`

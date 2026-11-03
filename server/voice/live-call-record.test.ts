@@ -5,7 +5,7 @@ import type { LiveCallRecord } from "../../shared/wire.ts";
 import { recordLiveCall, spokenLineFields, titleLiveCall, type LiveCallRecordDeps, type LiveCallTitleDeps } from "./live-call-record.ts";
 import { redactSecretsInText } from "../redact.ts";
 import type { Message } from "../store.ts";
-import { callTitleExcerpt } from "../thread-title.ts";
+import { callTitleExcerpt } from "../threads/thread-title.ts";
 
 const record = (extra: Partial<LiveCallRecord> = {}): LiveCallRecord => ({
   callId: "call-1", botId: "bot1", client: "ios", startedAt: 1_000, endedAt: 103_000, seconds: 102, endReason: "hung-up", ...extra,

@@ -6,9 +6,9 @@
 // Links come from the words of text messages, both sides of the
 // conversation: a bare http(s) URL or a Markdown link (whose text becomes the
 // title). Each URL appears once, at its newest mention. Files are the
-// existing per-thread listing (server/thread-files.ts), merged newest first
+// existing per-thread listing (server/threads/thread-files.ts), merged newest first
 // and split into media (images and videos) and other files.
-import type { ThreadFile } from "./thread-files.ts";
+import type { ThreadFile } from "./threads/thread-files.ts";
 
 export interface BotLink {
   url: string;

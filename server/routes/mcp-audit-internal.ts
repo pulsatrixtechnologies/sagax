@@ -8,7 +8,7 @@ import { PASS } from "./table.ts";
 
 export interface McpAuditInternalDeps {
   append(row: ReturnType<typeof mcpAuditRow>): void;
-  /** A confidential thread (server/confidential-threads.ts): its rows keep
+  /** A confidential thread (server/threads/confidential-threads.ts): its rows keep
    * the tool, permission and decision, never the resource a call named. */
   confidential?(threadId: string): boolean;
 }

@@ -52,7 +52,7 @@ const workspace = await load<Any>("server/workspace.ts");
 const attachments = await load<Any>("server/attachments.ts");
 const messageFile = await load<Any>("server/message-file.ts");
 const native = await load<Any>("server/drivers/native.ts");
-const threadEvents = await load<Any>("server/thread-events.ts");
+const threadEvents = await load<Any>("server/threads/thread-events.ts");
 const config = await load<Any>("server/config.ts");
 let atRest: Any | null = null;
 try { atRest = await load<Any>("server/content-at-rest.ts"); } catch { atRest = null; }

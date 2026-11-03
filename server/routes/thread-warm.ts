@@ -1,4 +1,4 @@
-// Pre-warm (server/thread-prewarm.ts): the person opened a bot's
+// Pre-warm (server/threads/thread-prewarm.ts): the person opened a bot's
 // conversation or started typing in it.
 //
 //   POST /api/bots/:id/warm   { threadId }   -> 200 { warm: started | extended | limited | skipped }

@@ -46,7 +46,7 @@ import { chatFollowups, closeMessageDb, closeMessageSearch, configureContentEncr
 import { appendDecision, flushDecisionLog, readDecisions } from "./decision-log.ts";
 import { journalFile, readMemoryJournal, recordMemoryChange, flushMemoryJournal, resetMemoryJournalState } from "./memory/memory-journal.ts";
 import { readMemoryDoc } from "./memory/memory-store.ts";
-import { readRecentLines } from "./thread-events.ts";
+import { readRecentLines } from "./threads/thread-events.ts";
 import { createWorkspaceBackup, stageWorkspaceBackup } from "./workspace-backup.ts";
 import { holdBotMemoryPlain, readMemoryFile, searchMemoryFiles, workspaceDir, writeMemoryFile, writeMemoryTopic } from "./workspace.ts";
 import { open as openHandle } from "node:fs/promises";

@@ -30,12 +30,12 @@ import {
 import { PUSH_TOKEN_HEADER, pushTokenFromHeader } from "../push/devices.ts";
 import { openSseHeartbeat } from "../sse-fanout.ts";
 import type { BotRecord, GroupRecord, Message } from "../store.ts";
-import { readThreadEvents } from "../thread-events.ts";
+import { readThreadEvents } from "../threads/thread-events.ts";
 import {
   listThreadFiles,
   writtenFilesForMessage,
   type ThreadFileRef,
-} from "../thread-files.ts";
+} from "../threads/thread-files.ts";
 import { THUMB_MAX_SOURCE_BYTES, thumbnailFor, thumbnailable } from "../thumbnail.ts";
 import { screenVisibleToPrincipal } from "../sandbox/user-sandbox-routing.ts";
 import {

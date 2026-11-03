@@ -25,7 +25,7 @@
 //     theirs (organization permission folders.botWorkingFolder).
 //
 // A confidential thread creates no bot at all, Primary Bot included
-// (server/confidential-threads.ts REFUSED_INTERNAL_ROUTES).
+// (server/threads/confidential-threads.ts REFUSED_INTERNAL_ROUTES).
 
 /** A bot made by a bot: which one, how deep, when. Server-private. */
 export interface BotCreatedBy {

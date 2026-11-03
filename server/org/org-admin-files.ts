@@ -23,7 +23,7 @@
 //   desktop      the owner's own computer through the desktop bridge: never
 //                reachable from the server
 //
-// A confidential thread (server/confidential-threads.ts) is not here at all:
+// A confidential thread (server/threads/confidential-threads.ts) is not here at all:
 // its folder under tasks and its attachments are left out of every listing
 // and read as missing (404), so an admin learns nothing, not even its id.
 //

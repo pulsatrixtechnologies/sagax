@@ -236,7 +236,7 @@ import { cwActionInstruction, parseCwAction } from "../shared/cw-widgets/actions
 import { createApprovalModeSupport } from "./harness-capabilities.ts";
 import { escapeAttribute } from "../src/lib/composer-attachments.ts";
 import { threadRefUrl } from "../src/lib/thread-refs.ts";
-import { markDeadThreadChip } from "./dead-thread-chips.ts";
+import { markDeadThreadChip } from "./threads/dead-thread-chips.ts";
 import { credentialResumeOutcome, credentialIsConfigured, isCredentialTargetId } from "../shared/credential-request.ts";
 import { VAULT_LOGIN_TARGET, ONE_PASSWORD_WAITING } from "../shared/credential-vault.ts";
 import { HOST_COMPUTER_RESOURCE, HOST_CONTROL_NOTICE } from "../shared/host-control.ts";
@@ -320,14 +320,14 @@ import {
   statMessageFile,
   type OpenedMessageFile
 } from "./message-file.ts";
-import { createThreadFilePins } from "./thread-file-pins.ts";
+import { createThreadFilePins } from "./threads/thread-file-pins.ts";
 import {
   activePath,
   listThreadFiles,
   threadFileId,
   threadFileRefs,
   type ThreadFileRef
-} from "./thread-files.ts";
+} from "./threads/thread-files.ts";
 import {
   avatarGenerationRequestSchema,
   avatarGenerationStateMatches,
@@ -364,7 +364,7 @@ import { DATA_INTERNAL_MCP_PATH, dataRpc } from "./data/rpc.ts";
 import { createDataRoutes } from "./data/routes.ts";
 import { DataSheetRegistry } from "./data/sheet.ts";
 import { erasePersonData } from "./data/erase.ts";
-import { erasePersonThreadFiles, planPersonThreadErasure } from "./person-thread-erase.ts";
+import { erasePersonThreadFiles, planPersonThreadErasure } from "./threads/person-thread-erase.ts";
 import {
   dataFrameAllowed,
   dataScopeAudience,
@@ -406,7 +406,7 @@ import {
   openedThreadRefs,
   ownSubagentThreads,
   toolRowOpen
-} from "./subagent-cleanup.ts";
+} from "./threads/subagent-cleanup.ts";
 import { reapOrphanEngineGroups } from "./engine-groups.ts";
 import { BOT_ACTIVITY_WINDOW_MS as SUBAGENT_SWEEP_WINDOW_MS } from "../shared/bot-activity.ts";
 import type { TeamComputersPayload } from "../shared/team-computer.ts";
@@ -553,7 +553,7 @@ import {
   newRoutinesPaused,
   openCodeProviderKeys
 } from "./config.ts";
-import { sweepThreadEventLogsPaced, type ThreadLogRetentionCandidate } from "./thread-retention.ts";
+import { sweepThreadEventLogsPaced, type ThreadLogRetentionCandidate } from "./threads/thread-retention.ts";
 import { ComputerControl } from "./computer/computer-control.ts";
 import { augmentedPath, resetPathCache } from "./env-path.ts";
 import { registerEnginesBinDir } from "./engine-install.ts";
@@ -923,7 +923,7 @@ import {
 import { EventBus, withoutPrivateFields } from "./harness/bus.ts";
 import { ProviderRegistry } from "./harness/registry.ts";
 import { ManagedDesktopProviders } from "./computer/managed-desktop.ts";
-import { wasOldestThread } from "./main-thread.ts";
+import { wasOldestThread } from "./threads/main-thread.ts";
 import {
   HOST_COMPUTER_REFUSAL,
   computerKindForResource,
@@ -949,7 +949,7 @@ import {
   withNewBotEffort,
   type SelectableInstance
 } from "./default-model-selection.ts";
-import { threadModelFallback, type ThreadEngine } from "./thread-model.ts";
+import { threadModelFallback, type ThreadEngine } from "./threads/thread-model.ts";
 import {
   NO_ENGINE_PERSON,
   engineProblem,
@@ -1056,7 +1056,7 @@ import {
   perspicaxConfidentialVerdict,
   perspicaxMemoryVerdict,
   pinPersonalScope
-} from "./confidential-threads.ts";
+} from "./threads/confidential-threads.ts";
 import { makeCapContinuationSubscriber } from "./turn-continuation.ts";
 import { TurnStops, stoppedTurnOutcome } from "./turn-outcome.ts";
 import {
@@ -1083,7 +1083,7 @@ import {
   callTitleExcerpt,
   threadTitlePrompt,
   type ThreadTitleSource
-} from "./thread-title.ts";
+} from "./threads/thread-title.ts";
 import { stallLimitMs, TurnWatchdog } from "./turn-watchdog.ts";
 import { TurnResources, type TurnOwner } from "./turn-resources.ts";
 import {
@@ -1331,7 +1331,7 @@ import { OutboundRequestService } from "./outbound-requests.ts";
 import { DEFAULT_OUTBOUND_POLICY, isOutboundTool, normalizeOutboundPolicy } from "../shared/outbound.ts";
 import { normalizeAllowedRecipients, sendRecipientsAllowed } from "../shared/allowed-recipients.ts";
 import { standingGrantsAllowed } from "./custom-rules-org.ts";
-import { bindThreadLogCapProvider } from "./thread-log-rotation.ts";
+import { bindThreadLogCapProvider } from "./threads/thread-log-rotation.ts";
 import { listenWebhookIngress, resolveWebhookPublicUrl, type WebhookIngress } from "./webhook-ingress.ts";
 import { assertModelVariantSupported, memberTurnSelection } from "./member-turn.ts";
 import { WebhookManager } from "./webhooks.ts";
@@ -1496,7 +1496,7 @@ import {
   readLastWorkspaceRestore,
   type WorkspaceRestoreResult
 } from "./workspace-backup.ts";
-import { forgetThreadLogs } from "./forgotten-threads.ts";
+import { forgetThreadLogs } from "./threads/forgotten-threads.ts";
 import {
   compactPending,
   dataEngineHomes,
@@ -1605,7 +1605,7 @@ import {
 import { callHasParkableWork, classifyVoiceIntent } from "../src/lib/voice-mode/voice-topics.ts";
 import { VoiceCallSessions, voiceCallTurnSettle } from "./voice/voice-call-session.ts";
 import { VoiceCallWarmup } from "./voice/voice-call-warmup.ts";
-import { namedTeammates, prewarmWindowMs, ThreadPrewarm } from "./thread-prewarm.ts";
+import { namedTeammates, prewarmWindowMs, ThreadPrewarm } from "./threads/thread-prewarm.ts";
 import { callTurnEffort } from "./voice/voice-call-effort.ts";
 import {
   VoiceTurnSessions,
@@ -1760,7 +1760,7 @@ import { createBotGrantRoutes, visibleGrants, wireGrants } from "./bot-grants.ts
 import { createBotPerspicaxRoutes } from "./bot-perspicax.ts";
 import { OrgFlowPlugins, guarded as orgFlowGuarded } from "./org/org-flow-plugins.ts";
 import { applyIdentityMigration, principalIdFor, rewritePeopleForAttach } from "./identity-migration.ts";
-import { ThreadStarters } from "./thread-starters.ts";
+import { ThreadStarters } from "./threads/thread-starters.ts";
 import {
   activityEntries,
   appendAdminAction,
@@ -1856,7 +1856,7 @@ import {
   planThreadOwners,
   viewerThread,
   type ThreadAction
-} from "./thread-privacy.ts";
+} from "./threads/thread-privacy.ts";
 import {
   approvalAnswerStatus,
   approvalAudience,
@@ -2416,7 +2416,7 @@ import {
   type TurnState
 } from "./agent-api.ts";
 import { type PriorityDelivery } from "./priority-wake.ts";
-import { parseHideList, planHiddenAgentThreads, planHiddenBotThreads } from "./agent-threads.ts";
+import { parseHideList, planHiddenAgentThreads, planHiddenBotThreads } from "./threads/agent-threads.ts";
 import { MemberLiveText } from "./member-live-text.ts";
 import { computersRoutes, type ComputersDeps } from "./org/org-admin-computers.ts";
 import {
@@ -3320,7 +3320,7 @@ const artifactStore = createArtifactStore({ file: join(DATA_DIR, "artifacts.json
 const preferenceStore = createPreferenceStore({ file: join(DATA_DIR, "bot-preferences.json") });
 // Ids only (frame `bot.tasks`): the bot's panel reads the list again live.
 const botTaskStore = createBotTaskStore({ file: join(DATA_DIR, "bot-tasks.json"), onChange: (frame) => broadcast({ ...frame }) });
-// The files pinned in a conversation's Library tab (server/thread-file-pins.ts).
+// The files pinned in a conversation's Library tab (server/threads/thread-file-pins.ts).
 const threadFilePins = createThreadFilePins({ file: join(DATA_DIR, "thread-file-pins.json") });
 // 2026-10-16: people's custom auto-review rules, in their own words
 // (shared/custom-rules.ts, server/custom-rules-review.ts).
@@ -6460,7 +6460,7 @@ function myChromeNavigationRefusal(params: unknown): string | null {
 // Temporary profiles last for this server run, but are never saved to disk.
 // The viewer and the agent must address the SAME temporary browser.
 const temporaryBrowserSessions = new Map<string, string>();
-// A confidential thread's browser (server/confidential-threads.ts): a
+// A confidential thread's browser (server/threads/confidential-threads.ts): a
 // throwaway guest session of that thread alone, never the bot's profile nor
 // a shared one, never saved to disk, discarded at the end of each turn.
 const confidentialBrowserSessions = new Map<string, string>();
@@ -6601,7 +6601,7 @@ function dataFrameAudience(scopeKey: string): { audience?: string; dataScope?: D
   const thread = kind === "thread" ? dataScopeThread(scopeKey) : undefined;
   return { audience: dataScopeAudience(scopeKey) ?? "", dataScope: kind, ...(thread ? { threadId: thread } : {}) };
 }
-// A confidential thread (#683, server/confidential-threads.ts) has a Data
+// A confidential thread (#683, server/threads/confidential-threads.ts) has a Data
 // database and sheet of its own, reachable by its owner only: the resolver
 // tells data/scope.ts which threads are confidential and whose they are. A
 // confidential thread whose owner cannot be found matches nobody.
@@ -14406,7 +14406,7 @@ function approvalHostOf(bot: BotRecord): BotHost {
 }
 
 /** Who answers a bot's approval cards: its owner, except in a confidential
- * thread (server/confidential-threads.ts), whose cards are its owner's only. */
+ * thread (server/threads/confidential-threads.ts), whose cards are its owner's only. */
 function approvalOwnerId(bot: BotRecord, threadId?: string): string {
   if (threadId && store.isConfidentialThread(threadId)) {
     const task = store.taskByThread(bot.id, threadId);
@@ -14639,7 +14639,7 @@ function wipeConfidentialThread(botId: string, threadId: string, attachmentNames
 }
 /** The thread a bot's peers, delegations, asides and any turn started
  * without a named thread land in: its selected thread, unless that one is
- * confidential (server/confidential-threads.ts), which never receives a
+ * confidential (server/threads/confidential-threads.ts), which never receives a
  * turn its owner did not start. Then its newest ordinary open conversation
  * of the bot owner's, else a new one, never selected. */
 function peerThreadFor(bot: BotRecord): string {
@@ -15295,7 +15295,7 @@ function notifyAccess(notification: Notification | null, access: WireAccessCard,
   if (!notification) return;
   // A refused turn, for the console's Overview (server/org/org-problem-log.ts).
   const refusedBot = store.bot(access.botId);
-  // a confidential thread's row names nothing of it (server/confidential-threads.ts)
+  // a confidential thread's row names nothing of it (server/threads/confidential-threads.ts)
   const refusedConfidential = store.isConfidentialThread(notification.threadId);
   void appendProblem(DATA_DIR, {
     kind: "refused", botId: access.botId, botName: refusedBot?.name ?? access.botId, ownerPrincipalId: access.ownerPrincipalId || null,
@@ -15600,7 +15600,7 @@ function sseFrameFor(
       clientFrame = serialized;
     }
   }
-  // Private threads (server/thread-privacy.ts): a bot frame shows each
+  // Private threads (server/threads/thread-privacy.ts): a bot frame shows each
   // organization viewer their own threads and transcript only, and queued
   // sends list their threads only. Admin streams too: the admin projection
   // below would otherwise send the frame as it was broadcast.
@@ -15675,7 +15675,7 @@ const toolMessageByItem = new Map<string, string>(); // threadId:itemId -> messa
  * short instead of spinning, so nothing is left half done without saying so.
  * A turn that settled any other way (an error, a usage limit, a sub-agent
  * the engine never reported back) closes them too, with `output`
- * (server/subagent-cleanup.ts). A late completion from the engine finds no
+ * (server/threads/subagent-cleanup.ts). A late completion from the engine finds no
  * row to patch. */
 function closeCutToolRows(threadId: string, output: string = CUT_TOOL_OUTPUT): number {
   const prefix = `${threadId}:`;
@@ -15692,7 +15692,7 @@ function closeCutToolRows(threadId: string, output: string = CUT_TOOL_OUTPUT): n
 }
 
 /** A person's Stop on a conversation: the bot's own sub-agent threads opened
- * from it stop too (server/subagent-cleanup.ts ownSubagentThreads). */
+ * from it stop too (server/threads/subagent-cleanup.ts ownSubagentThreads). */
 async function stopOwnSubagents(botId: string, threadId: string): Promise<number> {
   const { parallel, threads } = ownSubagentThreads({
     botId, threadId, tasks: store.tasks(botId),
@@ -17068,7 +17068,7 @@ bus.subscribe((event: RuntimeEvent) => {
     const bot = store.botByThread(event.threadId);
     if (!bot || !upkeepEnabled(bot) || store.groupByThread(event.threadId) || isInternalTurn(event.threadId)
       || isUnattended(bot.id, event.threadId) || routines?.runForThread(event.threadId)) return;
-    // A confidential thread is never remembered (server/confidential-threads.ts).
+    // A confidential thread is never remembered (server/threads/confidential-threads.ts).
     if (store.isConfidentialThread(event.threadId)) return;
     const turn = captureTurnFor(event.threadId, event.turnId);
     if (turn) memoryUpkeep.noteTurn(bot.id, event.threadId, turn);
@@ -17078,7 +17078,7 @@ bus.subscribe((event: RuntimeEvent) => {
 });
 
 // A confidential thread's browser lasts one turn: its cookies and storage
-// are dropped when the turn ends (server/confidential-threads.ts).
+// are dropped when the turn ends (server/threads/confidential-threads.ts).
 bus.subscribe((event: RuntimeEvent) => {
   if (shouldIgnoreProviderEvent(event)) return;
   if (event.type !== "turn.completed" || !confidentialBrowserSessions.has(event.threadId)) return;
@@ -19858,7 +19858,7 @@ bus.subscribe((event: RuntimeEvent) => {
       // An engine's technical note (an MCP server skipped, a session
       // rebuilt, a model fallback, a quiet engine, a Codex slot): the turn
       // carries on. It goes to the server log and the Events lens (the
-      // runtime stream, server/thread-events.ts), never into the chat
+      // runtime stream, server/threads/thread-events.ts), never into the chat
       // (the maintainer, 2026-10-26, shared/chat-notices.ts).
       console.info(`[notice] ${event.threadId}: ${redactSecretsInText(event.message.slice(0, 240))}`);
       break;
@@ -21374,7 +21374,7 @@ function releaseWarmEngine(threadId: string): void {
   registry.get(live.modelSelection.instanceId)?.adapter.releaseWarmSession?.(threadId);
 }
 
-/** Pre-warm (server/thread-prewarm.ts): the engine of a thread starts when the
+/** Pre-warm (server/threads/thread-prewarm.ts): the engine of a thread starts when the
  * person opens its conversation or starts typing, or shortly before a
  * scheduled routine, so the first message does not pay the cold start. */
 const threadPrewarm = new ThreadPrewarm({ windowMs: prewarmWindowMs() });
@@ -22194,7 +22194,7 @@ async function startDuplexCallTurn(
  * available. Reuse the existing cancellable, idempotent composer queue. */
 /** Sends that arrived while a pre-warm of their thread was starting: the
  * first one takes the warm process; the others wait for it, so they queue
- * behind its turn instead of racing it into a 409 (server/thread-prewarm.ts). */
+ * behind its turn instead of racing it into a 409 (server/threads/thread-prewarm.ts). */
 const prewarmSends = new Map<string, Promise<unknown>>();
 async function startOrQueueDirectMessage(...args: Parameters<typeof startOrQueueDirectMessageNow>) {
   const threadId = args[1];
@@ -22309,7 +22309,7 @@ async function startParallelTask(input: {
   voiceCall?: Message["voiceCall"];
   /** start_thread `workspace`: where its Auto turns start. */
   autoWorkspace?: AutoComputerTarget;
-  /** start_thread `read_only` (server/subagent-threads.ts): never wider than Ask. */
+  /** start_thread `read_only` (server/threads/subagent-threads.ts): never wider than Ask. */
   approvalMode?: "ask";
   /** route_message parallel: the person's row already in the conversation
    * (steered into the running turn) becomes the request line; no second row. */
@@ -23564,7 +23564,7 @@ function routineRunReceiptFacts(routine: Pick<Routine, "botId" | "name">, run: R
 }
 
 /** Where a routine without a thread of its own reports: the bot's main
- * thread (server/main-thread.ts), the one a bot with hidden threads opens
+ * thread (server/threads/main-thread.ts), the one a bot with hidden threads opens
  * to (WireBot.mainThreadId). On a Cloud home a conversation someone else
  * opened never counts. */
 function botMainThread(botId: string): string | undefined {
@@ -24282,7 +24282,7 @@ routines = new RoutineManager({
     if (place.target !== "user-sandbox" && routine.runOn !== "cloud" && !cloudOnlyBot(routine.botId)) return;
     void userSandbox.prewake(principal, routine.botId);
   },
-  // Pre-warm (server/thread-prewarm.ts): a scheduled bot run's engine starts
+  // Pre-warm (server/threads/thread-prewarm.ts): a scheduled bot run's engine starts
   // PREWARM_ENGINE_LEAD_MS ahead in the task its run will take, with the
   // run's own speaker and place, so the run is not a cold start.
   reserveTask: (botId, title, run) => {
@@ -28484,7 +28484,7 @@ function configStatus() {
     // 2026-10-30 (lot 2): the models the organization turned off; on a solo
     // server, the installation's own switches (a person's own come with configForPerson)
     ...(IDENTITY.kind === "perspicax" ? { disabledModels: orgDisabledModels() } : { myDisabledModels: personDisabledModels(null) }),
-    // organization server: new threads start confidential (server/confidential-threads.ts)
+    // organization server: new threads start confidential (server/threads/confidential-threads.ts)
     ...(IDENTITY.kind === "perspicax" ? { confidentialThreadsByDefault: confidentialThreadsByDefault() } : {})
   };
 }
@@ -34613,7 +34613,7 @@ function cwWidgetRule(rules: Parameters<typeof matchOwnerRule>[0], ownerId: stri
     ?? matchOwnerRule(rules, { ownerId, botId, tool: CW_WIDGET_RULE_TOOL_BEFORE, input });
 }
 
-// ── a confidential thread's personal memory write (server/confidential-threads.ts) ──
+// ── a confidential thread's personal memory write (server/threads/confidential-threads.ts) ──
 // Perspicax memory_write to the person's own tier ("me") from a confidential
 // thread waits for their Allow on a card: the call is answered "waiting",
 // and on Allow the bot is asked to make that same write again, which a
@@ -34975,7 +34975,7 @@ async function resolveAndSendEmailDraft(res: ServerResponse, auth: RequestAuth, 
   return true;
 }
 
-/** How a request this server makes to itself is marked (server/confidential-threads.ts):
+/** How a request this server makes to itself is marked (server/threads/confidential-threads.ts):
  * `onBehalf` for a bot acting as its person (operator acts included), so it
  * never reaches a confidential thread; `continuation` for the follow-up of
  * a card its owner allowed in person: when that thread is confidential, a
@@ -35093,7 +35093,7 @@ async function performBotActRoute(actor: PerformActor, target: RouteTarget, maxC
     if (revokeId) sessions.revoke(revokeId);
   }
 }
-/** The ids of every confidential thread (server/confidential-threads.ts). */
+/** The ids of every confidential thread (server/threads/confidential-threads.ts). */
 function confidentialThreadIds(): Set<string> {
   const ids = new Set<string>();
   for (const bot of store.bots) for (const task of bot.tasks ?? []) if (task.confidential === true) ids.add(task.threadId);
@@ -36403,7 +36403,7 @@ function viewerBotLevel(auth: RequestAuth, bot: Parameters<typeof botFacts>[0]):
   if (!viewer) return "owner";
   return botLevel({ viewer, ...botFacts(bot) });
 }
-// ── private threads (server/thread-privacy.ts) ─────────────────────────
+// ── private threads (server/threads/thread-privacy.ts) ─────────────────────────
 // On an organization server each 1:1 thread with a bot is one person's; only
 // group chats are shared. Every read, write, stream, search, export, file
 // and card of a bot thread asks botThreadReadable.
@@ -36580,7 +36580,7 @@ function threadKeyedForViewer<T>(entries: Record<string, T>, viewerId: string | 
 }
 /** Once (marker file `agent-threads-hidden.v1`): the threads an AI client
  * opened with `newThread` before #291 become hidden conversations, and are
- * no longer unread (server/agent-threads.ts). Counts only in the log. */
+ * no longer unread (server/threads/agent-threads.ts). Counts only in the log. */
 function hideEarlierAgentThreads(): void {
   if (IDENTITY.kind !== "perspicax") return;
   const marker = join(DATA_DIR, "agent-threads-hidden.v1");
@@ -36664,7 +36664,7 @@ function openedThreadOwner(from: BotRecord, fromThreadId: string, target: BotRec
  * whatever comes back). A 1:1 turn: the same person's threads with this bot
  * and the rooms that person reads. Null: no narrowing (solo server). */
 function privateRecallFilter(bot: BotRecord, threadId: string): ((candidate: string) => boolean) | null {
-  // A confidential thread (server/confidential-threads.ts) feeds no other
+  // A confidential thread (server/threads/confidential-threads.ts) feeds no other
   // thread, on any server and for anyone, its owner included: only itself.
   const notConfidential = (candidate: string) => candidate === threadId || !store.isConfidentialThread(candidate);
   if (!privateThreads()) return (bot.tasks ?? []).some((task) => task.confidential === true) ? notConfidential : null;
@@ -36835,7 +36835,7 @@ function routineResultsRefusalFor(auth: RequestAuth, body: unknown): string | nu
     ? (body as { resultsThreadId: string }).resultsThreadId : null;
   if (!resultsThreadId) return null;
   // No routine comes from, or reports into, a confidential thread
-  // (server/confidential-threads.ts): its runs would work as the bot
+  // (server/threads/confidential-threads.ts): its runs would work as the bot
   // owner, in their environment.
   if (store.isConfidentialThread(resultsThreadId)) return "No routine can be created from a confidential thread. Set it up from an ordinary thread.";
   return cloudThreadRefusal(auth, resultsThreadId);
@@ -41128,7 +41128,7 @@ function insideDataDir(path: string): boolean {
 /** The roots of a bot's files for the console's file browser
  * (server/org/org-admin-files.ts); never a path on the wire. */
 function orgBotFileRoots(bot: BotRecord): BotFileRoot[] {
-  // A confidential thread's folder is never in the console (server/confidential-threads.ts).
+  // A confidential thread's folder is never in the console (server/threads/confidential-threads.ts).
   const confidential = new Set(store.tasks(bot.id).filter((task) => task.confidential === true).map((task) => task.threadId));
   const folder = (id: "workspace" | "tasks", dir: string): BotFileRoot => existsSync(dir)
     ? { id, kind: "folder", dir, ...(id === "tasks" && confidential.size ? { hidden: confidential } : {}) }
@@ -41566,7 +41566,7 @@ async function startAgentPrompt(from: BotRecord, target: BotRecord, threadId: st
  * included), and every one when the bot is theirs. */
 function personAgentThreads(principalId: string, agent: BotRecord): TaskRecord[] {
   const ownsBot = approvalOwnerId(agent) === principalId;
-  // An AI client never reads a confidential thread (server/confidential-threads.ts).
+  // An AI client never reads a confidential thread (server/threads/confidential-threads.ts).
   return store.tasks(agent.id).filter((task) => task.confidential !== true && (task.ownerPrincipalId === principalId || (ownsBot && !task.ownerPrincipalId)));
 }
 function agentApiAudit(caller: AgentCaller, entry: AuditEntry): void {
@@ -41902,7 +41902,7 @@ const agentApi = createAgentApi({
     const from = agentApiCallerBot(caller);
     const capability = caller.depth;
     // a confidential conversation sends nothing to another agent, and an AI
-    // client never reaches into one (server/confidential-threads.ts)
+    // client never reaches into one (server/threads/confidential-threads.ts)
     if (store.isConfidentialThread(threadId) || (caller.sourceThreadId && store.isConfidentialThread(caller.sourceThreadId))) {
       return agentRefuse(403, "confidential_thread", CONFIDENTIAL_PEER_REFUSED);
     }
@@ -44327,7 +44327,7 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
   // A bot's grants are judged by server/bot-grants.ts (slice 4): an admin
   // or a team manager administers them without seeing the bot.
   const grantRoute = IDENTITY.kind === "perspicax" && /^\/api\/bots\/[\w-]+\/grants(?:\/[^/]+)?$/.test(path);
-  // Private threads (server/thread-privacy.ts): the helpers routes call
+  // Private threads (server/threads/thread-privacy.ts): the helpers routes call
   // without the request read who is asking from here. Set for every
   // request, so a kept-alive connection never inherits one.
   const scopedViewerId = serviceThreadViewer(serviceViewerClosed(auth, path, privateThreads()), viewerId);
@@ -44588,7 +44588,7 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
     }
     // A confidential thread's turn writes nothing other people or threads
     // read: memory, logs, rules, docs, skills, routines
-    // (server/confidential-threads.ts).
+    // (server/threads/confidential-threads.ts).
     if (store.isConfidentialThread(internalCapability.threadId)) {
       const confidentialRefusal = confidentialInternalRefusal(path, method);
       if (confidentialRefusal) {
@@ -44694,7 +44694,7 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
     };
     // A confidential thread's calls to other MCP servers: reads pass,
     // anything else waits for the owner's card with its exact arguments,
-    // whatever the approval mode (server/confidential-threads.ts).
+    // whatever the approval mode (server/threads/confidential-threads.ts).
     if (method === "POST" && CONFIDENTIAL_GATED_MCP_PATHS.has(path) && store.isConfidentialThread(internalCapability.threadId)) {
       const envelope = CONFIDENTIAL_GATED_MCP_PATHS.get(path);
       const raw: unknown = await readInternalBody();
@@ -47492,7 +47492,7 @@ warnReservedMcpServers(cfg);
   }
 }
 // Organization server, once: every bot thread from before private threads
-// gets its owner (server/thread-privacy.ts), before anyone can read one.
+// gets its owner (server/threads/thread-privacy.ts), before anyone can read one.
 migrateThreadOwners();
 resetMemberAutoLevelsOnce();
 // and every start after it: a level stored since (a demoted admin's bot)

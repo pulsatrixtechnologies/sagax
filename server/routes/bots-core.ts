@@ -20,7 +20,7 @@ import { cloudThreadRefusal } from "../cloud-thread-refusal.ts";
 import {
   confidentialPatch,
   newThreadConfidential,
-} from "../confidential-threads.ts";
+} from "../threads/confidential-threads.ts";
 import type { ProviderInstance } from "../contracts.ts";
 import { autoNewBotSelection } from "../default-model-selection.ts";
 import { githubSkillFetch, type GithubCredential } from "../github-access.ts";
@@ -58,8 +58,8 @@ import {
   parseFolderBody,
   parseFolderOrder,
   parseThreadOrganization,
-} from "../thread-folders.ts";
-import { titleConversationExcerpt } from "../thread-title.ts";
+} from "../threads/thread-folders.ts";
+import { titleConversationExcerpt } from "../threads/thread-title.ts";
 import { writeMemoryFile, writeMemoryTopic } from "../workspace.ts";
 import {
   approvalModeFor,
@@ -1023,7 +1023,7 @@ export function createBotsCoreRoutes(deps: BotsCoreRouteDeps): RouteHandler {
       // nothing on their screens moves to it.
       const startedAside = body.hidden === true;
       const hidden = false;
-      // A confidential thread (server/confidential-threads.ts): the person's
+      // A confidential thread (server/threads/confidential-threads.ts): the person's
       // choice, else the organization's default. Its files stay in its own
       // folder, so no other working folder is taken with it.
       const confidentialChoice = newThreadConfidential(body.confidential, confidentialThreadsByDefault());
@@ -1108,7 +1108,7 @@ export function createBotsCoreRoutes(deps: BotsCoreRouteDeps): RouteHandler {
       if (Object.keys(body).some((key) => !allowed.has(key))) return json(res, 400, { error: "unsupported thread setting" });
       const notYours = cloudThreadRefusal(auth, m[2]);
       if (notYours) return json(res, 403, { error: notYours });
-      // Confidential is one way (server/confidential-threads.ts): on with the
+      // Confidential is one way (server/threads/confidential-threads.ts): on with the
       // person's confirmation that it is permanent, never off again.
       const confidentialChange = confidentialPatch(store.taskByThread(m[1], m[2]) ?? {}, body);
       if (confidentialChange.kind === "refused") {
@@ -1196,7 +1196,7 @@ export function createBotsCoreRoutes(deps: BotsCoreRouteDeps): RouteHandler {
         return json(res, 200, { task: wireTask(task, store.bot(profile.id)!.modelSelection), bot: publicBot(store.bot(profile.id)!) });
       }
       // Archive, snooze, pin and folder: the same rules as a group thread
-      // (server/thread-folders.ts).
+      // (server/threads/thread-folders.ts).
       const organization = parseThreadOrganization(body, (projectId) => Boolean(store.project(current.id, projectId)), "projectId must belong to this bot, or null to ungroup the thread");
       if (!organization.ok) return json(res, 400, { error: organization.error });
       const patch: Record<string, unknown> = { ...organization.patch };
@@ -1314,7 +1314,7 @@ export function createBotsCoreRoutes(deps: BotsCoreRouteDeps): RouteHandler {
       const stagedSkillCleanups = stagedSkillCleanupsForThread(m[2]);
       coordinator.cancelDirect(m[2], THREAD_DELETED);
       cancelTeamSetupResumesForThread(m[2]);
-      // A confidential thread leaves nothing behind (server/confidential-threads.ts):
+      // A confidential thread leaves nothing behind (server/threads/confidential-threads.ts):
       // its files are listed before its messages go.
       const confidentialFiles = store.isConfidentialThread(m[2]) ? confidentialThreadAttachments(m[1], m[2]) : null;
       // and the keys of its engine transcripts, before its record and logs go

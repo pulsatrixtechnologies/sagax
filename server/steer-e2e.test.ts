@@ -43,7 +43,7 @@ posixOnly("mid-turn steering e2e", () => {
     return { status: res.status, body: await res.json() };
   };
   const getBot = async (id: string) => (await api("GET", "/api/bots")).body.bots.find((b: any) => b.id === id);
-  /** When a person last wrote in the thread, as the server keeps it (server/main-thread.ts). */
+  /** When a person last wrote in the thread, as the server keeps it (server/threads/main-thread.ts). */
   const askedAt = (botId: string, threadId: string) => (JSON.parse(readFileSync(join(home, ".sagax", "bots.json"), "utf8")) as any[])
     .find((bot) => bot.id === botId).tasks.find((task: any) => task.threadId === threadId).askedAt;
   /** Pair the operator's own second device (a default, admin-scope code, so

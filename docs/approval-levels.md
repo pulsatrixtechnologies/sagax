@@ -444,7 +444,7 @@ exports there, each database closed first (`server/data/erase.ts`), and the
 files of their own ordinary threads on other people's bots: each thread's
 own folder, its tool results and the stored files no thread that stays
 points at. A folder another thread works in is kept, and nothing of anyone
-else's goes (`server/person-thread-erase.ts`).
+else's goes (`server/threads/person-thread-erase.ts`).
 
 Auto-accept edits and Ask card whatever the provider asks about. Approve for
 me cards whatever the provider's reviewer leaves for you, with the note "The

@@ -394,8 +394,8 @@ describe("defensive mentions of malware", () => {
     "Installe l'agent anti-ransomware sur le serveur de fichiers.",
     "Write a ransomware incident report for the client.",
     "Build a ransomware response playbook for the service desk.",
-    "Triage this SOC alert: possible keylogger on LAPTOP-12, user reported odd pop-ups. Check the SentinelOne threat, isolate the host if confirmed, open a P1 ticket.",
-    "Incident response, ransomware: LockBit note found on FS-01. Disconnect the share, preserve the logs, restore from the last clean backup and notify the client.",
+    "Triage this SOC alert: possible keylogger on LAPTOP-12, user reported odd pop-ups. Check the endpoint threat, isolate the host if confirmed, open a P1 ticket.",
+    "Incident response, ransomware: LockBit note found on FILESRV-02. Disconnect the share, preserve the logs, restore from the last clean backup and notify the client.",
     "Réponse à un incident de rançongiciel : isole les postes touchés, garde les journaux, restaure la dernière sauvegarde saine et avise le client.",
     "Le client a installé un logiciel malveillant par erreur, ouvre un billet de sécurité.",
   ])("does not refuse %j", (text) => {

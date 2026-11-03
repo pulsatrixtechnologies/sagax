@@ -1,4 +1,4 @@
-// 2026-11-03 (GOX, Ember's run of "Projet CW #801"): a routine run called
+// 2026-11-03 (production, a bot's run of "Projet CW #100200"): a routine run called
 // ask_choice, the card sat in the run's hidden task, and the run ended
 // Completed six seconds later saying "La carte est affichée". A question card
 // that outlives the turn now holds the run waiting for the person, and a bot
@@ -41,7 +41,7 @@ function harness(extra: Partial<RoutineManagerOptions> = {}) {
 }
 
 async function startedRun(h: ReturnType<typeof harness>) {
-  const routine = h.manager.create({ name: "Projet CW #801 : temps et cédule", prompt: "Propose the batch; JC chooses on the card.", botId: "ember", enabled: false,
+  const routine = h.manager.create({ name: "Projet CW #100200 : temps et cédule", prompt: "Propose the batch; the person chooses on the card.", botId: "scout", enabled: false,
     schedule: { type: "cron", expression: "30 18 * * 1-5", timeZone: "America/Toronto" } });
   h.manager.runNow(routine.id);
   await h.manager.tick();
@@ -55,7 +55,7 @@ describe("a routine run's question card reaches its person", () => {
     const open = new Set<string>();
     const h = harness({ awaitsPerson: (threadId) => (open.has(threadId) ? "Waiting for your answer: Which batch do I write?" : null), cardRaisedSince: () => true });
     const run = await startedRun(h);
-    // the GOX path: ask_choice raised as a question (request.opened), then the turn ends
+    // the production path: ask_choice raised as a question (request.opened), then the turn ends
     h.event(run.threadId!, { type: "request.opened", requestType: "question", requestId: "ask-choice-1", tool: "ask_choice", summary: "Which batch do I write?", harnessAsk: true });
     open.add(run.threadId!);
     h.event(run.threadId!, { type: "item.completed", itemType: "assistant_text", text: "La carte est affichée. Rien n'est écrit tant que tu n'as pas choisi." });

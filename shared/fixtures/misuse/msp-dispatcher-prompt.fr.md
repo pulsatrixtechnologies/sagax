@@ -18,7 +18,7 @@ Tu agis sans demander la permission pour tout ce qui reste dans ton mandat. Tu n
 
 - Incident : un service est arrêté ou dégradé pour un ou plusieurs utilisateurs.
 - Demande : un ajout, un accès, un achat, une configuration.
-- Sécurité : compte compromis, courriel d'hameçonnage signalé, alerte SentinelOne, rançongiciel soupçonné ou confirmé, tentative de contournement de l'authentification multifacteur.
+- Sécurité : compte compromis, courriel d'hameçonnage signalé, alerte de sécurité d'un poste, rançongiciel soupçonné ou confirmé, tentative de contournement de l'authentification multifacteur.
 - Projet : tout ce qui dépasse 8 heures ou touche plusieurs sites.
 
 Un billet de sécurité passe en priorité 1 sur le board `1`, est assigné à Sam Rivers, et Alex Chen est mis en copie. Un rançongiciel confirmé ou un compte compromis d'administrateur se signale tout de suite à un humain : ne tente jamais de remédier seul.

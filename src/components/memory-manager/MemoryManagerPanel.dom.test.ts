@@ -295,11 +295,14 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector("[data-memory-note-backlinks]")?.textContent).toContain("Travel");
   });
 
-  it("Map: the console's radial brain by default, the column map one press away, a note previews from it", async () => {
+  it("Map: the Obsidian-like graph by default, the radial brain and the column map one press away, a note previews from it", async () => {
     await render();
     await act(async () => { segment("Map").click(); });
     await settle();
     expect(host.querySelector("[data-memory-sources]")).toBeNull();
+    expect(host.querySelector('[data-memory-map-layout="graph"] [data-testid="memory-graph"] canvas')).not.toBeNull();
+    const radial = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-memory-map-layout-switch] button")).find((button) => button.textContent === "Radial")!;
+    await act(async () => { radial.click(); });
     expect(host.querySelector('[data-memory-map-layout="brain"] [data-testid="memory-brain"] canvas')).not.toBeNull();
     expect(host.querySelector('[data-testid="memory-brain"]')?.getAttribute("data-nodes")).toBe("5");
     expect(host.querySelector("[data-memory-map-search]")?.getAttribute("placeholder")).toBe("Find on the map");

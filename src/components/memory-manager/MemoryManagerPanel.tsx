@@ -1210,7 +1210,7 @@ export function MemoryManagerPanel() {
           ))}
 
           <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {view === "map" && <MemoryMapView rows={rows} tiers={tiers} bodies={bodies} review={counts.review} focusKey={mapFocus} onOpen={previewKey} onNew={targets.length ? () => startCreate() : undefined} />}
+            {view === "map" && <MemoryMapView rows={rows} tiers={tiers} bodies={bodies} review={counts.review} focusKey={mapFocus} onOpen={previewKey} onOpenNote={(key) => openKey(key)} onNew={targets.length ? () => startCreate() : undefined} />}
             {view === "tags" && (
               <div className="min-h-0 flex-1 overflow-y-auto">
                 <MemoryTagsView stats={stats} vocabulary={vocabulary} onTag={(tag) => { goPlace({ kind: "all" }); setListQuery(`tag:${/\s/.test(tag) ? `"${tag}"` : tag}`); }} />

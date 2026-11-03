@@ -558,3 +558,11 @@ server/tool-results.test.ts
 server/tool-results.ts
 server/tool-summary.test.ts
 server/tool-summary.ts
+server/wait-host.test.ts
+server/wait-host.ts
+server/wait-probes.test.ts
+server/wait-probes.ts
+server/waiting-on-person.test.ts
+server/waiting-on-person.ts
+server/waits.test.ts
+server/waits.ts

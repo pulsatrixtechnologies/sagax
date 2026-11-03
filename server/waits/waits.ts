@@ -4,10 +4,10 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 
-import { WAIT_HOURS, type WaitKind } from "../shared/waits.ts";
-import { writeFileAtomic } from "./atomic.ts";
-import { noteAtRestWrite, readAtRestTextSync } from "./encryption/content-at-rest.ts";
-import { DATA_DIR } from "./config.ts";
+import { WAIT_HOURS, type WaitKind } from "../../shared/waits.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { noteAtRestWrite, readAtRestTextSync } from "../encryption/content-at-rest.ts";
+import { DATA_DIR } from "../config.ts";
 import {
   expandHome,
   fetchPageText,

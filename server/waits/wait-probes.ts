@@ -6,8 +6,8 @@ import { isIP, type LookupFunction } from "node:net";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { resolveTarget } from "./browser/egress/gate.ts";
-import { addressClass, ownAddresses } from "./browser/egress/policy.ts";
+import { resolveTarget } from "../browser/egress/gate.ts";
+import { addressClass, ownAddresses } from "../browser/egress/policy.ts";
 
 export interface FileStamp {
   size: number;

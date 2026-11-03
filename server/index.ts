@@ -16,7 +16,7 @@ import "./safety/network-guard.ts";
 // The console's server log tail captures from here on (server-log-ring.ts).
 import { serverLog } from "./server-log-capture.ts";
 import { startEventLoopLagMonitor } from "./event-loop-lag.ts";
-import { settledChipLabel } from "./waiting-chip.ts";
+import { settledChipLabel } from "./waits/waiting-chip.ts";
 import { groupOwnerId, ownsGroup, type GroupActor } from "./groups/group-ownership.ts";
 import { groupLeftFrameAllowed } from "./groups/group-leave.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -158,7 +158,7 @@ import {
   type Coordinator,
   type HandoffView
 } from "./coordinator.ts";
-import { queuedBehindPersonText, UnansweredApprovals } from "./waiting-on-person.ts";
+import { queuedBehindPersonText, UnansweredApprovals } from "./waits/waiting-on-person.ts";
 import {
   assertRequestTarget,
   guardedRequestPath,
@@ -1211,7 +1211,7 @@ import {
   subscribeLoopGuard
 } from "./host/loop-guard-wiring.ts";
 import { correctiveRounds, loopGuardSettings } from "./host/loop-guard.ts";
-import { createWaitsBootstrap, cancelWaitFromCard, waitRunChat } from "./wait-host.ts";
+import { createWaitsBootstrap, cancelWaitFromCard, waitRunChat } from "./waits/wait-host.ts";
 import { findWaitPeer, hostWaitRefusal, waitSourceRefusal } from "./routes/waits.ts";
 import { createReadAndDraft } from "./read-and-draft.ts";
 import {

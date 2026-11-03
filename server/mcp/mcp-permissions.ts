@@ -121,7 +121,7 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("model:propose", "own", "propose_model"),
   p("routines:propose", "own", "propose_routine"),
   p("routines:propose.action", "own", "propose_routine_action"),
-  // "tell me when" waits (server/waits.ts): plain checks for the speaker, no AI
+  // "tell me when" waits (server/waits/waits.ts): plain checks for the speaker, no AI
   p("waits:set", "own", "wait_until"),
   p("waits:list", "read", "list_waits"),
   p("waits:cancel", "own", "cancel_wait"),

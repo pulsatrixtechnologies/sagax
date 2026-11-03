@@ -1,9 +1,9 @@
-import type { Notification } from "../shared/notification.ts";
-import type { RoutineRunOn } from "../shared/routines.ts";
-import { buildNotification } from "./notify.ts";
-import type { RoutineRun } from "./routines/routines.ts";
-import { createWaitRoutes, type WaitRouteContext } from "./routes/waits.ts";
-import type { BotRecord, Store } from "./store.ts";
+import type { Notification } from "../../shared/notification.ts";
+import type { RoutineRunOn } from "../../shared/routines.ts";
+import { buildNotification } from "../notify.ts";
+import type { RoutineRun } from "../routines/routines.ts";
+import { createWaitRoutes, type WaitRouteContext } from "../routes/waits.ts";
+import type { BotRecord, Store } from "../store.ts";
 import { WaitManager, type WaitManagerOptions } from "./waits.ts";
 
 /** Follow-up enqueue shape: includes wait fields Sagax's webhook queue may
@@ -134,7 +134,7 @@ export interface WaitsBootstrapDeps extends WaitHostDeps {
 export interface WaitsBootstrap {
   waits: WaitManager;
   host: ReturnType<typeof createWaitHost>;
-  routes: (ctx: WaitRouteContext) => Promise<typeof import("./routes/table.ts").PASS | void>;
+  routes: (ctx: WaitRouteContext) => Promise<typeof import("../routes/table.ts").PASS | void>;
   cancelFromCard: typeof cancelWaitFromCard;
   waitRunChat: typeof waitRunChat;
 }

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Notification } from "../shared/notification.ts";
-import type { Message } from "./store.ts";
+import type { Notification } from "../../shared/notification.ts";
+import type { Message } from "../store.ts";
 import { cancelWaitFromCard, createWaitHost, waitRunChat, type WaitHostDeps } from "./wait-host.ts";
 import type { WaitRecord } from "./waits.ts";
 

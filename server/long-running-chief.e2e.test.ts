@@ -355,7 +355,7 @@ it("tells the Chief what happened to each approval: allowed, denied, or never an
   expect(f.turns(f.mira.id).map((record: any) => [record.planKey, record.approval?.behavior])).toEqual([["MA", "allow"], ["MB", "deny"], ["MC", "deny"]]);
   // Each chip says what happened to its card, once.
   const settled = (await f.rows(job)).filter((name: string) => name.includes("@Mira"));
-  // Sagax's chip wording (server/waiting-chip.ts settledChipLabel)
+  // Sagax's chip wording (server/waits/waiting-chip.ts settledChipLabel)
   expect(settled).toEqual(["@Mira got your approval", "You declined @Mira's request", "@Mira's approval request expired"]);
   // The step nobody answered for is named on the result the Chief reads,
   // ahead of the teammate's own words; a step the person denied is not.

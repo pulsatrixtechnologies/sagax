@@ -23,7 +23,7 @@ export {
   type JobStage,
   type StageAssignment,
   type StageEvent,
-} from "./runtime/stage.ts";
+} from "../runtime/stage.ts";
 
 export function settledChipLabel(
   name: string,

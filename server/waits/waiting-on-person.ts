@@ -3,8 +3,8 @@
 // the request (approved, denied, nobody answered, closed), never "got your
 // approval" for an action nobody approved. The engines' own prompts stay the
 // only gates: nothing here answers, holds or grants anything.
-import type { RuntimeEvent } from "./contracts.ts";
-import { redactSecretsInText } from "./redact.ts";
+import type { RuntimeEvent } from "../contracts.ts";
+import { redactSecretsInText } from "../redact.ts";
 
 type Resolved = Extract<RuntimeEvent, { type: "request.resolved" }>;
 

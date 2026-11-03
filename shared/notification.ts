@@ -36,7 +36,7 @@ export type NotifyKind =
    * own comment; opens the conversation the page came from. */
   | "page-comment"
   /** A wait_until condition fired: the person asked to be told when
-   * something happened, and it did (server/waits.ts). */
+   * something happened, and it did (server/waits/waits.ts). */
   | "wait";
 
 export interface Notification {

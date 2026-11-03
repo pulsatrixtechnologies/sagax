@@ -984,6 +984,8 @@ enum ConnectAccountsService: Hashable {
 /// Connect apps list (Discover and Bots are the main view's own).
 struct ConnectAppsManage: View {
     @Environment(\.themePalette) var themePalette
+    @Environment(\.capabilitiesDesktop) private var desktop
+    @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
     @ObservedObject var model: ConnectAppsModel
     @Binding var tab: ConnectAppsTab
@@ -1044,17 +1046,24 @@ struct ConnectAppsManage: View {
                             if entry.primary.key == tailscaleConnectAppKey { push(.tailscale) }
                             else { push(.detail(entry.primary.key)) }
                         } label: {
+                            // InstalledView.tsx InstalledRow on the desktop: a 36
+                            // tile, the name 13 medium over what it brings 11.5
                             HStack(spacing: 12) {
-                                ConnectAppIcon(item: icon(entry))
+                                ConnectAppIcon(item: icon(entry), size: desktop ? 36 : 34)
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(verbatim: entry.name).foregroundStyle(Theme.textPrimary).lineLimit(1)
-                                    Text(verbatim: brings(entry.brings)).font(.footnote).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                                    Text(verbatim: entry.name)
+                                        .font(desktop ? theme.font(13, .medium) : .body)
+                                        .foregroundStyle(desktop ? theme.ink : Theme.textPrimary).lineLimit(1)
+                                    Text(verbatim: brings(entry.brings))
+                                        .font(desktop ? theme.font(11.5) : .footnote)
+                                        .foregroundStyle(desktop ? theme.inkSecondary : Theme.textSecondary).lineLimit(1)
                                 }
                                 Spacer(minLength: 8)
                                 Text(verbatim: ConnectAppsWords.status(entry.status))
-                                    .font(.footnote)
-                                    .foregroundStyle(entry.status == .connected ? Theme.success : Theme.textSecondary)
+                                    .font(desktop ? theme.font(12) : .footnote)
+                                    .foregroundStyle(entry.status == .connected ? (desktop ? theme.accent : Theme.success) : (desktop ? theme.inkSecondary : Theme.textSecondary))
                             }
+                            .padding(.vertical, desktop ? 2 : 0)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
@@ -1193,15 +1202,35 @@ struct ConnectAppsManage: View {
         }
         Section {
             ForEach(model.marketplaces) { market in
-                HStack {
+                HStack(spacing: 10) {
+                    if desktop {
+                        Image(systemName: "shippingbox").font(.system(size: 14)).foregroundStyle(theme.ink).frame(width: 20)
+                    }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(verbatim: market.name)
+                            .font(desktop ? theme.font(13, .semibold) : .body)
+                            .foregroundStyle(desktop ? theme.ink : Theme.textPrimary)
                         Text(String(localized: "\(market.plugins.count) plugins, \(market.plugins.filter(\.installed).count) installed"))
-                            .font(.footnote)
-                            .foregroundStyle(Theme.textSecondary)
+                            .font(desktop ? theme.font(11.5) : .footnote)
+                            .foregroundStyle(desktop ? theme.inkSecondary : Theme.textSecondary)
                     }
                     Spacer()
                     if model.busy == "market:\(market.name)" { ProgressView().controlSize(.small) }
+                    // SourcesView.tsx: the row's own pills where the phone swipes
+                    if desktop, session.canAdminister {
+                        Button { Task { await model.refreshMarketplace(market.name, session: session) } } label: {
+                            Text(String(localized: "Refresh")).font(theme.font(11.5, .medium)).foregroundStyle(theme.ink)
+                                .padding(.horizontal, 10).frame(height: 26).background(theme.control, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        if !market.plugins.contains(where: \.installed) {
+                            Button { removingMarket = market.name } label: {
+                                Text(String(localized: "Remove")).font(theme.font(11.5, .medium)).foregroundStyle(theme.danger)
+                                    .padding(.horizontal, 10).frame(height: 26).background(theme.control, in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
                 .swipeActions {
                     if session.canAdminister {

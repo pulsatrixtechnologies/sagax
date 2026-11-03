@@ -80,7 +80,7 @@ final class DesktopShellModel: ObservableObject {
         case releaseNotes, whatsNew
 
         /// Drawn in the shell as the desktop's modals, not as sheets.
-        var inShell: Bool { [.settings, .search, .plugins, .shortcuts, .releaseNotes, .whatsNew].contains(self) }
+        var inShell: Bool { [.settings, .search, .plugins, .shortcuts, .about, .releaseNotes, .whatsNew].contains(self) }
         var id: String { rawValue }
     }
 
@@ -153,6 +153,15 @@ final class DesktopShellModel: ObservableObject {
     @Published var sharingTeam: String?
     /// A bot row's Share: the link that opens this bot in Sagax.
     @Published var sharingBotLink: URL?
+    /// The sidebar's multi-select of bots (lot 6): the row menu's Select, the
+    /// rows' checks and the bar's grouped actions.
+    @Published var selection = DesktopBotSelection()
+    /// The bar's Edit (Edit N bots) and Archive confirmation.
+    @Published var bulkEditing = false
+    @Published var archivingSelection = false
+    /// The bot's computer window drawn in the shell (lot 6): the fallback
+    /// where iPadOS has no second scene to give it, and the parity captures.
+    @Published var computerWindow: String?
     /// The open "To:" picker's ⌘1 to ⌘9 (DesktopKeyCommands routes them).
     var composeActivate: ((Int) -> Void)?
     #if DEBUG
@@ -334,6 +343,7 @@ struct DesktopShell: View {
         .parityLauncher()
         .modifier(DesktopShellPresenter(model: model))
         .modifier(DesktopSidebarPrompts(model: model))
+        .modifier(DesktopSelectionPrompts(model: model))
         .modifier(DesktopShellRouting(model: model))
         .onReceive(NotificationCenter.default.publisher(for: .approvalEditRule)) { _ in
             model.showPersona(.access)
@@ -408,6 +418,12 @@ struct DesktopShell: View {
                 ))
                 .transition(.opacity)
             }
+            // lot 6: the bot's computer window where no second scene exists
+            if let botId = model.computerWindow {
+                AnyView(DesktopComputerWindowView(botId: botId, floating: true) { model.computerWindow = nil })
+                    .transition(.opacity)
+                    .zIndex(5)
+            }
             // I5: Settings and Plugins are the desktop's modals, over everything
             if model.modal == .settings {
                 AnyView(DesktopSettingsModal(close: { model.modal = nil }))
@@ -422,6 +438,9 @@ struct DesktopShell: View {
                     .transition(.opacity)
             } else if model.modal == .shortcuts {
                 AnyView(DesktopShortcutsModal(close: { model.modal = nil }))
+                    .transition(.opacity)
+            } else if model.modal == .about {
+                AnyView(DesktopAboutModal(close: { model.modal = nil }, openReleaseNotes: { model.modal = .releaseNotes }))
                     .transition(.opacity)
             } else if model.modal == .releaseNotes || model.modal == .whatsNew {
                 AnyView(DesktopReleaseNotesModal(mode: model.modal == .whatsNew ? .current : .browse, close: { model.modal = nil }))
@@ -684,6 +703,8 @@ private struct DesktopShellRouting: ViewModifier {
                 model.applyParityModals(screen)
                 model.page = screen.parityPage
                 if screen == .keyboardShortcuts { model.modal = .shortcuts }
+                if screen == .aboutDialog { model.modal = .about }
+                if screen == .releaseNotesDialog { model.modal = .releaseNotes }
                 await applyParitySidebar(screen)
                 return
             }
@@ -716,6 +737,13 @@ private struct DesktopShellRouting: ViewModifier {
             model.menu = DesktopMenuRequest(kind: .profile, anchor: CGPoint(x: 8, y: height - 64), opensUp: true)
         case .sidebarNewMenu:
             model.menu = DesktopMenuRequest(kind: .new, anchor: .zero)
+        case .sidebarSelect:
+            // the reference chooses Aurora from its menu, then clicks Helix
+            guard let aurora = bot("Aurora"), let helix = bot("Helix") else { return }
+            model.selection.start(with: aurora.id)
+            model.selection.toggle(helix.id)
+        case .computerWindow:
+            model.computerWindow = model.selected?.id
         case .newGroup:
             // the reference's pointer stays on the row under the click (Orion)
             model.parityComposePreset = (group: true, cursor: 1)
@@ -781,9 +809,7 @@ private struct DesktopShellPresenter: ViewModifier {
             EmptyView()
         case .templates:
             DesktopTemplatesSheet { model.modal = nil }
-        case .about:
-            NavigationStack { AboutPage() }
-        case .shortcuts, .releaseNotes, .whatsNew:
+        case .about, .shortcuts, .releaseNotes, .whatsNew:
             EmptyView()
         case .achievements:
             NavigationStack {

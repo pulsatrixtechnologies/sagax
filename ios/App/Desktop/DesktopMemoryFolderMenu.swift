@@ -44,15 +44,23 @@ struct DesktopMemoryLinkHint: View {
     }
 }
 
-/// A linked folder's mark: the bot's colour.
+/// A linked folder's mark (MemoryManagerPanel.tsx LinkMark): the bot's
+/// picture at 14 when it has one (not its mascot), else its colour dot.
 struct DesktopMemoryLinkMark: View {
+    @EnvironmentObject private var session: Session
     let bot: LinkBot
 
     var body: some View {
-        Circle()
-            .fill(MausPalette.color(bot.color ?? "green"))
-            .frame(width: 10, height: 10)
-            .padding(.horizontal, 2)
+        Group {
+            if bot.avatarUrl != nil, bot.avatarCrop != "mascot", let full = session.state.bot(bot.id) {
+                BotMascotView(bot: full, size: 14).frame(width: 14, height: 14).clipShape(Circle())
+            } else {
+                Circle()
+                    .fill(MausPalette.color(bot.color ?? "green"))
+                    .frame(width: 10, height: 10)
+                    .padding(.horizontal, 2)
+            }
+        }
             .accessibilityElement()
             .accessibilityLabel(Text(verbatim: DesktopMemoryText.l("Linked to %@", bot.name)))
             .accessibilityIdentifier("desktop-memory-link-mark")

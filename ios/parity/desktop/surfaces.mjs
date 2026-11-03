@@ -267,6 +267,18 @@ add({ id: "plugins-mcp", phase: "main", note: "Connected apps / plugins panel: M
   open: async (ctx) => { await ctx.dispatch({ type: "togglePlugins", open: true, surface: "mcp" }); await ctx.sleep(1200); } });
 add({ id: "keyboard-shortcuts", phase: "main", note: "keyboard shortcuts sheet (? or Cmd-/)",
   open: async (ctx) => { await ctx.dispatch({ type: "toggleShortcuts", open: true }); await ctx.sleep(500); } });
+add({ id: "about-dialog", phase: "main", note: "About Sagax (account menu > Help > About): the small centred window",
+  open: async (ctx) => {
+    await ctx.click('[aria-label="Parity Person"]'); await ctx.sleep(300);
+    await ctx.click({ text: /^Help$/ }); await ctx.sleep(300);
+    await ctx.click({ text: /^About$/ }); await ctx.sleep(600);
+  } });
+add({ id: "release-notes-dialog", phase: "main", note: "Release notes with the version picker (account menu > Help > Release notes)",
+  open: async (ctx) => {
+    await ctx.click('[aria-label="Parity Person"]'); await ctx.sleep(300);
+    await ctx.click({ text: /^Help$/ }); await ctx.sleep(300);
+    await ctx.click({ text: /^Release notes$/ }); await ctx.sleep(700);
+  } });
 add({ id: "notice-thread-gone", phase: "main", note: "in-app notice (toast)",
   open: async (ctx) => { await ctx.dispatch({ type: "notice", notice: { kind: "thread-gone", botName: "Helix" } }); await ctx.sleep(500); } });
 
@@ -402,6 +414,24 @@ for (const section of ["account", "voice", "updates", "about", "providers", "sec
       await ctx.sleep(700);
     } });
 }
+
+add({ id: "sidebar-select", phase: "main", note: "sidebar multi-select: Aurora and Helix chosen, the grouped action bar",
+  open: async (ctx) => {
+    await ctx.hover('[aria-label="Actions for Aurora"]');
+    await ctx.click('[aria-label="Actions for Aurora"]');
+    await ctx.click({ text: "Select", tag: "[role=menuitem]" });
+    await ctx.sleep(300);
+    await ctx.click({ text: /^Helix/, tag: "[role=button],button,a,li" });
+    await ctx.moveAway();
+    await ctx.sleep(400);
+  } });
+add({ id: "computer-window", phase: "main", noShell: true, note: "the bot's computer in its own large window (SandboxDesktopModal, src/gallery/computer-screens.html?modal=sandbox)",
+  open: async (ctx) => {
+    const origin = await ctx.eval("location.origin");
+    await ctx.page.send("Page.navigate", { url: `${origin}/src/gallery/computer-screens.html?modal=sandbox&lang=en` });
+    await ctx.sleep(2500);
+    await ctx.waitFor(`Boolean(document.querySelector("[data-sandbox-takeover]"))`, { timeoutMs: 15_000 });
+  } });
 
 export const NOT_CAPTURED = [
   { id: "floating-mascot", why: "desktop-only: a bot floated onto the macOS desktop is its own frameless always-on-top Electron window (electron/floating-bot-window.mjs); nothing is drawn in the main window" },

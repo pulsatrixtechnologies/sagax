@@ -327,7 +327,7 @@ struct DesktopSidebarMenus {
             model.threadActions.copyConversationId(bot)
         })
         // BotContextMenu.tsx (2026-11-03 reference): New topic (threads
-        // off), Pin, Move to ›, then Rename the bot, Edit bot, Share, Make
+        // off), Pin, Move to ›, Select, then Rename the bot, Edit bot, Share, Make
         // primary bot, then Hide from sidebar, Archive, Delete.
         if !DesktopSidebarState.threadsOn(model: model, prefs: prefs) {
             out.append(DesktopMenuEntry(id: "new-topic", title: String(localized: "New topic"), icon: .plus, kind: .action {
@@ -347,6 +347,10 @@ struct DesktopSidebarMenus {
             return out
         }
         if let move = moveBot(bot) { out.append(move) }
+        // sidebar.select.start: the multi-select starts with this bot
+        out.append(DesktopMenuEntry(id: "select", title: String(localized: "Select"), icon: .listChecks, kind: .action {
+            model.selection.start(with: bot.id)
+        }))
         out.append(.divider("d1"))
         out.append(DesktopMenuEntry(id: "rename", title: String(localized: "Rename the bot"), icon: .pencil, kind: .action {
             model.renameDraft = bot.name

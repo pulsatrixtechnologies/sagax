@@ -168,6 +168,11 @@ targets:
         # read when Xcode generates the Info.plist itself, and this target
         # supplies one, so they are silently ignored.
         UILaunchScreen: {}
+        # The bot's computer opens in its own window on iPad (a second
+        # SwiftUI scene, `WindowGroup(id: "computer-window")`): without this
+        # key iPadOS never creates another scene and `openWindow` does nothing.
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
         # Geist and Geist Mono (OFL-1.1), the interface and code faces. Listed
         # so UIKit registers them at launch; the files sit flat in the bundle.
         UIAppFonts:

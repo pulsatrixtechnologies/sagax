@@ -25,11 +25,19 @@ enum DesktopIcon: String, CaseIterable {
     case bot
     // Automations header (List, Filters), the grouped list's folders, the bot panel's Suggestions
     case list, slidersHorizontal, folder, sparkles, refresh
+    // Team map (Monitor, Minus) and About's link rows (ExternalLink)
+    case monitor, minus, externalLink, messageCircle
+    // lot 6: the multi-select bar (CheckCheck, ListChecks) and the computer window (Minimize2, Hand)
+    case checkCheck, listChecks, minimize, hand
 
     /// Path data in the 24 pt viewBox.
     var paths: [String] {
         switch self {
         case .plus: ["M5 12h14", "M12 5v14"]
+        case .monitor: [Self.rect(2, 3, 20, 14, 2), "M8 21h8", "M12 17v4"]
+        case .minus: ["M5 12h14"]
+        case .messageCircle: ["M7.9 20A9 9 0 1 0 4 16.1L2 22Z"]
+        case .externalLink: ["M15 3h6v6", "M10 14 21 3", "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"]
         case .panelLeftClose: [Self.rect(3, 3, 18, 18, 2), "M9 3v18", "m16 15-3-3 3-3"]
         case .panelLeftOpen: [Self.rect(3, 3, 18, 18, 2), "M9 3v18", "m14 9 3 3-3 3"]
         case .search: ["m21 21-4.34-4.34", Self.circle(11, 11, 8)]
@@ -140,6 +148,12 @@ enum DesktopIcon: String, CaseIterable {
         case .sparkles:
             ["M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z",
              "M20 3v4", "M22 5h-4", "M4 17v2", "M5 18H3"]
+        case .checkCheck: ["M18 6 7 17l-5-5", "m22 10-7.5 7.5L13 16"]
+        case .listChecks: ["m3 17 2 2 4-4", "m3 7 2 2 4-4", "M13 6h8", "M13 12h8", "M13 18h8"]
+        case .minimize: ["m14 10 7-7", "M20 10h-6V4", "m3 21 7-7", "M4 14h6v6"]
+        case .hand:
+            ["M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2", "M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2", "M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8",
+             "M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"]
         case .eye:
             ["M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0",
              Self.circle(12, 12, 3)]
@@ -154,6 +168,10 @@ enum DesktopIcon: String, CaseIterable {
         case .panelLeftClose: "sidebar.left"
         case .panelLeftOpen: "sidebar.left"
         case .search: "magnifyingglass"
+        case .monitor: "display"
+        case .minus: "minus"
+        case .messageCircle: "bubble.left"
+        case .externalLink: "arrow.up.right.square"
         case .chevronRight: "chevron.right"
         case .network: "point.3.connected.trianglepath.dotted"
         case .calendarDays: "calendar"
@@ -205,6 +223,10 @@ enum DesktopIcon: String, CaseIterable {
         case .folder: "folder"
         case .sparkles: "sparkles"
         case .refresh: "arrow.clockwise"
+        case .checkCheck: "checkmark.circle"
+        case .listChecks: "checklist"
+        case .minimize: "arrow.down.right.and.arrow.up.left"
+        case .hand: "hand.raised"
         }
     }
 

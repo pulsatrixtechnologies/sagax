@@ -1,5 +1,5 @@
 // Presence of the people of an organization server (shared/presence.ts,
-// server/presence.ts):
+// server/people/presence.ts):
 //
 //   GET  /api/org/presence        every active person of the directory: their
 //                                 state and when they were last seen. A
@@ -16,7 +16,7 @@
 import { z } from "zod";
 
 import { SYSTEM_IDLE_STATES, publicPresence, type PresenceView, type SystemIdleState } from "../../shared/presence.ts";
-import type { PresenceHeartbeat } from "../presence.ts";
+import type { PresenceHeartbeat } from "../people/presence.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

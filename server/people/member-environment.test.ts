@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { autoVerdict } from "./approvals/auto-approve.ts";
-import { gateReadOnlyTools } from "./drivers/acp/grok-approval-gate.ts";
-import { memberBotAdminApproval } from "./engines/engine-access.ts";
-import { mcpServerNameError } from "./mcp/mcp-registry.ts";
+import { autoVerdict } from "../approvals/auto-approve.ts";
+import { gateReadOnlyTools } from "../drivers/acp/grok-approval-gate.ts";
+import { memberBotAdminApproval } from "../engines/engine-access.ts";
+import { mcpServerNameError } from "../mcp/mcp-registry.ts";
 import {
   memberEnvironmentAutonomyAllowed,
   ownEnvironmentAutonomy,
@@ -16,10 +16,10 @@ import {
   ownDestinationCall,
   normalizedDestinationPath,
 } from "./member-environment.ts";
-import { SPAWNED_PROXIES } from "./proxy-paths.ts";
-import { USER_SANDBOX_MCP_NAME } from "./sandbox/user-sandbox-routing.ts";
-import { DESKTOP_BRIDGE_MCP_NAME } from "../shared/bot-workplace.ts";
-import { callStepUpClasses } from "./auth/step-up-gate.ts";
+import { SPAWNED_PROXIES } from "../proxy-paths.ts";
+import { USER_SANDBOX_MCP_NAME } from "../sandbox/user-sandbox-routing.ts";
+import { DESKTOP_BRIDGE_MCP_NAME } from "../../shared/bot-workplace.ts";
+import { callStepUpClasses } from "../auth/step-up-gate.ts";
 
 const OWNER = "pr_owner";
 const MOUNTED = new Set([USER_SANDBOX_MCP_NAME, DESKTOP_BRIDGE_MCP_NAME]);

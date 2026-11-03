@@ -42,7 +42,7 @@ L'app de bureau garde toujours son harness local en solo. Un serveur d'organisat
 2. Connexion OIDC (section 2). L'environnement est enregistré.
 3. L'app propose « Copier des bots vers l'organisation ». On choisit des bots; pour chacun, avec ou sans fils et mémoire.
 4. Le transfert réutilise la sauvegarde d'équipe (`server/backup/team-backup.ts`, `shared/team-backup.ts`: bots, tâches avec leurs messages, routines, mémoire), exportée par le harness local et importée par une route authentifiée du serveur d'organisation (`POST /api/org/import`, section 8). Les canaux (`GroupRecord`) suivent seulement si leurs seuls humains sont la personne qui migre.
-5. Réécriture des personnes: le principal local (`local: true`) reçoit `linkedSubjects: [{ iss, sub, serverOrigin }]`. À l'import, chaque référence au principal local (`ownerUserId`, `humanIds`, `directGrants`, `runAs`) devient le principal d'organisation de la même personne. Toute autre référence (une autre personne connue de ce poste) est retirée et listée dans le rapport d'import, jamais convertie en droit. Même mécanique que `server/identity-migration.ts`, avec une table de réécriture explicite au lieu d'une résolution par courriel.
+5. Réécriture des personnes: le principal local (`local: true`) reçoit `linkedSubjects: [{ iss, sub, serverOrigin }]`. À l'import, chaque référence au principal local (`ownerUserId`, `humanIds`, `directGrants`, `runAs`) devient le principal d'organisation de la même personne. Toute autre référence (une autre personne connue de ce poste) est retirée et listée dans le rapport d'import, jamais convertie en droit. Même mécanique que `server/people/identity-migration.ts`, avec une table de réécriture explicite au lieu d'une résolution par courriel.
 6. C'est une **copie**. Rien n'est effacé localement. Après vérification, l'app offre « Retirer ces bots de cet ordinateur » bot par bot.
 7. Les clés des fournisseurs ne voyagent pas (la sauvegarde les caviarde déjà, `redactSecretsInText`); le propriétaire les saisit dans le coffre du serveur (décision 7).
 
@@ -212,7 +212,7 @@ Un module `server/auth/authz.ts` absorbe `channel-visibility.ts` et `direct-gran
 - Un principal `disabledAt` n'a aucun droit; ses droits restent listés pour l'historique.
 - Utilisé par le filtre SSE, la liste des canaux et des bots, la recherche (`searchHitVisible`) et chaque route qui modifie. Les fonctions pures de `channel-visibility.ts` deviennent des cas de `can()`, avec leurs tests.
 
-La branche `fix/member-identity` (`server/viewer-identity.ts`, `memberBotFieldViolation` dans `request-auth.ts`) se garde telle quelle: le nom et le courriel viennent des claims au lieu de l'adresse de connexion.
+La branche `fix/member-identity` (`server/people/viewer-identity.ts`, `memberBotFieldViolation` dans `request-auth.ts`) se garde telle quelle: le nom et le courriel viennent des claims au lieu de l'adresse de connexion.
 
 ### Les sections de la barre latérale sont des canaux (décision de the owner, 2026-09-30)
 
@@ -455,7 +455,7 @@ Rappels de ce dépôt: versions les plus récentes vérifiées sur crates.io au 
 | `mcp-oauth.ts` | gardé pour les MCP tiers; coffre indexé par `(principalId, name)` en organisation; ses utilitaires servent à `oidc-rp.ts` |
 | `email-otp.ts`, `mailer.ts`, `mail-config.ts`, `account-signin.ts`, `src/pair/JoinPage.tsx`, `SignInAccessCard.tsx`, `compose.mail-test.yaml` | retirés à la dernière tranche, après que plus rien ne les appelle; d'ici là refusés en organisation |
 | `electron/control-plane-client.mjs` | hors sujet (le tunnel `server/tunnel.ts` l'utilise encore) |
-| `server/viewer-identity.ts` (branche `fix/member-identity`) | gardé, nourri par les claims |
+| `server/people/viewer-identity.ts` (branche `fix/member-identity`) | gardé, nourri par les claims |
 
 ## 9. Revue de sécurité
 

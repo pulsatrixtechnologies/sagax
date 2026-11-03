@@ -19,7 +19,7 @@
 //
 // PARITY_OWNER=1 is the personal computer whose desktop app is signed in to
 // an organization: the same dataset, plus the owner identity the desktop
-// hands its server (owner-identity.json, server/owner-identity.ts) with a
+// hands its server (owner-identity.json, server/people/owner-identity.ts) with a
 // solid-colour avatar, and the phone reaching it the way an iPhone reaches
 // a personal computer: through the companion sidecar (companion/src/proxy.ts)
 // with a device token. session.json then names the sidecar, no environment,
@@ -790,7 +790,7 @@ async function main() {
   seedCommandRules(dataDir, seeded);
   const ownerMode = process.env.PARITY_OWNER === "1";
   if (ownerMode) {
-    // What the signed-in desktop leaves its server (server/owner-identity.ts).
+    // What the signed-in desktop leaves its server (server/people/owner-identity.ts).
     writeFileSync(join(dataDir, "owner-identity.json"), JSON.stringify({
       origin: "https://sagax.example.test", principalId: "pr_parity_org_person", name: "Parity Person", email: "parity.person@example.test",
       avatar: { version: "parityowner01", data: png(96, 96, ORG_AVATAR_RGB, { band: false }).toString("base64") },

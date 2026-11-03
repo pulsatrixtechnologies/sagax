@@ -1,4 +1,4 @@
-// Folders of a person conversation's threads (server/people-dms.ts), the
+// Folders of a person conversation's threads (server/people/people-dms.ts), the
 // same requests a bot's folders take (server/threads/thread-folders.ts):
 //
 //   POST   /api/groups/:id/projects            { name, emoji? }

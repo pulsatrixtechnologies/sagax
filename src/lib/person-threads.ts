@@ -1,4 +1,4 @@
-// A conversation with a person has threads like a bot (server/people-dms.ts).
+// A conversation with a person has threads like a bot (server/people/people-dms.ts).
 // What the picker and the sidebar read from it, in one place.
 import { t } from "@/lib/i18n";
 import type { Group, GroupTask } from "@/state/store";

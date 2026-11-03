@@ -9,7 +9,7 @@
 import { realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import { memberOwnScopeTool, ownAct, builtinAgentToolName } from "../member-tool-scope.ts";
+import { memberOwnScopeTool, ownAct, builtinAgentToolName } from "../people/member-tool-scope.ts";
 import { READABLE_HIDDEN_SEGMENTS } from "../../shared/readable-hidden.ts";
 import { dataToolName, foreignToolSpelling } from "../sagax-internal-tools.ts";
 

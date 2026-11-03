@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { expandSkillCommandTurnText } from "./skills.ts";
-import { PersonCapabilities } from "../person-connections.ts";
+import { PersonCapabilities } from "../people/person-connections.ts";
 import { PersonalSkills, createPersonalSkillRoutes } from "./personal-skills.ts";
 import { dispatchRoutes } from "../routes/table.ts";
 import { json, readBody } from "../harness/http.ts";

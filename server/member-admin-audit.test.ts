@@ -10,8 +10,8 @@ import { ADMIN_ONLY_PERMISSIONS, can, isPermissionKey, normalizePermissions } fr
 import { autoVerdict } from "./approvals/auto-approve.ts";
 import { memberBotAdminApproval, memberOwnedBot } from "./engines/engine-access.ts";
 import { decide } from "./mcp/mcp-permissions.ts";
-import { HOST_LEVEL_AGENT_TOOLS } from "./member-tool-scope.ts";
-import { ownComputerChoiceCall, ownDestinationCall } from "./member-environment.ts";
+import { HOST_LEVEL_AGENT_TOOLS } from "./people/member-tool-scope.ts";
+import { ownComputerChoiceCall, ownDestinationCall } from "./people/member-environment.ts";
 import { terminalResourceAllowed } from "./terminal-resources/registry.ts";
 import type { TerminalAccess } from "./terminal-resources/types.ts";
 import { USER_SANDBOX_MCP_NAME } from "./sandbox/user-sandbox-routing.ts";

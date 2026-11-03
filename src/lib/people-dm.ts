@@ -1,4 +1,4 @@
-// A direct conversation between two people (server/people-dms.ts) as the app
+// A direct conversation between two people (server/people/people-dms.ts) as the app
 // shows it: under the other person's name and avatar, from the directory.
 import type { OrgDirectoryPerson } from "@/lib/perspicax-org";
 import { personAvatarSrc } from "@/lib/profile-management";

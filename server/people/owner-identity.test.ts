@@ -1,14 +1,14 @@
 // A personal computer's owner as their organization knows them: the private
 // message the signed-in desktop sends, what the server keeps, and the avatar
-// route it answers (server/owner-identity.ts).
+// route it answers (server/people/owner-identity.ts).
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { createOwnerAvatarRoute, OWNER_IDENTITY_MESSAGE, OwnerIdentityStore, parseOwnerIdentityMessage } from "./owner-identity.ts";
-import { PASS, type RouteContext } from "./routes/table.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
+import { PASS, type RouteContext } from "../routes/table.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
 
 const PNG = Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), Buffer.from("owner png")]);
 const JPEG = Buffer.concat([Buffer.from("ffd8ffe0", "hex"), Buffer.from("owner jpeg")]);

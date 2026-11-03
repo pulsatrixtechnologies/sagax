@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { basename } from "node:path";
 
 import type { McpServerSpec } from "../contracts.ts";
-import type { PersonalMcpServer } from "../person-connections.ts";
+import type { PersonalMcpServer } from "../people/person-connections.ts";
 import { listedMounts, resolveBotCapabilities, type CapabilityInputs } from "./capabilities.ts";
 import { engineServerMcp, perspicaxServerName, personalMcpPrecheck, serverMcpAsPerson, turnPluginPromptDirs } from "../turns/turn-mounts.ts";
 import { selectPluginScopes } from "./capability-plugin-mounts.ts";

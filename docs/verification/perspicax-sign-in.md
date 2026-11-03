@@ -654,7 +654,7 @@ their own addresses).
 ### Automated
 
 ```sh
-pnpm -s vitest run shared/org-import.test.ts server/identity-migration.test.ts \
+pnpm -s vitest run shared/org-import.test.ts server/people/identity-migration.test.ts \
   server/org/org-export.test.ts server/org/org-import-routes.test.ts server/interim-attach-routes.test.ts \
   server/auth/principals.test.ts server/org/org-routes.test.ts server/perspicax/perspicax-org-routes.test.ts \
   server/org/org-import.e2e.test.ts server/org/org-interim-attach.e2e.test.ts \

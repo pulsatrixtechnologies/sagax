@@ -18,9 +18,9 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { z } from "zod";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { avatarContentType, AVATAR_MAX_BYTES } from "./perspicax/perspicax-link.ts";
-import { PASS, type RouteHandler } from "./routes/table.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { avatarContentType, AVATAR_MAX_BYTES } from "../perspicax/perspicax-link.ts";
+import { PASS, type RouteHandler } from "../routes/table.ts";
 
 export const OWNER_IDENTITY_MESSAGE = "openmausbot:owner-identity";
 const VERSION = /^[0-9A-Za-z_-]{1,64}$/;

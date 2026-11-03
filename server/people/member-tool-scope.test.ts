@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { availableTools, catalogProfileFromEnv, type CatalogProfile } from "./drivers/agents-catalog.ts";
+import { availableTools, catalogProfileFromEnv, type CatalogProfile } from "../drivers/agents-catalog.ts";
 import { builtinAgentToolName, HOST_LEVEL_AGENT_TOOLS, MEMBER_OWN_SCOPE_AGENT_TOOLS, memberOwnScopeTool, ownBotReadAct } from "./member-tool-scope.ts";
-import { describeApproval } from "../shared/approval-describe.ts";
+import { describeApproval } from "../../shared/approval-describe.ts";
 
 const everything: CatalogProfile = {
   externalRuntime: false, coordinating: false, ownThreadCreation: true, skillAuthoring: true, sharedComputers: true,

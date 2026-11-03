@@ -2,7 +2,7 @@
 // Only reviewed SKILL.md files leave it for that person's environment.
 import { join } from "node:path";
 import { composeSkillMd, parseSkillMd, scanSkillText } from "../../shared/skill-md.ts";
-import { principalDir, type PersonCapabilities } from "../person-connections.ts";
+import { principalDir, type PersonCapabilities } from "../people/person-connections.ts";
 import { deleteLibrarySkill, installLibrarySkill, listLibrarySkills, readLibrarySkillFile, setLibrarySkillReviewState, updateLibrarySkill } from "./skill-library.ts";
 import {
   acceptLibrarySkillReview,

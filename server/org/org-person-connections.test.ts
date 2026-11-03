@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createOrgPersonConnectionRoutes, orgConnectionListing, type OrgPersonConnectionsDeps, type RemovedConnection } from "./org-person-connections.ts";
-import type { PersonalMcpServer } from "../person-connections.ts";
+import type { PersonalMcpServer } from "../people/person-connections.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteContext } from "../routes/table.ts";
 import type { SessionRecord } from "../auth/sessions.ts";

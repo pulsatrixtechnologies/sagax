@@ -38,7 +38,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
 import { guardedFetch } from "../public-fetch.ts";
-import { personalMcpHostRefusal } from "../person-connections.ts";
+import { personalMcpHostRefusal } from "../people/person-connections.ts";
 import { readPluginMcpServers } from "./plugin-mcp.ts";
 import {
   BotPluginError,

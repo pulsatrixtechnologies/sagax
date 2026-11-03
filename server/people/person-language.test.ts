@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { cwActionLanguage } from "./cw-widget-actions.ts";
+import { cwActionLanguage } from "../cw-widget-actions.ts";
 import { personLanguage, personLanguageOf } from "./person-language.ts";
-import { serverApprovalWords } from "./approvals/approval-words.ts";
-import { emailSendSummary } from "../shared/email-draft-send.ts";
+import { serverApprovalWords } from "../approvals/approval-words.ts";
+import { emailSendSummary } from "../../shared/email-draft-send.ts";
 
 describe("the person's language, not the server's", () => {
   it("prefers the person's choice over the server default", () => {
@@ -41,7 +41,7 @@ describe("personLanguageOf (push and rule text)", () => {
 
 describe("a routine run's thread title date", () => {
   it("follows the person's language", async () => {
-    const { runTitleDate } = await import("./routines/routines.ts");
+    const { runTitleDate } = await import("../routines/routines.ts");
     const at = Date.UTC(2026, 9, 26, 15, 30);
     expect(runTitleDate(at, "en")).toMatch(/Oct/);
     expect(runTitleDate(at, "fr")).toMatch(/oct\./);

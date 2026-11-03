@@ -1,6 +1,6 @@
 // A person's own Settings > Experimental choices and browser profiles on an
 // organization server (#1098, 2026-10-27): set by the person, with no right
-// to edit the installation. Server: server/person-settings.ts and
+// to edit the installation. Server: server/people/person-settings.ts and
 // GET/PATCH /api/me/experimental (server/routes/person-settings.ts). The
 // app reads them in its config (`features` and `browserProfiles`, the
 // person's own marked `personal`), the same way it reads the installation's.

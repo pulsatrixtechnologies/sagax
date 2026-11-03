@@ -12,10 +12,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createConnectedDeviceTracker } from "../companion/src/connected-devices.ts";
-import { createProxyHandler } from "../companion/src/proxy.ts";
-import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
-import { freePortBlock } from "./testing/ports.ts";
+import { createConnectedDeviceTracker } from "../../companion/src/connected-devices.ts";
+import { createProxyHandler } from "../../companion/src/proxy.ts";
+import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
+import { freePortBlock } from "../testing/ports.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const posixOnly = describe.skipIf(process.platform === "win32");
@@ -51,8 +51,8 @@ posixOnly("a personal computer signed in to an organization", () => {
       origin: "https://sagax.example.test", principalId: "pr_org_person", name: "Alex Martin", email: "owner@example.test",
       avatar: { version: VERSION, data: PNG.toString("base64") },
     }), { mode: 0o600 });
-    child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
-      cwd: join(SERVER_DIR, ".."),
+    child = spawn(process.execPath, [join(SERVER_DIR, "..", "index.ts")], {
+      cwd: join(SERVER_DIR, "..", ".."),
       env: {
         ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
         HOME: home, USERPROFILE: home, SAGAX_LOCAL_VM_TEST_NAMESPACE: process.env.SAGAX_LOCAL_VM_TEST_NAMESPACE ?? "",

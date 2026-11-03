@@ -82,7 +82,7 @@ import {
 } from "../../shared/payments-settings.ts";
 import { writeFileAtomic } from "../atomic.ts";
 import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
-import { principalDir } from "../person-connections.ts";
+import { principalDir } from "../people/person-connections.ts";
 import { parseTotpSeed, totp } from "../auth/totp.ts";
 import type { IssuedCard, WalletIssuer } from "../wallet-issuer.ts";
 

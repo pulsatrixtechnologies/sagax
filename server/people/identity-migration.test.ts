@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { applyIdentityMigration, migrateIdentityRefs, principalIdFor, rewritePeopleForAttach, rewritePeopleForImport, type AttachRecords } from "./identity-migration.ts";
-import { PrincipalRegistry } from "./auth/principals.ts";
+import { PrincipalRegistry } from "../auth/principals.ts";
 
 const fresh = () => new PrincipalRegistry({ path: join(mkdtempSync(join(tmpdir(), "mig-")), "principals.json") });
 

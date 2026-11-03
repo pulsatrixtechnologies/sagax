@@ -19,9 +19,9 @@ import {
   MAX_PERSONAL_BROWSER_PROFILES,
   PERSONAL_BROWSER_PROFILE_PREFIX,
   type PersonalFeature,
-} from "../shared/person-settings.ts";
-import { cleanDisabledModels } from "../shared/offered-models.ts";
-import { writeFileAtomic } from "./atomic.ts";
+} from "../../shared/person-settings.ts";
+import { cleanDisabledModels } from "../../shared/offered-models.ts";
+import { writeFileAtomic } from "../atomic.ts";
 
 export const PERSON_SETTINGS_FILE = "person-settings.json";
 const PRINCIPAL = /^[a-z0-9][a-z0-9_-]{0,80}$/;

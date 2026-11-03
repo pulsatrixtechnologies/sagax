@@ -472,7 +472,7 @@ const appConfigSchema = z.object({
     allowFullAccess: z.boolean().optional(),
     /** 2026-10-16: a bot a member owns runs its commands in its owner's
      * own isolated environment (their server environment, their Local VM)
-     * without an approval card (server/member-environment.ts). Absent means
+     * without an approval card (server/people/member-environment.ts). Absent means
      * on; an admin turns it off in Settings > Organization. */
     memberEnvironmentAutonomy: z.boolean().optional(),
     /** 2026-10-16: new threads start confidential unless the person
@@ -515,10 +515,10 @@ const appConfigSchema = z.object({
     disabledModels: z.array(z.string().max(300)).max(2000).optional(),
     /** #1098: folders of the server's disk an admin opened to members as
      * working folders, keyed by principal id or `*` for every member
-     * (server/member-folders.ts). */
+     * (server/people/member-folders.ts). */
     memberFolders: z.record(z.string().max(200), z.array(z.string().max(1024)).max(50)).optional(),
   }).optional(),
-  /** When stored person references became principal ids (server/identity-migration.ts). */
+  /** When stored person references became principal ids (server/people/identity-migration.ts). */
   identityMigratedAt: z.number().optional(),
   /** When every bot thread got its owner (server/threads/thread-privacy.ts). */
   privateThreadsMigratedAt: z.number().optional(),
@@ -803,10 +803,10 @@ export interface AppConfig {
     /** 2026-10-30: models the organization turned off (`<engine>/<model>`). */
     disabledModels?: string[];
     /** #1098: folders of the server's disk an admin opened to members as
-     * working folders, by principal id or `*` (server/member-folders.ts). */
+     * working folders, by principal id or `*` (server/people/member-folders.ts). */
     memberFolders?: Record<string, string[]>;
   };
-  /** When stored person references became principal ids (server/identity-migration.ts). */
+  /** When stored person references became principal ids (server/people/identity-migration.ts). */
   identityMigratedAt?: number;
   /** When every bot thread got its owner (server/threads/thread-privacy.ts). */
   privateThreadsMigratedAt?: number;

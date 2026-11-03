@@ -935,7 +935,7 @@ function dispatchTasksEffects(action: Action, env: DispatchEnv): void {
               if (!r?.group) return;
               dispatch({ type: "groupPatched", group: r.group });
               // A person conversation: opening an unread thread reads it,
-              // for this person only (server/people-dms.ts).
+              // for this person only (server/people/people-dms.ts).
               const read = peopleDmReadTarget(r.group);
               if (read) api(`/api/groups/${action.groupId}/read`, { method: "POST", body: JSON.stringify(read) }).catch(() => {});
             })

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { ownEnvironmentSensitiveRead } from "../member-environment.ts";
+import { ownEnvironmentSensitiveRead } from "../people/member-environment.ts";
 import { credentialLocation, procSecretPath, resolvedReadRefusal, sensitiveEnvironmentPath } from "./sensitive-path.ts";
 import { callUserSandboxTool, type ToolExec } from "../sandbox/user-sandbox-tools.ts";
 

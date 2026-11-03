@@ -229,7 +229,7 @@ export const GUIDES: Guide[] = [
     title: "Solo Sagax and organization (Perspicax) differences",
     keywords: "solo organisation organization perspicax admin membre member difference entreprise business",
     text: "Solo: a person's own Sagax; they hold every setting. Organization: a Sagax server linked to Perspicax (Sagax Business); people sign in with Perspicax, admins manage people, teams, bot rights, engines, routines and usage in the Perspicax console. A member's bot runs its commands, code and files on its OWN computer by default (its server environment (sagax-environment), its owner's own computer or Local VM (sagax-desktop), or its cloud computer), under the owner's own approval level, never assuming the shared organization server. The engine's host shell (a Bash or shell command on the shared server) is an admin's: only an admin targets the organization's server, so run commands on the bot's own computer instead. Host-level tools (add_mcp_server, attach_file, vm_exec, shared_computer, the cloud agent tools) also run only after an admin's approval. A read-only act on the member's own bot does not wait for an admin; a write through act, or act on someone else's bot, does. Perspicax also serves the organization's products (ConnectWise and others) to bots through api_list, api_search and the profile tools.",
-    refs: ["file:server/member-tool-scope.ts", "px:console:/sagax/permissions", "tool:api_list"],
+    refs: ["file:server/people/member-tool-scope.ts", "px:console:/sagax/permissions", "tool:api_list"],
   },
   {
     id: "admin-asks",

@@ -6,7 +6,7 @@
 // exactly what the list says", server/capabilities/capabilities.test.ts).
 import type { McpServerSpec } from "../contracts.ts";
 import { githubServersAsPerson, withGithubToken } from "../github/github-mcp-token.ts";
-import { personalAuthHeaders, type GithubConnection, type PersonalMcpServer } from "../person-connections.ts";
+import { personalAuthHeaders, type GithubConnection, type PersonalMcpServer } from "../people/person-connections.ts";
 import { claudePluginDirs } from "./plugin-turn.ts";
 import { reservedMcpName } from "../../shared/mcp-reserved-names.ts";
 

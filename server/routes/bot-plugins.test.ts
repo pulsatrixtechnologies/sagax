@@ -13,7 +13,7 @@ import { json, readBody } from "../harness/http.ts";
 import { PluginMarketplaces } from "../plugins/plugin-marketplaces.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { createBotPluginRoutes, createPersonalPluginRoutes } from "./bot-plugins.ts";
-import { PersonCapabilities } from "../person-connections.ts";
+import { PersonCapabilities } from "../people/person-connections.ts";
 import { personalPluginStorage } from "../plugins/person-plugins.ts";
 import { createMarketplaceRoutes } from "./marketplaces.ts";
 import { dispatchRoutes } from "./table.ts";

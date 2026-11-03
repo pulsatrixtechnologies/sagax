@@ -27,7 +27,7 @@ import type { OrgFlowPluginsStatus } from "../org/org-flow-plugins.ts";
 import type { Principal } from "../auth/principals.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
-import { personAvatarUrl, personDisplayName } from "../viewer-identity.ts";
+import { personAvatarUrl, personDisplayName } from "../people/viewer-identity.ts";
 
 export interface OrgSettings {
   /** The server has a key for at least one engine (Settings > Connections):
@@ -41,7 +41,7 @@ export interface OrgSettings {
    * on by default, an admin turns it off. */
   allowFullAccess: boolean;
   /** 2026-10-16: a bot a member owns runs commands in its owner's own
-   * isolated environment without a card (server/member-environment.ts):
+   * isolated environment without a card (server/people/member-environment.ts):
    * on by default, an admin turns it off. */
   memberEnvironmentAutonomy: boolean;
   /** 2026-10-16: new threads start confidential unless the person says
@@ -81,7 +81,7 @@ export interface OrgDirectoryEntry {
   /** Their Perspicax avatar as this server serves it, when they have one. */
   avatarUrl?: string;
   /** A Perspicax service account (`kind: "service"`): never a person to
-   * write to (server/people-dms.ts). */
+   * write to (server/people/people-dms.ts). */
   service?: true;
   /** Admins only: this person's page in the Perspicax console
    * (`<issuer>/console/users/<sub>`). Never sent to a member. */

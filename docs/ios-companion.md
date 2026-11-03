@@ -647,7 +647,7 @@ module's own test under `server/routes/`.
 | `POST /api/mcp/servers/:name/oauth/start` | adds `returnTo` and `callbackOrigin` | admin or owner |
 | `PATCH /api/groups/:id` | adds `pinned` | member |
 | `GET /api/auth/session` | personal computer: `name` (Settings > General, else the OS user) and `computerName`, never an email unless the desktop is signed in to an organization (then that person's name, address and `avatarUrl`); organization server: the person, and `avatarUrl` when Perspicax has their photo | anyone signed in |
-| `GET /api/people/:id/avatar?v=` | the person's Perspicax avatar as `avatarUrl` names it (PNG or JPEG, `private, max-age=86400` for the current version), read by the server through its Perspicax link; the phone asks only this route, with its own bearer, and keeps the image keyed by the versioned URL (`AccountAvatar`, `AccountPhotoStore`) | anyone signed in (organization; on a personal computer whose desktop is signed in to an organization, its owner's avatar, `server/owner-identity.ts`) |
+| `GET /api/people/:id/avatar?v=` | the person's Perspicax avatar as `avatarUrl` names it (PNG or JPEG, `private, max-age=86400` for the current version), read by the server through its Perspicax link; the phone asks only this route, with its own bearer, and keeps the image keyed by the versioned URL (`AccountAvatar`, `AccountPhotoStore`) | anyone signed in (organization; on a personal computer whose desktop is signed in to an organization, its owner's avatar, `server/people/owner-identity.ts`) |
 | `DELETE /api/me` | `{ confirm: true }` | the person (organization) |
 
 Also through the companion: `GET /api/usage`, `GET /api/mcp/servers`,

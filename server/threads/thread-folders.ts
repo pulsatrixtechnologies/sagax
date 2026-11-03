@@ -1,5 +1,5 @@
 // Folders organize one owner's threads: a bot's, or a group's (a person
-// conversation's, server/people-dms.ts). They never own settings,
+// conversation's, server/people/people-dms.ts). They never own settings,
 // transcripts or working directories. The request rules are the same for
 // both owners, so they live here once; the routes only pick the owner.
 import { isProjectEmoji } from "../store.ts";

@@ -36,7 +36,7 @@ import {
 } from "../bots/new-bot-defaults.ts";
 import { newConversationFullAllowed } from "../org/org-full-access.ts";
 import { orgXaiRefusal } from "../org/org-xai-media.ts";
-import { peopleDmForViewer } from "../people-dms.ts";
+import { peopleDmForViewer } from "../people/people-dms.ts";
 import { isPrincipalId } from "../auth/principals.ts";
 import {
   applyPresetToBot,

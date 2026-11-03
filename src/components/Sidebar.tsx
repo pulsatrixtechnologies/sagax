@@ -1639,7 +1639,7 @@ export function BotThreadList({ bot, selected, density = "comfortable", query = 
 }
 
 /** The thread tree under a person's row: a conversation with a person has
- * threads like a bot (server/people-dms.ts), with the same rows, menus and
+ * threads like a bot (server/people/people-dms.ts), with the same rows, menus and
  * folders. No generated title (it would send the pair's words to a model)
  * and no approval refresh (no bot). */
 export function PersonThreadList({ group, name, selected, density = "comfortable", query = "", hidden = false }: {

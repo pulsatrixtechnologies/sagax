@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { StoredMcpServer, StoredRemoteMcpServer } from "./mcp-registry.ts";
-import { parsePersonalMcpInput, PersonConnections } from "../person-connections.ts";
+import { parsePersonalMcpInput, PersonConnections } from "../people/person-connections.ts";
 import {
   AMBIGUOUS_PERSONAL_HEADERS_REFUSAL,
   ambiguousPersonalHeaderRefusal,

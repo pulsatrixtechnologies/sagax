@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { PRESENCE_AWAY_AFTER_MS, PRESENCE_DISCONNECT_GRACE_MS, PRESENCE_OFFLINE_AFTER_MS, type PresenceView } from "../shared/presence.ts";
+import { PRESENCE_AWAY_AFTER_MS, PRESENCE_DISCONNECT_GRACE_MS, PRESENCE_OFFLINE_AFTER_MS, type PresenceView } from "../../shared/presence.ts";
 import { PresenceTracker } from "./presence.ts";
 
 function tracker() {

@@ -1183,7 +1183,7 @@ async function loadRemoteActor(): Promise<{ id: string; role: "owner" | "admin" 
 export function GroupView({ group: stored, pane }: { group: Group; pane?: SideChat }) {
   "use memo";
   const roomShowThreads = useShowThreads();
-  // A direct conversation between two people (server/people-dms.ts) runs on
+  // A direct conversation between two people (server/people/people-dms.ts) runs on
   // the single-thread path of a bot-to-bot channel: no panel, no tasks. It
   // reads as the other person.
   const group = useMemo(() => (stored.peopleDm ? { ...stored, dm: true } : stored), [stored]);

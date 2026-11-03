@@ -347,7 +347,7 @@ export interface Group {
   createdAt: number;
   /** auto-created bot⇄bot channel (ask_bot exchanges mirror here) */
   dm?: boolean;
-  /** A direct conversation between two people (server/people-dms.ts). */
+  /** A direct conversation between two people (server/people/people-dms.ts). */
   peopleDm?: boolean;
   /** The group's shared memory; absent = on. */
   memoryEnabled?: boolean;
@@ -387,7 +387,7 @@ export interface Group {
   turnTimeoutMinutes?: number | null;
   /** Separate conversations in this channel. DMs deliberately stay on one
    * thread and omit this collection. A conversation with a person has them
-   * like a bot (server/people-dms.ts). */
+   * like a bot (server/people/people-dms.ts). */
   tasks?: GroupTask[];
   /** Folders of a person conversation's threads, in sidebar order. */
   projects?: BotProject[];
@@ -761,7 +761,7 @@ export type FolderOwnerKind = "bot" | "group";
 export type GroupTaskUpdatePatch = { archivedAt?: number | null; snoozedUntil?: number | null; projectId?: string | null; pinned?: boolean };
 /** Sent on every API request: this client knows a conversation with a
  * person has threads, so the server answers with the thread this person has
- * open (server/people-dms.ts). */
+ * open (server/people/people-dms.ts). */
 export const PERSON_THREADS_HEADER = "x-sagax-person-threads";
 
 /** A conversation uses its own execution settings; the sidebar keeps the
@@ -1022,7 +1022,7 @@ export interface ConfigStatus {
   cloudHome?: boolean;
 }
 
-/** Mirrors ViewerIdentity in server/viewer-identity.ts. */
+/** Mirrors ViewerIdentity in server/people/viewer-identity.ts. */
 export interface ConfigViewer {
   /** The operator at the server's computer, or a device they paired. */
   operator: boolean;
@@ -1609,7 +1609,7 @@ export type Action =
   | { type: "groupDeleted"; groupId: string }
   | { type: "createGroup"; memberIds: string[]; humanIds?: string[]; name?: string; section?: string }
   /** Open (or create) the direct conversation with another person of the
-   * organization (server/people-dms.ts). */
+   * organization (server/people/people-dms.ts). */
   | { type: "openPeopleDm"; principalId: string }
   /** Nudge that person (POST /api/nudges). The server enforces the cooldown. */
   /** `threadId`: the thread of the pair's conversation the line goes to. */
@@ -2359,7 +2359,7 @@ export function applyFolderOwner(
  * this client has open keeps it open, unless the update carries a
  * transcript (the answer to a switch, a create or a fresh load) or that
  * thread is gone. A live frame always names the conversation's default
- * thread (server/people-dms.ts). */
+ * thread (server/people/people-dms.ts). */
 export function personThreadKept(
   held: Pick<Group, "threadId" | "tasks"> & { peopleDm?: boolean },
   patch: Partial<Group>,

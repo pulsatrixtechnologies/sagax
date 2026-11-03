@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { GithubConnect, githubAuthorizedFetch, githubGitEnvironment, githubOrigins, githubSandboxArgv, githubTokenKind } from "./github-connect.ts";
-import type { GithubConnection } from "../person-connections.ts";
+import type { GithubConnection } from "../people/person-connections.ts";
 
 function fakeGithub(options: { pendingPolls?: number; deny?: boolean } = {}) {
   let polls = 0;

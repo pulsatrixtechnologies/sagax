@@ -1,7 +1,7 @@
-// The words a bot is writing now, per thread (server/member-live-text.ts).
+// The words a bot is writing now, per thread (server/people/member-live-text.ts).
 import { describe, expect, it } from "vitest";
 
-import type { RuntimeEvent } from "../shared/runtime-events.ts";
+import type { RuntimeEvent } from "../../shared/runtime-events.ts";
 import { MEMBER_LIVE_TEXT_MAX, MemberLiveText } from "./member-live-text.ts";
 
 const base = { eventId: "e", provider: "claudeAgent", createdAt: "2026-10-09T00:00:00Z" } as const;

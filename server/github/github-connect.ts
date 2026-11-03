@@ -8,14 +8,14 @@
 //   - a token they paste (a fine-grained or classic personal access token).
 //
 // The token lands in the person's encrypted connections file
-// (server/person-connections.ts), never in config.json, never in another
+// (server/people/person-connections.ts), never in config.json, never in another
 // person's turn. It is used, for that person only, by: their server
 // environment (gh and git read it from /workspace, see githubSandboxArgv),
 // their personal GitHub MCP server (Authorization: Bearer), and the fetches
 // Sagax itself makes for them (private skills, plugin marketplaces).
 import { createHash } from "node:crypto";
 
-import type { GithubConnection } from "../person-connections.ts";
+import type { GithubConnection } from "../people/person-connections.ts";
 
 export const GITHUB_SCOPES = "repo read:org gist workflow";
 /** How long a successful /user probe keeps the connection "Connected" without asking GitHub again. */

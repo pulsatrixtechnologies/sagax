@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { BotPluginError, insideRoot, marketplaceAllowed, migrateBotMarketplaces, normalizePolicyEntry, parseGitSource, readMarketplaceManifest, readPluginContents, type GitRunner } from "./bot-plugins.ts";
 import { PluginMarketplaces } from "../plugins/plugin-marketplaces.ts";
 import { botPluginsWithMarketplaces } from "../testing/plugin-stores.ts";
-import { PersonCapabilities, principalDir } from "../person-connections.ts";
+import { PersonCapabilities, principalDir } from "../people/person-connections.ts";
 import { personalPluginStorage } from "../plugins/person-plugins.ts";
 
 const dirs: string[] = [];

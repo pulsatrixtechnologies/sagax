@@ -342,7 +342,7 @@ import {
   MEMBER_FOLDER_REFUSED,
   openedMemberFolders,
   personFolder
-} from "./member-folders.ts";
+} from "./people/member-folders.ts";
 import {
   RoomTurnDeadline,
   RoomTurnStallRegistry,
@@ -732,9 +732,9 @@ import {
   type EmailConnector,
   type EmailSendRequestCard
 } from "../shared/email-draft-send.ts";
-import { builtinAgentToolName, memberOwnScopeTool, unknownAgentToolRefusal } from "./member-tool-scope.ts";
+import { builtinAgentToolName, memberOwnScopeTool, unknownAgentToolRefusal } from "./people/member-tool-scope.ts";
 import { serverApprovalWords } from "./approvals/approval-words.ts";
-import { personLanguageOf } from "./person-language.ts";
+import { personLanguageOf } from "./people/person-language.ts";
 import {
   isModelVariant,
   TurnNotStartedError,
@@ -1759,7 +1759,7 @@ import {
 import { createBotGrantRoutes, visibleGrants, wireGrants } from "./bots/bot-grants.ts";
 import { createBotPerspicaxRoutes } from "./bots/bot-perspicax.ts";
 import { OrgFlowPlugins, guarded as orgFlowGuarded } from "./org/org-flow-plugins.ts";
-import { applyIdentityMigration, principalIdFor, rewritePeopleForAttach } from "./identity-migration.ts";
+import { applyIdentityMigration, principalIdFor, rewritePeopleForAttach } from "./people/identity-migration.ts";
 import { ThreadStarters } from "./threads/thread-starters.ts";
 import {
   activityEntries,
@@ -1868,15 +1868,15 @@ import { interBotWaiting } from "./approvals/inter-bot-approvals.ts";
 import { interBotConversations } from "./peers/inter-bot-conversations.ts";
 import type { BotHost } from "./turns/turn-route.ts";
 import { signInListWithOpenInvites, type OrgRole } from "./org/org-directory.ts";
-import { createOwnerAvatarRoute, OwnerIdentityStore, parseOwnerIdentityMessage } from "./owner-identity.ts";
+import { createOwnerAvatarRoute, OwnerIdentityStore, parseOwnerIdentityMessage } from "./people/owner-identity.ts";
 import {
   configForViewer,
   personAvatarUrl,
   personDisplayName,
   sessionIsOperator,
   type ViewerIdentity
-} from "./viewer-identity.ts";
-import { PersonSettingsStore, personSettingsPrincipal, personalProfilePartition } from "./person-settings.ts";
+} from "./people/viewer-identity.ts";
+import { PersonSettingsStore, personSettingsPrincipal, personalProfilePartition } from "./people/person-settings.ts";
 import { withPersonalVoiceKeys } from "./voice/person-voice-keys.ts";
 import { PersonalProviderInstances } from "./engines/personal-provider-instances.ts";
 import type { ProviderAccountsView } from "../shared/provider-accounts.ts";
@@ -2110,7 +2110,7 @@ import {
   PersonConnectionsError,
   principalDir,
   type PersonalMcpServer
-} from "./person-connections.ts";
+} from "./people/person-connections.ts";
 import {
   ambiguousPersonalHeaderRefusal,
   collectPersonalMcpNames,
@@ -2142,7 +2142,7 @@ import { createLocalComputerAutoRoutes } from "./routes/local-computer-auto.ts";
 import { createUserPreferenceRoutes } from "./routes/user-preferences.ts";
 import { replaceDashes, voiceDashesEnabled, VOICE_DASHES_PREFERENCE } from "../shared/voice-dashes.ts";
 import { PERSPICAX_CONVENTIONS_PROMPT } from "./perspicax/perspicax-conventions.ts";
-import { createUserPreferenceStore, preferencesFrameAllowed, type PersonPreferences } from "./user-preferences.ts";
+import { createUserPreferenceStore, preferencesFrameAllowed, type PersonPreferences } from "./people/user-preferences.ts";
 import { createViewerBotOverrideRoutes } from "./routes/viewer-bot-overrides.ts";
 import { createViewerBotOverrideStore } from "./bots/viewer-bot-overrides.ts";
 import {
@@ -2266,7 +2266,7 @@ import {
   phoneToolsFrameAllowed
 } from "../shared/phone-tools.ts";
 import { createArtifactStore } from "./artifacts/artifacts.ts";
-import { createPreferenceStore } from "./preference-import.ts";
+import { createPreferenceStore } from "./people/preference-import.ts";
 import { createPreferenceImportRoutes } from "./routes/preference-import.ts";
 import { createArtifactInternalRoutes, createArtifactRoutes } from "./routes/artifacts.ts";
 import { createBotTaskInternalRoutes, createBotTaskRoutes } from "./routes/bot-task-list.ts";
@@ -2315,7 +2315,7 @@ import { videoMessagesFromTool } from "./video/video-widget-turn.ts";
 import { askedForView } from "../shared/requested-views.ts";
 import { isCwViewTool } from "../shared/cw-widgets/tool-call.ts";
 import { createPresenceRoutes, presenceFrameAllowed, type PresenceViewer } from "./routes/presence.ts";
-import { PresenceTracker } from "./presence.ts";
+import { PresenceTracker } from "./people/presence.ts";
 import { readApnsConfig } from "./push/config.ts";
 import {
   createPushDeviceStore,
@@ -2351,7 +2351,7 @@ import {
 } from "../shared/presence.ts";
 import { NudgeCooldown, nudgeFrameAllowed, recordNudgeLine } from "./nudge.ts";
 import { createUnfinishedTurnGuard, decideUnfinishedTurn, unfinishedTurnPrompt, type UnfinishedKind } from "./turns/unfinished-turn.ts";
-import { findPeopleDm, isPeopleDmParticipant, otherPerson, PEOPLE_DM_THREADS_HEADER, PeopleDmSelections, peopleDmForViewer, peopleDmRouteRefusal, peopleDmThreadUnreadPatch } from "./people-dms.ts";
+import { findPeopleDm, isPeopleDmParticipant, otherPerson, PEOPLE_DM_THREADS_HEADER, PeopleDmSelections, peopleDmForViewer, peopleDmRouteRefusal, peopleDmThreadUnreadPatch } from "./people/people-dms.ts";
 import { groupMemoryEnabled, groupMemorySystemPrompt, updateGroupMemory } from "./memory/group-memory.ts";
 import type { OrgRecord } from "./org/org-record.ts";
 import {
@@ -2417,7 +2417,7 @@ import {
 } from "./agent-api.ts";
 import { type PriorityDelivery } from "./proactive/priority-wake.ts";
 import { parseHideList, planHiddenAgentThreads, planHiddenBotThreads } from "./threads/agent-threads.ts";
-import { MemberLiveText } from "./member-live-text.ts";
+import { MemberLiveText } from "./people/member-live-text.ts";
 import { computersRoutes, type ComputersDeps } from "./org/org-admin-computers.ts";
 import {
   createOrgAdminRoutes,
@@ -2484,7 +2484,7 @@ import {
   ownEnvironmentSensitiveRead,
   ownEnvironmentTool,
   ownEnvironmentTurnOrigin
-} from "./member-environment.ts";
+} from "./people/member-environment.ts";
 import {
   lineageEnvironmentCall,
   ownerLineageOrigin,
@@ -2565,7 +2565,7 @@ import {
 } from "./sandbox/user-sandbox-routing.ts";
 import { handleUserSandboxMcp } from "./sandbox/user-sandbox-tools.ts";
 import { BotFolderRegistry, WorkspaceTidier, botFolderNote, botFolderPath, inBotFolder, rewriteMovedPaths, workspaceDiskWarning, type TidyMove } from "./sandbox/sandbox-bot-folder.ts";
-import { enginePluginCommandRefusal } from "./person-integrations.ts";
+import { enginePluginCommandRefusal } from "./people/person-integrations.ts";
 import { SandboxControlHolds } from "./sandbox/sandbox-control.ts";
 import { DesktopBridges, resolveBotWorkplace, type WorkplaceDecision } from "./desktop/desktop-bridge.ts";
 import { DesktopLocalModels } from "./desktop/desktop-local-models.ts";
@@ -4889,7 +4889,7 @@ const browserCleanup: BrowserCleanupCoordinator = new BrowserCleanupCoordinator(
 });
 const phoneSecrets = new PhoneSecretBridge(postDesktopPrivateMessage);
 // A personal computer's owner as their organization knows them, handed over
-// by the signed-in desktop app (server/owner-identity.ts). An organization
+// by the signed-in desktop app (server/people/owner-identity.ts). An organization
 // server has its own people and takes none.
 const ownerIdentity = IDENTITY.kind === "perspicax" ? null : new OwnerIdentityStore(join(DATA_DIR, "owner-identity.json"));
 // This computer's driver connection: only from the app that launched us.
@@ -8720,7 +8720,7 @@ ROUTES.push(createUserSandboxRoutes({
   turnRunning: userSandboxTurnRunning
 }));
 // ── a person's own connections (organization mode) ─────────────────────
-// Their own MCP servers and GitHub account (server/person-connections.ts),
+// Their own MCP servers and GitHub account (server/people/person-connections.ts),
 // encrypted per person with the vault key of mcp-oauth.enc, and their own
 // OAuth sign-ins (one manager per person, principals/<pid>/mcp-oauth.enc).
 // Nobody else's turn ever gets them. A command they add runs in their
@@ -8933,7 +8933,7 @@ function workflowCallerScope(auth: RequestAuth) {
 }
 const usageMeter = new UsageMeter(DATA_DIR);
 // A person's own Experimental switches and browser profiles on an
-// organization server (#1098, 2026-10-27, server/person-settings.ts): set by
+// organization server (#1098, 2026-10-27, server/people/person-settings.ts): set by
 // the person, no right to edit the installation needed.
 const personSettings = new PersonSettingsStore(DATA_DIR);
 /** Whose own settings apply: an organization server's person. A solo
@@ -13750,7 +13750,7 @@ interface SseClient {
   /** The bots and rooms this stream has been shown (bot-visibility.ts). */
   seen: StreamSeen;
   /** Who is watching, for config frames: the operator sees their profile,
-   * anyone else sees themselves (server/viewer-identity.ts). Read at each
+   * anyone else sees themselves (server/people/viewer-identity.ts). Read at each
    * frame, so a changed role is current. Absent for a local service. */
   identity?: () => ViewerIdentity | null;
   /** A person of this organization's directory: receives presence.changed
@@ -15546,7 +15546,7 @@ function sseFrameFor(
   if (payload && temporaryAgentFrame(payload)) return null;
   if (payload && viewerNotificationMuted(payload, client.viewerId)) return null;
   // A conversation between two people carries each person's own unread
-  // state, and never who else has read it (server/people-dms.ts).
+  // state, and never who else has read it (server/people/people-dms.ts).
   // Its threads too, per thread. A frame always carries the default
   // thread: a client that knows threads keeps the one it has open.
   if (payload?.kind === "group" && payload.group && typeof payload.group === "object" &&
@@ -33662,7 +33662,7 @@ ROUTES.push(createGroupMemoryRoutes({
     if (group) broadcast({ kind: "group", group: publicGroupState(group) });
   }
 }));
-// Direct conversations between two people (server/people-dms.ts).
+// Direct conversations between two people (server/people/people-dms.ts).
 ROUTES.push(createPeopleDmRoutes<GroupRecord>({
   organization: () => IDENTITY.kind === "perspicax",
   viewerId: (auth) => (auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() || undefined : undefined),
@@ -33866,7 +33866,7 @@ ROUTES.push(createPersonLabelRoutes({
   }
 }));
 // Which thread of a person conversation each of its two people has open
-// (server/people-dms.ts): theirs, in memory, like a bot's per-viewer thread.
+// (server/people/people-dms.ts): theirs, in memory, like a bot's per-viewer thread.
 const peopleDmSelections = new PeopleDmSelections();
 /** The request comes from a client that knows a person conversation has
  * threads. A client from before threads never says so, and keeps reading
@@ -34423,7 +34423,7 @@ async function settleBotActCard(
 const cwActionPasses = createCwActionPasses();
 
 /** The language to word a text for the person behind this request: their own
- * `omb-language`, else the server's default (server/person-language.ts). */
+ * `omb-language`, else the server's default (server/people/person-language.ts). */
 function languageOfPerson(person: string | null | undefined): string {
   return personLanguageOf(person, (id) => userPreferenceStore.get(id).preferences, cfg.language);
 }
@@ -36152,7 +36152,7 @@ function memberFolderPrincipal(auth: RequestAuth): string | null {
   if (IDENTITY.kind !== "perspicax" || auth.kind === "loopback" || auth.scopes.includes("admin")) return null;
   return sessionPrincipal(auth) ?? "";
 }
-/** A member's own roots on the server's disk (server/member-folders.ts):
+/** A member's own roots on the server's disk (server/people/member-folders.ts):
  * their person folder, the workspaces of their own bots, and the folders an
  * admin opened to them. */
 function memberFolderRoots(principalId: string): string[] {
@@ -36317,7 +36317,7 @@ function authzViewerFor(auth: RequestAuth): AuthzViewer | undefined {
 function groupVisible(group: { id?: unknown; humanIds?: string[]; section?: unknown; peopleDm?: boolean; archivedAt?: number }, viewerId: string | undefined): boolean {
   // The last person left it (server/group-leave.ts): kept, listed to no one.
   if (group.archivedAt) return false;
-  // A conversation between two people is theirs alone (server/people-dms.ts):
+  // A conversation between two people is theirs alone (server/people/people-dms.ts):
   // not an admin's, a section's, nor the operator's at this computer.
   if (group.peopleDm) return isPeopleDmParticipant(group, viewerId);
   if (!viewerId) return true;
@@ -37056,7 +37056,7 @@ function channelActorRole(auth: RequestAuth): OrgRole | null {
   return null;
 }
 
-// ── the viewer's own identity and bots (server/viewer-identity.ts) ─────
+// ── the viewer's own identity and bots (server/people/viewer-identity.ts) ─────
 /** The operator at this computer, or a device they paired: the profile
  * describes them. Anyone else is described as themselves. */
 function viewerIsOperator(auth: RequestAuth): boolean {
@@ -38011,7 +38011,7 @@ if (ownerIdentity) {
   ROUTES.push(createOwnerAvatarRoute({ store: ownerIdentity, localPrincipalId }));
 }
 // ── presence: online, away, offline (organization server) ────────────
-// shared/presence.ts, server/presence.ts, server/routes/presence.ts. In
+// shared/presence.ts, server/people/presence.ts, server/routes/presence.ts. In
 // memory only: never written to a chat, the journal or a backup.
 function presenceViewer(auth: RequestAuth): PresenceViewer {
   const id = auth.kind === "session" ? auth.session.principalId?.trim() : undefined;
@@ -41243,7 +41243,7 @@ const orgLink = createOrgLinkRoutes({
   scheduler: directoryRefresh
 });
 /** Lot C.3: the words each bot is writing now, for the member API's
- * streamed turn (server/member-live-text.ts). */
+ * streamed turn (server/people/member-live-text.ts). */
 const memberLiveText = new MemberLiveText();
 bus.subscribe((event: RuntimeEvent) => {
   if (shouldIgnoreProviderEvent(event)) return;
@@ -44414,7 +44414,7 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
     }
   }
   {
-    // A conversation between two people (server/people-dms.ts): only they
+    // A conversation between two people (server/people/people-dms.ts): only they
     // reach it, loopback included, and it only takes messages.
     const subject = pathSubject(path);
     const dmRoom = roomOfSubject(subject);

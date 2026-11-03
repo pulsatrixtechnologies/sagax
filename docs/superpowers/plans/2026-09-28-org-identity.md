@@ -4,7 +4,7 @@
 
 **Goal:** Chaque personne devient un principal stable (`pr_<uuid>`), chaque session en porte un, et une organisation exige une adresse de serveur.
 
-**Architecture:** Un nouveau registre `server/auth/principals.ts` (fichier `principals.json` dans `DATA_DIR`) remplace les emails et `"local-owner"` comme clé d'identité. Une migration pure (`server/identity-migration.ts`) réécrit une fois les ids stockés. Les sessions gagnent `principalId`: la connexion par email le résout, un code d'appairage hérite du principal qui l'a créé. `channelViewerId` rend le principal, ou un id anonyme qui ne voit aucun channel. Les rôles d'organisation comparent l'id du principal au propriétaire et son email aux listes `cfg.signIn`.
+**Architecture:** Un nouveau registre `server/auth/principals.ts` (fichier `principals.json` dans `DATA_DIR`) remplace les emails et `"local-owner"` comme clé d'identité. Une migration pure (`server/people/identity-migration.ts`) réécrit une fois les ids stockés. Les sessions gagnent `principalId`: la connexion par email le résout, un code d'appairage hérite du principal qui l'a créé. `channelViewerId` rend le principal, ou un id anonyme qui ne voit aucun channel. Les rôles d'organisation comparent l'id du principal au propriétaire et son email aux listes `cfg.signIn`.
 
 **Tech Stack:** TypeScript strict, Node 24 `--experimental-strip-types`, Vitest, Zod, React 19 + Tailwind v4.
 
@@ -252,8 +252,8 @@ git commit -m "feat: add a principal registry keyed by stable ids"
 ### Task 2: Migration des ids stockés
 
 **Files:**
-- Create: `server/identity-migration.ts`
-- Test: `server/identity-migration.test.ts`
+- Create: `server/people/identity-migration.ts`
+- Test: `server/people/identity-migration.test.ts`
 
 **Interfaces:**
 - Consumes: `PrincipalRegistry`, `isPrincipalId` (Task 1).
@@ -264,7 +264,7 @@ git commit -m "feat: add a principal registry keyed by stable ids"
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// server/identity-migration.test.ts
+// server/people/identity-migration.test.ts
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -319,13 +319,13 @@ describe("identity migration", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx vitest run server/identity-migration.test.ts`
+Run: `npx vitest run server/people/identity-migration.test.ts`
 Expected: FAIL, module not found.
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```ts
-// server/identity-migration.ts
+// server/people/identity-migration.ts
 // One-time rewrite of stored person references (emails, "local-owner") to
 // principal ids. Pure over its inputs apart from the registry, which creates
 // principals as it meets new emails. Running it twice changes nothing.
@@ -395,13 +395,13 @@ export function migrateIdentityRefs(input: {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx vitest run server/identity-migration.test.ts`
+Run: `npx vitest run server/people/identity-migration.test.ts`
 Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/identity-migration.ts server/identity-migration.test.ts
+git add server/people/identity-migration.ts server/people/identity-migration.test.ts
 git commit -m "feat: migrate stored person references to principal ids"
 ```
 

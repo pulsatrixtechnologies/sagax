@@ -525,7 +525,7 @@ files in the prompt and those tools for the rest; hooks/LSP stay on Claude).
 
 ## Capabilities: personal references and complete plugins (lot 2, 2026-10-30)
 
-`PersonCapabilities` (`server/person-connections.ts`, legacy export
+`PersonCapabilities` (`server/people/person-connections.ts`, legacy export
 `PersonConnections`) keeps MCP, GitHub, plugin records/config values and
 skill references in `principals/<pid>/capabilities.enc`. Its first read
 migrates `connections.enc` only if the new file is absent. A corrupt new
@@ -654,7 +654,7 @@ sheet). Keep these rules, covered by `server/capabilities/capabilities.test.ts`,
 
 ## Personal capability storage (lot 2, 2026-10-30)
 
-`PersonCapabilities` (`server/person-connections.ts`, also exported under
+`PersonCapabilities` (`server/people/person-connections.ts`, also exported under
 the existing `PersonConnections` name) owns one encrypted
 `principals/<pid>/capabilities.enc`: MCP servers, GitHub, installed plugin
 state, plugin configuration and assigned library skills. Existing connection
@@ -4084,7 +4084,7 @@ in `server/routes/security-keys.ts`. Rules, covered by
 
 ## Conversations with a person have threads like a bot (2026-10-09)
 
-A direct conversation between two people (`peopleDm`, server/people-dms.ts)
+A direct conversation between two people (`peopleDm`, server/people/people-dms.ts)
 has threads and folders exactly like a bot's, through the room thread routes
 and `server/routes/group-folders.ts`. Keep these rules, covered by
 `server/people-threads.e2e.test.ts` and `server/people-dm-threads-store.test.ts`:
@@ -5039,7 +5039,7 @@ onboarding tests:
   welcome greeting asks for nothing and Settings > General shows the identity
   read-only ("Géré par votre organisation (Pulsatrix Perspicax)", "Modifier
   dans Perspicax"). A change here needs the server image redeployed.
-- A person reads as `personDisplayName` (`server/viewer-identity.ts`): the
+- A person reads as `personDisplayName` (`server/people/viewer-identity.ts`): the
   Perspicax display name, else the address's local part, else the login; a
   directory name equal to the login is not a display name.
 - Avatar (`server/org/org-profile.e2e.test.ts`): Sagax keeps only a version
@@ -5079,7 +5079,7 @@ onboarding tests:
   `src/lib/avatar-crop.test.ts`, `ios/Tests/CompanionCoreTests/OwnAvatarTests.swift`.
 - A personal computer whose desktop app is signed in to an organization
   server serves its owner's avatar the same way
-  (`server/owner-identity.ts`, `electron/owner-identity.mjs`): main reads
+  (`server/people/owner-identity.ts`, `electron/owner-identity.mjs`): main reads
   `<org>/api/auth/session` and the avatar it names with the app's own
   organization cookie (nothing new stored), and sends name, address, version
   and bytes over the private parent port (`openmausbot:owner-identity`; null
@@ -5120,7 +5120,7 @@ short guide with an outline, and the block bots read
 A user-created group keeps one shared memory (`server/memory/group-memory.ts`,
 `DATA_DIR/group-memory/<groupId>/MEMORY.md`), separate from every bot's own
 workspace. Keep these rules, each covered by `server/memory/group-memory.test.ts`,
-`server/memory/group-memory.e2e.test.ts` or `server/people-dms.e2e.test.ts`:
+`server/memory/group-memory.e2e.test.ts` or `server/people/people-dms.e2e.test.ts`:
 
 - Every bot of the group reads it in each room turn there (the
   `group-memory` prompt section); a bot writes it only with
@@ -5135,7 +5135,7 @@ workspace. Keep these rules, each covered by `server/memory/group-memory.test.ts
   gets 404 at once (the channel gate).
 
 On an organization server a person writes to another person through
-`POST /api/people-dms` (`server/people-dms.ts`): a group record with
+`POST /api/people-dms` (`server/people/people-dms.ts`): a group record with
 `peopleDm: true`, two `humanIds` and no bot. Only those two list, read,
 stream, search, export or write it (not an admin, a section, nor loopback);
 it stays people-only (no bot, task, rename, delete, folder or memory); a
@@ -5400,7 +5400,7 @@ applies. Tests: `server/computer/user-computers.test.ts`,
 
 A person's preferences on an organization server live per principal
 (`shared/user-preferences.ts` lists the only keys that travel,
-`server/user-preferences.ts`, `GET/PUT /api/me/preferences`). The renderer
+`server/people/user-preferences.ts`, `GET/PUT /api/me/preferences`). The renderer
 syncs them before the app draws (`src/lib/user-preferences-sync.ts`); the
 launch screen hands this computer's own values over once at join
 (`orgJoin.join({ preferences })`, `takePreferences`). Device-only state
@@ -6831,7 +6831,7 @@ Connected apps, shared one token by all and ran commands on the host;
 `claude plugin ...` typed by a bot hit the host Bash denial whatever
 `SAGAX_CLAUDE_ALLOW` said; skills routes were admin-only; the environment
 had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.test.ts`
-(OC-1 to OC-9), `server/person-connections.test.ts`,
+(OC-1 to OC-9), `server/people/person-connections.test.ts`,
 `server/org/org-person-connections.test.ts`,
 `server/github/github-connect.test.ts`, `server/bots/bot-plugins.test.ts`,
 `server/turns/plugin-turn.test.ts`, `server/bot-plugin-act.test.ts`,
@@ -6843,7 +6843,7 @@ had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.tes
   `/api/me/mcp/servers/*` (`server/routes/person-connections.ts`), the
   session's person only, member scope (CLIENT_ALLOW, `orgDirectory`).
 - One encrypted file per person (`principals/<pid>/capabilities.enc`,
-  AES-256-GCM with the mcp-oauth vault key; `server/person-connections.ts`)
+  AES-256-GCM with the mcp-oauth vault key; `server/people/person-connections.ts`)
   holds their own MCP servers, GitHub token, plugin state and skill
   references (`connections.enc` migrates at first read); OAuth sign-ins live in
   their own `principals/<pid>/mcp-oauth.enc` (one `McpOAuthManager` per
@@ -6929,7 +6929,7 @@ had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.tes
   `managedByAdmin`, no `viewer.integrationsManagedByAdmin`, no notice).
   `run_command` in their environment and on their desktop refuses the
   engines' plugin, MCP and extension subcommands
-  (`enginePluginCommandRefusal`, `server/person-integrations.ts`). The tool
+  (`enginePluginCommandRefusal`, `server/people/person-integrations.ts`). The tool
   result tells the bot to install through Sagax `act` plugin actions. The
   check is a courtesy: a turn loads only what Sagax keeps. `/plugin` and
   `/mcp` are managed for everyone. An organization admin changes a person's
@@ -6947,7 +6947,7 @@ had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.tes
   child (`closePerson`) and writes `connections.revoke` (category `people`)
   only when something was removed. One target that is missing is 404 with
   no audit; remove-all of nothing is 200 and no audit.
-  Tests: `server/person-integrations.test.ts`,
+  Tests: `server/people/person-integrations.test.ts`,
   `server/perspicax/perspicax-link.test.ts`, `server/org/org-person-connections.test.ts`,
   OC-7, OC-8 and OC-9, `MyConnectionsSettings.test.ts`,
   `PersonConnectionsSection.test.ts`.
@@ -7016,7 +7016,7 @@ gallery `connect-apps.html?view=manage|org-settings`).
 
 Owner: Sources showed a GitHub section beside the GitHub plugin already
 Connected in Installed ("that should be only marketplaces"). One GitHub
-connection, the person's own (`server/person-connections.ts`,
+connection, the person's own (`server/people/person-connections.ts`,
 `/api/me/github/*`), serves every use: private marketplace clones, gh and
 git in their environment, private skills, and the GitHub plugin's MCP
 server. It sat in Providers > GitHub (#1550) until the owner asked "Why is
@@ -7148,7 +7148,7 @@ list says, and is never switched on again under that name. It is not silent:
   entry under it, saves it off, forgets the sign-ins of both names, and
   moves the bots that listed it (their account choice for it is dropped).
   Policy and the organization host-command refusal apply to the new name.
-- A personal connection (`server/person-connections.ts`) saved before #695
+- A personal connection (`server/people/person-connections.ts`) saved before #695
   under a name with `__` is no longer mounted (since 2026-10-30,
   `personalMcpPrecheck`) and the capabilities list shows it `reserved`.
 - Tests: `server/mcp/mcp-registry.test.ts`, `server/config.test.ts`
@@ -7968,8 +7968,8 @@ PL-4), `src/lib/person-labels.test.ts`, `src/components/PersonLabel.test.ts`,
 ## Presence: online, away, offline (organization server, 2026-10-08)
 
 The maintainer asked for an online / away / offline indicator on people. Keep these
-rules, covered by `shared/presence.test.ts`, `server/presence.test.ts`,
-`server/routes/presence.test.ts`, `server/presence.e2e.test.ts`,
+rules, covered by `shared/presence.test.ts`, `server/people/presence.test.ts`,
+`server/routes/presence.test.ts`, `server/people/presence.e2e.test.ts`,
 `src/lib/presence.test.ts`, `src/components/PresenceDot.test.ts` and
 `electron/system-idle.node-test.mjs`:
 
@@ -7981,7 +7981,7 @@ rules, covered by `shared/presence.test.ts`, `server/presence.test.ts`,
   reconnect grace passed, or no sign of a client for 10 minutes,
   `PRESENCE_OFFLINE_AFTER_MS`). A person is as present as their most
   present client. Change a threshold there, nowhere else.
-- Server (`server/presence.ts`, `PresenceTracker`, in memory only): one
+- Server (`server/people/presence.ts`, `PresenceTracker`, in memory only): one
   connection per signed-in session, from its `/api/events` streams
   (`connect` on open, `touch` on each keepalive, close on close) and its
   pages' heartbeats. `presenceViewer` in index.ts decides who counts: a

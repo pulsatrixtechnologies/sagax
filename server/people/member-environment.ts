@@ -52,12 +52,12 @@
 //
 // Names are matched exactly, never by prefix: `mcp__<server>__<tool>`
 // (Claude), `<server>__<tool>` (ACP titles, Codex, chat engines' mcpTool).
-import type { ApprovalMode } from "../shared/approval-mode.ts";
-import { DESKTOP_BRIDGE_MCP_NAME } from "../shared/bot-workplace.ts";
-import type { TurnSpeaker } from "./engines/engine-access.ts";
-import { ownerLineageOrigin } from "./approvals/owner-autonomy.ts";
-import { sensitiveReadPath } from "./safety/sensitive-path.ts";
-import { USER_SANDBOX_MCP_NAME } from "./sandbox/user-sandbox-routing.ts";
+import type { ApprovalMode } from "../../shared/approval-mode.ts";
+import { DESKTOP_BRIDGE_MCP_NAME } from "../../shared/bot-workplace.ts";
+import type { TurnSpeaker } from "../engines/engine-access.ts";
+import { ownerLineageOrigin } from "../approvals/owner-autonomy.ts";
+import { sensitiveReadPath } from "../safety/sensitive-path.ts";
+import { USER_SANDBOX_MCP_NAME } from "../sandbox/user-sandbox-routing.ts";
 
 /** The server environment's tools (server/sandbox/user-sandbox-tools.ts). */
 export const SERVER_ENVIRONMENT_TOOLS: ReadonlySet<string> = new Set([

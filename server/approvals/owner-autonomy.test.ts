@@ -165,7 +165,7 @@ describe("owner setup prompts", async () => {
 
 describe("lineageEnvironmentCall", async () => {
   const { lineageEnvironmentCall } = await import("./owner-autonomy.ts");
-  const { ownEnvironmentSensitiveRead } = await import("../member-environment.ts");
+  const { ownEnvironmentSensitiveRead } = await import("../people/member-environment.ts");
   const run = (command: string) => lineageEnvironmentCall("mcp__sagax-environment__run_command", JSON.stringify({ command }), ownEnvironmentSensitiveRead);
   it("lets a hop of the owner's lineage run ordinary work in the owner's cloud computer", () => {
     expect(run('df -h; NPMC=$(npm config get cache); du -sh "$NPMC"')).toBe(true);

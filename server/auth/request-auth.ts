@@ -767,7 +767,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["PATCH"], path: /^\/api\/groups\/[\w-]+$/ }, // display fields only: see clientGroupPatchViolation
   // a group's shared memory: its people read, its owner edits (server/routes/group-memory.ts)
   { methods: ["GET", "PUT"], path: /^\/api\/groups\/[\w-]+\/memory$/ },
-  // a direct conversation with another person of the organization (server/people-dms.ts)
+  // a direct conversation with another person of the organization (server/people/people-dms.ts)
   { methods: ["POST"], path: /^\/api\/people-dms$/ },
   // Shake that person's Sagax (server/routes/nudges.ts). The handler checks
   // the person and the 5 minute cooldown.
@@ -870,7 +870,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // only. PATCH /api/org/settings stays admin.
   { methods: ["GET"], path: /^\/api\/org\/directory$/, feature: "orgDirectory" },
   // a person's Perspicax avatar (the "You" row, room members, pickers; on a
-  // personal computer, its owner's only, server/owner-identity.ts)
+  // personal computer, its owner's only, server/people/owner-identity.ts)
   { methods: ["GET"], path: /^\/api\/people\/[\w-]{1,80}\/avatar$/ },
   // Organization server, slice 4: a bot's grants (user or team, with a
   // level). server/bots/bot-grants.ts decides who may read and change them (the

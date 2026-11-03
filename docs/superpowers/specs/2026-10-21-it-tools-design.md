@@ -98,7 +98,7 @@ Network-safety helpers already in the tree:
   cloud host-agent address `168.63.129.16`; for IPv6 only global 2000::/3 passes).
 - `server/public-fetch.ts`: `guardedFetch` re-checks every redirect and pins the resolved address. Note that its
   **first** request is not guarded, so callers must guard hop 0 themselves.
-- `server/person-connections.ts`: the "all resolved addresses must be public" rule.
+- `server/people/person-connections.ts`: the "all resolved addresses must be public" rule.
 - `server/browser/browser-navigation.ts`: blocks `localhost`, `metadata.google.internal` and non-public IP literals.
 
 Environment facts:

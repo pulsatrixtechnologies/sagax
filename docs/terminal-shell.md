@@ -32,7 +32,7 @@ someone else opens THEIR environment under THEIR rights, never the owner's.
   Workspace, or the place Auto chose this turn); else the person's cloud
   computer, Local VM, computer, in that order.
 
-Both are member-scope tools (`server/member-tool-scope.ts`): the list is
+Both are member-scope tools (`server/people/member-tool-scope.ts`): the list is
 already filtered for the person and the card only stages a request.
 
 ## The card

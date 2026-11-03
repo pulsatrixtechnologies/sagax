@@ -22,7 +22,7 @@ export type NotifyKind =
    * Sent to admins only, at most once per month for each. */
   | "spend"
   /** A person wrote to another in a direct conversation between people
-   * (server/people-dms.ts). Sent to the recipient only (`audience`); `botId` is empty. */
+   * (server/people/people-dms.ts). Sent to the recipient only (`audience`); `botId` is empty. */
   | "message"
   /** An organization admin force-stopped or force-deleted a bot
    * (server/org/org-bot-force.ts). Sent to the bot's owner only (`audience`). */

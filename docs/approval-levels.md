@@ -181,7 +181,7 @@ Organization > Bots work freely in their owner's environment**, or
 admin turns it off; each change is an `org.settings` row). The environment
 still holds the owner's own credentials (a git credential store, a GitHub
 CLI login) and reaches the internet, so this is bounded
-(`server/member-environment.ts`, security review of 2026-10-16):
+(`server/people/member-environment.ts`, security review of 2026-10-16):
 
 - only at a level that already runs work unasked: **Approve for me** or
   **Auto-accept edits**. At **Ask** the person asked to see every call, so
@@ -379,7 +379,7 @@ reviewed list of exact names):
   out of sight with `chr()` or `$$`) or uses `ATTACH`, `COPY`, `INSTALL`,
   `LOAD` keep their card, which the person may allow;
 - the **agents** tools a bot runs in its own scope
-  (`server/member-tool-scope.ts`: its teammates, threads, rooms, memory,
+  (`server/people/member-tool-scope.ts`: its teammates, threads, rooms, memory,
   skills and own setup). The host-level ones (`act`, `add_mcp_server`,
   `attach_file`, `vm_exec`, `shared_computer`, the cloud agent tools) keep
   their card.

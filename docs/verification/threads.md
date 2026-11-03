@@ -152,7 +152,7 @@ the threads) and the same keyboard handling. Two things a bot thread has are
 left out on purpose: Regenerate title (it would send the pair's words to a
 model) and Refresh permissions (there is no bot).
 
-Rules (server/people-dms.ts, covered by `server/people-threads.e2e.test.ts`):
+Rules (server/people/people-dms.ts, covered by `server/people-threads.e2e.test.ts`):
 
 - A thread belongs to the pair. Both see the same list, titles, pins,
   folders, archive and snooze. Which thread each one has open is their own
@@ -214,7 +214,7 @@ operating-system folder picker.
 
 ```sh
 pnpm exec vitest run server/workspace/independent-threads-api.test.ts server/paired-thread-targets-api.test.ts server/direct-screen-settlement-api.test.ts server/bot-projects-api.test.ts server/thread-capacity-api.test.ts src/components/BotThreads.test.ts src/components/BotProjects.test.ts src/components/bot-settings/BotParallelSettings.test.ts src/components/ComposerQueuedMessages.test.ts src/lib/folder-order.test.ts src/state/store.test.ts
-pnpm exec vitest run server/people-threads.e2e.test.ts server/people-dm-threads-store.test.ts server/people-dms.test.ts server/threads/thread-folders.test.ts src/components/PersonThreads.test.ts src/state/person-threads.test.ts
+pnpm exec vitest run server/people-threads.e2e.test.ts server/people-dm-threads-store.test.ts server/people/people-dms.test.ts server/threads/thread-folders.test.ts src/components/PersonThreads.test.ts src/state/person-threads.test.ts
 ```
 
 These cover thread-pinned tools and permissions, stale legacy phone requests,

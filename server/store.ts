@@ -48,7 +48,7 @@ import type { AgentPart, PartPair, RoomPart } from "./package-parts.ts";
 import type { BotHost } from "./turns/turn-route.ts";
 import { advancesPosition, type ReadMap, type ReadPosition } from "./messages/read-receipts.ts";
 import { applyReaction, normalizeReactions, type ReactionActor, type ReactionMode } from "../shared/reactions.ts";
-import { migratePeopleDmToThreads, PEOPLE_DM_GENERAL_TITLE } from "./people-dms.ts";
+import { migratePeopleDmToThreads, PEOPLE_DM_GENERAL_TITLE } from "./people/people-dms.ts";
 import type {
   BotActivity, GroupDefaultResponder, GroupTask as GroupTaskRecord, MausColor,
   OptionCardData, TaskClosedBy, TaskOpenedBy, TaskUsage, WireBot, WireGroup,
@@ -86,7 +86,7 @@ export interface GroupPackageStamp {
 export type GroupRecord = Omit<WireGroup, "working" | "usage"> & {
   installedPackage?: GroupPackageStamp;
   /** A person conversation went through the threads migration once
-   * (server/people-dms.ts migratePeopleDmToThreads). */
+   * (server/people/people-dms.ts migratePeopleDmToThreads). */
   personThreads?: 1;
   /** The last person left (server/group-leave.ts, #1480): the group is kept
    * and listed to no one. */
@@ -1033,7 +1033,7 @@ export class Store {
         groupsMigrated = true;
       }
       // A person conversation becomes threads once: what it was is its
-      // first thread, "General", and stays its default (server/people-dms.ts).
+      // first thread, "General", and stays its default (server/people/people-dms.ts).
       if (migratePeopleDmToThreads(g)) groupsMigrated = true;
       g.pinnedCwd = active.pinnedCwd;
       g.pinnedMessageId = active.pinnedMessageId;
@@ -1539,7 +1539,7 @@ export class Store {
       defaultResponder?: GroupDefaultResponder;
     },
     humanIds?: string[],
-    /** A direct conversation between two people (server/people-dms.ts),
+    /** A direct conversation between two people (server/people/people-dms.ts),
      * set before the record is first emitted. */
     extra?: { peopleDm?: true; createdBy?: string },
   ): GroupRecord {

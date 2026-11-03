@@ -10,8 +10,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { cleanUserPreferences, isUserPreferenceKey, type UserPreferences } from "../shared/user-preferences.ts";
-import { writeFileAtomic } from "./atomic.ts";
+import { cleanUserPreferences, isUserPreferenceKey, type UserPreferences } from "../../shared/user-preferences.ts";
+import { writeFileAtomic } from "../atomic.ts";
 
 // The one-time move to Advanced (src/lib/interface-mode.ts, 2026-10-16).
 const INTERFACE_MODE_KEY = "sagax.interfaceMode.v1";

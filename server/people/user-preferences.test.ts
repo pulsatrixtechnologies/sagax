@@ -1,13 +1,13 @@
-// A person's preferences on an organization server (server/user-preferences.ts,
+// A person's preferences on an organization server (server/people/user-preferences.ts,
 // server/routes/user-preferences.ts): their own record, known keys only.
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createUserPreferenceStore, migrateToAdvancedOnce, preferencesFrameAllowed } from "./user-preferences.ts";
-import { createUserPreferenceRoutes, USER_PREFERENCES_PATH } from "./routes/user-preferences.ts";
-import { PASS } from "./routes/table.ts";
-import { CLIENT_ALLOW } from "./auth/request-auth.ts";
+import { createUserPreferenceRoutes, USER_PREFERENCES_PATH } from "../routes/user-preferences.ts";
+import { PASS } from "../routes/table.ts";
+import { CLIENT_ALLOW } from "../auth/request-auth.ts";
 
 const ADA = "pr_11111111-1111-4111-8111-111111111111";
 const BOB = "pr_22222222-2222-4222-8222-222222222222";

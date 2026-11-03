@@ -1,6 +1,6 @@
 // Lot B (upstream only-me / MCP personal cluster): a personal MCP key must
 // never land in the shared installation config. Personal servers live in the
-// person store (server/person-connections.ts); shared ones in
+// person store (server/people/person-connections.ts); shared ones in
 // cfg.mcpServers / installation-capabilities.enc. These helpers refuse
 // cross-writes, blank personal headers on shared creates, and mark scope so
 // shared probes and team edits skip the person store.

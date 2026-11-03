@@ -1,7 +1,7 @@
 // A personal computer's look for its paired phone (shared/desktop-appearance.ts):
 // the desktop's skin, font and Hibou 98 switch, one small JSON file in the
 // data directory, written atomically. Organization servers keep the same keys
-// per person in server/user-preferences.ts instead.
+// per person in server/people/user-preferences.ts instead.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { cleanDesktopAppearance, type DesktopAppearance } from "../../shared/desktop-appearance.ts";

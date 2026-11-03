@@ -1,12 +1,12 @@
 // POST /api/people-dms { principalId }: open (or create) the direct
 // conversation between the signed-in person and another person of the
-// organization (server/people-dms.ts). Organization servers only; the other
+// organization (server/people/people-dms.ts). Organization servers only; the other
 // person must be an active person of the Perspicax directory, never a
 // service account and never the caller. Answers the conversation as a
 // group record (200 when it already existed, 201 when created).
 import { z } from "zod";
 
-import { findPeopleDm, type PeopleDmLike } from "../people-dms.ts";
+import { findPeopleDm, type PeopleDmLike } from "../people/people-dms.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

@@ -257,7 +257,7 @@ export async function seedOrg(org, seeded, api) {
   const id = (login) => people.find((p) => p.login === login)?.principalId;
   org.viewer.principalId = id(VIEWER.preferred_username) ?? null;
   // PARITY_PEOPLE=1 (WP15 UI tests): Sam has written to the viewer once,
-  // a direct conversation between two people (server/people-dms.ts).
+  // a direct conversation between two people (server/people/people-dms.ts).
   if (process.env.PARITY_PEOPLE === "1") await seedPeopleDm(org, id("sam.rivera")).catch((error) => console.error(`[parity] people dm: ${error.message}`));
   const ara = seeded.ids.ara.id;
   const grants = [

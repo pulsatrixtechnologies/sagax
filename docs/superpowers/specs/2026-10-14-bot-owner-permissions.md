@@ -16,7 +16,7 @@ des choses ; là, TOUT ce qu'un bot fait spamme un admin d'approbations. »
   `memberBotAdminApproval` (`server/engines/engine-access.ts`). Cette fonction
   marquait `adminApproval: true` **tout** sauf deux cas : un outil de
   fichier qui reste dans l'espace de travail du bot, et un outil `agents`
-  de la liste revue (`server/member-tool-scope.ts`). Donc chaque outil MCP
+  de la liste revue (`server/people/member-tool-scope.ts`). Donc chaque outil MCP
   (ConnectWise par Perspicax, BookStack, le serveur MCP distant du
   propriétaire), chaque recherche web, etc. devenait une carte d'admin.
 - Une carte `adminApproval` :

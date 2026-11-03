@@ -202,7 +202,7 @@ turn. A waiting flag without an open card (a card just answered) does not
 end a watch. A client that closes the connection stops the watch.
 
 `partial` comes from the runtime's assistant text deltas
-(`server/member-live-text.ts`, memory only, reasoning never kept). Tool
+(`server/people/member-live-text.ts`, memory only, reasoning never kept). Tool
 inputs and outputs never appear, only the tool's name and outcome.
 
 ### The turn summary

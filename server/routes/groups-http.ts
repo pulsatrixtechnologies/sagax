@@ -41,7 +41,7 @@ import {
   peopleDmPatchRefusal,
   peopleDmThreadUnreadPatch,
   peopleDmUnreadPatch,
-} from "../people-dms.ts";
+} from "../people/people-dms.ts";
 import { promptWithReply } from "../messages/replies.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { clientGroupPatchViolation, requestSource } from "../auth/request-auth.ts";
@@ -59,7 +59,7 @@ import type { BotRecord, GroupRecord, Message } from "../store.ts";
 import { sectionKey } from "../store.ts";
 import { parseThreadOrganization } from "../threads/thread-folders.ts";
 import { extractTurnImages } from "../turns/turn-images.ts";
-import { personDisplayName } from "../viewer-identity.ts";
+import { personDisplayName } from "../people/viewer-identity.ts";
 import { permissionRefusal } from "../../shared/permissions.ts";
 import type { GroupCommandRoute } from "../../shared/harness-commands.ts";
 import { isStopIntent } from "../../shared/stop-intent.ts";
@@ -595,7 +595,7 @@ export function createGroupsHttpRoutes(deps: GroupsHttpDeps): RouteHandler {
     m = path.match(/^\/api\/groups\/([\w-]+)\/read$/);
     if (m && method === "POST") {
       // A conversation between two people is read by the person reading it,
-      // never for the other one (server/people-dms.ts).
+      // never for the other one (server/people/people-dms.ts).
       const existing = store.group(m[1]);
       const reader = groupReaderId(auth);
       // A person conversation: `{ threadId }` reads that thread for the

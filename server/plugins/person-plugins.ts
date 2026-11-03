@@ -4,7 +4,7 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { BotPluginsOptions } from "../bots/bot-plugins.ts";
-import { principalDir, type PersonCapabilities } from "../person-connections.ts";
+import { principalDir, type PersonCapabilities } from "../people/person-connections.ts";
 
 export function personalPluginStorage(dataDir: string, capabilities: PersonCapabilities): NonNullable<BotPluginsOptions["storage"]> {
   return {

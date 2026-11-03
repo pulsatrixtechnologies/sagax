@@ -7,7 +7,7 @@
 // clears it (the finished words are in the thread by then). Reasoning text
 // is never kept. Memory only; at most MEMBER_LIVE_TEXT_MAX characters per
 // thread, the newest kept.
-import type { RuntimeEvent } from "../shared/runtime-events.ts";
+import type { RuntimeEvent } from "../../shared/runtime-events.ts";
 
 /** The most of a thread's partial text kept. */
 export const MEMBER_LIVE_TEXT_MAX = 4_000;

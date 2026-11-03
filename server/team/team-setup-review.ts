@@ -34,7 +34,7 @@ export interface MemberSetupContext {
   /** Whether the person holds this permission. */
   can(permission: PermissionKey): boolean;
   /** #1098: whether this working folder is in the person's own roots on the
-   * server (server/member-folders.ts). Absent: any folder. */
+   * server (server/people/member-folders.ts). Absent: any folder. */
   folderAllowed?(folder: string): boolean;
 }
 

@@ -14,7 +14,7 @@
 // the routine until they dismiss it (POST /api/routines/:id/away-seen).
 //
 // Who is "there" (AwayVerdict): on an organization server, the routine's
-// person's presence (server/presence.ts, shared/presence.ts thresholds:
+// person's presence (server/people/presence.ts, shared/presence.ts thresholds:
 // online is present, away and offline are away). On a solo server, the
 // desktop or web page's own beat (POST /api/routines/away/beat, the idle
 // time and the system idle state, LocalAwayTracker below). With no signal

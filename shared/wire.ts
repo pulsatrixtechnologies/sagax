@@ -1326,7 +1326,7 @@ export interface GroupTask {
   /** The folder (`WireGroup.projects`) this thread is filed under. */
   projectId?: string;
   /** A person conversation: this thread is unread for the viewer. Drawn
-   * per viewer from `unreadFor` (server/people-dms.ts peopleDmForViewer). */
+   * per viewer from `unreadFor` (server/people/people-dms.ts peopleDmForViewer). */
   unread?: boolean;
   /** A person conversation: which of its two people have not read this
    * thread yet (principal ids). Server-side; a client never gets it. */
@@ -1383,13 +1383,13 @@ export interface WireGroup {
   /** true for auto-created bot-bot channels. */
   dm?: boolean;
   /** Organization server: a direct conversation between two people
-   * (`humanIds`), with no bot (server/people-dms.ts). Only those two read it. */
+   * (`humanIds`), with no bot (server/people/people-dms.ts). Only those two read it. */
   peopleDm?: boolean;
   /** A conversation between two people: which of the two have not read it
    * yet (principal ids). Each person's own `unread` is drawn from it, so
    * the sender reading it never clears it for the recipient. A room: the
    * people tagged with @ who have not read it yet (server/rooms/room-mentions.ts).
-   * Server-side; a client never gets it (server/people-dms.ts
+   * Server-side; a client never gets it (server/people/people-dms.ts
    * peopleDmForViewer). */
   unreadFor?: string[];
   /** A room: @all tags every person in it (a notification each). Absent:
@@ -1536,7 +1536,7 @@ export type ServerFrame =
   /** A person's own unlocks (server/achievements.ts), to their streams only. */
   | { kind: "achievements"; audience: string; unlocked: Array<{ id: string; points: number; unlockedAt: number }> }
   /** A person's preferences after a save on any of their devices
-   * (server/user-preferences.ts), to that person's streams only. */
+   * (server/people/user-preferences.ts), to that person's streams only. */
   | { kind: "preferences"; audience: string; preferences: Record<string, string>; updatedAt: number | null }
   /** A screen or button for one person's open desktop app. iOS and Android ignore this kind. */
   | { kind: "bot-act"; audience: string; action: string; input?: Record<string, unknown> }

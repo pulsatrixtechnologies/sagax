@@ -15,7 +15,7 @@ import {
   type PresenceState,
   type PresenceView,
   type SystemIdleState,
-} from "../shared/presence.ts";
+} from "../../shared/presence.ts";
 
 interface MutableConnection extends PresenceConnection {
   pages: Map<string, PresencePage>;

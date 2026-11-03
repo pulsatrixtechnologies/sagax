@@ -12,7 +12,7 @@ import { availableTools, catalogProfileFromEnv } from "./drivers/agents-catalog.
 import { catalogBridgeOn, findCatalogTools, routeBridgeCall } from "./drivers/catalog-bridge.ts";
 import { hookRuns } from "./lifecycle-hooks.ts";
 import { guardToolCall } from "./mcp/mcp-permissions.ts";
-import { memberOwnScopeTool } from "./member-tool-scope.ts";
+import { memberOwnScopeTool } from "./people/member-tool-scope.ts";
 import { misuseToolFrameText } from "./safety/misuse-guardrails.ts";
 import { ToolGrantStore } from "./tool-grants.ts";
 import type { CustomRule } from "../shared/custom-rules.ts";

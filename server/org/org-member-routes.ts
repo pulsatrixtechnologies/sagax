@@ -144,7 +144,7 @@ export interface OrgMemberRouteDeps {
   /** A principal id from a principal id or a Perspicax user id. */
   resolvePerson(ref: string): string | null;
   /** The words the bot is writing in this thread right now, or null
-   * (server/member-live-text.ts). */
+   * (server/people/member-live-text.ts). */
   liveText?(threadId: string): string | null;
   /** The link that opens the thread in Sagax, or null. */
   threadLink?(threadId: string, botId: string | null): string | null;

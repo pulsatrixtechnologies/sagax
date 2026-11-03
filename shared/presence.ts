@@ -1,6 +1,6 @@
 // Who of the organization is here: online, away or offline (organization
 // server only). One module for the thresholds and the state machine, read by
-// the server (server/presence.ts, the routes in server/routes/presence.ts)
+// the server (server/people/presence.ts, the routes in server/routes/presence.ts)
 // and by the renderer (src/lib/presence.ts) for its own clock.
 //
 //   online   a client of that person is connected and the person used it

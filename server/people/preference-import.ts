@@ -2,11 +2,11 @@
 // mode 0600. Not the agent import, and not MEMORY.md.
 import { readFileSync } from "node:fs";
 
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 import {
   applyPreferenceImport, parsePreferenceLines, previewPreferenceImport,
   type PreferenceItem, type PreferencePreviewLine,
-} from "../shared/preference-import.ts";
+} from "../../shared/preference-import.ts";
 
 interface BotPreferences {
   botId: string;

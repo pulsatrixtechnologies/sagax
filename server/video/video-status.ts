@@ -1,7 +1,7 @@
 // The conversation row of one make_video job: progress while xAI works, the
 // stop or failure receipt when it ends without a video. The completed MP4
 // replaces this row (server/index.ts publish). Worded in the person's own
-// language (server/person-language.ts); English for any other choice.
+// language (server/people/person-language.ts); English for any other choice.
 import { parseWidgetInput, widgetToText, type WidgetRoot } from "../../shared/widget.ts";
 import type { VideoJob } from "./video-generation.ts";
 

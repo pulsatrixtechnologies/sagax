@@ -3,7 +3,7 @@
 // that follow the PERSON from device to device. The renderer keeps them in
 // localStorage under these exact keys (the modules that own them read them
 // there), and on an organization server they are also kept per person on
-// the server (server/user-preferences.ts, GET/PUT /api/me/preferences).
+// the server (server/people/user-preferences.ts, GET/PUT /api/me/preferences).
 //
 // Only these keys travel. Everything about one device or one window stays
 // on that device: drafts, window and panel sizes, which bots float and where
@@ -70,7 +70,7 @@ export const USER_PREFERENCE_KEYS = [
   // Simple or Advanced (src/lib/interface-mode.ts). "simple" | "advanced".
   "sagax.interfaceMode.v1",
   // the one-time move from Simple to Advanced was done for this person (an
-  // ISO date; src/lib/interface-mode.ts, server/user-preferences.ts)
+  // ISO date; src/lib/interface-mode.ts, server/people/user-preferences.ts)
   "sagax.advancedModeMigratedAt.v1",
   // where bots work for this person (organization server: their computer
   // through the desktop app, or their server environment; shared/bot-workplace.ts)

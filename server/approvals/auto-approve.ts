@@ -191,7 +191,7 @@ export type AutoVerdictSource =
    * scope), which never ask. */
   | "sagax-internal"
   /** 2026-10-16: a tool of the bot owner's own isolated environment (their
-   * server environment, their Local VM), server/member-environment.ts. */
+   * server environment, their Local VM), server/people/member-environment.ts. */
   | "own-environment"
   | "own-attachment"
   | "own-computer-choice"
@@ -257,7 +257,7 @@ export function autoVerdict(
     sagaxInternal?: boolean;
     /** The call acts in the bot owner's own isolated environment, the
      * organization allows it and the turn is the owner's own
-     * (server/member-environment.ts ownEnvironmentAutonomy). Answered only
+     * (server/people/member-environment.ts ownEnvironmentAutonomy). Answered only
      * at Auto or Auto-accept edits, never at Ask. */
     ownEnvironment?: boolean;
     /** 2026-10-19: a read of the person's own attachments in their own

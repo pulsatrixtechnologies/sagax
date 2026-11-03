@@ -716,7 +716,7 @@ export function GroupTaskPicker({ group }: { group: Group }) {
   );
 }
 
-/** A conversation with a person has threads like a bot (server/people-dms.ts):
+/** A conversation with a person has threads like a bot (server/people/people-dms.ts):
  * the same picker, menus and folders, in the chat header while Settings >
  * Appearance puts threads there; in the sidebar location the list sits
  * under the person's row instead, never both. No generated title (that

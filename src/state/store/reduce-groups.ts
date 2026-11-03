@@ -17,7 +17,7 @@ export function reduceGroups(state: AppState, action: Action, _reduce: ReduceFn)
         ? fenced.groups.map((g) => (g.id === action.group.id ? {
             ...g, ...action.group,
             // A person conversation: a frame names its default thread; the
-            // thread this person has open stays open (server/people-dms.ts).
+            // thread this person has open stays open (server/people/people-dms.ts).
             threadId: personThreadKept(g, action.group) ? g.threadId : (action.group.threadId ?? g.threadId),
             section: typeof action.group.threadId === "string" || Object.hasOwn(action.group, "section") ? action.group.section : g.section,
             tasks: action.group.tasks ? mergeTaskStamps(g.tasks, action.group.tasks) : g.tasks,

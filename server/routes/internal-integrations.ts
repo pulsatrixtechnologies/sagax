@@ -21,7 +21,7 @@ import {
   personalMcpInputFromAgent,
   PersonConnectionsError,
   type PersonalMcpInput,
-} from "../person-connections.ts";
+} from "../people/person-connections.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 

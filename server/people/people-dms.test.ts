@@ -1,11 +1,11 @@
 // The rules of a direct conversation between two people, pure. The real
 // server's behavior (privacy, live frames, search, notifications) is covered
-// by server/people-dms.e2e.test.ts.
+// by server/people/people-dms.e2e.test.ts.
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { json, readBody } from "./harness/http.ts";
+import { json, readBody } from "../harness/http.ts";
 import {
   findPeopleDm,
   isPeopleDmParticipant,
@@ -20,9 +20,9 @@ import {
   peopleDmRouteRefusal,
   PeopleDmSelections,
 } from "./people-dms.ts";
-import type { RequestAuth } from "./auth/request-auth.ts";
-import { createPeopleDmRoutes } from "./routes/people-dms.ts";
-import { dispatchRoutes } from "./routes/table.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { createPeopleDmRoutes } from "../routes/people-dms.ts";
+import { dispatchRoutes } from "../routes/table.ts";
 
 const dm = { id: "g1", peopleDm: true, humanIds: ["pr_alice", "pr_bob"] };
 

@@ -18,6 +18,7 @@ import {
   CircleCheck,
   Clock3,
   FileText,
+  FolderInput,
   Gauge,
   Loader2,
   Network,
@@ -44,6 +45,7 @@ import {
   browseTeamSource,
   deleteBotNotes,
   detectBodyKind,
+  emptyBotFolder,
   fetchMemoryManagerSources,
   fetchPerspicaxArchived,
   fetchPerspicaxVocabulary,
@@ -51,6 +53,7 @@ import {
   openPerspicaxNote,
   openTeamNote,
   pxMemory,
+  restoreBotChange,
   saveBotNote,
   undoBotDeletes,
   type MemoryBrowse,
@@ -77,15 +80,20 @@ import {
   type PageRow,
   type PageTier,
 } from "@/lib/memory-page";
+import { MEMORY_INDEX } from "@/lib/memory";
+import { botNames, botSourceLink, isLinked, pxFolderLink, teamFolderLink, type FolderLink, type LinkBot } from "@/lib/memory-folders";
+import type { ImportWriters } from "@/lib/memory-import";
+import { swatchStyle, type MausColor } from "@/lib/mascot";
 import { useCaptionChrome } from "../DesktopCapabilities";
 import { PAGE_HEADER_BUTTON, PAGE_MENU_ITEM, PAGE_POPOVER, PageHeader, PageSegment, PageTopStrip, useDismissMenus } from "../content-page";
 import { confirmAsync } from "../ConfirmProvider";
+import { MemoryImportDialog, type ImportDestination } from "./MemoryImportDialog";
 import { addToCollection, fetchCollections, MemoryCollections, type CollectionSummary } from "./MemoryCollections";
 import { MemoryMapView } from "./MemoryMapView";
 import { MemoryNoteView, type NoteSave } from "./MemoryNoteView";
 import { MemoryNotesList, type ListTemplate } from "./MemoryNotesList";
 import { MemoryQualityView } from "./MemoryQualityView";
-import { MemorySidebar, type MemoryRowAction, type MemorySidebarFolder, type MemorySidebarNav, type MemorySidebarTier } from "./MemorySidebar";
+import { MemorySidebar, type MemoryFolderMenu, type MemoryRowAction, type MemorySidebarFolder, type MemorySidebarNav, type MemorySidebarTier } from "./MemorySidebar";
 import { MemoryTagsView } from "./MemoryTagsView";
 import { FIELD, PRIMARY_BUTTON, Swatch } from "./memory-ui";
 
@@ -166,9 +174,28 @@ async function pooled<T>(items: T[], limit: number, work: (item: T) => Promise<v
   }));
 }
 
+/** A linked folder's mark: the bot's picture, else its colour. */
+function LinkMark({ bot }: { bot: LinkBot }) {
+  if (bot.avatarUrl && bot.avatarCrop !== "mascot") {
+    return <img src={bot.avatarUrl} alt="" className="size-[14px] shrink-0 rounded-full object-cover" data-memory-link-mark="avatar" />;
+  }
+  return <span className="mx-[2px] size-[10px] shrink-0 rounded-full" style={swatchStyle((bot.color ?? "green") as MausColor)} aria-hidden="true" data-memory-link-mark="color" />;
+}
+
+/** The ⋯ menu's first lines: who the folder belongs to and what uses it. */
+function linkLines(link: FolderLink): string[] {
+  if (!isLinked(link)) return [link.readBy.length ? t("memoryManager.readBy", { bots: link.readBy.join(", ") }) : t("memoryManager.notLinkedLine")];
+  return [
+    t("memoryManager.linkedTo", { bot: botNames(link) }),
+    ...(link.routines.length ? [t("memoryManager.routinesLine", { names: link.routines.join(", ") })] : []),
+  ];
+}
+
 /** Full-page Memory (main column). */
 export function MemoryManagerPanel() {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
+  const linkBots = state.bots as unknown as LinkBot[];
+  const linkRoutines = state.routines;
   const { dragProps, noDragStyle, controlsShiftStyle } = useCaptionChrome();
   const close = useCallback(() => dispatch({ type: "toggleMemoryManager", open: false }), [dispatch]);
   const mac = useMemo(() => isMacPlatform(), []);
@@ -206,6 +233,7 @@ export function MemoryManagerPanel() {
   // The console's preview: a click on a row opens the note beside the list.
   const [preview, setPreview] = useState<{ entry: PageRow; detail: MemoryNoteDetail | null } | null>(null);
   const [collections, setCollections] = useState<CollectionSummary[]>([]);
+  const [importOpen, setImportOpen] = useState(false);
   const [explorerOpen, setExplorerOpen] = useState(() => typeof window === "undefined" || typeof window.matchMedia !== "function" || window.matchMedia("(min-width: 1024px)").matches);
   const switcherRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDetailsElement | null>(null);
@@ -275,7 +303,13 @@ export function MemoryManagerPanel() {
 
   const pxSource = useMemo(() => sources?.find((source) => source.kind === "perspicax") ?? null, [sources]);
   const pxTiers = useMemo(() => (pxSource ? overviews[pxSource.id]?.tiers ?? [] : []), [pxSource, overviews]);
-  const botSources = useMemo(() => (sources ?? []).filter((source) => source.kind === "bot" && overviews[source.id]), [sources, overviews]);
+  // A temporary agent's memory folder stays until it is deleted; emptied, it leaves the page.
+  const allBotSources = useMemo(() => (sources ?? []).filter((source) => source.kind === "bot" && overviews[source.id]), [sources, overviews]);
+  const botSources = useMemo(() => allBotSources.filter((source) => {
+    if (source.linked !== false) return true;
+    const browse = overviews[source.id]!;
+    return (browse.indexBytes ?? 1) > 0 || browse.notes.some((row) => row.path !== MEMORY_INDEX);
+  }), [allBotSources, overviews]);
   const teamSources = useMemo(() => (sources ?? []).filter((source) => source.kind === "team" && overviews[source.id]), [sources, overviews]);
   const meTier = pxTiers.find((tier) => tier.kind === "me");
 
@@ -283,14 +317,18 @@ export function MemoryManagerPanel() {
     const out: PageTier[] = [];
     if (botSources.length > 0 || meTier) out.push({ key: "mine", name: t("memoryManager.tierMine"), kind: "mine", color: tierColor("mine") });
     let team = 0;
-    for (const source of teamSources) out.push({ key: source.id, name: source.name, kind: "team", color: tierColor("team", team++) });
+    // A sidebar section with no team note is not a tier of its own (General always is).
+    for (const source of teamSources) {
+      if (source.section && !(overviews[source.id]?.notes.length)) continue;
+      out.push({ key: source.id, name: source.name, kind: "team", color: tierColor("team", team++) });
+    }
     for (const tier of pxTiers) {
       if (tier.kind === "me") continue;
       const kind = tier.kind === "org" ? "org" : "team";
       out.push({ key: `perspicax:${tier.scope}`, name: tier.kind === "org" ? t("memoryManager.tierOrg") : tier.name, kind, color: tierColor(kind, kind === "team" ? team++ : 0) });
     }
     return out;
-  }, [botSources.length, meTier, teamSources, pxTiers]);
+  }, [botSources.length, meTier, teamSources, pxTiers, overviews]);
   const tierByKey = useMemo(() => new Map(tiers.map((tier) => [tier.key, tier])), [tiers]);
   const pxTierKey = useCallback((scope: string | undefined) => {
     const tier = pxTiers.find((entry) => entry.scope === scope);
@@ -315,6 +353,7 @@ export function MemoryManagerPanel() {
     for (const source of botSources) {
       const facts = factsByBot[source.botId ?? ""];
       for (const row of overviews[source.id]!.notes) {
+        if (source.linked === false && row.path === MEMORY_INDEX && (overviews[source.id]!.indexBytes ?? 1) === 0) continue;
         const key = rowKey(source, row);
         const fact = row.path ? facts?.get(row.path) : undefined;
         const body = bodies[key];
@@ -366,7 +405,30 @@ export function MemoryManagerPanel() {
     });
   }, [pxSource, pxTiers, pxTierKey]);
   const archivedRows = useMemo(() => pxRows(archivedRaw, true), [pxRows, archivedRaw]);
-  const trashRows = useMemo(() => pxRows(trashRaw.map((row) => ({
+  // A bot's deleted notes: the journal keeps their text, a revert puts them back.
+  const botTrashRows = useMemo<PageRow[]>(() => {
+    const out: PageRow[] = [];
+    for (const source of allBotSources) {
+      const present = new Set(overviews[source.id]!.notes.map((row) => row.path));
+      const seen = new Set<string>();
+      for (const entry of journals[source.botId ?? ""] ?? []) {
+        if (seen.has(entry.path)) continue;
+        seen.add(entry.path);
+        if (entry.kind !== "deleted" || !entry.canRevert || present.has(entry.path)) continue;
+        const title = entry.path.split("/").pop()?.replace(/\.md$/i, "") || entry.path;
+        out.push({
+          key: `trash|bot:${source.botId}|${entry.id}`,
+          source,
+          tier: "mine",
+          folderKey: source.id,
+          folderPath: source.name,
+          row: { id: entry.id, title, path: entry.path, updatedAt: entry.at, archived: true },
+        });
+      }
+    }
+    return out;
+  }, [allBotSources, overviews, journals]);
+  const pxTrashRows = useMemo(() => pxRows(trashRaw.map((row) => ({
     id: row.id,
     title: row.title,
     scope: row.scope,
@@ -377,6 +439,7 @@ export function MemoryManagerPanel() {
     archived: true,
     status: row.may_manage === false ? "locked" : undefined,
   })), false), [pxRows, trashRaw]);
+  const trashRows = useMemo(() => [...pxTrashRows, ...botTrashRows], [pxTrashRows, botTrashRows]);
 
   // Bodies, in the background: excerpts of the bots' notes, [[links]] for the map and the backlinks.
   useEffect(() => {
@@ -652,12 +715,15 @@ export function MemoryManagerPanel() {
   };
 
   const restoreKeys = async (keys: string[]) => {
-    const items = keys.map(lookup).filter((entry): entry is PageRow => Boolean(entry)).map((entry) => ({ scope: entry.row.scope, id: entry.row.id }));
-    if (!items.length) return;
+    const entries = keys.map(lookup).filter((entry): entry is PageRow => Boolean(entry));
+    const fromBots = entries.filter((entry) => entry.key.startsWith("trash|bot:") && entry.source.botId);
+    const items = entries.filter((entry) => !fromBots.includes(entry)).map((entry) => ({ scope: entry.row.scope, id: entry.row.id }));
+    if (!items.length && !fromBots.length) return;
     setBusy(true);
     try {
-      await pxMemory("/bulk", { method: "POST", body: JSON.stringify({ action: "restore", items }) });
-      setNotice({ text: t("memoryManager.restored", { count: items.length }) });
+      if (items.length) await pxMemory("/bulk", { method: "POST", body: JSON.stringify({ action: "restore", items }) });
+      for (const entry of fromBots) await restoreBotChange(entry.source.botId!, entry.row.id);
+      setNotice({ text: t("memoryManager.restored", { count: items.length + fromBots.length }) });
       refresh();
     } catch (cause) {
       setError(readableError(cause));
@@ -667,7 +733,7 @@ export function MemoryManagerPanel() {
   };
 
   const emptyTrash = async () => {
-    const ok = await confirmAsync({ title: t("memoryManager.emptyTrash"), body: t("memoryManager.emptyTrashConfirm", { count: trashRows.length }), confirmLabel: t("memoryManager.emptyTrash"), tone: "danger" });
+    const ok = await confirmAsync({ title: t("memoryManager.emptyTrash"), body: t("memoryManager.emptyTrashConfirm", { count: pxTrashRows.length }), confirmLabel: t("memoryManager.emptyTrash"), tone: "danger" });
     if (!ok) return;
     setBusy(true);
     try {
@@ -831,6 +897,52 @@ export function MemoryManagerPanel() {
     }
   };
 
+  // A bot memory folder no bot is linked to (a temporary agent's): its notes
+  // to the Trash (the journal keeps each one), with Undo.
+  const deleteBotFolder = async (source: MemoryManagerSource) => {
+    const browse = overviews[source.id];
+    if (!source.botId || !browse) return;
+    const paths = browse.notes.map((row) => row.path).filter((path): path is string => Boolean(path) && path !== MEMORY_INDEX);
+    const clearIndex = (browse.indexBytes ?? 0) > 0;
+    const ok = await confirmAsync({
+      title: t("memoryManager.deleteFolder"),
+      body: t("memoryManager.deleteFolderTrash", { folder: source.name, count: paths.length + (clearIndex ? 1 : 0) }),
+      confirmLabel: t("memoryManager.delete"),
+      tone: "danger",
+    });
+    if (!ok) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const botId = source.botId;
+      const { undoIds, count } = await emptyBotFolder(botId, paths, clearIndex);
+      setNotice({
+        text: t("memoryManager.deleted", { count }),
+        undo: undoIds.length ? async () => { await undoBotDeletes(botId, undoIds); refresh(); } : undefined,
+      });
+      if (place.kind === "folder" && (place.folder === source.id || place.folder.startsWith(`${source.id}/`))) setPlace({ kind: "all" });
+      refresh();
+    } catch (cause) {
+      setError(readableError(cause));
+      refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** "Delete folder…" in a folder's ⋯ menu: offered when no bot is linked to it, greyed with the reason otherwise. */
+  const folderMenu = (link: FolderLink, remove: (() => void) | null, blocked?: string): MemoryFolderMenu => ({
+    lines: linkLines(link),
+    items: [{
+      id: "delete",
+      label: t("memoryManager.deleteFolderItem"),
+      danger: true,
+      onSelect: () => remove?.(),
+      disabledReason: isLinked(link) ? t("memoryManager.deleteFolderLinked", { bot: botNames(link) }) : remove ? undefined : blocked,
+    }],
+  });
+  const linkTitle = (link: FolderLink) => (isLinked(link) ? t("memoryManager.linkedTo", { bot: botNames(link) }) : t("memoryManager.notLinkedLine"));
+
   // A Perspicax folder's manual order (the console's drag in Manual order).
   const reorder = async (ids: string[]) => {
     if (place.kind !== "folder" || !place.folder.startsWith("px:")) return;
@@ -891,11 +1003,14 @@ export function MemoryManagerPanel() {
     { id: "recent", label: t("memoryManager.nav.recent"), icon: Clock3, count: counts.recent, current: current({ kind: "recent" }), onOpen: () => goPlace({ kind: "recent" }) },
     { id: "review", label: t("memoryManager.nav.review"), icon: CircleCheck, count: counts.review, dot: counts.review > 0, current: current({ kind: "review" }), onOpen: () => goPlace({ kind: "review" }) },
   );
-  const tidy: MemorySidebarNav[] = pxSource ? [
-    { id: "collections", label: t("memoryManager.collections.title"), icon: BookOpen, count: collections.length, current: current({ kind: "collections" }), onOpen: () => goPlace({ kind: "collections" }) },
-    { id: "archived", label: t("memoryManager.nav.archived"), icon: Archive, count: archivedRows.length, current: current({ kind: "archived" }), onOpen: () => goPlace({ kind: "archived" }) },
-    { id: "trash", label: t("memoryManager.nav.trash"), icon: Trash2, count: trashRows.length, current: current({ kind: "trash" }), onOpen: () => goPlace({ kind: "trash" }) },
-  ] : [];
+  const tidy: MemorySidebarNav[] = [
+    ...(pxSource ? [
+      { id: "collections", label: t("memoryManager.collections.title"), icon: BookOpen, count: collections.length, current: current({ kind: "collections" }), onOpen: () => goPlace({ kind: "collections" }) },
+      { id: "archived", label: t("memoryManager.nav.archived"), icon: Archive, count: archivedRows.length, current: current({ kind: "archived" }), onOpen: () => goPlace({ kind: "archived" }) },
+    ] : []),
+    ...(pxSource || trashRows.length ? [{ id: "trash", label: t("memoryManager.nav.trash"), icon: Trash2, count: trashRows.length, current: current({ kind: "trash" }), onOpen: () => goPlace({ kind: "trash" }) }] : []),
+    ...(sources?.length ? [{ id: "import", label: t("memoryManager.import.open"), icon: FolderInput, count: null, current: false, onOpen: () => setImportOpen(true) }] : []),
+  ];
 
   const folderCount = (key: string) => rows.filter((entry) => entry.folderKey === key || entry.folderKey.startsWith(`${key}/`)).length;
   const folderPlace = (tier: string, folder: string): Place => ({ kind: "folder", tier, folder });
@@ -905,15 +1020,19 @@ export function MemoryManagerPanel() {
     const target = targets.find((entry) => entry.id === `px:${tier.scope}`);
     return tier.folders.map((folder) => {
       const key = `px:${tier.scope}/${folder.name}`;
+      const link = pxFolderLink(folder.name, linkBots, linkRoutines);
       const actions: MemoryRowAction[] = tier.mayWrite ? [
         { kind: "new", label: t("memoryManager.newIn", { folder: folder.name }), onClick: () => startCreate(target, folder.name) },
         { kind: "rename", label: t("memoryManager.renameFolder", { folder: folder.name }), onClick: () => setRenaming(key) },
-        { kind: "delete", label: t("memoryManager.deleteFolderNamed", { folder: folder.name }), onClick: () => void deletePxFolder(tier.scope, folder.name) },
       ] : [];
       return {
         key,
         name: folder.name,
+        title: linkTitle(link),
         icon: "folder",
+        leading: isLinked(link) ? <LinkMark bot={link.bots[0]!} /> : undefined,
+        unlinked: !isLinked(link),
+        menu: folderMenu(link, tier.mayWrite ? () => void deletePxFolder(tier.scope, folder.name) : null, t("memoryManager.deleteFolderReadOnly")),
         count: folder.count,
         current: current(folderPlace(tierKey, key)),
         onOpen: () => goPlace(folderPlace(tierKey, key)),
@@ -928,11 +1047,16 @@ export function MemoryManagerPanel() {
     const tierPlace: Place = { kind: "tier", tier: tier.key };
     const base = { key: tier.key, name: tier.name, color: tier.color, count: rows.filter((entry) => entry.tier === tier.key).length, current: current(tierPlace), onOpen: () => goPlace(tierPlace), data: { "data-memory-tier": tier.key } };
     if (tier.key === "mine") {
-      const botFolders: MemorySidebarFolder[] = botSources.map((source) => ({
+      const botFolders: MemorySidebarFolder[] = botSources.map((source) => {
+        const link = botSourceLink(source, linkBots, linkRoutines);
+        return {
         key: source.id,
         name: source.name,
-        title: source.detail,
-        icon: "bot",
+        title: linkTitle(link),
+        icon: isLinked(link) ? "bot" as const : "folder" as const,
+        leading: isLinked(link) ? <LinkMark bot={link.bots[0]!} /> : undefined,
+        unlinked: !isLinked(link),
+        menu: folderMenu(link, source.mayWrite ? () => void deleteBotFolder(source) : null, t("memoryManager.deleteFolderReadOnly")),
         count: folderCount(source.id),
         current: current(folderPlace("mine", source.id)),
         onOpen: () => goPlace(folderPlace("mine", source.id)),
@@ -951,7 +1075,8 @@ export function MemoryManagerPanel() {
           };
         }),
         data: { "data-memory-source": source.id },
-      }));
+        };
+      });
       const meTarget = meTier ? targets.find((target) => target.id === `px:${meTier.scope}`) : undefined;
       return {
         ...base,
@@ -972,10 +1097,14 @@ export function MemoryManagerPanel() {
         actions: target ? [{ kind: "new", label: t("memoryManager.newIn", { folder: team.name }), onClick: () => startCreate(target) }] : [],
         folders: (overviews[team.id]?.folders ?? []).map((folder) => {
           const key = `${team.id}/${folder.id}`;
+          const link = teamFolderLink(team.section ?? "", linkBots);
           return {
             key,
             name: folder.name,
+            title: linkTitle(link),
             icon: "folder" as const,
+            unlinked: true,
+            menu: folderMenu(link, null, t("memoryManager.deleteFolderTeamKind")),
             count: folder.count,
             current: current(folderPlace(team.id, key)),
             onOpen: () => goPlace(folderPlace(team.id, key)),
@@ -1111,6 +1240,34 @@ export function MemoryManagerPanel() {
   const active = useMemo(() => activeSeries(rows, tiers.map((tier) => tier.key), Date.now()), [rows, tiers]);
   const writes = useMemo(() => writeSeries(allJournal, Date.now()), [allJournal]);
 
+  // ---- import ----------------------------------------------------------------------------
+
+  const importDestinations = useMemo<ImportDestination[]>(() => targets.filter((target) => target.source.kind !== "team").map((target) => {
+    if (target.source.kind === "bot" && target.source.botId) {
+      const sourceId = target.source.id;
+      return {
+        id: target.id,
+        label: target.label,
+        target: { kind: "bot" as const, botId: target.source.botId },
+        folders: [],
+        existing: rows.filter((entry) => entry.source.id === sourceId && entry.row.path?.startsWith("memory/")).map((entry) => ({ folder: "", title: entry.row.title, body: bodies[entry.key] })),
+      };
+    }
+    const scope = target.id.slice(3);
+    return {
+      id: target.id,
+      label: target.label,
+      target: { kind: "perspicax" as const, scope },
+      folders: target.folders,
+      existing: rows.filter((entry) => entry.source.kind === "perspicax" && entry.row.scope === scope).map((entry) => ({ folder: entry.row.folder ?? "", title: entry.row.title, body: bodies[entry.key], id: entry.row.id })),
+    };
+  }), [targets, rows, bodies]);
+  const importWriters = useMemo<ImportWriters>(() => ({
+    bot: (botId, body) => api(`/api/bots/${botId}/memory/import`, { method: "POST", body: JSON.stringify(body) }),
+    pxCreate: (note) => pxMemory("/entry", { method: "POST", body: JSON.stringify(note) }),
+    pxUpdate: (note) => pxMemory("/entry", { method: "PUT", body: JSON.stringify(note) }),
+  }), []);
+
   // ---- render ----------------------------------------------------------------------------
 
   const viewOptions = [
@@ -1152,7 +1309,12 @@ export function MemoryManagerPanel() {
                 <CircleCheck size={16} />{t("memoryManager.proposals")}
                 {counts.review > 0 && <span className="ml-auto rounded-full bg-raised px-1.5 text-[11px] text-ink-secondary">{counts.review}</span>}
               </button>
-              {pxSource && (
+              {importDestinations.length > 0 && (
+                <button type="button" role="menuitem" className={PAGE_MENU_ITEM} onClick={() => { menuRef.current?.removeAttribute("open"); setImportOpen(true); }} data-memory-import-open="">
+                  <FolderInput size={16} />{t("memoryManager.import.open")}
+                </button>
+              )}
+              {(pxSource || trashRows.length > 0) && (
                 <button type="button" role="menuitem" className={PAGE_MENU_ITEM} onClick={() => { menuRef.current?.removeAttribute("open"); goPlace({ kind: "trash" }); }}>
                   <Trash2 size={16} />{t("memoryManager.nav.trash")}
                 </button>
@@ -1257,7 +1419,7 @@ export function MemoryManagerPanel() {
                       onDelete={place.kind === "archived" || place.kind === "trash" ? undefined : (keys) => void deleteKeys(keys)}
                       onMove={place.kind === "archived" || place.kind === "trash" ? undefined : startMove}
                       onRestore={place.kind === "archived" || place.kind === "trash" ? (keys) => void restoreKeys(keys) : undefined}
-                      headExtra={place.kind === "trash" && trashRows.some((entry) => entry.row.status !== "locked") ? (
+                      headExtra={place.kind === "trash" && pxTrashRows.some((entry) => entry.row.status !== "locked") ? (
                         <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-full border border-hairline/60 px-2.5 text-[12.5px] text-ink hover:bg-hover" onClick={() => void emptyTrash()} data-memory-trash-empty="">
                           <Trash2 size={14} aria-hidden="true" />{t("memoryManager.emptyTrash")}
                         </button>
@@ -1363,6 +1525,15 @@ export function MemoryManagerPanel() {
             )}
           </section>
         </div>
+        {importOpen && importDestinations.length > 0 && (
+          <MemoryImportDialog
+            destinations={importDestinations}
+            defaultId={importDestinations.find((entry) => entry.target.kind === "perspicax" && entry.target.scope === meTier?.scope)?.id ?? importDestinations[0]!.id}
+            writers={importWriters}
+            onClose={() => setImportOpen(false)}
+            onImported={(count) => { setNotice({ text: t("memoryManager.importedNotice", { count }) }); refresh(); }}
+          />
+        )}
         {preview && (view === "notes" || view === "map") && (
           <>
             <button type="button" aria-label={t("common.close")} className="absolute inset-0 z-30 cursor-default bg-ink/10" onClick={() => setPreview(null)} data-memory-preview-scrim="" />

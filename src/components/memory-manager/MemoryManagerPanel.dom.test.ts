@@ -37,10 +37,17 @@ vi.mock("@/state/store", async () => {
       calls.push({ path, method: init?.method ?? "GET", body: typeof init?.body === "string" ? init.body : undefined });
       // `wide`: every kind of row (a team section, a team tier, a proposal).
       const wide = (globalThis as { __memoryWide?: boolean }).__memoryWide === true;
+      // `links`: a temporary agent's memory no bot is linked to, a sidebar section without team notes.
+      const links = (globalThis as { __memoryLinks?: boolean }).__memoryLinks === true;
       if (path === "/api/memory-manager/sources") {
         return {
           sources: [
-            { id: "bot:atlas", kind: "bot", name: "Atlas", detail: "Bot memory", mayWrite: true, botId: "atlas" },
+            { id: "bot:atlas", kind: "bot", name: "Atlas", detail: "Bot memory", mayWrite: true, botId: "atlas", linked: true },
+            ...(links ? [
+              { id: "bot:perf", kind: "bot", name: "perf-test-061", detail: "Bot memory", mayWrite: true, botId: "perf", linked: false },
+              { id: "team:general", kind: "team", name: "General", detail: "1 team note", mayWrite: true, section: "" },
+              { id: "team:dr-eggbot", kind: "team", name: "dr eggbot", detail: "0 team notes", mayWrite: true, section: "dr-eggbot" },
+            ] : []),
             // A bot the memory routes refuse (an older server still lists it).
             { id: "bot:northwind", kind: "bot", name: "Northwind", detail: "Bot memory", mayWrite: true, botId: "northwind" },
             ...(wide ? [{ id: "team:general", kind: "team", name: "General", detail: "1 team note", mayWrite: true, section: "" }] : []),
@@ -50,6 +57,17 @@ vi.mock("@/state/store", async () => {
         };
       }
       if (path.startsWith("/api/bots/northwind/")) throw new actual.ApiError("no such bot", 404);
+      if (path.startsWith("/api/team-memory") && path.includes("section=dr-eggbot")) return { entries: [] };
+      if (path.startsWith("/api/bots/perf/memory/journal")) return { entries: [] };
+      if (path.startsWith("/api/bots/perf/memory") && init?.method === "DELETE") return { ok: true };
+      if (path.startsWith("/api/bots/perf/memory") && !path.includes("/file")) {
+        return {
+          botId: "perf", workspacePath: "/tmp/perf",
+          index: { lines: 0, bytes: 0, maxLines: 200, maxBytes: 24000, loadedLines: 0, loadedBytes: 0, truncated: false, hash: "h" },
+          topics: [{ path: "memory/probe.md", name: "probe.md", bytes: 5, modifiedAt: now - 3_600_000 }],
+          logs: [],
+        };
+      }
       if (path.startsWith("/api/team-memory")) {
         if (init?.method && init.method !== "GET") return {};
         return { entries: [{ id: "tm1", kind: "term", name: "OMB", detail: "Open MAUS Bot", status: "proposed", updatedAt: now, source: { botId: "atlas", botName: "Atlas", threadId: "t", at: now - 1000 } }] };
@@ -151,6 +169,7 @@ describe("MemoryManagerPanel page", () => {
     act(() => root.unmount());
     host.remove();
     delete (globalThis as { __memoryWide?: boolean }).__memoryWide;
+    delete (globalThis as { __memoryLinks?: boolean }).__memoryLinks;
     vi.restoreAllMocks();
   });
 
@@ -184,7 +203,7 @@ describe("MemoryManagerPanel page", () => {
     const lists = Array.from(host.querySelectorAll("[data-memory-nav-list] [data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"));
     expect(lists).toEqual(["all", "pinned", "recent", "review"]);
     expect(host.querySelector('[data-memory-nav="all"]')?.textContent).toContain("5");
-    expect(Array.from(host.querySelectorAll("[data-memory-tidy-list] [data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"))).toEqual(["collections", "archived", "trash"]);
+    expect(Array.from(host.querySelectorAll("[data-memory-tidy-list] [data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"))).toEqual(["collections", "archived", "trash", "import"]);
     const mine = host.querySelector('[data-memory-tier="mine"]') as HTMLElement;
     expect(mine.textContent).toContain("My memory");
     expect(mine.textContent).toContain("5");
@@ -192,7 +211,7 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector('[data-memory-source="bot:atlas"]')?.textContent).toContain("Atlas");
     expect(host.querySelector('[data-memory-source="bot:atlas"]')?.textContent).not.toContain("Bot memory");
     const folder = host.querySelector('[data-memory-folder="me/notes"]')!.closest("div")!;
-    expect(Array.from(folder.querySelectorAll("[data-memory-row-action]")).map((node) => node.getAttribute("data-memory-row-action"))).toEqual(["new", "rename", "delete"]);
+    expect(Array.from(folder.querySelectorAll("[data-memory-row-action]")).map((node) => node.getAttribute("data-memory-row-action"))).toEqual(["new", "rename", "menu"]);
     // The list card, its toolbar and its rows.
     expect(host.querySelector("[data-memory-list-title]")?.textContent).toBe("All notes");
     expect(host.querySelector("[data-memory-list-count]")?.textContent).toBe("5 of 5");
@@ -397,7 +416,7 @@ describe("MemoryManagerPanel page", () => {
     await render();
     expect(host.querySelector('[data-memory-source="bot:northwind"]')).toBeNull();
     expect(host.textContent).not.toContain("Northwind");
-    expect(Array.from(host.querySelectorAll("[data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"))).toEqual(["all", "teams", "pinned", "recent", "review", "collections", "archived", "trash"]);
+    expect(Array.from(host.querySelectorAll("[data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"))).toEqual(["all", "teams", "pinned", "recent", "review", "collections", "archived", "trash", "import"]);
     // A JSON excerpt reads in words.
     expect(host.querySelector('[data-memory-row-key="perspicax|team:ops/n2"]')?.textContent).toContain("JSON · 2 keys: steps, owner");
     const rows = [
@@ -419,5 +438,65 @@ describe("MemoryManagerPanel page", () => {
     }
     await act(async () => { (host.querySelector('[data-memory-nav="review"]') as HTMLButtonElement).click(); });
     expect(host.querySelectorAll("[data-memory-note-row]").length).toBe(1);
+  });
+  // 2026-11-03 (JC): "I need to be able to see if it's linked to a bot" and
+  // delete a folder no bot is linked to; the stray "dr eggbot 0 · No folders yet" tier.
+  it("says which folders a bot is linked to, and lets an unlinked one be deleted", async () => {
+    (globalThis as { __memoryLinks?: boolean }).__memoryLinks = true;
+    await render();
+    const row = (selector: string) => host.querySelector(selector)!.closest("[data-memory-folder-link]")!;
+    // linked: the bot's mark and its name in the tooltip
+    const atlas = row('[data-memory-source="bot:atlas"]');
+    expect(atlas.getAttribute("data-memory-folder-link")).toBe("bot");
+    expect(atlas.querySelector("[data-memory-link-mark]")).not.toBeNull();
+    expect(host.querySelector('[data-memory-source="bot:atlas"]')!.getAttribute("title")).toBe("Linked to Atlas");
+    // a temporary agent's memory: a plain folder, "Not linked"
+    const perf = row('[data-memory-source="bot:perf"]');
+    expect(perf.getAttribute("data-memory-folder-link")).toBe("none");
+    expect(perf.querySelector("[data-memory-unlinked]")?.textContent).toBe("Not linked");
+    expect(host.querySelector('[data-memory-source="bot:perf"]')!.getAttribute("title")).toBe("Not linked to any bot.");
+    // team folders and Perspicax folders belong to no bot
+    expect(row('[data-memory-folder="team:general/term"]').getAttribute("data-memory-folder-link")).toBe("none");
+    expect(row('[data-memory-folder="me/notes"]').getAttribute("data-memory-folder-link")).toBe("none");
+    // a section without team notes is no tier of its own
+    expect(host.querySelector('[data-memory-tier="team:dr-eggbot"]')).toBeNull();
+    expect(host.textContent).not.toContain("dr eggbot");
+    expect(host.querySelector('[data-memory-tier="team:general"]')).not.toBeNull();
+
+    // the linked bot's menu: who uses it, and delete greyed with the reason
+    await act(async () => { (atlas.querySelector('[data-memory-row-action="menu"]') as HTMLButtonElement).click(); });
+    const menu = host.querySelector("[data-memory-folder-menu]")!;
+    expect(menu.querySelector("[data-memory-folder-menu-line]")?.textContent).toBe("Linked to Atlas");
+    const blocked = menu.querySelector('[data-memory-folder-menu-item="delete"]') as HTMLButtonElement;
+    expect(blocked.disabled).toBe(true);
+    expect(blocked.textContent).toContain("Linked to Atlas; remove or archive the bot first");
+    // a team folder's menu: read by its section's bots, not deletable as a folder
+    const term = row('[data-memory-folder="team:general/term"]');
+    await act(async () => { (term.querySelector('[data-memory-row-action="menu"]') as HTMLButtonElement).click(); });
+    expect((term.querySelector('[data-memory-folder-menu] [data-memory-folder-menu-item="delete"]') as HTMLButtonElement).disabled).toBe(true);
+
+    // the unlinked folder: Delete folder…, its notes counted, to the Trash
+    await act(async () => { (perf.querySelector('[data-memory-row-action="menu"]') as HTMLButtonElement).click(); });
+    const remove = perf.querySelector('[data-memory-folder-menu] [data-memory-folder-menu-item="delete"]') as HTMLButtonElement;
+    expect(remove.disabled).toBe(false);
+    expect(remove.textContent).toContain("Delete folder…");
+    calls.length = 0;
+    await act(async () => { remove.click(); });
+    await settle();
+    expect(confirmAsync).toHaveBeenCalledWith(expect.objectContaining({ body: "Delete the folder perf-test-061 and its 1 notes? They go to the Trash, where you can restore them." }));
+    expect(calls.some((call) => call.method === "DELETE" && call.path === "/api/bots/perf/memory/file?path=memory%2Fprobe.md")).toBe(true);
+  });
+
+  it("opens the import window from the ⋯ menu and from Tidy up", async () => {
+    await render();
+    await act(async () => { (host.querySelector('[data-memory-nav="import"]') as HTMLButtonElement).click(); });
+    const dialog = document.querySelector("[data-memory-import]");
+    expect(dialog).not.toBeNull();
+    expect(dialog!.textContent).toContain("Import an Obsidian vault");
+    expect(document.querySelector("[data-memory-import-folder]")?.hasAttribute("webkitdirectory")).toBe(true);
+    expect(document.querySelector("[data-memory-import-zip]")?.getAttribute("accept")).toContain(".zip");
+    await act(async () => { (document.querySelector("[data-memory-import] [data-dialog-close]") as HTMLButtonElement).click(); });
+    expect(document.querySelector("[data-memory-import]")).toBeNull();
+    expect(host.querySelector("[data-memory-import-open]")).not.toBeNull();
   });
 });

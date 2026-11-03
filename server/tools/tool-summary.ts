@@ -3,6 +3,7 @@
 // pasted, and a key sliced in half would slip past the shapes redaction knows.
 import { MAX_QUESTION_TEXT } from "../../shared/ask-question.ts";
 import { cwResultText, isCwTool } from "../../shared/cw-widgets/tool-call.ts";
+import { toolFailureText } from "../../shared/tool-failure-text.ts";
 import { HELD_SECRET_MASK, redactSecrets, redactSecretsInText } from "../redact.ts";
 
 /** Display-only excerpt, never the raw protocol payload. Bound traversal and
@@ -45,6 +46,15 @@ export function toolDetailPreview(value: unknown): string | undefined {
   const text = typeof safe === "string" ? safe : JSON.stringify(safe, null, 2);
   if (!text?.trim() || text === "{}" || text === "[]") return undefined;
   return text.length > 6_000 ? `${text.slice(0, 6_000)}\n[… preview shortened]` : text;
+}
+
+/** A failed call's result for its step: the error's own words
+ * (shared/tool-failure-text.ts), redacted and cut like any preview, else the
+ * preview of whatever it returned. Every driver ends a failed call with it,
+ * so a card never says "no error message" when the engine gave one. */
+export function toolFailurePreview(value: unknown): string | undefined {
+  const words = toolFailureText(value);
+  return (words ? toolDetailPreview(words) : undefined) ?? toolDetailPreview(value);
 }
 
 /** The whole result of a ConnectWise call, for its in-chat widget (the

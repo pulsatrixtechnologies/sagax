@@ -12,6 +12,7 @@ import { PlaceIcon } from "./PlaceIcon";
 import { StepRow } from "./StepRow";
 import { CustomRuleNoticeLine } from "./CustomRuleNotice";
 import { autoApprovalReason, type AutoApprovalReason } from "../../shared/auto-approval-reason";
+import { toolFailureText } from "../../shared/tool-failure-text";
 import type { LocaleKey } from "@/locales";
 
 type Tool = NonNullable<Message["tool"]>;
@@ -115,7 +116,10 @@ export function ToolStepDetail({ tool, status, nameOf, place = null }: { tool: T
   const parsed = parseArgs(tool.input);
   const command = typeof parsed?.command === "string" ? parsed.command : undefined;
   const plainInput = !parsed && (tool.input ?? tool.summary);
-  const result = stepResult(tool.output);
+  // 2026-11-03: a failure shows its own words, whatever envelope the engine
+  // wrapped them in (shared/tool-failure-text.ts); "no error message" only
+  // when there are none.
+  const result = stepResult(phase === "failed" ? toolFailureText(tool.output) ?? tool.output : tool.output);
   const duration = stepDuration(tool.durationMs);
   return (
     <div className="space-y-2 py-1 text-[12px] text-ink-secondary" data-testid="tool-step-detail">

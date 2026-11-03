@@ -2,7 +2,7 @@
 import { describeSpawnFailure } from "../../procs.ts";
 import { appendNative } from "../native.ts";
 import { classifyError, RETRY_MAX_ATTEMPTS } from "../retry.ts";
-import { commandSummary, cwToolResult, toolDetailPreview } from "../../tools/tool-summary.ts";
+import { commandSummary, cwToolResult, toolDetailPreview, toolFailurePreview } from "../../tools/tool-summary.ts";
 import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../../shared/phone-tools.ts";
 import { filesField, writtenFilesFromToolInput } from "../../threads/thread-files.ts";
 import { extractMcpImages } from "../../mcp/mcp-tool-images.ts";
@@ -165,7 +165,8 @@ s.handleNotification = (msg: any) => {
         const ok = item.status !== "failed" && item.status !== "declined";
         const output = item.type === "mcpToolCall" && isPhoneToolCallName(typeof item.tool === "string" ? item.tool : undefined)
           ? PHONE_TOOL_OUTPUT_NOT_KEPT
-          : toolDetailPreview(item.type === "commandExecution" ? { output: item.aggregatedOutput, exitCode: item.exitCode } : item.type === "mcpToolCall" ? item.error ?? item.result : item.type === "fileChange" ? item.changes : item.action);
+          // a failed call's own words (shared/tool-failure-text.ts), else its preview
+          : (ok ? toolDetailPreview : toolFailurePreview)(item.type === "commandExecution" ? { output: item.aggregatedOutput, exitCode: item.exitCode } : item.type === "mcpToolCall" ? item.error ?? item.result : item.type === "fileChange" ? item.changes : item.action);
         if (typeof item.id === "string") {
           const step = s.renewalSteps.find((entry) => entry.id === item.id);
           if (step) {

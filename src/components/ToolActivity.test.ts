@@ -99,6 +99,23 @@ describe("ToolActivity", () => {
     expect(render(true)).not.toContain("thinking-shimmer");
   });
 
+  it("shows a failure's own words, whatever envelope a driver stored (2026-11-03)", () => {
+    const render = (output: string) => renderToStaticMarkup(createElement(ToolActivity, { tool: { name: "mcp__sagax-environment__read_file", ok: false, input: JSON.stringify({ path: "../../notes/README.md" }), output }, defaultOpen: true }));
+    const refused = "Refusé : ce chemin ou ce fichier appartient au serveur Sagax, pas à votre environnement.";
+    // Grok's MCP failure, an MCP isError result, the chat driver's envelope
+    for (const output of [
+      JSON.stringify({ type: "MCP", output: { Error: refused }, is_error: true }, null, 2),
+      JSON.stringify({ content: [{ type: "text", text: refused }], isError: true }),
+      JSON.stringify({ ok: false, result: refused }),
+      refused,
+    ]) {
+      const html = render(output);
+      expect(html).toContain(refused);
+      expect(html).not.toContain("The tool failed and returned no error message.");
+      expect(html).not.toContain("is_error");
+    }
+  });
+
   it("shows a computer switch as a small line, not a tool disclosure", () => {
     const chip = (target: string, ok?: boolean) => renderToStaticMarkup(createElement(ToolActivity, { tool: { name: "mcp__sagax-computer__computer_select", ok, input: JSON.stringify({ target, reason: "her files" }) } }));
     expect(chip("this_computer", true)).toContain('data-testid="tool-computer-switch"');

@@ -12,7 +12,7 @@ import { newEventId, newId } from "../contracts.ts";
 import { ASK_USER_TOOL, ASK_USER_TOOL_DEFINITION, askQuestionSummary, parseAskQuestions, questionChoices } from "../../shared/ask-question.ts";
 import { allowsTool, parseToolScope } from "../../shared/tool-scope.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { cwToolResult, toolDetailPreview } from "../tools/tool-summary.ts";
+import { cwToolResult, toolDetailPreview, toolFailurePreview } from "../tools/tool-summary.ts";
 import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../shared/phone-tools.ts";
 import { ChatToolSessionError, mountChatTools, providerToolLimit, type ChatToolDefinition, type ChatToolSession, type ChatToolResult } from "./chat-mcp-tools.ts";
 import { assertImageTransport, chatImageBudget, chatToolImages, chatUserContent, type ChatContentPart } from "./chat-images.ts";
@@ -1367,7 +1367,9 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
             if (!started) emit({ ...base(turn.threadId, turnId), type: "item.started", itemType: "tool", itemId: call.id, title: call.function.name });
             const text = safeText(result.text);
             // a phone's answer reaches the model, never the event log or the chat (phone_tool)
-            const output = isPhoneToolCallName(call.function.name) ? PHONE_TOOL_OUTPUT_NOT_KEPT : preview({ ok: result.ok, result: text });
+            // a failure reads as its words, not the { ok, result } envelope the model gets
+            const output = isPhoneToolCallName(call.function.name) ? PHONE_TOOL_OUTPUT_NOT_KEPT
+              : result.ok ? preview({ ok: result.ok, result: text }) : toolFailurePreview(text) ?? preview({ ok: result.ok, result: text });
             emit({
               ...base(turn.threadId, turnId), type: "item.completed", itemType: "tool", itemId: call.id, ok: result.ok, output,
               ...(result.ok ? cwToolResult(call.function.name, text) : {}),

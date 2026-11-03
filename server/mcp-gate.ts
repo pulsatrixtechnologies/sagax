@@ -26,12 +26,12 @@ import { connect, type Socket } from "node:net";
 import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
-import { allowsTool, parseToolScope, type ToolScope } from "../shared/tool-scope.ts";
+import { allowsTool, MCP_SERVER_NAME, parseToolScope, type ToolScope } from "../shared/tool-scope.ts";
 
 import { resolveCliSpawn } from "./env-path.ts";
 import { DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, directoryCallTarget, isDirectoryTool, type CatalogTool, type DirectoryContext } from "./mcp/mcp-directory.ts";
 import { lenientToolValidator, schemaProblems } from "./mcp/mcp-schema-validator.ts";
-import { parseGateSearch, searchedCatalog } from "./mcp/mcp-gate-search.ts";
+import { parseGateSearch, pinnedToolNames, searchedCatalog } from "./mcp/mcp-gate-search.ts";
 import { QUERY_TOOL, QUERY_TOOL_NAME, ResultStore, answerQuery, describeShape, exampleQuery } from "./mcp/mcp-shape.ts";
 import { DEFAULT_RESULT_BUDGET, type HeldResult, trimResultText, trimStructured } from "./mcp/mcp-trim.ts";
 import { ToolNameAliases, mapJsonStrings } from "./mcp/mcp-tool-names.ts";
@@ -111,7 +111,7 @@ function toolScope(): ToolScope | undefined {
   try { value = JSON.parse(raw); } catch { fail("invalid tool selection JSON"); }
   const parsed = parseToolScope(value);
   if (!parsed.ok || parsed.scope === undefined) fail("invalid tool selection; check the bot's Access settings");
-  if (!/^[a-z][a-z0-9_-]{0,31}$/.test(NAME)) fail("invalid MCP server identity for tool selection");
+  if (!MCP_SERVER_NAME.test(NAME)) fail("invalid MCP server identity for tool selection");
   return parsed.scope;
 }
 
@@ -520,7 +520,7 @@ async function searchRoute(line: string, message: Json): Promise<void> {
       if (!id) return rejectRequest(message.id, -32600, "Tool listing needs a request ID");
       if (params?.cursor !== undefined) return rejectRequest(message.id, -32602, "Invalid cursor");
       const { directory, searched } = await loadSearch();
-      const tools: Json[] = searched ? [...directory.pinned(SEARCH!.pinned), ...directory.listed(searchContext)] : [...directory.tools];
+      const tools: Json[] = searched ? [...directory.pinned(pinnedToolNames(directory.tools, SEARCH!)), ...directory.listed(searchContext)] : [...directory.tools];
       return reply(message.id, { tools: BUDGET > 0 ? [...tools.filter((tool) => tool.name !== QUERY_TOOL_NAME), QUERY_TOOL] : tools });
     }
     const { directory, searched } = await loadSearch();

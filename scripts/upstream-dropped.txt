@@ -598,3 +598,5 @@ server/graceful-shutdown.test.ts
 server/graceful-shutdown.ts
 server/restart.test.ts
 server/restart.ts
+server/sse-fanout.test.ts
+server/sse-fanout.ts

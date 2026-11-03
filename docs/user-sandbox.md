@@ -221,7 +221,7 @@ quota and the volume.
   (`server/sandbox/sandbox-control.ts`), and "Rendre le contrôle" or closing the
   window (Cmd/Ctrl+Shift+Esc, or Escape outside the screen) hands it back. The WebSocket never
   starts anything: the Sagax server frames the RFB bytes itself
-  (`server/ws-bridge.ts`) and reaches the VNC port only through the
+  (`server/streams/ws-bridge.ts`) and reaches the VNC port only through the
   provisioner, a signed HTTP upgrade (`/v1/sandboxes/<key>/desktop`) spliced
   to a `docker exec` relay inside that one sandbox. No port is published, no
   network path opens between Sagax and a sandbox. A view in control counts as

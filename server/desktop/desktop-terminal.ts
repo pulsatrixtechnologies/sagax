@@ -15,7 +15,7 @@ import { PassThrough } from "node:stream";
 
 import type { DesktopBridgeOperation } from "./desktop-bridge.ts";
 import type { TerminalAttachment } from "../terminal-resources/types.ts";
-import { encodeWebSocketFrame, websocketAccept, webSocketFrameDecoder } from "../ws-bridge.ts";
+import { encodeWebSocketFrame, websocketAccept, webSocketFrameDecoder } from "../streams/ws-bridge.ts";
 
 export type DesktopTerminalTarget = "desktop" | "vm";
 

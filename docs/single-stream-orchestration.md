@@ -125,7 +125,7 @@ stream in chronological order with no data written, fully reversible.
 a fresh engine context. The person sees a divider ("Nouveau sujet" / "New
 topic") in the same stream, never a new place.
 
-### Server orchestration (`server/single-stream.ts`)
+### Server orchestration (`server/streams/single-stream.ts`)
 
 - **Marker.** A send from a client with threads off carries `singleStream:
   true` (`singleStreamTurnField`); the server marks the thread
@@ -285,11 +285,11 @@ Release note text:
 ## Tests
 
 - `shared/single-stream.test.ts`: segment rule and order, exclusions.
-- `server/single-stream.test.ts`: digest extraction and caps, model digest
+- `server/streams/single-stream.test.ts`: digest extraction and caps, model digest
   fallback and timeout, composed block budget, recall pages, candidates.
 - `server/drivers/agents-catalog-single-stream.test.ts`: the tool appears
   only in a stream turn and is a read.
-- `server/single-stream.e2e.test.ts`: marker, new topic, digest in the
+- `server/streams/single-stream.e2e.test.ts`: marker, new topic, digest in the
   prompt, background model digest, `recall_topic` list and read, refusal of
   a confidential topic, hidden and confidential exclusions, thread mode on
   unchanged, a topic made confidential later.

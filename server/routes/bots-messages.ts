@@ -348,7 +348,7 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
       const dataContext = press ? undefined : ownPageContext(parseDataContext(body.dataContext), bot.id, auth);
       // the coding view is on for the device that sent this (server/dev-pods-prompt.ts)
       devPodsThreads.note(threadId, parseDevPods(body.devPods));
-      // Single stream (server/single-stream.ts): a client showing one
+      // Single stream (server/streams/single-stream.ts): a client showing one
       // continuous conversation (threads off) marks this thread a stream
       // segment; a client showing threads clears the mark. A client that says
       // nothing (an older build, the phone, a relay) leaves it as it is.

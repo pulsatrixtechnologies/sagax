@@ -7785,8 +7785,8 @@ none optional:
   live composer as a citation. New topic: the header button
   (`data-new-topic`) and the bot row menu. Threads outside the stream
   (confidential, bot-opened, hidden) open alone with the way back.
-- Tests: `shared/single-stream.test.ts`, `server/single-stream.test.ts`,
-  `server/single-stream.e2e.test.ts`, PT-5 in
+- Tests: `shared/single-stream.test.ts`, `server/streams/single-stream.test.ts`,
+  `server/streams/single-stream.e2e.test.ts`, PT-5 in
   `server/org/org-private-threads.e2e.test.ts`,
   `server/drivers/agents-catalog-single-stream.test.ts`,
   `src/lib/single-stream.test.ts`, `src/components/ChatView.stream.test.ts`,

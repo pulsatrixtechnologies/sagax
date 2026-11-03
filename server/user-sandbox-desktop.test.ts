@@ -23,7 +23,7 @@ import { inProcessSandboxdClient } from "./testing/in-process-sandboxd.ts";
 import { UserSandboxManager } from "./sandbox/user-sandbox-manager.ts";
 import { sandboxNames, sandboxdConfigFromEnv } from "./sandbox/user-sandbox-spec.ts";
 import { callUserSandboxTool, handleUserSandboxMcp, sandboxComputerExec, SANDBOX_COMPUTER_TOOLS } from "./sandbox/user-sandbox-tools.ts";
-import { encodeWebSocketFrame, webSocketFrameDecoder } from "./ws-bridge.ts";
+import { encodeWebSocketFrame, webSocketFrameDecoder } from "./streams/ws-bridge.ts";
 
 const ALICE = "pr_00000000-0000-4000-8000-00000000000a";
 const BOB = "pr_00000000-0000-4000-8000-00000000000b";

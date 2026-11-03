@@ -74,8 +74,8 @@ import {
 } from "../../shared/voice-mode.ts";
 import { accessCardVisibleTo } from "../engines/engine-access.ts";
 import { isSameOrigin } from "../auth/request-auth.ts";
-import { websocketAccept } from "../ws-bridge.ts";
-import { webSocketSession } from "../ws-session.ts";
+import { websocketAccept } from "../streams/ws-bridge.ts";
+import { webSocketSession } from "../streams/ws-session.ts";
 import { readForVoice } from "../tts/voice-reading.ts";
 import { speakableDelta } from "../tts/speech-text.ts";
 import { createListenSession } from "./voice-listen-session.ts";

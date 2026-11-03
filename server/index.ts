@@ -117,7 +117,7 @@ import {
   streamCandidate,
   STREAM_FULL_ENTRIES,
   type SegmentDigest
-} from "./single-stream.ts";
+} from "./streams/single-stream.ts";
 import { conversationThreadId, isStreamSegment } from "../shared/single-stream.ts";
 import {
   agentCallerLabel,
@@ -1065,7 +1065,7 @@ import {
   engineIsFresh,
   replaysNatively
 } from "./turns/turn-context.ts";
-import { ReplayBuffer } from "./sse-replay.ts";
+import { ReplayBuffer } from "./streams/sse-replay.ts";
 import {
   Handoffs,
   handedStateUsable,
@@ -1801,7 +1801,7 @@ import {
 import { serviceThreadViewer, serviceViewerClosed } from "./cli/service-viewer.ts";
 import { browserNavigationRefusal } from "./browser/browser-navigation.ts";
 import { describeBrand, loadBrand } from "./brand.ts";
-import { deliverSseFrame } from "./sse-fanout.ts";
+import { deliverSseFrame } from "./streams/sse-fanout.ts";
 import {
   PHONE_SECRET_PROTOCOL_VERSION,
   PhoneSecretBridge,
@@ -5539,7 +5539,7 @@ function agentsIntegration(
         return "error" in turn ? "" : phoneTools.botTools(turn.person).join(",");
       })(),
       // recall_topic: a person's turn in a single-stream segment
-      // (server/single-stream.ts). The route re-checks.
+      // (server/streams/single-stream.ts). The route re-checks.
       SAGAX_SINGLE_STREAM: depth === 0 && store.taskByThread(botId, threadId)?.streamSegment === true ? "1" : "0",
       // route_message: a person's turn in a 1:1 conversation whose busy sends
       // the bot may route (server/busy-routing.ts). The route re-checks.
@@ -30637,7 +30637,7 @@ ROUTES.push(createArtifactRoutes({
   }
 }));
 const INTERNAL_ROUTES: InternalRouteHandler[] = [
-  // recall_topic (server/routes/recall-topic-internal.ts, server/single-stream.ts)
+  // recall_topic (server/routes/recall-topic-internal.ts, server/streams/single-stream.ts)
   createRecallTopicInternalRoutes({
     ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
     topics: (capability) => {
@@ -36695,7 +36695,7 @@ function recentWorkFor(bot: BotRecord, threadId: string, opts: { userName: strin
   );
 }
 
-// ── single stream (thread mode off, server/single-stream.ts) ──────────────
+// ── single stream (thread mode off, server/streams/single-stream.ts) ──────────────
 /** The segments a stream turn in `threadId` may draw on: the bot's stream
  * segments (shared/single-stream.ts: never confidential, hidden, routine,
  * parallel or bot-opened) other than this one, narrowed like recall to the

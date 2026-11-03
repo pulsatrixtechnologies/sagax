@@ -8,7 +8,7 @@ import type { Duplex } from "node:stream";
 import { isSameOrigin, type RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 import { isDesktopTunnelPath } from "../desktop/desktop-bridge-routes.ts";
-import { bridgeWebSocketToStream, websocketAccept } from "../ws-bridge.ts";
+import { bridgeWebSocketToStream, websocketAccept } from "../streams/ws-bridge.ts";
 
 // `sandbox/me` is the signed-in person's own server environment desktop
 // (organization mode): there is no id that names another person's.

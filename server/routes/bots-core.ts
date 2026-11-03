@@ -1054,7 +1054,7 @@ export function createBotsCoreRoutes(deps: BotsCoreRouteDeps): RouteHandler {
       if (creator && !startedAside) selectViewerThread(bot.id, creator, task.threadId);
       // "New topic" in a single stream (threads off): a stream segment from
       // the start, and the topic it closes gets its digest written now, in
-      // the background, while the person types (server/single-stream.ts).
+      // the background, while the person types (server/streams/single-stream.ts).
       if (body.stream === true && !hidden && !confidentialChoice.confidential) {
         noteStreamSend(bot.id, task.threadId, true);
         refreshStreamDigests(bot.id, task.threadId);

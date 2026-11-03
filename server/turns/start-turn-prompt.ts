@@ -123,7 +123,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       throw new DirectTurnSetupCancelled("Coordination access changed before dispatch");
     }
     // Single stream (thread mode off): a person's turn in a stream segment
-    // carries the digest of their earlier topics (server/single-stream.ts),
+    // carries the digest of their earlier topics (server/streams/single-stream.ts),
     // never on a call (a phone turn stays short), and those topics leave
     // the recent-work brief so nothing is said twice.
     state.streamPart = !state.onCall && streamTurn(state.bot, state.threadId, { person: state.commsDepth === 0 && !state.coordinationNode && !state.opts?.automationSource && !state.opts?.unattended && !state.warmOnly && !state.userMessage.peerAsk })

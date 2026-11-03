@@ -78,7 +78,7 @@ export interface CatalogProfile {
    * conversation: join_meeting is offered. */
   meetings?: boolean;
   /** A person's turn in a single-stream segment (thread mode off,
-   * server/single-stream.ts): recall_topic is offered. Absent is off. */
+   * server/streams/single-stream.ts): recall_topic is offered. Absent is off. */
   singleStream?: boolean;
   /** A person's turn in a 1:1 conversation whose busy sends the bot routes
    * (server/busy-routing.ts): route_message is offered. Absent is off. */

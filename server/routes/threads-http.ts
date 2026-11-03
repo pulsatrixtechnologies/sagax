@@ -28,7 +28,7 @@ import {
   roomReceiptMember,
 } from "../messages/read-receipts.ts";
 import { PUSH_TOKEN_HEADER, pushTokenFromHeader } from "../push/devices.ts";
-import { openSseHeartbeat } from "../sse-fanout.ts";
+import { openSseHeartbeat } from "../streams/sse-fanout.ts";
 import type { BotRecord, GroupRecord, Message } from "../store.ts";
 import { readThreadEvents } from "../threads/thread-events.ts";
 import {

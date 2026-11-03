@@ -39,7 +39,7 @@ import { REMOVED_COMPUTER_DRIVER, type ComputerEngineMove } from "./computer/com
 import type { ProfileRequestChanges } from "../shared/profile-request.ts";
 import type { TaskParallelOf } from "../shared/parallel-tasks.ts";
 import type { SelectedComputer } from "../shared/execution-target.ts";
-import type { SegmentDigest } from "./single-stream.ts";
+import type { SegmentDigest } from "./streams/single-stream.ts";
 import type { TeamSetupRequest, TeamSetupResult } from "../shared/team-setup.ts";
 import type { GroupGoalRunCardData } from "../shared/group-goal-run.ts";
 import { isMentionBoundary, isMentionNameContinuation } from "../shared/mention-boundary.ts";
@@ -150,7 +150,7 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
    * one is the bot's main thread (server/threads/main-thread.ts), which clients get
    * worked out (WireBot.mainThreadId). Absent until someone writes. */
   askedAt?: number;
-  /** Single stream (thread mode off, server/single-stream.ts): a person
+  /** Single stream (thread mode off, server/streams/single-stream.ts): a person
    * wrote here from a client showing one continuous conversation, so a
    * person's turn here carries the digest of their earlier topics and may
    * call recall_topic. Only `true` is stored; a send from a client showing
@@ -2184,7 +2184,7 @@ export class Store {
     // its own key from now on, everything so far re-sealed under it now
     mdb.contentOwnerChanged([threadId]);
     // Nothing of a confidential thread feeds the single stream: its digest
-    // goes, and it stops being a stream segment (server/single-stream.ts).
+    // goes, and it stops being a stream segment (server/streams/single-stream.ts).
     delete task.streamSegment;
     delete task.segmentDigest;
     if (bot.threadId === threadId) this.mirrorActiveTask(bot, task);

@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type DragEvent as ReactDragEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type CSSProperties,
 } from "react";
@@ -1997,8 +1998,13 @@ const CalendarGrid = memo(function CalendarGrid({
     const rect = event.currentTarget.getBoundingClientRect();
     const start = slotAt(day, event.clientY, rect.top, HOUR_HEIGHT);
     let end = start + 30 * 60_000;
-    setSelection({ day, start, end });
+    // 2026-11-03 (JC): a plain click on the grid never opens the create
+    // dialog; only a drag over the slots does (or a right-click, below).
+    const startY = event.clientY;
+    let dragged = false;
     const move = (pointer: PointerEvent) => {
+      if (!dragged && Math.abs(pointer.clientY - startY) < 6) return;
+      dragged = true;
       const current = slotAt(day, pointer.clientY, rect.top, HOUR_HEIGHT);
       end = Math.max(start + CALENDAR_SLOT_MINUTES * 60_000, current + CALENDAR_SLOT_MINUTES * 60_000);
       setSelection({ day, start, end });
@@ -2007,12 +2013,22 @@ const CalendarGrid = memo(function CalendarGrid({
       document.removeEventListener("pointermove", move);
       document.removeEventListener("pointerup", up);
       setSelection(null);
+      if (!dragged) return;
       // Beside the day's column at the slot's top, so the marked slot stays in view.
       const slotTop = rect.top + ((new Date(start).getHours() * 60 + new Date(start).getMinutes()) / 60) * HOUR_HEIGHT;
       onCreate({ kind: "routine", at: start, durationMinutes: Math.max(CALENDAR_SLOT_MINUTES, Math.round((end - start) / 60_000)), botIds: [], anchor: { x: rect.right, y: slotTop, left: rect.left } });
     };
     document.addEventListener("pointermove", move);
     document.addEventListener("pointerup", up, { once: true });
+  };
+
+  const createFromMenu = (event: ReactMouseEvent<HTMLDivElement>, day: number) => {
+    if ((event.target as HTMLElement).closest("[data-event-card]")) return;
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const at = slotAt(day, event.clientY, rect.top, HOUR_HEIGHT);
+    const slotTop = rect.top + ((new Date(at).getHours() * 60 + new Date(at).getMinutes()) / 60) * HOUR_HEIGHT;
+    onCreate({ kind: "routine", at, durationMinutes: 30, botIds: [], anchor: { x: rect.right, y: slotTop, left: rect.left } });
   };
 
   const drop = (event: ReactDragEvent<HTMLDivElement>, day: number) => {
@@ -2069,7 +2085,7 @@ const CalendarGrid = memo(function CalendarGrid({
           const selected = selection?.day === start ? selection : null;
           const preview = dragPreview?.day === start ? dragPreview : null;
           return (
-            <div key={start} role="gridcell" aria-label={t("routineCalendar.dayCalendar", { date: niceDate(start) })} onPointerDown={(event) => beginSelection(event, start)} onDragOver={(event) => previewDrop(event, start)} onDragLeave={(event) => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setDragPreview(null); }} onDrop={(event) => drop(event, start)} className={cn("relative border-r border-hairline/40 last:border-r-0", start === today && "bg-accent/[0.025]")}>
+            <div key={start} role="gridcell" aria-label={t("routineCalendar.dayCalendar", { date: niceDate(start) })} onPointerDown={(event) => beginSelection(event, start)} onContextMenu={(event) => createFromMenu(event, start)} onDragOver={(event) => previewDrop(event, start)} onDragLeave={(event) => { if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) setDragPreview(null); }} onDrop={(event) => drop(event, start)} className={cn("relative border-r border-hairline/40 last:border-r-0", start === today && "bg-accent/[0.025]")}>
               {Array.from({ length: 48 }, (_, half) => <div key={half} className={cn("pointer-events-none absolute inset-x-0 border-t", half % 2 === 0 ? "border-hairline/30" : "border-hairline/10")} style={{ top: (half / 2) * HOUR_HEIGHT }} />)}
               {start === today && <div className="pointer-events-none absolute inset-x-0 z-20 flex items-center" style={{ top: nowTop }}><span className="-ml-1 size-2 rounded-full bg-danger" /><span className="h-px flex-1 bg-danger/80" /></div>}
               {selected && <div className="pointer-events-none absolute inset-x-1 z-10 rounded-md border border-accent/70 bg-accent/20" style={{ top: ((new Date(selected.start).getHours() * 60 + new Date(selected.start).getMinutes()) / 60) * HOUR_HEIGHT, height: Math.max(16, ((selected.end - selected.start) / 3_600_000) * HOUR_HEIGHT) }} />}

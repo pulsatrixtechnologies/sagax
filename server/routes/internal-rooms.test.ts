@@ -90,6 +90,7 @@ function baseDeps(over: Partial<InternalRoomsDeps> = {}): InternalRoomsDeps {
     openedThreadOwner: () => "person-1",
     openerFrom: () => undefined,
     noteRelayParent: () => undefined,
+    isRelayPart: () => false,
     askBotAndWait: async () => ({ status: "reply", text: "done" }),
     mcpCallTimeoutMinutes: () => 10,
     externalCompletion: () => ({}),
@@ -267,5 +268,35 @@ describe("createInternalRoomsRoutes", () => {
     });
     await run();
     expect(sent).toEqual([{ status: 403, body: { error: "source conversation does not belong to sender" } }]);
+  });
+});
+
+describe("POST /run-with-engine: who may run a part on another engine", () => {
+  const GROK = { instanceId: "grok-1", driverKind: "grokAgent", displayName: "Grok", models: { default: "grok-4.7", options: [{ id: "grok-4.7" }] } };
+  const capability = (depth: number): InternalRouteContext["capability"] => ({
+    botId: BOT.id, threadId: "t-1", generation: "g1", depth, openedThreads: 0, createdBots: 0, createdRooms: 0, roomPosts: 0,
+  });
+
+  // GOX 2026-11-03 00:09 UTC: Harrie, given work by Katarina (depth 1) on an
+  // engine without Outlook, was refused run_with_engine to its Grok sign-in.
+  it("a teammate's work turn (depth 1) runs its part on another engine, one level deeper", async () => {
+    const askBotAndWait = vi.fn<InternalRoomsDeps["askBotAndWait"]>(async () => ({ status: "reply", text: "mail read" }));
+    const route = createInternalRoomsRoutes(baseDeps({ relayEnginesFor: () => [GROK], askBotAndWait }));
+    const { sent, run } = call(route, { path: "/api/internal/run-with-engine", body: { engine: "grok", message: "read the two archived messages", depth: 1 }, capability: capability(1) });
+    await run();
+    expect(askBotAndWait).toHaveBeenCalledOnce();
+    expect(askBotAndWait.mock.calls[0]![2]).toBe(1);
+    expect(sent[0]).toMatchObject({ status: 200, body: { status: "reply", engineLabel: "Grok" } });
+  });
+
+  it("a part never hands a part on again: the part of a direct turn, and the part of a teammate's turn", async () => {
+    for (const [depth, isRelayPart] of [[1, () => true], [2, () => false]] as const) {
+      const askBotAndWait = vi.fn(async () => ({ status: "reply", text: "x" }));
+      const route = createInternalRoomsRoutes(baseDeps({ relayEnginesFor: () => [GROK], askBotAndWait, isRelayPart }));
+      const { sent, run } = call(route, { path: "/api/internal/run-with-engine", body: { engine: "grok", message: "again", depth }, capability: capability(depth) });
+      await run();
+      expect(askBotAndWait).not.toHaveBeenCalled();
+      expect(sent).toEqual([{ status: 409, body: { error: "This turn is already a part run on another engine: do this work here." } }]);
+    }
   });
 });

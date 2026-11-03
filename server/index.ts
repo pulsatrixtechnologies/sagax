@@ -31265,6 +31265,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       openedThreadOwner(from as unknown as BotRecord, fromThreadId, target as unknown as BotRecord),
     openerFrom,
     noteRelayParent,
+    isRelayPart: (threadId) => relayParentThreads.has(threadId),
     askBotAndWait: (targetBotId, message, depth, fromBotId, fromThreadId, targetThreadId, opts) =>
       askBotAndWait(targetBotId, message, depth, fromBotId, fromThreadId, targetThreadId, opts) as Promise<{ status: string; text?: string }>,
     mcpCallTimeoutMinutes: () => mcpCallTimeoutMinutes(cfg),

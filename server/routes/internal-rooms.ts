@@ -158,6 +158,8 @@ export interface InternalRoomsDeps {
   openedThreadOwner(from: InternalRoomsBot, fromThreadId: string, target: InternalRoomsBot): string | undefined;
   openerFrom(fromThreadId: string): string | undefined;
   noteRelayParent(threadId: string, parentThreadId: string): void;
+  /** The thread is a part run_with_engine opened (noteRelayParent). */
+  isRelayPart(threadId: string): boolean;
   askBotAndWait(
     targetBotId: string,
     message: string,
@@ -258,6 +260,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
       openedThreadOwner,
       openerFrom,
       noteRelayParent,
+      isRelayPart,
       askBotAndWait,
       externalCompletion,
       activeRoutineRunForThread,
@@ -527,8 +530,12 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
       if (body.depth !== undefined && (!Number.isInteger(body.depth) || body.depth !== internalCapability.depth)) {
         return json(res, 403, { error: "the recursion depth does not match this turn" });
       }
-      // the part itself is one hop: it never hands a part on again
-      if (internalCapability.depth >= MAX_COMMS_DEPTH) {
+      // The part itself never hands a part on again. A teammate's work turn
+      // (depth 1, coordinate_bots) is no part: it may run its own part on
+      // another engine, as its prompt says (GOX 2026-11-03 00:09 UTC: Harrie,
+      // on an engine without Outlook, was refused this in 6 ms and its turn
+      // ended in tool_error). Its part runs one level deeper and stops there.
+      if (isRelayPart(fromThreadId) || internalCapability.depth > MAX_COMMS_DEPTH) {
         return json(res, 409, { error: "This turn is already a part run on another engine: do this work here." });
       }
       const message = typeof body.message === "string" ? body.message.trim() : "";

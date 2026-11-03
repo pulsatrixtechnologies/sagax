@@ -29,8 +29,7 @@ import { ComputerPanel } from "./ComputerPanel";
 import { BotProfileAvatarCard } from "./BotProfileAvatarCard";
 import { useCaptionChrome, useMacInsetChrome } from "./DesktopCapabilities";
 import { t } from "@/lib/i18n";
-import { canEditBotField, canSetBotHost, viewerOwnsBot } from "@/lib/bot-capabilities";
-import { TeamBotVaultSection } from "./bot-settings/TeamBotVaultSection";
+import { canEditBotField } from "@/lib/bot-capabilities";
 import { viewerBotsReadOnly } from "@/lib/viewer";
 import { useBotSectionAvailability, useBotSectionContent } from "./bot-settings/useBotSectionContent";
 import { botsReadOnlyText } from "@/lib/permissions";
@@ -259,9 +258,6 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
               <SuggestionsSection bot={bot} routineCount={derived.botRoutines.length} />
               <BotTaskSection botId={bot.id} />
               <ActivitySection bot={bot} />
-              {Boolean(bot.grants?.length || bot.directGrants?.length) && (viewerOwnsBot(state.config, bot) || canSetBotHost(state.config, bot)) && (
-                <TeamBotVaultSection botId={bot.id} botName={bot.name} />
-              )}
               {/* Temporary attended remote sessions: only while active, above Routines.
                   Unattended hosts live in the Computer place picker. */}
               <RemoteSessionsSection bot={bot} />

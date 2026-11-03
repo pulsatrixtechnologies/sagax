@@ -9,7 +9,7 @@ import { api, useStore, type Bot, type BotSettingsSection, type ConfigStatus } f
 import type { BotOverview } from "@/lib/bot-overview-types";
 import type { LocaleKey } from "@/locales";
 import { t } from "@/lib/i18n";
-import { canEditBotField, canStepPrimary, showBotVisibility } from "@/lib/bot-capabilities";
+import { canEditBotField, canSetBotHost, canStepPrimary, showBotVisibility, viewerOwnsBot } from "@/lib/bot-capabilities";
 import { viewerBotsReadOnly } from "@/lib/viewer";
 import { servedPage } from "@/lib/desktop";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
@@ -37,6 +37,7 @@ import { UsageSection } from "./UsageSection";
 import { VisibilitySection } from "./VisibilitySection";
 import { SharingSection } from "./SharingSection";
 import { PerspicaxSection } from "./PerspicaxSection";
+import { TeamBotVaultSection } from "./TeamBotVaultSection";
 import { AppearancePane } from "../appearance/AppearancePane";
 import type { PromptPreviewData } from "./PromptPreview";
 
@@ -304,7 +305,16 @@ export function useBotSectionContent(bot: Bot, {
       case "visibility":
         return <VisibilitySection bot={bot} />;
       case "sharing":
-        return <SharingSection bot={bot} />;
+        // The shared vault of a team bot sits with its sharing, in Edit bot,
+        // not in the bot's side panel (JC 2026-11-03).
+        return (
+          <>
+            <SharingSection bot={bot} />
+            {Boolean(bot.grants?.length || bot.directGrants?.length) && (viewerOwnsBot(state.config, bot) || canSetBotHost(state.config, bot)) && (
+              <TeamBotVaultSection botId={bot.id} botName={bot.name} />
+            )}
+          </>
+        );
       case "perspicax":
         return <PerspicaxSection bot={bot} />;
       case "history":

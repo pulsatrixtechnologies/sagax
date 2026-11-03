@@ -254,13 +254,14 @@ posixOnly("organization: a person's own GitHub, MCP servers, plugins and skills"
     writeFileSync(join(data, "config.json"), JSON.stringify({
       instances: {
         claude: {
-          driver: "claudeAgent",
+          // fcce56775 (#1812): this fixture uses the organization API key.
+          driver: "claudeAgent", access: "api",
           environment: {
             FAKE_CLAUDE_MCP_CALLS: JSON.stringify([{ server: "mytools", tool: "whoami", arguments: {} }]),
             FAKE_CLAUDE_MCP_DUMP: mcpDump,
             FAKE_CLAUDE_DUMP: engineDump,
           },
-          config: { cli: FAKE_CLAUDE, fullAuto: true },
+          config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true },
         },
       },
     }));

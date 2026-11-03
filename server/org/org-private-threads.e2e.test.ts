@@ -162,7 +162,7 @@ posixOnly("Perspicax organization: private threads with a shared bot, group chat
     // PT-6: a folder an admin opened to every member
     mkdirSync(join(home, "opened"), { recursive: true });
     writeFileSync(join(data, "config.json"), JSON.stringify({
-      instances: { claude: { driver: "claudeAgent", environment: { FAKE_CLAUDE_DUMP: join(home, "claude-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true } } },
+      instances: { claude: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP: join(home, "claude-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } } },
       organization: { memberFolders: { "*": [join(home, "opened")] } },
     }));
     await start();

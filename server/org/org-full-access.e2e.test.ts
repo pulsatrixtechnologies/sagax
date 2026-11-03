@@ -117,9 +117,10 @@ posixOnly("organization Full access", () => {
     dump = join(home, "claude-dump.json");
     writeFileSync(join(data, "config.json"), JSON.stringify({
       instances: {
-        claude: { driver: "claudeAgent", environment: { FAKE_CLAUDE_DUMP: dump }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        // fcce56775 (#1812): these fixtures use the organization API key.
+        claude: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP: dump }, config: { cli: FAKE_CLAUDE, requireApiKey: true, fullAuto: true } },
         // a turn that stays open, for the Primary Bot's tool calls (FA-4)
-        waiting: { driver: "claudeAgent", environment: { FAKE_CLAUDE_DUMP: dump, FAKE_CLAUDE_MODE: "hang" }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        waiting: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP: dump, FAKE_CLAUDE_MODE: "hang" }, config: { cli: FAKE_CLAUDE, requireApiKey: true, fullAuto: true } },
       },
     }));
     child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {

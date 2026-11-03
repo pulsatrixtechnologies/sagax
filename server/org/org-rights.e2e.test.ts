@@ -182,7 +182,7 @@ posixOnly("Perspicax organization, slice 4: rights, teams, owner keys, sections"
     dump = join(home, "claude-dump.json");
     writeFileSync(join(data, "config.json"), JSON.stringify({
       instances: {
-        claude: { driver: "claudeAgent", environment: { FAKE_CLAUDE_DUMP: dump }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        claude: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP: dump }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
         codex: { driver: "codex", environment: { SAGAX_DEVICE_AUTH_FIXTURE: "1" }, config: { cli: FAKE_CODEX_LOGIN } },
       },
     }));

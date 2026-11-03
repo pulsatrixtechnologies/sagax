@@ -194,12 +194,13 @@ posixOnly("Perspicax AI clients: the Sagax member API", () => {
     }), { mode: 0o640 });
     writeFileSync(join(data, "config.json"), JSON.stringify({
       instances: {
-        claude: { driver: "claudeAgent", config: { cli: FAKE_CLAUDE, fullAuto: true } },
-        slow: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "slow", FAKE_CLAUDE_GATE_DIR: gates }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
-        hold: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json"), FAKE_CLAUDE_RELEASE: join(gates, "release") }, config: { cli: FAKE_CLAUDE, fullAuto: false } },
-        ask: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "ask-dump.json"), FAKE_CLAUDE_RELEASE: join(gates, "ask-release") }, config: { cli: FAKE_CLAUDE, fullAuto: false } },
+        // fcce56775 (#1812): these fixtures use the organization API key.
+        claude: { driver: "claudeAgent", access: "api", config: { cli: FAKE_CLAUDE, requireApiKey: true, fullAuto: true } },
+        slow: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_MODE: "slow", FAKE_CLAUDE_GATE_DIR: gates }, config: { cli: FAKE_CLAUDE, requireApiKey: true, fullAuto: true } },
+        hold: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json"), FAKE_CLAUDE_RELEASE: join(gates, "release") }, config: { cli: FAKE_CLAUDE, requireApiKey: true, fullAuto: false } },
+        ask: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "ask-dump.json"), FAKE_CLAUDE_RELEASE: join(gates, "ask-release") }, config: { cli: FAKE_CLAUDE, requireApiKey: true, fullAuto: false } },
         // a Claude Code recent enough for --restricted (a confined turn)
-        mail: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_RELEASE: join(gates, "mail-release"), FAKE_CLAUDE_DUMP: join(home, "mail-dump.json"), FAKE_CLAUDE_VERSION: "2.1.290" }, config: { cli: FAKE_CLAUDE, fullAuto: false } },
+        mail: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_RELEASE: join(gates, "mail-release"), FAKE_CLAUDE_DUMP: join(home, "mail-dump.json"), FAKE_CLAUDE_VERSION: "2.1.290" }, config: { cli: FAKE_CLAUDE, requireApiKey: true, fullAuto: false } },
       },
     }));
     await start();
@@ -434,7 +435,7 @@ posixOnly("Perspicax AI clients: the Sagax member API", () => {
     expect(sent.body).toMatchObject({ accepted: true, thread_id: threadId });
     const early = await member("POST", "agents/await_turn", BOB, { agent_id: bots.orion!.id, handle: sent.body.handle, timeout_ms: 1_000 });
     expect(early.body).toMatchObject({ finished: false });
-    expect(String(early.body.next)).toContain("never send the prompt again");
+    expect(String(early.body.next)).toContain("Never send the prompt again");
     writeFileSync(join(gates, "a2a"), "");
     const awaited = await member("POST", "agents/await_turn", BOB, { agent_id: bots.orion!.id, handle: sent.body.handle, timeout_ms: 30_000 });
     expect(awaited.status, awaited.text).toBe(200);

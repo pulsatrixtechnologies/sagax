@@ -169,7 +169,8 @@ posixOnly("Perspicax organization: a routine whose engine fails says why", () =>
       anthropic: { key: "sk-ant-test-org-0000000000" },
       xai: { key: "xai-test-org-00000000000000" },
       instances: {
-        claude: { driver: "claudeAgent", config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        // fcce56775 (#1812): only this explicit API instance uses the organization key.
+        claude: { driver: "claudeAgent", access: "api", config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
         grok: {
           driver: "grokAgent",
           environment: { FAKE_ACP_GROK_VERSION: "1.0.50", FAKE_ACP_RPC_FAILURE_FILE: failureFile },

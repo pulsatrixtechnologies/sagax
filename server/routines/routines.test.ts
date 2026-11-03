@@ -4938,6 +4938,25 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(runOf(h).problems).toBe("Ledger's work was not finished: acknowledged without doing the work");
   });
 
+  // GOX 2026-11-03 00:10 UTC: Harrie's account quoted its last message as JSON,
+  // and the person read literal \n, ** and an open quote where the cut fell.
+  it("a teammate's quoted last message is kept as plain text, cut with an ellipsis", async () => {
+    const h = harness(start);
+    const said = `FAIL\n\nThe two-message archive plan is **not** confirmed. ${"Evidence line. ".repeat(80)}`;
+    h.options.handedOutOutcome = () => ({ root: { status: "completed", detail: "", result: "" }, pending: false,
+      failed: [{ name: "Harrie", outcome: "failed", detail: `The turn did not complete (tool_error). Before it stopped it made 8 tool calls: read_file ×3 (1 failed).\nIts last message, quoted: ${JSON.stringify(said)}` }] });
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    say(h, "thread-1", "Summary sent.");
+    done(h, "thread-1");
+    const problems = runOf(h).problems!;
+    expect(problems.startsWith("Harrie's work failed: The turn did not complete (tool_error).")).toBe(true);
+    expect(problems).toContain("Its last message:\nFAIL\n\nThe two-message archive plan is not confirmed.");
+    expect(problems).not.toMatch(/\\n|\*\*|quoted: "/);
+    expect(problems.length).toBeLessThanOrEqual(1_000);
+    expect(problems.endsWith("…")).toBe(true);
+  });
+
   it("a run waiting on teammates settles when the runtime ended that work without a turn (relay, stall), instead of waiting forever", async () => {
     const h = harness(start);
     let pending = true;

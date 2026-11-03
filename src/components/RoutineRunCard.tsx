@@ -1,7 +1,7 @@
 import { ArrowRight, Loader2, Play } from "lucide-react";
 
 import { cn } from "@/lib/cn";
-import { routineAutoPausedText, routineDateTime, routineRunError } from "@/lib/routine-display";
+import { routineAutoPausedText, routineDateTime, routineRunError, routineRunProblems } from "@/lib/routine-display";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -89,7 +89,8 @@ export function RoutineRunCard({
     ) : null;
   }
 
-  const withProblems = run.status === "completed" && Boolean(run.problems?.trim());
+  const problems = routineRunProblems(run);
+  const withProblems = Boolean(problems);
   const copy = run.goalStatus
     ? GOAL_COPY[run.goalStatus]
     : withProblems
@@ -120,7 +121,7 @@ export function RoutineRunCard({
       {(report || detail) && <div className="w-fit max-w-[min(42rem,88%)] rounded-2xl bg-card px-4 py-2.5 text-[14px] leading-relaxed text-ink">
         {report ? <ChatMarkdown text={report} inert /> : <p className="whitespace-pre-wrap">{detail}</p>}
       </div>}
-      {withProblems && <p data-routine-problems className="mt-1 max-w-[min(42rem,88%)] whitespace-pre-wrap px-1 text-[12px] leading-relaxed text-warning">{run.problems!.trim()}</p>}
+      {withProblems && <p data-routine-problems className="mt-1 max-w-[min(42rem,88%)] whitespace-pre-wrap px-1 text-[12px] leading-relaxed text-warning">{problems}</p>}
       <div className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-1 text-[11.5px] text-ink-secondary", (report || detail || withProblems) && "mt-1")}>
         <span className="truncate">{t("routines.post.routine", { name: run.routineName })}</span>
         {(!reported || withProblems) && <>

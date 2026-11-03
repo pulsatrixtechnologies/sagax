@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { turnTrace } from "../turn-trace.ts";
+import { readableRoutineProblems } from "../../shared/routine-problems.ts";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
@@ -3758,7 +3759,10 @@ export class RoutineManager {
     run.finishedAt = this.now();
     run.error = undefined;
     if (problems.length) {
-      run.problems = redactSecretsInText(problems.join("\n")).slice(0, 1_000);
+      // Plain text before the cut: a teammate's quoted last message never
+      // reaches the person as JSON escapes and markdown (shared/routine-problems.ts).
+      const readable = readableRoutineProblems(redactSecretsInText(problems.join("\n")));
+      run.problems = readable.length > 1_000 ? `${readable.slice(0, 999).trimEnd()}…` : readable;
       delete run.quiet;
     } else delete run.problems;
     // A run that completes ends the owner's open notices for its bot.

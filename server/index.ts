@@ -7381,6 +7381,8 @@ async function perspicaxTurnIntegration(input: {
     }
     const name = perspicaxServerName(profile.slug || profile.profileId, taken);
     taken.add(name);
+    // #1935: a gateway answer (api_search) names the server that runs its tools
+    perspicaxMcp.setMount(input.threadId, input.generation, profile.profileId, name);
     custom[name] = {
       command: process.execPath,
       args: [perspicaxBridgePath],

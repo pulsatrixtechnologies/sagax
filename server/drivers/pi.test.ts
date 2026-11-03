@@ -43,6 +43,7 @@ import {
   updatePiModelCatalog,
 } from "./pi.ts";
 import { STABLE_END_MARKER } from "./pi-mcp-extension.ts";
+import { SPAWNED_PROXIES } from "../proxy-paths.ts";
 
 const FAKE_CLI = join(dirname(fileURLToPath(import.meta.url)), "..", "testing", "fake-pi-cli.ts");
 const MODELS_LINE =
@@ -290,6 +291,14 @@ describe("buildMcpServers", () => {
     expect(JSON.parse(servers.agents!.env.SAGAX_COMPACT_TOOLS!)).toEqual({ core: "used", pinned: ["ask_bot", "list_bots"] });
     expect(servers.agents!.env.KEEP).toBe("1");
     expect(JSON.parse(servers.ops!.env.SAGAX_GATE_SEARCH!).pinned).toEqual(["get_ticket"]);
+    expect(JSON.parse(servers.ops!.env.SAGAX_GATE_SEARCH!).pinnedSuffixes).toBeUndefined();
+    // #1935: a Perspicax profile bridge also lists its own core whole
+    const bridged = buildMcpServers({ threadId: "compact-px", text: "Go", compactPrompt, integrations: {
+      custom: { perspicax_read_only_dispatch_view: { command: process.execPath, args: [SPAWNED_PROXIES.perspicax], env: { SAGAX_PERSPICAX_PROFILE: "P1" } } },
+    } }) as Record<string, { env: Record<string, string> }>;
+    const search = JSON.parse(bridged.perspicax_read_only_dispatch_view!.env.SAGAX_GATE_SEARCH!);
+    expect(search.pinned).toEqual(["api_describe", "api_result_query", "api_search"]);
+    expect(search.pinnedSuffixes).toEqual(["_action", "_query", "_write"]);
     // without a compact prompt nothing changes
     const plain = buildMcpServers({ threadId: "plain", text: "Go", integrations: {
       agents: { command: "node", args: ["agents"], env: {} },

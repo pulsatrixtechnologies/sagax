@@ -9,6 +9,7 @@ import { adoptLegacyAutoMemory, legacyClaudeAutoMemoryDir } from "../../context/
 import { writeFileAtomicIfChanged } from "../../atomic.ts";
 import { commandVariablesDigest } from "../../vault/credential-command-env.ts";
 import { customServerGate, gateQueryTools, gateServer } from "../../mcp/mcp-gate-config.ts";
+import { compactGateSearch } from "../../mcp/mcp-gate-search.ts";
 import { canUseMcpServer } from "../../../shared/tool-scope.ts";
 import { harnessMcpHttpSpec, loopbackNoProxy } from "../../mcp/harness-mcp-http.ts";
 import { isPerspicaxBridge, PERSPICAX_FLOW_COMPUTE_TOOLS } from "../acp/grok-read-only-tools.ts";
@@ -205,7 +206,12 @@ const searchedMounts = new Set<string>(turn.compactPrompt && turn.integrations?.
 for (const name of turn.toolScope === undefined ? botOwned : Object.keys(mcpServers)) {
   if (!canUseMcpServer(turn.toolScope, name)) { delete mcpServers[name]; continue; }
   // a server may be named like an Object property ("constructor"): own keys only
-  const search = turn.compactPrompt && botOwned.has(name) ? { pinned: Object.hasOwn(turn.compactPrompt.pinned, name) ? turn.compactPrompt.pinned[name]! : [] } : undefined;
+  const used = turn.compactPrompt && Object.hasOwn(turn.compactPrompt.pinned, name) ? turn.compactPrompt.pinned[name]! : [];
+  // #1935: a Perspicax profile lists its own query, write and action tools
+  // whole from the first turn; a bot that saw only search_tools there took
+  // api_search's tool names to the agents server.
+  const profile = Object.hasOwn(turn.integrations?.custom ?? {}, name) && isPerspicaxBridge(turn.integrations!.custom![name]);
+  const search = turn.compactPrompt && botOwned.has(name) ? compactGateSearch(used, profile) : undefined;
   if (search) searchedMounts.add(name);
   const gated = gateServer({ name, server: mcpServers[name], threadId, nodeEnv: NODE_ENV_FLAG, toolScope: turn.toolScope, ...(search ? { search } : {}), ...customServerGate(name, botOwned.has(name), turn.integrations?.customResultBudgets, turnEnvironment) });
   if (gated) mcpServers[name] = { ...gated, ...((mcpServers[name] as { alwaysLoad?: unknown })?.alwaysLoad === true ? { alwaysLoad: true } : {}) };

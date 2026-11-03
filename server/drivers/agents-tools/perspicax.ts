@@ -99,6 +99,20 @@ export const CLAIM_TOOLS = [
 if (CLAIM_TOOLS.map((tool) => tool.name).join() !== CLAIM_TOOL_NAMES.join()) throw new Error("CLAIM_TOOLS and CLAIM_TOOL_NAMES disagree");
 
 
+/** #1935: the answer for a tool the agents server does not have, when this
+ * turn's Perspicax profile server runs it (a name api_search gave): where to
+ * call it instead of "No tool named ...". Null when no profile is mounted or
+ * the harness cannot say. */
+export async function perspicaxToolElsewhere(name: string, context: ToolCallContext): Promise<string | null> {
+  if (context.externalRuntime || !name || PERSPICAX_TOOL_NAMES.has(name) || isClaimTool(name)) return null;
+  try {
+    const { ok, body } = await context.client.apiResponse("/api/internal/perspicax/tool", { method: "POST", body: JSON.stringify({ locate: name }) });
+    return ok && typeof body.server === "string" && typeof body.text === "string" ? body.text : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function callPerspicaxTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
   const { externalRuntime: EXTERNAL_RUNTIME } = context;
   const { apiResponse } = context.client;

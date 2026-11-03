@@ -78,6 +78,8 @@ import { appendNative } from "./native.ts";
 import { piHostToolArgs } from "./host-tools.ts";
 import { canUseMcpServer, parseToolScope } from "../../shared/tool-scope.ts";
 import { customServerGate, gateServer, mcpStdioServer } from "../mcp/mcp-gate-config.ts";
+import { compactGateSearch } from "../mcp/mcp-gate-search.ts";
+import { isPerspicaxBridge } from "./acp/grok-read-only-tools.ts";
 import { remoteMcpSpec } from "../mcp/mcp-http.ts";
 import { readMcpGatewayCall } from "../../shared/mcp-gateway-call.ts";
 
@@ -482,7 +484,10 @@ export function buildMcpServers(turn: SendTurnInput): Record<string, unknown> | 
     // listing whole only the tools the person's bots use.
     const botOwned = name in (turn.integrations?.custom ?? {});
     // a server may be named like an Object property ("constructor"): own keys only
-    const search = turn.compactPrompt && botOwned && !directory ? { pinned: Object.hasOwn(turn.compactPrompt.pinned, name) ? turn.compactPrompt.pinned[name]! : [] } : undefined;
+    // #1935: a Perspicax profile bridge also lists its own core whole.
+    const search = turn.compactPrompt && botOwned && !directory
+      ? compactGateSearch(Object.hasOwn(turn.compactPrompt.pinned, name) ? turn.compactPrompt.pinned[name]! : [], isPerspicaxBridge(turn.integrations!.custom![name]))
+      : undefined;
     const gated = gateServer({ name, server, toolScope: parsed.scope, threadId: turn.threadId, nodeEnv: NODE_ENV_FLAG, directory, ...(search ? { search } : {}), ...customServerGate(name, botOwned, turn.integrations?.customResultBudgets) });
     const stdio = gated ?? mcpStdioServer(server, { nodeEnv: NODE_ENV_FLAG, ...(directory ? { directory: { name } } : {}) });
     if (!stdio) throw new Error("Pi MCP server configuration is invalid");

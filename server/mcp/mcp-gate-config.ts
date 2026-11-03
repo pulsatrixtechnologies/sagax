@@ -4,7 +4,7 @@
 // what a tool may put into a model's context is written once. The gate itself
 // is mcp-gate.ts; the policy it applies is mcp-trim.ts.
 import { join } from "node:path";
-import { parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
+import { MCP_SERVER_NAME, parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
 
 import { DATA_DIR } from "../config.ts";
 import { DEFAULT_RESULT_BUDGET, QUERY_TOOL_NAME } from "./mcp-trim.ts";
@@ -156,7 +156,7 @@ export function mcpStdioServer(server: unknown, options: StdioServerOptions = {}
     // The proxy refuses to start on settings it cannot read; refuse here
     // first, where the caller can still say why.
     const scope = parseToolScope(options.directory.toolScope);
-    if (!/^[a-z][a-z0-9_-]{0,31}$/.test(options.directory.name) || !scope.ok) throw new Error("Invalid MCP tool search configuration.");
+    if (!MCP_SERVER_NAME.test(options.directory.name) || !scope.ok) throw new Error("Invalid MCP tool search configuration.");
     directory = JSON.stringify({ name: options.directory.name, ...(scope.scope ? { toolScope: scope.scope } : {}) });
   }
   const settings = {
@@ -214,7 +214,7 @@ export function gateServer(input: {
   gateRemote?: boolean;
   /** #1276: the gate searches a big catalog itself (mcp-gate-search.ts) and
    * lists whole only `pinned`. Mounts the gate always, stdio or URL. */
-  search?: { pinned?: readonly string[]; maxTools?: number; maxChars?: number };
+  search?: { pinned?: readonly string[]; pinnedSuffixes?: readonly string[]; maxTools?: number; maxChars?: number };
 }): { command: string; args: string[]; env: Record<string, string> } | null {
   const { name, server, budget } = input;
   const parsed = parseToolScope(input.toolScope);

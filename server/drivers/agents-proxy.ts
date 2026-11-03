@@ -29,6 +29,7 @@ import { readMergedCall } from "../../shared/merged-agent-tools.ts";
 import { BRIDGE_USE_TOOL } from "../../shared/searched-tool-call.ts";
 import { CALL_TOOL, DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, isDirectoryTool, type CatalogTool } from "../mcp/mcp-directory.ts";
 import { callTool, capResult, toolCallContextFromEnv } from "./agents-call.ts";
+import { perspicaxToolElsewhere } from "./agents-tools/perspicax.ts";
 import { harnessClientFromEnv, type Json } from "./agents-client.ts";
 import { auditSampleFromEnv, deniedResourcesFromEnv, guardToolCall, learnCreatedBot, permissionModeFromEnv, principalFromEnv, scopeOwnersFromEnv } from "../mcp/mcp-permissions.ts";
 
@@ -161,6 +162,13 @@ async function handle(msg: Json) {
       }
       if (SEARCHED && SEARCHED.tools.length && isDirectoryTool(name)) {
         if (name === SEARCH_TOOL) return ok(id, await SEARCHED.search(args));
+        // #1935: a Perspicax profile tool (api_search named it) is not here:
+        // say which server runs it rather than "No tool named ...".
+        const target = typeof args.name === "string" ? args.name : "";
+        if ((name === DESCRIBE_TOOL || name === CALL_TOOL) && target && !SEARCHED.has(target) && !AVAILABLE_TOOLS.some((t) => t.name === target)) {
+          const elsewhere = await perspicaxToolElsewhere(target, CONTEXT);
+          if (elsewhere) return textResult(id, elsewhere, true);
+        }
         if (name === DESCRIBE_TOOL) return ok(id, SEARCHED.describe(args));
         if (name === CALL_TOOL) {
           const call = SEARCHED.call(args);
@@ -177,7 +185,11 @@ async function handle(msg: Json) {
         name = family.tool;
         args = family.arguments as Json;
       }
-      if (!AVAILABLE_TOOLS.some((t) => t.name === name)) return rpcErr(id, -32602, `Unknown tool: ${name}`);
+      if (!AVAILABLE_TOOLS.some((t) => t.name === name)) {
+        const elsewhere = await perspicaxToolElsewhere(name, CONTEXT);
+        if (elsewhere) return textResult(id, elsewhere, true);
+        return rpcErr(id, -32602, `Unknown tool: ${name}`);
+      }
       try {
         const { text, isError, passthrough } = await guardToolCall(GUARD, name, args, () => callTool(name, args, CONTEXT)) as Awaited<ReturnType<typeof callTool>>;
         // 2026-10-27 (#1098): a bot the person just created is theirs for

@@ -197,10 +197,14 @@ import {
   proactivePrompt,
   textNamesBot,
   PeerNoticeHops,
+  peerNoticeDropped,
   peerNoticeEvent,
+  peerWakeDigest,
   proactiveWakePrompt,
   runFailureWakesBot,
   type ProactiveEvent,
+  type ProactiveOfferVerdict,
+  type PeerNoticeFacts,
   type ProactiveSource,
   type ProactiveWakeBatch
 } from "./proactive-wake.ts";
@@ -24082,6 +24086,10 @@ const proactiveWaker = new ProactiveWaker({
   },
   log: (botId, line) => proactiveEventsLine(botId, line),
   wake: (batch) => startProactiveWake(batch, false, batch.runAs),
+  // 2026-11-02: a teammate's notice no wake will run for is still shown
+  dropped: (botId, events) => {
+    for (const event of events) if (event.peer) surfacePeerNotice(botId, event.peer);
+  },
   // Cheap expired marker: do not start another wake that would fail the same way.
   engineExpired: (botId) => {
     if (!engineLogins) return false;
@@ -24657,21 +24665,57 @@ function offerPeerNotice(child: HandoffView, parent: HandoffView | undefined): v
   if (!receiver || child.groupId) return;
   const sender = parent ? store.bot(parent.botId) : undefined;
   if (sender?.id === receiver.id) return;
-  offerProactive(peerNoticeEvent({
+  const event = peerNoticeEvent({
     receiverId: receiver.id, noticeId: child.id, threadId: child.threadId,
     title: store.taskByThread(receiver.id, child.threadId)?.title ?? "Teammate message",
     status: child.status, text: redactSecretsInText(child.text), result: redactSecretsInText(child.result ?? ""),
     ...(sender ? { senderId: sender.id, senderName: sender.name } : {}),
     hops: peerNoticeHops.get(child.threadId) ?? 1,
-  }));
+  });
+  // 2026-11-02 (second pass): a notice no wake runs for (proactive off, the
+  // hop limit, an expired sign-in) used to end there, unseen. The person
+  // now reads it in the receiver's own conversation.
+  const verdict = offerProactive(event);
+  if (verdict && peerNoticeDropped(verdict) && event.peer) surfacePeerNotice(receiver.id, event.peer);
+}
+
+/** 2026-11-02 (peer inbox, second pass): a teammate's notice the receiver
+ * will not be woken for, shown to its person: one line in the receiver's
+ * own conversation, from the sender, linking the notice's thread (where the
+ * receiver's turn and any question are), and the conversation turns unread. */
+function surfacePeerNotice(receiverId: string, peer: PeerNoticeFacts): void {
+  try {
+    const receiver = store.bot(receiverId);
+    if (!receiver || receiver.hidden) return;
+    const own = botMainThread(receiver.id) ?? receiver.threadId;
+    if (!own || own === peer.threadId || !store.taskByThread(receiver.id, own) || store.isConfidentialThread(own)) return;
+    const task = store.taskByThread(receiver.id, peer.threadId);
+    if (!task) return;
+    // once per notice thread, a replay never adds another
+    if (store.messagesFor(own).some((message) => message.threadRef?.threadId === peer.threadId && message.tool?.name.startsWith("Message from ") === true)) return;
+    const sender = peer.senderId ? store.bot(peer.senderId) : undefined;
+    const from = sender?.name ?? peer.senderName ?? "A teammate";
+    const status = peer.status === "completed" ? "" : ` (${peer.status})`;
+    store.appendMessage(own, {
+      role: "bot", kind: "activity",
+      ...(sender ? { from: { botId: sender.id, name: sender.name, color: sender.color } } : {}),
+      tool: { name: `Message from ${from}: #${task.title}${status}`, ok: peer.status === "completed" || peer.status === "needs_input" },
+      threadRef: { botId: receiver.id, threadId: peer.threadId, title: task.title }
+    });
+    store.patchTask(receiver.id, own, { unread: true });
+    notify(deliverableNotification("delegation-settled", receiver, own, `Message from ${from}: ${task.title}`, { avatarUrl: receiver.avatarUrl }));
+  } catch (error) {
+    console.warn(`[proactive] peer notice could not be shown: ${error instanceof Error ? error.name : "error"}`);
+  }
 }
 
 /** One event for one bot; never throws into the path that saw it. */
-function offerProactive(event: ProactiveEvent): void {
+function offerProactive(event: ProactiveEvent): ProactiveOfferVerdict | undefined {
   try {
-    proactiveWaker.offer(event);
+    return proactiveWaker.offer(event);
   } catch (error) {
     console.warn(`[proactive] offer failed: ${error instanceof Error ? error.name : "error"}`);
+    return undefined;
   }
 }
 
@@ -24722,6 +24766,7 @@ function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?:
   // else the bot owner. Never an arbitrary member's credentials.
   const person = runAs || effectiveBotOwner(bot) || undefined;
   const sources = [...new Set(batch.events.map((event) => event.source))];
+  const peerDigest = peerWakeDigest(batch.events, batch.more);
   routines.enqueueProactive({
     botId: batch.botId,
     name: `Proactive: ${sources.map((source) => PROACTIVE_RUN_NAMES[source]).join(", ")}`,
@@ -24731,7 +24776,8 @@ function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?:
       hops: batch.hops,
       sources,
       ...(batch.confined ? { confined: true as const } : {}),
-      ...(accepted ? { accepted: true as const } : {})
+      ...(accepted ? { accepted: true as const } : {}),
+      ...(peerDigest ? { peerDigest } : {})
     },
     ...(person ? { runAs: person } : {})
   });

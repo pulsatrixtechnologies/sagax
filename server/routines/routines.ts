@@ -8,7 +8,7 @@ import { DATA_DIR } from "../config.ts";
 import type { RuntimeEvent } from "../contracts.ts";
 import { writeFileAtomic } from "../atomic.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { flowRunBlockedReason, routineReportOutcome } from "./routine-report.ts";
+import { flowRunBlockedReason, routineReportOutcome, type RoutineReportOutcome } from "./routine-report.ts";
 import { stopCause } from "../drivers/engine-errors.ts";
 import {
   evaluateRoutinePrecheck,
@@ -496,6 +496,21 @@ export interface RoutineRunProactive {
   accepted?: true;
   /** Write plans recorded before ordinary approval ran them. */
   dryRuns?: ProactiveDryRunEntry[];
+  /** 2026-11-02 (peer inbox, second pass): a wake on teammates' messages
+   * (source peer) is never quiet; this is its report when the bot gave
+   * none (who wrote, about what: server/proactive-wake.ts peerWakeDigest). */
+  peerDigest?: string;
+}
+
+/** 2026-11-02 (peer inbox, second pass): on GOX five wakes of six on
+ * teammates' messages ended NOTHING_TO_REPORT ("already told you"), the
+ * bot taking the reply of the notice's own thread, which the person never
+ * sees, for one they had read. A wake with a teammate's message always
+ * reports: what the bot wrote without the marker, else the events' digest. */
+export function peerWakeOutcome(run: Pick<RoutineRun, "proactive">, outcome: RoutineReportOutcome): RoutineReportOutcome {
+  if (!outcome.quiet || !run.proactive?.sources.includes("peer")) return outcome;
+  const report = outcome.report || run.proactive.peerDigest || "A teammate sent a message; its thread has the details.";
+  return { ...outcome, quiet: false, report };
 }
 
 /** Similar work the organization memory knew of before a run (organization
@@ -3627,7 +3642,7 @@ export class RoutineManager {
   /** Whether the completed run has anything for the person (2026-10-22):
    * a quiet run keeps its note in the logs, without the marker. */
   private settleReport(run: RoutineRun) {
-    const outcome = routineReportOutcome(run.output);
+    const outcome = peerWakeOutcome(run, routineReportOutcome(run.output));
     run.output = outcome.report || undefined;
     if (outcome.quiet) run.quiet = true;
     else delete run.quiet;

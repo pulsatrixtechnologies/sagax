@@ -19,7 +19,9 @@ import {
   proactivePrompt,
   proactiveRelevance,
   proactiveWakePrompt,
+  peerNoticeDropped,
   peerNoticeEvent,
+  peerWakeDigest,
   runFailureWakesBot,
   proposalCardWords,
   textNamesBot,
@@ -33,10 +35,12 @@ function harness(modes: Record<string, ProactiveMode | undefined | string>, opts
   const timers: Array<{ at: number; fn: () => void; live: boolean }> = [];
   const woken: ProactiveWakeBatch[] = [];
   const lines: Array<{ botId: string; line: string }> = [];
+  const dropped: Array<{ botId: string; events: readonly ProactiveEvent[] }> = [];
   const waker = new ProactiveWaker({
     bot: (botId) => (botId in modes ? { proactiveMode: modes[botId] } : undefined),
     wake: (batch) => woken.push(batch),
     log: (botId, line) => lines.push({ botId, line }),
+    dropped: (botId, events) => dropped.push({ botId, events }),
     ...(opts.engineExpired ? { engineExpired: opts.engineExpired } : {}),
     now: () => now,
     setTimer: (fn, ms) => {
@@ -59,7 +63,7 @@ function harness(modes: Record<string, ProactiveMode | undefined | string>, opts
   };
   /** Every model call the fake engine would have made: one per wake run. */
   const modelCalls = () => woken.length;
-  return { waker, advance, woken, lines, modelCalls };
+  return { waker, advance, woken, lines, modelCalls, dropped, setMode: (botId: string, mode: string) => { modes[botId] = mode; } };
 }
 
 const mail = (botId: string, n = 1, extra: Partial<ProactiveEvent> = {}): ProactiveEvent => ({
@@ -404,5 +408,53 @@ describe("teammates' messages (peer inbox, 2026-11-02)", () => {
 
   it("every turn of a proactive bot knows teammates' messages wake it", () => {
     expect(proactivePrompt("proactive")).toContain("teammates' messages");
+  });
+});
+
+describe("teammates' messages, second pass (GOX Melonie, 2026-11-02)", () => {
+  const notice = (receiverId: string, n: number, extra: Partial<Parameters<typeof peerNoticeEvent>[0]> = {}) => peerNoticeEvent({
+    receiverId, noticeId: `node-${n}`, threadId: `th-${n}`, title: `Urgent Northwind ${n}`, status: "completed",
+    text: `Carl answered on ${n}.`, senderId: "katarina", senderName: "Katarina", ...extra,
+  });
+
+  it("the wake is told the person never sees the notice threads and never ends quiet on them", () => {
+    const h = harness({ melonie: "proactive" });
+    h.waker.offer(notice("melonie", 1));
+    h.advance(30_000);
+    const prompt = proactiveWakePrompt(h.woken[0]!);
+    expect(prompt).toContain("The person never sees those threads");
+    expect(prompt).toContain("never ends with NOTHING_TO_REPORT");
+  });
+
+  it("the digest names who wrote and about what, with a status other than done", () => {
+    const digest = peerWakeDigest([notice("m", 1), notice("m", 2, { status: "expired" }), { botId: "m", source: "mail", key: "x", label: "Email", detail: "d" }], 2);
+    expect(digest).toBe("Messages from teammates:\n- Katarina: Urgent Northwind 1\n- Katarina: Urgent Northwind 2 (expired)\n- and 2 more");
+    expect(peerWakeDigest([{ botId: "m", source: "mail", key: "x", label: "Email", detail: "d" }])).toBeUndefined();
+  });
+
+  it("every verdict that means no wake is a notice to show the person: off, the hop limit, an expired sign-in, a temporary bot", () => {
+    for (const verdict of ["off", "hops", "auth", "gone", "own", "irrelevant"] as const) expect(peerNoticeDropped(verdict)).toBe(true);
+    expect(peerNoticeDropped("gathered")).toBe(false);
+    expect(peerNoticeDropped("duplicate")).toBe(false);
+    const h = harness({ melonie: "proactive" });
+    expect(peerNoticeDropped(h.waker.offer(notice("melonie", 1, { hops: PROACTIVE_MAX_HOPS })))).toBe(true);
+  });
+
+  it("notices gathered and then skipped (the hour's limit of wakes, or turned off meanwhile) are handed back to be shown", () => {
+    const h = harness({ melonie: "proactive" });
+    for (let n = 1; n <= 12; n += 1) {
+      h.waker.offer(notice("melonie", n));
+      h.advance(2 * 60_000);
+    }
+    expect(h.woken).toHaveLength(12);
+    h.waker.offer(notice("melonie", 13));
+    h.advance(2 * 60_000);
+    expect(h.woken).toHaveLength(12);
+    expect(h.dropped.map((row) => row.events.map((event) => event.peer?.threadId))).toEqual([["th-13"]]);
+    h.advance(60 * 60_000);
+    h.waker.offer(notice("melonie", 14));
+    h.setMode("melonie", "off");
+    h.advance(60_000);
+    expect(h.dropped.at(-1)!.events.map((event) => event.peer)).toEqual([{ threadId: "th-14", title: "Urgent Northwind 14", status: "completed", senderId: "katarina", senderName: "Katarina" }]);
   });
 });

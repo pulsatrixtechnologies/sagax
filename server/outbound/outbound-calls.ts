@@ -32,14 +32,14 @@ import { createHash, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { normalizePhone } from "../shared/allowed-recipients.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { normalizePhone } from "../../shared/allowed-recipients.ts";
 import {
   callDigestSource, callTwiml, canadianNumber, conversationDisclosure, createCallArgs, formatPhone, maskPhone, parseOutboundCall, voiceCallArgs,
   type CallLanguage, type CallNames, type OutboundCallRequest,
-} from "../shared/outbound-call.ts";
-import { wrapUntrusted } from "../shared/safety-review.ts";
-import type { OutboundCallResult, OutboundCard } from "../shared/wire.ts";
+} from "../../shared/outbound-call.ts";
+import { wrapUntrusted } from "../../shared/safety-review.ts";
+import type { OutboundCallResult, OutboundCard } from "../../shared/wire.ts";
 
 export const CALL_APPROVAL_MS = 15 * 60_000;
 export const CALL_RETENTION_MS = 30 * 24 * 60 * 60_000;

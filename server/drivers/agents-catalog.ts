@@ -475,9 +475,9 @@ function catalogTools(profile: CatalogProfile) {
     videoToolDefinition(),
     ...(profile.perspicax && !profile.externalRuntime ? PERSPICAX_TOOLS : []),
     // a call through the speaker's Twilio profile on Perspicax, on a card
-    // (server/outbound-calls.ts); never in a room. A person's direct chat
+    // (server/outbound/outbound-calls.ts); never in a room. A person's direct chat
     // coordinates too, so this reads room, never coordinating (the route
-    // refuses a room only, server/outbound-wiring.ts placeCall).
+    // refuses a room only, server/outbound/outbound-wiring.ts placeCall).
     ...(profile.perspicax && !profile.externalRuntime && profile.room !== true
       ? [PLACE_PHONE_CALL_TOOL_SPEC, PLACE_CALL_TOOL_SPEC, SEND_DTMF_TOOL_SPEC, TRANSFER_CALL_TOOL_SPEC, HANG_UP_TOOL_SPEC]
       : []),

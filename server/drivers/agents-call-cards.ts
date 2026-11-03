@@ -70,7 +70,7 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
     };
   }
 
-  // place_phone_call / place_call (server/outbound-calls.ts): consent once,
+  // place_phone_call / place_call (server/outbound/outbound-calls.ts): consent once,
   // then the request card (Ask) or Auto place; the harness builds every word.
   if (name === PLACE_PHONE_CALL_TOOL || name === PLACE_CALL_TOOL) {
     const { ok, body } = await apiResponse("/api/internal/phone-call", { method: "POST", body: JSON.stringify(args) });

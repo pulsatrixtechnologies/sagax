@@ -1,4 +1,4 @@
-// The person's answer to a phone call card (server/outbound-calls.ts):
+// The person's answer to a phone call card (server/outbound/outbound-calls.ts):
 //
 //   POST /api/me/phone-calls                  the calls waiting on this person
 //   POST /api/me/phone-calls/:id/answer       {decision: "call" | "deny", stepUp?}
@@ -9,7 +9,7 @@
 // (ownerGate). No Always allow: one answer covers one call. A person who
 // protects "money" with a security key steps up as for a purchase.
 import { formatPhone } from "../../shared/outbound-call.ts";
-import { OutboundCallError, type OutboundCallRecord, type OutboundCalls } from "../outbound-calls.ts";
+import { OutboundCallError, type OutboundCallRecord, type OutboundCalls } from "../outbound/outbound-calls.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

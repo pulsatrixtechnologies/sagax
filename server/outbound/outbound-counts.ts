@@ -8,7 +8,7 @@
 // the activity log already keeps the history.
 import { readFileSync } from "node:fs";
 
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 
 type Stored = Record<string, { day: string; count: number }>;
 

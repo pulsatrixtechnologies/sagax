@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL, type PurchaseListing } from "./credential-vault.ts";
-import { purchaseCardFallback, purchaseOutboundCard } from "../outbound-wiring.ts";
+import { purchaseCardFallback, purchaseOutboundCard } from "../outbound/outbound-wiring.ts";
 import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
 
 // 4242... is the well-known test number, not a real card.

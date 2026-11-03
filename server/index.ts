@@ -242,7 +242,7 @@ import { VAULT_LOGIN_TARGET, ONE_PASSWORD_WAITING } from "../shared/credential-v
 import { HOST_COMPUTER_RESOURCE, HOST_CONTROL_NOTICE } from "../shared/host-control.ts";
 import { CredentialVault, fillResolverFor, LOCAL_VAULT_PRINCIPAL } from "./vault/credential-vault.ts";
 import { cliWalletIssuer } from "./wallet-issuer.ts";
-import { outboundWiring, primaryOutboundDecision, primaryPurchaseCard } from "./outbound-wiring.ts";
+import { outboundWiring, primaryOutboundDecision, primaryPurchaseCard } from "./outbound/outbound-wiring.ts";
 import { followUpNote, OrderFollowUps } from "./order-follow-ups.ts";
 import { OnePassword } from "./onepassword.ts";
 import { createCredentialVaultRoutes, vaultPrincipalFor } from "./routes/credential-vault.ts";
@@ -1326,8 +1326,8 @@ import {
   type RuleTestDraft,
   type RuleTestResult
 } from "../shared/action-journal.ts";
-import { OutboundCounts } from "./outbound-counts.ts";
-import { OutboundRequestService } from "./outbound-requests.ts";
+import { OutboundCounts } from "./outbound/outbound-counts.ts";
+import { OutboundRequestService } from "./outbound/outbound-requests.ts";
 import { DEFAULT_OUTBOUND_POLICY, isOutboundTool, normalizeOutboundPolicy } from "../shared/outbound.ts";
 import { normalizeAllowedRecipients, sendRecipientsAllowed } from "../shared/allowed-recipients.ts";
 import { standingGrantsAllowed } from "./custom-rules-org.ts";
@@ -8752,7 +8752,7 @@ bus.subscribe((event: RuntimeEvent) => {
   else if (event.type === "turn.completed" || event.type === "session.exited") credentialVault.turnPhase(event.threadId, "ended");
 });
 // R13 (parité the reference design V4, 59, 83): phone call and purchase cards
-// (server/outbound-wiring.ts); every outward action keeps its card.
+// (server/outbound/outbound-wiring.ts); every outward action keeps its card.
 const outbound = outboundWiring({
   dataDir: DATA_DIR,
   store,
@@ -30660,7 +30660,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
     route: (input) => routeSteeredMessage(input)
   }),
-  // place_phone_call (server/outbound-wiring.ts)
+  // place_phone_call (server/outbound/outbound-wiring.ts)
   outbound.internalRoutes({
     ownsThread: (botId, threadId) => Boolean(connectorThread(botId, threadId)),
     principalForThread: vaultPrincipalForThread,

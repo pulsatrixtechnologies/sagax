@@ -34,7 +34,7 @@ const PEER_TOOLS = ["send_to_bot", "post_to_room", "coordinate_bots", "ask_bot",
   .flatMap((tool) => [`agents__${tool}`, `mcp__agents__${tool}`]);
 // Real sends to a third party: mail, Teams, SMS, a channel post, a public post.
 // (A phone call is placed through place_phone_call, whose own card, AI
-// disclosure and do-not-call list are server/outbound-calls.test.ts.)
+// disclosure and do-not-call list are server/outbound/outbound-calls.test.ts.)
 const OUTBOUND_SENDS = [
   "mcp__gmail__send_email",
   "mcp__microsoft_outlook__send_mail",

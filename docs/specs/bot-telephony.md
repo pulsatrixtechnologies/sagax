@@ -891,7 +891,7 @@ interne** (conditions de l'ÉFVP Loi 25 du 2026-10-22) :
   Organisation > Appels téléphoniques, y saisit le **numéro de rappel**
   (obligatoire : sans numéro, aucun appel) et tient la liste **« Ne pas
   appeler »**, vérifiée à la carte et de nouveau au départ de l'appel.
-- **`place_phone_call`** (`shared/outbound-call.ts`, `server/outbound-calls.ts`) :
+- **`place_phone_call`** (`shared/outbound-call.ts`, `server/outbound/outbound-calls.ts`) :
   Canada seulement (R10, sans N11, 976 ni central 0 ou 1), ouverture fixe
   construite par Sagax (assistant IA, au nom de qui, numéro de rappel, « pour
   ne plus recevoir d'appels, dites-le au numéro de rappel »), puis objectif et
@@ -952,8 +952,8 @@ peux l'entendre, dialoguer avec lui et me revenir avec un résumé. »
   mot dit ; journaux et audit gardent le numéro masqué.
 - **Règles** : le pilote d'organisation, la liste « Ne pas appeler » et les
   règles Refuser et Demander d'abord s'appliquent comme pour le mode message.
-- Code : `shared/outbound-call.ts`, `server/outbound-calls.ts`,
-  `server/outbound-wiring.ts`, `server/bot-inbound-telephony.ts`. Tests :
+- Code : `shared/outbound-call.ts`, `server/outbound/outbound-calls.ts`,
+  `server/outbound/outbound-wiring.ts`, `server/bot-inbound-telephony.ts`. Tests :
   `server/outbound-conversation.test.ts` (cycle complet, faux Twilio et fausse
   voix temps réel).
 

@@ -19,7 +19,7 @@
 // covers every relayed source) are the typed triggers' own. Posting into
 // the person's conversation was set aside: that would make the caller's
 // words a turn of the person, with the bot's usual tools and kept answers.
-// The outbound call driver (#956, `place_phone_call`, server/outbound-calls.ts)
+// The outbound call driver (#956, `place_phone_call`, server/outbound/outbound-calls.ts)
 // is untouched: a run that wants to call someone uses it, with its card.
 //
 //   - `sms`, `call_request`, `call_summary` wake the bot with the text
@@ -34,7 +34,7 @@
 //     only, one admin activity row, no run;
 //   - `call_result` (2026-10-28) ends a conversation call the bot placed
 //     with place_phone_call: it goes to that call's card and conversation
-//     (`callResult`, server/outbound-calls.ts applyResult), never to the
+//     (`callResult`, server/outbound/outbound-calls.ts applyResult), never to the
 //     phone triggers. Only the person whose line placed the call (the
 //     assertion's `sub`) can settle it, once. Its texts (summary, the
 //     other party's words) are data, never instructions.

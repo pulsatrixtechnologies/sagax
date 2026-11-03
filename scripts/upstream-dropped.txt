@@ -418,3 +418,7 @@ server/workspace-backup-maintenance.test.ts
 server/workspace-backup-maintenance.ts
 server/workspace-backup-policy.test.ts
 server/workspace-backup-policy.ts
+server/outbound-counts.test.ts
+server/outbound-counts.ts
+server/outbound-requests.test.ts
+server/outbound-requests.ts

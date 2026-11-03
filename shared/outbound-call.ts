@@ -7,7 +7,7 @@
 // `conversation` (2026-10-28) goes out through Perspicax Voice on the
 // person's own line: the line says the AI disclosure, then the realtime
 // voice talks with the callee and the result comes back to the
-// conversation (server/outbound-calls.ts).
+// conversation (server/outbound/outbound-calls.ts).
 //
 // Pure: no disk, no clock, no node built-ins.
 

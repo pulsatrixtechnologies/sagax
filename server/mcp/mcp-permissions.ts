@@ -104,7 +104,7 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("pages:comments", "own", "page_comments"),
   // place_call is the same tool under its compatibility name
   p("phone:call", "own", "place_phone_call", "sagax", ["place_call"]),
-  // mid-call controls on the person's own live call (server/outbound-calls.ts)
+  // mid-call controls on the person's own live call (server/outbound/outbound-calls.ts)
   p("phone:dtmf", "own", "send_dtmf"),
   p("phone:transfer", "own", "transfer"),
   p("phone:hangup", "own", "hang_up"),

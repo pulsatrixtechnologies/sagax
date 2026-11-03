@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { PurchaseListing } from "./vault/credential-vault.ts";
+import type { PurchaseListing } from "../vault/credential-vault.ts";
 import { outboundWiring, primaryOutboundDecision, primaryPurchaseCard, purchaseCardFallback, purchaseOutboundCard } from "./outbound-wiring.ts";
-import type { Message } from "./store.ts";
+import type { Message } from "../store.ts";
 
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });

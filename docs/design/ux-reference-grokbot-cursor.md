@@ -643,7 +643,7 @@ d'appel conversationnel et le consentement d'usage acceptable. Captures : galeri
 
 Composants : `src/components/OutboundCard.tsx`, `src/components/PhoneCallConsentCard.tsx`.
 Helpers purs : `shared/phone-call-live.ts`, `shared/phone-call-consent.ts`. Serveur :
-`server/outbound-calls.ts`, contrôles mid-call, `server/routes/phone-call-consent.ts`.
+`server/outbound/outbound-calls.ts`, contrôles mid-call, `server/routes/phone-call-consent.ts`.
 
 ### 2.20 Boutons de carte qui mènent quelque part, et fin de tour
 

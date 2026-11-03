@@ -166,7 +166,7 @@ function startServer(port, webhook) {
       FAKE_CLAUDE_MODE: "happy",
       // The desktop references load the renderer through Vite's proxy in
       // headless Chrome: since #2930 a local browser is no longer the owner
-      // unless this development switch says so (server/request-auth.ts).
+      // unless this development switch says so (server/auth/request-auth.ts).
       SAGAX_DEV_TRUST_LOCAL_BROWSER: "1",
       ...(THREAD_TITLES ? { FAKE_CLAUDE_TEXT_FILE: join(home, "thread-title.txt") } : {}),
       // No stub layer for the solo dataset: the open-source edition runs with

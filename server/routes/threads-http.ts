@@ -8,7 +8,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { deliveredCopy } from "../bot-attachment.ts";
-import type { ApprovalViewer } from "../approval-audience.ts";
+import type { ApprovalViewer } from "../approvals/approval-audience.ts";
 import {
   listMessageFolder,
   messageAttachmentName,

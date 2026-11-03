@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { expireApprovalsAfterRestart, type StaleApproval } from "./approval-restart.ts";
-import type { Message } from "./store.ts";
+import type { Message } from "../store.ts";
 
 const card = (extra: Record<string, unknown>) => ({ title: "t", subtitle: "s", options: ["Allow", "Deny"], requestType: "permission", requestId: "r1", tool: "other", ...extra });
 const msg = (id: string, c: Record<string, unknown>) => ({ id, at: 1, role: "bot", kind: "options", card: card(c) }) as unknown as Message;

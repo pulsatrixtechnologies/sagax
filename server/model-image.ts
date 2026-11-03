@@ -29,7 +29,7 @@ import { atRestSizeSync, readAtRest } from "./content-at-rest.ts";
 import { ATTACHMENTS_DIR, modelImageCopyPath } from "./attachments.ts";
 import type { TurnImageInput } from "./contracts.ts";
 import { nativeRequire } from "./data/engine.ts";
-import { serverApprovalWords } from "./approval-words.ts";
+import { serverApprovalWords } from "./approvals/approval-words.ts";
 import { WebpUndecodable, scaleWebpOffThread } from "./webp-scale-worker.ts";
 
 /** Claude's recommended long edge; beyond it a model only scales down itself. */

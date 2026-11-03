@@ -48,7 +48,7 @@ export interface OrgSettings {
    * otherwise (server/confidential-threads.ts): off by default. */
   confidentialThreadsByDefault?: boolean;
   /** 2026-10-16: a bot a member owns runs its Auto and Auto-accept edits
-   * levels as such (server/member-auto-approval.ts): on by default, an
+   * levels as such (server/approvals/member-auto-approval.ts): on by default, an
    * admin turns it off. */
   memberAutoApproval: boolean;
   /** 2026-10-18: whether people may export their credential vault in clear

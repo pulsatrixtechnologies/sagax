@@ -11,11 +11,11 @@
 // grants. Questions never come through here: a bot's question always reaches
 // a human.
 
-import { supportsApprovalMode, type ApprovalMode } from "../shared/approval-mode.ts";
-import { outboundMailNeedsDraftCard } from "../shared/email-draft-send.ts";
-import { isOutboundTool } from "../shared/outbound.ts";
-import type { ProviderAdapter, RequestOutcome } from "./contracts.ts";
-import { standingGrantsAllowed } from "./custom-rules-org.ts";
+import { supportsApprovalMode, type ApprovalMode } from "../../shared/approval-mode.ts";
+import { outboundMailNeedsDraftCard } from "../../shared/email-draft-send.ts";
+import { isOutboundTool } from "../../shared/outbound.ts";
+import type { ProviderAdapter, RequestOutcome } from "../contracts.ts";
+import { standingGrantsAllowed } from "../custom-rules-org.ts";
 import { fullAccessDecision } from "./full-access-gate.ts";
 
 /** A failed delivery is a runtime error, not another permission decision.
@@ -195,7 +195,7 @@ export type AutoVerdictSource =
   | "own-environment"
   | "own-attachment"
   | "own-computer-choice"
-  /** 2026-10-19 (owner setup, server/owner-autonomy.ts): a Perspicax read
+  /** 2026-10-19 (owner setup, server/approvals/owner-autonomy.ts): a Perspicax read
    * on Sagax's own mount at a level that runs work unasked, and a
    * coordination lease (claim, claim_renew, claim_release) at any level. */
   | "perspicax-read"
@@ -277,7 +277,7 @@ export function autoVerdict(
      * computer). Answered at any level and from any turn, after the safety
      * hold and the person's own rules, never when a security key protects it. */
     ownReadOnlyCommand?: boolean;
-    /** 2026-10-19 (owner setup, server/owner-autonomy.ts): a Perspicax read
+    /** 2026-10-19 (owner setup, server/approvals/owner-autonomy.ts): a Perspicax read
      * or lease on Sagax's own mount that the caller found applies at this
      * level (perspicaxSelfAnswerAt). Answered after the safety hold and the
      * person's own rules, never for a send, a sandbox widening or a call a

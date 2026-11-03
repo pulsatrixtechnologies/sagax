@@ -40,10 +40,10 @@
 //    Recognized only on Sagax's own Perspicax mount (`perspicax_*`, names
 //    reserved for Sagax, mcp-registry.ts) and never when another server of
 //    the turn could have spelled the name.
-import type { ApprovalMode } from "../shared/approval-mode.ts";
+import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import type { BotPermissionMode } from "./owner-approval.ts";
-import type { TurnSpeaker } from "./engine-access.ts";
-import { PERSPICAX_READ_ONLY_TOOLS } from "./drivers/acp/grok-read-only-tools.ts";
+import type { TurnSpeaker } from "../engine-access.ts";
+import { PERSPICAX_READ_ONLY_TOOLS } from "../drivers/acp/grok-read-only-tools.ts";
 
 /** Whose work a turn is, for the owner's own setup: "owner" when the owner
  * (signed in as themselves) wrote it, or when every hop leads back to the owner's own words or the

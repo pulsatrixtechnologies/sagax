@@ -28,7 +28,7 @@ import { providerReplyCutMessage, providerReplyCutReason } from "../../shared/pr
 import { classifyContinuable, writeTurnHandoff } from "../turn-continuation.ts";
 import { DUPLEX_INTERRUPT_WAIT_MS } from "../voice-call-duplex.ts";
 import { KEY_REJECTED_REASON, keyRejected, noteKeyAccepted, noteKeyRejected, rejectsKey } from "../key-rejections.ts";
-import { fullAccessActs } from "../full-access-gate.ts";
+import { fullAccessActs } from "../approvals/full-access-gate.ts";
 import type { EffortLevel } from "../../shared/model-selection.ts";
 import { refusedResponsesOption, refusesModel, refusesResponsesEndpoint, responsesEffort, responsesInput, ResponsesReader, responsesTools } from "./openai-responses.ts";
 

@@ -1,6 +1,6 @@
 // Structural guard (#1905, 2026-11-02): every code path that can put an
 // approval or a choice card between the bot and the person reads the one
-// Full access decision (server/full-access-gate.ts), and says so with a
+// Full access decision (server/approvals/full-access-gate.ts), and says so with a
 // marker comment on the line that emits the card. A new surface without a
 // marker, a marker naming no registered surface, a registered surface whose
 // deciding file stopped reading the gate, or a registered surface nothing
@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 
 import { FULL_ACCESS_MARKER, FULL_ACCESS_SURFACES, type FullAccessSurface } from "./full-access-gate.ts";
 
-const ROOT = join(import.meta.dirname, "..");
+const ROOT = join(import.meta.dirname, "..", "..");
 const SERVER = join(ROOT, "server");
 
 /** What emits a card or a permission request the person may have to answer. */
@@ -107,7 +107,7 @@ describe("every approval or choice card reads the Full access decision", () => {
   });
 
   it("the file that decides each surface imports the gate and reads its decision", () => {
-    const gateImport = /from "(?:\.\.\/)*(?:\.\/)?full-access-gate\.ts"/;
+    const gateImport = /from "(?:\.\.\/)*(?:\.\/)?(?:approvals\/)?full-access-gate\.ts"/;
     const gateCall = /\bfullAccess(?:Decision|Acts|ChoiceAnswer)\(|\bpeerContactCardRequired\(|\bsetSafetyFullAccess\(|\bfullAccessResolver\b/;
     for (const [surface, file] of Object.entries(DECIDED_IN) as Array<[FullAccessSurface, string | null]>) {
       if (!file) continue;
@@ -167,7 +167,7 @@ describe("every approval or choice card reads the Full access decision", () => {
     expect(shared.indexOf('"full_access", ""')).toBeLessThan(shared.indexOf("const next = step(memory"));
     const server = readFileSync(join(SERVER, "safety-review.ts"), "utf8");
     expect(server).toMatch(/if \(verdict\.code === "full_access"\) return null;/);
-    const auto = readFileSync(join(SERVER, "auto-approve.ts"), "utf8");
+    const auto = readFileSync(join(SERVER, "approvals", "auto-approve.ts"), "utf8");
     expect(auto.indexOf("fullAccessDecision(")).toBeLessThan(auto.indexOf('source: "safety-hold"'));
     expect(auto).toMatch(/if \(context\?\.safetyHold && !full\.acts && !full\.hold\)/);
     expect(auto).toMatch(/if \(full\.acts && !\(context\?\.sagaxGate && context\.stepUpRequired\?\.length\)\)/);

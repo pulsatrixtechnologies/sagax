@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoVerdict } from "./auto-approve.ts";
+import { autoVerdict } from "./approvals/auto-approve.ts";
 import { createRoomTurnLevels } from "./room-turn-level.ts";
 
 // An ACP engine (Antigravity, Gemini) leaves every permission request to the

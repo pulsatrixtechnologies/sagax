@@ -441,7 +441,7 @@ describe("the store", () => {
 
 describe("earlier per-bot Allow keys on the rules page", () => {
   it("round-trips a legacy id, and refuses anything else", async () => {
-    const { legacyRuleId, parseLegacyRuleId } = await import("./routes/owner-approvals.ts");
+    const { legacyRuleId, parseLegacyRuleId } = await import("../routes/owner-approvals.ts");
     const id = legacyRuleId("bot-a", "mcp:perspicax_quasar__cw_psa_write");
     expect(id).toMatch(/^legacy_[\w-]+$/);
     expect(parseLegacyRuleId(id)).toEqual({ botId: "bot-a", key: "mcp:perspicax_quasar__cw_psa_write" });

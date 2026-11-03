@@ -13,7 +13,7 @@
 // Custom (Codex config.toml) is never touched. A mode chosen by a previous
 // owner of the bot is dropped without changing anything, as it already read
 // as Approval for the current owner.
-import type { ApprovalMode } from "../shared/approval-mode.ts";
+import type { ApprovalMode } from "../../shared/approval-mode.ts";
 
 export type LegacyPermissionMode = "approval" | "auto" | "bypass";
 

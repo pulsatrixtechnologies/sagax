@@ -17,7 +17,7 @@ import { createAppCard, isAppTool } from "./chat-apps.ts";
 import { createOptionsCard } from "./options-card.ts";
 import { ASK_CHOICE_TOOL, parseAskChoiceInput } from "../shared/options-card.ts";
 import type { ApprovalMode } from "../shared/approval-mode.ts";
-import { fullAccessChoiceAnswer } from "./full-access-gate.ts";
+import { fullAccessChoiceAnswer } from "./approvals/full-access-gate.ts";
 import { isSecretName, mask, redactSecretsInText } from "./redact.ts";
 import type { AgentCardResult, AgentCardStore } from "./chat-card-types.ts";
 

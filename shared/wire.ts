@@ -328,7 +328,7 @@ export interface WireBotGrant {
 }
 
 /** A bot-to-bot conversation of this bot waiting on the person
- * (server/inter-bot-approvals.ts): never listed, its cards are answered from
+ * (server/approvals/inter-bot-approvals.ts): never listed, its cards are answered from
  * the conversation the person has open. */
 export interface WireWaitingApproval {
   threadId: string;
@@ -1106,7 +1106,7 @@ export interface OptionCardData extends WaitCardField {
   ownerRule?: {
     tool: string; scope: Record<string, string>; destructive?: "delete" | "bulk" | "external-message"; description: string;
     /** 2026-10-19 ("Toujours permettre" on every card): the card's
-     * situation the rule also answers (server/owner-approval.ts `from`):
+     * situation the rule also answers (server/approvals/owner-approval.ts `from`):
      * an admin's card, a held card, a turn that is not the person's own. */
     from?: "admin" | "hold" | "origin";
   };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approvalPlain } from "../shared/approval-describe.ts";
+import { approvalPlain } from "../../shared/approval-describe.ts";
 import { serverApprovalWords } from "./approval-words.ts";
 
 describe("serverApprovalWords", () => {

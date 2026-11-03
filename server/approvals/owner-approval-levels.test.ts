@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { engineApprovalMode, type ApprovalMode } from "../shared/approval-mode.ts";
+import { engineApprovalMode, type ApprovalMode } from "../../shared/approval-mode.ts";
 import { autoVerdict } from "./auto-approve.ts";
 import { ownerDecision, ownerVerdictOver, ruleCandidateFor, type OwnerRule, type RuleBehavior } from "./owner-approval.ts";
 import { ownerModeForTurn } from "./owner-autonomy.ts";
@@ -75,14 +75,14 @@ describe("4 levels x a rule Deny / Ask / Allow / none", () => {
   });
 
   it("request.opened reads the owner's rules even when the level answered (index.ts ownerLayer)", () => {
-    const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+    const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
     const start = source.indexOf("const ownerLayer = Boolean(");
     const line = source.slice(start, source.indexOf("\n", start));
     expect(start).toBeGreaterThan(-1);
     expect(line).not.toContain("!baseVerdict?.approve");
     // and both turn launches hand the engine its native level; they left
     // index.ts for server/turns/ (9fe511cdb startTurn, 062d7c42e group member)
-    const launches = ["./turns/start-turn-dispatch.ts", "./turns/group-member-turn-launch.ts"]
+    const launches = ["../turns/start-turn-dispatch.ts", "../turns/group-member-turn-launch.ts"]
       .map((path) => readFileSync(new URL(path, import.meta.url), "utf8").match(/approvalMode: engineTurnLevel\(/g)?.length ?? 0);
     expect(launches).toEqual([1, 1]);
   });

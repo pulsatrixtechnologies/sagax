@@ -4,7 +4,7 @@
 // note a card can show has a catalog key.
 import { describe, expect, it, vi } from "vitest";
 
-import englishCatalog from "../src/locales/en.json" with { type: "json" };
+import englishCatalog from "../../src/locales/en.json" with { type: "json" };
 
 import {
   HELD_NOTE,

@@ -13,7 +13,7 @@
 // The level is the one the turn really runs at (index.ts engineTurnLevel of
 // approvalModeForTurn), never the bot's stored setting: an organization that
 // denies Full, a guest's or a mail-woken run drop it to Ask before here.
-import type { ApprovalMode } from "../shared/approval-mode.ts";
+import type { ApprovalMode } from "../../shared/approval-mode.ts";
 
 const NEVER_TYPED =
   " Never ask the person to type GO, yes or a confirmation word before acting, and never treat such a word as missing: a request they made is their instruction."

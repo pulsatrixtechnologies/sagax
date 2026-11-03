@@ -704,7 +704,7 @@ Existing tests that expected an email as the viewer id: update their fixture ses
 
 - [ ] **Step 4: Run tests**
 
-Run: `npx vitest run server/channel-visibility.test.ts server/approval-audience.test.ts`
+Run: `npx vitest run server/channel-visibility.test.ts server/approvals/approval-audience.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**

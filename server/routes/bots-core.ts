@@ -8,7 +8,7 @@
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 
-import type { ApprovalViewer } from "../approval-audience.ts";
+import type { ApprovalViewer } from "../approvals/approval-audience.ts";
 import type { LookRefusal } from "../achievements-mastery.ts";
 import { atLeast, type Level } from "../authz.ts";
 import { generateAvatarImage, avatarGenerationRequestSchema } from "../avatar-image.ts";
@@ -25,7 +25,7 @@ import type { ProviderInstance } from "../contracts.ts";
 import { autoNewBotSelection } from "../default-model-selection.ts";
 import { githubSkillFetch, type GithubCredential } from "../github-access.ts";
 import { mcpServerNameError, MAX_MCP_SERVERS } from "../mcp-registry.ts";
-import { MEMBER_AUTO_NOT_ALLOWED } from "../member-auto-approval.ts";
+import { MEMBER_AUTO_NOT_ALLOWED } from "../approvals/member-auto-approval.ts";
 import { journalMemoryWrite } from "../memory/memory-journal.ts";
 import { pickBotName } from "../names.ts";
 import {

@@ -3,8 +3,8 @@
 import { describe, expect, it } from "vitest";
 
 import { approvalHeldNote, autoVerdict } from "./auto-approve.ts";
-import { customRuleCandidate, customRuleNotice, reviewCustomRules, ruleCoversCard } from "./custom-rules-review.ts";
-import type { CustomRule } from "../shared/custom-rules.ts";
+import { customRuleCandidate, customRuleNotice, reviewCustomRules, ruleCoversCard } from "../custom-rules-review.ts";
+import type { CustomRule } from "../../shared/custom-rules.ts";
 
 const HOME = "/Users/example";
 let seq = 0;

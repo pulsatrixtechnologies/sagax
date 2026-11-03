@@ -2,8 +2,8 @@
 // (card.plain, push title/body). Web and desktop cards re-word themselves in
 // the app's language; phones show these fields as sent, so the server picks:
 // SAGAX_APPROVAL_LOCALE, then the server's UI language setting, then English.
-import fr from "../src/locales/fr.json" with { type: "json" };
-import { ENGLISH_WORDS, type ApprovalWords } from "../shared/approval-describe.ts";
+import fr from "../../src/locales/fr.json" with { type: "json" };
+import { ENGLISH_WORDS, type ApprovalWords } from "../../shared/approval-describe.ts";
 
 const CATALOGS: Readonly<Record<string, Readonly<Record<string, string>>>> = { fr };
 

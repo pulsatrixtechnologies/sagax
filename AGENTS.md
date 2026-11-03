@@ -28,20 +28,20 @@ person's words, not the model's. `docs/voice-mode-xai.md`, first section.
 
 ## Full access, one decision (#1065, #1819, #1905; 2026-11-02)
 
-`server/full-access-gate.ts` is the one place that says whether a turn at
+`server/approvals/full-access-gate.ts` is the one place that says whether a turn at
 Full access acts without a card, and the only holds that stand under it:
 an organization or personal Refuse or Ask first rule, isolation between
 people, a sensitive path or the shared server, a real question. Every code
 path that emits an approval or a choice card carries `// full-access:
 <surface>` on its line, with the surface in `FULL_ACCESS_SURFACES`;
-`server/full-access-gate.guard.test.ts` (merge gate) fails a new emitter
+`server/approvals/full-access-gate.guard.test.ts` (merge gate) fails a new emitter
 without one. The safety review reads the level through
 `setSafetyFullAccess` and never holds a Full turn; `autoVerdict` reads
 `fullAccessDecision` before the safety hold; a may-I `ask_choice` or
 question under Full is answered with its recommended option
 (`shared/permission-question.ts`). Never fix a Full access card on one
 surface alone: add the surface to the gate and its regression to
-`server/full-access-gate.regressions.test.ts`. `docs/approval-levels.md`,
+`server/approvals/full-access-gate.regressions.test.ts`. `docs/approval-levels.md`,
 "Full access: one decision".
 
 ## Agents catalog budget (#1703, 2026-11-01)
@@ -1635,7 +1635,7 @@ A bot in Full access answered "no sends without your typed GO": nothing in
 its prompt said it ran in Full, and a loaded instruction (a plugin skill
 asking for the operator's GO before a send) filled the gap. Every direct
 and room turn now gets an "Approval level" section
-(server/approval-level-prompt.ts) with the level it really runs at
+(server/approvals/approval-level-prompt.ts) with the level it really runs at
 (`approvalModeForTurn`, `roomTurnApprovalMode`). Full: act without asking,
 never ask for a typed GO or a confirmation; only Refuse and Ask first rules
 and recipients outside the allowed list hold a call, and Sagax shows that
@@ -1651,7 +1651,7 @@ The approval-level section now says not to invent a second person gate for
 in-scope work; a Peer contact section states the effective flag
 (`peerReviewRequired`: `approvePeerComms` and not Full). `VERIFY_FIRST_PROMPT`
 and the `ask_choice` tool description match. Fleet merge/release/deploy GO
-in chat is unchanged. Tests: `server/approval-level-prompt.test.ts`,
+in chat is unchanged. Tests: `server/approvals/approval-level-prompt.test.ts`,
 `server/system-prompt.test.ts`, `server/bot-overview.test.ts`.
 
 ## Work style: one section every turn reads (2026-10-29)
@@ -2488,7 +2488,7 @@ Decision: "On doit avoir des cartes, mais avoir la possibilité de faire TOUJOUR
 le Toujours permettre." Every approval card offers Always allow to the
 person who answers it, with the exact scope written on the card
 (`approval.always.scopeLine`): this bot, this tool or kind of action, this
-target. The rule is an owner rule (`server/owner-approval.ts`, store
+target. The rule is an owner rule (`server/approvals/owner-approval.ts`, store
 `owner-approvals.json`), the person's own, listed and revocable in
 Settings > Security (`MyApprovalRules`, also `rules.owner` and
 `rules.ownerDelete` in sagax_settings). Rules:
@@ -2545,12 +2545,12 @@ Settings > Security (`MyApprovalRules`, also `rules.owner` and
 - Tests: `server/always-allow.e2e.test.ts` (engine card, key, bulk, act,
   proposal, Codex and ACP engines), `server/member-own-destinations.e2e.test.ts`
   (real computer, admin card), `server/cw-widgets.e2e.test.ts`,
-  `server/owner-approval.test.ts`.
+  `server/approvals/owner-approval.test.ts`.
 
 ## Advanced approvals: one app, 1Password per request, card photos (2026-10-21, parité R10)
 
 - **One app of this computer** (`shared/computer-app.ts`,
-  `server/computer-app.ts`, `server/owner-approval.ts` `APP_RULE_TOOL`): a
+  `server/computer-app.ts`, `server/approvals/owner-approval.ts` `APP_RULE_TOOL`): a
   screen action of the host Mac ("this computer", server mount `computer`,
   a desktop or a solo server on macOS, the person's own turn, the same bot
   and live turn generation, never an admin's, a held or an origin card)
@@ -2648,7 +2648,7 @@ Settings > Security (`MyApprovalRules`, also `rules.owner` and
   `server/routes/credential-vault.test.ts`.
 - Not done: a device tool on the phone (row 81): Sagax has no phone tools.
 - Tests: `shared/computer-app.test.ts`, `server/computer-app.test.ts`,
-  `server/harness/bus.test.ts` (publish gate), `server/owner-approval.test.ts`
+  `server/harness/bus.test.ts` (publish gate), `server/approvals/owner-approval.test.ts`
   (app rules), `server/routes/credential-vault.test.ts` (1Password per
   request, once only, single use), `ios/Tests/CompanionCoreTests/VaultLoginCardTests.swift`.
 
@@ -2666,7 +2666,7 @@ quote must be in the person's own message.
 
 - `sagax_approvals` (agents catalog, `server/drivers/agents-approvals-tools.ts`,
   every owned bot, not in `CHIEF_ONLY_TOOL_NAMES`; route `/api/internal/approvals`,
-  `server/primary-approvals.ts`): `list` (the person's Approvals screen,
+  `server/approvals/primary-approvals.ts`): `list` (the person's Approvals screen,
   `inboxPending`, kept by `primaryAnswerable`; a short handle `c` + 7 hex,
   never an id), `answer` (allow, always_allow, always_allow_this, deny,
   always_deny, answer for a question), `cancel` (the card's turn).
@@ -2722,8 +2722,8 @@ quote must be in the person's own message.
   bot and holds `bots.fullAccess`). The settings replay carries `primary`
   (`PlannedAct.primary`), so a level also changes while that bot works
   (`primaryAskedReplay`: "mets-toi en Full"); the next turn starts on it.
-- Tests: `shared/primary-request.test.ts`, `server/primary-approvals.test.ts`,
-  `shared/settings-actions-policy.test.ts`, `server/primary-approvals.e2e.test.ts`.
+- Tests: `shared/primary-request.test.ts`, `server/approvals/primary-approvals.test.ts`,
+  `shared/settings-actions-policy.test.ts`, `server/approvals/primary-approvals.e2e.test.ts`.
 
 ## The Primary Bot changes the person's bots at once (2026-10-20)
 
@@ -2989,7 +2989,7 @@ The maintainer's GO on points 1 and 2 of the bot quality diagnostic. Rules:
   list, ToolSearch, Task, `pwd`; no git, Skill, ls or wc rule); every other
   call reaches the broker and is a real card (`autoVerdict` decides, as
   before). Tests read the level with `server/testing/claude-level.ts`.
-- Owner setup (2026-10-19, `server/owner-autonomy.ts`): at Approve for me
+- Owner setup (2026-10-19, `server/approvals/owner-autonomy.ts`): at Approve for me
   or Full access, the owner mode `approval` reads as `auto` for the owner's
   own work (`ownerLineageOrigin`: the owner's words signed in, their
   scheduled or manual routine, a hop from their own bot speaking for them;
@@ -3693,7 +3693,7 @@ for themself, for every bot they can see: no admin, no owner check.
   sent as a notice; a pass with nothing new sends nothing.
 - Tests: `shared/reach-me.test.ts`, `server/reach-me/*.test.ts`,
   `server/routes/reach-me.test.ts`, `server/push/fcm.test.ts`,
-  `server/routes/push-devices.test.ts`, `server/auto-approve.test.ts`,
+  `server/routes/push-devices.test.ts`, `server/approvals/auto-approve.test.ts`,
   `src/components/bot-settings/BotReachMe.test.ts`,
   `src/lib/no-visible-ids.test.ts`, Android `FcmMessageTest`. Captures:
   `node scripts/capture/reach-me.mjs`. Doc: `docs/reach-me.md`.
@@ -3930,7 +3930,7 @@ covered by `server/meetings/*.test.ts` and `server/routes/meetings.test.ts`:
   normal end the card's live lines go once the summary turn is asked for.
   Three unreadable polls in a row end the meeting.
 - The Perspicax console and `sagax_approve` never answer the card
-  (`server/approval-type.ts` types it `other`).
+  (`server/approvals/approval-type.ts` types it `other`).
 - One meeting per bot, reserved before any await; at most
   `MEETING_MAX_CONCURRENT` (2) meeting browsers on a server.
 - The meeting runs in a private guest browser session per meeting, never in
@@ -4787,7 +4787,7 @@ and `server/store.org-approval-default.test.ts`:
 
 A bot acts with its owner's rights (spec
 `docs/superpowers/specs/2026-10-14-bot-owner-permissions.md`). Keep these
-rules, covered by `server/owner-approval.test.ts`,
+rules, covered by `server/approvals/owner-approval.test.ts`,
 `server/engine-access.test.ts` and `server/org/org-sharing.e2e.test.ts` (S3-7d):
 
 - Only what goes beyond the owner's rights is an admin card
@@ -4812,7 +4812,7 @@ rules, covered by `server/owner-approval.test.ts`,
   org Refuse/Ask first, then the person's and the bot's rules (a deny
   refuses, an ask keeps its card even in Full access, an allow goes without
   a card even at Ask), then the level for what no rule covers
-  (`ownerVerdictOver`, matrix in `server/owner-approval-levels.test.ts`).
+  (`ownerVerdictOver`, matrix in `server/approvals/owner-approval-levels.test.ts`).
   At Full with an Ask or Deny rule in force, the engine runs at Ask so the
   rule sees every call (`engineApprovalMode`); Sagax answers the rest as
   Full. The old `GET/PUT /api/bots/:id/permission-mode` is gone; stored
@@ -4833,7 +4833,7 @@ Custom rules are a person's approval rules in their own words
 (`shared/custom-rules.ts`, store `custom-approval-rules.json` 0600 in
 `server/custom-rules-store.ts`, routes `server/routes/custom-rules.ts`,
 editor `src/components/bot-settings/CustomRulesCard.tsx`). Keep these rules,
-covered by `shared/custom-rules.test.ts`, `server/auto-approve.custom-rules.test.ts`,
+covered by `shared/custom-rules.test.ts`, `server/approvals/auto-approve.custom-rules.test.ts`,
 `server/routes/custom-rules.test.ts` and `src/components/CustomRuleNotice.test.ts`:
 
 - A rule is "Quand <bot> veut :" a phrase plus Autoriser automatiquement,

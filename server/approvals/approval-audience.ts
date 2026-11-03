@@ -1,4 +1,4 @@
-import type { BotHost } from "./turn-route.ts";
+import type { BotHost } from "../turn-route.ts";
 
 export interface ApprovalViewer {
   userId: string;

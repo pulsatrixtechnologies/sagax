@@ -100,7 +100,7 @@ Its Auto-accept edits and Approve for me pass through to the provider
 unless an organization admin turned them off: **Settings > Organization >
 Automatic approval levels for members' bots**, or `memberAutoApproval` in
 the admin API's `POST settings` (on unless an admin turns it off; each
-change is an `org.settings` row; `server/member-auto-approval.ts`). While it
+change is an `org.settings` row; `server/approvals/member-auto-approval.ts`). While it
 is on, a looser level still needs the person's security key when they
 chose the rule-change class. While it is off those levels run as Ask, and a
 change of a member's bot (or one of its threads) to one of them is refused
@@ -127,7 +127,7 @@ bots again, so no saved Auto outlives the setting (2026-10-17,
 organization rules above.
 
 It also governs the owner's own **permission mode** of a member's bot
-(Automatic, Bypass, `server/owner-approval.ts`): while the setting is off
+(Automatic, Bypass, `server/approvals/owner-approval.ts`): while the setting is off
 the mode runs as Approval, and choosing Automatic or Bypass is refused with
 `member_auto_not_allowed` (re-review of 2026-10-17).
 
@@ -224,7 +224,7 @@ CLI login) and reaches the internet, so this is bounded
   bot's permissions) and their **Always allow** rules follow the same two
   limits: a call in a class protected by a security key keeps its card
   (its Allow needs the key), and a call from a turn that is not the owner's
-  own runs unasked only as such a read (`server/owner-approval.ts`
+  own runs unasked only as such a read (`server/approvals/owner-approval.ts`
   `ownerDecision`, re-review of 2026-10-17). A deny rule still denies;
 - the person's own deny and ask rules, the safety review and the grant
   guard decide first, on every engine. On a Grok turn under the approval
@@ -301,7 +301,7 @@ previous fix had not touched: the owner's own computer (#1065), a may-I
 safety review holding a send (`send_to_bot` is a send by its name) before
 the level was read (#1905, a Grok turn in `default` mode because the
 account's connectors were loaded, so every Sagax tool asked). Since
-2026-11-02 one module decides: `server/full-access-gate.ts`
+2026-11-02 one module decides: `server/approvals/full-access-gate.ts`
 (`fullAccessDecision`). Under Full access the bot acts, and only these
 holds stand, nothing else:
 
@@ -334,9 +334,9 @@ What this changes for a turn at Full access:
 Every code path that can put an approval or a choice card between the bot
 and the person carries a marker comment, `// full-access: <surface>`, with
 the surface listed in `FULL_ACCESS_SURFACES`;
-`server/full-access-gate.guard.test.ts` (run by `pnpm verify:merge`) fails a
+`server/approvals/full-access-gate.guard.test.ts` (run by `pnpm verify:merge`) fails a
 card without one, a marker naming no surface, and a deciding file that
-stopped reading the gate. `server/full-access-gate.regressions.test.ts`
+stopped reading the gate. `server/approvals/full-access-gate.regressions.test.ts`
 holds the three incidents as tests.
 
 ## Answering a request

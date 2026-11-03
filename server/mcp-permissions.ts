@@ -246,7 +246,7 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   // own rights decide on the route, like act
   p("settings:change", "own", "sagax_settings"),
   // a Primary Bot answers its person's cards at their request
-  // (server/primary-approvals.ts): the click's own checks decide
+  // (server/approvals/primary-approvals.ts): the click's own checks decide
   p("approvals:primary", "own", "sagax_approvals"),
 ];
 

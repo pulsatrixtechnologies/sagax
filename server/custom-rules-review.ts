@@ -4,7 +4,7 @@
 //
 // Nothing here answers a provider. server/index.ts asks `reviewCustomRules`
 // at request.opened, before any grant answers, and passes the decision to
-// autoVerdict (server/auto-approve.ts), which keeps the order: a question
+// autoVerdict (server/approvals/auto-approve.ts), which keeps the order: a question
 // and a safety hold first, then the person's deny or ask, then grants, then
 // the person's allow.
 

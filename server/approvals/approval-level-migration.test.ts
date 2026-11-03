@@ -97,7 +97,7 @@ describe("runPermissionModeMigration (old formats that failed at start, #1236)",
     expect(dropped).toBe(0);
   });
   it("server/index.ts runs it after the principal registry is built", () => {
-    const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+    const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
     const built = source.indexOf("principals.localOperator(cfg.profile?.email)");
     const migration = source.indexOf("runPermissionModeMigration({");
     expect(built).toBeGreaterThan(0);

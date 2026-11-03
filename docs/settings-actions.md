@@ -57,7 +57,7 @@ parties hors tableau du script.
   permet Full, la personne possède le bot et a `bots.fullAccess`. Un niveau
   change même pendant que ce bot travaille (« mets-toi en Full ») ; le tour
   suivant part avec. Les cartes en attente se répondent avec
-  `sagax_approvals` (`server/primary-approvals.ts`), par n'importe quel
+  `sagax_approvals` (`server/approvals/primary-approvals.ts`), par n'importe quel
   bot que la personne possède, depuis son propre message (un « oui », y
   compris transcrit à la voix) : un « oui » qui ne nomme aucune carte
   répond à la plus récente que la personne voyait, quelle que soit la

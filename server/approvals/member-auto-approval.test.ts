@@ -1,4 +1,4 @@
-// Automatic approval levels for members' bots (server/member-auto-approval.ts).
+// Automatic approval levels for members' bots (server/approvals/member-auto-approval.ts).
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -39,7 +39,7 @@ describe("memberRoomTurnLevel (a Primary Bot's handoff in a room)", () => {
   });
 
   it("is what the server's room turns apply to a member's bot (index.ts roomTurnApprovalMode)", () => {
-    const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+    const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
     const start = source.indexOf("function roomTurnApprovalMode(");
     const body = source.slice(start, source.indexOf("\n}\n", start));
     expect(start).toBeGreaterThan(-1);
@@ -49,7 +49,7 @@ describe("memberRoomTurnLevel (a Primary Bot's handoff in a room)", () => {
   });
 
   it("the owner route of a member's bot runs as Approval while the setting is off (index.ts ownerModeForTurn autoAllowed)", () => {
-    const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+    const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
     expect(source).toMatch(/autoAllowed: !\(memberOwnedInOrg\(asker\) && !memberAutoApprovalAllowed\(cfg\.organization\)\),/);
   });
 

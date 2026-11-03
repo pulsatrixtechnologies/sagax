@@ -18,8 +18,8 @@ import { removeTempDir } from "./testing/cleanup.ts";
 import { callUserSandboxTool, type ToolExec } from "./user-sandbox-tools.ts";
 import { SAFER_GIT, SAFETY_REFUSAL_FINAL } from "../shared/safety-review.ts";
 import { isOutboundTool } from "../shared/outbound.ts";
-import { autoVerdict } from "./auto-approve.ts";
-import { destructiveKindOf, ownerDecision } from "./owner-approval.ts";
+import { autoVerdict } from "./approvals/auto-approve.ts";
+import { destructiveKindOf, ownerDecision } from "./approvals/owner-approval.ts";
 
 const dirs: string[] = [];
 let dataDir = "";

@@ -8,24 +8,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { approvalLevelPrompt } from "./approval-level-prompt.ts";
 import { autoVerdict } from "./auto-approve.ts";
-import { createAgentCard, type AgentCardStore } from "./chat-widgets.ts";
-import { DATA_DIR } from "./config.ts";
-import type { ModelSelection } from "./contracts.ts";
-import { grokPermissionMode } from "./drivers/acp/grok.ts";
-import { flushAdminActivity } from "./admin-activity.ts";
+import { createAgentCard, type AgentCardStore } from "../chat-widgets.ts";
+import { DATA_DIR } from "../config.ts";
+import type { ModelSelection } from "../contracts.ts";
+import { grokPermissionMode } from "../drivers/acp/grok.ts";
+import { flushAdminActivity } from "../admin-activity.ts";
 import { fullAccessActs, fullAccessChoiceAnswer } from "./full-access-gate.ts";
 import { ownerModeForLevel } from "./owner-autonomy.ts";
 import { ownerDecision, ownerVerdictOver, type OwnerRule } from "./owner-approval.ts";
-import { resetSafetyReviewForTests, safetyPermissionEffect, setSafetyDataDirForTests, setSafetyFullAccess } from "./safety-review.ts";
-import { Store } from "./store.ts";
-import type { Message } from "./store.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
-import { ASK_CHOICE_TOOL } from "../shared/options-card.ts";
-import { isOutboundTool } from "../shared/outbound.ts";
+import { resetSafetyReviewForTests, safetyPermissionEffect, setSafetyDataDirForTests, setSafetyFullAccess } from "../safety-review.ts";
+import { Store } from "../store.ts";
+import type { Message } from "../store.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
+import { ASK_CHOICE_TOOL } from "../../shared/options-card.ts";
+import { isOutboundTool } from "../../shared/outbound.ts";
 import { peerContactCardRequired } from "./full-access-gate.ts";
-import { cancelPeerApprovalsFor, requestPeerApproval, resolvePeerComms } from "./peer-approval.ts";
-import { closeMessageDb } from "./message-db.ts";
-import { reviewSafety } from "../shared/safety-review.ts";
+import { cancelPeerApprovalsFor, requestPeerApproval, resolvePeerComms } from "../peer-approval.ts";
+import { closeMessageDb } from "../message-db.ts";
+import { reviewSafety } from "../../shared/safety-review.ts";
 
 const SEND_TO_BOT = "agents__send_to_bot";
 // Sagax's own bot-to-bot tools: in-app peer contact between the person's own

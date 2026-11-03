@@ -7,7 +7,7 @@
 // timer cannot help (the request it would decline is gone), so every such
 // card is closed at startup: it reads Expired, the action never ran, and
 // the audit log says why.
-import type { Message } from "./store.ts";
+import type { Message } from "../store.ts";
 
 export interface StaleApproval {
   threadId: string;

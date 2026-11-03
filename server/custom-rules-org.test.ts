@@ -8,13 +8,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { autoVerdict } from "./auto-approve.ts";
+import { autoVerdict } from "./approvals/auto-approve.ts";
 import { setOrgApprovalPolicySource, standingGrantsAllowed } from "./custom-rules-org.ts";
 import { customRuleNotice, reviewCustomRules } from "./custom-rules-review.ts";
 import { CustomRuleStore, registeredCustomRuleStore } from "./custom-rules-store.ts";
 import { json, readBody } from "./harness/http.ts";
 import { opsRoutes, type OpsDeps } from "./org/org-admin-ops.ts";
-import { matchOwnerRule, ruleCoversExactScope, type OwnerRule } from "./owner-approval.ts";
+import { matchOwnerRule, ruleCoversExactScope, type OwnerRule } from "./approvals/owner-approval.ts";
 import type { RequestAuth } from "./request-auth.ts";
 import { createCustomRuleRoutes } from "./routes/custom-rules.ts";
 import { dispatchRoutes } from "./routes/table.ts";

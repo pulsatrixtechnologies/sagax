@@ -26,7 +26,7 @@ import { join } from "node:path";
 
 import { expect, it } from "vitest";
 
-import { launchVerificationServer } from "../scripts/control-omb.ts";
+import { launchVerificationServer } from "../../scripts/control-omb.ts";
 
 it("the Primary Bot answers, always allows and cancels the person's cards at their request, refuses otherwise, and turns cards off", async () => {
   const owner = randomBytes(32).toString("base64url");

@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import { OwnerApprovalStore } from "../owner-approval-store.ts";
+import { OwnerApprovalStore } from "../approvals/owner-approval-store.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { createOwnerApprovalRoutes } from "./owner-approvals.ts";
 import { dispatchRoutes } from "./table.ts";

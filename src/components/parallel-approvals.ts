@@ -6,7 +6,7 @@
 // the task's own thread.
 //
 // 2026-10-19: the same for a conversation another bot opened on this one
-// (WireBot.waitingApprovals, server/inter-bot-approvals.ts). It is never
+// (WireBot.waitingApprovals, server/approvals/inter-bot-approvals.ts). It is never
 // listed, so its cards were nowhere the person could find them while the
 // bot stayed busy (its model locked). They join the box too, naming the bot
 // that asked.

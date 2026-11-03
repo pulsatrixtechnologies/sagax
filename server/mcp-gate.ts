@@ -38,7 +38,7 @@ import { ToolNameAliases, mapJsonStrings } from "./mcp-tool-names.ts";
 import { killCliTree } from "./procs.ts";
 import { misuseGateBlockText } from "../shared/misuse-guardrails.ts";
 import { BRIDGE_FIND_TOOL, BRIDGE_SERVER, readBridgeCall } from "../shared/searched-tool-call.ts";
-import { gateArgsSummary, gateDeclinedText, type GateAnswer, type GateAsk } from "./mcp-gate-approval.ts";
+import { gateArgsSummary, gateDeclinedText, type GateAnswer, type GateAsk } from "./approvals/mcp-gate-approval.ts";
 
 type Json = Record<string, unknown>;
 

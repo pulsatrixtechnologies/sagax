@@ -711,8 +711,8 @@ git commit -m "feat: queue channel turns while a worker is offline"
 ### Task 12: Approbation réservée au propriétaire
 
 **Files:**
-- Create: `server/approval-audience.ts`
-- Test: `server/approval-audience.test.ts`
+- Create: `server/approvals/approval-audience.ts`
+- Test: `server/approvals/approval-audience.test.ts`
 - Modify: le point qui émet la carte d'approbation d'un tour de canal (chercher `PendingApproval` côté serveur, le module qui notifie la session)
 
 **Interfaces:**
@@ -740,7 +740,7 @@ it("does not take channel members as an audience", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm exec vitest run server/approval-audience.test.ts`
+Run: `pnpm exec vitest run server/approvals/approval-audience.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: Write minimal implementation**
@@ -749,13 +749,13 @@ Avant d'émettre la carte, filtrer les sessions dont `userId` n'est pas `audienc
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/approval-audience.test.ts`
+Run: `pnpm exec vitest run server/approvals/approval-audience.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/approval-audience.ts server/approval-audience.test.ts
+git add server/approvals/approval-audience.ts server/approvals/approval-audience.test.ts
 git commit -m "feat: deliver channel approvals only to the bot owner"
 ```
 
@@ -806,7 +806,7 @@ Quand le socket du worker se ferme pendant un tour, appeler `failTurn` et écrir
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/workers.test.ts server/turn-route.test.ts server/approval-audience.test.ts server/channel-membership.test.ts src/components/OwnerWait.test.ts src/components/OrgSidebar.test.ts src/components/OrgDirectory.test.ts`
+Run: `pnpm exec vitest run server/workers.test.ts server/turn-route.test.ts server/approvals/approval-audience.test.ts server/channel-membership.test.ts src/components/OwnerWait.test.ts src/components/OrgSidebar.test.ts src/components/OrgDirectory.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**

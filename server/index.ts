@@ -259,7 +259,7 @@ import {
   autoVerdict,
   deliverFullAccessApproval,
   delegatedApprovalMode
-} from "./auto-approve.ts";
+} from "./approvals/auto-approve.ts";
 import { CommandAllowlistStore, commandAllowlistCandidate, sandboxCommandCandidate } from "./command-allowlist.ts";
 import type { CommandAllowlistCandidate, CommandAllowlistResponse } from "../shared/command-allowlist.ts";
 import { claudeAccountInfo } from "./claude-accounts.ts";
@@ -282,7 +282,7 @@ import {
   renderDigest,
   toolEvidence
 } from "./digest.ts";
-import { expireApprovalsAfterRestart } from "./approval-restart.ts";
+import { expireApprovalsAfterRestart } from "./approvals/approval-restart.ts";
 import {
   actorLabel,
   appendDecision,
@@ -616,7 +616,7 @@ import {
   type PrimaryCard,
   type PrimaryDecision,
   type PrimaryTurn
-} from "./primary-approvals.ts";
+} from "./approvals/primary-approvals.ts";
 import { reviewedSkillSha256 } from "../shared/skill-request.ts";
 import { checkPersonQuote, personWordsForTurn } from "../shared/primary-request.ts";
 import { sessionIdlePolicy } from "./drivers/session-idle.ts";
@@ -694,8 +694,8 @@ import {
   scopeKeepable,
   scopeRemembers,
   type OwnerRule
-} from "./owner-approval.ts";
-import { OwnerApprovalStore } from "./owner-approval-store.ts";
+} from "./approvals/owner-approval.ts";
+import { OwnerApprovalStore } from "./approvals/owner-approval-store.ts";
 import { CustomRuleStore } from "./custom-rules-store.ts";
 import {
   customRuleCandidate,
@@ -717,7 +717,7 @@ import {
   type TurnStart
 } from "../shared/custom-rules.ts";
 import { createCustomRuleRoutes } from "./routes/custom-rules.ts";
-import { createAutoApprovalNotes, type ToolAutoApproval } from "./tool-auto-approval.ts";
+import { createAutoApprovalNotes, type ToolAutoApproval } from "./approvals/tool-auto-approval.ts";
 import { createEmailDraftRoutes } from "./routes/email-drafts.ts";
 import { createThreadWarmRoutes } from "./routes/thread-warm.ts";
 import { createEmailSendPasses, emailSendCard, sendWithMailer } from "./mail/email-draft-send.ts";
@@ -733,7 +733,7 @@ import {
   type EmailSendRequestCard
 } from "../shared/email-draft-send.ts";
 import { builtinAgentToolName, memberOwnScopeTool, unknownAgentToolRefusal } from "./member-tool-scope.ts";
-import { serverApprovalWords } from "./approval-words.ts";
+import { serverApprovalWords } from "./approvals/approval-words.ts";
 import { personLanguageOf } from "./person-language.ts";
 import {
   isModelVariant,
@@ -1153,9 +1153,9 @@ import {
 } from "./solo-goal.ts";
 import { soloGoalLineText, type SoloGoalLine } from "../shared/solo-goal-line.ts";
 import { relayAccountLabel } from "./run-with-engine.ts";
-import { approvalLevelPrompt, peerContactPrompt } from "./approval-level-prompt.ts";
+import { approvalLevelPrompt, peerContactPrompt } from "./approvals/approval-level-prompt.ts";
 // #1905: Full access, one decision for every approval and choice card
-import { fullAccessActs, fullAccessChoiceAnswer, fullAccessChoiceLine, fullAccessDecision, peerContactCardRequired } from "./full-access-gate.ts";
+import { fullAccessActs, fullAccessChoiceAnswer, fullAccessChoiceLine, fullAccessDecision, peerContactCardRequired } from "./approvals/full-access-gate.ts";
 import { expandLearnTurnText } from "./skill-learn.ts";
 import { expandSetupTurnText, setupModeActive, setupSystemPrompt } from "./setup-mode.ts";
 import type { SkillRequestCardData } from "../shared/skill-request.ts";
@@ -1863,8 +1863,8 @@ import {
   approvalDelivery,
   receivesApprovalCard,
   type ApprovalViewer
-} from "./approval-audience.ts";
-import { interBotWaiting } from "./inter-bot-approvals.ts";
+} from "./approvals/approval-audience.ts";
+import { interBotWaiting } from "./approvals/inter-bot-approvals.ts";
 import { interBotConversations } from "./inter-bot-conversations.ts";
 import type { BotHost } from "./turn-route.ts";
 import { signInListWithOpenInvites, type OrgRole } from "./org/org-directory.ts";
@@ -2252,7 +2252,7 @@ import { createRoutineAwayRoutes } from "./routes/routine-away.ts";
 import { createRoutineFolderRoutes } from "./routes/routine-folders.ts";
 import { createRoutineBulkRoutes } from "./routes/routine-bulk.ts";
 import { createMeetingRoutes } from "./routes/meetings.ts";
-import { approvalTypeOf } from "./approval-type.ts";
+import { approvalTypeOf } from "./approvals/approval-type.ts";
 import { createMeetingInternalRoutes } from "./routes/meeting-internal.ts";
 // Phone tools (audit row 81): the person's own iPhone, approved on the phone.
 import { createPhoneCardScanRoutes, createPhoneToolInternalRoutes, createPhoneToolRoutes } from "./routes/phone-tools.ts";
@@ -2491,9 +2491,9 @@ import {
   ownerModeForTurn,
   perspicaxSelfAnswer,
   perspicaxSelfAnswerAt
-} from "./owner-autonomy.ts";
+} from "./approvals/owner-autonomy.ts";
 import { routineOwnerAuthorization } from "./routines/routine-authorization.ts";
-import { runPermissionModeMigration } from "./approval-level-migration.ts";
+import { runPermissionModeMigration } from "./approvals/approval-level-migration.ts";
 import {
   MEMBER_AUTO_NOT_ALLOWED,
   memberAutoApprovalAllowed,
@@ -2504,7 +2504,7 @@ import {
   memberRoomTurnLevel,
   memberTurnLevel,
   type MemberAutoReset
-} from "./member-auto-approval.ts";
+} from "./approvals/member-auto-approval.ts";
 import {
   ORG_FULL_ACCESS_DEFAULT_MARKER,
   orgFullAccessAllowed,
@@ -10649,7 +10649,7 @@ const wireBot = (bot: BotRecord): WireBot => {
     : rest;
   const lead = instructionsLead(visible.soul);
   // 2026-10-19: a bot-to-bot conversation's cards wait on the person, who
-  // never sees that conversation (server/inter-bot-approvals.ts).
+  // never sees that conversation (server/approvals/inter-bot-approvals.ts).
   const waitingApprovals = allTasks ? interBotWaiting(bot.id, allTasks) : [];
   // Both ends of a bot-to-bot conversation show it (inter-bot-conversations.ts);
   // an organization viewer gets the readable ones only (botForViewer).
@@ -15753,7 +15753,7 @@ function stoppedRowSinceLastPerson(threadId: string, turnId: string | undefined)
   return false;
 }
 /** 2026-10-28: what answered a call's ask with no card, kept until the
- * call's own row exists (server/tool-auto-approval.ts). */
+ * call's own row exists (server/approvals/tool-auto-approval.ts). */
 const autoApprovals = createAutoApprovalNotes();
 /** Put what answered an ask with no card on the call's own row: the newest
  * row of this tool in the conversation that has none yet (Claude writes the
@@ -18955,7 +18955,7 @@ bus.subscribe((event: RuntimeEvent) => {
         // the route runs it only after this card's yes (grantRemoteExecApproval)
         noteRemoteExecRequest(event.threadId, event.requestId!, remoteInput);
       }
-      // 2026-10-19 (owner setup, server/owner-autonomy.ts): a Perspicax read
+      // 2026-10-19 (owner setup, server/approvals/owner-autonomy.ts): a Perspicax read
       // or coordination lease on Sagax's own mount, never a name another
       // server of the turn could have spelled, never a guest's turn.
       // Security review: a read only for the owner's own work (another
@@ -34196,7 +34196,7 @@ function settingsActions(): ReturnType<typeof createSettingsActions> {
 
 // ── sagax_approvals: a bot the person owns answers their cards (2026-10-27) ──
 /** The person's own bot, in a turn the person started with their own
- * message (server/primary-approvals.ts). `cards` (the default) is
+ * message (server/approvals/primary-approvals.ts). `cards` (the default) is
  * sagax_approvals: any bot they own, never a temporary agent. `settings`
  * is sagax_settings' `quote`, a proposal and archiving a temporary agent:
  * still their Primary Bot only. Fail closed: a routine, a webhook, another
@@ -34983,7 +34983,7 @@ async function resolveAndSendEmailDraft(res: ServerResponse, auth: RequestAuth, 
  * delegated session (an ordinary thread needs none). */
 /** The person's Allow behind a replay: a card's key covering `classes`, or
  * (`primary`, 2026-10-20) the person's own request to their Primary Bot to
- * answer a card for them (server/primary-approvals.ts), which the card then
+ * answer a card for them (server/approvals/primary-approvals.ts), which the card then
  * reads as "via <bot>". */
 type ActConfirmation = { personKey: string | null; classes: readonly string[]; primary?: PrimaryAnswer; reachMe?: { channel: ReachChannelId } };
 type InternalRequestMark = { onBehalf?: true; continuation?: string; continuationExact?: true; confirmed?: ActConfirmation };
@@ -35563,7 +35563,7 @@ function sameOwnerRosterMember(bot: BotRecord): (member: { id: string }) => bool
     return Boolean(owner && peer && effectiveBotOwner(peer).trim().toLowerCase() === owner);
   };
 }
-/** 2026-10-19 (owner setup, server/owner-autonomy.ts): whether this turn
+/** 2026-10-19 (owner setup, server/approvals/owner-autonomy.ts): whether this turn
  * is the owner's own work through their own bots or their own routine.
  * A webhook routine needs live server-owned authorization; its event data
  * never supplies permission or changes another person's rights. */
@@ -38180,7 +38180,7 @@ function reachMeAnswerer(threadId: string, requestId: string): string | null {
   return bot && message?.card ? reachMePerson(cardAnswererId(bot, threadId, message.card)) : null;
 }
 /** The click, replayed with the person's own session (the Primary Bot's
- * replay of sagax_approvals, server/primary-approvals.ts). */
+ * replay of sagax_approvals, server/approvals/primary-approvals.ts). */
 async function reachMeRespond(person: string, card: ReachCard, body: ReachRespondBody, channel: ReachChannelId): Promise<{ status: number; body: Record<string, unknown> }> {
   let actor: PerformActor = { kind: "operator" };
   if (IDENTITY.kind === "perspicax") {
@@ -47327,7 +47327,7 @@ console.log(describeBrand(loadBrand()));
 // every reservation, which is exactly what made uploads quadratic in
 // directory size; do the initial sweep before accepting requests.
 // Approval cards whose live request died with the previous process: they
-// read Expired instead of staying pending forever (server/approval-restart.ts).
+// read Expired instead of staying pending forever (server/approvals/approval-restart.ts).
 try {
   const closed = expireApprovalsAfterRestart({
     open: openApprovalCardMessages,

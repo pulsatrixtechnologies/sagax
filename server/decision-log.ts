@@ -32,7 +32,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { appendFile, mkdir, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 
-import type { AutoVerdictSource } from "./auto-approve.ts";
+import type { AutoVerdictSource } from "./approvals/auto-approve.ts";
 import { DATA_DIR } from "./config.ts";
 import { appendLog, LogReader, registerSealedLog, sealLogLine, sealLogLines, withLogFileLock } from "./content-at-rest.ts";
 import { WORKSPACE_OWNER } from "./content-keys.ts";

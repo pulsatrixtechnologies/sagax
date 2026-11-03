@@ -198,3 +198,9 @@ scripts/verify-threads.ts
 scripts/verify-tool-scope.ts
 scripts/verify-whop.ts
 scripts/verify-workspace-backup.ts
+
+# server/ by domain (chore/server-by-domain, 2026-11-02): these root files moved
+# into server/<domain>/ (git mv). Upstream edits follow the rename; a path that
+# comes back as a modify/delete conflict is the old copy, so drop it.
+server/auto-approve.test.ts
+server/auto-approve.ts

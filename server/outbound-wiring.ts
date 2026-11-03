@@ -22,7 +22,7 @@ import {
 } from "./outbound-calls.ts";
 import { hangUpLiveCall, sendDtmfLiveCall, transferLiveCall, type LiveCallPatch } from "./phone/phone-call-control.ts";
 import { PhoneCallConsentStore } from "./phone/phone-call-consent.ts";
-import type { PrimaryCard } from "./primary-approvals.ts";
+import type { PrimaryCard } from "./approvals/primary-approvals.ts";
 import { createOutboundCallRoutes, type OutboundCallRouteDeps } from "./routes/outbound-calls.ts";
 import type { InternalRouteHandler } from "./routes/internal-route.ts";
 import { PASS, type RouteHandler } from "./routes/table.ts";

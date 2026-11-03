@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createAgentCardGuard } from "./agent-tool-card-guard.ts";
-import { autoVerdict } from "./auto-approve.ts";
+import { autoVerdict } from "./approvals/auto-approve.ts";
 import { READ_ONLY_AGENT_TOOL_NAMES } from "./agent-tool-policy.ts";
 import { reviewCustomRules } from "./custom-rules-review.ts";
 import { availableTools, catalogProfileFromEnv } from "./drivers/agents-catalog.ts";

@@ -116,7 +116,7 @@ export interface SafetyInput {
    * from the server, never from the text. */
   ownPaths?: MisuseOwnPaths;
   /** #1905: the turn runs at Full access, as the server judged it
-   * (server/full-access-gate.ts fullAccessActs on the turn's level), never
+   * (server/approvals/full-access-gate.ts fullAccessActs on the turn's level), never
    * read from the text. The safer path and the confirmation are then not
    * offered: the person already answered them. A block still blocks. */
   fullAccess?: boolean;

@@ -9,7 +9,7 @@
 // answer (others). Before: the newest row of that tool without an answer
 // takes it. After: the answer waits here, per conversation, for the row.
 
-import type { CustomRuleNotice } from "../shared/custom-rules.ts";
+import type { CustomRuleNotice } from "../../shared/custom-rules.ts";
 
 export interface ToolAutoApproval {
   /** The decision log's source (auto-approve.ts AutoVerdict.source). */

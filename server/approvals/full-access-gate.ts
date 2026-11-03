@@ -28,8 +28,8 @@
 // this decision and says so with a marker comment, `// full-access: <id>`,
 // on the line of the card (full-access-gate.guard.test.ts fails a surface
 // without one, and a marker without a registered id).
-import type { ApprovalMode } from "../shared/approval-mode.ts";
-import { permissionQuestion, recommendedPermissionAnswer, type ChoiceQuestion } from "../shared/permission-question.ts";
+import type { ApprovalMode } from "../../shared/approval-mode.ts";
+import { permissionQuestion, recommendedPermissionAnswer, type ChoiceQuestion } from "../../shared/permission-question.ts";
 
 export const FULL_ACCESS_HOLDS = ["org-rule", "person-rule", "isolation", "sensitive-path", "question"] as const;
 export type FullAccessHold = (typeof FULL_ACCESS_HOLDS)[number];

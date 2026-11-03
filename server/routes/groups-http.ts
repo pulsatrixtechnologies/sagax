@@ -9,7 +9,7 @@ import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 
 import { admit } from "../admission.ts";
-import type { ApprovalViewer } from "../approval-audience.ts";
+import type { ApprovalViewer } from "../approvals/approval-audience.ts";
 import { memberGroup } from "../bot-visibility.ts";
 import { validateBotCwd } from "../bot-cwd.ts";
 import {

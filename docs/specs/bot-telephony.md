@@ -135,7 +135,7 @@ Speech-to-Speech (rejeté : il remplacerait le cerveau).
 - **Aucun code de téléphonie** : aucune occurrence de voice webhook, TwiML,
   Media Streams, SIP, PSTN ni SMS entrant. Les « phone » du code sont le
   téléphone compagnon (iOS, appairage, `phone-secret.ts`), pas la téléphonie.
-- **Garde-fou existant utile** : `server/owner-approval.ts`,
+- **Garde-fou existant utile** : `server/approvals/owner-approval.ts`,
   `destructiveKindOf()` classe `external-message` tout outil d'envoi ou toute
   ressource `messages|mail|emails|sms|calls` en création. Une telle action
   ouvre toujours une carte, même en mode `auto` (test

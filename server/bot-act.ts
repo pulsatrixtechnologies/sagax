@@ -10,7 +10,7 @@ import { botActClasses } from "../shared/step-up.ts";
 
 /** 2026-10-19 ("Toujours permettre" on every card): what "Always allow"
  * on an act card keeps, as the person's own rule for this bot
- * (server/owner-approval.ts OwnerRule): a setting (its key and target) or a
+ * (server/approvals/owner-approval.ts OwnerRule): a setting (its key and target) or a
  * route (method and exact path), and the exact value when the change is
  * more than a simple one (a secret, another person, a deletion, a widening,
  * the organization). Never "anything this bot does". */

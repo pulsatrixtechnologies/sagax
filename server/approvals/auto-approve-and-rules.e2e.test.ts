@@ -17,7 +17,7 @@ import { join } from "node:path";
 
 import { expect, it } from "vitest";
 
-import { launchVerificationServer } from "../scripts/control-omb.ts";
+import { launchVerificationServer } from "../../scripts/control-omb.ts";
 
 it("auto level + auto mode auto-approves ordinary and read-only work and a rule-covered send, but still cards deletes, bulk changes, a shell rm and an uncovered send", async () => {
   const owner = randomBytes(32).toString("base64url");

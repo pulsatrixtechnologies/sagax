@@ -8,7 +8,7 @@
 // bots, a deletion of their own bot and every field a member sets on a
 // bot they own (2026-10-26: a member manages what is theirs without an
 // admin; the organization switch that refused Auto for members' bots is
-// gone, server/member-auto-approval.ts). Stays out of reach: a bot that is not theirs (another person's things),
+// gone, server/approvals/member-auto-approval.ts). Stays out of reach: a bot that is not theirs (another person's things),
 // and a working folder on the server's disk (folders.botWorkingFolder: it
 // reaches other people's files there).
 

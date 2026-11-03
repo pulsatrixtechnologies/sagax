@@ -31,7 +31,7 @@ import { journalDays, type JournalPayload, type RuleTestDraft, type RuleTestResu
 import type { JournalChain } from "../action-journal.ts";
 import { isCustomRuleBehavior, isRiskClass, MAX_RULE_TEXT } from "../../shared/custom-rules.ts";
 import { liveDecisionRefusal } from "../../shared/live-approval.ts";
-import { approvalTypeOf } from "../approval-type.ts";
+import { approvalTypeOf } from "../approvals/approval-type.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

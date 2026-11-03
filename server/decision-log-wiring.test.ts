@@ -172,7 +172,7 @@ posixOnly("authorization decisions are logged", () => {
     async () => {
       // Auto (Approve for me) on the owner's own bot: the provider's request
       // runs without a card, approved by the bot's level (owner-auto,
-      // server/auto-approve.ts), and the row says so.
+      // server/approvals/auto-approve.ts), and the row says so.
       const bot = await makePermissionBot({ name: "Granted", autoApprove: true });
       expect((await api("POST", `/api/bots/${bot.id}/messages`, { text: "run it" })).status).toBe(202);
 

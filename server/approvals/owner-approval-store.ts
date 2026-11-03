@@ -12,7 +12,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
 
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 import type { LegacyPermissionMode } from "./approval-level-migration.ts";
 import {
   MAX_EXACT_VALUE,

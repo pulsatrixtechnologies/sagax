@@ -294,7 +294,7 @@ function parsedInput(text: string | undefined): Record<string, unknown> | undefi
 
 /** Whether a tool's name says it changes rules, permissions, policies or an
  * approval level (the "rule-change" class), as stepUpClassesForCard reads
- * it. Such a call never answers itself (server/auto-approve.ts). */
+ * it. Such a call never answers itself (server/approvals/auto-approve.ts). */
 export function toolChangesRules(tool: string | undefined): boolean {
   if (!tool) return false;
   const bare = bareToolName(tool);

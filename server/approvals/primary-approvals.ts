@@ -20,7 +20,7 @@
 
 import { createHash } from "node:crypto";
 
-import { checkPersonQuote, messageNamesCard, normalizeWords, personWrote, type PrimaryIntent } from "../shared/primary-request.ts";
+import { checkPersonQuote, messageNamesCard, normalizeWords, personWrote, type PrimaryIntent } from "../../shared/primary-request.ts";
 
 export type PrimaryDecision = "allow" | "always_allow" | "always_allow_this" | "deny" | "always_deny" | "answer";
 export const PRIMARY_DECISIONS: readonly PrimaryDecision[] = ["allow", "always_allow", "always_allow_this", "deny", "always_deny", "answer"];

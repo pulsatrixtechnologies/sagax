@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { CustomRuleStore } from "../custom-rules-store.ts";
 import { json, readBody } from "../harness/http.ts";
-import { OwnerApprovalStore } from "../owner-approval-store.ts";
+import { OwnerApprovalStore } from "../approvals/owner-approval-store.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { createCustomRuleRoutes } from "./custom-rules.ts";
 import { createOwnerApprovalRoutes } from "./owner-approvals.ts";

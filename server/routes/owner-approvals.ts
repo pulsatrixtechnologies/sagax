@@ -17,8 +17,8 @@
 // service or a turn's token is never a person here (`manager` is null), so
 // a bot cannot widen its own leash.
 import type { RequestAuth } from "../request-auth.ts";
-import { isRuleBehavior, type OwnerRule } from "../owner-approval.ts";
-import type { OwnerApprovalStore } from "../owner-approval-store.ts";
+import { isRuleBehavior, type OwnerRule } from "../approvals/owner-approval.ts";
+import type { OwnerApprovalStore } from "../approvals/owner-approval-store.ts";
 import { ORG_ALWAYS_ALLOW_OFF, standingGrantsAllowed } from "../custom-rules-org.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

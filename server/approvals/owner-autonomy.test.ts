@@ -143,8 +143,8 @@ describe("perspicaxSelfAnswer", () => {
 });
 
 describe("owner setup prompts", async () => {
-  const { peerRosterSystemPrompt } = await import("./peer-roster.ts");
-  const { aiClientPrompt } = await import("./system-prompt.ts");
+  const { peerRosterSystemPrompt } = await import("../peer-roster.ts");
+  const { aiClientPrompt } = await import("../system-prompt.ts");
   it("an ordinary bot reads the descriptions of its own owner's teammates only", () => {
     const team = [
       { id: "auditor", name: "Auditor", title: "Department of Efficiency", description: "Audits all bots and routines on a schedule." },
@@ -165,7 +165,7 @@ describe("owner setup prompts", async () => {
 
 describe("lineageEnvironmentCall", async () => {
   const { lineageEnvironmentCall } = await import("./owner-autonomy.ts");
-  const { ownEnvironmentSensitiveRead } = await import("./member-environment.ts");
+  const { ownEnvironmentSensitiveRead } = await import("../member-environment.ts");
   const run = (command: string) => lineageEnvironmentCall("mcp__sagax-environment__run_command", JSON.stringify({ command }), ownEnvironmentSensitiveRead);
   it("lets a hop of the owner's lineage run ordinary work in the owner's cloud computer", () => {
     expect(run('df -h; NPMC=$(npm config get cache); du -sh "$NPMC"')).toBe(true);

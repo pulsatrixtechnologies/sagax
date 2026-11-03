@@ -29,17 +29,17 @@
 
 import { createHash } from "node:crypto";
 
-import { approvalAction, describeApproval, parseArgs, parseToolId, type ApprovalWords, ENGLISH_WORDS } from "../shared/approval-describe.ts";
-import { canonicalJson } from "../shared/canonical-json.ts";
-import { sagaxFolder } from "../shared/human-id.ts";
-import { singleProgramOf } from "../shared/read-only-command.ts";
-import { readShell } from "../shared/custom-rules.ts";
-import { isOutboundTool } from "../shared/outbound.ts";
-import { decodeGrokGatewayName, grokGatewayToolConnector } from "../shared/grok-cloud-connectors.ts";
-import { connectorWriteKind } from "../shared/engine-connectors.ts";
-import { screenAppTarget, type ScreenAppIdentity } from "../shared/computer-app.ts";
-import { standingGrantsAllowed } from "./custom-rules-org.ts";
-import { sensitiveReadPath } from "./sensitive-path.ts";
+import { approvalAction, describeApproval, parseArgs, parseToolId, type ApprovalWords, ENGLISH_WORDS } from "../../shared/approval-describe.ts";
+import { canonicalJson } from "../../shared/canonical-json.ts";
+import { sagaxFolder } from "../../shared/human-id.ts";
+import { singleProgramOf } from "../../shared/read-only-command.ts";
+import { readShell } from "../../shared/custom-rules.ts";
+import { isOutboundTool } from "../../shared/outbound.ts";
+import { decodeGrokGatewayName, grokGatewayToolConnector } from "../../shared/grok-cloud-connectors.ts";
+import { connectorWriteKind } from "../../shared/engine-connectors.ts";
+import { screenAppTarget, type ScreenAppIdentity } from "../../shared/computer-app.ts";
+import { standingGrantsAllowed } from "../custom-rules-org.ts";
+import { sensitiveReadPath } from "../sensitive-path.ts";
 
 export const BOT_PERMISSION_MODES = ["approval", "auto", "bypass"] as const;
 export type BotPermissionMode = (typeof BOT_PERMISSION_MODES)[number];

@@ -22,7 +22,7 @@
 // true), so none of the above happens any more; the helpers stay for the
 // callers and their tests.
 
-import type { ApprovalMode } from "../shared/approval-mode.ts";
+import type { ApprovalMode } from "../../shared/approval-mode.ts";
 
 export const MEMBER_AUTO_NOT_ALLOWED = {
   error: "Automatic approval levels are turned off for members' bots in this organization. An organization admin can allow them in Settings > Organization.",

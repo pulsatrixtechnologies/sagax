@@ -7,7 +7,7 @@
 // bot now names these conversations (WireBot.waitingApprovals) so the app
 // can bring their cards into the conversation the person has open, the way
 // a parallel task's cards are (src/components/parallel-approvals.ts).
-import type { WireWaitingApproval } from "../shared/wire.ts";
+import type { WireWaitingApproval } from "../../shared/wire.ts";
 
 export interface InterBotTask {
   threadId: string;

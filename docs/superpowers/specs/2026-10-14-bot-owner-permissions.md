@@ -10,7 +10,7 @@ des choses ; là, TOUT ce qu'un bot fait spamme un admin d'approbations. »
 ## 1. État d'avant (cause du spam admin)
 
 - Les cartes d'approbation vont déjà au **propriétaire** du bot
-  (`server/approval-audience.ts` : `approvalAudience` = `ownerUserId`).
+  (`server/approvals/approval-audience.ts` : `approvalAudience` = `ownerUserId`).
 - Mais sur un serveur d'organisation, un bot dont le propriétaire n'est pas
   admin (`memberOwnedBot`) passe chaque carte par
   `memberBotAdminApproval` (`server/engine-access.ts`). Cette fonction
@@ -233,7 +233,7 @@ possible (hors de ce chantier) : un approbateur `bot_owner` dans
 
 ## 10. Tests
 
-`server/owner-approval.test.ts` (pur) et `server/engine-access.test.ts` :
+`server/approvals/owner-approval.test.ts` (pur) et `server/engine-access.test.ts` :
 Toujours / Une fois / Refuser, retenu par personne, pas partagé entre
 personnes, destructif exige une règle explicite, mode auto, mode bypass
 journalisé, rien ne contourne la route admin ni les holds, admin sollicité

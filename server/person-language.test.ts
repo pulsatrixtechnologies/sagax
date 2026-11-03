@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cwActionLanguage } from "./cw-widget-actions.ts";
 import { personLanguage, personLanguageOf } from "./person-language.ts";
-import { serverApprovalWords } from "./approval-words.ts";
+import { serverApprovalWords } from "./approvals/approval-words.ts";
 import { emailSendSummary } from "../shared/email-draft-send.ts";
 
 describe("the person's language, not the server's", () => {

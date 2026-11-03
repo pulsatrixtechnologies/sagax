@@ -1,8 +1,8 @@
 // What kind of approval a pending card is, for the Perspicax console
 // (pending list, sagax_approve). Only "tool" cards are decidable there;
 // everything else is answered in Sagax itself.
-import type { ApprovalType } from "./org/org-admin-routes.ts";
-import type { OptionCardData } from "../shared/wire.ts";
+import type { ApprovalType } from "../org/org-admin-routes.ts";
+import type { OptionCardData } from "../../shared/wire.ts";
 
 export function approvalTypeOf(card: Pick<OptionCardData, "skillRequest" | "routineRequest" | "profileRequest" | "modelRequest" | "ruleRequest" | "teamSetupRequest" | "meetingRequest" | "allowKey" | "tool" | "commandAllowlist" | "approvalScope">): ApprovalType {
   // A meeting's consent card is the person's own tap in the chat, every

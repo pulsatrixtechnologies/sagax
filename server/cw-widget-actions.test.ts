@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { autoVerdict } from "./auto-approve.ts";
+import { autoVerdict } from "./approvals/auto-approve.ts";
 import { CW_ACTION_PASS_MS, cwActionCard, cwActionLanguage, cwToolRowWidget, cwToolWidget, createCwActionPasses } from "./cw-widget-actions.ts";
 import { isCwViewTool, shownCwWidget } from "../shared/cw-widgets/tool-call.ts";
 import { withoutPrivateFields } from "./harness/bus.ts";

@@ -15,7 +15,7 @@
 // that environment: it is never an admin approval, every call is still in
 // the decision log (`own-environment`), and the safety holds, the person's
 // own deny and ask rules, a sandbox widening and a guest's turn keep their
-// card (server/auto-approve.ts).
+// card (server/approvals/auto-approve.ts).
 //
 // This computer (every other `sagax-desktop` tool: the person's real files,
 // apps and network) is not an isolated environment and keeps today's rule.
@@ -55,7 +55,7 @@
 import type { ApprovalMode } from "../shared/approval-mode.ts";
 import { DESKTOP_BRIDGE_MCP_NAME } from "../shared/bot-workplace.ts";
 import type { TurnSpeaker } from "./engine-access.ts";
-import { ownerLineageOrigin } from "./owner-autonomy.ts";
+import { ownerLineageOrigin } from "./approvals/owner-autonomy.ts";
 import { sensitiveReadPath } from "./sensitive-path.ts";
 import { USER_SANDBOX_MCP_NAME } from "./user-sandbox-routing.ts";
 

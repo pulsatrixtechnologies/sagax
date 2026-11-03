@@ -364,7 +364,7 @@ model on every subsequent turn — and after item 7, into every rebuild too. One
 accidental `.env` read becomes permanent.
 
 **Design.** A result-side hook running before the message is written. Reuse the
-patterns already in `server/auto-approve.ts` (`SENSITIVE` covers `.env`, ssh keys,
+patterns already in `server/approvals/auto-approve.ts` (`SENSITIVE` covers `.env`, ssh keys,
 AWS credentials, netrc, npmrc, keychain, service accounts). Replace matches with a
 marker that says something was redacted, so behaviour stays explainable. Redact
 the stored copy, not just the displayed one.

@@ -13,10 +13,10 @@ import { createInterface } from "node:readline";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { GateAsk } from "./mcp-gate-approval.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const GATE = join(HERE, "mcp-gate.ts");
+const GATE = join(HERE, "..", "mcp-gate.ts");
 
 const UPSTREAM = `
 const { createInterface } = require("node:readline");

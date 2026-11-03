@@ -130,7 +130,7 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   // ORG_REACH_AREAS) stays an admin card (memberBotAdminApproval).
   act: "own-setup",
   manage_settings: "own-setup",
-  // the member's own cards, at their request (server/primary-approvals.ts)
+  // the member's own cards, at their request (server/approvals/primary-approvals.ts)
   sagax_approvals: "own-setup",
   // 2026-10-26: a pairing code for the member's own device; the route binds
   // the code to the person the turn speaks for, never anyone else, and a

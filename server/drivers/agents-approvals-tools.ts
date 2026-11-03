@@ -1,5 +1,5 @@
 // sagax_approvals: any bot the person owns answers their approval cards
-// (server/primary-approvals.ts), spread into TOOL_DEFINITIONS in
+// (server/approvals/primary-approvals.ts), spread into TOOL_DEFINITIONS in
 // agents-catalog.ts. Offered to every owned bot (2026-10-27); the server
 // gate (purpose "cards") still requires the person's own message. Settings
 // stay with the Primary Bot. Definition only; agents-call.ts carries a

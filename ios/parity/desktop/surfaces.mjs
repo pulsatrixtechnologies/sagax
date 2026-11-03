@@ -403,6 +403,24 @@ for (const section of ["account", "voice", "updates", "about", "providers", "sec
     } });
 }
 
+add({ id: "sidebar-select", phase: "main", note: "sidebar multi-select: Aurora and Helix chosen, the grouped action bar",
+  open: async (ctx) => {
+    await ctx.hover('[aria-label="Actions for Aurora"]');
+    await ctx.click('[aria-label="Actions for Aurora"]');
+    await ctx.click({ text: "Select", tag: "[role=menuitem]" });
+    await ctx.sleep(300);
+    await ctx.click({ text: /^Helix/, tag: "[role=button],button,a,li" });
+    await ctx.moveAway();
+    await ctx.sleep(400);
+  } });
+add({ id: "computer-window", phase: "main", noShell: true, note: "the bot's computer in its own large window (SandboxDesktopModal, src/gallery/computer-screens.html?modal=sandbox)",
+  open: async (ctx) => {
+    const origin = await ctx.eval("location.origin");
+    await ctx.page.send("Page.navigate", { url: `${origin}/src/gallery/computer-screens.html?modal=sandbox&lang=en` });
+    await ctx.sleep(2500);
+    await ctx.waitFor(`Boolean(document.querySelector("[data-sandbox-takeover]"))`, { timeoutMs: 15_000 });
+  } });
+
 export const NOT_CAPTURED = [
   { id: "floating-mascot", why: "desktop-only: a bot floated onto the macOS desktop is its own frameless always-on-top Electron window (electron/floating-bot-window.mjs); nothing is drawn in the main window" },
   { id: "update-banner", why: "needs the Electron updater bridge (window.ogb.updater); the iPad updates through the App Store" },

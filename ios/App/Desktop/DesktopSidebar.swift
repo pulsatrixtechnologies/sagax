@@ -83,8 +83,12 @@ struct DesktopSidebar: View {
             }
             AnyView(DesktopSidebarList(layout: layout))
                 .frame(maxHeight: .infinity)
+            // lot 6: the multi-select bar, above the foot; the rail has none
+            if model.selection.active, !icons { AnyView(DesktopSelectionBar()) }
             AnyView(DesktopSidebarFooter())
         }
+        // leaving the wide sidebar ends the selection (useSidebarMultiSelect)
+        .onValueChange(of: model.density) { if $0 == .icons { model.selection.clear() } }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(theme.sidebar.skinTexture(theme.texture, ink: UIColor(theme.sidebarInk)))
         .overlay(alignment: .trailing) {

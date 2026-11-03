@@ -500,16 +500,20 @@ export interface RoutineRunProactive {
    * (source peer) is never quiet; this is its report when the bot gave
    * none (who wrote, about what: server/proactive-wake.ts peerWakeDigest). */
   peerDigest?: string;
+  /** 2026-11-02: never quiet (a teammate's message or a post in a two-bot
+   * DM: server/proactive-wake.ts wakeAlwaysReports). */
+  alwaysReport?: true;
 }
 
 /** 2026-11-02 (peer inbox, second pass): on GOX five wakes of six on
  * teammates' messages ended NOTHING_TO_REPORT ("already told you"), the
  * bot taking the reply of the notice's own thread, which the person never
- * sees, for one they had read. A wake with a teammate's message always
- * reports: what the bot wrote without the marker, else the events' digest. */
+ * sees, for one they had read. A wake with a teammate's message (or a post
+ * in a two-bot DM, alwaysReport) always reports: what the bot wrote without
+ * the marker, else the events' digest. */
 export function peerWakeOutcome(run: Pick<RoutineRun, "proactive">, outcome: RoutineReportOutcome): RoutineReportOutcome {
-  if (!outcome.quiet || !run.proactive?.sources.includes("peer")) return outcome;
-  const report = outcome.report || run.proactive.peerDigest || "A teammate sent a message; its thread has the details.";
+  if (!outcome.quiet || !(run.proactive?.alwaysReport === true || run.proactive?.sources.includes("peer"))) return outcome;
+  const report = outcome.report || run.proactive!.peerDigest || "A teammate sent a message; its thread has the details.";
   return { ...outcome, quiet: false, report };
 }
 

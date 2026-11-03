@@ -4475,14 +4475,18 @@ function adminActorFor(auth: RequestAuth, req: IncomingMessage): AdminActor {
  * the blame (or the credit) for another admin's change made meanwhile. */
 type AdminActorScope = { actor: AdminActor; sharedAtStart: boolean } | null;
 const adminActorScope = new AsyncLocalStorage<AdminActorScope>();
-onConfigSaved((before, after) => {
+onConfigSaved((before, after) => recordAdminConfigChange(before, after));
+/** The rows of an admin-scope save, put down to the admin whose request runs.
+ * Also called for settings kept outside config.json (MCP servers in the
+ * installation capability store, audit S-1 follow-up). */
+function recordAdminConfigChange(before: unknown, after: unknown): void {
   const scope = adminActorScope.getStore();
   if (!scope || DESKTOP_MANAGED) return;
   // Shared when the request began, or now: the change that makes a server
   // shared, or stops it being, is kept.
   if (!scope.sharedAtStart && !adminActivityRecording() && !sharedSignIn(signInListsOf(before)) && !sharedSignIn(signInListsOf(after))) return;
   for (const row of configChangeRows(before, after)) appendAdminAction(DATA_DIR, { ...row, actor: scope.actor });
-});
+}
 
 interface AuditPlan {
   /** An admin-scope change: config saves made while it runs are recorded. */
@@ -28777,9 +28781,12 @@ function persistMcpServers(next: Record<string, unknown>): void {
   try {
     if (installationCapabilityStore.hasMigrated("config-mcp-servers")) {
       const document = installationCapabilityStore.read();
+      const previous = document.mcpServers ?? {};
       document.mcpServers = next;
       installationCapabilityStore.write(document);
       cfg.mcpServers = next;
+      // not a config.json save: the admin journal is told here (mcp.update)
+      recordAdminConfigChange({ mcpServers: previous }, { mcpServers: next });
       return;
     }
   } catch {

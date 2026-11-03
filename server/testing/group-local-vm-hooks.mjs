@@ -65,9 +65,13 @@ registerHooks({
       return { ...result, source: `import { readFileSync as readVmClock } from 'node:fs';\n` +
         String(result.source).replaceAll('Date.now()', `(Date.now() + (JSON.parse(readVmClock(${jsLiteral(state)}, 'utf8')).clockOffset || 0))`) };
     }
-    if (url.endsWith('/drivers/claude.ts')) {
+    // 9e50628aa moved the real completion emitter into create-instance.
+    if (url.endsWith('/drivers/claude/create-instance.ts')) {
+      const source = String(result.source);
+      const emitter = 'for (const l of Array.from(listeners)) l(event);';
+      if (source.split(emitter).length !== 2) throw new Error('Claude completion emitter seam changed');
       return { ...result, source: `import { existsSync as existsVmRelease, readFileSync as readVmEvents, writeFileSync as writeVmEvent } from 'node:fs';\n` +
-        String(result.source).replace('for (const l of Array.from(listeners)) l(event);',
+        source.replace(emitter,
           `if (event.type === 'turn.completed') {\n        const fixture = JSON.parse(readVmEvents(${jsLiteral(state)}, 'utf8'));\n        if (fixture.dropCompletion) return;\n        if (fixture.holdCompletion) { writeVmEvent(${jsLiteral(state)} + '.completionheld', event.turnId ?? ''); const timer = setInterval(() => { if (!existsVmRelease(${jsLiteral(state)} + '.releasecompletion')) return; clearInterval(timer); writeVmEvent(${jsLiteral(state)} + '.latecompleted', event.turnId ?? ''); for (const l of Array.from(listeners)) l(event); }, 10); return; }\n      }\n      for (const l of Array.from(listeners)) l(event);`) };
     }
     if (url.endsWith('/turn-watchdog.ts')) {

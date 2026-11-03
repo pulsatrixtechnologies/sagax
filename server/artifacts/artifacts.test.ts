@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createArtifactStore } from "./artifacts.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
-import { ARTIFACT_LIMITS, summarizeArtifact, type ArtifactsFrame } from "../shared/artifacts.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
+import { ARTIFACT_LIMITS, summarizeArtifact, type ArtifactsFrame } from "../../shared/artifacts.ts";
 
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) removeTempDir(dir); });

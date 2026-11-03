@@ -80,7 +80,7 @@ with every refresh. The app posts `{type:"sagax-artifact-data", data, at}` to
 the frame; the bridge accepts only messages from its parent. A refresh never
 reloads the document.
 
-## Refresh (`server/artifact-refresh.ts`)
+## Refresh (`server/artifacts/artifact-refresh.ts`)
 
 Sober choice: a source runs only while its artifact is visible or a favorite.
 Visible means open somewhere (its own window): the client
@@ -89,7 +89,7 @@ while a frame is mounted. A row in the list shows no data and holds no lease.
 Favorites refresh on their interval even when no window is open, so the
 palette and the Favorites section open on fresh data. Nothing else runs.
 
-Runner rules (`server/artifact-sources.ts`), checked before every run
+Runner rules (`server/artifacts/artifact-sources.ts`), checked before every run
 (never cached), with nobody there:
 
 - `workspace_read`: the bot's reviewed read of a text file in its own

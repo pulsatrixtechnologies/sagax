@@ -5,7 +5,7 @@
 // A restore writes the live artifact and this list in the same file replace
 // (writeFileAtomic), so a crash leaves the previous pair or the new pair.
 
-import { parseArtifactSource, type Artifact, type ArtifactSource } from "../shared/artifacts.ts";
+import { parseArtifactSource, type Artifact, type ArtifactSource } from "../../shared/artifacts.ts";
 
 export const ARTIFACT_VERSION_CAP = 30;
 

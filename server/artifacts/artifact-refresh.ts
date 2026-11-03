@@ -7,7 +7,7 @@
 // Nothing runs for an artifact nobody looks at. A paused artifact waits for
 // the bot (update_artifact paused false) or Refresh now. Runs are bounded:
 // two at once, 30 seconds each.
-import type { Artifact } from "../shared/artifacts.ts";
+import type { Artifact } from "../../shared/artifacts.ts";
 import type { ArtifactRun, ArtifactStore } from "./artifacts.ts";
 
 export const REFRESH_TICK_MS = 5_000;

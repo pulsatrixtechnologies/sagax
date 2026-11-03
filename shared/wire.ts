@@ -1515,7 +1515,7 @@ export type ServerFrame =
   | { kind: "routine.run"; run: RoutineRun }
   /** A cloud coding agent record changed (server/cloud-agents/manager.ts). */
   | { kind: "cloud.agent"; botId: string; item: CloudAgentWireItem }
-  /** A bot's artifacts changed (server/artifacts.ts): ids only, fetch again. */
+  /** A bot's artifacts changed (server/artifacts/artifacts.ts): ids only, fetch again. */
   | ArtifactsFrame
   /** A bot's task list changed (server/bots/bot-task-list.ts): ids only, fetch again. */
   | BotTasksFrame

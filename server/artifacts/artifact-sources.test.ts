@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { commandValue, createArtifactSourceRunner, perspicaxReadTool, SOURCE_BLOCKED, toolResultValue, type ArtifactSourceDeps } from "./artifact-sources.ts";
-import type { Artifact, ArtifactSource } from "../shared/artifacts.ts";
+import type { Artifact, ArtifactSource } from "../../shared/artifacts.ts";
 
 const artifact = (source: ArtifactSource): Artifact => ({
   id: "art_test0001", botId: "bot-a", threadId: "t1", title: "T", html: "<p>", source, intervalSeconds: 60,

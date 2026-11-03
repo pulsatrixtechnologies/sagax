@@ -7,12 +7,12 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import { artifactDocument, parseVersionList, rememberVersion, snapshotArtifact, type ArtifactVersion } from "./artifact-versions.ts";
-import { writeFileAtomic } from "./atomic.ts";
-import { redactSecretsInText } from "./redact.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { redactSecretsInText } from "../redact.ts";
 import {
   ARTIFACT_LIMITS, ARTIFACTS_FRAME, isArtifactId, parseArtifactFields,
   type Artifact, type ArtifactFields, type ArtifactsFrame,
-} from "../shared/artifacts.ts";
+} from "../../shared/artifacts.ts";
 
 export type ArtifactResult =
   | { ok: true; artifact: Artifact }

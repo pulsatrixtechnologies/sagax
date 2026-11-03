@@ -41,7 +41,7 @@ export const READ_ONLY_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   // Claims (server/perspicax/perspicax-claims.ts): listing the live leases changes no
   // live lease (Perspicax only frees the expired ones as it lists).
   "claim_list",
-  // Artifacts (server/artifacts.ts): the bot's own saved widgets, settings only.
+  // Artifacts (server/artifacts/artifacts.ts): the bot's own saved widgets, settings only.
   "list_artifacts",
 ]);
 

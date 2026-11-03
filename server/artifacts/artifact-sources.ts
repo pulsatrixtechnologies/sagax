@@ -18,11 +18,11 @@
 //     can route, so a command there still waits for a turn.
 // Anything else is blocked, with the reason, and no call is made. Every
 // dependency comes from server/index.ts, so the rules are tested here.
-import { PERSPICAX_READ_ONLY_TOOLS } from "./drivers/acp/grok-read-only-tools.ts";
-import type { McpServerSpec, RemoteMcpSpec } from "./contracts.ts";
-import { RemoteMcpClient } from "./mcp/mcp-http.ts";
-import { parseToolId } from "../shared/approval-describe.ts";
-import type { Artifact } from "../shared/artifacts.ts";
+import { PERSPICAX_READ_ONLY_TOOLS } from "../drivers/acp/grok-read-only-tools.ts";
+import type { McpServerSpec, RemoteMcpSpec } from "../contracts.ts";
+import { RemoteMcpClient } from "../mcp/mcp-http.ts";
+import { parseToolId } from "../../shared/approval-describe.ts";
+import type { Artifact } from "../../shared/artifacts.ts";
 import type { ArtifactRun } from "./artifacts.ts";
 
 export interface ArtifactSourceBot {

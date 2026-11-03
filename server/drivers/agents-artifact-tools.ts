@@ -2,7 +2,7 @@
 // (docs/superpowers/specs/2026-10-16-artifacts-design.md), spread into
 // TOOL_DEFINITIONS in agents-catalog.ts. Definitions only;
 // agents-call-artifacts.ts carries a call to the internal route and
-// server/artifacts.ts stores the result. Every word here is sent to the
+// server/artifacts/artifacts.ts stores the result. Every word here is sent to the
 // model on every turn and pinned by agents-catalog-wire.test.ts.
 const FIELDS = {
   title: { type: "string" },

@@ -2265,15 +2265,15 @@ import {
   PHONE_TOOLS_FRAME,
   phoneToolsFrameAllowed
 } from "../shared/phone-tools.ts";
-import { createArtifactStore } from "./artifacts.ts";
+import { createArtifactStore } from "./artifacts/artifacts.ts";
 import { createPreferenceStore } from "./preference-import.ts";
 import { createPreferenceImportRoutes } from "./routes/preference-import.ts";
 import { createArtifactInternalRoutes, createArtifactRoutes } from "./routes/artifacts.ts";
 import { createBotTaskInternalRoutes, createBotTaskRoutes } from "./routes/bot-task-list.ts";
 import { createBotTaskStore } from "./bots/bot-task-list.ts";
 import { botTasksFrameAllowed, sameBotTaskOwner } from "../shared/bot-task-list.ts";
-import { createArtifactRefresher } from "./artifact-refresh.ts";
-import { createArtifactSourceRunner, toolResultValue, type ToolAnswer } from "./artifact-sources.ts";
+import { createArtifactRefresher } from "./artifacts/artifact-refresh.ts";
+import { createArtifactSourceRunner, toolResultValue, type ToolAnswer } from "./artifacts/artifact-sources.ts";
 import {
   createRoutineWatchEvaluator,
   RoutineWatchStates,
@@ -3314,7 +3314,7 @@ if (securityKeys.store.removedOutside) {
   orgAudit({ category: "approval", action: "security_keys.file_removed", target: { kind: "file", id: "security-keys.json" }, actor: { kind: "cli" } });
 }
 const securityKeyCeremonies = securityKeyCeremonyRoutes({ keys: securityKeys });
-// Artifacts: the widgets bots saved (server/artifacts.ts). Clients get ids
+// Artifacts: the widgets bots saved (server/artifacts/artifacts.ts). Clients get ids
 // only and fetch the change with their own rights.
 const artifactStore = createArtifactStore({ file: join(DATA_DIR, "artifacts.json"), onChange: (frame) => broadcast({ ...frame }) });
 const preferenceStore = createPreferenceStore({ file: join(DATA_DIR, "bot-preferences.json") });
@@ -30541,9 +30541,9 @@ async function perspicaxReadAlone(input: { botId: string; principalId: string; t
   }
 }
 // Artifacts in the Files tab and the palette (server/routes/artifacts.ts).
-// The artifact refresher (server/artifact-refresh.ts): a source re-runs on
+// The artifact refresher (server/artifacts/artifact-refresh.ts): a source re-runs on
 // its interval while its artifact is open somewhere or a favorite, and only
-// when it needs no approval (server/artifact-sources.ts).
+// when it needs no approval (server/artifacts/artifact-sources.ts).
 const artifactRefresher = createArtifactRefresher({
   store: artifactStore,
   log: (line) => console.warn(line),

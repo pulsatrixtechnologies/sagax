@@ -9882,7 +9882,7 @@ Covered by `shared/bot-task-list.test.ts` and `server/bots/bot-task-list.test.ts
 ## Artifacts: saved widgets that refresh without a turn (2026-10-16)
 
 A bot saves a widget as an artifact (`save_artifact`, `update_artifact`,
-`list_artifacts`, `delete_artifact`; `server/artifacts.ts`,
+`list_artifacts`, `delete_artifact`; `server/artifacts/artifacts.ts`,
 `server/routes/artifacts.ts`, spec
 `docs/superpowers/specs/2026-10-16-artifacts-design.md`). Rules:
 
@@ -9905,10 +9905,10 @@ A bot saves a widget as an artifact (`save_artifact`, `update_artifact`,
 - The widget renders in the chat widgets' sandbox (`allow-scripts` only,
   opaque origin, the no-network CSP). Data reaches it by `postMessage`
   (`sagax-artifact-data`); the bridge accepts only its parent.
-- A refresh is never a model turn. `server/artifact-refresh.ts` re-runs a
+- A refresh is never a model turn. `server/artifacts/artifact-refresh.ts` re-runs a
   source only while the artifact is open (a watch lease) or a favorite, two
   at once, 30 seconds each, and pauses it after 3 failures in a row.
-- `server/artifact-sources.ts` decides what may run with nobody there, on
+- `server/artifacts/artifact-sources.ts` decides what may run with nobody there, on
   every run: `workspace_read` of the bot's own workspace, a Perspicax tool
   in `PERSPICAX_READ_ONLY_TOOLS` (in the owner's name, through the relay's
   permission guard), a remote MCP tool the person allowed for good

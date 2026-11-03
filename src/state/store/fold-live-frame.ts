@@ -276,7 +276,7 @@ export function foldLiveFrame(frame: ServerFrame, ctx: FoldLiveFrameCtx): void {
           window.dispatchEvent(new CustomEvent("sagax-cloud-agent", { detail: { botId: frame.botId, item: frame.item } }));
           break;
         case "artifacts":
-          // Ids only (server/artifacts.ts): the Files tab and the palette fetch again.
+          // Ids only (server/artifacts/artifacts.ts): the Files tab and the palette fetch again.
           window.dispatchEvent(new CustomEvent(ARTIFACTS_EVENT, { detail: { botId: frame.botId, artifactId: frame.artifactId, deleted: frame.deleted === true } }));
           break;
         case "bot.tasks":

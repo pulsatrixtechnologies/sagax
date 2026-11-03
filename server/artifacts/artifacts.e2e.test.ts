@@ -7,9 +7,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
-import { startFakeHttpMcp } from "./testing/fake-http-mcp-server.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
+import { startFakeHttpMcp } from "../testing/fake-http-mcp-server.ts";
 
 it("a bot saves an artifact in its turn; the person sees it, stars it and deletes it", async () => {
   const gates = mkdtempSync(join(tmpdir(), "omb-artifacts-"));

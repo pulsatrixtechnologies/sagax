@@ -29,6 +29,20 @@ struct DesktopGeneralSettings: View {
 
 /// A row that opens a sub-page (`SettingsSubPageRow`): title, summary and
 /// a chevron.
+/// A page's grey section title (`SettingsSection` heading): 13/18 medium
+/// in the secondary ink, 2 pt in, above its card.
+struct DesktopSettingsHeading: View {
+    let title: Text
+    init(_ title: Text) { self.title = title }
+
+    var body: some View {
+        DesktopText(title, size: 13, weight: .medium, line: 18, color: \.inkSecondary)
+            .padding(.leading, 2)
+            .padding(.top, 4)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
 struct DesktopSubPageRow: View {
     @Environment(\.desktopTheme) private var theme
     let title: Text
@@ -71,7 +85,11 @@ private struct DesktopGeneralMainSettings: View {
 
     var body: some View {
         let config = model.config
-        let saving = !model.saving.isEmpty
+        // Settings > Account (2026-10-28): Account (who is signed in, About
+        // me), Appearance (Language), System (Advanced), under the desktop's
+        // grey headings. The effort for new bots is Models > Defaults for
+        // new bots now.
+        DesktopSettingsHeading(Text("Account"))
         AnyView(DesktopProfileCard())
         Button { editingAboutMe = true } label: {
             DesktopCollapsedRow(title: Text("About me"), summary: aboutMeSummary)
@@ -83,6 +101,7 @@ private struct DesktopGeneralMainSettings: View {
             DesktopAboutMeEditor(initial: config?.profile?.aboutMe ?? "")
                 .environmentObject(model)
         }
+        DesktopSettingsHeading(Text("Appearance"))
         DesktopSettingsGroup {
             DesktopSettingRow(
                 title: Text("Language"),
@@ -98,31 +117,14 @@ private struct DesktopGeneralMainSettings: View {
                     choose: { language = $0 }
                 )
             }
-            DesktopSettingRow(
-                title: Text("Effort for new bots"),
-                subtitle: Text("How hard new bots think from their first message."),
-                help: Text("How hard every new bot thinks from its first message. A bot can change its own level; model providers without this level keep their default.")
-            ) {
-                DesktopSelect(
-                    options: [("", AppStrings.localized("Provider default"))] + DesktopEffort.levels.map { ($0, DesktopGeneralSettings.effortLabel($0)) },
-                    selection: config?.newBots?.effort ?? "",
-                    label: Text("Effort for new bots"),
-                    identifier: "desktop-settings.effort",
-                    disabled: saving || config == nil,
-                    choose: setEffort
-                )
-            }
         }
+        DesktopSettingsHeading(Text("System"))
         DesktopSubPageRow(
             title: Text("Advanced"),
             summary: Text("Parallel threads, recovery, cleanup, group turns, routines"),
             identifier: "desktop-settings.advanced",
             open: openAdvanced
         )
-    }
-
-    private func setEffort(_ value: String) {
-        Task { _ = await model.apply(.newBotEffort(value.isEmpty ? nil : value), key: "effort") }
     }
 
     private var aboutMeSummary: Text {

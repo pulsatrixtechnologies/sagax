@@ -100,8 +100,8 @@ final class DesktopSettingsUITests: XCTestCase {
         let search = app.textFields["desktop-settings.search"]
         search.tap()
         search.typeText("openrouter")
-        // API keys is a card of Models and voice (#518)
-        XCTAssertTrue(app.buttons["desktop-settings.nav.engines"].waitForExistence(timeout: 5))
+        // API keys is a card of Providers (the desktop's page of 2026-10-30)
+        XCTAssertTrue(app.buttons["desktop-settings.nav.providers"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["desktop-settings.nav.backups"].exists)
         XCTAssertFalse(app.buttons["desktop-settings.nav.companion"].exists, "Pair devices left the app")
         // the search opens the API keys card
@@ -117,9 +117,10 @@ final class DesktopSettingsUITests: XCTestCase {
     @MainActor
     func testConnectedAppsOpensPluginsOnBothTabs() throws {
         let app = launch()
-        app.buttons["desktop-sidebar-connected-apps"].tap()
+        // the foot's round Capabilities button (2026-10-27)
+        app.buttons["desktop-sidebar-capabilities"].tap()
         let close = app.buttons["desktop-plugins.close"]
-        XCTAssertTrue(close.waitForExistence(timeout: 10), "Connected apps opens Plugins")
+        XCTAssertTrue(close.waitForExistence(timeout: 10), "Capabilities opens")
         XCTAssertTrue(app.buttons["desktop-plugins.apps-tab.marketplace"].waitForExistence(timeout: 10))
         app.buttons["desktop-plugins.tab.mcp"].tap()
         XCTAssertTrue(app.buttons["desktop-plugins.mcp-refresh"].waitForExistence(timeout: 10))

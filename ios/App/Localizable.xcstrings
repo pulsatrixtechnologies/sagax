@@ -5566,6 +5566,16 @@
         }
       }
     },
+    "AI": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "IA"
+          }
+        }
+      }
+    },
     "API keys": {
       "localizations": {
         "en": {
@@ -9834,6 +9844,16 @@
         }
       }
     },
+    "App": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Application"
+          }
+        }
+      }
+    },
     "App icon unlocked": {
       "localizations": {
         "en": {
@@ -12472,6 +12492,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Menu du bot"
+          }
+        }
+      }
+    },
+    "Bot models": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modèles des bots"
           }
         }
       }
@@ -22134,6 +22164,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Respondente padrão"
+          }
+        }
+      }
+    },
+    "Defaults for new bots": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Défauts des nouveaux bots"
           }
         }
       }
@@ -33657,7 +33697,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Installation"
+            "value": "Espace de travail"
           }
         }
       }
@@ -37158,6 +37198,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chargement des voix"
+          }
+        }
+      }
+    },
+    "Loading voices…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chargement des voix…"
           }
         }
       }
@@ -63291,7 +63341,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ajustes"
+            "value": "Configurações"
           }
         }
       }
@@ -66950,6 +67000,16 @@
         }
       }
     },
+    "Speech to text": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcription"
+          }
+        }
+      }
+    },
     "Speed": {
       "localizations": {
         "fr": {
@@ -68968,6 +69028,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sistema"
+          }
+        }
+      }
+    },
+    "System default": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microphone par défaut du système"
           }
         }
       }
@@ -74590,6 +74660,16 @@
         }
       }
     },
+    "This iPad updates through the App Store, or TestFlight for test builds.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cet iPad se met à jour par l'App Store, ou TestFlight pour les versions de test."
+          }
+        }
+      }
+    },
     "This iPad's own pairing with the computer. Forgetting it removes the saved connection from this iPad only.": {
       "localizations": {
         "en": {
@@ -79093,13 +79173,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nouveautés"
+            "value": "Mises à jour"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Novidades"
+            "value": "Atualizações"
           }
         }
       }
@@ -79750,6 +79830,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "A utilisé %@ sur ce téléphone (toujours permis)."
+          }
+        }
+      }
+    },
+    "Used for dictation, voice notes and calls on this iPad.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilisé pour la dictée, les notes vocales et les appels sur cet iPad."
           }
         }
       }
@@ -82766,6 +82856,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qui paie les réponses"
+          }
+        }
+      }
+    },
+    "Who speaks and who listens": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qui parle et qui écoute"
           }
         }
       }

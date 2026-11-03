@@ -106,7 +106,7 @@ export interface PerspicaxMcpOptions {
   botProfiles(botId: string): readonly string[] | undefined;
   /** The thread is on a live voice call: a turn's tokens are kept for its
    * next turn instead of revoked, so the call's tools stay mounted from turn
-   * to turn without a new exchange (server/voice-call-session.ts). */
+   * to turn without a new exchange (server/voice/voice-call-session.ts). */
   keepWarm?(threadId: string): boolean;
   /** Pulsa Bot's version, sent in `clientInfo`. */
   version: string;

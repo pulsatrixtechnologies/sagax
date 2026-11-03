@@ -3,7 +3,7 @@
 // https://docs.fish.audio/api-reference/endpoint/openapi-v1/text-to-speech
 import type { FishTtsModel } from "../config.ts";
 import type { SynthesizeOptions } from "./grok.ts";
-import type { VoiceProviderAdapter } from "../voice-mode.ts";
+import type { VoiceProviderAdapter } from "../voice/voice-mode.ts";
 import * as fish from "./fish.ts";
 
 export function createFishVoice(options: { api?: string; fetch?: typeof fetch; model?(): FishTtsModel } = {}): VoiceProviderAdapter {

@@ -204,3 +204,10 @@ scripts/verify-workspace-backup.ts
 # comes back as a modify/delete conflict is the old copy, so drop it.
 server/auto-approve.test.ts
 server/auto-approve.ts
+server/live-call-controller.test.ts
+server/live-call-controller.ts
+server/live-call-record.test.ts
+server/live-call-record.ts
+server/live-call.e2e.test.ts
+server/live-call.test.ts
+server/live-call.ts

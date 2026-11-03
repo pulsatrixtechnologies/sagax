@@ -226,7 +226,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       { id: "playbooks", label: "Playbooks", text: state.coldPrompt ? "" : state.packagePlaybooks },
       { id: "webhook", label: "Webhook provenance", text: state.opts?.automationSource === "webhook" ? WEBHOOK_PROMPT : "" },
       { id: "mentions", label: "Mentions", text: state.boundedCoordination && state.tagged.length ? `The user named these existing teammates: ${state.tagged.map((b: any) => uniquePeerName(b, state.sectionPeers) ? peerName(b.name) : `${peerName(b.name)} (${b.id})`).join(", ")}. Use coordinate_bots when their contribution is needed (a unique name works as its bot_ids entry), with relay=true when the user only wants one teammate's own answer passed back; do not substitute native helper agents for these bots.` : mentionPrompt(state.tagged) },
-      // a voice call: the phone-call instruction (server/voice-call-prompt.ts)
+      // a voice call: the phone-call instruction (server/voice/voice-call-prompt.ts)
       { id: "voice-call", label: "Phone call", text: state.voiceCallText },
     ];
     if (!serverFiles) {

@@ -1,6 +1,6 @@
 /** ACP turn prompt phase: build prompt, send, continue, settle success. */
 import { fitPromptBytes } from "./prompt-fit.ts";
-import { joinCachePrime } from "../../voice-first-sentence.ts";
+import { joinCachePrime } from "../../voice/voice-first-sentence.ts";
 import {
   deletePromptSplitReceipt, promptHalves, readPromptSplitReceipt, splitSessionPrompt, writePromptSplitReceipt,
 } from "../prompt-split.ts";

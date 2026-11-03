@@ -10,8 +10,8 @@
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 import type { LiveSettings } from "../../shared/wire.ts";
-import { LiveSessionError, MAX_SDP_BYTES } from "../live-call.ts";
-import { LiveCallBusyError, type LiveCallController } from "../live-call-controller.ts";
+import { LiveSessionError, MAX_SDP_BYTES } from "../voice/live-call.ts";
+import { LiveCallBusyError, type LiveCallController } from "../voice/live-call-controller.ts";
 import { PASS, type RouteContext, type RouteHandler } from "./table.ts";
 
 export interface LiveRouteDeps {

@@ -421,7 +421,7 @@ export interface TurnStartResult {
   turnId: TurnId;
   /** The turn went to an engine process that was already running (no cold
    * start). Reported by drivers that pool a process per thread; absent
-   * elsewhere. Diagnostics only (server/voice-latency.ts). */
+   * elsewhere. Diagnostics only (server/voice/voice-latency.ts). */
   reused?: boolean;
 }
 

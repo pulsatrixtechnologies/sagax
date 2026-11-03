@@ -103,7 +103,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     } } : undefined);
     // A call turn (and the warm that prepares its process, so the two share
     // one spawn contract) runs at the engine's low effort: the person is
-    // waiting for the first word (server/voice-call-effort.ts).
+    // waiting for the first word (server/voice/voice-call-effort.ts).
     // A pre-warm off a call (server/thread-prewarm.ts) takes the next
     // turn's own effort and flags, or the turn would relaunch it.
     const turnEffort = state.onCall

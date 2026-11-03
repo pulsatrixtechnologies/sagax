@@ -794,7 +794,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["GET"], path: /^\/api\/tts\/voices$/ },
   { methods: ["POST"], path: /^\/api\/tts\/prepare$/ },
   { methods: ["POST"], path: /^\/api\/tts\/speak$/ },
-  // voice mode (server/voice-mode.ts): the speaker's own turn on a bot they may use; never the key
+  // voice mode (server/voice/voice-mode.ts): the speaker's own turn on a bot they may use; never the key
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/voice\/(?:status|voices|listen|speech|realtime)$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/voice\/(?:prepare|speak|transcribe|stream|call)$/ },
   // the person's own providers, a provider's voices and the voice test (Settings > Voice, 2026-10-29)

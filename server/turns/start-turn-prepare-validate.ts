@@ -234,13 +234,13 @@ export function createPrepareValidateStartTurn(host: StartTurnHost) {
     }
   }
   // A turn said on a live call, and the warm that prepares its process, run
-  // on a fast model (server/voice-turn.ts): the person waits in silence for
+  // on a fast model (server/voice/voice-turn.ts): the person waits in silence for
   // the first word. Pinned or Auto alike; a request that needed another
   // engine's connector keeps it. Heavy work is handed to a parallel task on
   // the bot's main model by the call turn itself.
   state.voiceTurnPick= null;
   /** The turn runs in the call's own session, from a short view of the
-   * conversation (server/voice-turn.ts), not in the conversation's session. */
+   * conversation (server/voice/voice-turn.ts), not in the conversation's session. */
   state.voiceCallTurn = false;
   if (!state.connectorSwitch && voiceCalls.active(state.threadId) && !state.opts?.commsDepth && !state.opts?.coordination && !state.opts?.automationSource
     && !state.opts?.compactOnly && !state.opts?.unattended && !(state.opts?.peerAsk ?? (state.opts?.editedMessageId ? undefined : state.opts?.userMessage?.peerAsk))) {

@@ -11,7 +11,7 @@ import Foundation
 /// already streamed are kept as they are (desktop DICTATION_FINAL_TIMEOUT_MS).
 public let DICTATION_FINAL_TIMEOUT_MS: UInt64 = 1_500
 
-/// One JSON frame from the listen socket (server/voice-listen-session.ts).
+/// One JSON frame from the listen socket (server/voice/voice-listen-session.ts).
 public enum ListenFrame: Equatable, Sendable {
     case ready
     case reconnected

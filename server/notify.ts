@@ -200,7 +200,7 @@ export function quietForCall(
   notification: Pick<Notification, "kind"> | null,
   lastPersonMessage: { at?: number; voiceCall?: unknown } | undefined,
   now: number,
-  /** the thread is on a call the page started (server/voice-call-session.ts) */
+  /** the thread is on a call the page started (server/voice/voice-call-session.ts) */
   callLive = false,
 ): boolean {
   if (!notification || notification.kind === "spend") return false;

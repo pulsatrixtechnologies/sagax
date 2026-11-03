@@ -245,7 +245,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
   // A voice call turn gets the hidden phone-call instruction; the first
   // written turn after a call is told the call ended. Only a person's own
   // turn: a continuation or a peer hop is not said on the phone.
-  // The thread is on a live call (server/voice-call-session.ts): the engine
+  // The thread is on a live call (server/voice/voice-call-session.ts): the engine
   // stays warm between turns and the turn's context stays short.
   state.onCall = Boolean(voiceCalls.active(state.threadId)) && !state.opts?.commsDepth && !state.userMessage.peerAsk;
   state.voiceCallText = state.opts?.cardContinuation || state.opts?.commsDepth || state.userMessage.peerAsk

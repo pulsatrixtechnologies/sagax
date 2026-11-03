@@ -35,7 +35,7 @@ export function userProfileSystemPrompt(profile?: { aboutMe?: string }): string 
  * entire conversation at the cache-write rate. Mentions did the same on any
  * turn that tagged a bot, and recent work did it on every turn of an active
  * bot, because its "2h ago" labels drift even when nothing else changed.
- * The phone-call section (server/voice-call-prompt.ts) rides only on the
+ * The phone-call section (server/voice/voice-call-prompt.ts) rides only on the
  * turns of a voice call and the first written turn after it. The Auto
  * workspace rules (server/auto-computer.ts) come and go with the bot's
  * Workspace setting and with who speaks; volatile, so neither relaunches. */
@@ -224,7 +224,7 @@ export function computerPrompt(kind: ComputerPromptKind | null): string {
 }
 
 /** Where a Cloud home's bot runs, in the one wording its prompts share: the
- * bot's own (cloudHomePrompt) and its Live call voice's (server/live-call.ts). */
+ * bot's own (cloudHomePrompt) and its Live call voice's (server/voice/live-call.ts). */
 export const CLOUD_HOME_PLACE = "the user's My Cloud, their always-on Sagax in the cloud, not on their own computer";
 
 /** Every turn on a Cloud home (server/cloud-home.ts). The bot runs in the

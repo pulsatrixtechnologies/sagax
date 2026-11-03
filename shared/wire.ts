@@ -687,7 +687,7 @@ export interface VoiceCallMark {
   /** STT partial sent before end-of-speech. Must not become a parallel task. */
   speculative?: boolean;
   /** The page's stages of this turn in ms (end of speech, speech to text,
-   * send), for the Events lens (server/voice-timing.ts). Diagnostics only:
+   * send), for the Events lens (server/voice/voice-timing.ts). Diagnostics only:
    * the server never stores it on the message. */
   timing?: { endpointMs?: number; sttMs?: number; dispatchMs?: number };
 }
@@ -941,7 +941,7 @@ export interface WireMessage extends WaitLineField {
   /** A user message said on a voice call (src/components/voice-mode/LiveCall.tsx):
    * which call, whether the person cut the bot's previous answer to say it,
    * and the call's language when one is set. The turn it starts gets the
-   * hidden phone-call instruction (server/voice-call-prompt.ts). */
+   * hidden phone-call instruction (server/voice/voice-call-prompt.ts). */
   voiceCall?: VoiceCallMark;
   /** group threads: which member said this (sender attribution). */
   from?: { botId: string; name: string; color: string };
@@ -1564,7 +1564,7 @@ export type ServerFrame =
   | { kind: "presence.changed"; audience?: string; people: Array<{ principalId: string; state: "online" | "away" | "offline"; lastSeenAt: number | null; hidden?: true }> }
   | { kind: "live.call"; botId: string; threadId: string; call: LiveCallState | null }
   /** A short first sentence spoken ahead of the bot's own reply on a duplex
-   * call (server/voice-first-sentence.ts). The speaker's streams only. Not
+   * call (server/voice/voice-first-sentence.ts). The speaker's streams only. Not
    * stored. iOS ignores the kind. */
   | { kind: "voice.opener"; audience: string; threadId: string; callId: string; utteranceId: string; text: string }
   /** The live phone call ended. The speaker's streams only. `by` is who

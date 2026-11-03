@@ -6,7 +6,7 @@ import { applyStoredEngineEnv } from "../../engine-api-keys.ts";
 import { applyEngineCommandVariables } from "../../vault/credential-command-env.ts";
 import { newId } from "../../contracts.ts";
 import type { SendTurnInput } from "../../contracts.ts";
-import { cachePrimePrompt } from "../../voice-first-sentence.ts";
+import { cachePrimePrompt } from "../../voice/voice-first-sentence.ts";
 import { supportsApprovalMode } from "../../../shared/approval-mode.ts";
 import { narrowsNativeTools, parseToolScope } from "../../../shared/tool-scope.ts";
 import { TURN_TOKEN_ENV, warmCommsEnv } from "../spawn-contract.ts";
@@ -267,7 +267,7 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
     const cursor = !turn.sessionReset && typeof turn.resumeCursor === "string" ? turn.resumeCursor : null;
     // The turn reaches a live process whose native session it can
     // prompt as is: no handshake, no session/load (the voice latency log
-    // reads this, server/voice-latency.ts).
+    // reads this, server/voice/voice-latency.ts).
     const reused = session === pooled && session.sessionId !== null && session.sessionKey === sessionKey
       && (cursor === null || cursor === session.sessionId);
     // `session` rebinds mid-turn: when the establishment retry below

@@ -11,7 +11,7 @@
 //   provider's JSON): it is sorted into a kind, and the kind has one
 //   sentence in the call's language (`voiceMode.failure.<kind>`).
 // - The harness retries a call turn that ended without an answer once
-//   (server/voice-call-watchdog.ts, 2.5 s after it settles). The call waits
+//   (server/voice/voice-call-watchdog.ts, 2.5 s after it settles). The call waits
 //   CALL_FAILURE_GRACE_MS after it first saw the failed row, with the bot
 //   idle, before it speaks; a retry that answers says nothing of the
 //   failure, a retry that fails too is said once.

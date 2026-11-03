@@ -111,10 +111,10 @@ approbations et ses règles de payeur.
 
 | Pièce | Où | Ce qu'elle fait | Réutilisable au téléphone |
 | --- | --- | --- | --- |
-| Mode Voix (barre flottante) | `server/voice-mode.ts`, `src/lib/voice-mode/*` | xAI en STT (`/v1/stt` en WebSocket) et TTS (`/v1/tts` en PCM streamé) ; le bot écrit la réponse | Oui : les routes serveur `listen` et `speech` sont déjà des ponts serveur vers xAI ; il faut un adaptateur mu-law 8 kHz |
-| Session d'appel | `server/voice-call-session.ts`, `voice-call-prompt.ts`, `voice-call-watchdog.ts`, `voice-call-duplex.ts` | `voiceCall` sur chaque tour, section cachée « Phone call » du prompt, `end_call`, chien de garde, duplex (#292) | Oui, tel quel : un appel PSTN est un `voiceCall` avec `channel: "pstn"` |
+| Mode Voix (barre flottante) | `server/voice/voice-mode.ts`, `src/lib/voice-mode/*` | xAI en STT (`/v1/stt` en WebSocket) et TTS (`/v1/tts` en PCM streamé) ; le bot écrit la réponse | Oui : les routes serveur `listen` et `speech` sont déjà des ponts serveur vers xAI ; il faut un adaptateur mu-law 8 kHz |
+| Session d'appel | `server/voice/voice-call-session.ts`, `voice-call-prompt.ts`, `voice-call-watchdog.ts`, `voice-call-duplex.ts` | `voiceCall` sur chaque tour, section cachée « Phone call » du prompt, `end_call`, chien de garde, duplex (#292) | Oui, tel quel : un appel PSTN est un `voiceCall` avec `channel: "pstn"` |
 | Lecture française | `server/tts/french-reading.ts`, `speech-text.ts` | Heures, prix, ordinaux lus à voix haute ; markdown retiré | Oui |
-| Appel Live (GPT-Live) | `server/live-call.ts` | OpenAI Realtime en « client delegation » : la voix mène la conversation, chaque vraie demande devient un tour du bot | Oui en phase avancée (OpenAI Realtime accepte aussi SIP) |
+| Appel Live (GPT-Live) | `server/voice/live-call.ts` | OpenAI Realtime en « client delegation » : la voix mène la conversation, chaque vraie demande devient un tour du bot | Oui en phase avancée (OpenAI Realtime accepte aussi SIP) |
 | Moteurs TTS | `server/tts/` : `grok.ts`, `elevenlabs.ts`, `fish.ts`, `chatterbox.ts` (local), `system-voices.ts` (Mac) | Synthèse par fournisseur, clé côté serveur | xAI, ElevenLabs, Fish : oui. Chatterbox et voix Mac : non pour un serveur d'org |
 | Détection de tour | Silero VAD v5 dans la page (`turns.ts`), CAM++ « Seulement ma voix » | Tour, barge-in, écho | À porter côté serveur pour Media Streams (ou laisser Twilio le faire avec ConversationRelay) |
 | Clés de voix (#533) | Réglages > Modèles et voix > Clés | Une seule gestion des clés : `xai.key`, `tts.key` (ElevenLabs), `tts.fishKey` | Oui : la voix du téléphone choisit parmi les clés déjà saisies |

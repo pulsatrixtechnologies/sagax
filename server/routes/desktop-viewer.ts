@@ -54,7 +54,7 @@ export function createDesktopViewer(deps: {
   target: (id: string, auth: RequestAuth) => DesktopTarget | undefined;
   live: (auth: RequestAuth) => boolean;
   /** Other WebSocket routes that run through the same gates (voice mode's
-   * live call, server/voice-mode.ts); they take their socket with upgradeOf. */
+   * live call, server/voice/voice-mode.ts); they take their socket with upgradeOf. */
   acceptsUpgrade?: (path: string) => boolean;
   /** Bind a viewer to a control lease: a phone driving the Local VM directly,
    * without the companion sidecar. Answers nothing unless `controlLeaseId`

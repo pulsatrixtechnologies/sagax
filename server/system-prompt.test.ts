@@ -392,7 +392,7 @@ describe("cloudHomePrompt", () => {
     for (const tools of [true, false]) {
       const text = cloudHomePrompt(tools);
       expect(text).toMatch(/^ You run on the user's My Cloud, their always-on Sagax in the cloud, not on their own computer\./);
-      // the same words the Live call's voice is told (server/live-call.ts)
+      // the same words the Live call's voice is told (server/voice/live-call.ts)
       expect(text.startsWith(` You run on ${CLOUD_HOME_PLACE}.`)).toBe(true);
       expect(text).toContain("Offer what works here: the built-in browser and their cloud computer, a desktop in the cloud. Call it their cloud computer, as the app does.");
       expect(text).not.toMatch(/\bOMB\b|\bBoat\b|\bbox\b/);

@@ -369,7 +369,7 @@ export const PROVIDER_KEY_MAX_BYTES = 8 * 1024;
 export const PROVIDER_KEY_CACHE_MS = 60_000;
 /** A key a person keeps in Perspicax ("Mes clés de modèle"), by provider:
  * anthropic (Claude Code, pi), openai (Codex, pi), xai (Grok Build, pi and
- * voice mode, server/voice-mode.ts), google (Gemini CLI, pi) and moonshot
+ * voice mode, server/voice/voice-mode.ts), google (Gemini CLI, pi) and moonshot
  * (Kimi Code, pi). Perspicax 1.8 lists the first three; google and moonshot
  * are read as soon as its directory lists them (server/engine-credentials.ts). */
 export type ModelProvider = "anthropic" | "openai" | "xai" | "google" | "moonshot" | "openrouter" | "mistral" | "cerebras" | "opencode" | "cursor" | "factory" | "minimax" | "glm" | "zai" | "groq" | `compat:${string}`;

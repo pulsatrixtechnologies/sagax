@@ -57,7 +57,7 @@ import {
 } from "../harness-commands.ts";
 import { recordHeldSteer } from "../held-steers.ts";
 import { introAdvance } from "../intro-tour.ts";
-import { spokenLineFields } from "../live-call-record.ts";
+import { spokenLineFields } from "../voice/live-call-record.ts";
 import { cancelledChatFollowup } from "../message-db.ts";
 import { misuseRefusal } from "../misuse-guardrails.ts";
 import { ORG_FULL_ACCESS_DISABLED } from "../org/org-full-access.ts";
@@ -93,12 +93,12 @@ import {
   pinVoiceInterrupt,
   voiceFullDuplexEnabled,
   withoutDuplexMarks,
-} from "../voice-call-duplex.ts";
+} from "../voice/voice-call-duplex.ts";
 import {
   parseVoiceCallMeta,
   voiceCallSteerPrompt,
-} from "../voice-call-prompt.ts";
-import { parseVoiceClientTiming } from "../voice-timing.ts";
+} from "../voice/voice-call-prompt.ts";
+import { parseVoiceClientTiming } from "../voice/voice-timing.ts";
 
 /** Injected closures from index.ts. Pure move; host locals stay loosely typed. */
 export type BotsMessagesRouteDeps = Record<string, any>;
@@ -247,7 +247,7 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
       if (notYours) return json(res, 403, { error: notYours });
       // While the thread is on a live call, every send to it is a call turn,
       // marked or not (typed words, a retry, an old page): server state,
-      // not only the page's mark (server/voice-call-session.ts).
+      // not only the page's mark (server/voice/voice-call-session.ts).
       const voiceCall = guarded ? sentVoiceCall : voiceCalls.markFor(threadId, sentVoiceCall);
       // A goal for this one bot. A team channel keeps its own /goal.
       const solo = !guarded && !voiceCall && !pressed

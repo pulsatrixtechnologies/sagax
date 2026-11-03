@@ -651,7 +651,7 @@ import { PROVIDER_KEY_KINDS } from "./provider-key-check.ts";
 import { forgetKey, onKeyRejectionChange } from "./key-rejections.ts";
 import { personalCapNotice, setPersonalCapOrganization } from "./personal-spend-cap.ts";
 import { startLowDiskWatch } from "./low-disk-alert.ts";
-import { voiceCostUsd } from "./voice-cost.ts";
+import { voiceCostUsd } from "./voice/voice-cost.ts";
 import {
   assertWithinBudget,
   noteSpend,
@@ -1032,9 +1032,9 @@ import {
   LiveSessionError,
   type LiveBot,
   type LiveHistoryMessage
-} from "./live-call.ts";
-import { LiveCallController, LiveCallSignedOutError, type LiveSocket } from "./live-call-controller.ts";
-import { recordLiveCall, spokenLineFields, titleLiveCall } from "./live-call-record.ts";
+} from "./voice/live-call.ts";
+import { LiveCallController, LiveCallSignedOutError, type LiveSocket } from "./voice/live-call-controller.ts";
+import { recordLiveCall, spokenLineFields, titleLiveCall } from "./voice/live-call-record.ts";
 import { narrateTool, toUtterances } from "./tts/speech-text.ts";
 import { toolWorkingStep } from "./working-step.ts";
 import { autoRecallLogLine, turnStartLogLine } from "./turn-log.ts";
@@ -1524,7 +1524,7 @@ import {
   resolveVoiceKey,
   type VoiceModeDeps,
   type VoiceSpeaker
-} from "./voice-mode.ts";
+} from "./voice/voice-mode.ts";
 import {
   VOICE_MODE_STORAGE_KEY,
   VOICE_SERVER_ENGINE,
@@ -1532,7 +1532,7 @@ import {
   FISH_VOICE_SERVER_ENGINE
 } from "../shared/voice-mode.ts";
 import type { VoiceTtsProvider } from "../shared/voice-providers.ts";
-import { keyLast4, type VoiceKeyCandidate } from "./voice-keys.ts";
+import { keyLast4, type VoiceKeyCandidate } from "./voice/voice-keys.ts";
 import { IMAGE_SERVER_ENGINE } from "../shared/image-generation.ts";
 import {
   orgXaiKeyAllowed,
@@ -1540,7 +1540,7 @@ import {
   orgXaiRefusal,
   type OrgXaiMedia
 } from "./org/org-xai-media.ts";
-import { configuredKeyterms, VOICE_KEYTERM_RECENT_MESSAGES, voiceKeyterms } from "./voice-keyterms.ts";
+import { configuredKeyterms, VOICE_KEYTERM_RECENT_MESSAGES, voiceKeyterms } from "./voice/voice-keyterms.ts";
 import { installTerminalFeature } from "./terminal-install.ts";
 import { createRemoteSessionService } from "./remote-support/remote-sessions.ts";
 import { createRemoteSessionActionsAudit, readRemoteSessionLog } from "./remote-support/remote-session-actions-audit.ts";
@@ -1582,14 +1582,14 @@ import { loginShellArgv } from "../electron/desktop-terminal.mjs";
 import {
   voiceCallSection,
   voiceCallTurnPrompt
-} from "./voice-call-prompt.ts";
+} from "./voice/voice-call-prompt.ts";
 import {
   VOICE_FIRST_SENTENCE_SYSTEM,
   VoiceFirstSentenceJobs,
   beginVoiceFirstSentence,
   pickFastSentenceModel,
   voiceOpenerFrameAllowed
-} from "./voice-first-sentence.ts";
+} from "./voice/voice-first-sentence.ts";
 import {
   admitDuplexSend,
   continuesSameUtterance,
@@ -1601,33 +1601,33 @@ import {
   lastOwnUserVoiceText,
   matchingVoiceSibling,
   waitForThreadIdle
-} from "./voice-call-duplex.ts";
+} from "./voice/voice-call-duplex.ts";
 import { callHasParkableWork, classifyVoiceIntent } from "../src/lib/voice-mode/voice-topics.ts";
-import { VoiceCallSessions, voiceCallTurnSettle } from "./voice-call-session.ts";
-import { VoiceCallWarmup } from "./voice-call-warmup.ts";
+import { VoiceCallSessions, voiceCallTurnSettle } from "./voice/voice-call-session.ts";
+import { VoiceCallWarmup } from "./voice/voice-call-warmup.ts";
 import { namedTeammates, prewarmWindowMs, ThreadPrewarm } from "./thread-prewarm.ts";
-import { callTurnEffort } from "./voice-call-effort.ts";
+import { callTurnEffort } from "./voice/voice-call-effort.ts";
 import {
   VoiceTurnSessions,
   callLinesBlock,
   voiceBriefText,
   voiceTranscript,
   voiceUnseenBlock
-} from "./voice-turn.ts";
+} from "./voice/voice-turn.ts";
 import { effortAcceptedByEngine, resolveEngineTurnEffort } from "../shared/ultracode-effort.ts";
 import { routeTurnModel, type TurnModelSwitch } from "./turn-model-routing.ts";
 import { effortAcceptedByModel, effortForModel } from "../shared/model-capabilities.ts";
-import { VoiceLatencyLog } from "./voice-latency.ts";
+import { VoiceLatencyLog } from "./voice/voice-latency.ts";
 import {
   noteFirstResponse,
   noteTurnQueued,
   setTurnTimingWriter,
   turnTrace
 } from "./turn-trace.ts";
-import { unansweredCallMessage, VOICE_CALL_WATCHDOG_MS, voiceCallRecoveryPrompt } from "./voice-call-watchdog.ts";
+import { unansweredCallMessage, VOICE_CALL_WATCHDOG_MS, voiceCallRecoveryPrompt } from "./voice/voice-call-watchdog.ts";
 import * as grokVoice from "./tts/grok.ts";
-import { realtimeUrl, WORK_TIMEOUT_MS as REALTIME_WORK_TIMEOUT_MS } from "./realtime-call.ts";
-import { realtimeWork } from "./realtime-call-host.ts";
+import { realtimeUrl, WORK_TIMEOUT_MS as REALTIME_WORK_TIMEOUT_MS } from "./voice/realtime-call.ts";
+import { realtimeWork } from "./voice/realtime-call-host.ts";
 import { createOpenAiVoice } from "./tts/openai-voice.ts";
 import { createOpenAiStt } from "./tts/openai-stt.ts";
 import { createElevenLabsVoice } from "./tts/elevenlabs-voice.ts";
@@ -1877,7 +1877,7 @@ import {
   type ViewerIdentity
 } from "./viewer-identity.ts";
 import { PersonSettingsStore, personSettingsPrincipal, personalProfilePartition } from "./person-settings.ts";
-import { withPersonalVoiceKeys } from "./person-voice-keys.ts";
+import { withPersonalVoiceKeys } from "./voice/person-voice-keys.ts";
 import { PersonalProviderInstances } from "./personal-provider-instances.ts";
 import type { ProviderAccountsView } from "../shared/provider-accounts.ts";
 import { ProviderAccounts, type ProviderAccountOwner } from "./provider-accounts.ts";
@@ -8958,7 +8958,7 @@ function personalProfileOf(principalId: string | null | undefined, profileId: un
   return Boolean(owner && isPersonalBrowserProfileId(profileId) && personSettings.get(owner).browserProfiles.some((profile) => profile.id === profileId));
 }
 // A person's own voice keys on an organization server (#1098, 2026-10-28,
-// server/person-voice-keys.ts): their speech and voice notes use them in
+// server/voice/person-voice-keys.ts): their speech and voice notes use them in
 // place of the organization's key for the same engine.
 /** The voice settings and the xAI access for speech made for this person:
  * their own key where they saved one (their own xAI key needs no grant of
@@ -21105,7 +21105,7 @@ function isExternalContextMarker(value: string | undefined): boolean {
 
 /** thread -> the last context message before its call's first turn: the
  * conversation's own session resumes after the call with the call's lines
- * in front of its next written turn (server/voice-turn.ts). Memory only. */
+ * in front of its next written turn (server/voice/voice-turn.ts). Memory only. */
 const callLinesSince = new Map<string, string>();
 
 /** A call turn ran beside the conversation's own session: that session
@@ -21357,10 +21357,10 @@ async function compactConversation(input: {
   }
 }
 
-/** Threads on a live voice call (server/voice-call-session.ts). */
+/** Threads on a live voice call (server/voice/voice-call-session.ts). */
 const voiceCalls = new VoiceCallSessions();
 const voiceWarmup = new VoiceCallWarmup();
-/** Each call's own engine session (server/voice-turn.ts). */
+/** Each call's own engine session (server/voice/voice-turn.ts). */
 const voiceSessions = new VoiceTurnSessions();
 const voiceFirstSentences = new VoiceFirstSentenceJobs();
 /** Close the idle engine a call warmed. A process a turn already owns stays. */
@@ -21542,10 +21542,10 @@ function finishVoiceCallRequestedByBot(threadId: string, settle: ReturnType<type
   broadcastVoiceCallEnded(threadId, ending.callId, "bot");
 }
 /** Each call turn's server stages, logged under its utterance id
- * (server/voice-latency.ts), and shown in the thread's Events lens. */
+ * (server/voice/voice-latency.ts), and shown in the thread's Events lens. */
 const voiceLatency = new VoiceLatencyLog(undefined, undefined, (threadId, message) => publishVoiceNotice(threadId, message));
 
-/** A voice timing note (server/voice-timing.ts) into the thread's Events
+/** A voice timing note (server/voice/voice-timing.ts) into the thread's Events
  * lens: a runtime.notice, never a chat row. Numbers only. */
 function publishVoiceNotice(threadId: string, message: string): void {
   const selection = store.botByThread(threadId)?.modelSelection;
@@ -21984,7 +21984,7 @@ function scheduleUnfinishedTurn(botId: string, threadId: string, turnId: string 
 
 /** A moment after a direct turn settles on a thread on a live call: words
  * said on the call with no answer after them run once more
- * (server/voice-call-watchdog.ts). */
+ * (server/voice/voice-call-watchdog.ts). */
 function scheduleVoiceCallWatchdog(botId: string, threadId: string): void {
   if (!voiceCalls.active(threadId)) return;
   const timer = setTimeout(() => {
@@ -22275,7 +22275,7 @@ function patchParallelCard(parentThreadId: string, cardId: string | undefined, p
   store.patchMessage(parentThreadId, cardId, { parallelTask: { ...card.parallelTask, ...patch } });
 }
 
-/** The conversation a call hands work off from (server/voice-turn.ts): its
+/** The conversation a call hands work off from (server/voice/voice-turn.ts): its
  * summary and latest turns, as a written turn would rebuild them. */
 function callHandoffHistory(bot: BotRecord, threadId: string, anchorId: string): string {
   const messages = store.activePath(threadId);
@@ -29479,7 +29479,7 @@ function autoPickForTurn(input: {
   const quick = parsedQuickTask(input.text);
   return { payer, pick: pickOrchestrationModel(request, quick) };
 }
-/** The fast model of a call turn (server/voice-turn.ts), on the engines the
+/** The fast model of a call turn (server/voice/voice-turn.ts), on the engines the
  * payer can use now; null when none has one (the turn keeps its model). */
 function voicePickForTurn(bot: BotRecord, base: ModelSelection, speaker: TurnSpeaker, guestConfined: boolean): AutoPick | null {
   const payer = autoPayerKey(bot, speaker);
@@ -38971,7 +38971,7 @@ const videoGenerations = new VideoGenerations({
 });
 
 /** The OpenAI or ElevenLabs keys that may serve one person's voice, in the
- * order of the xAI keys (server/voice-mode.ts resolveVoiceKeys): their own
+ * order of the xAI keys (server/voice/voice-mode.ts resolveVoiceKeys): their own
  * voice key (My voice keys), their own OpenAI key in Perspicax, then the
  * organization's key when it was given to them (the same grant as its xAI
  * voice). A solo server: the server's key. Never sent anywhere but to the
@@ -38997,7 +38997,7 @@ async function voiceProviderKeys(provider: Exclude<VoiceTtsProvider, "xai">, spe
   return keys;
 }
 
-// Voice mode (server/voice-mode.ts): xAI speech to text and text to speech
+// Voice mode (server/voice/voice-mode.ts): xAI speech to text and text to speech
 // for the floating voice bar, with the speaker's own xAI key (Perspicax),
 // else the server's xAI key (Settings > Models and voice, xai.key; since
 // 2026-10-14 Grok voice has no key of its own). The key never leaves the
@@ -39053,7 +39053,7 @@ const voiceModeDeps: VoiceModeDeps = {
   },
   // OpenAI and ElevenLabs (2026-10-29): the person picks who speaks and who
   // hears in Settings > Voice and Edit bot > Voice; each falls back on the
-  // others (server/voice-mode.ts)
+  // others (server/voice/voice-mode.ts)
   openai: openAiVoiceMode,
   elevenlabs: elevenLabsVoiceMode,
   fish: fishVoiceMode,

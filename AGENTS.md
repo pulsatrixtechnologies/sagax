@@ -19,8 +19,8 @@ UI work: read docs/design/ux-reference-grokbot-cursor.md first; do not re-scan G
 ## A call is a realtime voice session (2026-11-02)
 
 Never text to speech on a call: `GET /voice/realtime` bridges the page to
-xAI's Voice Agent API (`server/realtime-call.ts`); the bot's work is the
-`work` function, run as an ordinary turn (`server/realtime-call-host.ts`).
+xAI's Voice Agent API (`server/voice/realtime-call.ts`); the bot's work is the
+`work` function, run as an ordinary turn (`server/voice/realtime-call-host.ts`).
 No realtime voice means no call, said plainly with the voice settings link;
 never restore the dictation plus text to speech call as a fallback. Audio of
 a cut response is dropped by response id; a permission is decided from the
@@ -422,7 +422,7 @@ identifies their owner. Late results of retired turns are ignored. xAI and
 older clients retain their ordered untagged chunk protocol. A failed OpenAI
 transcription closes its socket so the existing reconnect/upload path runs.
 Tests: `src/lib/voice-mode/stt-stream.e2e.test.ts`, `server/tts/openai-stt.test.ts`,
-`server/voice-listen-session.test.ts`, `src/lib/voice-mode/stt-stream.test.ts`,
+`server/voice/voice-listen-session.test.ts`, `src/lib/voice-mode/stt-stream.test.ts`,
 `src/lib/voice-mode/call.test.ts`, iOS `VoiceCallTests.swift`.
 
 ## Providers the admin turns off are off for everyone (2026-10-30)
@@ -776,7 +776,7 @@ On a live call every turn (and the warm at call start) runs on a fast model
 (`pickVoiceModel`: the bot's fast model, else its engine's fast tier, else
 another engine's), in a session of its own started from a short view of the
 conversation (summary plus the latest 12 messages, 6,000 bytes,
-`server/voice-turn.ts`) and kept warm turn to turn. The call never resumes
+`server/voice/voice-turn.ts`) and kept warm turn to turn. The call never resumes
 or writes the conversation's cursor (`VoiceTurnSessions.noteSession` takes
 the call's `session.started`); the next written turn gets the call's lines
 (unseen messages, or `callLinesBlock`). Real work goes to `start_thread`
@@ -784,7 +784,7 @@ the call's `session.started`); the next written turn gets the call's lines
 lines waiting in the queue drain as one turn answering the newest. Events
 lines name the model and context; the page posts `state: "heard"` audio
 stages. Details: docs/voice-mode-xai.md, "A call turn runs fast". Tests:
-`server/voice-turn.test.ts`, `server/voice-fast-turn.e2e.test.ts`.
+`server/voice/voice-turn.test.ts`, `server/voice/voice-fast-turn.e2e.test.ts`.
 ## Voice providers: OpenAI and ElevenLabs beside xAI (2026-10-29)
 
 Voice mode (calls, read aloud, dictation) is no longer xAI only. A person
@@ -5973,7 +5973,7 @@ UI, no folded row and no full-column stage, restored from 0.4.8 on
 call card in the conversation, under `ios/`), when `GET /api/bots/<id>/voice/status` says
 xAI voice mode serves the person; otherwise a solo Mac keeps the older call
 (macOS dictation helper). Keep these rules, each covered by
-`server/voice-mode.test.ts`, `src/lib/voice-mode/voice-mode.test.ts`,
+`server/voice/voice-mode.test.ts`, `src/lib/voice-mode/voice-mode.test.ts`,
 `src/components/voice-mode/VoiceModeSettingsPanel.test.ts` or
 `electron/app-permissions.node-test.mjs`; real Electron in server mode with a
 fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-xai.md`.
@@ -5989,9 +5989,9 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   that fails or is interrupted drops the request (`settleEnding`) and
   keeps the call: the next turn is still on it. The next written turn
   after a finished hang-up gets `voiceCallEndedNote`. An old turn cannot
-  end a newer call. Tests: `server/voice-call-session.test.ts`,
+  end a newer call. Tests: `server/voice/voice-call-session.test.ts`,
   `src/lib/voice-mode/call-end.test.ts`,
-  `server/voice-call-reliability.e2e.test.ts`.
+  `server/voice/voice-call-reliability.e2e.test.ts`.
 - Who pays (`resolveVoiceKey`): on an organization server the speaker's own
   `xai` key in Perspicax, else the organization's (Settings > Connections),
   else an access card in that person's bar only (the audience rule of every
@@ -6018,7 +6018,7 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   `GET /voice/listen` (WebSocket, same origin only, bridged to xAI streaming
   speech to text) and the answer is spoken clause by clause over one
   `GET /voice/speech` socket for the call ("Streaming voice", Advanced, on by
-  default: `speech-stream.ts`, `server/voice-speech-session.ts`, xAI's
+  default: `speech-stream.ts`, `server/voice/voice-speech-session.ts`, xAI's
   `wss://api.x.ai/v1/tts` with `optimize_streaming_latency=2`, no 36
   character wait for the first clause, `text.clear` on a cancel), or
   sentence by sentence through `POST /voice/stream` (raw PCM) when it is off
@@ -6043,7 +6043,7 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   language without those words gets none); the first once a tool has run
   1.5 s with nothing said (the quick first line on every engine; the
   model's own parallel opener stays HTTP Grok only, why in
-  `server/voice-first-sentence.ts`), later ones after 7 s of silence and
+  `server/voice/voice-first-sentence.ts`), later ones after 7 s of silence and
   9 s apart, five a turn; never over the bot's voice, the person's words,
   an open approval or question; a barge-in stops them until the next turn.
   The Mac's older dictation call (`CallView`) and room call
@@ -6056,8 +6056,8 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   `call-logic.test.ts`, `voice-build.test.ts`,
   `call.test.ts`, `duplex-policy.test.ts`, `speech-fence.test.ts`,
   `speech-stream.test.ts`,
-  `models.test.ts`, `server/voice-speech-session.test.ts`,
-  `server/voice-call.e2e.test.ts`, `server/voice-call-duplex.test.ts`,
+  `models.test.ts`, `server/voice/voice-speech-session.test.ts`,
+  `server/voice-call.e2e.test.ts`, `server/voice/voice-call-duplex.test.ts`,
   `scripts/voice-duplex-harness.test.ts`.
 - "Faster end of turn" (Advanced, on by default; never in Patient nor push
   to talk): `prosody.ts` reads the pitch and energy of the last 400 ms
@@ -6074,7 +6074,7 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   live call and the older macOS call mark them the same way
   (`useVoiceCallMark`, `src/lib/voice-mode/call-mark.ts`, test
   `call-mark.test.ts`); the server adds the
-  hidden "Phone call" volatile section (`server/voice-call-prompt.ts`), never
+  hidden "Phone call" volatile section (`server/voice/voice-call-prompt.ts`), never
   stored as the person's text. The room call (`GroupCallView`) does not mark
   its turns, on purpose (2026-10-17): one spoken turn there can reach
   several bots (`@everyone`, "everyone, ...", the room's default responder),
@@ -6085,7 +6085,7 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   call session on the server first (one per room thread, ended only by the
   person), not the bot hook. The call speaks only `spokenPart` of an answer,
   cleaned by `src/lib/voice-mode/spoken.ts`. Tests:
-  `server/voice-call-prompt.test.ts`, `server/voice-call-prompt.e2e.test.ts`.
+  `server/voice/voice-call-prompt.test.ts`, `server/voice/voice-call-prompt.e2e.test.ts`.
 - xAI is only ears and a voice: never its realtime agent, responses, chat or
   function calling. Every turn goes to the bot through the normal send route,
   and only the bot's text is synthesized. The e2e test and
@@ -6102,7 +6102,7 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
 
 - Latency (`docs/voice-mode-xai.md`, "Latency"): every call turn is timed
   under its `utteranceId` on the page (`latency.ts`) and on the server
-  (`server/voice-latency.ts`, `[voice-latency]` lines). A thread on a call
+  (`server/voice/voice-latency.ts`, `[voice-latency]` lines). A thread on a call
   passes `keepWarm` to the engine: the Claude driver keeps one process for
   the call, and Grok (ACP) keeps one process and one native session, the
   per-turn comms token in a file (`SAGAX_COMMS_TOKEN_FILE`,
@@ -6118,7 +6118,7 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   A hangup closes the idle process
   (`releaseWarmSession`). Codex and the API drivers are not warmed (no
   hidden prompt is sent). A call turn and its warm run at the engine's low
-  effort (`server/voice-call-effort.ts`: "low", never "none", a bot set
+  effort (`server/voice/voice-call-effort.ts`: "low", never "none", a bot set
   lower keeps its level, a Codex bot with no effort is left alone); the
   model is unchanged (the call's model tier belongs to Auto, PR #153). The
   call's start and each heartbeat mark the person's server environment
@@ -6128,11 +6128,11 @@ fake xAI: `scripts/verify/dev/verify-voice-mode.ts`. Details: `docs/voice-mode-x
   relaunches or re-establishes the engine on every turn. Tests:
   `server/voice-call-latency.e2e.test.ts` (Claude and Grok),
   `server/drivers/acp/acp.test.ts` (call session, warm),
-  `server/voice-call-effort.test.ts`, `server/voice-call-warmup.test.ts`,
+  `server/voice/voice-call-effort.test.ts`, `server/voice/voice-call-warmup.test.ts`,
   `server/sandbox/user-sandbox-manager.test.ts`, `call.test.ts` ("latency"), bench
   `scripts/voice-latency-bench.ts` (Claude and Grok).
 
-A change to `server/voice-mode.ts` needs the server image redeployed.
+A change to `server/voice/voice-mode.ts` needs the server image redeployed.
 
 ## Floating bots and the desktop mascot
 

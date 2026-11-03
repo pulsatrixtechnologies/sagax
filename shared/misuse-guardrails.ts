@@ -416,7 +416,7 @@ const SANDBOX_HOME = "/workspace";
  * path as written, `..` resolved; a relative one against the working folder
  * (`cwd`, the bot's own folder; /workspace when unknown or not absolute).
  * 2026-11-03 (production): a bot in /workspace/bots/<slug> asked for
- * `../../gox-autonomie/...`, a path that stays in the person's /workspace,
+ * `../../team-notes/...`, a path that stays in the person's /workspace,
  * and was refused as a server path because any relative `..` that rose
  * above the folder was refused. The resolved path now meets the same
  * allowlist as an absolute one, so `../../../etc/shadow` is still refused. */

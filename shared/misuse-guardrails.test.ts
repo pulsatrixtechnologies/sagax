@@ -259,11 +259,11 @@ describe("red team: server-environment paths", () => {
   // that climbs out of the folder but stays in the person's /workspace
   it("resolves a relative path against the bot's folder and allows it inside /workspace", () => {
     const own = { cwd: "/workspace/bots/osprey" };
-    expect(sandboxAbsolutePath("../../gox-autonomie/email-template/README.md", own.cwd)).toBe("/workspace/gox-autonomie/email-template/README.md");
+    expect(sandboxAbsolutePath("../../team-notes/email-template/README.md", own.cwd)).toBe("/workspace/team-notes/email-template/README.md");
     expect(sandboxAbsolutePath("active/x.md", own.cwd)).toBe("/workspace/bots/osprey/active/x.md");
     expect(sandboxAbsolutePath("../x.md")).toBe("/x.md");
-    expect(sandboxPathBlocked("../../gox-autonomie/email-template/README.md", own)).toBe(false);
-    expect(classifySandboxPath("../../gox-autonomie/email-template/README.md", false, "own_environment", own).action).toBe("allow");
+    expect(sandboxPathBlocked("../../team-notes/email-template/README.md", own)).toBe(false);
+    expect(classifySandboxPath("../../team-notes/email-template/README.md", false, "own_environment", own).action).toBe("allow");
     expect(sandboxPathBlocked("../wren/active/notes.md", own)).toBe(false);
     expect(sandboxPathBlocked("../../shared/plan.md", own)).toBe(false);
   });

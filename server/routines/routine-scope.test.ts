@@ -198,4 +198,11 @@ describe("Clear logs", () => {
     expect(clearable("all", admin, "&status=paused")).toEqual(["run-carol"]);
     expect(clearable("mine", admin)).toEqual(["run-mia"]);
   });
+
+  it("one routine's runs (the routine panel's Clear run logs): mine only, unless scope all for an admin", () => {
+    expect(clearable("mine", member, "&routineId=r-mia")).toEqual(["run-mia"]);
+    expect(clearable("mine", member, "&routineId=r-dave")).toEqual([]);
+    expect(clearable("all", admin, "&routineId=r-dave")).toEqual(["run-dave"]);
+    expect(parseRoutineScopeQuery(new URLSearchParams("routineId=../x"))).toMatchObject({ code: "routine_scope_invalid" });
+  });
 });

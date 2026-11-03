@@ -33,6 +33,8 @@ struct TasksRoutinesView: View {
     @State private var query = ""
     @State private var logLimit = 50
     let page: Page
+    /// The iPad desktop shell: the desktop's header, no navigation bar.
+    @Environment(\.automationsDesktop) private var desktop
     @State private var scheduleView: ScheduleView
     @State private var agendaDay = RoutineCalendar.startOfDay(Date())
     @State private var quickSlot: AutomationsSlot?
@@ -65,6 +67,14 @@ struct TasksRoutinesView: View {
     init(page: Page = .settings) {
         self.page = page
         _scheduleView = State(initialValue: page == .automations ? .calendar : .list)
+        #if DEBUG
+        // the desktop references: routines-list, routines-logs
+        switch ParityLaunch.current?.iPadScreen {
+        case .routinesList?: _scheduleView = State(initialValue: .list)
+        case .routinesLogs?: _section = State(initialValue: .logs)
+        default: break
+        }
+        #endif
     }
 
     private var automations: Bool { page == .automations }
@@ -143,13 +153,19 @@ struct TasksRoutinesView: View {
                 day: $agendaDay, routines: routines, runs: runs, bots: session.state.bots,
                 botId: botFilter.botId, loading: loading
             ) {
-                sectionPicker
-                if organization {
-                    scopePicker
-                    scopeNote
+                if desktop {
+                    desktopLeading
+                } else {
+                    sectionPicker
+                    if organization {
+                        scopePicker
+                        scopeNote
+                    }
+                    scheduleViewPicker
+                    if section == .routines, showsPauseChrome { routinePauseChrome }
                 }
-                scheduleViewPicker
-                if section == .routines, showsPauseChrome { routinePauseChrome }
+            } trailing: {
+                AnyView(desktop ? AnyView(desktopTrailing) : AnyView(EmptyView()))
             } onCreate: { at in
                 quickSlot = AutomationsSlot(at: at)
             } onAction: { action, item in
@@ -157,6 +173,27 @@ struct TasksRoutinesView: View {
             }
         } else {
             ThemedList {
+                if desktop {
+                    Section {
+                        HStack(spacing: 10) {
+                            desktopLeading
+                            Spacer(minLength: 0)
+                            desktopTrailing
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                        if organization { scopePicker.listRowBackground(Color.clear); scopeNote.listRowBackground(Color.clear) }
+                    }
+                    if section == .routines {
+                        Section {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Routines").font(Theme.font(15, .semibold)).foregroundStyle(Theme.textPrimary)
+                                Text("All schedules, including paused and finished routines.").font(Theme.font(12)).foregroundStyle(Theme.textSecondary)
+                            }
+                            .listRowBackground(Color.clear)
+                        }
+                    }
+                } else {
                 Section {
                     sectionPicker
                         .listRowBackground(Color.clear)
@@ -174,17 +211,120 @@ struct TasksRoutinesView: View {
                             .listRowInsets(EdgeInsets())
                     }
                 }
+                }
                 if section == .routines {
-                    if showsPauseChrome { Section { routinePauseChrome } }
+                    if showsPauseChrome, !desktop { Section { routinePauseChrome } }
                     routinesContent
                 } else { logsContent }
             }
         }
     }
 
+    // MARK: The desktop's header (RoutineCalendarPage.tsx PageHeader)
+
+    /// "Automations" with its mark, then List and Calendar.
+    private var desktopLeading: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "calendar").font(.system(size: 15))
+                Text("Automations").font(Theme.font(15, .semibold))
+            }
+            .foregroundStyle(Theme.textPrimary)
+            .accessibilityAddTraits(.isHeader)
+            HStack(spacing: 2) {
+                desktopViewButton(.list, "List", "list.bullet")
+                desktopViewButton(.calendar, "Calendar", "calendar")
+            }
+        }
+    }
+
+    private func desktopViewButton(_ view: ScheduleView, _ title: LocalizedStringKey, _ symbol: String) -> some View {
+        let on = section == .routines && scheduleView == view
+        return Button {
+            section = .routines
+            scheduleView = view
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: symbol).font(.system(size: 12))
+                Text(title).font(Theme.font(12.5))
+            }
+            .foregroundStyle(on ? Theme.textPrimary : Theme.textSecondary)
+            .padding(.horizontal, 10)
+            .frame(minHeight: 32)
+            .background(RoundedRectangle(cornerRadius: 8).fill(on ? Theme.card : Color.clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
+        .accessibilityIdentifier("automations-view.\(view == .list ? "list" : "calendar")")
+    }
+
+    /// Filters, the logs (with their problem count), and New.
+    private var desktopTrailing: some View {
+        HStack(spacing: 8) {
+            Menu {
+                Picker(selection: $botFilter) {
+                    Text("All bots").tag(RoutineBotFilter())
+                    ForEach(visibleBots) { bot in Text(verbatim: bot.name).tag(RoutineBotFilter(botId: bot.id)) }
+                } label: { Label("Filter by bot", systemImage: "line.3.horizontal.decrease.circle") }
+                .pickerStyle(.menu)
+                if organization { scopeFilters }
+                if seenAllowed {
+                    Button("Mark all as read", systemImage: "checkmark.circle") { Task { await markAllSeen() } }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "line.3.horizontal.decrease").font(.system(size: 12))
+                    Text("Filters").font(Theme.font(12.5))
+                }
+                .foregroundStyle(Theme.textPrimary)
+                .padding(.horizontal, 10)
+                .frame(minHeight: 32)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.hairline, lineWidth: 0.5))
+            }
+            .accessibilityIdentifier("automations-filters")
+            Button {
+                section = section == .logs ? .routines : .logs
+            } label: {
+                Image(systemName: "list.bullet.rectangle").font(.system(size: 13))
+                    .foregroundStyle(section == .logs ? Theme.accent : Theme.textPrimary)
+                    .frame(width: 32, height: 32)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.hairline, lineWidth: 0.5))
+                    .overlay(alignment: .topTrailing) {
+                        if unseenFailures > 0 {
+                            Text(verbatim: "\(unseenFailures)").font(.system(size: 9, weight: .semibold)).foregroundStyle(Theme.textPrimary)
+                                .padding(.horizontal, 3).offset(x: 4, y: -4)
+                        }
+                    }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Run logs"))
+            .accessibilityIdentifier("automations-logs")
+            Menu {
+                Button {
+                    quickSlot = AutomationsSlot(at: RoutineScheduleForm.nextHour())
+                } label: {
+                    Label { Text("Scheduled task") } icon: { Image(systemName: "clock") }
+                    Text("Ask a bot to do something later.")
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "plus").font(.system(size: 12, weight: .semibold))
+                    Text("New").font(Theme.font(12.5, .medium))
+                }
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 32)
+                .background(Capsule().fill(Theme.accent))
+            }
+            .accessibilityIdentifier("automations-new")
+        }
+    }
+
     var body: some View {
         pageContent
         .navigationTitle(automations ? "Automations" : "Threads & Routines")
+        .toolbar(desktop ? .hidden : .automatic, for: .navigationBar)
         .modifier(LogsSearch(active: section == .logs, query: $query, limit: $logLimit))
         .toolbar {
             if seenAllowed && unseenFailures > 0 {
@@ -382,6 +522,7 @@ struct TasksRoutinesView: View {
 
     @ViewBuilder
     private var routinesContent: some View {
+        if !desktop {
         Section {
             VStack(alignment: .leading, spacing: 8) {
                 Label("Thread = one conversation and result", systemImage: "bubble.left.and.text.bubble.right")
@@ -392,17 +533,20 @@ struct TasksRoutinesView: View {
         } footer: {
             Text("Every run uses the agent's existing model, tools, permissions, computer, and connected apps. Times follow the paired computer's local timezone.")
         }
+        }
 
         // 2026-10-28: routines in no folder stay in "Routines" (every bot
         // mixed, as before); each folder follows as its own section, the
         // bot's order, one bot after another when the list shows them all.
         let groups = folderGroups
-        Section("Routines") {
+        Section(desktop ? "" : "Routines") {
             let loose = groups.first?.routines ?? []
             if loose.isEmpty && groups.count == 1 && !loading {
                 EmptyStateView("No routines", systemImage: "calendar.badge.plus", description: Text("Schedule recurring or one-time agent work."))
             }
-            ForEach(loose) { routine in routineRow(routine) }
+            ForEach(loose) { routine in
+                if desktop { desktopRoutineRow(routine) } else { routineRow(routine) }
+            }
         }
         ForEach(groups.dropFirst()) { group in
             if let folder = group.folder, let botId = group.botId {
@@ -428,9 +572,54 @@ struct TasksRoutinesView: View {
             }
         }
 
-        RoutineTriggersSection(hooks: triggers, baseURL: triggerBaseURL, busyId: triggerBusy) { hook in
-            Task { await toggleTrigger(hook) }
+        if !desktop {
+            RoutineTriggersSection(hooks: triggers, baseURL: triggerBaseURL, busyId: triggerBusy) { hook in
+                Task { await toggleTrigger(hook) }
+            }
         }
+    }
+
+    /// The desktop list's row (RoutinesList.tsx): the name, "schedule ·
+    /// zone · Next: …", Paused under it, the switch at the right in the
+    /// bot's colour.
+    private func desktopRoutineRow(_ routine: Routine) -> some View {
+        let canToggle = routine.mayEdit && routine.canToggle()
+        var parts = [RoutineWording.compact(routine.schedule)]
+        if let zone = routine.schedule.timeZone, !zone.isEmpty { parts.append(zone) }
+        if routine.enabled, let next = routine.nextRunAt {
+            let date = Date(timeIntervalSince1970: next / 1000)
+            let time = date.formatted(date: .omitted, time: .shortened)
+            let when = Calendar.current.isDateInToday(date) ? String(localized: "Today at \(time)")
+                : Calendar.current.isDateInTomorrow(date) ? String(localized: "Tomorrow at \(time)")
+                : String(localized: "\(date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())) at \(time)")
+            parts.append(String(localized: "Next: \(when)"))
+        }
+        let tint = BubbleColors.user(botColor: session.state.bot(routine.botId)?.color)?.fill.color ?? Theme.accent
+        return HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(routine.name).font(Theme.font(13, .medium)).foregroundStyle(Theme.textPrimary).lineLimit(1)
+                Text(verbatim: parts.joined(separator: " · ")).font(Theme.font(12)).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                if !routine.enabled { Text("Paused").font(Theme.font(11.5)).foregroundStyle(Theme.textTertiary) }
+            }
+            Spacer(minLength: 0)
+            Button { Task { await toggle(routine) } } label: {
+                ZStack(alignment: routine.enabled ? .trailing : .leading) {
+                    Capsule().fill(routine.enabled ? tint : Theme.textTertiary.opacity(0.5))
+                    Capsule().fill(Color.white).frame(width: 26, height: 16).padding(.horizontal, 2)
+                }
+                .frame(width: 44, height: 20)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!canToggle)
+            .accessibilityLabel(Text(routine.enabled ? "Pause" : "Resume"))
+            .accessibilityValue(Text(routine.enabled ? "On" : "Off"))
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture { if routine.mayEdit { editor = .edit(routine) } else { showLogs(of: routine) } }
+        .listRowBackground(Color.clear)
     }
 
     /// One routine row with its swipes and menu.

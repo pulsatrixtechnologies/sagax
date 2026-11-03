@@ -224,6 +224,12 @@ const skillLibraryEntrySchema = z.object({
 });
 const skillLibraryIndexSchema = z.record(z.string(), skillLibraryEntrySchema);
 
+/** Whether a value is a valid library index entry: one invalid entry makes
+ * the whole index unreadable, so a recovery adopts only entries that pass. */
+export function isSkillLibraryEntry(value: unknown): value is SkillLibraryEntry {
+  return skillLibraryEntrySchema.safeParse(value).success;
+}
+
 /** Every library write emits here so later skills-lane consumers can drop
  * caches without polling. The payload names what changed. */
 export const skillLibraryEvents = new EventEmitter();

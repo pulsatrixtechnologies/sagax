@@ -15,6 +15,7 @@ import { capabilityPluginStateSchema, capabilityPluginValuesSchema } from "./cap
 import { BotCapabilityStore, emptyBotCapabilityDocument } from "./bot-capability-store.ts";
 import { InstallationCapabilityStore, emptyInstallationCapabilityDocument } from "./installation-capability-store.ts";
 import { principalDir } from "./person-connections.ts";
+import { isSkillLibraryEntry } from "./skill-library.ts";
 
 const BACKUP_SUFFIX = ".capabilities-l5.bak";
 const RETIRED_SUFFIX = ".migrated";
@@ -429,6 +430,7 @@ function migrateInstallation(
 
   if (verified.migrated.includes("skills-library-index")) {
     const path = join(dataDir, "skills-library", "index.json");
+    recoverStrandedLibraryEntries(options, verified, imported);
     if (!existsSync(path) || deepEqual(readJson(path), verified.skillsLibrary)) retireFile(path);
     repairPersonSkillsInInstallationIndex(options, verified, imported, skipped);
   }
@@ -448,6 +450,51 @@ function migrateInstallation(
     if (Object.keys(verified.mcpServers).length > 0 && deepEqual(fromDisk, verified.mcpServers)) {
       options.clearMcpServers?.();
     }
+  }
+}
+
+/**
+ * Recovery for 0.8.24 to 0.8.33: the skills library boot sweep ran before
+ * the installation bridge was set, so every per-bot skill it moved into the
+ * library (archived copy, manifest entry dropped, bot assigned) got its
+ * index entry written to skills-library/index.json after that file had been
+ * absorbed. Nothing reads it there, and the skill answered 404. Each entry
+ * of that file the sealed index lacks, whose SKILL.md under
+ * skills-library/skills/<name>/ still has the recorded sha256, is adopted.
+ * A name the sealed index already has is never replaced. Once every entry
+ * of the file is in the sealed index, the caller retires the file.
+ */
+function recoverStrandedLibraryEntries(
+  options: CapabilitiesStoreMigrationOptions,
+  verified: ReturnType<InstallationCapabilityStore["read"]>,
+  imported: string[],
+): void {
+  const { dataDir, installation } = options;
+  const path = join(dataDir, "skills-library", "index.json");
+  const raw = readJson(path);
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return;
+  const stranded: Record<string, unknown> = {};
+  for (const [name, entry] of Object.entries(raw as Record<string, unknown>)) {
+    if (!SKILL_NAME.test(name) || Object.hasOwn(verified.skillsLibrary, name)) continue;
+    if (!isSkillLibraryEntry(entry) || entry.name !== name) continue;
+    try {
+      const bytes = readFileSync(join(dataDir, "skills-library", "skills", name, "SKILL.md"));
+      if (createHash("sha256").update(bytes).digest("hex") !== entry.sha256) continue;
+    } catch {
+      continue;
+    }
+    stranded[name] = entry;
+  }
+  if (!Object.keys(stranded).length) return;
+  const next = { ...verified, skillsLibrary: { ...verified.skillsLibrary, ...stranded } };
+  try {
+    installation.write(next);
+    installation.clearCache();
+    const reread = installation.read();
+    verified.skillsLibrary = reread.skillsLibrary;
+    imported.push(...Object.keys(stranded).map((name) => `installation:skills-library-index:${name}`));
+  } catch {
+    // The file stays in place; the next boot retries.
   }
 }
 

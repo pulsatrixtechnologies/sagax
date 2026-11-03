@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
+  BookOpen,
   Brain,
   Check,
   CircleCheck,
@@ -79,6 +80,7 @@ import {
 import { useCaptionChrome } from "../DesktopCapabilities";
 import { PAGE_HEADER_BUTTON, PAGE_MENU_ITEM, PAGE_POPOVER, PageHeader, PageSegment, PageTopStrip, useDismissMenus } from "../content-page";
 import { confirmAsync } from "../ConfirmProvider";
+import { addToCollection, fetchCollections, MemoryCollections, type CollectionSummary } from "./MemoryCollections";
 import { MemoryMapView } from "./MemoryMapView";
 import { MemoryNoteView, type NoteSave } from "./MemoryNoteView";
 import { MemoryNotesList, type ListTemplate } from "./MemoryNotesList";
@@ -90,7 +92,7 @@ import { FIELD, PRIMARY_BUTTON, Swatch } from "./memory-ui";
 type View = "notes" | "map" | "tags" | "quality";
 
 type Place =
-  | { kind: "all" | "teams" | "pinned" | "recent" | "review" | "archived" | "trash" }
+  | { kind: "all" | "teams" | "pinned" | "recent" | "review" | "archived" | "trash" | "collections" }
   | { kind: "tier"; tier: string }
   | { kind: "folder"; tier: string; folder: string };
 
@@ -201,6 +203,9 @@ export function MemoryManagerPanel() {
   const [switcherQuery, setSwitcherQuery] = useState("");
   const [listQuery, setListQuery] = useState<string | undefined>();
   const [mapFocus, setMapFocus] = useState<string | null>(null);
+  // The console's preview: a click on a row opens the note beside the list.
+  const [preview, setPreview] = useState<{ entry: PageRow; detail: MemoryNoteDetail | null } | null>(null);
+  const [collections, setCollections] = useState<CollectionSummary[]>([]);
   const [explorerOpen, setExplorerOpen] = useState(() => typeof window === "undefined" || typeof window.matchMedia !== "function" || window.matchMedia("(min-width: 1024px)").matches);
   const switcherRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDetailsElement | null>(null);
@@ -242,6 +247,7 @@ export function MemoryManagerPanel() {
       void fetchPerspicaxArchived().then(setArchivedRaw).catch(() => setArchivedRaw([]));
       void fetchPerspicaxVocabulary().then(setVocabulary).catch(() => setVocabulary(null));
       void pxMemory<{ notes?: TrashRow[] }>("/trash").then((result) => setTrashRaw(result.notes ?? [])).catch(() => setTrashRaw([]));
+      void fetchCollections().then(setCollections).catch(() => setCollections([]));
     }
   }, []);
 
@@ -428,6 +434,7 @@ export function MemoryManagerPanel() {
     if (place.kind === "review") return rows.filter((entry) => entry.row.status === "proposed");
     if (place.kind === "archived") return archivedRows;
     if (place.kind === "trash") return trashRows;
+    if (place.kind === "collections") return [];
     if (place.kind === "tier") return rows.filter((entry) => entry.tier === place.tier);
     if (place.kind !== "folder") return rows;
     const folder = place.folder;
@@ -435,6 +442,7 @@ export function MemoryManagerPanel() {
   }, [place, rows, tierByKey, pins, archivedRows, trashRows]);
 
   const goPlace = (next: Place) => {
+    setPreview(null);
     setPlace(next);
     setScreen({ kind: "list" });
     setView("notes");
@@ -444,22 +452,51 @@ export function MemoryManagerPanel() {
 
   // ---- notes ---------------------------------------------------------------------------
 
+  const loadDetail = async (entry: PageRow): Promise<MemoryNoteDetail> => {
+    let detail: MemoryNoteDetail | null = null;
+    if (entry.source.kind === "bot" && entry.source.botId && entry.row.path) detail = await openBotNote(entry.source.botId, entry.row.path);
+    else if (entry.source.kind === "team") detail = await openTeamNote(entry.source.section ?? "", entry.row.id);
+    else if (entry.source.kind === "perspicax" && entry.row.scope) detail = await openPerspicaxNote(entry.row.scope, entry.row.id);
+    if (!detail) throw new Error(t("memoryManager.noteMissing"));
+    return entry.source.kind === "bot" ? { ...detail, title: entry.row.title } : detail;
+  };
+
+  /** A click: the note in the preview panel beside the list or the map. */
+  const openPreview = async (entry: PageRow) => {
+    setPreview({ entry, detail: null });
+    try {
+      const detail = await loadDetail(entry);
+      setPreview((current) => (current?.entry.key === entry.key ? { entry, detail } : current));
+      setBodies((current) => ({ ...current, [entry.key]: detail.body }));
+    } catch (cause) {
+      setError(readableError(cause));
+      setPreview(null);
+    }
+  };
+  const previewKey = (key: string) => {
+    const entry = rowByKey.get(key);
+    if (entry) void openPreview(entry);
+  };
+  useEffect(() => {
+    if (!preview) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setPreview(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [preview]);
+
+  /** A double click (or Edit): the note's own page. */
   const openNote = async (entry: PageRow, edit = false) => {
     setBusy(true);
     setError(null);
     setNote(null);
+    setPreview(null);
     setNoteEntry(entry);
     setView("notes");
     setScreen({ kind: "note", key: entry.key, edit });
     try {
-      let detail: MemoryNoteDetail | null = null;
-      if (entry.source.kind === "bot" && entry.source.botId && entry.row.path) detail = await openBotNote(entry.source.botId, entry.row.path);
-      else if (entry.source.kind === "team") detail = await openTeamNote(entry.source.section ?? "", entry.row.id);
-      else if (entry.source.kind === "perspicax" && entry.row.scope) detail = await openPerspicaxNote(entry.row.scope, entry.row.id);
-      if (!detail) throw new Error(t("memoryManager.noteMissing"));
-      if (entry.source.kind === "bot") detail = { ...detail, title: entry.row.title };
+      const detail = await loadDetail(entry);
       setNote(detail);
-      setBodies((current) => ({ ...current, [entry.key]: detail!.body }));
+      setBodies((current) => ({ ...current, [entry.key]: detail.body }));
     } catch (cause) {
       setError(readableError(cause));
       setScreen({ kind: "list" });
@@ -794,6 +831,36 @@ export function MemoryManagerPanel() {
     }
   };
 
+  // A Perspicax folder's manual order (the console's drag in Manual order).
+  const reorder = async (ids: string[]) => {
+    if (place.kind !== "folder" || !place.folder.startsWith("px:")) return;
+    const cut = place.folder.indexOf("/");
+    const scope = place.folder.slice(3, cut);
+    const topic = place.folder.slice(cut + 1);
+    setBusy(true);
+    try {
+      await pxMemory("/order", { method: "PUT", body: JSON.stringify({ scope, kind: "note", topic, ids }) });
+      setNotice({ text: t("memoryManager.orderSaved") });
+      refresh();
+    } catch (cause) {
+      setError(readableError(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const collect = async (keys: string[], collection: string) => {
+    const notes = keys.map(lookup).filter((entry): entry is PageRow => Boolean(entry?.row.scope)).map((entry) => ({ scope: entry.row.scope!, id: entry.row.id }));
+    try {
+      await addToCollection(collection, notes);
+      const title = collections.find((entry) => entry.id === collection)?.title ?? "";
+      setNotice({ text: t("memoryManager.collections.added", { count: notes.length, title }) });
+      void fetchCollections().then(setCollections).catch(() => undefined);
+    } catch (cause) {
+      setError(readableError(cause));
+    }
+  };
+
   // ---- keyboard: Cmd+O (Ctrl+O elsewhere) opens a note, as in the console --------------
 
   useEffect(() => {
@@ -825,6 +892,7 @@ export function MemoryManagerPanel() {
     { id: "review", label: t("memoryManager.nav.review"), icon: CircleCheck, count: counts.review, dot: counts.review > 0, current: current({ kind: "review" }), onOpen: () => goPlace({ kind: "review" }) },
   );
   const tidy: MemorySidebarNav[] = pxSource ? [
+    { id: "collections", label: t("memoryManager.collections.title"), icon: BookOpen, count: collections.length, current: current({ kind: "collections" }), onOpen: () => goPlace({ kind: "collections" }) },
     { id: "archived", label: t("memoryManager.nav.archived"), icon: Archive, count: archivedRows.length, current: current({ kind: "archived" }), onOpen: () => goPlace({ kind: "archived" }) },
     { id: "trash", label: t("memoryManager.nav.trash"), icon: Trash2, count: trashRows.length, current: current({ kind: "trash" }), onOpen: () => goPlace({ kind: "trash" }) },
   ] : [];
@@ -989,6 +1057,7 @@ export function MemoryManagerPanel() {
       case "review": return [t("memoryManager.nav.review"), t("memoryManager.nav.reviewHint")];
       case "archived": return [t("memoryManager.nav.archived"), t("memoryManager.nav.archivedHint")];
       case "trash": return [t("memoryManager.nav.trash"), t("memoryManager.trashHint")];
+      case "collections": return [t("memoryManager.collections.title"), t("memoryManager.collections.hint")];
       case "tier": {
         const tier = tierByKey.get(place.tier);
         return [tier?.name ?? "", place.tier === "mine" ? t("memoryManager.tierMineHint") : t("memoryManager.tierHint", { tier: tier?.name ?? "" })];
@@ -1020,7 +1089,7 @@ export function MemoryManagerPanel() {
   const canNewHere = place.kind === "all" || place.kind === "tier" || place.kind === "folder" ? Boolean(defaultTarget().target) : false;
 
   const noteTier = noteEntry ? tierByKey.get(noteEntry.tier) : undefined;
-  const noteLinks = useMemo<{ out: PageLink[]; back: PageLink[] }>(() => {
+  const linksFor = useCallback((note: MemoryNoteDetail | null, noteEntry: PageRow | null): { out: PageLink[]; back: PageLink[] } => {
     if (!note || !noteEntry) return { out: [], back: [] };
     if (noteEntry.source.kind === "perspicax" && (note.linksOut || note.backlinks)) {
       const toKey = (link: { scope?: string; id: string }) => `perspicax|${link.scope}/${link.id}`;
@@ -1030,7 +1099,9 @@ export function MemoryManagerPanel() {
       };
     }
     return { out: linksOut(note.body, rows, noteEntry.key), back: backlinksTo(note.title, rows, bodies, noteEntry.key) };
-  }, [note, noteEntry, rows, bodies]);
+  }, [rows, bodies]);
+  const noteLinks = useMemo(() => linksFor(note, noteEntry), [linksFor, note, noteEntry]);
+  const previewLinks = useMemo(() => linksFor(preview?.detail ?? null, preview?.entry ?? null), [linksFor, preview]);
 
   // ---- tags and quality ------------------------------------------------------------------
 
@@ -1058,7 +1129,7 @@ export function MemoryManagerPanel() {
         name="memory"
         icon={Brain}
         title={t("memoryManager.title")}
-        section={view === "notes" && screen.kind === "list" && place.kind !== "all" ? listTitle : null}
+        large
         {...dragProps}
         topbar
         style={dragProps.style}
@@ -1139,7 +1210,7 @@ export function MemoryManagerPanel() {
           ))}
 
           <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {view === "map" && <MemoryMapView rows={rows} tiers={tiers} bodies={bodies} review={counts.review} focusKey={mapFocus} onOpen={(key) => openKey(key)} />}
+            {view === "map" && <MemoryMapView rows={rows} tiers={tiers} bodies={bodies} review={counts.review} focusKey={mapFocus} onOpen={previewKey} onNew={targets.length ? () => startCreate() : undefined} />}
             {view === "tags" && (
               <div className="min-h-0 flex-1 overflow-y-auto">
                 <MemoryTagsView stats={stats} vocabulary={vocabulary} onTag={(tag) => { goPlace({ kind: "all" }); setListQuery(`tag:${/\s/.test(tag) ? `"${tag}"` : tag}`); }} />
@@ -1160,7 +1231,12 @@ export function MemoryManagerPanel() {
             )}
             {view === "notes" && (
               <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-                {screen.kind === "list" && (
+                {screen.kind === "list" && place.kind === "collections" && (
+                  <div data-memory-nav-view="collections">
+                    <MemoryCollections onOpenNote={(scope, id) => previewKey(`perspicax|${scope}/${id}`)} onChanged={() => void fetchCollections().then(setCollections).catch(() => undefined)} />
+                  </div>
+                )}
+                {screen.kind === "list" && place.kind !== "collections" && (
                   <div data-memory-nav-view={place.kind} data-memory-browse={place.kind === "folder" || place.kind === "tier" ? "" : undefined}>
                     <MemoryNotesList
                       key={JSON.stringify(place)}
@@ -1173,7 +1249,7 @@ export function MemoryManagerPanel() {
                       fixedView={place.kind === "archived" || place.kind === "trash"}
                       canSelect={(entry) => (place.kind === "trash" ? entry.row.status !== "locked" : place.kind === "archived" ? true : entry.source.mayWrite)}
                       emptyText={loading ? t("memoryManager.loading") : place.kind === "trash" ? t("memoryManager.trashEmpty") : place.kind === "pinned" ? t("memoryManager.pinnedEmpty") : t("memoryManager.emptyView")}
-                      onOpen={(entry) => { if (!entry.row.archived) void openNote(entry); }}
+                      onOpen={(entry) => { if (!entry.row.archived) void openPreview(entry); }}
                       onEdit={(entry) => void openNote(entry, true)}
                       onNewHere={canNewHere ? () => { const { target, folder } = defaultTarget(); startCreate(target, folder); } : undefined}
                       templates={templates}
@@ -1189,6 +1265,9 @@ export function MemoryManagerPanel() {
                       busy={busy}
                       loading={loading}
                       initialQuery={listQuery}
+                      onReorder={place.kind === "folder" && place.folder.startsWith("px:") ? reorder : undefined}
+                      collections={collections.filter((entry) => entry.may_edit)}
+                      onAddToCollection={(keys, collection) => void collect(keys, collection)}
                     />
                     {place.kind === "trash" && <div data-memory-trash="" />}
                   </div>
@@ -1284,6 +1363,45 @@ export function MemoryManagerPanel() {
             )}
           </section>
         </div>
+        {preview && (view === "notes" || view === "map") && (
+          <>
+            <button type="button" aria-label={t("common.close")} className="absolute inset-0 z-30 cursor-default bg-ink/10" onClick={() => setPreview(null)} data-memory-preview-scrim="" />
+            <aside role="complementary" aria-label={preview.entry.row.title} className="absolute inset-y-0 right-0 z-40 flex w-[min(920px,calc(100%-40px))] flex-col border-l border-hairline/60 bg-app shadow-xl" data-memory-preview-panel="">
+              <div className="flex shrink-0 items-center justify-end px-4 pt-3">
+                <button type="button" aria-label={t("common.close")} title={t("common.close")} className="grid size-8 place-items-center rounded-full text-ink-secondary hover:bg-hover hover:text-ink" onClick={() => setPreview(null)} data-memory-preview-close="">
+                  <X size={16} aria-hidden="true" />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
+                {preview.detail ? (
+                  <MemoryNoteView
+                    key={`preview:${preview.entry.key}`}
+                    variant="panel"
+                    entry={preview.entry}
+                    detail={preview.detail}
+                    tier={tierByKey.get(preview.entry.tier)}
+                    facts={preview.entry.source.kind === "bot" && preview.entry.row.path ? factsByBot[preview.entry.source.botId ?? ""]?.get(preview.entry.row.path) : undefined}
+                    linksOut={previewLinks.out}
+                    backlinks={previewLinks.back}
+                    pinned={pins.includes(preview.entry.key)}
+                    busy={busy}
+                    onBack={() => setPreview(null)}
+                    onPin={() => togglePin(preview.entry.key)}
+                    onSave={async () => false}
+                    onEditPage={() => void openNote(preview.entry, true)}
+                    onDelete={preview.detail.mayEdit ? () => { const key = preview.entry.key; setPreview(null); void deleteKeys([key]); } : undefined}
+                    onMove={preview.entry.source.kind === "perspicax" && preview.detail.mayEdit ? () => { const key = preview.entry.key; setPreview(null); startMove([key]); } : undefined}
+                    onNeighbourhood={() => { setMapFocus(preview.entry.key); setPreview(null); setView("map"); }}
+                    onOpenLink={previewKey}
+                    linkColor={(key) => tierByKey.get(rowByKey.get(key)?.tier ?? "")?.color}
+                  />
+                ) : (
+                  <div className="flex min-h-[160px] items-center justify-center text-ink-secondary"><Loader2 size={18} className="animate-spin" aria-label={t("memoryManager.loading")} /></div>
+                )}
+              </div>
+            </aside>
+          </>
+        )}
       </div>
     </main>
   );

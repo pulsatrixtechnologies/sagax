@@ -179,12 +179,14 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     prompts = join(home, "claude-prompts.jsonl");
     writeFileSync(join(data, "config.json"), JSON.stringify({
       instances: {
-        claude: { driver: "claudeAgent", environment: { FAKE_CLAUDE_DUMP: dump, FAKE_CLAUDE_PROMPTS: prompts }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        // fcce56775 (#1812) separated subscription instances from API-key
+        // instances. These cases exercise the org key, not a subscription.
+        claude: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP: dump, FAKE_CLAUDE_PROMPTS: prompts }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
         // a turn that never ends on its own: how a bot is held busy
         stuck: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_PROMPTS: prompts }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
-        ghost: { driver: "claudeAgent", config: { cli: "/nonexistent/claude", fullAuto: true } },
+        ghost: { driver: "claudeAgent", access: "api", config: { cli: "/nonexistent/claude", fullAuto: true, requireApiKey: true } },
         // held open with its permission broker reachable: how cards are raised
-        hold: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        hold: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
         grok: { driver: "grokAgent", config: { cli: FAKE_ACP, fullAuto: false } },
       },
     }));
@@ -246,6 +248,8 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     expect((await api("GET", "/api/org", alice)).body.settings).toEqual({
       orgKeyConfigured: true, allowFullAccess: true, allowVaultExport: true, memberEnvironmentAutonomy: true, confidentialThreadsByDefault: false, memberAutoApproval: true, interimAttach: { until: null, people: 0 },
       github: { clientId: null, fromEnvironment: false }, pluginMarketplaces: { mode: "any" },
+      // 84841aeed (capabilities lot 4): this older directory keeps local policy.
+      pluginMarketplacesOwner: "local",
       // Pulsatrix Flow for members (#1091)
       flowPlugins: expect.anything(),
     });

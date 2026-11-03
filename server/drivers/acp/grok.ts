@@ -3,6 +3,7 @@
 // (~/.grok/auth.json), NOT the xAI API key (that driver is drivers/grok.ts).
 // The generic protocol runtime lives in acp/core.ts; this file is only the
 // per-harness quirks. Verified against grok 1.0.0.
+import { GROK_PROMPT_BYTE_LIMIT } from "./prompt-fit.ts";
 import { spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -1199,6 +1200,8 @@ const support: AcpSupport = {
   // reach the agent-stdio system prompt (verified against 1.0.0), so the
   // persona is prepended codex-style.
   buildPromptText: (turn) => (turn.system ? `${turn.system}\n\n${turn.text}` : turn.text),
+  // Grok moves a prompt of about 100 KB to a file on the server (prompt-fit.ts)
+  promptByteLimit: GROK_PROMPT_BYTE_LIMIT,
 
   // Grok reaches every Sagax MCP tool through search_tool then use_tool, and
   // each of those is a full model round trip carrying the whole context.
@@ -1279,3 +1282,5 @@ export async function waitForGrokMcpSettled(
 }
 
 export const GrokAgentDriver = createAcpDriver(support);
+/** The size Grok's requests are kept under (prompt-fit.ts). */
+export const grokPromptByteLimit = (): number | undefined => support.promptByteLimit;

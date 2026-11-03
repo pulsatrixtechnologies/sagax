@@ -266,6 +266,10 @@ export type GroupMemberTurnHost = {
   workplaceTurnText: any,
   workspaceCwdPrompt: any,
   workspaceLocationsPrompt: any,
+  /** The bot's folder in the person's server environment, or null. */
+  sandboxFolderFor?: any,
+  /** The server's data folder and the bot's workspace, every spelling. */
+  serverPathView: any,
   workspaceMaintenance: any,
   groupTurnCwd: any,
   effectiveRoomTurnTimeoutMinutes: any,

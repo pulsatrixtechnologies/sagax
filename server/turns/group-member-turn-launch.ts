@@ -1,5 +1,6 @@
 // @ts-nocheck
 // #1388 wave 4 step 3: runGroupMemberTurn phase. Never imports server/index.ts.
+import { hideServerPathsInSections } from "../server-path-prompt.ts";
 import type { GroupMemberTurnHost } from "./group-member-turn-types.ts";
 import type { GroupMemberTurnCtx } from "./group-member-turn-ctx.ts";
 
@@ -236,6 +237,8 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     workplaceTurnText,
     workspaceCwdPrompt,
     workspaceLocationsPrompt,
+    sandboxFolderFor,
+    serverPathView,
     groupTurnCwd,
     effectiveRoomTurnTimeoutMinutes,
     roomTurnTimeoutMessage,
@@ -887,12 +890,16 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     ? compactPromptFor(readyBot, roomSpeakerId || effectiveBotOwner(readyBot))
     : undefined;
   const roomPromptLevel = roomTurnApprovalMode(readyBot, threadId, orchestration);
-  const roomBuilt = buildSystemPrompt(system, store.bot(bot.id)?.soul ?? bot.soul ?? "", [
+  // 2026-11-02 (GOX, Melonie): no server path for an engine without file
+  // tools on the Sagax server (server/server-path-prompt.ts)
+  const roomServerFiles = !withholdHostToolsFor(instance);
+  const roomEnvironmentFolder = roomServerFiles ? null : sandboxFolderFor?.(bot.id) ?? null;
+  const roomParts = [
     { id: "finish-until", label: "Do not finish until", text: finishUntilPrompt(store.bot(bot.id)?.finishUntil ?? bot.finishUntil) },
     { id: "user-profile", label: "About the user", text: userProfileSystemPrompt(botUserProfile(bot)) },
     { id: "model", label: "Model", text: modelPrompt({ engine: engineDisplayName(instance), model: roomModel, actual: modelFallbackByPayer.get(modelFallbackPayerKey(threadId, instance.instanceId, roomModel)) }) },
-    { id: "files", label: "File locations", text: workspace ? workspaceLocationsPrompt(bot.id, cwd, readyBot.cwd, { attachFile: Boolean(integrations.agents) && !HOSTED_WORKSPACE, ...(roomStable ? { cwdElsewhere: true } : {}) }) : "" },
-    { id: "files-cwd", label: "Current working folder", text: roomStable && workspace ? workspaceCwdPrompt(cwd) : "" },
+    { id: "files", label: "File locations", text: workspace ? workspaceLocationsPrompt(bot.id, cwd, readyBot.cwd, { attachFile: Boolean(integrations.agents) && !HOSTED_WORKSPACE, ...(roomStable ? { cwdElsewhere: true } : {}), serverFiles: roomServerFiles, environmentFolder: roomEnvironmentFolder }) : "" },
+    { id: "files-cwd", label: "Current working folder", text: roomStable && workspace && roomServerFiles ? workspaceCwdPrompt(cwd) : "" },
     { id: "shell", label: "Long-running commands", text: workspace ? longCommandsPrompt(roomComputerPromptKind) : "" },
     { id: "mcp", label: "MCP servers", text: customMcpPrompt(Object.keys(integrations.custom ?? {})) + githubWithheldPrompt(roomGithubWithheld) },
     { id: "perspicax", label: "Perspicax", text: roomPerspicaxPrompt },
@@ -922,7 +929,7 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     { id: "rules", label: "Rules (RULES.md)", text: rulesSystemPrompt(bot.id, { writes: Boolean(integrations.agents) }) },
     { id: "memory", label: "Memory", text: roomMemory ? `\n${roomMemory.trim()}` : "" },
     { id: "host-tools", label: "Host tools", text: withholdHostToolsFor(instance) ? WITHHELD_HOST_TOOLS_PROMPT : "" },
-    { id: "docs", label: "Documents index", text: docsIndexPrompt(bot.id, { tools: integrations.agents ? "agents" : workspace ? "files" : "none" }) },
+    { id: "docs", label: "Documents index", text: docsIndexPrompt(bot.id, { tools: integrations.agents ? "agents" : workspace && roomServerFiles ? "files" : "none" }) },
     // The group's shared memory: every bot of the group reads it here; only
     // explicit group_memory_update writes reach it (server/memory/group-memory.ts).
     { id: "group-memory", label: "Group memory", text: (() => {
@@ -932,9 +939,12 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     // readyBot was captured before awaited setup work; an assignment PUT in
     // that window must still reach this turn's prompt.
     { id: "skills", label: "Skills index", text: scopedSkillsPrompt(bot, instance, roomPrincipal ?? "", { managedTools: skillDiscoveryAvailable(Boolean(integrations.agents), roomToolScope), fileAccess: Boolean(workspace), syncNative: true })?.text ?? "" },
-    { id: "skill-instructions", label: "Skill instructions", text: renderSkillInstructions(selectedSkills, { includeRoot: Boolean(workspace) }) },
+    { id: "skill-instructions", label: "Skill instructions", text: renderSkillInstructions(selectedSkills, { includeRoot: Boolean(workspace) && roomServerFiles }) },
     { id: "playbooks", label: "Playbooks", text: installedPlaybookInstructions(text, bot.playbooks) },
-  ], roomStable || instance.driverKind === "claudeAgent"
+  ];
+  const roomHidden = roomServerFiles ? null : hideServerPathsInSections(roomParts, serverPathView(bot.id));
+  if (roomHidden?.leaked.length) console.warn(`[prompt] server paths hidden for ${bot.id} (no server file tools): ${roomHidden.leaked.join(", ")}`);
+  const roomBuilt = buildSystemPrompt(system, store.bot(bot.id)?.soul ?? bot.soul ?? "", roomHidden?.sections ?? roomParts, roomStable || instance.driverKind === "claudeAgent"
     ? new Set([
       ...(instance.driverKind === "claudeAgent" ? CLAUDE_REUSE_VOLATILE_SECTIONS : []),
       ...(roomStable ? COMPACT_VOLATILE_SECTIONS : []),

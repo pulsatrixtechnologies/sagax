@@ -288,6 +288,27 @@ describe("profileMenuItems (the reference design's account menu, 2026-10-16)", (
     }
   });
 
+  it("names the starred plan beside Usage, and stars each plan once in Usage ›", () => {
+    const toggled: string[] = [];
+    const lines = [
+      { key: "grok:weekly", planId: "grok", planName: "Grok SuperGrok Heavy", label: "Grok SuperGrok Heavy · Weekly", value: "87% used" },
+      { key: "grok:five-hour", planId: "grok", planName: "Grok SuperGrok Heavy", label: "Grok SuperGrok Heavy · 5-hour", value: "10% used" },
+      { key: "codex:five-hour", planId: "codex", planName: "Codex Business", label: "Codex Business · 5-hour", value: "100% used" },
+    ];
+    const usage = items({
+      usagePercent: 87, usageName: "Grok", usageLines: lines,
+      usageFavorite: { id: "grok", onToggle: (id) => toggled.push(id) },
+    }).find((entry) => entry.key === "usage")!;
+    expect(usage.value).toBe("Grok 87%");
+    const stars = usage.submenu!.filter((entry) => entry.favorite);
+    expect(stars.map((entry) => [entry.key, entry.favorite!.on])).toEqual([["grok:weekly", true], ["codex:five-hour", false]]);
+    expect(stars[1]!.favorite!.label).toBe("Show Codex Business in the Usage menu");
+    stars[1]!.favorite!.onToggle();
+    expect(toggled).toEqual(["codex"]);
+    // the usual figure, unnamed, without a favorite
+    expect(items({ usagePercent: 100, usageName: null, usageLines: lines }).find((entry) => entry.key === "usage")!.value).toBe("100% used");
+  });
+
   it("puts Keyboard shortcuts, Release notes, Check for updates and About under Help", () => {
     const update = { key: "update", label: "Check for updates", onSelect: noop };
     expect(items({ updateItem: update }).find((entry) => entry.key === "help")!.submenu!.map((entry) => entry.key))

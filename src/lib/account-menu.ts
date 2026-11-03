@@ -20,23 +20,55 @@ import { formatResetDistance, type PlanRow } from "./plan-usage";
  * on mobile" stays out of the menu until one does. */
 export const SAGAX_MOBILE_URL: string | null = null;
 
-/** The figure beside Usage: the most used weekly window of the person's own
- * plans (a 5-hour window when a plan reports no weekly one), rounded; null
- * without a plan that reports one. */
+/** One plan's figure: its weekly window, else its 5-hour window when it
+ * reports no weekly one, rounded and clamped; null when neither is reported. */
+function planPercent(row: PlanRow): number | null {
+  if (row.state !== "windows") return null;
+  const window = row.weekly.available && row.weekly.usedPercent != null ? row.weekly : row.fiveHour;
+  if (!window.available || window.usedPercent == null || !Number.isFinite(window.usedPercent)) return null;
+  return Math.round(Math.min(100, Math.max(0, window.usedPercent)));
+}
+
+/** The figure beside Usage with no favorite (the rule since 0.5.7): the
+ * HIGHEST of the person's plans, each read on its weekly window (a 5-hour
+ * window when a plan reports no weekly one), rounded; null without a plan
+ * that reports one. The highest, not the first: the plan closest to its
+ * limit is the one worth seeing. */
 export function usagePercent(rows: readonly PlanRow[]): number | null {
   let best: number | null = null;
   for (const row of rows) {
-    if (row.state !== "windows") continue;
-    const window = row.weekly.available && row.weekly.usedPercent != null ? row.weekly : row.fiveHour;
-    if (!window.available || window.usedPercent == null || !Number.isFinite(window.usedPercent)) continue;
-    const used = Math.round(Math.min(100, Math.max(0, window.usedPercent)));
-    best = best === null ? used : Math.max(best, used);
+    const used = planPercent(row);
+    if (used !== null) best = best === null ? used : Math.max(best, used);
   }
   return best;
 }
 
+export interface UsageSummary {
+  percent: number | null;
+  /** the starred plan's short name ("Grok"), only while it drives the
+   * figure; null with the usual rule */
+  name: string | null;
+}
+
+/** The figure beside Usage (2026-11-03): the starred plan's own figure, with
+ * its name, while that plan is connected and reports a window. Without a
+ * favorite, or once it is gone (signed out, no window), the usual rule
+ * (usagePercent: the highest plan). */
+export function usageSummary(rows: readonly PlanRow[], favorite: string | null): UsageSummary {
+  if (favorite) {
+    const row = rows.find((candidate) => candidate.id === favorite);
+    const percent = row ? planPercent(row) : null;
+    if (row && percent !== null) return { percent, name: row.name };
+  }
+  return { percent: usagePercent(rows), name: null };
+}
+
 export interface UsageLine {
   key: string;
+  /** the plan row this line belongs to (a favorite names it) */
+  planId?: string;
+  /** that plan as people read it ("Grok SuperGrok Heavy") */
+  planName?: string;
   label: string;
   subtitle?: string;
   value: string;
@@ -58,6 +90,8 @@ export function usageLines(
       const when = formatResetDistance(window.resetsAt, now);
       lines.push({
         key: `${row.id}:${key}`,
+        planId: row.id,
+        planName: name,
         label: `${name} · ${label}`,
         subtitle: when ? labels.resetsIn(when) : undefined,
         value: labels.used(Math.round(Math.min(100, Math.max(0, window.usedPercent)))),

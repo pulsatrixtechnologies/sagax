@@ -81,6 +81,62 @@ function productName(row: Pick<PlanProvider, "driver" | "name">): string {
   return (row.driver && PRODUCT[row.driver]) || row.name;
 }
 
+/** Plan ids a provider sends that have a known name (lower case). Codex
+ * reports the ChatGPT plan type, Claude its subscription type. Product
+ * names: the same in every language. */
+const PLAN_NAMES: Record<string, string> = {
+  free: "Free",
+  go: "Go",
+  plus: "Plus",
+  pro: "Pro",
+  prolite: "Pro Lite",
+  pro_lite: "Pro Lite",
+  max: "Max",
+  max5x: "Max 5x",
+  max_5x: "Max 5x",
+  max20x: "Max 20x",
+  max_20x: "Max 20x",
+  team: "Team",
+  business: "Business",
+  enterprise: "Enterprise",
+  edu: "Edu",
+  education: "Edu",
+  supergrok: "SuperGrok",
+  supergrok_heavy: "SuperGrok Heavy",
+  premium: "Premium",
+  premium_plus: "Premium+",
+};
+
+/** Words an id may lead with that name no plan (self_serve_business_...,
+ * default_claude_max_20x). */
+const PLAN_ID_PREFIX = /^(?:self_serve|default|claude|chatgpt|openai|grok|xai)[_-]+/;
+
+/**
+ * The plan as the person reads it, never a raw id (2026-11-03: "Codex
+ * self_serve_business_prolite" was shown as is). A name the provider already
+ * wrote for people ("SuperGrok Heavy") is kept. An id is looked up as sent,
+ * then without its leading words; a Business or Enterprise id of any flavor
+ * is that plan; anything else is cleaned and title-cased
+ * ("team_annual" -> "Team Annual").
+ */
+export function humanPlanName(plan: string | null | undefined): string | null {
+  const raw = plan?.trim();
+  if (!raw) return null;
+  // spaces or capitals and no id separators: already a name
+  if (!/[_]/.test(raw) && (/\s/.test(raw) || /[A-Z]/.test(raw))) return raw;
+  let id = raw.toLowerCase().replace(/[\s.]+/g, "_");
+  if (PLAN_NAMES[id]) return PLAN_NAMES[id]!;
+  for (let stripped = id.replace(PLAN_ID_PREFIX, ""); stripped !== id && stripped; stripped = id.replace(PLAN_ID_PREFIX, "")) {
+    id = stripped;
+    if (PLAN_NAMES[id]) return PLAN_NAMES[id]!;
+  }
+  const words = id.split(/[_-]+/).filter(Boolean);
+  if (words.includes("enterprise")) return "Enterprise";
+  if (words.includes("business")) return "Business";
+  if (words.length === 0) return null;
+  return words.map((word) => PLAN_NAMES[word] ?? (/^\d/.test(word) ? word : word[0]!.toUpperCase() + word.slice(1))).join(" ");
+}
+
 /** The reason in the person's language. */
 export function planFailureText(failure: PlanFailure): string {
   switch (failure.kind) {
@@ -118,7 +174,7 @@ function rowOf(provider: PlanProvider): PlanRow {
     id: provider.id,
     name: access === "api-key" ? t("planUsage.apiKeyName", { name }) : provider.state ? provider.name : name,
     driver: provider.driver ?? "",
-    plan: provider.plan ?? null,
+    plan: humanPlanName(provider.plan),
     state,
     access,
     instanceId: provider.instanceId ?? null,

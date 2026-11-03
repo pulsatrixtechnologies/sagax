@@ -43953,7 +43953,22 @@ async function runPreAuth(req: IncomingMessage, res: ServerResponse, url: URL, p
 }
 
 /** #1388 wave 4 step 2: resolveRequestAuth, session/idp gates, visibility and request scopes. */
-async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL, path: string, method: string, state: { m?: RegExpMatchArray | null; releaseWorkspaceRequest?: () => void }): Promise<RequestAuth | null> {
+/** The request-scoped stores authenticate sets. enterWith after an await
+ * inside authenticate does not reach its caller's frame, so handleRequest
+ * enters them again from here before any route runs (enterRequestScopes). */
+type RequestScopes = {
+  viewer: string | null;
+  delegated: boolean;
+  continuation: ReturnType<typeof takeOwnerContinuation>;
+  actConfirmed: ReturnType<typeof takeActConfirmation> | null;
+};
+function enterRequestScopes(scopes: RequestScopes): void {
+  threadViewerScope.enterWith(scopes.viewer);
+  delegatedRequestScope.enterWith(scopes.delegated);
+  continuationThreadScope.enterWith(scopes.continuation);
+  actConfirmedScope.enterWith(scopes.actConfirmed);
+}
+async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL, path: string, method: string, state: { m?: RegExpMatchArray | null; releaseWorkspaceRequest?: () => void; scopes?: RequestScopes }): Promise<RequestAuth | null> {
   const gate = resolveRequestAuth(req, {
     sessions,
     cookieName: SESSION_COOKIE,
@@ -44152,7 +44167,9 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
   // without the request read who is asking from here. Set for every
   // request, so a kept-alive connection never inherits one.
   const scopedViewerId = serviceThreadViewer(serviceViewerClosed(auth, path, privateThreads()), viewerId);
-  threadViewerScope.enterWith(scopedViewerId ?? null);
+  const scopes: RequestScopes = { viewer: scopedViewerId ?? null, delegated: false, continuation: null, actConfirmed: null };
+  state.scopes = scopes;
+  threadViewerScope.enterWith(scopes.viewer);
   // On someone's behalf (act, an AI client): a confidential thread is not
   // there. Named in the path or query: 404; in an answer: cut out, and an
   // answer that still names one is withheld.
@@ -44165,14 +44182,17 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
   const continuation = takeOwnerContinuation(typeof continuationHeader === "string" ? continuationHeader : undefined, method, path);
   const delegated = !continuation && ((auth.kind === "session" && auth.session.ephemeral === true)
     || secureTokenMatch(typeof onBehalfHeader === "string" ? onBehalfHeader : undefined, ON_BEHALF_SECRET));
+  scopes.delegated = delegated;
+  scopes.continuation = continuation;
   delegatedRequestScope.enterWith(delegated);
   continuationThreadScope.enterWith(continuation);
   const confirmedHeader = req.headers[ACT_CONFIRMED_HEADER];
   // only this server's own replay carries it: a bot act copy of the
   // person's session, or the operator through the desktop owner header
-  actConfirmedScope.enterWith((auth.kind === "session" && isBotActSession(auth.session)) || (auth.kind === "loopback" && auth.trust !== "service")
+  scopes.actConfirmed = (auth.kind === "session" && isBotActSession(auth.session)) || (auth.kind === "loopback" && auth.trust !== "service")
     ? takeActConfirmation(typeof confirmedHeader === "string" ? confirmedHeader : undefined, method, path)
-    : null);
+    : null;
+  actConfirmedScope.enterWith(scopes.actConfirmed);
   if (delegated) {
     const confidentialIds = confidentialThreadIds();
     if (confidentialIds.size) {
@@ -47038,12 +47058,14 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
   if (!parsed) return;
   const { url, path, method } = parsed;
   /** Shared scratch for named handleRequest steps (#1388 wave 4 step 2). */
-  const state: { m: RegExpMatchArray | null; releaseWorkspaceRequest?: () => void } = { m: null };
+  const state: { m: RegExpMatchArray | null; releaseWorkspaceRequest?: () => void; scopes?: RequestScopes } = { m: null };
   try {
     if (await originGates(req, res, url, path, method)) return;
     if (await runPreAuth(req, res, url, path, method)) return;
     const auth = await authenticate(req, res, url, path, method, state);
     if (!auth) return;
+    // Set for every request, so a kept-alive connection never inherits one.
+    enterRequestScopes(state.scopes ?? { viewer: null, delegated: false, continuation: null, actConfirmed: null });
     if (await runRoutes(req, res, url, path, method, auth)) return;
     if (await runInternal(req, res, url, path, method, auth)) return;
     if (await fallback(req, res, url, path, method, auth, state)) return;

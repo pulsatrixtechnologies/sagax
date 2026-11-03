@@ -314,6 +314,11 @@ posixOnly("confidential thread of a person on a team bot someone else owns", () 
     const created = await api("POST", `/api/bots/${botId}/tasks`, ana, { title: `Projet ${SECRET}`, confidential: true });
     expect(created.status, created.text).toBe(201);
     expect(created.body.task.confidential).toBe(true);
+    // The thread is Ana's: routes read who is asking from the request scope
+    // authenticate sets (lost after its awaits until 91f41daf7), so a
+    // member's thread on a shared bot was created with no owner and then
+    // read as missing to her.
+    expect(created.body.task.ownerPrincipalId).toBe(ids.ana);
     secretThread = created.body.task.threadId;
     for (const body of [{ confidential: false }, { confidential: false, confirmConfidential: true }]) {
       const off = await api("PATCH", `/api/bots/${botId}/tasks/${secretThread}`, ana, body);

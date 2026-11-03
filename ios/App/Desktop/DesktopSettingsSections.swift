@@ -36,9 +36,8 @@ struct DesktopSettingsHeading: View {
     init(_ title: Text) { self.title = title }
 
     var body: some View {
-        DesktopText(title, size: 13, weight: .medium, line: 18, color: \.inkSecondary)
-            .padding(.leading, 2)
-            .padding(.top, 4)
+        DesktopText(title, size: 13, line: 18, color: \.inkSecondary)
+            .padding(.leading, 4)
             .accessibilityAddTraits(.isHeader)
     }
 }
@@ -80,35 +79,27 @@ struct DesktopSubPageRow: View {
 private struct DesktopGeneralMainSettings: View {
     @EnvironmentObject private var model: DesktopSettingsModel
     @AppStorage(PrefKey.language) private var language = AppLanguage.system.rawValue
+    @ObservedObject private var mode = DesktopInterfaceMode.shared
     @State private var editingAboutMe = false
     let openAdvanced: () -> Void
 
     var body: some View {
         let config = model.config
         // Settings > Account (2026-10-28): Account (who is signed in, About
-        // me), Appearance (Language), System (Advanced), under the desktop's
-        // grey headings. The effort for new bots is Models > Defaults for
-        // new bots now.
-        DesktopSettingsHeading(Text("Account"))
-        AnyView(DesktopProfileCard())
-        Button { editingAboutMe = true } label: {
-            DesktopCollapsedRow(title: Text("About me"), summary: aboutMeSummary)
+        // me), Appearance (Language, time zone), System (Guided tours,
+        // Advanced), under the desktop's grey headings.
+        DesktopSettingsGroup(Text("Account"), identifier: "account") {
+            AnyView(DesktopProfileCard())
+            DesktopSubPageRowBare(title: Text("About me"), summary: aboutMeSummary, action: Text("Edit"),
+                                  identifier: "desktop-settings.about-me") { editingAboutMe = true }
         }
-        .buttonStyle(DesktopHoverFill(radius: 14))
-        .desktopHairlineBox()
-        .accessibilityIdentifier("desktop-settings.about-me")
         .sheet(isPresented: $editingAboutMe) {
             DesktopAboutMeEditor(initial: config?.profile?.aboutMe ?? "")
                 .environmentObject(model)
         }
-        DesktopSettingsHeading(Text("Appearance"))
-        DesktopSettingsGroup {
-            DesktopSettingRow(
-                title: Text("Language"),
-                subtitle: Text("Follows your system language unless you pick one."),
-                help: Text("The app follows your system language unless you pick one here. Buttons drawn by iPadOS itself follow the iPad's language.")
-            ) {
-                DesktopSelect(
+        DesktopSettingsGroup(Text("Appearance"), identifier: "appearance") {
+            DesktopCompactRow(Text("Language"), identifier: "language") {
+                DesktopPillSelect(
                     options: AppLanguage.allCases.map { ($0.rawValue, $0.optionLabel) },
                     selection: language,
                     shown: AppLanguage(rawValue: language).map(\.inEffect)?.optionLabel,
@@ -119,13 +110,18 @@ private struct DesktopGeneralMainSettings: View {
             }
             DesktopTimeZoneRows()
         }
-        DesktopSettingsHeading(Text("System"))
-        DesktopSubPageRow(
-            title: Text("Advanced"),
-            summary: Text("Parallel threads, recovery, cleanup, group turns, routines"),
-            identifier: "desktop-settings.advanced",
-            open: openAdvanced
-        )
+        DesktopSettingsGroup(Text("System"), identifier: "system") {
+            // the desktop's guided tours (GuidedToursRow) play in its window;
+            // on the iPad the row says so behind its help
+            DesktopCompactRow(Text("Guided tours"), identifier: "tours") {
+                DesktopTourButton(title: Text("App tour"), identifier: "desktop-settings.app-tour")
+                DesktopTourButton(title: Text("Welcome tour"), identifier: "desktop-settings.welcome-tour")
+            }
+            if mode.advanced {
+                DesktopSubPageRowBare(title: Text("Advanced"), summary: Text("People's tool access, conversation cleanup, diagnostics"),
+                                      action: Text("Open"), identifier: "desktop-settings.advanced", open: openAdvanced)
+            }
+        }
     }
 
     private var aboutMeSummary: Text {
@@ -133,6 +129,58 @@ private struct DesktopGeneralMainSettings: View {
             .split(whereSeparator: \.isNewline).first.map(String.init)?
             .trimmingCharacters(in: .whitespaces) ?? ""
         return first.isEmpty ? Text("Not set") : Text(verbatim: first)
+    }
+}
+
+/// A guided tour's button (GuidedToursRow): the tours play in the desktop's
+/// window, so on the iPad the button says where to find them.
+struct DesktopTourButton: View {
+    let title: Text
+    let identifier: String
+    @State private var showing = false
+
+    var body: some View {
+        Button { showing = true } label: { title }
+            .buttonStyle(DesktopButtonStyle(kind: .control))
+            .accessibilityIdentifier(identifier)
+            .popover(isPresented: $showing) {
+                DesktopText("The app tour and the welcome tour play in Sagax on your computer.", size: 12, line: 17, color: \.inkSecondary)
+                    .frame(width: 232, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(12)
+                    .desktopPopoverOnCompact()
+            }
+    }
+}
+
+/// `SettingsSubPageRow bare`: a row of a group's card that opens a
+/// sub-page: title, summary, the accent action word and a chevron.
+struct DesktopSubPageRowBare: View {
+    @Environment(\.desktopTheme) private var theme
+    let title: Text
+    let summary: Text
+    let action: Text
+    let identifier: String
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    DesktopText(title)
+                    DesktopText(summary, size: 12.5, line: 18, color: \.inkSecondary).lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                DesktopText(action, size: 12.5, weight: .medium, color: \.accent)
+                DesktopSettingsIconView(icon: .chevronRight, size: 14)
+                    .foregroundStyle(theme.inkSecondary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(DesktopHoverFill(radius: 0))
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -299,48 +347,125 @@ struct DesktopCollapsedRow: View {
     }
 }
 
-/// Profile: the initial, the name and the address, edited in place.
+/// The account row (AccountCard.tsx, OperatorIdentity): the initial, the
+/// name and the address edited in place, the person's own label under the
+/// name (MyLabelField) and the copy-email button.
 struct DesktopProfileCard: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var model: DesktopSettingsModel
+    @EnvironmentObject private var session: Session
+    @ObservedObject private var people = PeopleDirectory.shared
     @State private var name = ""
     @State private var email = ""
     @State private var seeded = false
+    @State private var label = ""
+    @State private var editingLabel = false
+    @State private var labelError: String?
+    @State private var copied = false
+    @FocusState private var labelFocused: Bool
+
+    private var principal: String? {
+        let id = session.account?.principalId?.trimmingCharacters(in: .whitespaces) ?? session.roomViewer.actorId
+        return id.isEmpty ? nil : id
+    }
 
     var body: some View {
         let profile = model.config?.profile
-        DesktopSettingsCard(Text("Profile"), summary: Text(verbatim: profile?.name ?? ""), identifier: "general.profile") {
-            HStack(spacing: 12) {
-                Text(verbatim: String((name.isEmpty ? (profile?.email ?? "?") : name).prefix(1)).uppercased())
-                    .font(theme.font(13, .semibold))
+        HStack(spacing: 12) {
+            Text(verbatim: String((name.isEmpty ? (email.isEmpty ? "?" : email) : name).prefix(1)).uppercased())
+                .font(theme.font(13, .semibold))
+                .foregroundStyle(theme.ink)
+                .frame(width: 36, height: 36)
+                .background(theme.raised, in: Circle())
+            VStack(alignment: .leading, spacing: 4) {
+                TextField(text: $name, prompt: Text("Your name").foregroundColor(theme.inkSecondary)) { Text("Your name") }
+                    .font(theme.font(13, .medium))
                     .foregroundStyle(theme.ink)
-                    .frame(width: 36, height: 36)
-                    .background(theme.raised, in: Circle())
-                VStack(alignment: .leading, spacing: 4) {
-                    TextField(text: $name, prompt: Text("Your name").foregroundColor(theme.inkSecondary)) { Text("Your name") }
-                        .font(theme.font(14, .semibold))
-                        .foregroundStyle(theme.ink)
-                        .frame(height: 21)
-                        .submitLabel(.done)
-                        .onSubmit { save(.profileName(name), was: profile?.name) }
-                        .accessibilityIdentifier("desktop-settings.profile-name")
-                    TextField(text: $email, prompt: Text("Email").foregroundColor(theme.inkSecondary)) { Text("Email") }
+                    .frame(height: 18)
+                    .submitLabel(.done)
+                    .onSubmit { save(.profileName(name), was: profile?.name) }
+                    .accessibilityIdentifier("desktop-settings.profile-name")
+                if let principal { labelLine(principal) }
+                HStack(spacing: 4) {
+                    TextField(text: $email, prompt: Text(verbatim: "you@example.com").foregroundColor(theme.inkSecondary)) { Text("Email") }
                         .font(theme.font(13))
                         .foregroundStyle(theme.inkSecondary)
-                        .frame(height: 19.5)
+                        .frame(height: 18)
+                        .fixedSize()
                         .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .submitLabel(.done)
                         .onSubmit { save(.profileEmail(email), was: profile?.email) }
                         .accessibilityIdentifier("desktop-settings.profile-email")
+                    if !email.trimmingCharacters(in: .whitespaces).isEmpty {
+                        Button {
+                            UIPasteboard.general.string = email.trimmingCharacters(in: .whitespaces)
+                            copied = true
+                            Task { try? await Task.sleep(nanoseconds: 1_500_000_000); copied = false }
+                        } label: {
+                            DesktopSettingsIconView(icon: copied ? .check : .copy, size: 13)
+                                .foregroundStyle(copied ? theme.success : theme.inkSecondary)
+                                .frame(width: 24, height: 24)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(DesktopHoverFill(radius: 6))
+                        .accessibilityLabel(copied ? Text("Email copied") : Text("Copy email"))
+                        .accessibilityIdentifier("desktop-settings.copy-email")
+                    }
+                    Spacer(minLength: 0)
+                }
+                if let labelError {
+                    DesktopText(verbatim: labelError, size: 12, line: 16, color: \.danger)
                 }
             }
-            .padding(.top, 1)
-            .padding(.bottom, 3)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("settings-card.general.account")
         .onAppear(perform: seed)
         .onValueChange(of: model.config?.profile) { _ in seed() }
+    }
+
+    /// The person's own label (`InlineEditableText`, muted 12/16): the
+    /// placeholder reads as editable; a tap edits it in place.
+    @ViewBuilder
+    private func labelLine(_ principal: String) -> some View {
+        let saved = people.label(principal) ?? ""
+        if editingLabel {
+            TextField(text: $label, prompt: Text("Add a label").foregroundColor(theme.inkSecondary)) { Text("Edit label") }
+                .font(theme.font(12))
+                .foregroundStyle(theme.inkSecondary)
+                .frame(height: 16)
+                .focused($labelFocused)
+                .submitLabel(.done)
+                .onSubmit { commitLabel(principal, was: saved) }
+                .onChange(of: labelFocused) { focused in if !focused { commitLabel(principal, was: saved) } }
+                .accessibilityIdentifier("desktop-settings.my-label-field")
+        } else {
+            Button {
+                label = saved
+                editingLabel = true
+                labelFocused = true
+            } label: {
+                DesktopText(verbatim: saved.isEmpty ? AppStrings.localized("Add a label") : saved, size: 12, line: 16, color: \.inkSecondary)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Edit label"))
+            .accessibilityValue(Text(verbatim: saved))
+            .accessibilityIdentifier("desktop-settings.my-label")
+        }
+    }
+
+    private func commitLabel(_ principal: String, was: String) {
+        guard editingLabel else { return }
+        editingLabel = false
+        let next = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard next != was else { return }
+        Task { labelError = await people.saveLabel(principal, next, session: session) }
     }
 
     private func seed() {
@@ -454,76 +579,60 @@ struct DesktopExperimentalSettings: View {
 
     var body: some View {
         let config = model.config
-        let saving = !model.saving.isEmpty || config == nil
-        DesktopSettingsCard(
+        let features = config?.features
+        let busy = !model.saving.isEmpty || config == nil
+        let skills = features?.skillAuthoring != false
+        let browser = features?.browser == true
+        let engine = config?.browserEngine
+        let browserReady = engine?.kind != "unavailable"
+        let browserInstallable = engine?.installable == true
+        let decision = features?.decisionModel == true
+        let dataWindow = features?.dataWindow == true
+        let notetaker = features?.meetingNotetaker == true
+        let titles = features?.llmThreadTitles == true
+        let on = [skills, browser, decision, dataWindow, notetaker, devPods, titles].filter { $0 }.count
+        DesktopSettingsGroup(
             Text("Experimental features"),
-            subtitle: Text("Early features may change while we test them. Each one says whether it starts on or off."),
-            identifier: "experimental.features"
+            accessory: AnyView(DesktopText(verbatim: "· " + String(format: AppStrings.localized("%@ of %@ on"), "\(on)", "7"), color: \.inkSecondary).lineLimit(1)),
+            identifier: "experimental"
         ) {
-            let skills = config?.features?.skillAuthoring ?? true
-            DesktopFeatureRow(
-                title: Text("Bots may draft skills for your review"),
-                detail: Text("On by default. Save a bot's verification run as a skill from the Verify card, or ask a supported bot to run /create-verification-skill. Every change waits for your review."),
-                isOn: skills, label: Text("Allow bots to draft skills"), identifier: "desktop-settings.skill-authoring",
-                disabled: saving
-            ) { Task { _ = await model.apply(.feature("skillAuthoring", !skills), key: "skills") } }
-            let browser = config?.features?.browser == true
-            let engine = config?.browserEngine
-            DesktopFeatureRow(
-                title: Text("Built-in browser"),
-                detail: engine?.kind == "unavailable"
-                    ? Text(verbatim: AppStrings.localized("The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Experimental and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server."))
-                    : (browser
-                        ? Text("Enabled for this installation. Each bot also has its own browser switch.")
-                        : Text("Off by default. Enable it to let supported bots use a browser tab you can watch and take over.")),
-                isOn: browser, label: Text("Enable the built-in browser"), identifier: "desktop-settings.browser",
-                disabled: saving || (!browser && engine?.kind == "unavailable" && engine?.installable != true),
-                divided: true
-            ) { Task { _ = await model.apply(.feature("browser", !browser), key: "browser") } }
-            let browseBots = config?.features?.templates == true
-            DesktopFeatureRow(
-                title: Text("Browse Bots"),
-                detail: Text("Off by default. Shows Browse Bots in the sidebar menu, to find and add ready-made bots and teams."),
-                isOn: browseBots, label: Text("Show Browse Bots in the sidebar"), identifier: "desktop-settings.browse-bots",
-                disabled: saving, divided: true
-            ) { Task { _ = await model.apply(.feature("templates", !browseBots), key: "templates") } }
-            DesktopFeatureRow(
-                title: Text(verbatim: DevPodsStrings.settingTitle),
-                detail: Text(verbatim: DevPodsStrings.settingDetail),
-                isOn: devPods, label: Text(verbatim: DevPodsStrings.settingTitle), identifier: "desktop-settings.dev-pods",
-                divided: true
-            ) { devPods.toggle() }
+            row("skillAuthoring", Text("Bots may write their own skills"), aria: Text("Allow bots to draft skills"), on: skills, busy: busy, identifier: "desktop-settings.skill-authoring")
+            row("browser", Text("Built-in browser"), aria: Text("Enable the built-in browser"), on: browser, busy: busy,
+                unavailable: !browserReady && !browserInstallable,
+                reason: Text(verbatim: AppStrings.localized("The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Experimental and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server.")),
+                note: !browserReady && browserInstallable ? Text("Then install the engine from a bot's Computer > Browser.") : nil,
+                identifier: "desktop-settings.browser")
+            row("decisionModel", Text("Decision model"), aria: Text("Decision model"), on: decision, busy: busy, identifier: "desktop-settings.decision-model")
+            row("dataWindow", Text("Data window"), aria: Text("Turn on the Data window"), on: dataWindow, busy: busy,
+                unavailable: features?.dataWindow == nil,
+                reason: Text("This server does not offer the Data window yet. It comes with Sagax 0.5.3 on the server."),
+                identifier: "desktop-settings.data-window")
+            row("meetingNotetaker", Text("Meeting notetaker (Google Meet)"), aria: Text("Meeting notetaker (Google Meet)"), on: notetaker, busy: busy,
+                unavailable: features?.meetingNotetaker == nil,
+                reason: Text("This server does not offer the meeting notetaker yet."),
+                note: Text("Bots can ask to join a Google Meet and take notes, after your approval on each meeting. Not yet tested on real meetings."),
+                identifier: "desktop-settings.meeting-notetaker")
+            row("llmThreadTitles", Text("Generated conversation titles"), aria: Text("Turn on generated conversation titles"), on: titles, busy: busy,
+                unavailable: features?.llmThreadTitles == nil,
+                reason: Text("This server does not offer this feature yet. Update Sagax on the server."),
+                identifier: "desktop-settings.thread-titles")
+            DesktopDescribedRow(Text("Context pods for development"), identifier: "devPods") {
+                DesktopSwitch(isOn: devPods, label: Text("Turn on context pods for development"), identifier: "desktop-settings.dev-pods") { devPods.toggle() }
+            }
         }
     }
-}
 
-/// One switch of Experimental features (`text-[14px] font-medium`, detail
-/// 12 pt relaxed; a hairline above the second and later).
-struct DesktopFeatureRow: View {
-    @Environment(\.desktopTheme) private var theme
-    let title: Text
-    let detail: Text
-    let isOn: Bool
-    let label: Text
-    var identifier: String
-    var disabled = false
-    var divided = false
-    let toggle: () -> Void
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 2) {
-                DesktopText(title, size: 14, weight: .medium, line: 21)
-                DesktopText(detail, size: 12, line: 19.5, color: \.inkSecondary)
+    /// `FeatureRow`: a feature the server cannot run keeps its row, greyed,
+    /// with "Not available on this server" and the reason behind the help.
+    private func row(_ feature: String, _ label: Text, aria: Text, on: Bool, busy: Bool, unavailable: Bool = false,
+                     reason: Text? = nil, note: Text? = nil, identifier: String) -> some View {
+        DesktopDescribedRow(label, description: unavailable ? Text("Not available on this server") : note, identifier: feature) {
+            if unavailable, let reason { DesktopHelpTip(help: reason) }
+            DesktopSwitch(isOn: on, label: aria, identifier: identifier, disabled: busy || (unavailable && !on)) {
+                Task { _ = await model.apply(.feature(feature, !on), key: feature) }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            DesktopSwitch(isOn: isOn, label: label, identifier: identifier, disabled: disabled, action: toggle)
         }
-        .padding(.top, divided ? 16 : 0)
-        .overlay(alignment: .top) {
-            if divided { Rectangle().fill(theme.hairline.opacity(0.3)).frame(height: 1) }
-        }
-        .padding(.top, divided ? 16 : 0)
+        .opacity(unavailable ? 0.75 : 1)
     }
 }
 

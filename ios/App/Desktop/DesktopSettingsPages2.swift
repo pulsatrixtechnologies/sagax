@@ -23,8 +23,7 @@ struct DesktopSecuritySettings: View {
                     line: 19.5, color: \.inkSecondary)
         if let error { DesktopText(Text(verbatim: error), color: \.danger) }
 
-        DesktopSettingsHeading(Text("Your keys"))
-        DesktopSettingsGroup {
+        DesktopSettingsGroup(Text("Your keys")) {
             if let keys, !keys.keys.isEmpty {
                 ForEach(keys.keys) { key in
                     DesktopSettingRow(title: Text(verbatim: key.name),
@@ -40,8 +39,7 @@ struct DesktopSecuritySettings: View {
             }
         }
 
-        DesktopSettingsHeading(Text("Approvals that need a key"))
-        DesktopSettingsGroup {
+        DesktopSettingsGroup(Text("Approvals that need a key")) {
             let hasKey = !(keys?.keys.isEmpty ?? true)
             DesktopText(hasKey ? Text("When one of these is on, approving that kind of action asks for one of your keys. Turning one off asks for your key too.")
                                : Text("Add a key first, then choose which approvals need it."),
@@ -59,8 +57,7 @@ struct DesktopSecuritySettings: View {
             }
         }
 
-        DesktopSettingsHeading(Text("Your approval rules"))
-        DesktopSettingsGroup {
+        DesktopSettingsGroup(Text("Your approval rules")) {
             if let rules, !rules.isEmpty {
                 ForEach(rules) { rule in
                     DesktopSettingRow(title: Text(verbatim: rule.description),
@@ -76,8 +73,7 @@ struct DesktopSecuritySettings: View {
             }
         }
 
-        DesktopSettingsHeading(Text("My tool access"))
-        DesktopSettingsGroup {
+        DesktopSettingsGroup(Text("My tool access")) {
             if let grants, !grants.isEmpty {
                 ForEach(grants) { grant in
                     DesktopSettingRow(title: Text(verbatim: grant.scope), subtitle: Text(verbatim: grant.state)) {
@@ -227,6 +223,7 @@ struct DesktopVaultSettings: View {
 /// Settings > Notifications: Alerts (the system permission, sounds, the
 /// icon's count, the approval chime), Nudges, then Blocked people.
 struct DesktopNotificationsSettings: View {
+    @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
     @AppStorage(NotificationSounds.key) private var sounds = true
     @AppStorage(AttentionPrefs.badgeKey) private var badge = true
@@ -235,20 +232,31 @@ struct DesktopNotificationsSettings: View {
     @AppStorage(AttentionPrefs.approvalChimeKey) private var approvalChime = true
     @AppStorage(NotificationSounds.choiceKey) private var soundChoice = NotificationSoundChoice.system.rawValue
     @State private var authorized: Bool?
+    /// "Keep notifications on screen": iPadOS keeps a banner up when its
+    /// style is Persistent (`alertStyle == .alert`), set in the iPad's Settings.
+    @State private var persistent = false
+    @State private var reports: [Moderation.Report]?
+    @State private var reportsError: String?
+
+    private var admin: Bool {
+        let role = session.surfaceGate.viewer?.role
+        return role == "admin" || role == "owner" || session.surfaceGate.scope == .sidecar
+    }
+
+    private var thisIPad: AnyView {
+        AnyView(DesktopText(verbatim: "· " + AppStrings.localized("On this iPad"), color: \.inkSecondary).lineLimit(1))
+    }
 
     var body: some View {
-        DesktopSettingsHeading(Text("Alerts · On this iPad"))
-        DesktopSettingsGroup {
-            DesktopSettingRow(title: Text("Let your bots notify you when something needs your attention")) {
-                if authorized == true {
-                    DesktopText(Text("On"), color: \.success)
-                } else {
+        DesktopSettingsGroup(Text("Alerts"), accessory: thisIPad, identifier: "alerts") {
+            if authorized != true {
+                DesktopCompactRow(Text("Let your bots notify you when something needs your attention"), identifier: "notificationInvite") {
                     Button("Enable") { Task { await enable() } }
-                        .buttonStyle(DesktopButtonStyle(kind: .ghost, size: 12.5, weight: .medium, height: 30, horizontal: 10))
+                        .buttonStyle(DesktopButtonStyle(kind: .control))
                         .accessibilityIdentifier("desktop-settings.notifications.enable")
                 }
             }
-            DesktopSettingRow(title: Text("Notification sounds")) {
+            DesktopCompactRow(Text("Notification sounds"), identifier: "notificationSounds") {
                 DesktopSwitch(isOn: sounds, label: Text("Notification sounds"), identifier: "desktop-settings.notifications.sounds") {
                     sounds.toggle()
                     let value = sounds
@@ -258,57 +266,148 @@ struct DesktopNotificationsSettings: View {
                     }
                 }
             }
-            DesktopSettingRow(title: Text("Notification sound")) {
-                DesktopSelect(options: NotificationSoundChoice.allCases.map { ($0.rawValue, AppStrings.localized($0.label)) },
-                              selection: soundChoice, label: Text("Notification sound"), identifier: "desktop-settings.notifications.sound",
-                              disabled: !sounds) { value in
+            DesktopCompactRow(Text("Notification sound"), identifier: "notificationSound") {
+                DesktopPillSelect(options: NotificationSoundChoice.allCases.map { ($0.rawValue, AppStrings.localized($0.label)) },
+                                  selection: soundChoice, label: Text("Notification sound"), identifier: "desktop-settings.notifications.sound",
+                                  disabled: !sounds) { value in
                     soundChoice = value
                     NotificationSounds.applyChoice(NotificationSoundChoice.parse(value))
                     Task { await PushRegistrar.shared.sync() }
                 }
             }
-            DesktopSettingRow(title: Text("Unread count on the app icon")) {
+            DesktopDescribedRow(Text("Keep notifications on screen"), description: Text("On the iPad, choose Persistent banners in Settings > Notifications > Sagax."), identifier: "persistentNotifications") {
+                DesktopSwitch(isOn: persistent, label: Text("Keep notifications on screen"), identifier: "desktop-settings.notifications.persistent") {
+                    if let url = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(url) }
+                }
+            }
+            DesktopCompactRow(Text("Unread count on the app icon"), identifier: "dockBadge") {
                 DesktopSwitch(isOn: badge, label: Text("Unread count on the app icon"), identifier: "desktop-settings.notifications.badge") {
                     badge.toggle()
                     NotificationCoordinator.shared.setBadge(session.state.unreadCount)
                     Task { await PushRegistrar.shared.sync() }
                 }
             }
-            DesktopSettingRow(title: Text("Chime when an approval arrives")) {
+            DesktopCompactRow(Text("Chime when an approval arrives"), identifier: "approvalChime") {
                 DesktopSwitch(isOn: approvalChime, label: Text("Chime when an approval arrives"), identifier: "desktop-settings.notifications.chime") {
                     approvalChime.toggle()
                     Task { await PushRegistrar.shared.sync() }
                 }
             }
         }
-        DesktopSettingsHeading(Text("Nudges · On this iPad"))
-        DesktopSettingsGroup {
-            DesktopSettingRow(title: Text("Nudge sound")) {
+        DesktopSettingsGroup(Text("Nudges"), accessory: thisIPad, identifier: "nudges") {
+            DesktopCompactRow(Text("Nudge sound"), identifier: "nudgeSound") {
                 DesktopSwitch(isOn: nudgeSound, label: Text("Nudge sound"), identifier: "desktop-settings.notifications.nudge-sound") { nudgeSound.toggle() }
             }
-            DesktopSettingRow(title: Text("Shake on nudge"), subtitle: Text("The iPad buzzes, as the desktop window shakes.")) {
+            DesktopCompactRow(Text("Shake on nudge"), identifier: "nudgeShake") {
                 DesktopSwitch(isOn: nudgeHaptic, label: Text("Shake on nudge"), identifier: "desktop-settings.notifications.nudge-shake") { nudgeHaptic.toggle() }
             }
         }
-        DesktopSettingsHeading(Text("Blocked people"))
-        DesktopSettingsGroup {
+        DesktopSettingsGroup(Text("Blocked people"), identifier: "blockedPeople") {
             if session.blockedPeople.isEmpty {
-                DesktopSettingRow(title: Text("Nobody blocked")) { EmptyView() }
+                DesktopCompactRow(Text("Nobody blocked"), identifier: "blockedPeople") { EmptyView() }
             } else {
                 ForEach(session.blockedPeople, id: \.id) { person in
-                    DesktopSettingRow(title: Text(verbatim: person.name)) {
+                    DesktopCompactRow(person.name.isEmpty ? Text("Someone") : Text(verbatim: person.name), identifier: "blocked-\(person.id)") {
                         Button("Unblock") { Task { _ = await session.unblock(person.id) } }
-                            .buttonStyle(DesktopButtonStyle(kind: .ghost, size: 12.5, weight: .medium, height: 30, horizontal: 10))
+                        .buttonStyle(DesktopButtonStyle(kind: .control))
                     }
                 }
             }
+            DesktopText(Text("Their messages are hidden for you only, on all your devices."), size: 12.5, line: 18, color: \.inkSecondary)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
         }
-        DesktopText(Text("Their messages are hidden for you only, on all your devices."), size: 12, line: 16, color: \.inkSecondary)
-            .padding(.leading, 2)
+        if admin {
+            DesktopSettingsGroup(Text("Reports"), identifier: "reports") {
+                let listed = Moderation.listed(reports ?? [])
+                if reports != nil && !listed.contains(where: \.isOpen) {
+                    DesktopCompactRow(Text("No open reports"), identifier: "reports") { EmptyView() }
+                }
+                ForEach(listed) { report in reportRow(report) }
+                if let reportsError {
+                    DesktopText(verbatim: reportsError, size: 12.5, line: 18, color: \.danger)
+                        .padding(.horizontal, 14).padding(.bottom, 8)
+                }
+            }
+        }
+        Color.clear.frame(height: 0)
             .task {
                 await session.loadModeration()
-                authorized = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .authorized
+                let settings = await UNUserNotificationCenter.current().notificationSettings()
+                authorized = settings.authorizationStatus == .authorized
+                persistent = settings.alertStyle == .alert
+                if admin { await loadReports() }
             }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                Task {
+                    let settings = await UNUserNotificationCenter.current().notificationSettings()
+                    authorized = settings.authorizationStatus == .authorized
+                    persistent = settings.alertStyle == .alert
+                }
+            }
+    }
+
+    private func reportRow(_ report: Moderation.Report) -> some View {
+        let someone = AppStrings.localized("Someone")
+        let line = String(format: AppStrings.localized("%@ reported %@: %@"),
+                          report.reporterName?.isEmpty == false ? report.reporterName! : someone,
+                          report.reportedName?.isEmpty == false ? report.reportedName! : someone,
+                          Self.reasonLabel(report.reason))
+        let place = report.peopleDm == true ? AppStrings.localized("In a direct message")
+            : report.groupName.map { String(format: AppStrings.localized("In %@"), $0) }
+        let date = Date(timeIntervalSince1970: report.at / 1000).formatted(date: .abbreviated, time: .shortened)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 0) {
+                    DesktopText(verbatim: line)
+                    DesktopText(verbatim: [place, date].compactMap { $0 }.joined(separator: " · "), size: 12, line: 16, color: \.inkSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if report.isOpen {
+                    Button("Mark handled") {
+                        Task {
+                            do { _ = try await session.settingsClient?.resolveReport(id: report.id); await loadReports() }
+                            catch { reportsError = error.localizedDescription }
+                        }
+                    }
+                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                } else {
+                    DesktopText("Handled", size: 12, line: 16, color: \.inkSecondary)
+                }
+            }
+            if let excerpt = report.excerpt, !excerpt.isEmpty {
+                DesktopText(verbatim: excerpt, size: 12.5, line: 18, color: \.inkSecondary)
+                    .padding(.leading, 8)
+                    .overlay(alignment: .leading) { Rectangle().fill(theme.hairline).frame(width: 2) }
+            }
+            if let note = report.note, !note.isEmpty {
+                DesktopText(verbatim: String(format: AppStrings.localized("Note: %@"), note), size: 12.5, line: 18, color: \.inkSecondary)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+    }
+
+    static func reasonLabel(_ reason: String) -> String {
+        switch reason {
+        case "harassment": AppStrings.localized("Harassment or bullying")
+        case "hate": AppStrings.localized("Hate speech")
+        case "sexual": AppStrings.localized("Sexual content")
+        case "violence": AppStrings.localized("Violence or threats")
+        case "spam": AppStrings.localized("Spam or scam")
+        case "privacy": AppStrings.localized("Private information")
+        default: AppStrings.localized("Something else")
+        }
+    }
+
+    private func loadReports() async {
+        guard let client = session.settingsClient else { return }
+        do {
+            reports = try await client.moderationReports()
+            reportsError = nil
+        } catch {
+            reportsError = error.localizedDescription
+        }
     }
 
     private func enable() async {
@@ -336,8 +435,7 @@ struct DesktopImportSettings: View {
     private var primary: Bot? { session.state.bots.first { $0.chiefOfStaff == true } }
 
     var body: some View {
-        DesktopSettingsHeading(Text("Import a Grok Bot"))
-        DesktopSettingsGroup {
+        DesktopSettingsGroup(Text("Import a Grok Bot")) {
             DesktopText(Text("Bring a shared Grok Bot into Sagax: its instructions, skills (turned off), timed routines (paused) and the apps it used. The model, the computer, logins and keys never come over; the bot uses your own engine and apps."),
                         size: 12.5, line: 18, color: \.inkSecondary)
                 .padding(.horizontal, 14).padding(.vertical, 10)
@@ -355,8 +453,7 @@ struct DesktopImportSettings: View {
             .environmentObject(session)
         }
 
-        DesktopSettingsHeading(Text("Import preferences"))
-        DesktopSettingsGroup {
+        DesktopSettingsGroup(Text("Import preferences")) {
             VStack(alignment: .leading, spacing: 8) {
                 DesktopText(Text("Paste preference lines for your primary bot. Nothing is written until you accept the lines on the card. A line that would replace one starts unchecked."),
                             size: 12.5, line: 18, color: \.inkSecondary)
@@ -446,22 +543,45 @@ struct DesktopImportSettings: View {
 /// Account > Appearance's time zone rows (the bots' own computer clock):
 /// "Detect time zone automatically" and, under it, the zone in use.
 struct DesktopTimeZoneRows: View {
+    @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
     @StateObject private var model = SettingsModel()
 
     var body: some View {
         Group {
-            DesktopSettingRow(title: Text("Detect time zone automatically")) {
+            DesktopCompactRow(Text("Detect time zone automatically"), identifier: "timeZoneAuto") {
                 DesktopSwitch(isOn: model.timeZoneAuto, label: Text("Detect time zone automatically"), identifier: "desktop-settings.time-zone-auto") {
                     let next = !model.timeZoneAuto
                     Task { await model.setTimeZoneAuto(next) }
                 }
             }
-            DesktopSettingRow(title: Text("Time zone")) {
-                DesktopSelect(options: Self.zones.map { ($0, $0) }, selection: model.timeZone ?? TimeZone.current.identifier,
-                              label: Text("Time zone"), identifier: "desktop-settings.time-zone", disabled: model.timeZoneAuto) { zone in
-                    Task { await model.setTimeZone(zone) }
+            DesktopCompactRow(Text("Time zone"), identifier: "timeZone") {
+                let current = model.timeZone ?? TimeZone.current.identifier
+                // the desktop's field (`h-8 w-56 rounded-full bg-control
+                // text-right`), its zones in a menu
+                Menu {
+                    ForEach(Self.zones, id: \.self) { zone in
+                        Button {
+                            Task { await model.setTimeZone(zone) }
+                        } label: {
+                            if zone == current { Label(zone, systemImage: "checkmark") } else { Text(verbatim: zone) }
+                        }
+                    }
+                } label: {
+                    Text(verbatim: current)
+                        .font(theme.font(13))
+                        .foregroundStyle(theme.ink)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.horizontal, 12)
+                        .frame(width: 224, height: 32)
+                        .background(theme.control, in: Capsule())
                 }
+                .disabled(model.timeZoneAuto)
+                .opacity(model.timeZoneAuto ? 0.6 : 1)
+                .accessibilityLabel(Text("Time zone"))
+                .accessibilityValue(Text(verbatim: current))
+                .accessibilityIdentifier("desktop-settings.time-zone")
             }
         }
         .task {

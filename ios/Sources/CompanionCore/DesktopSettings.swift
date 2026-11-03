@@ -194,6 +194,12 @@ public struct DesktopSettingsConfig: Decodable, Equatable, Sendable {
         public var claudeUserMcp: Bool?
         /// Settings > Appearance > Tool calls ("Details"): off by default.
         public var showToolCalls: Bool?
+        /// Settings > Experimental (ExperimentalSettings.tsx): a server that
+        /// predates one sends no value, and its row stays greyed.
+        public var decisionModel: Bool?
+        public var dataWindow: Bool?
+        public var meetingNotetaker: Bool?
+        public var llmThreadTitles: Bool?
     }
 
     public struct Rooms: Decodable, Equatable, Sendable { public var turnTimeoutMinutes: Int? }

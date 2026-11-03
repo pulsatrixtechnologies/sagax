@@ -23,10 +23,12 @@ struct DesktopSkinFamilies: View {
 
     var body: some View {
         let state = current
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 4) {
             DesktopSkinFamilyGrid(families: families, state: state, depth: depth, texture: texture) { family, variant in
                 wear(variant, mode: ThemeSelection.carry(state.mode, to: variant, worn: state.place.scheme))
             }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
             VStack(alignment: .leading, spacing: 0) {
                 let offered = state.place.family.variants(for: state.place.scheme, keeping: state.place.variant)
                 if offered.count > 1 {
@@ -34,7 +36,7 @@ struct DesktopSkinFamilies: View {
                         let variants = offered.filter { $0.group == group }
                         if !variants.isEmpty {
                             row(title: state.place.family.id == .phone ? Text("Variant") : Text(LocalizedStringKey(group.name))) {
-                                SwatchFlow(spacing: 8) {
+                                SwatchFlow(spacing: 6) {
                                     ForEach(variants) { variant in swatch(variant, state: state) }
                                 }
                             }
@@ -43,7 +45,7 @@ struct DesktopSkinFamilies: View {
                 }
                 if state.place.variant.hasDepth {
                     row(title: Text(LocalizedStringKey(SkinDepth.label))) {
-                        DesktopSelect(
+                        DesktopPillSelect(
                             options: SkinDepth.allCases.map { ($0, AppStrings.localized($0 == .full ? "Full (intensity)" : $0.name)) },
                             selection: depth,
                             label: Text(LocalizedStringKey(SkinDepth.label)),
@@ -53,7 +55,7 @@ struct DesktopSkinFamilies: View {
                 }
                 if state.place.family.id != .retro98 {
                     row(title: Text(LocalizedStringKey(SkinTexture.label))) {
-                        DesktopSelect(
+                        DesktopPillSelect(
                             options: SkinTexture.allCases.map { ($0, AppStrings.localized($0.name)) },
                             selection: texture,
                             label: Text(LocalizedStringKey(SkinTexture.label)),
@@ -64,7 +66,7 @@ struct DesktopSkinFamilies: View {
                 row(title: Text("Mode")) {
                     let variant = state.place.variant
                     let modes: [SkinModeChoice] = selection.mode == .computer ? [.light, .dark] : SkinModeChoice.allCases
-                    DesktopSelect(
+                    DesktopPillSelect(
                         options: modes.filter { mode in
                             mode == state.mode || (mode == .auto ? variant.followsSystem : variant.schemes.contains(mode == .light ? .light : .dark))
                         }.map { ($0, AppStrings.localized(modeTitle($0))) },
@@ -87,16 +89,8 @@ struct DesktopSkinFamilies: View {
     }
 
     /// One setting under the cards: its name, then its control on the right.
-    private func row<Control: View>(title: Text, @ViewBuilder control: () -> Control) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            DesktopText(title, line: 19.5)
-                .fixedSize()
-            Spacer(minLength: 8)
-            control()
-        }
-        .padding(.vertical, 8)
-        .frame(minHeight: 44)
-        .overlay(alignment: .top) { Rectangle().fill(theme.hairline.opacity(0.4)).frame(height: 1) }
+    private func row<Control: View>(title: Text, @ViewBuilder control: @escaping () -> Control) -> some View {
+        DesktopCompactRow(title, control: control)
     }
 
     private func swatch(_ variant: SkinVariant, state: (place: SkinPlace, mode: SkinModeChoice)) -> some View {
@@ -118,9 +112,11 @@ struct DesktopSkinFamilies: View {
                           : AnyShapeStyle(flat.color))
                     .rotationEffect(.degrees(-45))
             }
-            .frame(width: 24, height: 24)
-            .overlay(Circle().strokeBorder(selected ? theme.accent : theme.hairline, lineWidth: selected ? 2 : 1))
-            .padding(2)
+            .frame(width: 22, height: 22)
+            .overlay(Circle().strokeBorder(selected ? Color.clear : theme.hairline, lineWidth: 1))
+            .padding(selected ? 2 : 0)
+            .overlay(Circle().strokeBorder(selected ? theme.accentBorder : Color.clear, lineWidth: 2))
+            .padding(selected ? 0 : 2)
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -177,11 +173,11 @@ struct DesktopSkinFamilyGrid: View {
     @State private var width: CGFloat = 606
 
     var body: some View {
-        let columns = max(1, Int((width + 12) / (190 + 12)))
+        let columns = max(1, Int((width + 8) / (132 + 8)))
         let rows = stride(from: 0, to: families.count, by: columns).map { Array(families[$0..<min($0 + columns, families.count)]) }
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             ForEach(rows, id: \.first?.id) { row in
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: 8) {
                     ForEach(row) { family in
                         let selected = family.id == state.place.family.id
                         let variant = selected ? state.place.variant

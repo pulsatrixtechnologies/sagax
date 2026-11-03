@@ -120,32 +120,52 @@ struct DesktopOrganizationSettings: View {
 
 // MARK: - Appearance
 
+/// Simple or Advanced (`sagax.interfaceMode.v1`, interface-mode.ts): one
+/// choice per person, Advanced by default; on an organization server the key
+/// is one of the person's synced preferences.
+@MainActor
+final class DesktopInterfaceMode: ObservableObject {
+    static let shared = DesktopInterfaceMode()
+    @Published private(set) var advanced = UserDefaults.standard.string(forKey: ModelMenu.interfaceModeKey) != "simple"
+
+    func load(_ session: Session) async {
+        guard let record = try? await session.settingsClient?.sidebarPreferenceRecord(),
+              let raw = record.preferences[ModelMenu.interfaceModeKey] else { return }
+        UserDefaults.standard.set(raw, forKey: ModelMenu.interfaceModeKey)
+        advanced = raw != "simple"
+    }
+
+    func set(_ on: Bool, session: Session) {
+        let raw = on ? "advanced" : "simple"
+        advanced = on
+        UserDefaults.standard.set(raw, forKey: ModelMenu.interfaceModeKey)
+        guard let client = session.settingsClient else { return }
+        Task { _ = try? await client.saveSidebarPreferences([ModelMenu.interfaceModeKey: raw]) }
+    }
+}
+
 struct DesktopAppearanceSettings: View {
-    @Environment(\.themePalette) private var themePalette
     @EnvironmentObject private var session: Session
     @ObservedObject private var themes = ThemeStore.shared
+    @ObservedObject private var mode = DesktopInterfaceMode.shared
     @AppStorage(PrefKey.desktopSidebarDensity) private var density = DesktopSidebarDensity.comfortable.rawValue
     @AppStorage(SidebarLogoPreference.key) private var showSidebarLogo = SidebarLogoPreference.defaultEnabled
     @AppStorage(RunCardPreference.key) private var showRunCard = true
-    @AppStorage(NotificationSounds.key) private var sounds = true
     @AppStorage(DesktopInspectorButton.key) private var showInspector = false
     @ObservedObject private var prefs = SidebarPrefsModel.shared
     @ObservedObject private var toolCalls = ToolCallsSetting.shared
 
     var body: some View {
-        DesktopSettingsCard(
-            Text("Skin"),
-            summary: Text(verbatim: SkinPlace.of(themePalette.id, tint: themePalette.tint).family.name),
-            subtitle: Text("Applies instantly and is remembered on this machine."),
-            identifier: "appearance.skin"
-        ) {
-            // the families and their variants, as the iPhone's picker (#1126) and the desktop's SkinPicker
-            DesktopSkinFamilies()
-        }
-        DesktopSettingsGroup {
-            let font = themes.effective.mode == .computer ? (themes.effective.computerFont ?? .skin) : themes.effective.font
-            DesktopSettingRow(title: Text("Interface font"), subtitle: Text("Overrides the skin's font on this device.")) {
-                DesktopSelect(
+        let advanced = mode.advanced
+        DesktopSettingsGroup(Text("Interface"), identifier: "interface") {
+            DesktopDescribedRow(Text("Advanced mode"), description: Text("Show technical controls. Saved choices stay either way."), identifier: "advancedMode") {
+                DesktopSwitch(isOn: advanced, label: Text("Advanced mode"), identifier: "desktop-settings.advanced-mode") {
+                    mode.set(!advanced, session: session)
+                }
+            }
+            DesktopCompactRow(Text("Interface font"), identifier: "font") {
+                let font = themes.effective.mode == .computer ? (themes.effective.computerFont ?? .skin) : themes.effective.font
+                DesktopPillSelect(
                     options: [(SkinFontChoice.skin, AppStrings.localized("Skin default")),
                               (.system, AppStrings.localized("System")), (.serif, AppStrings.localized("Serif"))],
                     selection: font == .inter || font == .poppins ? .system : font,
@@ -153,119 +173,299 @@ struct DesktopAppearanceSettings: View {
                     identifier: "desktop-settings.font"
                 ) { themes.chooseFont($0, client: session.settingsClient) }
             }
-            DesktopSettingRow(
-                title: Text("Sidebar density"),
-                subtitle: Text("How much room each bot and thread takes in the sidebar, on this device only.")
-            ) {
-                DesktopSelect(
-                    options: [(DesktopSidebarDensity.comfortable.rawValue, AppStrings.localized("Comfortable")),
-                              (DesktopSidebarDensity.compact.rawValue, AppStrings.localized("Compact")),
-                              (DesktopSidebarDensity.icons.rawValue, AppStrings.localized("Avatars only"))],
-                    selection: density,
-                    label: Text("Sidebar density"),
-                    identifier: "desktop-settings.density"
-                ) { density = $0 }
-            }
-            if SidebarLogoRuntime.showsSetting {
-                DesktopSettingRow(
-                    title: Text("Sidebar logo"),
-                    subtitle: Text("Show the Sagax logo and name at the top of the sidebar.")
-                ) {
-                    DesktopSwitch(
-                        isOn: showSidebarLogo,
-                        label: Text("Show the sidebar logo"),
-                        identifier: "desktop-settings.sidebar-logo"
-                    ) {
-                        showSidebarLogo.toggle()
-                    }
-                }
-            }
-            // a display preference: an organization member opens the
-            // Inspector on the bots they own (2026-10-26)
-            if session.surfaceGate.allows(.inspector) || session.surfaceGate.isOrgMemberSession {
-                DesktopSettingRow(
-                    title: Text("Inspector button"),
-                    subtitle: Text("Show the Inspector (run log, events, raw) button in the chat header.")
-                ) {
-                    DesktopSwitch(isOn: showInspector, label: Text("Show the Inspector button"), identifier: "desktop-settings.inspector-button") {
-                        showInspector.toggle()
-                    }
-                }
-            }
-            DesktopSettingRow(title: Text("Notification sounds"), subtitle: Text("Play a sound when an agent finishes or needs you.")) {
-                DesktopSwitch(isOn: sounds, label: Text("Notification sounds"), identifier: "desktop-settings.sounds") {
-                    let next = !sounds
-                    sounds = next
-                    Task { await NotificationSounds.set(next, session: session) }
-                }
-            }
-            DesktopSettingRow(
-                title: Text("This run"),
-                subtitle: Text("Show a list of the shell commands a bot ran for your current request.")
-            ) {
-                DesktopSwitch(isOn: showRunCard, label: Text("This run"), identifier: "desktop-settings.run-card") {
-                    showRunCard.toggle()
-                }
-            }
-            DesktopSettingRow(
-                title: Text("Tool calls"),
-                subtitle: Text("Show tool calls in chat. Off: the chat shows the messages, a turn's steps fold away. The same switch as on your computer.")
-            ) {
-                DesktopSwitch(isOn: toolCalls.showToolCalls, label: Text("Show tool calls in chat"), identifier: "desktop-settings.tool-calls", disabled: toolCalls.saving) {
-                    let next = !toolCalls.showToolCalls
-                    Task { await toolCalls.set(session, next) }
-                }
-            }
-            DesktopSettingRow(title: Text("Use bot color as accent"), subtitle: Text("The accent follows the open bot's color.")) {
+        }
+        DesktopSettingsGroup(Text("Skin"), identifier: "skin") {
+            // the families and their variants, as the iPhone's picker (#1126) and the desktop's SkinPicker
+            DesktopSkinFamilies()
+            DesktopDescribedRow(Text("Use bot color as accent"), description: Text("The accent follows the open bot's color."), identifier: "botAccent") {
                 DesktopSwitch(isOn: prefs.botAccent, label: Text("Use bot color as accent"), identifier: "desktop-settings.bot-accent") {
                     prefs.setBotAccent(session, !prefs.botAccent)
                 }
             }
-            DesktopSettingRow(title: Text("Color 1:1 messages with the bot color"), subtitle: Text("Assistant bubbles and cards in a one-to-one chat use the bot's color. Off leaves them in the skin's color.")) {
-                DesktopSwitch(isOn: prefs.botBubble, label: Text("Color 1:1 messages with the bot color"), identifier: "desktop-settings.bot-bubble") {
-                    prefs.setBotBubble(session, !prefs.botBubble)
-                }
-            }
-            DesktopSettingRow(title: Text("Show replies as they are written"), subtitle: Text("Show a bot reply word by word while it is written, instead of all at once when it is finished")) {
-                DesktopSwitch(isOn: prefs.streamReplies, label: Text("Show replies as they are written"), identifier: "desktop-settings.stream-replies") {
+        }
+        DesktopSettingsGroup(Text("Background effects"), identifier: "backgroundEffects") {
+            DesktopBackgroundEffectsPicker()
+        }
+        DesktopSettingsGroup(Text("Conversations"), identifier: "conversation") {
+            DesktopCompactRow(Text("Show replies as they are written"), identifier: "streamReplies") {
+                DesktopSwitch(isOn: prefs.streamReplies, label: Text("Show a bot reply word by word while it is written, instead of all at once when it is finished"), identifier: "desktop-settings.stream-replies") {
                     prefs.setStreamReplies(session, !prefs.streamReplies)
                 }
             }
-            DesktopSettingRow(title: Text("Show suggestions"), subtitle: Text("Show the Suggestions card in the bot panel")) {
-                DesktopSwitch(isOn: prefs.showSuggestions, label: Text("Show suggestions"), identifier: "desktop-settings.show-suggestions") {
-                    prefs.setShowSuggestions(session, !prefs.showSuggestions)
+            if advanced {
+                DesktopDescribedRow(Text("Tool calls"), description: Text("Show tool calls in chat. Off: the chat shows the messages, a turn's steps fold away. The same switch as on your computer."), identifier: "toolCalls") {
+                    DesktopSwitch(isOn: toolCalls.showToolCalls, label: Text("Show tool calls in chat"), identifier: "desktop-settings.tool-calls", disabled: toolCalls.saving) {
+                        let next = !toolCalls.showToolCalls
+                        Task { await toolCalls.set(session, next) }
+                    }
                 }
-            }
-            DesktopSettingRow(
-                title: Text("HD mascots"),
-                subtitle: Text("Detailed art for the characters that have it. Colors and skins apply to the classic look.")
-            ) {
-                DesktopSwitch(isOn: prefs.hdMascots, label: Text("HD mascots"), identifier: "desktop-settings.hd-mascots") {
-                    prefs.setHdMascots(session, !prefs.hdMascots)
+                DesktopCompactRow(Text("This run"), identifier: "runCard") {
+                    DesktopSwitch(isOn: showRunCard, label: Text("Show the run card"), identifier: "desktop-settings.run-card") {
+                        showRunCard.toggle()
+                    }
                 }
-            }
-            DesktopSettingRow(title: Text("Notification sound"), subtitle: Text("Play a sound when an agent finishes or needs you.")) {
-                DesktopSelect(
-                    options: NotificationSoundChoice.allCases.map { ($0, AppStrings.localized($0.label)) },
-                    selection: prefs.notificationSound,
-                    label: Text("Notification sound"),
-                    identifier: "desktop-settings.notification-sound"
-                ) { choice in
-                    prefs.setNotificationSound(session, choice)
-                    NotificationSounds.preview(choice)
-                }
-            }
-            if prefs.synced {
-                DesktopSettingRow(title: Text("Send read receipts"), subtitle: Text("Off: you do not see other people's either.")) {
-                    DesktopSwitch(isOn: prefs.readReceipts, label: Text("Send read receipts"), identifier: "desktop-settings.read-receipts") {
-                        prefs.setReadReceipts(session, !prefs.readReceipts)
+                // a display preference: an organization member opens the
+                // Inspector on the bots they own (2026-10-26)
+                if session.surfaceGate.allows(.inspector) || session.surfaceGate.isOrgMemberSession {
+                    DesktopCompactRow(Text("Inspector button"), identifier: "inspectorButton") {
+                        DesktopSwitch(isOn: showInspector, label: Text("Show the Inspector button"), identifier: "desktop-settings.inspector-button") {
+                            showInspector.toggle()
+                        }
                     }
                 }
             }
         }
-        .task(id: session.connection?.id) {
-            await toolCalls.load(session)
-            await prefs.readComputerHdMascots(session)
+        DesktopSettingsGroup(Text("Sidebar"), identifier: "sidebar") {
+            DesktopCompactRow(Text("Sidebar density"), identifier: "sidebarDensity") {
+                DesktopPillSelect(
+                    options: [(DesktopSidebarDensity.comfortable.rawValue, AppStrings.localized("Comfortable")),
+                              (DesktopSidebarDensity.compact.rawValue, AppStrings.localized("Compact")),
+                              (DesktopSidebarDensity.icons.rawValue, AppStrings.localized("Avatars only"))],
+                    selection: density,
+                    label: Text("Choose sidebar density"),
+                    identifier: "desktop-settings.density"
+                ) { density = $0 }
+            }
+            if advanced && SidebarLogoRuntime.showsSetting {
+                DesktopCompactRow(Text("Sidebar logo"), identifier: "sidebarLogo") {
+                    DesktopSwitch(isOn: showSidebarLogo, label: Text("Show the sidebar logo"), identifier: "desktop-settings.sidebar-logo") {
+                        showSidebarLogo.toggle()
+                    }
+                }
+            }
+            DesktopCompactRow(Text("Show suggestions"), identifier: "showSuggestions") {
+                DesktopSwitch(isOn: prefs.showSuggestions, label: Text("Show the Suggestions card in the bot panel"), identifier: "desktop-settings.show-suggestions") {
+                    prefs.setShowSuggestions(session, !prefs.showSuggestions)
+                }
+            }
+        }
+        DesktopSettingsGroup(Text("Mascots"), identifier: "mascots") {
+            DesktopDescribedRow(Text("HD mascots"), description: Text("Detailed art for the characters that have it. Colors and skins apply to the classic look."), identifier: "hdMascots") {
+                DesktopSwitch(isOn: prefs.hdMascots, label: Text("HD mascots"), identifier: "desktop-settings.hd-mascots") {
+                    prefs.setHdMascots(session, !prefs.hdMascots)
+                }
+            }
+        }
+        Color.clear.frame(height: 0)
+            .task(id: session.connection?.id) {
+                await mode.load(session)
+                await toolCalls.load(session)
+                await prefs.readComputerHdMascots(session)
+            }
+    }
+}
+
+/// Settings > Appearance > Background effects (BackgroundEffectsPicker.tsx):
+/// the preview, the gallery and, for an effect, its colour and intensity.
+/// The choice is kept on this device under the desktop's key
+/// (`sagax-background-effect`); the effects themselves are drawn behind the
+/// conversation on a desktop, as the hint says.
+struct DesktopBackgroundEffectsPicker: View {
+    @Environment(\.desktopTheme) private var theme
+    @AppStorage("sagax-background-effect") private var raw = ""
+
+    static let effects: [(id: String, palettes: [String])] = [
+        ("none", []),
+        ("glyphs", ["theme", "aurora", "ocean", "ember", "neon", "violet", "gold", "mono"]),
+        ("matrix", ["aurora", "theme", "ocean", "ember", "neon", "mono"]),
+        ("starfield", ["ocean", "theme", "violet", "gold", "ember", "mono"]),
+        ("aurora", ["aurora", "violet", "ocean", "ember", "neon", "theme"]),
+        ("magnetic", ["theme", "ocean", "ember", "neon", "gold", "mono"]),
+        ("synthwave", ["neon", "violet", "ocean", "ember", "aurora", "theme"]),
+        ("ink", ["violet", "ocean", "ember", "aurora", "theme", "mono"]),
+        ("bubbles", ["ocean", "neon", "violet", "aurora", "theme", "gold"]),
+        ("constellation", ["theme", "ocean", "gold", "violet", "aurora", "mono"]),
+        ("sonar", ["aurora", "ocean", "ember", "theme", "neon", "mono"]),
+        ("fireflies", ["gold", "aurora", "ember", "ocean", "violet", "theme"]),
+        ("crystal", ["ocean", "violet", "aurora", "gold", "theme", "mono"]),
+    ]
+
+    private struct Prefs: Codable { var effect = "none"; var palettes: [String: String] = [:]; var intensity = "medium" }
+
+    private var prefs: Prefs {
+        (raw.data(using: .utf8)).flatMap { try? JSONDecoder().decode(Prefs.self, from: $0) } ?? Prefs()
+    }
+
+    private func save(_ edit: (inout Prefs) -> Void) {
+        var next = prefs
+        edit(&next)
+        if let data = try? JSONEncoder().encode(next) { raw = String(decoding: data, as: UTF8.self) }
+    }
+
+    private func palette(_ effect: String) -> String {
+        let offered = Self.effects.first { $0.id == effect }?.palettes ?? []
+        if let chosen = prefs.palettes[effect], offered.contains(chosen) { return chosen }
+        return offered.first ?? "theme"
+    }
+
+    static func name(_ id: String) -> String {
+        switch id {
+        case "none": AppStrings.localized("None")
+        case "glyphs": AppStrings.localized("Glyph ripple")
+        case "matrix": AppStrings.localized("Digital rain")
+        case "starfield": AppStrings.localized("Starfield")
+        case "aurora": AppStrings.localized("Aurora")
+        case "magnetic": AppStrings.localized("Magnetic field")
+        case "synthwave": AppStrings.localized("Neon horizon")
+        case "ink": AppStrings.localized("Ink in water")
+        case "bubbles": AppStrings.localized("Bubbles")
+        case "constellation": AppStrings.localized("Constellation")
+        case "sonar": AppStrings.localized("Sonar")
+        case "fireflies": AppStrings.localized("Fireflies")
+        default: AppStrings.localized("Crystal")
+        }
+    }
+
+    static func paletteName(_ id: String) -> String {
+        switch id {
+        case "theme": AppStrings.localized("Theme")
+        case "aurora": AppStrings.localized("Aurora")
+        case "ocean": AppStrings.localized("Ocean")
+        case "ember": AppStrings.localized("Ember")
+        case "neon": AppStrings.localized("Neon")
+        case "violet": AppStrings.localized("Violet")
+        case "gold": AppStrings.localized("Gold")
+        default: AppStrings.localized("Mono")
+        }
+    }
+
+    /// The palettes' three colours (background-effects.ts PALETTES, dark).
+    private func swatch(_ id: String) -> [Color] {
+        func c(_ hex: UInt32) -> Color { SkinColor(hex).color }
+        let dark = theme.dark
+        switch id {
+        case "aurora": return dark ? [c(0x3dffa8), c(0x2fd5ff), c(0xc3a2ff)] : [c(0x0b9e62), c(0x0a7fa8), c(0x7a3fd1)]
+        case "ocean": return dark ? [c(0x3d8bff), c(0x35e0ff), c(0xd2f6ff)] : [c(0x1f5fd1), c(0x0a8fb0), c(0x0b3d8c)]
+        case "ember": return dark ? [c(0xff8a3d), c(0xff3d5a), c(0xffe0a3)] : [c(0xd4570b), c(0xc21f3a), c(0x8a4a00)]
+        case "neon": return dark ? [c(0xff3dcb), c(0x35e8ff), c(0xfff06b)] : [c(0xc2189a), c(0x0a8fb0), c(0x7a6200)]
+        case "violet": return dark ? [c(0xa06bff), c(0xff6bd5), c(0xebdcff)] : [c(0x6a3fd1), c(0xb0228a), c(0x3d1f8c)]
+        case "gold": return dark ? [c(0xffc54d), c(0xff9a3d), c(0xfff3cf)] : [c(0xa87400), c(0xb0570b), c(0x5c3e00)]
+        case "mono": return [theme.ink, theme.inkSecondary, theme.ink]
+        default: return [theme.accent, theme.accentText, theme.accent]
+        }
+    }
+
+    private func gradient(_ id: String) -> AngularGradient {
+        let colors = swatch(id)
+        return AngularGradient(colors: colors + [colors[0]], center: .center, angle: .degrees(120))
+    }
+
+    var body: some View {
+        let current = prefs
+        VStack(alignment: .leading, spacing: 4) {
+            preview(current.effect)
+            DesktopText("Behind the conversation, on a desktop. Nothing moves when animations are reduced, and the effect stops when the window is hidden or in the background.",
+                        size: 12, line: 16, color: \.inkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 14)
+                .padding(.top, 4)
+            grid(current)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+            if current.effect != "none" {
+                let offered = Self.effects.first { $0.id == current.effect }?.palettes ?? []
+                DesktopCompactRow(Text("Colour"), identifier: "backgroundPalette") {
+                    HStack(spacing: 6) {
+                        ForEach(offered, id: \.self) { id in
+                            let selected = id == palette(current.effect)
+                            Button { save { $0.palettes[current.effect] = id } } label: {
+                                Circle().fill(gradient(id)).frame(width: 22, height: 22)
+                                    .overlay(Circle().strokeBorder(selected ? Color.clear : theme.hairline, lineWidth: 1))
+                                    .padding(selected ? 2 : 0)
+                                    .overlay(Circle().strokeBorder(selected ? theme.accentBorder : Color.clear, lineWidth: 2))
+                                    .padding(selected ? 0 : 2)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(Text(verbatim: Self.paletteName(id)))
+                            .accessibilityAddTraits(selected ? .isSelected : [])
+                        }
+                    }
+                }
+                DesktopCompactRow(Text("Intensity"), identifier: "backgroundIntensity") {
+                    DesktopPillSelect(
+                        options: [("low", AppStrings.localized("Low")), ("medium", AppStrings.localized("Medium")), ("high", AppStrings.localized("High"))],
+                        selection: current.intensity,
+                        label: Text("Intensity"),
+                        identifier: "desktop-settings.background-intensity"
+                    ) { level in save { $0.intensity = level } }
+                }
+            }
+        }
+        .accessibilityIdentifier("desktop-settings.background-effects")
+    }
+
+    private func preview(_ effect: String) -> some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.app)
+            if effect != "none" {
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(gradient(palette(effect))).opacity(0.3)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Spacer(minLength: 0)
+                    DesktopText("Can you sum up this week's open tickets?")
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(theme.bubbleUser, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                DesktopText("Fourteen are open: three wait on the client and two are ready to bill.", line: 19)
+                Spacer(minLength: 0)
+                DesktopText(effect == "none" ? "No effect behind the conversation." : "Move the pointer and click here to try it.",
+                            size: 12, line: 16, color: \.inkTertiary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+        }
+        .frame(height: 168)
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.6), lineWidth: 1))
+        .padding(.horizontal, 8)
+    }
+
+    private func grid(_ current: Prefs) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 132), spacing: 8)], alignment: .leading, spacing: 8) {
+            ForEach(Self.effects, id: \.id) { entry in
+                let selected = entry.id == current.effect
+                Button { save { $0.effect = entry.id } } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ZStack(alignment: .topLeading) {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.app)
+                            if entry.id != "none" {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(gradient(palette(entry.id))).opacity(0.3)
+                            }
+                            GeometryReader { geometry in
+                                let w = geometry.size.width
+                                RoundedRectangle(cornerRadius: 6).fill(theme.bubbleUser.opacity(0.9))
+                                    .frame(width: w * 0.42, height: 11)
+                                    .position(x: w - 8 - w * 0.21, y: 9 + 5.5)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Capsule().fill(theme.ink.opacity(0.45)).frame(width: w * 0.62, height: 2)
+                                    Capsule().fill(theme.ink.opacity(0.45)).frame(width: w * 0.62 * 0.82, height: 2)
+                                    Capsule().fill(theme.inkSecondary.opacity(0.4)).frame(width: w * 0.62 * 0.58, height: 2)
+                                }
+                                .offset(x: 8, y: 28)
+                            }
+                        }
+                        .frame(height: 78)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(selected ? theme.accentBorder : theme.hairline.opacity(0.6), lineWidth: selected ? 2 : 1))
+                        HStack(spacing: 6) {
+                            DesktopText(verbatim: Self.name(entry.id)).lineLimit(1)
+                            Spacer(minLength: 0)
+                            if selected {
+                                DesktopSettingsIconView(icon: .check, size: 13).foregroundStyle(theme.accentText)
+                            }
+                        }
+                        .padding(.horizontal, 2)
+                    }
+                    .padding(6)
+                    .background(selected ? theme.selected : .clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(verbatim: Self.name(entry.id)))
+                .accessibilityAddTraits(selected ? .isSelected : [])
+                .accessibilityIdentifier("desktop-settings.background-effect.\(entry.id)")
+            }
         }
     }
 }
@@ -333,33 +533,30 @@ struct DesktopSkinCard: View {
 
     var body: some View {
         let t = drawn ?? DesktopTheme.of(skin)
-        VStack(alignment: .leading, spacing: 10) {
+        // 0.5.6 (SkinPicker.tsx): the picture, the name and a check; the
+        // tagline is the tile's accessible description, not drawn
+        VStack(alignment: .leading, spacing: 6) {
             miniature(t)
-                .frame(height: 104)
+                .frame(height: 78)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(t.hairline, lineWidth: 1))
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    DesktopText(verbatim: name ?? skin.name, weight: .medium, line: 19.5)
-                    Spacer(minLength: 0)
-                    if selected {
-                        DesktopSettingsIconView(icon: .check, size: 14)
-                            .foregroundStyle(theme.ink)
-                    }
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(selected ? theme.accentBorder : t.hairline.opacity(0.6), lineWidth: selected ? 2 : 1))
+            HStack(spacing: 6) {
+                DesktopText(verbatim: name ?? skin.name)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if selected {
+                    DesktopSettingsIconView(icon: .check, size: 13)
+                        .foregroundStyle(theme.accentText)
                 }
-                DesktopText(Text(LocalizedStringKey(tagline ?? skin.tagline)), size: 12, line: 16.5, color: \.inkSecondary)
-                    .padding(.trailing, selected ? 0 : 0)
             }
             .padding(.horizontal, 2)
         }
-        .padding(11)
+        .padding(6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(selected ? theme.control : .clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(selected ? theme.accentBorder : theme.hairline.opacity(0.4), lineWidth: 1)
-        )
+        .background(selected ? theme.selected : .clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .contentShape(Rectangle())
+        .accessibilityHint(Text(LocalizedStringKey(tagline ?? skin.tagline)))
     }
 
     /// The renderer's miniature (`SkinPreview`): a rail, a sidebar with a

@@ -41,8 +41,7 @@ struct DesktopNewBotDefaults: View {
 
     var body: some View {
         let config = model.config
-        DesktopSettingsHeading(Text("Defaults for new bots"))
-        DesktopSettingsGroup {
+        DesktopSettingsGroup(Text("Defaults for new bots")) {
             DesktopSettingRow(
                 title: Text("Effort for new bots"),
                 subtitle: Text("How hard new bots think from their first message."),
@@ -208,8 +207,7 @@ struct DesktopVoiceSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            DesktopSettingsHeading(Text("Who speaks and who listens"))
-            DesktopSettingsGroup {
+            DesktopSettingsGroup(Text("Who speaks and who listens")) {
                 DesktopSettingRow(title: Text("Bot's voice")) {
                     DesktopSelect(options: [("", String(localized: "Auto")), ("xai", "xAI"), ("openai", "OpenAI"), ("elevenlabs", "ElevenLabs")],
                                   selection: settings.ttsChoice(botId: nil) ?? "", label: Text("Bot's voice"),

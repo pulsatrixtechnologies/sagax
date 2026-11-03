@@ -13,7 +13,7 @@ import CompanionCore
 // MARK: - Icons
 
 enum DesktopSettingsIcon: String, CaseIterable {
-    case user, building2, palette, flaskConical, keyRound, zap, terminal, tabletSmartphone, monitor, coins, mail, archive, users, scrollText, search, x, chevronDown, chevronUp, circleQuestionMark, refreshCw, check, externalLink, download, upload, arrowUpRight, loaderCircle, shield, rotateCcw, triangleAlert, clipboardPaste, plus, circlePower, pencil, trash2, globe, plugZap, plug, circle, circleCheck, audioLines, info, bell
+    case user, building2, palette, flaskConical, keyRound, zap, terminal, tabletSmartphone, monitor, coins, mail, archive, users, scrollText, search, x, chevronDown, chevronUp, circleQuestionMark, refreshCw, check, externalLink, download, upload, arrowUpRight, loaderCircle, shield, rotateCcw, triangleAlert, clipboardPaste, plus, circlePower, pencil, trash2, globe, plugZap, plug, circle, circleCheck, audioLines, info, bell, chevronRight, copy, fileUp, fingerprint
 
     /// Path data in the 24 pt viewBox (lucide-react 0.539, ISC).
     var paths: [String] {
@@ -60,6 +60,10 @@ enum DesktopSettingsIcon: String, CaseIterable {
         case .audioLines: ["M2 10v3","M6 6v11","M10 3v18","M14 8v7","M18 5v13","M22 10v3"]
         case .info: ["M2 12A10 10 0 1 0 22 12A10 10 0 1 0 2 12Z","M12 16v-4","M12 8h.01"]
         case .bell: ["M10.268 21a2 2 0 0 0 3.464 0","M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"]
+        case .chevronRight: ["m9 18 6-6-6-6"]
+        case .copy: ["M10 8H20A2 2 0 0 1 22 10V20A2 2 0 0 1 20 22H10A2 2 0 0 1 8 20V10A2 2 0 0 1 10 8Z","M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"]
+        case .fileUp: ["M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z","M14 2v4a2 2 0 0 0 2 2h4","M12 12v6","m15 15-3-3-3 3"]
+        case .fingerprint: ["M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4","M14 13.12c0 2.38 0 6.38-1 8.88","M17.29 21.02c.12-.6.43-2.3.5-3.02","M2 12a10 10 0 0 1 18-6","M2 16h.01","M21.8 16c.2-2 .131-5.354 0-6","M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2","M8.65 22c.21-.66.45-1.32.57-2","M9 6.8a6 6 0 0 1 9 5.2v2"]
         }
     }
 }
@@ -428,16 +432,274 @@ struct DesktopHairlineBox: ViewModifier {
     }
 }
 
-/// A group of setting rows (`rounded-[14px] border-[0.5px] border-border py-1`).
+/// `SettingsGroup`: a grey heading outside the card (`gap-2`), then one
+/// `rounded-xl border-[0.5px] border-border bg-elevated py-1.5` card of rows.
+/// `plain` keeps the heading only (the children are cards of their own).
 struct DesktopSettingsGroup<Content: View>: View {
+    @Environment(\.desktopTheme) private var theme
+    var title: Text? = nil
+    var accessory: AnyView? = nil
+    var plain = false
+    var identifier: String = ""
     @ViewBuilder let content: () -> Content
 
+    init(_ title: Text? = nil, accessory: AnyView? = nil, plain: Bool = false, identifier: String = "",
+         @ViewBuilder content: @escaping () -> Content) {
+        self.title = title
+        self.accessory = accessory
+        self.plain = plain
+        self.identifier = identifier
+        self.content = content
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0, content: content)
-            .padding(.vertical, 4)
-            .padding(1)
+        VStack(alignment: .leading, spacing: 8) {
+            if let title {
+                HStack(spacing: 6) {
+                    DesktopSettingsHeading(title)
+                    if let accessory { accessory }
+                }
+            }
+            if plain {
+                VStack(alignment: .leading, spacing: 8, content: content)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                VStack(alignment: .leading, spacing: 0, content: content)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(theme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .desktopHairlineBox(radius: 12)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(identifier.isEmpty ? "" : "settings-group.\(identifier)")
+    }
+}
+
+/// `HelpTip`: the 20 pt circle-help button and its popover (`w-64`, 12/17).
+struct DesktopHelpTip: View {
+    @Environment(\.desktopTheme) private var theme
+    let help: Text
+    @State private var showing = false
+
+    var body: some View {
+        Button { showing.toggle() } label: {
+            DesktopSettingsIconView(icon: .circleQuestionMark, size: 13)
+                .foregroundStyle(theme.inkSecondary)
+                .frame(width: 20, height: 20)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("More about this setting"))
+        .popover(isPresented: $showing) {
+            DesktopText(help, size: 12, line: 17, color: \.inkSecondary)
+                .frame(width: 232, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(12)
+                .desktopPopoverOnCompact()
+        }
+    }
+}
+
+/// `CompactRow`: the label at the left, the control at the right
+/// (`min-h-[44px] px-3.5 py-2 gap-5`).
+struct DesktopCompactRow<Control: View>: View {
+    let label: Text
+    var help: Text? = nil
+    var identifier: String = ""
+    @ViewBuilder let control: () -> Control
+
+    init(_ label: Text, help: Text? = nil, identifier: String = "", @ViewBuilder control: @escaping () -> Control) {
+        self.label = label
+        self.help = help
+        self.identifier = identifier
+        self.control = control
+    }
+
+    var body: some View {
+        HStack(spacing: 20) {
+            HStack(spacing: 6) {
+                DesktopText(label)
+                if let help { DesktopHelpTip(help: help) }
+            }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .desktopHairlineBox()
+            HStack(spacing: 8) { control() }
+                .fixedSize()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .frame(minHeight: 44)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(identifier.isEmpty ? "" : "settings-row.\(identifier)")
+    }
+}
+
+/// `DescribedRow`: the label and its one grey line (12/16) at the left, the
+/// control at the right (`px-3.5 py-2.5`, `min-h-[28px]`), what it opens below.
+struct DesktopDescribedRow<Control: View, Below: View>: View {
+    let label: Text
+    var description: Text? = nil
+    var help: Text? = nil
+    var identifier: String = ""
+    @ViewBuilder let control: () -> Control
+    @ViewBuilder let below: () -> Below
+
+    init(_ label: Text, description: Text? = nil, help: Text? = nil, identifier: String = "",
+         @ViewBuilder control: @escaping () -> Control, @ViewBuilder below: @escaping () -> Below) {
+        self.label = label
+        self.description = description
+        self.help = help
+        self.identifier = identifier
+        self.control = control
+        self.below = below
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 20) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        DesktopText(label)
+                        if let help { DesktopHelpTip(help: help) }
+                    }
+                    if let description {
+                        DesktopText(description, size: 12, line: 16, color: \.inkSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 8) { control() }
+                    .fixedSize()
+            }
+            .frame(minHeight: 28)
+            below()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(identifier.isEmpty ? "" : "settings-row.\(identifier)")
+    }
+}
+
+extension DesktopDescribedRow where Below == EmptyView {
+    init(_ label: Text, description: Text? = nil, help: Text? = nil, identifier: String = "",
+         @ViewBuilder control: @escaping () -> Control) {
+        self.init(label, description: description, help: help, identifier: identifier, control: control, below: { EmptyView() })
+    }
+}
+
+/// `LinkRow`: a row that opens something, the arrow (or the leave-the-app
+/// mark) at the right, the whole row one button.
+struct DesktopLinkRow: View {
+    @Environment(\.desktopTheme) private var theme
+    let label: Text
+    var external = false
+    var identifier: String = ""
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                DesktopText(label)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                DesktopSettingsIconView(icon: external ? .externalLink : .chevronRight, size: 14)
+                    .foregroundStyle(theme.inkSecondary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .frame(minHeight: 36)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(DesktopHoverFill(radius: 0))
+        .accessibilityIdentifier(identifier)
+    }
+}
+
+/// `SettingsTextRow`: a line of explanation with a row's insets (12/16).
+struct DesktopSettingsTextRow: View {
+    let text: Text
+    var color: KeyPath<DesktopTheme, Color> = \.inkSecondary
+    init(_ text: Text, color: KeyPath<DesktopTheme, Color> = \.inkSecondary) {
+        self.text = text
+        self.color = color
+    }
+
+    var body: some View {
+        DesktopText(text, size: 12, line: 16, color: color)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// `SettingsNotice`: a page's message as a card of its own, one row, the
+/// words at the left and at most one action at the right.
+struct DesktopSettingsNotice<Action: View>: View {
+    @Environment(\.desktopTheme) private var theme
+    let text: Text
+    var color: KeyPath<DesktopTheme, Color> = \.inkSecondary
+    @ViewBuilder let action: () -> Action
+
+    init(_ text: Text, color: KeyPath<DesktopTheme, Color> = \.inkSecondary, @ViewBuilder action: @escaping () -> Action) {
+        self.text = text
+        self.color = color
+        self.action = action
+    }
+
+    var body: some View {
+        HStack(spacing: 20) {
+            DesktopText(text, color: color)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            action()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .padding(.vertical, 6)
+        .background(theme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .desktopHairlineBox(radius: 12)
+    }
+}
+
+extension DesktopSettingsNotice where Action == EmptyView {
+    init(_ text: Text, color: KeyPath<DesktopTheme, Color> = \.inkSecondary) {
+        self.init(text, color: color) { EmptyView() }
+    }
+}
+
+/// A native checkbox as Chrome draws it (13 pt, a 3 pt radius).
+struct DesktopCheckbox: View {
+    @Environment(\.desktopTheme) private var theme
+    let checked: Bool
+    let label: Text
+    var identifier: String = ""
+    var disabled = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(checked ? theme.accent : Color.clear)
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .strokeBorder(checked ? theme.accent : theme.inkSecondary, lineWidth: 1)
+                if checked {
+                    DesktopSettingsIconView(icon: .check, size: 10, strokeWidth: 3)
+                        .foregroundStyle(theme.accentInk)
+                }
+            }
+            .frame(width: 13, height: 13)
+            .frame(width: 20, height: 20)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled ? 0.5 : 1)
+        .accessibilityLabel(label)
+        .accessibilityValue(checked ? Text("On") : Text("Off"))
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -588,6 +850,60 @@ struct DesktopSelect<Value: Hashable>: View {
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
             .contentShape(Rectangle())
         }
+        .disabled(disabled)
+        .opacity(disabled ? 0.5 : 1)
+        .accessibilityLabel(label)
+        .accessibilityValue(Text(verbatim: current))
+        .accessibilityIdentifier(identifier)
+    }
+}
+
+/// `PillSelect`: the borderless pill menu ("Dark ⌄"): the current value
+/// and a grey chevron (`h-7 rounded-full px-2.5 gap-1`), the choices in a menu.
+struct DesktopPillSelect<Value: Hashable>: View {
+    @Environment(\.desktopTheme) private var theme
+    let options: [(Value, String)]
+    let selection: Value
+    var shown: String? = nil
+    let label: Text
+    var identifier: String = ""
+    var disabled = false
+    /// Fill a table cell: the value at the left, the chevron at the right edge.
+    var fill = false
+    let choose: (Value) -> Void
+
+    var body: some View {
+        let current = shown ?? options.first { $0.0 == selection }?.1 ?? ""
+        Menu {
+            ForEach(options.indices, id: \.self) { index in
+                let option = options[index]
+                Button {
+                    if option.0 != selection { choose(option.0) }
+                } label: {
+                    if option.0 == selection {
+                        Label(option.1, systemImage: "checkmark")
+                    } else {
+                        Text(verbatim: option.1)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(verbatim: current)
+                    .font(theme.font(13))
+                    .foregroundStyle(theme.ink)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if fill { Spacer(minLength: 0) }
+                DesktopSettingsIconView(icon: .chevronDown, size: 13)
+                    .foregroundStyle(theme.inkSecondary)
+            }
+            .padding(.horizontal, fill ? 8 : 10)
+            .frame(maxWidth: fill ? .infinity : 240, alignment: .leading)
+            .frame(height: fill ? 32 : 28)
+            .contentShape(Capsule())
+        }
+        .fixedSize(horizontal: !fill, vertical: false)
         .disabled(disabled)
         .opacity(disabled ? 0.5 : 1)
         .accessibilityLabel(label)

@@ -447,6 +447,8 @@ extension IPadParityScreen {
         case .pluginsMcp: (.plugins, nil, .mcp)
         case .capabilities: (.plugins, nil, nil)
         case .settingsGeneral, .settingsGeneralScrolled: (.settings, .general, nil)
+        // the desktop opens Account for its former Cloud account section
+        case .settingsCloudAccount: (.settings, .general, nil)
         case .settingsOrganization: (.settings, .organization, nil)
         case .settingsAppearance: (.settings, .appearance, nil)
         case .settingsExperimental: (.settings, .experimental, nil)

@@ -93,4 +93,20 @@ final class ModerationTests: XCTestCase {
         XCTAssertTrue(again.accepted)
         XCTAssertEqual(again.acceptedAt, accepted.acceptedAt)
     }
+
+    func testReportsListTheOpenOnesThenTheLastTwentyHandled() throws {
+        let client = CompanionClient(connection: Connection(id: "c", name: "c", host: "example.test", port: 443), token: "t")
+        let list = try client.moderationReportsRequest()
+        XCTAssertEqual(list.httpMethod, "GET")
+        XCTAssertEqual(list.url?.path, "/api/moderation/reports")
+        let resolve = try client.resolveReportRequest(id: "r1")
+        XCTAssertEqual(resolve.httpMethod, "POST")
+        XCTAssertEqual(resolve.url?.path, "/api/moderation/reports/r1/resolve")
+
+        let handled = (0..<25).map { Moderation.Report(id: "h\($0)", at: Double($0), reason: "spam", status: "resolved") }
+        let open = Moderation.Report(id: "o", at: 99, reason: "hate", status: "open")
+        let listed = Moderation.listed(handled + [open])
+        XCTAssertEqual(listed.first?.id, "o")
+        XCTAssertEqual(listed.count, 21)
+    }
 }

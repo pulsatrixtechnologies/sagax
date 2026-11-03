@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { autoVerdict } from "./approvals/auto-approve.ts";
+import { peerContactCardRequired } from "./approvals/full-access-gate.ts";
 import { memberBotAdminApproval } from "./engines/engine-access.ts";
 import { gateReadOnlyTools } from "./drivers/acp/grok-approval-gate.ts";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -73,14 +74,43 @@ describe("Sagax's own person-scoped tools", () => {
 });
 
 describe("Sagax's own tools, security review 2026-10-16", () => {
-  it("never answers a send by itself: send_to_bot, post_to_room and send_voice_note keep the outbound guard", () => {
-    for (const name of ["agents__send_to_bot", "mcp__agents__post_to_room", "agents__send_voice_note"]) {
+  it("uses the peer policy for in-app sends and keeps real sends outbound below Full", () => {
+    const belowFull = ["ask", "edits", "auto", "custom"] as const;
+    // c09f3dfa2 (#1905): peer sends use approvePeerComms, not outbound.
+    // 23498ec06: Full answers the residual card; explicit rules still stand.
+    for (const name of ["agents__send_to_bot", "mcp__agents__post_to_room"]) {
       expect(sagaxInternalTool(name)).toBe("agents");
-      expect(autoVerdict("auto", "other", { sagaxInternal: true, toolName: name })).toEqual({ approve: null, source: "outbound-guard" });
-      expect(autoVerdict("auto", name, { sagaxInternal: true })).toEqual({ approve: null, source: "outbound-guard" });
-      // a gate card of a send stays a card too
-      expect(autoVerdict("auto", "other", { sagaxInternal: true, sagaxGate: true, toolName: name }).approve).toBeNull();
+      for (const mode of [...belowFull, "full"] as const) {
+        expect(autoVerdict(mode, "other", { sagaxInternal: true, outbound: true, toolName: name })).toEqual({ approve: "approved other (Sagax tool)", source: "sagax-internal" });
+        expect(autoVerdict(mode, name, { sagaxInternal: true }).source).toBe("sagax-internal");
+        expect(autoVerdict(mode, "other", { sagaxInternal: true, sagaxGate: true, toolName: name }).source).toBe("sagax-internal");
+        expect(peerContactCardRequired(true, mode)).toBe(mode !== "full");
+        expect(peerContactCardRequired(false, mode)).toBe(false);
+        for (const behavior of ["ask", "deny"] as const) {
+          for (const id of ["person_rule", "orule_required"]) {
+            expect(autoVerdict(mode, name, { sagaxInternal: true, customRule: { behavior, id } })).toEqual({ approve: null, source: `custom-rule-${behavior}` });
+          }
+        }
+        expect(autoVerdict(mode, name, { sagaxInternal: true, sagaxGate: true, stepUpRequired: ["external-send"] }).approve).toBeNull();
+      }
+      for (const mode of belowFull) {
+        for (const extra of [{ safetyHold: true }, { requiresExplicitApproval: true }]) {
+          expect(autoVerdict(mode, name, { sagaxInternal: true, ...extra }).approve).toBeNull();
+        }
+      }
     }
+    const voice = "agents__send_voice_note";
+    expect(sagaxInternalTool(voice)).toBe("agents");
+    for (const mode of belowFull) {
+      expect(autoVerdict(mode, "other", { sagaxInternal: true, toolName: voice })).toEqual({ approve: null, source: "outbound-guard" });
+      expect(autoVerdict(mode, voice, { sagaxInternal: true })).toEqual({ approve: null, source: "outbound-guard" });
+      expect(autoVerdict(mode, "other", { sagaxInternal: true, sagaxGate: true, toolName: voice }).approve).toBeNull();
+      for (const name of ["mcp__slack__post_message", "mcp__acme__send_to_bot"]) {
+        expect(sagaxInternalTool(name)).toBeNull();
+        expect(autoVerdict(mode, name, { outbound: true })).toEqual({ approve: null, source: "outbound-guard" });
+      }
+    }
+    expect(autoVerdict("full", voice, { sagaxInternal: true }).source).toBe("full-access");
     expect(autoVerdict("auto", "other", { sagaxInternal: true, toolName: "agents__delegate_bot" }).source).toBe("sagax-internal");
   });
 

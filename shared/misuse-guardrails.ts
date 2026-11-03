@@ -290,6 +290,10 @@ function decodeBase64(value: string): string {
 export interface MisuseOwnPaths {
   roots?: readonly string[];
   attachmentsDir?: string;
+  /** 2026-11-03: the working folder a relative path of a file tool resolves
+   * against in the person's server environment (the bot's own folder,
+   * /workspace/bots/<slug>). Absent: /workspace. */
+  cwd?: string;
 }
 
 const OWN_FOLDER = "own-folder";
@@ -401,27 +405,36 @@ function normalizeAbsolute(path: string): string {
  * the triage permission does not lift. */
 export function classifySandboxPath(input: string, triage = false, scope: MisuseScope = "default", own?: MisuseOwnPaths): MisuseVerdict {
   if (!sandboxPathBlocked(input, own)) return classifyMisuse(input, triage, scope, own);
-  const path = input.trim();
+  const path = sandboxAbsolutePath(input, own?.cwd);
   const category: MisuseCategory = /\/proc(?:\/|$)|\/sys(?:\/|$)/.test(path) ? "sandbox_escape" : "platform_exfiltration";
   return { action: "block", categories: [category], category, obfuscated: false };
 }
 
-/** File tools in a person's server environment. Relative paths stay in the
- * working folder. Absolute paths must sit on the allowlist, and a platform
- * path is refused even when a prefix would otherwise allow it. */
+const SANDBOX_HOME = "/workspace";
+
+/** Where a file tool's path lands in the server environment: an absolute
+ * path as written, `..` resolved; a relative one against the working folder
+ * (`cwd`, the bot's own folder; /workspace when unknown or not absolute).
+ * 2026-11-03 (production): a bot in /workspace/bots/<slug> asked for
+ * `../../gox-autonomie/...`, a path that stays in the person's /workspace,
+ * and was refused as a server path because any relative `..` that rose
+ * above the folder was refused. The resolved path now meets the same
+ * allowlist as an absolute one, so `../../../etc/shadow` is still refused. */
+export function sandboxAbsolutePath(input: string, cwd?: string): string {
+  const raw = input.trim();
+  if (raw.startsWith("/")) return normalizeAbsolute(raw);
+  const base = cwd?.trim().startsWith("/") ? normalizeAbsolute(cwd.trim()) : SANDBOX_HOME;
+  return normalizeAbsolute(`${base}/${raw}`);
+}
+
+/** File tools in a person's server environment. A relative path resolves
+ * against the working folder (`own.cwd`), then every path must sit on the
+ * allowlist, and a platform path is refused even when a prefix would
+ * otherwise allow it. */
 export function sandboxPathBlocked(input: string, own?: MisuseOwnPaths): boolean {
   const raw = input.trim();
   if (!raw || raw.includes("\u0000") || raw.length > 4096) return true;
-  if (!raw.startsWith("/")) {
-    let depth = 0;
-    for (const part of raw.split("/")) {
-      if (part === "..") depth -= 1;
-      else if (part && part !== ".") depth += 1;
-      if (depth < 0) return true;
-    }
-    return false;
-  }
-  const path = normalizeAbsolute(raw);
+  const path = sandboxAbsolutePath(raw, own?.cwd);
   const base = path.slice(path.lastIndexOf("/") + 1);
   if (PLATFORM_BASENAMES.has(base)) return true;
   if (SANDBOX_ALLOW_EXACT.has(path)) return false;

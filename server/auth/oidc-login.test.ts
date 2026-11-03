@@ -11,12 +11,12 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { AccountReauth } from "./account-reauth.ts";
 import { IDP_SWEEP_SLACK_MS, IdpGrantVault, IdpSessionManager } from "./idp-session.ts";
 import { BACKCHANNEL_MAX_BODY_BYTES, OIDC_NATIVE_BIND_GRACE_MS, OIDC_NATIVE_PAIRING_TTL_MS, createOidcLoginRoutes, type OidcGrantKeeper, desktopReturnLink, identityConfigFromEnv, identityDescriptor, isInterimSignInRoute, orgRoleForRole, phoneErrorLink, phoneReturnLink, profileManagement, sagaxReturnLink, scopesForRole, validLoopbackReturn, webPageReturn, writesManagedProfile } from "./oidc-login.ts";
-import { RoutineConsents } from "./org/org-routine-consent.ts";
+import { RoutineConsents } from "../org/org-routine-consent.ts";
 import { ACCOUNT_PURGED_EVENT, OidcRelyingParty } from "./oidc-rp.ts";
 import { PrincipalRegistry } from "./principals.ts";
 import { recentInteractiveSignIn } from "./recent-sign-in.ts";
 import { SessionRegistry } from "./sessions.ts";
-import { startFakeOidcProvider, type FakeOidcProvider } from "./testing/fake-oidc-provider.ts";
+import { startFakeOidcProvider, type FakeOidcProvider } from "../testing/fake-oidc-provider.ts";
 
 /** Every regular expression metacharacter escaped, not only the dots. */
 const escapeRegExp = (text: string) => text.replace(/[\\^$.*+?()[\]{}|/]/g, "\\$&");
@@ -275,7 +275,7 @@ describe("the sign-in routes (in process)", () => {
     expect(record).toMatchObject({ principalId: person.id, scopes: ["client"], idp: { iss: provider.issuer, sub: USER.sub, role: "employee", grantRef: expect.any(String) } });
     expect(manager.mustRefuse(record)).toBeNull();
     // 2026-10-18: the desktop's session carries the provider sign-in as its
-    // recent sign-in (server/recent-sign-in.ts), not the pairing's moment
+    // recent sign-in (server/auth/recent-sign-in.ts), not the pairing's moment
     expect(recentInteractiveSignIn(record)).toBe(true);
     expect(sessions.exchange({ code: match![2]!, label: "again", source: "10.0.0.1" }).ok).toBe(false);
   });
@@ -312,7 +312,7 @@ describe("the sign-in routes (in process)", () => {
   });
 
   it("names the sagax:// return exactly as the desktop app does", () => {
-    const desktop = createRequire(import.meta.url)("../electron/oidc-system-sign-in.cjs") as { sagaxReturnLink(origin: string): string };
+    const desktop = createRequire(import.meta.url)("../../electron/oidc-system-sign-in.cjs") as { sagaxReturnLink(origin: string): string };
     expect(sagaxReturnLink("https://bot.example.test")).toBe(desktop.sagaxReturnLink("https://bot.example.test"));
   });
 
@@ -587,7 +587,7 @@ describe("the sign-in routes (in process)", () => {
     expect(record.idp?.grantRef).toBeTruthy();
     expect(manager.mustRefuse(record)).toBeNull();
     expect(manager.sweep()).toBe(0);
-    // a web sign-in is an interactive sign-in (server/recent-sign-in.ts)
+    // a web sign-in is an interactive sign-in (server/auth/recent-sign-in.ts)
     expect(typeof record.authAt).toBe("number");
     expect(recentInteractiveSignIn(record)).toBe(true);
   });

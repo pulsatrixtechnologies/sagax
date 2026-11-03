@@ -16,7 +16,7 @@ import {
   planAccountsFromInstances,
   type PlanUsageReport,
 } from "../plan-usage.ts";
-import { isPrincipalId } from "../principals.ts";
+import { isPrincipalId } from "../auth/principals.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface PlanUsageRouteDeps {

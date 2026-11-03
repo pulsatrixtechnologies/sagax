@@ -6,7 +6,7 @@
 // The apply call reads the text again and writes only the lines whose ids
 // are in accept. A conflict is not written unless its id is there. Not an
 // admin route, and not the agent import.
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { PreferenceStore } from "../preference-import.ts";
 import { redactSecretsInText } from "../../shared/redact.ts";
 import { PASS, type RouteHandler } from "./table.ts";

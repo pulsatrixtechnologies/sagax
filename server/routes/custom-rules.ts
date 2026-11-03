@@ -25,7 +25,7 @@
 // leash. `fromCard` ("Toujours permettre ceci") names an open permission
 // card the rule was made from; the server checks the rule really covers
 // that card's call and marks the card.
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { CustomRuleStore } from "../custom-rules-store.ts";
 import {
   compileRule,

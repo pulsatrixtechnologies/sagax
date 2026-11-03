@@ -32,9 +32,9 @@ import { closeSync, mkdirSync, openSync, readFileSync, rmSync, statSync, unlinkS
 import { dirname, join } from "node:path";
 import { z } from "zod";
 
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 import { immediateRevocations, type RevocationSink } from "./idp-revocations.ts";
-import type { VaultKeySource } from "./mcp/mcp-oauth.ts";
+import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
 import { orgRoleForRole, scopesForRole } from "./oidc-login.ts";
 import type { OidcIdentity, RefreshOutcome } from "./oidc-rp.ts";
 import type { Principal } from "./principals.ts";

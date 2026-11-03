@@ -73,7 +73,7 @@ import {
   type VoiceModeVia,
 } from "../../shared/voice-mode.ts";
 import { accessCardVisibleTo } from "../engines/engine-access.ts";
-import { isSameOrigin } from "../request-auth.ts";
+import { isSameOrigin } from "../auth/request-auth.ts";
 import { websocketAccept } from "../ws-bridge.ts";
 import { webSocketSession } from "../ws-session.ts";
 import { readForVoice } from "../tts/voice-reading.ts";
@@ -118,7 +118,7 @@ import {
   type VoiceKeys,
 } from "./voice-keys.ts";
 import type { ProviderKeyResult } from "../perspicax-link.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
 import type { Audio, Voice } from "../tts/elevenlabs.ts";
 

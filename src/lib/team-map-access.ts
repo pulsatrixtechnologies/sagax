@@ -1,6 +1,6 @@
 // Team map teams (`bot.section`, shared instructions, team memory, team
 // computers) are installation-wide. Routes under /api/sidebar-sections stay
-// admin scope (server/request-auth.ts). Personal sidebar sections are a
+// admin scope (server/auth/request-auth.ts). Personal sidebar sections are a
 // different thing (src/lib/personal-sections.ts) and stay available to every
 // member. Hide create/edit/delete/move when the session cannot write them.
 import { ApiError } from "@/state/store";

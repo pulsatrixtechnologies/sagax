@@ -57,7 +57,7 @@ import { mask, redactSecretsInText } from "../../shared/redact.ts";
 import { skillRequestBehavior } from "../../shared/skill-request.ts";
 import { terminalRequestBehavior } from "../../shared/terminal-request.ts";
 import { parseMemoryPath } from "../memory/memory-store.ts";
-import type { ConsoleAssertion } from "../oidc-rp.ts";
+import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
 import { AssertionReplayCache } from "./org-admin-routes.ts";
 import { compileRoutes, matchRoutes } from "./org-admin-console.ts";
 

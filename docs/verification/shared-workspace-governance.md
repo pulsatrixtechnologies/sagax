@@ -12,7 +12,7 @@ prompt or dialog: visibility is access control and the log is a record.
 - **Per-bot visibility.** `PATCH /api/bots/:id` takes `visibility`:
   `"everyone"` (default), `"admins"`, or `{ "people": [emails or @domains] }`
   (admins always included). Members' PATCHes may not set it (the client
-  body filter in `server/request-auth.ts`). The rules live in
+  body filter in `server/auth/request-auth.ts`). The rules live in
   `server/bot-visibility.ts`; `server/index.ts` applies them:
   - one gate for every path naming a bot, thread, room, routine, run or
     attachment (`pathSubject` / `subjectVisible`): a hidden one answers 404
@@ -99,7 +99,7 @@ above passed. Before that rebase (main `0bb37982` plus #1708),
 `server/notification-routing.e2e.test.ts`, `server/comms.test.ts`,
 `server/guarded-messages-api.test.ts`,
 `server/paired-thread-targets-api.test.ts`, `server/chief-rooms.e2e.test.ts`,
-`server/direct-coordination.e2e.test.ts`, `server/request-auth.test.ts`,
+`server/direct-coordination.e2e.test.ts`, `server/auth/request-auth.test.ts`,
 `server/decision-log.test.ts`, `server/decision-log-wiring.test.ts`,
 `server/card-answerers.e2e.test.ts`, `server/peer-allowlist.e2e.test.ts`,
 `server/runtime/runtime.test.ts`, `server/chief-of-staff.test.ts`,

@@ -37,13 +37,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
-import { fillShape, memberRouteShapes, OWNED_KINDS, rowsBehindFeatures, type RouteShape, type Slot } from "./testing/authz-routes.ts";
-import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "./testing/fake-oidc-provider.ts";
-import { freePortBlock } from "./testing/ports.ts";
+import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
+import { fillShape, memberRouteShapes, OWNED_KINDS, rowsBehindFeatures, type RouteShape, type Slot } from "../testing/authz-routes.ts";
+import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
+import { freePortBlock } from "../testing/ports.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
-const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
+const FAKE_CLAUDE = join(SERVER_DIR, "..", "testing", "fake-claude-cli.ts");
 const posixOnly = describe.skipIf(process.platform === "win32");
 
 /** In everything B owns that A must never read. */
@@ -318,8 +318,8 @@ const allReal = (shape: RouteShape, things: Things) => shape.pieces.every((p) =>
 interface Row { phase: string; method: string; template: string; path: string; status: number; code?: string; note?: string }
 
 async function start() {
-  child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
-    cwd: join(SERVER_DIR, ".."),
+  child = spawn(process.execPath, [join(SERVER_DIR, "..", "index.ts")], {
+    cwd: join(SERVER_DIR, "..", ".."),
     env: {
       ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
       HOME: home, USERPROFILE: home, SAGAX_LOCAL_VM_TEST_NAMESPACE: process.env.SAGAX_LOCAL_VM_TEST_NAMESPACE ?? "", SAGAX_PORT: String(PORT), SAGAX_WEBHOOK_PORT: String(PORT + 1),

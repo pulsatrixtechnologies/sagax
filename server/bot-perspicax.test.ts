@@ -1,9 +1,9 @@
 // Slice 5: the Perspicax MCP profiles a bot mounts (server/bot-perspicax.ts).
 import { describe, expect, it } from "vitest";
 
-import type { BotGrant, Viewer } from "./authz.ts";
+import type { BotGrant, Viewer } from "./auth/authz.ts";
 import { createBotPerspicaxRoutes } from "./bot-perspicax.ts";
-import { requiredScope } from "./request-auth.ts";
+import { requiredScope } from "./auth/request-auth.ts";
 import { cleanBotPerspicax } from "./store.ts";
 
 const pid = (n: number) => `pr_00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;

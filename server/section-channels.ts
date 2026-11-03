@@ -9,7 +9,7 @@
 // name (`bot.section`, `group.section`), so a rename or a delete in the store
 // keeps this file in step.
 //
-// Access (server/authz.ts): a member (directly or through a team) gets
+// Access (server/auth/authz.ts): a member (directly or through a team) gets
 // min(defaultLevel, run) on the section's bots, reads its rooms (readonly)
 // and posts in them (participant, moderator). Owning a section gives no
 // access to bots someone else placed in it, and a section with no member is
@@ -57,8 +57,8 @@ import {
   type SectionRole,
   type TeamRef,
   type Viewer,
-} from "./authz.ts";
-import type { RequestAuth } from "./request-auth.ts";
+} from "./auth/authz.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./routes/table.ts";
 
 export const MAX_SECTION_MEMBERS = 200;

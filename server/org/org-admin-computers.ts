@@ -9,7 +9,7 @@
 //
 // A person reaches their own server environment without the admin role
 // (2026-10-26): the list, the detail and start, stop, pause, resume and
-// reset declare the `own-computer` grant (server/oidc-rp.ts), which
+// reset declare the `own-computer` grant (server/auth/oidc-rp.ts), which
 // Perspicax signs for that one request with the person's own role. The
 // route then answers only the person's own computers; anyone else's is not
 // found. Update and delete stay an admin's.

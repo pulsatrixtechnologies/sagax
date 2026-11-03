@@ -2105,7 +2105,7 @@ person's click and answers an Undo. Bots use `folder` on propose_routine.
 ## Signed bot visits (2026-10-27)
 
 The bot's own browser signs page opens (docs/web-bot-auth.md,
-server/web-bot-auth.ts). On unless that person turns it off
+server/auth/web-bot-auth.ts). On unless that person turns it off
 (`PUT /api/me/web-bot-auth`, `{ enabled: false }`). Not a login. The
 person's attached browser is not signed. One key per person on an
 organization server.
@@ -2306,7 +2306,7 @@ Copier. On desktop, web, iOS and Android:
 
 Decision: PORT COMPLET of upstream a5f9183bc. Three walls, each with tests:
 
-- **Browsers never get loopback trust** (`server/request-auth.ts`
+- **Browsers never get loopback trust** (`server/auth/request-auth.ts`
   `fromBrowser`): a session-less loopback request carrying `Sec-Fetch-Site`,
   `Sec-Fetch-Dest`, or a WebSocket `Origin` gets 401 `BROWSER_SIGN_IN` unless
   it carries the desktop owner header (`x-openmausbot-desktop-owner`, added by
@@ -2328,7 +2328,7 @@ Decision: PORT COMPLET of upstream a5f9183bc. Three walls, each with tests:
   AKS sandbox) never the private network unless `browserEngine.egress.allow`.
   Meeting browsers keep WebRTC UDP. `agent_browser_read` with `url` refused.
   Refusals are appended to the bot's next browser result.
-- Tests: `server/request-auth.e2e.test.ts` (real headless Chrome page cannot
+- Tests: `server/auth/request-auth.e2e.test.ts` (real headless Chrome page cannot
   create a bot), `server/browser/egress/hostile-pages.e2e.test.ts`,
   `companion/test/control.test.ts`. Docs: `docs/self-hosting.md#a-browser-signs-in`,
   `docs/browser-packaging.md#what-a-bots-browser-can-reach`.
@@ -3388,7 +3388,7 @@ routine. Wire contract v2 of 2026-10-21 (Perspicax <-> Sagax, Perspicax
 #419). Rules, none optional,
 covered by `server/mail/bot-inbound-mail.test.ts`,
 `server/mail/bot-mail-addresses.test.ts`, `server/routes/bot-inbound-mail.test.ts`,
-`server/oidc-rp.test.ts`, `server/org/org-member-api.e2e.test.ts` (M10),
+`server/auth/oidc-rp.test.ts`, `server/org/org-member-api.e2e.test.ts` (M10),
 `src/components/bot-settings/BotEmailAddress.test.ts`,
 `src/components/TypedTriggers.test.ts` and iOS `BotInboundMailTests`:
 
@@ -3524,7 +3524,7 @@ Phase 2 of Perspicax Voice (contract `perspicax-voice/1`, Perspicax side in
 its own PR). A text or a call on a person's phone line is answered by
 Perspicax (Twilio webhooks, IVR, PIN, choice of bot) and relayed here. It
 only wakes a routine, like bot email. Covered by
-`server/bot-inbound-telephony.test.ts`, `server/oidc-rp.test.ts` and
+`server/bot-inbound-telephony.test.ts`, `server/auth/oidc-rp.test.ts` and
 `src/components/TriggersPanel.test.ts`:
 
 - Delivery: `POST /api/org/telephony/inbound`
@@ -3945,10 +3945,10 @@ A person may ask that some kinds of approval need one of their security keys
 or passkeys (WebAuthn) on top of the tap: Settings > Security
 (`src/components/SecurityKeySettings.tsx`). Classes and classifier in
 `shared/step-up.ts`; keys, ceremonies and verification (`@simplewebauthn/server`)
-in `server/security-keys.ts`; the decision in `server/step-up-gate.ts`; routes
+in `server/auth/security-keys.ts`; the decision in `server/auth/step-up-gate.ts`; routes
 in `server/routes/security-keys.ts`. Rules, covered by
-`server/security-keys.test.ts`, `server/routes/security-keys.test.ts`,
-`server/security-keys.e2e.test.ts`, `shared/step-up.test.ts` and
+`server/auth/security-keys.test.ts`, `server/routes/security-keys.test.ts`,
+`server/auth/security-keys.e2e.test.ts`, `shared/step-up.test.ts` and
 `src/state/store.step-up.test.ts`:
 
 - Classes: destructive, irreversible, money, external-send (the risk classes
@@ -3965,7 +3965,7 @@ in `server/routes/security-keys.ts`. Rules, covered by
   disk, no broken link, no dot path or engine instruction file, not a move,
   a patch or a server's write), which is in no class; typed text a shell
   reads as a deletion (`rm -rf ~`) is destructive
-  (`server/step-up-action-classes.test.ts`). A bot act card is classed by its
+  (`server/auth/step-up-action-classes.test.ts`). A bot act card is classed by its
   route (DELETE destructive, any write irreversible, gone fails closed) and
   its step-up is bound to that route. Each person's own, on an organization
   server too: the answering person's choice applies; a caller with no person
@@ -3993,7 +3993,7 @@ in `server/routes/security-keys.ts`. Rules, covered by
   adding a second key (bound to its name and address) needs an existing
   key; the first key needs a sign-in younger than 15 minutes (or this
   computer's own person in the desktop app); every addition is audited.
-- "A sign-in younger than 15 minutes" (`server/recent-sign-in.ts`,
+- "A sign-in younger than 15 minutes" (`server/auth/recent-sign-in.ts`,
   2026-10-18) is the session's `authAt`, never its `createdAt`: a bot that
   can create a pairing code (`manage_pairing`, act on
   `POST /api/auth/pairing`) redeems it into a brand new session. Only
@@ -4018,8 +4018,8 @@ in `server/routes/security-keys.ts`. Rules, covered by
   export in clear there needs the desktop app. A headless server's
   loopback never counts (a bot's shell is a loopback caller there); the
   desktop app's own person does. The same rule gates the vault export for a
-  person without a key. Tests: `server/recent-sign-in.test.ts`,
-  `server/recent-sign-in.e2e.test.ts`, `server/oidc-login.test.ts` (the
+  person without a key. Tests: `server/auth/recent-sign-in.test.ts`,
+  `server/auth/recent-sign-in.e2e.test.ts`, `server/auth/oidc-login.test.ts` (the
   auth_time and `fresh` cases), `server/mail/email-signin.test.ts`, C5 in
   `server/org/org-admin-console.e2e.test.ts`. The last key removed
   clears the classes.
@@ -4516,7 +4516,7 @@ Covered by `src/components/SettingsModal.orgCleanup.test.ts`,
   them (who pays: the bot's setting, #1137). An organization admin is never narrowed. The UI hides
   New bot and says "Votre administrateur vous permet d'utiliser les robots
   partagés seulement" (`bots.readOnly.notice`; MA-3, MA-4,
-  `server/authz.test.ts`).
+  `server/auth/authz.test.ts`).
 - A routine always acts in its owner's name (2026-10-08). No consent,
   no switch, no settings card, no "Reconnect my routines": Sagax issues the
   routine delegation itself from the person's live sign-in, by RFC 8693
@@ -4622,7 +4622,7 @@ named permission (`shared/permissions.ts`, spec
   `server.settings`, `server.link`) are never granted by a profile; keep that
   list tiny and justify any addition in the spec.
 - An admin-scope route a key opens is listed in `PERMISSION_ROUTES`
-  (`server/request-auth.ts`); a new admin route stays admin until listed
+  (`server/auth/request-auth.ts`); a new admin route stays admin until listed
   there, and its handler must not trust the admin scope for more than the
   key says (an engine's `cli` and `configDir` stay `host.shell`).
 - A member bot field beyond `MEMBER_BOT_FIELDS` needs its key in
@@ -4636,7 +4636,7 @@ named permission (`shared/permissions.ts`, spec
   Perspicax matrix; `GET /api/org/admin/people/{principal}` returns the
   person's effective keys. Covered by `server/org/org-permissions.e2e.test.ts`
   (PM-1 to PM-5), `shared/permissions.test.ts`,
-  `server/org/org-permissions.test.ts` and `server/request-auth.test.ts`.
+  `server/org/org-permissions.test.ts` and `server/auth/request-auth.test.ts`.
 
 ## Directory refresh on demand (organization mode, 2026-10-11)
 
@@ -5022,8 +5022,8 @@ web test covers `approvalCardStaysInChat` yet.
 
 On an organization server (`SAGAX_IDENTITY=perspicax`) a signed-in person's
 name and email belong to Perspicax. Keep these rules, each covered by a test
-in `server/member-identity.e2e.test.ts`, `server/org/org-identity.e2e.test.ts`,
-`server/org/org-profile.e2e.test.ts`, `server/oidc-login.test.ts` or the
+in `server/auth/member-identity.e2e.test.ts`, `server/org/org-identity.e2e.test.ts`,
+`server/org/org-profile.e2e.test.ts`, `server/auth/oidc-login.test.ts` or the
 onboarding tests:
 
 - `GET /api/auth/session` and the config's `viewer` carry
@@ -6430,10 +6430,10 @@ listener on `127.0.0.1` (ephemeral port, random state path, exact Host and
 Origin, ten-minute timeout, closed after use), then `sagax://auth` only
 when this exact running copy owns the scheme and the server advertises
 `nativeReturn`, else an error on `/pair`. The server side is
-`validLoopbackReturn` in `server/oidc-login.ts` (loopback IP literals with a
+`validLoopbackReturn` in `server/auth/oidc-login.ts` (loopback IP literals with a
 port and a state only; the credential rides in the fragment) and the
 descriptor's `identity.loopbackReturn`. Tests:
-`electron/oidc-system-sign-in.node-test.mjs`, `server/oidc-login.test.ts`,
+`electron/oidc-system-sign-in.node-test.mjs`, `server/auth/oidc-login.test.ts`,
 `server/oidc-session.e2e.test.ts` (S2-7b). The return lands in the main window as
 `<origin>/pair?signin=<nonce>#code=...` (`authReturnTarget`): never a
 fragment-only change of the `/pair` the window already shows, which would
@@ -6455,10 +6455,10 @@ sensitive action. Keep these, each covered by a test:
   sessions are remembered by token hash in `sessions.json` (`ended`, 35 days,
   2,000 entries; `SessionRegistry.explainRefusal`). Each refusal and each
   session the server ends is one `auth: session refused|ended` line
-  (`server/auth-refusal-log.ts`: code, route without query, via, client
+  (`server/auth/auth-refusal-log.ts`: code, route without query, via, client
   family, session id prefix; never a token, hash or cookie; repeats once a
   minute).
-- `server/idp-session.ts`: a refresh is marked in the vault before it is
+- `server/auth/idp-session.ts`: a refresh is marked in the vault before it is
   sent (`refreshStartedAt`) and resumed at boot (`resumeInterrupted`); the
   rotated token is written first and kept in memory if the write fails; the
   vault is re-read before a refresh and before each write (a deploy's two
@@ -6472,7 +6472,7 @@ sensitive action. Keep these, each covered by a test:
   sign-in; an ignored id_token keeps the 24 h clock running. Transient failures retry at 5 s
   and 15 s (inside Perspicax's 30 s reuse grace), then each minute; 24 hours
   of observed failures answer 503 `idp_unreachable`, never a sign-out.
-  `server/oidc-rp.ts`: only `invalid_grant` is a refusal; `invalid_client`
+  `server/auth/oidc-rp.ts`: only `invalid_grant` is a refusal; `invalid_client`
   and the like, a 200 that is not a token answer, and an id_token that does
   not verify (except another subject) are not.
 - The Perspicax directory puts a missing person out only when two answers a
@@ -7720,7 +7720,7 @@ up (cloud computer woken, three commands, text at +67 s). Rules:
   sessions, 0 off; `ProviderAdapter.sessionBytes`, Claude only: the
   `projects/<cwd>/<id>.jsonl` file, never while a live process holds it).
   An active task keeps its session however large.
-  `server/stale-session.ts`, `staleEngineSession` in `server/index.ts`.
+  `server/auth/stale-session.ts`, `staleEngineSession` in `server/index.ts`.
   Engines handed the transcript every turn, a rewound thread or another
   engine joining are not concerned (they rebuild anyway). Routine, teammate
   and room threads are judged the same way. `context.autoCompact: false`
@@ -7741,7 +7741,7 @@ up (cloud computer woken, three commands, text at +67 s). Rules:
   while that message is the latest (a request steered in lifts it).
   The standing rule rides `RUN_YOURSELF_PROMPT`: small talk calls no tool and
   never resumes earlier work; one line may name it and ask.
-- Tests: `server/stale-session.test.ts`, `server/small-talk.test.ts`,
+- Tests: `server/auth/stale-session.test.ts`, `server/small-talk.test.ts`,
   `server/turns/turn-context.test.ts`, the stale case of
   `server/context-compaction.e2e.test.ts`, `sessionBytes` in
   `server/drivers/claude.test.ts`.
@@ -7930,7 +7930,7 @@ the bot-wide action. Tests: `src/lib/sidebar-hidden*.test.ts`,
 A person can carry one custom label ("CTO", "Dispatch"), shown the way a
 bot's label is. Keep these rules, each covered by
 `shared/person-label.test.ts`, `server/routes/person-labels.test.ts`,
-`server/principals.test.ts`, `server/person-labels.e2e.test.ts` (PL-1 to
+`server/auth/principals.test.ts`, `server/person-labels.e2e.test.ts` (PL-1 to
 PL-4), `src/lib/person-labels.test.ts`, `src/components/PersonLabel.test.ts`,
 `src/components/PersonLabel.edit.test.ts` or `PersonPanel.test.ts`:
 
@@ -8384,7 +8384,7 @@ PT-4 in `server/org/org-private-threads.e2e.test.ts`):
   Marking read, pins and section moves are not settings.
 - An admin has no override on content. `DELETE /api/groups/:id` is the
   owner's, or an admin's for moderation (`channel.moderate` on a room in
-  `server/authz.ts`). A client-scope session may delete only there.
+  `server/auth/authz.ts`). A client-scope session may delete only there.
 - The owner of a client-scope session also picks the default responder.
   The working folder keeps the admin scope (it touches the host or sandbox
   filesystem): a non-admin owner sees it read-only with a note.
@@ -9068,7 +9068,7 @@ routes need a paired session (or `SAGAX_CREDENTIAL_VAULT_LOOPBACK=1`). The
 `/usr/bin/op`, with no folder above it writable by others, located again
 before each run, satisfying the AgileBits code requirement on macOS, with a
 short environment.
-One-time codes are computed at fill time (`server/totp.ts`).
+One-time codes are computed at fill time (`server/auth/totp.ts`).
 
 Logins that fill where you'd expect (2026-10-19, port of OpenMausBot #2929,
 #2725/#2726 and the sign-in request of #2707, on this vault: no second login
@@ -9133,7 +9133,7 @@ CLI with the desktop app integration or a service account, never on an
 organization server; a picked item is a reference read at fill time. Tests:
 `server/vault/credential-vault.test.ts`, `server/vault/credential-fill.test.ts` (a
 happy-dom page behind a fake engine), `server/routes/credential-vault.test.ts`,
-`server/onepassword.test.ts`, `server/totp.test.ts`,
+`server/onepassword.test.ts`, `server/auth/totp.test.ts`,
 `src/components/VaultRequestCard.test.ts`.
 
 Import and Export (2026-10-18), two buttons in the vault's card

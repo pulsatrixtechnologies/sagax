@@ -8,7 +8,7 @@ import { createInterface } from "node:readline";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { launchVerificationServer, type VerificationServer } from "../../scripts/control-omb.ts";
 import { createComputerSharing, type SharedFolder } from "../../electron/computer-sharing.mjs";
-import { sessionCookieName } from "../request-auth.ts";
+import { sessionCookieName } from "../auth/request-auth.ts";
 
 let fixture: VerificationServer;
 let connector: ReturnType<typeof createComputerSharing>;

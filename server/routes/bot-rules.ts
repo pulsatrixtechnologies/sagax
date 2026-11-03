@@ -6,7 +6,7 @@
 // The Soul edit's gate, like the workspace routes (2026-10-09: members
 // manage their own bots): an admin, the bot's owner, or someone granted edit
 // on it; a person who may only use shared bots is refused. The scope rule
-// (server/request-auth.ts CLIENT_ALLOW) lets a client session reach the
+// (server/auth/request-auth.ts CLIENT_ALLOW) lets a client session reach the
 // handler; `mayEdit` decides. Text changes go through the memory store and
 // its journal (revertable in History, conflict hash, secret scrub); every
 // change is also written to the admin activity log (`audit`).
@@ -15,7 +15,7 @@ import { z } from "zod";
 
 import { journalMemoryDelete, journalMemoryWrite } from "../memory/memory-journal.ts";
 import { MemoryStoreError, readMemoryDoc } from "../memory/memory-store.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   RULE_SET_NAME_MAX,
   RULE_SETS_MAX,

@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { createDesktopAppearanceStore } from "./desktop-appearance.ts";
 import { createDesktopAppearanceRoutes } from "../routes/desktop-appearance.ts";
 import { PASS } from "../routes/table.ts";
-import { CLIENT_ALLOW } from "../request-auth.ts";
+import { CLIENT_ALLOW } from "../auth/request-auth.ts";
 import { DESKTOP_APPEARANCE_PATH } from "../../shared/desktop-appearance.ts";
 
 describe("desktop appearance store", () => {

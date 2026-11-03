@@ -1,7 +1,7 @@
 // Live Team Map metadata (#1388 slice P1). Prompts and replies never leave
 // their transcripts: this projection carries only ids, status relationships,
 // optional delegation labels, and timestamps.
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface TeamMapBot {

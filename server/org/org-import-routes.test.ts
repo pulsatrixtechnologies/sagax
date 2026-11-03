@@ -5,11 +5,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { DATA_DIR } from "../config.ts";
 import { createOrgImportRoute, type OrgImportRouteDeps } from "./org-import-routes.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { RoutineManager } from "../routines/routines.ts";
 import { PASS, type RouteContext } from "../routes/table.ts";
 import { SectionChannels } from "../section-channels.ts";
-import type { SessionRecord } from "../sessions.ts";
+import type { SessionRecord } from "../auth/sessions.ts";
 import { Store } from "../store.ts";
 import { importTeamBackup } from "../backup/team-backup.ts";
 

@@ -46,7 +46,7 @@ import { HOSTED_PROVIDER_SETTINGS_ERROR } from "../models/hosted-models.ts";
 import { cliCommandRefusal } from "../procs.ts";
 import type { ProviderAccountOwner } from "../engines/provider-accounts.ts";
 import { providerIconPatchSchema, withInstanceIcon } from "../engines/provider-icon.ts";
-import { isLoopbackHost, isProxied, type RequestAuth } from "../request-auth.ts";
+import { isLoopbackHost, isProxied, type RequestAuth } from "../auth/request-auth.ts";
 import { permissionRefusal, type PermissionKey } from "../../shared/permissions.ts";
 import { providerIconError } from "../../shared/provider-icon.ts";
 import { PASS, type RouteHandler } from "./table.ts";

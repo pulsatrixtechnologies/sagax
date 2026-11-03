@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { createViewerBotOverrideStore } from "./viewer-bot-overrides.ts";
 import { createViewerBotOverrideRoutes, VIEWER_BOT_OVERRIDES_PATH } from "./routes/viewer-bot-overrides.ts";
 import { PASS } from "./routes/table.ts";
-import { CLIENT_ALLOW } from "./request-auth.ts";
+import { CLIENT_ALLOW } from "./auth/request-auth.ts";
 import { readFileSync as readSource } from "node:fs";
 
 const ADA = "pr_11111111-1111-4111-8111-111111111111";

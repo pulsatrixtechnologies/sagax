@@ -6,7 +6,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { OidcError, type ConsoleAssertion } from "../oidc-rp.ts";
+import { OidcError, type ConsoleAssertion } from "../auth/oidc-rp.ts";
 import {
   AssertionReplayCache,
   botInReach,

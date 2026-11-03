@@ -3,7 +3,7 @@ import type { Socket } from "node:net";
 
 import { z } from "zod";
 
-import { isSameOrigin, type RequestAuth } from "../request-auth.ts";
+import { isSameOrigin, type RequestAuth } from "../auth/request-auth.ts";
 import { encodeWebSocketFrame, websocketAccept, webSocketFrameDecoder } from "../ws-bridge.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 import { parseTerminalControl } from "../../shared/terminal-resources.ts";

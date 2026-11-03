@@ -33,7 +33,7 @@ import {
 } from "@simplewebauthn/server";
 import { z } from "zod";
 
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 import {
   STEP_UP_CLASSES,
   isStepUpClass,
@@ -41,7 +41,7 @@ import {
   type SecurityKeyView,
   type StepUpClass,
   type StepUpFailure,
-} from "../shared/step-up.ts";
+} from "../../shared/step-up.ts";
 
 /** How long a ceremony waits for the key, from its start. */
 export const CEREMONY_TTL_MS = 2 * 60_000;

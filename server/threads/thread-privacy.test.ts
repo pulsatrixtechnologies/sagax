@@ -2,7 +2,7 @@
 // only; group chats are the only conversations several people share.
 import { describe, expect, it } from "vitest";
 
-import { canInChannel, type BotFacts, type BotGrant, type SectionAccess, type TeamRef, type Viewer } from "../authz.ts";
+import { canInChannel, type BotFacts, type BotGrant, type SectionAccess, type TeamRef, type Viewer } from "../auth/authz.ts";
 import {
   canOnThread,
   migrationLogLine,

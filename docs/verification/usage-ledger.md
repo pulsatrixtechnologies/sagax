@@ -80,7 +80,7 @@ waits for settlement, and checks that the tooltip separates 10 uncached input,
 headline. Its JSON evidence sits next to the fixture log; no live account is used.
 
 ```sh
-pnpm exec vitest run server/usage-ledger.test.ts src/components/UsageSection.test.ts server/request-auth.test.ts
+pnpm exec vitest run server/usage-ledger.test.ts src/components/UsageSection.test.ts server/auth/request-auth.test.ts
 ```
 
 These cover month files and 0600 modes, torn lines, clamped tokens, a blocked

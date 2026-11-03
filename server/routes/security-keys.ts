@@ -1,5 +1,5 @@
 // Settings > Security: a person's security keys and passkeys, the classes of
-// approval that need one, and the step-up ceremonies (server/security-keys.ts,
+// approval that need one, and the step-up ceremonies (server/auth/security-keys.ts,
 // shared/step-up.ts).
 //
 //   GET    /api/security-keys                    -> SecurityKeysState
@@ -32,9 +32,9 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { randomBytes } from "node:crypto";
 
-import type { RequestAuth } from "../request-auth.ts";
-import { isLoopbackHost, isProxied, requestOrigin } from "../request-auth.ts";
-import { grantDigest, type SecurityKeys } from "../security-keys.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { isLoopbackHost, isProxied, requestOrigin } from "../auth/request-auth.ts";
+import { grantDigest, type SecurityKeys } from "../auth/security-keys.ts";
 import {
   STEP_UP_CLASSES,
   canonicalJson,

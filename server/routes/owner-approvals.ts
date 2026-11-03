@@ -16,7 +16,7 @@
 // Every route is the caller's own: their rules, their bots. A local
 // service or a turn's token is never a person here (`manager` is null), so
 // a bot cannot widen its own leash.
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { isRuleBehavior, type OwnerRule } from "../approvals/owner-approval.ts";
 import type { OwnerApprovalStore } from "../approvals/owner-approval-store.ts";
 import { ORG_ALWAYS_ALLOW_OFF, standingGrantsAllowed } from "../custom-rules-org.ts";

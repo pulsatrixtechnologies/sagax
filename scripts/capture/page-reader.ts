@@ -17,7 +17,7 @@ import { chromium, type Page } from "playwright";
 
 import { json, readBody } from "../../server/harness/http.ts";
 import { PublishedPages } from "../../server/published-pages.ts";
-import type { RequestAuth } from "../../server/request-auth.ts";
+import type { RequestAuth } from "../../server/auth/request-auth.ts";
 import * as routesModule from "../../server/routes/published-pages.ts";
 import type { PageViewer, PublicPageOptions } from "../../server/routes/published-pages.ts";
 import { PASS } from "../../server/routes/table.ts";

@@ -1,4 +1,4 @@
-// The step-up decision for one Allow (shared/step-up.ts, server/security-keys.ts):
+// The step-up decision for one Allow (shared/step-up.ts, server/auth/security-keys.ts):
 // which classes the card falls in, which of them the answering person chose,
 // and whether the presented step-up was signed for exactly this card, its
 // content and this answer. server/index.ts calls it on every answer path.
@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { basename, dirname, resolve as resolvePath } from "node:path";
 
-import type { RiskClass } from "../shared/custom-rules.ts";
+import type { RiskClass } from "../../shared/custom-rules.ts";
 import {
   STEP_UP_CLASSES,
   actionToolClasses,
@@ -21,10 +21,10 @@ import {
   type StepUpClass,
   type StepUpRefusal,
   type StepUpTarget,
-} from "../shared/step-up.ts";
-import type { OptionCardData } from "../shared/wire.ts";
-import { ORG_ALWAYS_ALLOW_OFF, answerWidens, standingGrantsAllowed } from "./custom-rules-org.ts";
-import { factsForCall } from "./custom-rules-review.ts";
+} from "../../shared/step-up.ts";
+import type { OptionCardData } from "../../shared/wire.ts";
+import { ORG_ALWAYS_ALLOW_OFF, answerWidens, standingGrantsAllowed } from "../custom-rules-org.ts";
+import { factsForCall } from "../custom-rules-review.ts";
 import { grantDigest, type SecurityKeys } from "./security-keys.ts";
 
 /** The grant an Allow on this card, with this answer, is authorized by:

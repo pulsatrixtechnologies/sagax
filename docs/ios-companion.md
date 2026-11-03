@@ -436,7 +436,7 @@ request the remote-client renderer makes crosses, what it hides does not) and
 `companion/test/proxy.test.ts` (the new routes reach a real harness).
 
 For a phone or tablet paired with a server (a client session), `CLIENT_ALLOW`
-in `server/request-auth.ts` adds the two steer routes (the harness applies the
+in `server/auth/request-auth.ts` adds the two steer routes (the harness applies the
 cancel's guards plus the send's: the viewer's own thread, a read-only member
 of a shared room may not steer) and, on a solo or hosted server (not an
 organization server, where a member's engines are `/api/me/engines`),
@@ -581,7 +581,7 @@ refused, as does `POST /api/bots/:id/memory/open` (it opens a window on the
 host's screen).
 
 **Client sessions on a server (S2).** Added to `CLIENT_ALLOW` in
-`server/request-auth.ts`, each held by its handler:
+`server/auth/request-auth.ts`, each held by its handler:
 
 | Route | Who |
 |---|---|
@@ -609,7 +609,7 @@ sidecar by `companion/test/proxy.test.ts`.
 
 Tests: `companion/test/routes.test.ts` ("iOS feature parity (S1, D1, D3)"),
 `companion/test/proxy.test.ts` (the routes reach a real harness; the voice
-engine route; the routine edit), `server/request-auth.test.ts`,
+engine route; the routine edit), `server/auth/request-auth.test.ts`,
 `server/routes/tts-provider.test.ts`, `server/ios-parity.e2e.test.ts` ("holds
 The owner routes of a client session to the owner").
 

@@ -4,7 +4,7 @@
 // local state; packaged mutations additionally carry a per-launch capability
 // injected by Electron below renderer JavaScript. A **session** request carries
 // a credential minted by pairing
-// (server/sessions.ts): a bearer token, the session cookie the served web UI
+// (server/auth/sessions.ts): a bearer token, the session cookie the served web UI
 // uses, or, for the event stream only, a short-lived ticket. With a session
 // the loopback rule is replaced by a same-origin rule, so a browser on
 // another site still cannot ride the cookie (CSRF), and by a scope check.
@@ -13,15 +13,15 @@ import { timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 
 import type { Scope, SessionRecord, SessionRegistry } from "./sessions.ts";
-import type { PermissionKey } from "../shared/permissions.ts";
-import { denyReason as companionDenial, isCompanionNotice } from "../companion/src/routes.ts";
+import type { PermissionKey } from "../../shared/permissions.ts";
+import { denyReason as companionDenial, isCompanionNotice } from "../../companion/src/routes.ts";
 import {
   MEMBER_BOT_FIELDS,
   clientBotPatchViolation as sharedClientBotPatchViolation,
   memberBotFieldViolation as sharedMemberBotFieldViolation,
   viewerCapabilities,
   type ViewerCapabilities,
-} from "../shared/viewer-capabilities.ts";
+} from "../../shared/viewer-capabilities.ts";
 
 /** How much a loopback request without a session is trusted.
  *
@@ -696,7 +696,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["POST"], path: /^\/api\/bots$/ },
   { methods: ["DELETE"], path: /^\/api\/bots\/[\w-]+$/ },
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/direct-grants$/ },
-  // The owner removes a person's grant (server/direct-grants.ts checks ownership)
+  // The owner removes a person's grant (server/auth/direct-grants.ts checks ownership)
   { methods: ["DELETE"], path: /^\/api\/bots\/[\w-]+\/direct-grants\/pr_[0-9a-f-]{36}$/ },
   // approvals and cards
   { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/respond$/ },

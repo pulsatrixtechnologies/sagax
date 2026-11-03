@@ -12,12 +12,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { sandboxDesktopTarget } from "./desktop/desktop-viewer-targets.ts";
 import { json, readBody } from "./harness/http.ts";
-import { requiredScope, resolveRequestAuth } from "./request-auth.ts";
+import { requiredScope, resolveRequestAuth } from "./auth/request-auth.ts";
 import { createDesktopViewer, SANDBOX_VIEWER_TARGET } from "./routes/desktop-viewer.ts";
 import { PASS } from "./routes/table.ts";
 import { createUserSandboxRoutes } from "./sandbox/user-sandbox-routes.ts";
 import { SandboxService } from "./sandbox/sandboxd-core.ts";
-import { SessionRegistry } from "./sessions.ts";
+import { SessionRegistry } from "./auth/sessions.ts";
 import { FakeDocker } from "./testing/fake-docker.ts";
 import { inProcessSandboxdClient } from "./testing/in-process-sandboxd.ts";
 import { UserSandboxManager } from "./sandbox/user-sandbox-manager.ts";

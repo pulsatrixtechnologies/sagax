@@ -22,7 +22,7 @@ import {
   referencedFileName,
   statMessageFile,
 } from "../messages/message-file.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   personParticipant,
   roomReceiptMember,

@@ -2,9 +2,9 @@
 // team manager's anchor rule.
 import { describe, expect, it } from "vitest";
 
-import type { BotGrant, TeamRef, Viewer } from "./authz.ts";
+import type { BotGrant, TeamRef, Viewer } from "./auth/authz.ts";
 import { createBotGrantRoutes, type GrantAuditRow } from "./bot-grants.ts";
-import { requiredScope } from "./request-auth.ts";
+import { requiredScope } from "./auth/request-auth.ts";
 
 const pid = (n: number) => `pr_00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const ALICE = pid(1);

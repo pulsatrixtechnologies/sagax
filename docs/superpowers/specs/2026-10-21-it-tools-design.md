@@ -84,7 +84,7 @@ Tool declaration and gating:
 - **Confidential threads.** `server/threads/confidential-threads.ts` never trusts a tool's own `readOnlyHint`.
 - **HTTP routes.** Route modules live in `server/routes/` (README: `createXRoutes(deps)`, no new `if` blocks in
   `server/index.ts`, enforced by `scripts/testing/index-route-ratchet.test.ts`). Route scopes are in
-  `server/request-auth.ts` (`CLIENT_ALLOW` for client and member sessions, `PERMISSION_ROUTES`). Each route also
+  `server/auth/request-auth.ts` (`CLIENT_ALLOW` for client and member sessions, `PERMISSION_ROUTES`). Each route also
   needs a row in `server/tool-policy.generated.ts` (`scripts/tool-policy/generate.ts`, `docs/tool-policy.md`).
 - **Org permissions.** `shared/permissions.ts` (`PermissionDefinition`, `memberDefault`, `adminOnly`, labels
   `{en, fr}`).
@@ -322,7 +322,7 @@ Abuse notes for the spec:
   Chosen (decision 19): do not trust a client-supplied result. `post` takes `{ threadId, check, input }`
   and runs the check again, hitting the cache when it just ran. A client can then never post a fabricated
   verdict as if it came from the server.
-- Auth: add both paths to `CLIENT_ALLOW` in `server/request-auth.ts` so member sessions and paired clients reach
+- Auth: add both paths to `CLIENT_ALLOW` in `server/auth/request-auth.ts` so member sessions and paired clients reach
   them. On an organization server, gate them in `PERMISSION_ROUTES` with a new key (§3.8).
 - Tool policy: add reviewed rows to `server/tool-policy.generated.ts` (`tier: "read"`, `readOnly: true` for
   `run`, `write` for `post`), then rerun `scripts/tool-policy/generate.ts`.
@@ -678,7 +678,7 @@ Edited:
 - `server/index.ts` (capability kind, integration mount only; no route `if`)
 - `server/mcp/mcp-registry.ts`, `server/sagax-internal-tools.ts`, `server/threads/confidential-threads.ts`
 - `server/config.ts`, `src/lib/feature-flags.ts`
-- `server/request-auth.ts`, `server/tool-policy.generated.ts`
+- `server/auth/request-auth.ts`, `server/tool-policy.generated.ts`
 - `shared/permissions.ts`, `shared/requested-views.ts`, `shared/harness-commands.ts`
 - `src/lib/composer-commands.ts`
 - `src/components/bot-settings/panel-tabs.ts`, `src/components/BotSettingsDialog.tsx`

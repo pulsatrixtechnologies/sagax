@@ -125,7 +125,7 @@ Simple mode shows the list and the badges and leaves out their details.
 RULES.md and docs/ follow the Soul's gate (2026-10-09: members manage their own bots).
 The workspace routes (`/api/bots/:id/workspace`, `/workspace/file` for RULES.md and
 docs/<name>.md, `/workspace/download`, `/workspace/docs/rename`) are open to a client session
-in `server/request-auth.ts`, and the handler lets through only an admin, the bot's owner or
+in `server/auth/request-auth.ts`, and the handler lets through only an admin, the bot's owner or
 someone granted edit on it, never a person who may only use shared bots (`ownerOrAdminOf`,
 like `PATCH /api/bots/:id {soul}`). MEMORY.md and memory/ stay on the admin memory routes. In
 the persona editor Rules and Files lock on the Soul's field (`canEditBotField(..., "soul")`);

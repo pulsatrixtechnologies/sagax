@@ -6,7 +6,7 @@
 //   PATCH /api/me/experimental   { features?: { <key>: true | false | null }, browserProfiles?: [{ id?, name }] }
 //
 // A solo server answers 404: its one person edits the installation itself.
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PersonSettingsError, type PersonSettings, type PersonSettingsStore } from "../person-settings.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

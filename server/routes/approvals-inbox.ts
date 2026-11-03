@@ -32,7 +32,7 @@ import type { JournalChain } from "../action-journal.ts";
 import { isCustomRuleBehavior, isRiskClass, MAX_RULE_TEXT } from "../../shared/custom-rules.ts";
 import { liveDecisionRefusal } from "../../shared/live-approval.ts";
 import { approvalTypeOf } from "../approvals/approval-type.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface InboxViewer {

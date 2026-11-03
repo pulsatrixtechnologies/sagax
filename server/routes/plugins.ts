@@ -23,7 +23,7 @@ import type { IncomingMessage } from "node:http";
 
 import { PLUGIN_CATALOG } from "../../shared/plugin-catalog.ts";
 import { featuredListing, featuredMatching, listingInRegion, type PluginListing, type RegistrySearch } from "../plugins/plugin-registry.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export type InstalledPlugin =

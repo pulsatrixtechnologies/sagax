@@ -18,7 +18,7 @@
 // grants through Perspicax). Nothing here adds a multi-person view.
 import { z } from "zod";
 
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   conversationLines,
   excerptText,

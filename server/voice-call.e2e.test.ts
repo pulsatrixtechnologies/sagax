@@ -13,10 +13,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import WebSocket, { WebSocketServer } from "ws";
 
 import { json, readBody } from "./harness/http.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import { createDesktopViewer } from "./routes/desktop-viewer.ts";
 import { PASS, type RouteContext } from "./routes/table.ts";
-import type { SessionRecord } from "./sessions.ts";
+import type { SessionRecord } from "./auth/sessions.ts";
 import { startFakeXaiVoice, XAI_VOICE_PATHS, type FakeXaiVoice } from "./testing/fake-xai-voice.ts";
 import type { VoiceUsage } from "./voice/voice-mode.ts";
 

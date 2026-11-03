@@ -15,7 +15,7 @@ import {
 } from "./skill-person-edit.ts";
 import { botsUsingSharedSkill } from "./skill-share.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 
 export class PersonalSkills {
   private dataDir: string;

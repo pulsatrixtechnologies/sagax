@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { createInterimAttachRoutes, interimWindowUntil, suggestedPerson, windowWithDays, type InterimAttachRouteDeps } from "./interim-attach-routes.ts";
 import { createPerspicaxOrgRoutes } from "./perspicax-org-routes.ts";
-import type { Principal } from "./principals.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import type { Principal } from "./auth/principals.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import { PASS, type RouteContext } from "./routes/table.ts";
 
 const DAY = 86_400_000;

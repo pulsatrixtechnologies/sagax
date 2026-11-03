@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import { requiredScope } from "../request-auth.ts";
+import { requiredScope } from "../auth/request-auth.ts";
 import { repositoryInfo } from "../activity-code-work.ts";
 import { BranchArchive, BranchPulls, hostGit, parseStatus, proposedMessage, redactPaths, validBranchName, type GitExec } from "../code-branches.ts";
 import type { BotBranchInfo } from "../../shared/bot-code-branches.ts";

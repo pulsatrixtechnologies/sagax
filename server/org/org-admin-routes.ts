@@ -11,7 +11,7 @@
 //
 // Answered before the auth gate and before loopback trust: the only
 // credential is a console assertion Perspicax signs per request (typ
-// `pulsabot-console+jwt`, server/oidc-rp.ts verifyConsoleAssertion). A
+// `pulsabot-console+jwt`, server/auth/oidc-rp.ts verifyConsoleAssertion). A
 // session cookie is ignored here, and a loopback request without an
 // assertion is 401, never "the owner at this computer".
 //
@@ -26,7 +26,7 @@ import { permissionCatalogue } from "../../shared/permissions.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { aggregateOrgUsage, ORG_USAGE_MAX_ROWS, parseOrgUsageRange, type OrgUsageAggregate, type UsageRow } from "../usage-ledger.ts";
-import type { ConsoleAssertion, ConsoleGrant, ConsoleGrantKind, OidcTeamClaim } from "../oidc-rp.ts";
+import type { ConsoleAssertion, ConsoleGrant, ConsoleGrantKind, OidcTeamClaim } from "../auth/oidc-rp.ts";
 import type { IdentifiedAdminAction } from "../admin-activity.ts";
 import type { AdminBotLook, AdminBotPersona } from "./org-admin-look.ts";
 import { ADMIN_FILES_ROUTE, answerBotFiles, type OrgAdminFilesDeps } from "./org-admin-files.ts";

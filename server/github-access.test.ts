@@ -23,7 +23,7 @@ import { createMarketplaceRoutes, type MarketplaceRouteDeps } from "./routes/mar
 import { PluginMarketplaces } from "./plugins/plugin-marketplaces.ts";
 import { dispatchRoutes } from "./routes/table.ts";
 import { json, readBody } from "./harness/http.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 
 const servers: Server[] = [];
 const dirs: string[] = [];

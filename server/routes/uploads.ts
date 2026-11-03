@@ -33,7 +33,7 @@ import {
 } from "../attachments.ts";
 import { atRestStream, describeHandle } from "../encryption/content-at-rest.ts";
 import { ContentKeyUnavailable } from "../encryption/content-keys.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface UploadsRouteDeps {

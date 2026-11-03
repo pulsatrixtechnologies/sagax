@@ -386,7 +386,7 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   });
   // The UI checks drive this fixture from a real browser, as `pnpm dev` does;
   // SAGAX_DEV_TRUST_LOCAL_BROWSER=0 tests the sign-in a browser now needs
-  // (port of OpenMausBot #2930, server/request-auth.ts fromBrowser).
+  // (port of OpenMausBot #2930, server/auth/request-auth.ts fromBrowser).
   if (parentEnv.SAGAX_DEV_TRUST_LOCAL_BROWSER !== "0") childEnv.SAGAX_DEV_TRUST_LOCAL_BROWSER = "1";
   // A suite that drives a fixed Works on or a conversation pin through the
   // HTTP API (Workspace is always Auto otherwise, the owner 2026-10-18) opts in

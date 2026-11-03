@@ -360,7 +360,7 @@ public struct PairingInvite: Equatable, Sendable {
     public static let serverCodeAlphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 
     /// What the server does to a typed code before comparing it
-    /// (`normalizePairingCode` in `server/sessions.ts`): uppercase, drop
+    /// (`normalizePairingCode` in `server/auth/sessions.ts`): uppercase, drop
     /// dashes, spaces and anything else that is not a letter or digit, then
     /// read 0 as O and 1 as I. Identical here so the app and the server
     /// never disagree about which code was entered.

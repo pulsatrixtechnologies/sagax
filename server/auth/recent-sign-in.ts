@@ -5,12 +5,12 @@
 // a session is new: a bot that can create a pairing code (manage_pairing,
 // or act on POST /api/auth/pairing) can redeem it into a brand new session
 // in a second. So the clock is the session's `authAt`
-// (server/sessions.ts), which only "Sign in with Pulsatrix" stamps
+// (server/auth/sessions.ts), which only "Sign in with Pulsatrix" stamps
 // (OpenID Connect, in the browser or handed to the desktop or a phone), and
 // only from the id_token's verified `auth_time` when that moment is itself
 // recent (authAtFromAuthTime): a silent single sign-on at the provider never
 // counts, and "Sign in again" asks Perspicax for `prompt=login` and
-// `max_age=0` (server/oidc-rp.ts, 2026-10-19). An email code is a valid
+// `max_age=0` (server/auth/oidc-rp.ts, 2026-10-19). An email code is a valid
 // sign-in but never a recent one: a bot that reads the person's mailbox can
 // type it. A pairing code, an invite link, a renewal, a bot-act copy and an
 // act-as session stamp nothing.

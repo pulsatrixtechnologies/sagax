@@ -1,7 +1,7 @@
 // Live calls (GPT-Live as the voice, the bot as the brain). The call itself
 // runs in LiveCallController; these routes start it, end it, report it and
 // change its non-secret settings. The OpenAI key is never read or written
-// here. All are admin-scoped by default in server/request-auth.ts; the
+// here. All are admin-scoped by default in server/auth/request-auth.ts; the
 // companion allows the first four for the phone apps (companion/src/routes.ts).
 // The fifth, device-revoked, is the companion's own notice that it unpaired a
 // phone; a phone can never send it (companion/src/routes.ts COMPANION_NOTICES).
@@ -46,7 +46,7 @@ const DEVICE_ID = /^[\w-]{1,128}$/;
 /** The paired phone the companion vouched for, or undefined. The companion
  * sends its own id for the phone that authenticated (never one the phone
  * chose); in the desktop app the harness has already checked the companion's
- * private token before this runs (server/request-auth.ts). */
+ * private token before this runs (server/auth/request-auth.ts). */
 function companionDevice(req: IncomingMessage): string | undefined {
   if (req.headers["x-openmausbot-companion"] !== "1") return undefined;
   const device = req.headers["x-openmausbot-companion-device"];

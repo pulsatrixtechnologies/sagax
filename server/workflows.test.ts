@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { json } from "./harness/http.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import { createWorkflowRoutes, resumeDueWorkflows } from "./routes/workflows.ts";
 import { advanceWorkflow, parseWorkflowYaml, WORKFLOW_CLOCK_BACKOFF_MS, WorkflowStore, workflowScope, workflowScopeKey, type WorkflowEffects } from "./workflows.ts";
 

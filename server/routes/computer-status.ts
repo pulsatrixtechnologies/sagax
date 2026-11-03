@@ -16,7 +16,7 @@
 // reset removes the container and creates it again from that image (the
 // workspace folder on this computer is kept either way).
 import { UserSandboxUnavailable, type UserSandboxView } from "../sandbox/user-sandbox-manager.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 import { workspaceDiskLevel } from "../../shared/workspace-disk.ts";
 

@@ -167,7 +167,7 @@ export function toCsv(rows: ReadonlyArray<ReadonlyArray<string | undefined>>): s
 const BASE32 = /^[A-Z2-7]+=*$/;
 
 /** Whether the vault can compute codes from this seed (the rules of
- * server/totp.ts parseTotpSeed, without its crypto). */
+ * server/auth/totp.ts parseTotpSeed, without its crypto). */
 export function readableTotpSeed(raw: string | undefined): boolean {
   const text = raw?.trim();
   if (!text) return false;

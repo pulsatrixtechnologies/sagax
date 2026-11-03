@@ -1,7 +1,7 @@
 // YAML workflows for the signed-in person. No admin right. Steps do not
 // start a model turn. A send step posts a bot message in the conversation.
 // An approval stays waiting until this person answers.
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { advanceWorkflow, parseWorkflowYaml, WORKFLOW_CLOCK_BACKOFF_MS, workflowScopeKey, type WorkflowEffects, type WorkflowScope, type WorkflowStore } from "../workflows.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

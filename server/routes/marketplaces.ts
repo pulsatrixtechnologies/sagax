@@ -23,7 +23,7 @@ import type { IncomingMessage } from "node:http";
 
 import { setCapabilityDeprecationHeaders } from "../capabilities/capability-route-deprecation.ts";
 import { MarketplaceError, type MarketplaceView, type MarketplaceViewer, type MarketplaceVisibility, type PluginMarketplaces } from "../plugins/plugin-marketplaces.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { MarketplaceCredentialView } from "../../shared/github-credentials.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

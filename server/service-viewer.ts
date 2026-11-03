@@ -1,5 +1,5 @@
 // Session-less loopback on an organization server is a service, not a person.
-// SERVICE_ALLOW (server/request-auth.ts) is the first gate. This is the
+// SERVICE_ALLOW (server/auth/request-auth.ts) is the first gate. This is the
 // second: when a request still has no viewer, it must not become the operator.
 //
 // `/api/internal/` and the testing capability mint stay exempt. Those calls
@@ -10,7 +10,7 @@
 // The sentinel is truthy on purpose. An empty string is falsy, and the
 // channel and thread checks treat a missing viewer as the operator.
 
-import type { RequestAuth } from "./request-auth.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 
 export const SERVICE_VIEWER = "service:loopback";
 

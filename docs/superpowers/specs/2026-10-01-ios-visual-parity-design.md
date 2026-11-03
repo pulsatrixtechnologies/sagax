@@ -137,7 +137,7 @@ default", grey footer. The content is our editor, following
 
 Every choice saves at once through `patchBot` (`color`, `mascotSkin`,
 `mascotLook`, `avatarCrop`, and so on). The phone-client allow list in
-`server/request-auth.ts` gains `mascotSkin`, `mascotExpression` and the avatar
+`server/auth/request-auth.ts` gains `mascotSkin`, `mascotExpression` and the avatar
 framing fields.
 
 **Our other customizations stay** inside the new layout:
@@ -382,7 +382,7 @@ Each screen lists what changes and where its data comes from. "Client" means
 | Plugin catalog Part B (`shared/plugin-catalog.json`, `/api/plugins/search`) + phone OAuth start | 15 |
 
 Every new route gets tests in `server/` and keeps the phone-client limits in
-`server/request-auth.ts`: owner or admin only for delete, export, input, reset
+`server/auth/request-auth.ts`: owner or admin only for delete, export, input, reset
 and update.
 
 ## Client work (CompanionCore)

@@ -35,7 +35,7 @@ export interface TurnContextInput {
    * Told as a continuation, never as a hand-over or a rewind, so the bot
    * carries on as if nothing happened. */
   compacted?: boolean;
-  /** The fold came from a stale session (server/stale-session.ts): the
+  /** The fold came from a stale session (server/auth/stale-session.ts): the
    * conversation resumes after a pause, and unfinished earlier work waits
    * for the person to ask for it again. */
   paused?: boolean;

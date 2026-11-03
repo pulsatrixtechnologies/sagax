@@ -5,7 +5,7 @@
 // All or nothing: a refusal writes nothing, a failure midway is rolled back.
 import { MAX_ORG_IMPORT_BYTES, parseOrgImportDocument, type OrgImportDocument } from "../../shared/org-import.ts";
 import { rewritePeopleForImport, type ImportPeopleResult } from "../identity-migration.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
 
 export interface OrgImportReport {

@@ -515,7 +515,7 @@ export function ownerDecision(input: {
    * person answers, whatever the mode or rules say. */
   personMustAnswer?: boolean;
   /** The call falls in a class the person protects with a security key
-   * (server/step-up-gate.ts callStepUpClasses): no rule and no mode allows
+   * (server/auth/step-up-gate.ts callStepUpClasses): no rule and no mode allows
    * it, the card shows and its Allow needs the key. A deny rule still
    * denies. */
   stepUpRequired?: boolean;

@@ -13,7 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
-import { SessionRegistry } from "../sessions.ts";
+import { SessionRegistry } from "../auth/sessions.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const posixOnly = describe.skipIf(process.platform === "win32");

@@ -467,8 +467,8 @@ git commit -m "feat: filter channels and direct bots by membership"
 ### Task 7: Accord direct
 
 **Files:**
-- Create: `server/direct-grants.ts`
-- Test: `server/direct-grants.test.ts`
+- Create: `server/auth/direct-grants.ts`
+- Test: `server/auth/direct-grants.test.ts`
 
 **Interfaces:**
 - Consumes: `canPlaceBot` n'est pas réutilisé. Produit sa propre règle.
@@ -493,7 +493,7 @@ it("lets the owner open a direct and refuses anyone else", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm exec vitest run server/direct-grants.test.ts`
+Run: `pnpm exec vitest run server/auth/direct-grants.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: Write minimal implementation**
@@ -502,13 +502,13 @@ Persister les grants à côté du bot (`bot.directGrants: string[]` des userId).
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/direct-grants.test.ts`
+Run: `pnpm exec vitest run server/auth/direct-grants.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/direct-grants.ts server/direct-grants.test.ts
+git add server/auth/direct-grants.ts server/auth/direct-grants.test.ts
 git commit -m "feat: let a bot owner open a direct to one person"
 ```
 

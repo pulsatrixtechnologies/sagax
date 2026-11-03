@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { autoReviewThreadMode, createBotSettingsStore, isTimeZone } from "./bot-settings.ts";
 import { json, readBody } from "./harness/http.ts";
-import { requiredScope, type RequestAuth } from "./request-auth.ts";
+import { requiredScope, type RequestAuth } from "./auth/request-auth.ts";
 import { createBotSettingsRoutes } from "./routes/bot-settings.ts";
 import { dispatchRoutes } from "./routes/table.ts";
 

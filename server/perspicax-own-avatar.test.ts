@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { OWN_AVATAR_PATH, PerspicaxDirectory, SUBJECT_TOKEN_HEADER, type AvatarImage } from "./perspicax-link.ts";
-import { PrincipalRegistry } from "./principals.ts";
+import { PrincipalRegistry } from "./auth/principals.ts";
 
 const ISSUER = "https://px.example.test";
 const ORIGIN = "https://bot.example.test";

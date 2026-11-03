@@ -2,7 +2,7 @@
 //
 // A bot on an organization server lists Perspicax profiles
 // (server/bot-perspicax.ts). When a turn starts, the harness takes the
-// speaker's current sign-in access token (server/idp-session.ts, memory
+// speaker's current sign-in access token (server/auth/idp-session.ts, memory
 // only) and exchanges it at Perspicax (RFC 8693, server/perspicax-link.ts)
 // for one short MCP token per profile. Those tokens stay here: the engine
 // mounts a stdio bridge per profile (server/perspicax-mcp-bridge.ts) that
@@ -27,7 +27,7 @@
 import { guardToolCall, type GuardOptions } from "./mcp/mcp-permissions.ts";
 import { telephonyRefusal, voiceToolCall } from "./telephony-guard.ts";
 import { placeArgsFromVoiceCall } from "../shared/outbound-call.ts";
-import type { SubjectTokenOutcome } from "./idp-session.ts";
+import type { SubjectTokenOutcome } from "./auth/idp-session.ts";
 import type { DirectoryProfile, ExchangeResult } from "./perspicax-link.ts";
 import { PERSPICAX_READ_ONLY_TOOLS } from "./drivers/acp/grok-read-only-tools.ts";
 import { executionKey, WriteOnce } from "./write-once.ts";

@@ -21,7 +21,7 @@ import {
 import { clampAppend, commentaryChunks, LiveTranscript } from "../../shared/live-call.ts";
 import type { LiveCallRecord, LiveCallState, LiveClient, LiveEndReason } from "../../shared/wire.ts";
 import { liveCallSummaryLine, LiveSessionError, liveVoice } from "./live-call.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { Message, StoreChange } from "../store.ts";
 
 export const DELEGATION_SETTLE_MS = 700;

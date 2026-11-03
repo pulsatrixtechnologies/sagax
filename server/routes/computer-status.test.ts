@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { diskSpace, folderBytes } from "../disk-usage.ts";
 import { json, readBody } from "../harness/http.ts";
-import { requiredScope, type RequestAuth } from "../request-auth.ts";
+import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
 import { UserSandboxUnavailable, type UserSandboxView } from "../sandbox/user-sandbox-manager.ts";
 import { createComputerStatusRoutes, diskStateForFree, diskStateForQuota, sandboxStatus, type ComputerStatusRouteDeps, type SandboxLike } from "./computer-status.ts";
 import { dispatchRoutes } from "./table.ts";

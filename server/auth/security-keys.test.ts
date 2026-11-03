@@ -3,10 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { OptionCardData } from "../shared/wire.ts";
+import type { OptionCardData } from "../../shared/wire.ts";
 import { CEREMONY_TTL_MS, STEP_UP_USE_MS, SecurityKeyStore, SecurityKeys } from "./security-keys.ts";
 import { alwaysAllowStepUp, approvalGrantsFor, approvalStepUp, callStepUpClasses, cardRiskClasses } from "./step-up-gate.ts";
-import { fakeAuthenticator, type FakeAuthenticator } from "./testing/fake-authenticator.ts";
+import { fakeAuthenticator, type FakeAuthenticator } from "../testing/fake-authenticator.ts";
 
 const ALICE = "pr_alice";
 const BOB = "pr_bob";

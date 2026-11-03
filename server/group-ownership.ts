@@ -9,7 +9,7 @@
 // still leave it (remove only themselves from its people) and bring their
 // own bots in or take them out, never another person's. An organization
 // admin gets no override on content; deleting stays open to them for
-// moderation (channel.moderate on a room, server/authz.ts).
+// moderation (channel.moderate on a room, server/auth/authz.ts).
 
 type OwnedGroup = {
   createdBy?: string;

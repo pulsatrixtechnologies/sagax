@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { SECTION_CONTEXT_MAX_BYTES } from "../section-context.ts";
 import { createSectionContextRoutes, type SectionContextRouteDeps } from "./section-context.ts";
 import { PASS, type RouteContext } from "./table.ts";

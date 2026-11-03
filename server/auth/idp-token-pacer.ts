@@ -9,7 +9,7 @@
 //   - "refresh" waits at most a few seconds for a slot outside a pause, else
 //     it is refused without a network call (the caller defers it);
 //   - "revoke" only uses what leaves a reserve for sign-ins and refreshes,
-//     and never while paused (server/idp-revocations.ts retries it).
+//     and never while paused (server/auth/idp-revocations.ts retries it).
 //
 // The link-authenticated exchange (server/perspicax-link.ts) has its own
 // budget at Perspicax and is not paced here.

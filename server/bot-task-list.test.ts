@@ -7,7 +7,7 @@ import { createBotTaskStore } from "./bot-task-list.ts";
 import { botTasksFrameAllowed, sameBotTaskOwner, type BotTasksFrame } from "../shared/bot-task-list.ts";
 import { createBotTaskInternalRoutes, createBotTaskRoutes } from "./routes/bot-task-list.ts";
 import { json, readBody } from "./harness/http.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import { IncomingMessage, ServerResponse } from "node:http";
 import { Socket } from "node:net";
 

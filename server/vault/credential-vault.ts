@@ -83,7 +83,7 @@ import {
 import { writeFileAtomic } from "../atomic.ts";
 import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
 import { principalDir } from "../person-connections.ts";
-import { parseTotpSeed, totp } from "../totp.ts";
+import { parseTotpSeed, totp } from "../auth/totp.ts";
 import type { IssuedCard, WalletIssuer } from "../wallet-issuer.ts";
 
 export const LOCAL_VAULT_PRINCIPAL = "local";

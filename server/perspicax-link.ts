@@ -20,7 +20,7 @@ import { lstatSync, readFileSync } from "node:fs";
 import { z } from "zod";
 
 import { normalizePermissions, type PermissionKey } from "../shared/permissions.ts";
-import type { Principal } from "./principals.ts";
+import type { Principal } from "./auth/principals.ts";
 
 export const LINK_FILE_MAX_BYTES = 4 * 1024;
 export const DIRECTORY_MAX_BYTES = 4 * 1024 * 1024;
@@ -1278,7 +1278,7 @@ export class PerspicaxDirectory {
 
   /** 2026-10-17: the signed-in person erases their own Perspicax account
    * (2026-10-18: `subjectToken` is the access token of the sign-in they made
-   * again for it, server/account-reauth.ts, never a refreshed one):
+   * again for it, server/auth/account-reauth.ts, never a refreshed one):
    * `POST` OWN_ACCOUNT_ERASE_PATH `{ "confirm": true }` with the link token
    * (`Authorization: Bearer`, which server calls) and the person's live
    * sign-in access token (SUBJECT_TOKEN_HEADER, who), as writeOwnAvatar

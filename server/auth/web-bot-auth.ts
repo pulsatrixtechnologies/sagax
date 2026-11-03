@@ -12,8 +12,8 @@ import { createCipheriv, createDecipheriv, generateKeyPairSync, randomBytes, sig
 import { lstatSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { resolveVaultKey, type VaultKeySource } from "./mcp/mcp-oauth.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { resolveVaultKey, type VaultKeySource } from "../mcp/mcp-oauth.ts";
 
 const AAD = Buffer.from("sagax web-bot-auth v1");
 

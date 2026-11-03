@@ -36,10 +36,10 @@ import {
   type IdpPrincipalStore,
   type IdpRelyingParty,
   type SubjectTokenOutcome,
-} from "../idp-session.ts";
-import { immediateRevocations, type RevocationSink } from "../idp-revocations.ts";
-import { orgRoleForRole } from "../oidc-login.ts";
-import type { OidcIdentity } from "../oidc-rp.ts";
+} from "../auth/idp-session.ts";
+import { immediateRevocations, type RevocationSink } from "../auth/idp-revocations.ts";
+import { orgRoleForRole } from "../auth/oidc-login.ts";
+import type { OidcIdentity } from "../auth/oidc-rp.ts";
 
 /** A run renews the delegation at most this often (D6). */
 export const ROUTINE_CONSENT_RENEW_MS = 600_000;

@@ -3,10 +3,10 @@
 import { createServer, request } from "node:http";
 import { describe, expect, it } from "vitest";
 
-import { launchVerificationServer } from "../scripts/control-omb.ts";
+import { launchVerificationServer } from "../../scripts/control-omb.ts";
 import { BROWSER_SIGN_IN } from "./request-auth.ts";
-import { findChrome, launchPipeChrome } from "./testing/chrome-pipe.ts";
-import { hostTimeout } from "./testing/host-timeout.ts";
+import { findChrome, launchPipeChrome } from "../testing/chrome-pipe.ts";
+import { hostTimeout } from "../testing/host-timeout.ts";
 
 const chrome = findChrome();
 

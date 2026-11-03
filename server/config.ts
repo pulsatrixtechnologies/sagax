@@ -448,7 +448,7 @@ const threadsPatchSchema = threadsConfigSchema.extend({
 const appConfigSchema = z.object({
   /** Verified by the dedicated domain endpoint, never a generic config patch. */
   customDomain: z.string().optional(),
-  /** Who may sign in with an emailed code (server/account-signin.ts):
+  /** Who may sign in with an emailed code (server/auth/account-signin.ts):
    * addresses or `@domain` entries; admins get every scope, members chat only. */
   signIn: z.object({ admins: z.array(z.string().max(320)).max(500).optional(), members: z.array(z.string().max(320)).max(5000).optional() }).optional(),
   // Slice 8: the interim organization (`org`) was removed; an older
@@ -706,7 +706,7 @@ const appConfigSchema = z.object({
      * without Sagax, and the person may notice it. */
     autoCompactOffBots: z.array(z.string().min(1).max(200)).max(1_000).optional(),
     /** Hours of quiet after which a thread's engine session is not resumed
-     * but rebuilt from Sagax's summary (server/stale-session.ts; default 6,
+     * but rebuilt from Sagax's summary (server/auth/stale-session.ts; default 6,
      * 0 turns the check off). */
     staleSessionHours: z.number().min(0).max(24 * 365).optional(),
     /** Saved engine session size (bytes) past which it is not resumed

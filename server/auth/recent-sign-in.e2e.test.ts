@@ -6,7 +6,7 @@
 import { randomBytes } from "node:crypto";
 import { expect, it } from "vitest";
 
-import { launchVerificationServer } from "../scripts/control-omb.ts";
+import { launchVerificationServer } from "../../scripts/control-omb.ts";
 
 type Call = (method: string, path: string, body?: unknown, auth?: { owner?: string; bearer?: string }) => Promise<{ status: number; text: string; body: any }>;
 function caller(url: string): Call {

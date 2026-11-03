@@ -4,7 +4,7 @@
 // the code at the token endpoint itself, and verifies the ES256 id_token
 // against the issuer's JWKS with node:crypto. No token from the identity
 // provider ever reaches a browser, the desktop app, a phone or an engine:
-// they receive the ordinary Sagax session (server/sessions.ts).
+// they receive the ordinary Sagax session (server/auth/sessions.ts).
 //
 // Pending flows live in memory only: ten minutes, single use, at most
 // MAX_PENDING_FLOWS (the oldest is dropped). Each flow is also bound to the
@@ -21,7 +21,7 @@ import type { RevocationSink, RevokeAttempt } from "./idp-revoke-types.ts";
 
 export type { RevokeAttempt };
 import { TokenCallPacer, tokenBudget } from "./idp-token-pacer.ts";
-import { authorizationServerMetadataUrls, pkcePair, readBounded, safeEndpoint } from "./mcp/mcp-oauth.ts";
+import { authorizationServerMetadataUrls, pkcePair, readBounded, safeEndpoint } from "../mcp/mcp-oauth.ts";
 
 export const OIDC_PENDING_FLOW_TTL_MS = 10 * 60_000;
 export const OIDC_MAX_PENDING_FLOWS = 20;
@@ -104,7 +104,7 @@ export interface OidcRelyingPartyOptions {
   redirectUri: string;
   /** Space-separated. The default asks for the identity and a refresh
    * token (`offline_access`): the session lives as long as the provider
-   * keeps refreshing it (server/idp-session.ts). */
+   * keeps refreshing it (server/auth/idp-session.ts). */
   scope?: string;
   /** RFC 8707 resource for the login access token: the Sagax public
    * origin, so that token is worthless on the identity provider's /mcp. */
@@ -117,7 +117,7 @@ export interface OidcRelyingPartyOptions {
   internalBase?: string;
   fetch?: typeof fetch;
   now?: () => number;
-  /** The budget of token and revocation calls (server/idp-token-pacer.ts);
+  /** The budget of token and revocation calls (server/auth/idp-token-pacer.ts);
    * one is made from SAGAX_PERSPICAX_TOKEN_BUDGET when absent. */
   pacer?: TokenCallPacer;
 }
@@ -156,7 +156,7 @@ export const ACCOUNT_ERASURE_SCOPES = `openid ${ACCOUNT_ERASURE_SCOPE}`;
 
 /** What a flow is for: a sign-in, a routine delegation (slice 6), or the
  * person signing in again right before deleting their account (2026-10-18,
- * server/account-reauth.ts: `prompt=login`, `max_age=0`, a recent
+ * server/auth/account-reauth.ts: `prompt=login`, `max_age=0`, a recent
  * `auth_time` checked at the callback). */
 export type OidcFlowPurpose = "signin" | "routines" | "reauth";
 
@@ -170,7 +170,7 @@ export interface RoutineDelegationExpectation {
 interface PendingFlow {
   client: OidcClientKind;
   /** A desktop sign-in's validated loopback return, or a phone sign-in's
-   * `sagax` return (server/oidc-login.ts). */
+   * `sagax` return (server/auth/oidc-login.ts). */
   returnTo?: string;
   purpose: OidcFlowPurpose;
   expect?: RoutineDelegationExpectation;
@@ -330,7 +330,7 @@ export const CONSOLE_ASSERTION_SKEW_SECONDS = 5;
 export const BACKCHANNEL_LOGOUT_EVENT = "http://schemas.openid.net/event/backchannel-logout";
 /** The RISC "account purged" event (OpenID RISC Profile 1.0) Perspicax adds
  * to a logout token once it erased the person's account: this server then
- * erases their data too (server/oidc-login.ts, OidcGrantKeeper.purgePerson). */
+ * erases their data too (server/auth/oidc-login.ts, OidcGrantKeeper.purgePerson). */
 export const ACCOUNT_PURGED_EVENT = "https://schemas.openid.net/secevent/risc/event-type/account-purged";
 
 interface JwsCheck {
@@ -680,7 +680,7 @@ export class OidcRelyingParty {
   }
 
   /** Revocations this party starts go through `sink` (the durable queue,
-   * server/idp-revocations.ts) once set. */
+   * server/auth/idp-revocations.ts) once set. */
   setRevocations(sink: RevocationSink | null): void {
     this.revocations = sink;
   }
@@ -859,7 +859,7 @@ export class OidcRelyingParty {
       // Only a desktop sign-in comes back to a loopback listener, only a
       // phone sign-in to its app's scheme (PHONE_SAGAX_RETURN), and a web
       // sign-in only to a published page's reading link on this server
-      // (2026-10-28, #1486; checked by server/oidc-login.ts webPageReturn).
+      // (2026-10-28, #1486; checked by server/auth/oidc-login.ts webPageReturn).
       ...(options.returnTo && (client === "desktop" || client === "phone" || purpose === "signin") ? { returnTo: options.returnTo } : {}),
       purpose,
       ...(expect ? { expect } : {}),
@@ -886,7 +886,7 @@ export class OidcRelyingParty {
     // 2026-10-18: a sign-in again, never an existing session at the
     // provider (OIDC Core 3.1.2.1); the callback checks auth_time. The same
     // for "Sign in again" (`fresh`, 2026-10-19), whose session counts as a
-    // recent sign-in only from a recent auth_time (server/recent-sign-in.ts).
+    // recent sign-in only from a recent auth_time (server/auth/recent-sign-in.ts).
     if (purpose === "reauth" || (purpose === "signin" && options.fresh)) {
       url.searchParams.set("prompt", "login");
       url.searchParams.set("max_age", "0");
@@ -1083,7 +1083,7 @@ export class OidcRelyingParty {
   }
 
   /** One revocation call at the provider (RFC 7009), unpaced: the durable
-   * queue (server/idp-revocations.ts) paces it. Never throws and never puts
+   * queue (server/auth/idp-revocations.ts) paces it. Never throws and never puts
    * the token in a log line or a result. */
   async revokeAttempt(token: string, hint: "refresh_token" | "access_token" = "refresh_token"): Promise<RevokeAttempt> {
     let revocationEndpoint: string | undefined;

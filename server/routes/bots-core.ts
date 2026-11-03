@@ -10,7 +10,7 @@ import { z } from "zod";
 
 import type { ApprovalViewer } from "../approvals/approval-audience.ts";
 import type { LookRefusal } from "../achievements-mastery.ts";
-import { atLeast, type Level } from "../authz.ts";
+import { atLeast, type Level } from "../auth/authz.ts";
 import { generateAvatarImage, avatarGenerationRequestSchema } from "../avatar-image.ts";
 import { validateBotCwd, validateBotCwdFor, type RemoteCwdDeps } from "../bot-cwd.ts";
 import { soulFile, readSoulDrift, writeSoulMirror } from "../bot-folder.ts";
@@ -37,7 +37,7 @@ import {
 import { newConversationFullAllowed } from "../org/org-full-access.ts";
 import { orgXaiRefusal } from "../org/org-xai-media.ts";
 import { peopleDmForViewer } from "../people-dms.ts";
-import { isPrincipalId } from "../principals.ts";
+import { isPrincipalId } from "../auth/principals.ts";
 import {
   applyPresetToBot,
   presetOffered,
@@ -47,8 +47,8 @@ import {
 } from "../presets.ts";
 import { profileRevision, profileSnapshot } from "../profile-revision.ts";
 import { recordProfileChange } from "../profile-versions.ts";
-import type { RequestAuth } from "../request-auth.ts";
-import { sessionPrincipal } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { sessionPrincipal } from "../auth/request-auth.ts";
 import { fetchSkillFromSource } from "../skills/skill-fetch.ts";
 import { installOrgSkill, installSkill, setSkillEnabled } from "../skills/skills.ts";
 import type { BotRecord, GroupRecord, Message, TaskRecord } from "../store.ts";

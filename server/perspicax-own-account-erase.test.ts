@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { ACCOUNT_ERASURE_HEADER, OWN_ACCOUNT_ERASE_PATH, PerspicaxDirectory, SUBJECT_TOKEN_HEADER } from "./perspicax-link.ts";
-import { PrincipalRegistry } from "./principals.ts";
+import { PrincipalRegistry } from "./auth/principals.ts";
 
 const ISSUER = "https://px.example.test";
 const ORIGIN = "https://bot.example.test";

@@ -7,14 +7,14 @@ import { gzipSync } from "node:zlib";
 import { Header } from "tar";
 import { openRuntimeStore } from "./runtime/store.ts";
 import type { Assignment } from "./runtime/types.ts";
-import { SessionRegistry } from "./sessions.ts";
+import { SessionRegistry } from "./auth/sessions.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   applyPendingWorkspaceRestore, commitPendingWorkspaceRestore, createWorkspaceBackup,
   readLastWorkspaceRestore, readPendingWorkspaceRestoreMetadata, readStagedWorkspaceBackup,
   removeWorkspaceBackupJob, stageWorkspaceBackup, stripConfidentialMessages,
 } from "./workspace-backup.ts";
-import { PrincipalRegistry } from "./principals.ts";
+import { PrincipalRegistry } from "./auth/principals.ts";
 
 const PASSWORD = "correct horse battery staple";
 const AVATAR_BYTES = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");

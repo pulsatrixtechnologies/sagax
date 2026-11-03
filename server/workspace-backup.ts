@@ -16,7 +16,7 @@ import { fromMarkdown } from "mdast-util-from-markdown";
 import { writeFileAtomic } from "./atomic.ts";
 import { exportPlainCopy, isAtRestTemp, pauseAtRestMigration, useExportedContentKeys } from "./encryption/content-at-rest.ts";
 import { contentKeysForExport, unsealDatabaseCopy, type ExportedContentKey } from "./content-export.ts";
-import { mergePrincipalFiles } from "./principals.ts";
+import { mergePrincipalFiles } from "./auth/principals.ts";
 import { removeThreadTrees } from "./runtime/store.ts";
 import {
   chatOfKeys, confidentialEngineSessionPath, dataEngineHomes, databaseSidecarOf, ENGINE_PURGE_DONE, ENGINE_PURGE_FILE,
@@ -54,7 +54,7 @@ const EXCLUDED = new Set([
   ENGINE_PURGE_FILE, ENGINE_PURGE_DONE,
   ".openmausbot-server-child", "environment-id", "sessions.json", "tunnel-account.json",
   "team-computers.json",
-  // Identity provider grants (server/idp-session.ts): bound to this server's
+  // Identity provider grants (server/auth/idp-session.ts): bound to this server's
   // sessions, which are never carried over either.
   "idp-grants.enc", "idp-grants.key",
   // Typed-trigger poller passwords and ICS links (server/trigger-poller-

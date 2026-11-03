@@ -8,7 +8,7 @@
 import { parseBotProfilePatch } from "../bot-profile.ts";
 import { profileRevision, profileSnapshot } from "../profile-revision.ts";
 import { flushProfileHistory, readHistory, recordProfileChange } from "../profile-versions.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 type HistoryBot = Parameters<typeof profileRevision>[0] & Parameters<typeof profileSnapshot>[0] & { id: string };

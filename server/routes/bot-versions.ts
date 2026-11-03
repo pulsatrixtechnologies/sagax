@@ -8,14 +8,14 @@
 // The restore is itself recorded as a change (via "restore"), so it is a new
 // version that can be restored away in turn. Only the bot's owner or an
 // admin may restore; the scope rule (admin, like the other history routes)
-// is keyed by path in server/request-auth.ts.
+// is keyed by path in server/auth/request-auth.ts.
 //
 // The history keeps the full text of the Personality only. The other text
 // fields keep a one-line copy of at most 200 characters, and the working
 // folder is not restored from here: a value the history cannot give back
 // exactly is left as it is and named in the answer (`skipped`).
 import type { HistoryRow } from "../profile-versions.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { versionRestorePlan, type VersionRestorePatch } from "../../shared/bot-versions.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

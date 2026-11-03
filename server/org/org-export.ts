@@ -6,7 +6,7 @@
 import { ORG_IMPORT_FORMAT, ORG_IMPORT_VERSION, isPersonRef, parseOrgImportDocument, type OrgImportDocument } from "../../shared/org-import.ts";
 import { redactCutSecrets } from "../../shared/redact.ts";
 import { redactSecretsInText } from "../redact.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
 import type { Routine } from "../routines/routines.ts";
 import type { Store } from "../store.ts";

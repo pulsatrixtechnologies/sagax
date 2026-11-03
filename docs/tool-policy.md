@@ -31,7 +31,7 @@ A request that matches no row is treated as **write**, off by default (`UNKNOWN_
 1. Run `node scripts/tool-policy/generate.ts`. Reviewed rows are kept; new routes get the default classification.
 2. Review the new rows (tier, scope, defaultEnabled) and commit them.
 
-The route list comes from the server sources (`scripts/tool-policy/route-inventory.ts`). Sagax routes are code, not a registry. `server/request-auth.ts` is left out because its path rules are the auth gate, not routes.
+The route list comes from the server sources (`scripts/tool-policy/route-inventory.ts`). Sagax routes are code, not a registry. `server/auth/request-auth.ts` is left out because its path rules are the auth gate, not routes.
 
 Status: B1 declares the policy only and nothing enforces it yet. B2 adds grants and the guard (docs/agent-api.md).
 

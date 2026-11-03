@@ -1,5 +1,5 @@
-import type { WireMessage as Message } from "../shared/wire.ts";
-import { isPersistentQuestionCard } from "../shared/ask-question.ts";
+import type { WireMessage as Message } from "../../shared/wire.ts";
+import { isPersistentQuestionCard } from "../../shared/ask-question.ts";
 
 export function requestConflict(message = "The request no longer owns this conversation") {
   return Object.assign(new Error(message), { status: 409, code: "guarded_request_changed" });

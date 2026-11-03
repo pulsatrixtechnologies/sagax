@@ -17,8 +17,8 @@ import { z } from "zod";
 import type { InstalledBotPlugin } from "../bot-plugins.ts";
 import type { GithubStatus } from "../github-connect.ts";
 import type { PersonalMcpServer } from "../person-connections.ts";
-import { isPrincipalId } from "../principals.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import { isPrincipalId } from "../auth/principals.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
 
 export type OrgConnection =

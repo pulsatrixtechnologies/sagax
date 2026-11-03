@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import * as atomic from "./atomic.ts";
+import * as atomic from "../atomic.ts";
 
 import {
   ENDED_SESSION_MEMORY_MS,

@@ -2,9 +2,9 @@ import { Readable } from "node:stream";
 
 import { describe, expect, it, vi } from "vitest";
 
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteContext } from "../routes/table.ts";
-import type { SessionRecord } from "../sessions.ts";
+import type { SessionRecord } from "../auth/sessions.ts";
 import { VOICE_KEY_REFUSAL_TTL_MS } from "./voice-keys.ts";
 import { audioMime, createVoiceModeRoutes, listenTranscriptFrame, resolveVoiceKey, resolveVoiceKeys, VOICE_MODE_RATE, type VoiceModeDeps, type VoiceSpeaker, type VoiceUsage } from "./voice-mode.ts";
 

@@ -24,15 +24,15 @@
 //
 // Group chats (rooms: their people and their bots) are the only
 // conversations several people share: room threads are judged by the room
-// (server/authz.ts canInChannel), never here.
+// (server/auth/authz.ts canInChannel), never here.
 //
 // The operator at this computer (loopback, no viewer) sees everything, as
-// everywhere in server/authz.ts. A solo server never calls this.
+// everywhere in server/auth/authz.ts. A solo server never calls this.
 //
 // Pure: no store, no request. server/index.ts supplies the records.
 import { isAgentConversation } from "../../shared/agent-conversation.ts";
 import { conversationThreadId, type StreamTaskFacts } from "../../shared/single-stream.ts";
-import { canOnBot, type BotFacts, type Viewer } from "../authz.ts";
+import { canOnBot, type BotFacts, type Viewer } from "../auth/authz.ts";
 
 export type ThreadAction =
   | "thread.list"

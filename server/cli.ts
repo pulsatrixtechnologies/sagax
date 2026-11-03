@@ -31,11 +31,11 @@ import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 
 import { phonePairingLink } from "../shared/pairing-link.ts";
-import { parseAllowList } from "./account-signin.ts";
+import { parseAllowList } from "./auth/account-signin.ts";
 import { appendAdminAction, flushAdminActivity, sharedSignIn } from "./admin-activity.ts";
 import { bindDecisionRetention, decisionRetentionDays } from "./decision-log.ts";
 import { hostedWorkspaceConfigured } from "./enterprise.ts";
-import { resolveLoopbackTrust } from "./request-auth.ts";
+import { resolveLoopbackTrust } from "./auth/request-auth.ts";
 import { restartPolicy } from "./restart.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import { ensureCaddy, normalizeDomainOption, startCaddy, type RunningCaddy } from "./caddy.ts";

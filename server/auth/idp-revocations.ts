@@ -7,7 +7,7 @@
 //   - the entries are sealed with the sign-in grant vault's key in their own
 //     file (idp-revocations.enc, own AAD), written atomically, mode 0600;
 //   - one call is in flight at a time, through the shared token budget
-//     (server/idp-token-pacer.ts), which keeps a reserve for sign-ins and
+//     (server/auth/idp-token-pacer.ts), which keeps a reserve for sign-ins and
 //     refreshes and pauses on any 429;
 //   - 2xx, or a definitive 400 (invalid_request, unsupported_token_type),
 //     drops the entry; a 429 waits its Retry-After; anything else backs off
@@ -22,9 +22,9 @@ import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 import type { TokenCallPacer } from "./idp-token-pacer.ts";
-import type { VaultKeySource } from "./mcp/mcp-oauth.ts";
+import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
 import type { RevocationHint, RevokeAttempt } from "./idp-revoke-types.ts";
 
 export type { RevocationHint, RevocationSink, RevokeAttempt } from "./idp-revoke-types.ts";

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { botLevel, canInChannel, type TeamRef, type Viewer } from "./authz.ts";
+import { botLevel, canInChannel, type TeamRef, type Viewer } from "./auth/authz.ts";
 import { createSectionChannelRoutes, type SectionAuditRow, migrationOwner, SectionChannels, sectionShareGrants, validSectionName } from "./section-channels.ts";
 
 const pid = (n: number) => `pr_00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;

@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { parseOutboundCall } from "../../shared/outbound-call.ts";
 import { json, readBody } from "../harness/http.ts";
 import { OutboundCalls, type OutboundCallRecord } from "../outbound/outbound-calls.ts";
-import { requiredScope, type RequestAuth } from "../request-auth.ts";
+import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
 import { TOOL_POLICY_ROWS } from "../tool-policy.generated.ts";
 import { createOutboundCallRoutes } from "./outbound-calls.ts";
 import { dispatchRoutes } from "./table.ts";

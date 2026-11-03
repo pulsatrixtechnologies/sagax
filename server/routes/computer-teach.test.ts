@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { ComputerTeachRecordings } from "../computer/computer-teach.ts";
 import { json, readBody } from "../harness/http.ts";
-import { requiredScope, type RequestAuth } from "../request-auth.ts";
+import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
 import type { ControlState } from "./computer-input.ts";
 import { createComputerTeachRoutes } from "./computer-teach.ts";
 import { dispatchRoutes } from "./table.ts";

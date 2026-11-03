@@ -6,9 +6,9 @@ import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { launchVerificationServer, verificationServerEnvironment, type VerificationServer } from "../scripts/control-omb.ts";
+import { launchVerificationServer, verificationServerEnvironment, type VerificationServer } from "../../scripts/control-omb.ts";
 import { SessionRegistry } from "./sessions.ts";
-import { waitForExit } from "./testing/cleanup.ts";
+import { waitForExit } from "../testing/cleanup.ts";
 
 const key = "isolated-trust-capability";
 let fixture: VerificationServer;
@@ -109,8 +109,8 @@ beforeAll(async () => {
   member = sessions.issue({ label: "isolated member", email: "member@fixture.test", scopes: ["client"] }).token;
   sessions.close();
   const log = openSync(fixture.info.logPath, "a", 0o600);
-  child = spawn(process.execPath, ["--experimental-strip-types", fileURLToPath(new URL("./index.ts", import.meta.url))], {
-    cwd: fileURLToPath(new URL("..", import.meta.url)),
+  child = spawn(process.execPath, ["--experimental-strip-types", fileURLToPath(new URL("../index.ts", import.meta.url))], {
+    cwd: fileURLToPath(new URL("../..", import.meta.url)),
     env: { ...verificationServerEnvironment({}, fixture.info.dataDir, Number(new URL(fixture.info.url).port)),
       SAGAX_TEST_INTERNAL_CAPABILITY_KEY: key, SAGAX_COMPOSIO_API: brokerOrigin + "/api", SAGAX_COMPOSIO_TOOLKITS_API: brokerOrigin + "/api" },
     stdio: ["ignore", log, log],

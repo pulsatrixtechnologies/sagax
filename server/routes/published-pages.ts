@@ -102,7 +102,7 @@ import { lookContentTokens } from "../../src/lib/page-look.ts";
 import { readerBotColor } from "../../shared/page-reader.ts";
 import { MASCOT_COLOR_HEX, type MascotColorName } from "../../shared/mascot-colors.ts";
 import type { WidgetThemeTokens } from "../../src/lib/widget-kit.ts";
-import { requestSource, type RequestAuth } from "../request-auth.ts";
+import { requestSource, type RequestAuth } from "../auth/request-auth.ts";
 import { redactSecretsInText } from "../../shared/redact.ts";
 import { pageAudienceOf, pageMayEnter, parsePageAudience } from "../../shared/page-audience.ts";
 import {

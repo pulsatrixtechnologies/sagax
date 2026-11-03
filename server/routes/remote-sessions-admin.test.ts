@@ -6,12 +6,12 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { dispatchRoutes } from "./table.ts";
 import { createRemoteSessionsAdminRoutes } from "./remote-sessions-admin.ts";
 import { createRemoteSessionsAdmin } from "../remote-support/remote-sessions-admin.ts";
 import { createUnattendedConsentStore } from "../remote-support/remote-session-consent-store.ts";
-import { requiredScope } from "../request-auth.ts";
+import { requiredScope } from "../auth/request-auth.ts";
 import type { AdminSessionInput } from "../../shared/remote-session-admin.ts";
 
 const NOW = Date.parse("2026-10-22T12:00:00.000Z");

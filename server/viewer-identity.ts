@@ -9,7 +9,7 @@ import type { ViewerCapabilities } from "../shared/viewer-capabilities.ts";
 export interface ViewerIdentity {
   /** The operator at this computer, or a device they paired. */
   operator: boolean;
-  /** The person's principal (server/principals.ts), when known. */
+  /** The person's principal (server/auth/principals.ts), when known. */
   principalId: string | null;
   /** Their own sign-in email; "" when unknown. */
   email: string;
@@ -29,7 +29,7 @@ export interface ViewerIdentity {
    * named sender. Only set for someone who is not the operator. */
   operatorName?: string;
   /** Organization server: Perspicax owns this person's name and email, which
-   * are read-only here (server/oidc-login.ts profileManagement). Absent on a
+   * are read-only here (server/auth/oidc-login.ts profileManagement). Absent on a
    * solo server and for the operator at the server's own console. */
   profileManagedBy?: "perspicax";
   /** Where to change them: the issuer console's profile page. */

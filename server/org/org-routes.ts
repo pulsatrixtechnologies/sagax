@@ -2,8 +2,8 @@ import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { acceptInvite, inviteStatus, roleOf, type OrgInvite, type OrgRole } from "./org-directory.ts";
 import { createOrg, issueInvite, memberListsAfterAccept, serverAddressOk, type OrgRecord } from "./org-record.ts";
-import { isPrincipalId } from "../principals.ts";
-import { requestOrigin, type RequestAuth } from "../request-auth.ts";
+import { isPrincipalId } from "../auth/principals.ts";
+import { requestOrigin, type RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteContext, type RouteHandler } from "../routes/table.ts";
 
 export interface OrgState {
@@ -534,7 +534,7 @@ export function createPublicInviteRoutes(deps: PublicInviteRouteDeps) {
 //   POST         /api/org/invites[/...]     the invitation routes above
 //
 // An organization server refuses the email and invitation routes with 403
-// identity_perspicax before the auth gate (server/oidc-login.ts) and serves
+// identity_perspicax before the auth gate (server/auth/oidc-login.ts) and serves
 // its own /api/org (server/perspicax-org-routes.ts).
 
 export const INTERIM_ORG_REMOVED = {

@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { SERVER_FEATURE_NAMES } from "../shared/server-features.ts";
 import { environmentDescriptor, environmentLabel, loadEnvironmentId, serverVersion } from "./environment.ts";
 import { hostname } from "node:os";
-import { identityDescriptor } from "./oidc-login.ts";
+import { identityDescriptor } from "./auth/oidc-login.ts";
 
 const dirs: string[] = [];
 

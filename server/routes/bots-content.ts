@@ -10,7 +10,7 @@ import { z } from "zod";
 import type { GithubCredential } from "../github-access.ts";
 import { githubSkillFetch } from "../github-access.ts";
 import { botSkillTemplateSchema } from "../new-bot-defaults.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { fetchSkillFromSource } from "../skills/skill-fetch.ts";
 import type { LibrarySkillListing } from "../skills/skill-library.ts";
 import {

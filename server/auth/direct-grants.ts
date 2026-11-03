@@ -1,5 +1,5 @@
 import type { RequestAuth } from "./request-auth.ts";
-import { PASS, type RouteHandler } from "./routes/table.ts";
+import { PASS, type RouteHandler } from "../routes/table.ts";
 
 export interface DirectGrant {
   botId: string;

@@ -8,7 +8,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import { requiredScope } from "../request-auth.ts";
+import { requiredScope } from "../auth/request-auth.ts";
 import type { RoutineRun } from "../../shared/routines.ts";
 import type { BotActivityDetail, BotActivityItem } from "../../shared/bot-activity.ts";
 import { createBotActivityRoutes, stepError, STEP_ERROR_CHARS, type ActivityMessage, type ActivityTask, type BotActivityRouteDeps } from "./bot-activity.ts";

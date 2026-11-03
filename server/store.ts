@@ -131,7 +131,7 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
    * are the thread's memory of its older turns and stay off the chat: the
    * person never sees a fold, only the bot's next session reads it. */
   /** stale: written (or re-applied) for a stale engine session
-   * (server/stale-session.ts): the new session reads it as a pause. */
+   * (server/auth/stale-session.ts): the new session reads it as a pause. */
   contextSummaries?: Array<{ id: string; at: number; summary: string; firstKeptId: string; foldedThroughId: string; anchorId: string; tokensBefore: number; stale?: true }>;
   contextFloor?: number;
   lastContextModel?: string;
@@ -695,7 +695,7 @@ export function taskHiddenFromPerson(task: { routineRunId?: string; hidden?: tru
 }
 
 
-/** A stored grant (slice 4); see server/authz.ts. */
+/** A stored grant (slice 4); see server/auth/authz.ts. */
 export type BotGrant = WireBotGrant;
 const GRANT_TARGET = /^(?:user:pr_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|team:[0-9A-Za-z]{1,64})$/;
 const GRANT_LEVELS = new Set(["use", "run", "edit", "manage"]);

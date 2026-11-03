@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { requiredScope } from "./request-auth.ts";
+import { requiredScope } from "./auth/request-auth.ts";
 import { turnDestination } from "./turns/turn-route.ts";
 import {
   assignBotHost,

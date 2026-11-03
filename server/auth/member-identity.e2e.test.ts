@@ -12,9 +12,9 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { SessionRegistry } from "./sessions.ts";
-import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
-import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "./testing/fake-oidc-provider.ts";
-import { freePortBlock } from "./testing/ports.ts";
+import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
+import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
+import { freePortBlock } from "../testing/ports.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const PORT = await freePortBlock([0, 1]);
@@ -120,8 +120,8 @@ posixOnly("an organization member's identity and bots", () => {
     const registry = new SessionRegistry({ file: join(data, "sessions.json") });
     guestToken = registry.issue({ label: "Guest", principalId: GUEST_ID, scopes: ["client"] }).token;
     registry.close();
-    child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
-      cwd: join(SERVER_DIR, ".."),
+    child = spawn(process.execPath, [join(SERVER_DIR, "..", "index.ts")], {
+      cwd: join(SERVER_DIR, "..", ".."),
       env: {
         ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
         ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),

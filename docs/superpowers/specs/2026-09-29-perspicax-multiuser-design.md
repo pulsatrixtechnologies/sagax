@@ -101,7 +101,7 @@ Aujourd'hui Perspicax annonce `"id_token_signing_alg_values_supported": ["none"]
 
 ### Flux de connexion: Pulsa Bot comme BFF
 
-Le serveur Pulsa Bot est le client OIDC (patron Backend for Frontend). Ni le navigateur, ni l'app de bureau, ni le téléphone ne voient un jeton Perspicax. Ils reçoivent la session Pulsa Bot qu'ils connaissent déjà (`server/sessions.ts`: cookie HttpOnly pour le web, bearer pour les apps natives).
+Le serveur Pulsa Bot est le client OIDC (patron Backend for Frontend). Ni le navigateur, ni l'app de bureau, ni le téléphone ne voient un jeton Perspicax. Ils reçoivent la session Pulsa Bot qu'ils connaissent déjà (`server/auth/sessions.ts`: cookie HttpOnly pour le web, bearer pour les apps natives).
 
 ```
 navigateur ──GET /auth/oidc/start──▶ Pulsa Bot
@@ -134,7 +134,7 @@ Le schéma personnalisé ne transporte jamais de code Perspicax, seulement l'ide
 
 ### Principal
 
-Le principal de `server/principals.ts` reste la personne. On ajoute:
+Le principal de `server/auth/principals.ts` reste la personne. On ajoute:
 
 | Champ | Rôle |
 |---|---|
@@ -148,7 +148,7 @@ Le principal de `server/principals.ts` reste la personne. On ajoute:
 ### Session sur le serveur Pulsa Bot
 
 - La session reste un `SessionRecord` (`sessions.ts:68`), avec `principalId` et un nouveau champ `idp: { iss, sub, grantRef }`. `grantRef` pointe vers l'enregistrement scellé du refresh token Perspicax de cette session, dans un coffre calqué sur `McpOAuthVault` (`mcp-oauth.ts:120`, fichier chiffré à côté des données, clé en fichier `0600` ou en variable d'environnement).
-- Validation par requête: la session Pulsa Bot, comme aujourd'hui (`server/request-auth.ts`). Pas d'introspection.
+- Validation par requête: la session Pulsa Bot, comme aujourd'hui (`server/auth/request-auth.ts`). Pas d'introspection.
 - Fraîcheur: quand une session est utilisée et que son dernier rafraîchissement date de plus de 50 minutes (le jeton d'accès vit 3600 s, `ACCESS_TOKEN_TTL_SECS`, `lib.rs:229`), le serveur fait un `refresh_token` grant, en vol unique par session (même patron que `refreshing` dans `McpOAuthManager`). Le nouvel `id_token` met à jour les claims (rôle, équipes). Un `invalid_grant` révoque la session Pulsa Bot.
 - Durée: la session suit le refresh Perspicax (30 jours glissants, `REFRESH_TOKEN_TTL_SECS`, `lib.rs:234`). `SESSION_TTL_MS` et `SESSION_MAX_AGE_MS` (`sessions.ts:36-41`) restent des plafonds.
 - Révocation immédiate: Perspicax appelle `POST /api/auth/oidc/backchannel-logout` avec un `logout_token` ES256 (`sub`, `events`, `jti`) quand un utilisateur est désactivé, supprimé, ou révoque ses sessions. Pulsa Bot ferme les sessions de ce `sub` et leurs flux SSE (`closeSessionStreams` existe déjà).
@@ -201,7 +201,7 @@ C'est exactement la règle de Perspicax pour ses profils: « a manager grants on
 
 ### `can(principal, action, resource)`
 
-Un module `server/authz.ts` absorbe `channel-visibility.ts` et `direct-grants.ts`:
+Un module `server/auth/authz.ts` absorbe `channel-visibility.ts` et `direct-grants.ts`:
 
 - Entrées: le principal (rôle et équipes à jour, `disabledAt`), l'action (`bot.use`, `bot.run`, `bot.edit`, `bot.manage`, `bot.approve`, `channel.read`, `channel.post`, `channel.moderate`, `routine.view`, `routine.edit`, `org.settings`, `computer.use`, `vault.read`), la ressource (bot, canal, routine, org).
 - Cible d'un droit: un utilisateur Perspicax (`user:<ulid>`, résolu en principal) **ou une équipe Perspicax** (`team:<ulid>`). Un droit d'équipe suit l'équipe: qui y entre l'obtient, qui en sort le perd, sans rien recopier, comme les profils `via_team`. Un canal peut avoir une équipe pour membres.
@@ -424,10 +424,10 @@ Rappels de ce dépôt: versions les plus récentes vérifiées sur crates.io au 
 
 | Module | Rôle |
 |---|---|
-| `server/oidc-rp.ts` | découverte, PKCE, `state` et `nonce` en mémoire (10 min, usage unique, 20 au plus comme `MAX_PENDING_FLOWS`), échange du code, vérification ES256 par `node:crypto`, cache JWKS |
-| `server/idp-session.ts` | coffre des refresh Perspicax, rafraîchissement en vol unique, déconnexion par canal arrière, révocation |
+| `server/auth/oidc-rp.ts` | découverte, PKCE, `state` et `nonce` en mémoire (10 min, usage unique, 20 au plus comme `MAX_PENDING_FLOWS`), échange du code, vérification ES256 par `node:crypto`, cache JWKS |
+| `server/auth/idp-session.ts` | coffre des refresh Perspicax, rafraîchissement en vol unique, déconnexion par canal arrière, révocation |
 | `server/perspicax-link.ts` | lecture du fichier de lien, annuaire (ETag), client d'échange de jeton |
-| `server/authz.ts` | `can()` (section 3) |
+| `server/auth/authz.ts` | `can()` (section 3) |
 | `server/perspicax-mcp-bridge.ts` | le pont stdio (section 4), sur le patron de `connector-proxy.ts` et `mcp-bridge.ts` |
 | Routes | `GET /auth/oidc/start`, `GET /auth/oidc/callback`, `POST /api/auth/oidc/backchannel-logout`, `POST /api/org/import`, `/api/org/admin/*` (assertion de la console), `POST /api/org/routine-delegation` |
 | `server/engines/engine-credentials.ts` | résolution de l'accès d'un tour (section 4 bis): clé de routine, `credentialRef`, abonnement du propriétaire qui lance, clé du propriétaire lue dans le coffre de Perspicax par le lien, clé d'organisation si permise |

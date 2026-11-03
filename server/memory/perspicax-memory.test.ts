@@ -19,7 +19,7 @@ import {
   WORK_PATH,
   type WorkRow,
 } from "./perspicax-memory.ts";
-import { PrincipalRegistry } from "../principals.ts";
+import { PrincipalRegistry } from "../auth/principals.ts";
 
 const ISSUER = "https://px.example.test";
 const ORIGIN = "https://bot.example.test";

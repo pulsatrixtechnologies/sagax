@@ -17,7 +17,7 @@ import { z } from "zod";
 import { apnsEnvironment, maskSecret, type ApnsEnvironment } from "../push/config.ts";
 import { DEVICE_TOKEN, registrationSchema, type PushDevice, type PushDeviceStore } from "../push/devices.ts";
 import { androidRegistrationSchema, FCM_TOKEN, type AndroidPushDevice, type AndroidPushDeviceStore } from "../push/fcm-devices.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const PUSH_DEVICES_PATH = "/api/push/devices";

@@ -6,7 +6,7 @@ import {
 } from "./live-call-controller.ts";
 import { LIVE_COPY } from "../../shared/live-approval.ts";
 import { LiveSessionError } from "./live-call.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { Message, StoreChange } from "../store.ts";
 
 class FakeSocket implements LiveSocket {

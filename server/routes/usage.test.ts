@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import { requiredScope, type RequestAuth } from "../request-auth.ts";
+import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
 import { appendUsage, type UsageTrigger } from "../usage-ledger.ts";
 import { createUsageRoutes, ownUsageViewer } from "./usage.ts";
 import { dispatchRoutes } from "./table.ts";

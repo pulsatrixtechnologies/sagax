@@ -240,7 +240,7 @@ What Sagax does:
 
 - **Its own budget.** `SAGAX_PERSPICAX_TOKEN_BUDGET` (a whole number from 1 to
   60, default 45) caps Sagax's token and revocation calls per rolling minute
-  (`server/idp-token-pacer.ts`). A code exchange always goes (someone waits at
+  (`server/auth/idp-token-pacer.ts`). A code exchange always goes (someone waits at
   the browser). A refresh waits at most 5 s for a slot, else it is deferred as
   rate limited without a call. Revocations use only what leaves 10 slots free
   (1 on a budget below 11), one at a time. Any 429 pauses refreshes and
@@ -273,7 +273,7 @@ What Sagax does:
   ends, a refused sign-in, a replaced routine delegation, a rotated token
   nobody can keep) goes through a queue sealed with
   the sign-in vault key in `idp-revocations.enc` (0600, own AAD,
-  `server/idp-revocations.ts`). It is paced by the budget above, retried until
+  `server/auth/idp-revocations.ts`). It is paced by the budget above, retried until
   a 2xx or a definitive 400 (`invalid_request`, `unsupported_token_type`),
   waits a 429's `Retry-After`, backs off 30 s doubling to 10 minutes on other
   failures, resumes on boot, and drops entries after 30 days or past 5000
@@ -311,22 +311,22 @@ Who reaches `/api/org/routine-delegation` (GET only, read-only status):
 | A session without a principal or provider account, or a solo server | 403 `identity_perspicax` |
 
 ```sh
-pnpm exec vitest run server/oidc-rp.test.ts server/idp-token-pacer.test.ts \
-  server/idp-revocations.test.ts server/idp-session.test.ts \
+pnpm exec vitest run server/auth/oidc-rp.test.ts server/auth/idp-token-pacer.test.ts \
+  server/auth/idp-revocations.test.ts server/auth/idp-session.test.ts \
   server/org/org-routine-consent.test.ts server/routines/routines.test.ts \
-  server/perspicax-mcp.test.ts server/oidc-login.test.ts \
+  server/perspicax-mcp.test.ts server/auth/oidc-login.test.ts \
   server/perspicax-org-routes.test.ts server/org/org-routines.e2e.test.ts \
   server/perspicax-link.test.ts \
   src/pair/PairPage.test.ts src/components/routines/RoutineOwnerName.test.ts
 ```
 
-- `server/idp-token-pacer.test.ts`: with a budget of 5 the sixth refresh is
+- `server/auth/idp-token-pacer.test.ts`: with a budget of 5 the sixth refresh is
   deferred without a call; a 429 pauses refreshes and revocations, never a
   code exchange; revocations keep the reserve free.
-- `server/idp-revocations.test.ts`: a 429 with `Retry-After: 60` delays the
+- `server/auth/idp-revocations.test.ts`: a 429 with `Retry-After: 60` delays the
   next attempt 60 s; a restart sends what was pending; the sealed file and
   the log never hold a token; the 30 day and 5000 entry limits.
-- `server/idp-session.test.ts` ("rate limits"): 25 hours of 429 answers never
+- `server/auth/idp-session.test.ts` ("rate limits"): 25 hours of 429 answers never
   end a session while 25 hours of network errors still do; 120 releases in
   one tick send at most 35 revocations per rolling minute with a budget of
   45, all within 4 minutes.

@@ -1,7 +1,7 @@
 # iOS feature parity matrix (iPhone and iPad vs the Electron renderer)
 
 Date: 2026-10-03 (section 14 added 2026-10-08) · Status: inventory and plan, awaiting the owner review · Scope: `ios/` (iPhone
-and iPad), with the sidecar (`companion/src/routes.ts`) and server (`server/request-auth.ts`)
+and iPad), with the sidecar (`companion/src/routes.ts`) and server (`server/auth/request-auth.ts`)
 gates · Branch: `feat/ipad-desktop-parity`
 
 ## Why
@@ -674,7 +674,7 @@ separate shell work of the 2026-10-02 spec; this document adds the feature work 
 | WP0a | Core models and gates: decode `replyToId`, `pinnedMessageId`, `steered`, `ownerName`/`state`, `parallelTask`, `connector`, `access`, `goalRun`, `routedBy`, `BotTask.usage`, `Room.humanIds`; `Client.send` options (`replyToId`, `busyMode`); `SurfaceGate` | foundations | Core/Models.swift, Core/Chat.swift, Core/Client.swift (send), new Core/SurfaceGate.swift | none | none |
 | WP0b | ChatView seams and the gate bugs above (the routine editor goes to WP8 + S3, the room Memory tab to S1) | foundations, BA1, BA12, SB23, RM2, PL1, SB31 | ChatView.swift (extraction only), new Features/Chat/*, AgentProfileView.swift, BotProfileView.swift:536, Client.swift (groups) | none (parallel with WP0a) | none |
 | S1 | Sidecar routes batch with tests: GET harness-commands, POST parallel/:t/stop, GET bots/:id/activity[/item], GET/PUT groups/:id/memory, POST bots/:id/primary, GET /api/me/harness-connectors; plus D1 reads if approved | CO9, TH8, BP10, RM8, SB28, PL7 | companion/src/routes.ts, companion/test/routes.test.ts, proxy.test.ts | none (parallel with all) | yes |
-| S2 | Client-session routes: connector-card authorize; owner GET/DELETE command allowlist; plugin install for owners (if wanted) | CA10, BA9, PL11 | server/request-auth.ts and tests | none | yes |
+| S2 | Client-session routes: connector-card authorize; owner GET/DELETE command allowlist; plugin install for owners (if wanted) | CA10, BA9, PL11 | server/auth/request-auth.ts and tests | none | yes |
 | S3 | Routine PATCH merge check (keep window, endsAt, overlap, attachments, results, target when absent) and a test | AU13 | server/routes (routines), tests | none | yes |
 | WP1 | Message actions: Reply (send + quote strip + quote in bubble), Regenerate, Speak, View source, collapse long messages, steered marker, routed-by info, mention tint | CO2, MS3-MS5, MS8, MS19-MS21, RM10 | Features/Chat/MessageMenu.swift, Features/Chat/ReplyQuote.swift, MarkdownText.swift (tint) | WP0a, WP0b | none |
 | WP2 | Approval dock and interactive cards: session / command always-allow, allow read-only N, stepper, cancel turn, option dismiss, secret resume / dismiss, connector card, access card, owner wait, parallel task card, error Retry | CA3-CA5, CA8-CA12, CA17, TH8 | Cards/* (new ApprovalDock, ConnectorCardView, AccessCardView, ParallelTaskCardView), CardView extracted from ChatView in WP0b | WP0a, WP0b; S1 (parallel stop), S2 (authorize) for the last steps | via S1/S2 |

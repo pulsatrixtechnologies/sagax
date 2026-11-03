@@ -15,7 +15,7 @@ import { json, readBody } from "./harness/http.ts";
 import { pageOwnerFor, PublishedPages } from "./published-pages.ts";
 import { PageLive } from "./page-live.ts";
 import { bannerName, escapeHtml, FRAME_PRELUDE, jsonBlock, markdownToHtml, OPEN_BRIDGE_SOURCE, pageDocument, parseReaderAssets, REPORT_SIZE_SOURCE, SLIDE_PRINT_MM, STATE_BRIDGE_SOURCE, WRAPPER_OPEN_SOURCE, wrapperBanner, ANNOTATE_BRIDGE_SOURCE } from "./published-pages-render.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import {
   createPublishedPageRoutes,
   handlePagesOriginRequest,

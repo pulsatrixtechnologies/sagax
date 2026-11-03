@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { request, ServerResponse, type IncomingMessage, type Server } from "node:http";
 import { Socket } from "node:net";
 import type { Duplex } from "node:stream";
-import { isSameOrigin, type RequestAuth } from "../request-auth.ts";
+import { isSameOrigin, type RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 import { isDesktopTunnelPath } from "../desktop/desktop-bridge-routes.ts";
 import { bridgeWebSocketToStream, websocketAccept } from "../ws-bridge.ts";

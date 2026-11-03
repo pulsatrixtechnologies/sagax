@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { json, readBody } from "./harness/http.ts";
 import { PublishedPages } from "./published-pages.ts";
 import { ANNOTATE_SOURCE, pageDocument, presentationToHtml, splitSlides } from "./published-pages-render.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import { policyFor } from "./tool-policy.ts";
 import {
   createPublishedPageRoutes,

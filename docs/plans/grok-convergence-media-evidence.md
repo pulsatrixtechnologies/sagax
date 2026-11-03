@@ -105,7 +105,7 @@ Verification for this package:
   proxy/routes, thread-files and organization resume e2e). 32 more passed in
   the archive, member-identity and organization-permission e2e consumers of
   the message file route and the viewers DOM test.
-  `server/authz-matrix.e2e.test.ts` failed at collection on unclassified
+  `server/auth/authz-matrix.e2e.test.ts` failed at collection on unclassified
   slots already present in the 0.8.23 release; fixed at integration. Typecheck and
   `generate-locale --check` pass.
 

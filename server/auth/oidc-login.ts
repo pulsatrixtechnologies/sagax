@@ -3,12 +3,12 @@
 // SAGAX_IDENTITY=perspicax turns it on. The server then:
 //   - answers GET /auth/oidc/start (302 to the Perspicax authorize page) and
 //     GET /auth/oidc/callback (code exchange and id_token check in
-//     server/oidc-rp.ts, then a Sagax session cookie and 302 to /, or back
+//     server/auth/oidc-rp.ts, then a Sagax session cookie and 302 to /, or back
 //     to a published page's reading link named by `return`, #1486);
 //     `fresh=1` on the start is "Sign in again": `prompt=login` and
 //     `max_age=0` at Perspicax. Any sign-in stamps the session's `authAt`
 //     only from the id_token's verified `auth_time` when it is recent
-//     (server/recent-sign-in.ts authAtFromAuthTime);
+//     (server/auth/recent-sign-in.ts authAtFromAuthTime);
 //   - resolves the person by (iss, sub) through PrincipalRegistry.forSubject;
 //   - maps the `role` claim: admin -> scopes ["admin", "client"] and the
 //     organization role "admin"; manager and employee -> ["client"] and
@@ -16,7 +16,7 @@
 //   - refuses the interim email codes and invitation links, and says so in
 //     its environment descriptor so /pair offers only this button;
 //   - keeps the provider's refresh token as the session's grant
-//     (server/idp-session.ts) and answers POST
+//     (server/auth/idp-session.ts) and answers POST
 //     /api/auth/oidc/backchannel-logout (OpenID Connect Back-Channel Logout;
 //     a token that also carries the RISC account purged event erases the
 //     person's data here and answers `{ purged: true, bots, threads }`);
@@ -28,7 +28,7 @@
 //     sagax://pair?error=<code> (the app's authentication sheet only ever
 //     sees its own scheme, never the web /pair page);
 //   - answers GET /auth/oidc/reauth?ticket= (2026-10-18, account deletion,
-//     server/account-reauth.ts): the person signs in again (`prompt=login`,
+//     server/auth/account-reauth.ts): the person signs in again (`prompt=login`,
 //     `max_age=0`) and the callback keeps that sign-in's access token for
 //     their DELETE /api/me; it ends on /#account-reauth=ok (web) or
 //     sagax://account-reauth?status=ok (phone), refusals on
@@ -241,7 +241,7 @@ export function oidcSessionFields(session: SessionRecord, principal: Principal |
   };
 }
 
-/** The grant side of a sign-in (server/idp-session.ts IdpSessionManager). */
+/** The grant side of a sign-in (server/auth/idp-session.ts IdpSessionManager). */
 export interface OidcGrantKeeper {
   unavailableReason(): string | null;
   /** `accessToken` stays in memory only (slice 5 token exchange). */
@@ -283,11 +283,11 @@ export function routineDelegationReturn(outcome: { ok: true } | { error: string 
 export interface OidcLoginDeps {
   config: Extract<IdentityConfig, { kind: "perspicax" }>;
   rp?: OidcRelyingParty;
-  /** The Sagax session cookie name (server/request-auth.ts). */
+  /** The Sagax session cookie name (server/auth/request-auth.ts). */
   sessionCookie: string;
   forSubject: (input: { iss: string; sub: string; claims: { email?: string; name?: string; login?: string; avatar?: string }; orgRole: "admin" | "member"; teams?: { id: string; name: string; manager: boolean }[]; perspicaxRole?: "admin" | "manager" | "employee" }) => Principal;
   /** `authAt`: the provider's verified, recent `auth_time`; absent when the
-   * id_token gave none that counts (server/recent-sign-in.ts). */
+   * id_token gave none that counts (server/auth/recent-sign-in.ts). */
   issueSession: (input: { label: string; scopes: Scope[]; email?: string; principalId: string; idp: NonNullable<SessionRecord["idp"]>; authAt?: number }) => { token: string; session: PublicSession };
   /** Where each sign-in's refresh token is kept. */
   grants: OidcGrantKeeper;
@@ -298,7 +298,7 @@ export interface OidcLoginDeps {
   now?: () => number;
   log?: (line: string) => void;
   /** Where the refresh token of a refused sign-in or delegation is revoked
-   * (the durable queue, server/idp-revocations.ts); a single call now
+   * (the durable queue, server/auth/idp-revocations.ts); a single call now
    * without one. */
   revocations?: RevocationSink;
   /** 2026-10-18: the tickets and fresh sign-ins of account deletion. Absent:
@@ -706,7 +706,7 @@ export function createOidcLoginRoutes(deps: OidcLoginDeps) {
     // The provider's own word on when the person proved their factors, from
     // the verified id_token, and only when recent: a silent single sign-on
     // or an old sign-in gives a valid session that is not recent (a pairing
-    // code a bot made never is either; server/recent-sign-in.ts).
+    // code a bot made never is either; server/auth/recent-sign-in.ts).
     const authAt = authAtFromAuthTime(identity.authTime, now());
     if (authAt === undefined) log(`oidc sign-in: no recent auth_time from the provider; the session is not a recent sign-in`);
     try {

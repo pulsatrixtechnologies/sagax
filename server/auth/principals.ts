@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync } from "node:fs";
 import { z } from "zod";
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 
 const PRINCIPAL_ID_REGEX = /^pr_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** A Perspicax team id (slice 4): a ULID in practice, any short alphanumeric id accepted. */

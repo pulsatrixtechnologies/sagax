@@ -4,7 +4,7 @@
 
 **Goal:** Chaque personne devient un principal stable (`pr_<uuid>`), chaque session en porte un, et une organisation exige une adresse de serveur.
 
-**Architecture:** Un nouveau registre `server/principals.ts` (fichier `principals.json` dans `DATA_DIR`) remplace les emails et `"local-owner"` comme clé d'identité. Une migration pure (`server/identity-migration.ts`) réécrit une fois les ids stockés. Les sessions gagnent `principalId`: la connexion par email le résout, un code d'appairage hérite du principal qui l'a créé. `channelViewerId` rend le principal, ou un id anonyme qui ne voit aucun channel. Les rôles d'organisation comparent l'id du principal au propriétaire et son email aux listes `cfg.signIn`.
+**Architecture:** Un nouveau registre `server/auth/principals.ts` (fichier `principals.json` dans `DATA_DIR`) remplace les emails et `"local-owner"` comme clé d'identité. Une migration pure (`server/identity-migration.ts`) réécrit une fois les ids stockés. Les sessions gagnent `principalId`: la connexion par email le résout, un code d'appairage hérite du principal qui l'a créé. `channelViewerId` rend le principal, ou un id anonyme qui ne voit aucun channel. Les rôles d'organisation comparent l'id du principal au propriétaire et son email aux listes `cfg.signIn`.
 
 **Tech Stack:** TypeScript strict, Node 24 `--experimental-strip-types`, Vitest, Zod, React 19 + Tailwind v4.
 
@@ -35,8 +35,8 @@
 ### Task 1: Registre des principals
 
 **Files:**
-- Create: `server/principals.ts`
-- Test: `server/principals.test.ts`
+- Create: `server/auth/principals.ts`
+- Test: `server/auth/principals.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -47,7 +47,7 @@
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-// server/principals.test.ts
+// server/auth/principals.test.ts
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -114,13 +114,13 @@ describe("principal registry", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx vitest run server/principals.test.ts`
+Run: `npx vitest run server/auth/principals.test.ts`
 Expected: FAIL, `Cannot find module './principals.ts'`.
 
 - [ ] **Step 3: Write minimal implementation**
 
 ```ts
-// server/principals.ts
+// server/auth/principals.ts
 // A person, by a stable id. Emails change and "local-owner" was never a
 // person; ownership, channel membership and grants key on `pr_<uuid>`.
 import { randomUUID } from "node:crypto";
@@ -237,13 +237,13 @@ export class PrincipalRegistry {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `npx vitest run server/principals.test.ts`
+Run: `npx vitest run server/auth/principals.test.ts`
 Expected: PASS (6 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/principals.ts server/principals.test.ts
+git add server/auth/principals.ts server/auth/principals.test.ts
 git commit -m "feat: add a principal registry keyed by stable ids"
 ```
 
@@ -410,8 +410,8 @@ git commit -m "feat: migrate stored person references to principal ids"
 ### Task 3: Sessions liées à un principal
 
 **Files:**
-- Modify: `server/sessions.ts` (`sessionSchema` ~l.64, `PairingCode` ~l.110, `openPairing` ~l.308, `exchange` ~l.373, `issue`/`issueAccount` ~l.420, new `setPrincipal`)
-- Test: `server/sessions.test.ts` (append a `describe`)
+- Modify: `server/auth/sessions.ts` (`sessionSchema` ~l.64, `PairingCode` ~l.110, `openPairing` ~l.308, `exchange` ~l.373, `issue`/`issueAccount` ~l.420, new `setPrincipal`)
+- Test: `server/auth/sessions.test.ts` (append a `describe`)
 
 **Interfaces:**
 - Produces:
@@ -422,7 +422,7 @@ git commit -m "feat: migrate stored person references to principal ids"
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `server/sessions.test.ts`. The file's `beforeEach` builds a fresh `SessionRegistry` in the module-level `registry` variable on a temp path; the tests below use it.
+Append to `server/auth/sessions.test.ts`. The file's `beforeEach` builds a fresh `SessionRegistry` in the module-level `registry` variable on a temp path; the tests below use it.
 
 ```ts
 describe("sessions carry a principal", () => {
@@ -455,16 +455,16 @@ describe("sessions carry a principal", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx vitest run server/sessions.test.ts -t "sessions carry a principal"`
+Run: `npx vitest run server/auth/sessions.test.ts -t "sessions carry a principal"`
 Expected: FAIL (`principalId` undefined, `setPrincipal` is not a function).
 
 - [ ] **Step 3: Implement**
 
-In `server/sessions.ts`:
+In `server/auth/sessions.ts`:
 
 ```ts
 // sessionSchema, after `email`:
-  /** The person this session acts as (server/principals.ts). */
+  /** The person this session acts as (server/auth/principals.ts). */
   principalId: z.string().max(64).optional(),
 ```
 
@@ -486,7 +486,7 @@ In `exchange`, add to the `record` literal (after `expiresAt`):
       ...(pairing.principalId ? { principalId: pairing.principalId } : {}),
 ```
 
-Widen `issue`'s input with `principalId?: string`. Open `issueAccount` (`grep -n "issueAccount" server/sessions.ts`), widen its input the same way, and copy `principalId` into the record it builds, next to `userId` and `email`.
+Widen `issue`'s input with `principalId?: string`. Open `issueAccount` (`grep -n "issueAccount" server/auth/sessions.ts`), widen its input the same way, and copy `principalId` into the record it builds, next to `userId` and `email`.
 
 Add the method after `revoke`:
 
@@ -501,17 +501,17 @@ Add the method after `revoke`:
   }
 ```
 
-Add `principalId?: string` to `PublicSession` and to `publicSession()` if that function exists (`grep -n "function publicSession" server/sessions.ts`), so the UI can show who a device acts as.
+Add `principalId?: string` to `PublicSession` and to `publicSession()` if that function exists (`grep -n "function publicSession" server/auth/sessions.ts`), so the UI can show who a device acts as.
 
 - [ ] **Step 4: Run tests**
 
-Run: `npx vitest run server/sessions.test.ts server/remote-support/remote-sessions.test.ts`
+Run: `npx vitest run server/auth/sessions.test.ts server/remote-support/remote-sessions.test.ts`
 Expected: PASS, with no regressions in the existing tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/sessions.ts server/sessions.test.ts
+git add server/auth/sessions.ts server/auth/sessions.test.ts
 git commit -m "feat: bind sessions and pairing codes to a principal"
 ```
 
@@ -774,7 +774,7 @@ principals.localOperator(cfg.profile?.email);
 }
 ```
 
-Add `listRecordsForMigration(): { id: string; email?: string; userId?: string; principalId?: string }[]` to `SessionRegistry` in `server/sessions.ts`. It returns `this.sessions.map(({ id, email, userId, principalId }) => ({ id, email, userId, principalId }))`. Add a one-line test for it in `server/sessions.test.ts`.
+Add `listRecordsForMigration(): { id: string; email?: string; userId?: string; principalId?: string }[]` to `SessionRegistry` in `server/auth/sessions.ts`. It returns `this.sessions.map(({ id, email, userId, principalId }) => ({ id, email, userId, principalId }))`. Add a one-line test for it in `server/auth/sessions.test.ts`.
 
 `store.patchGroup` accepts `humanIds` (`store.ts:1178`). `applyHumanIds` (`server/channel-membership.ts:27`) passes ids through unchanged, so `pr_` ids need no change there.
 
@@ -801,7 +801,7 @@ const principal = principals.forAccount({ email: verified.email, controlPlaneUse
 
 - [ ] **Step 4: Run tests**
 
-Run: `npx vitest run server/org/org-identity.e2e.test.ts server/org/org-routes.test.ts server/channel-visibility.test.ts server/sessions.test.ts`
+Run: `npx vitest run server/org/org-identity.e2e.test.ts server/org/org-routes.test.ts server/channel-visibility.test.ts server/auth/sessions.test.ts`
 Then: `pnpm -s typecheck`
 Then run the whole server suite and compare with the pre-change failure list, saved before starting via `npx vitest run server > /tmp/server-before.txt`: `npx vitest run server`
 Expected: the new e2e test passes, with no new failures.
@@ -809,7 +809,7 @@ Expected: the new e2e test passes, with no new failures.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/index.ts server/sessions.ts server/sessions.test.ts server/org/org-identity.e2e.test.ts
+git add server/index.ts server/auth/sessions.ts server/auth/sessions.test.ts server/org/org-identity.e2e.test.ts
 git commit -m "feat: key org ownership, channels and approvals on principals"
 ```
 

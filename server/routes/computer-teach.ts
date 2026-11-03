@@ -15,7 +15,7 @@
 import { z } from "zod";
 
 import { FOCUSED_WINDOW_COMMAND, type ComputerTeachRecordings } from "../computer/computer-teach.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { ComputerShell, ControlState } from "./computer-input.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

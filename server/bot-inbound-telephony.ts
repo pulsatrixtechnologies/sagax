@@ -65,7 +65,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 
 import type { NormalizedTriggerEvent } from "../shared/trigger-sources.ts";
-import type { ConsoleAssertion, ConsoleAssertionActor } from "./oidc-rp.ts";
+import type { ConsoleAssertion, ConsoleAssertionActor } from "./auth/oidc-rp.ts";
 import { AssertionReplayCache } from "./org/org-admin-routes.ts";
 import { reachMeSmsReply } from "./reach-me/inbound.ts";
 import { isOwnText } from "./sms-conversation.ts";

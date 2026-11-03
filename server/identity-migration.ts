@@ -3,7 +3,7 @@
 // as it meets new emails. It runs on every boot: principal ids pass through,
 // so running it twice changes nothing, and data restored or imported later
 // is mapped too.
-import { isAccountEmail, isPrincipalId, type PrincipalRegistry } from "./principals.ts";
+import { isAccountEmail, isPrincipalId, type PrincipalRegistry } from "./auth/principals.ts";
 
 /** A person ref as a principal id. Only the literal "local-owner" is the
  * operator; a blank ref is nobody. A ref that is neither a principal id nor

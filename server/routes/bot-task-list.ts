@@ -13,7 +13,7 @@
 // It names a task by task_id, or by its exact title. It cannot resume,
 // reopen or remove: those are the person's. The bot id is the turn's,
 // never the body's.
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { BotTaskStore } from "../bot-task-list.ts";
 import { BOT_TOOL_TASK_ACTIONS, findBotTask, isBotTaskId, sameBotTaskOwner, type BotTask, type BotTaskAction } from "../../shared/bot-task-list.ts";
 import type { InternalRouteHandler } from "./internal-route.ts";

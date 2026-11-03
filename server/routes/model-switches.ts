@@ -9,7 +9,7 @@
 // the installation's (`disabledModels` in config.json), written by whoever
 // may edit it. The organization's list is read here, set in Perspicax only
 // (POST /api/org/admin/settings `disabledModels`).
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { cleanDisabledModels } from "../../shared/offered-models.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

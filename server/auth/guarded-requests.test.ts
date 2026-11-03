@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { WireMessage } from "../shared/wire.ts";
+import type { WireMessage } from "../../shared/wire.ts";
 import { assertRequestTarget, guardedRequestPath, requestNeedsInput, requestSourceForCard } from "./guarded-requests.ts";
 
 const source: WireMessage = { id: "source", role: "user", kind: "text", text: "request", at: 1, parentId: null, sendId: "fixture-send-id-1234" };

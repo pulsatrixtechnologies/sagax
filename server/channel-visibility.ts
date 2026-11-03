@@ -9,7 +9,7 @@ Slice 4: the rules themselves live in authz.ts (levels, team grants,
 `team:` entries in a room, shared sections); these helpers keep their
 names and answers and delegate there. A caller that knows the viewer's
 teams passes `viewer` (and a bot's `grants` and `sections`). */
-import { canInChannel, canOnBot, targetNamesViewer, type BotGrant, type SectionAccess, type Viewer } from "./authz.ts";
+import { canInChannel, canOnBot, targetNamesViewer, type BotGrant, type SectionAccess, type Viewer } from "./auth/authz.ts";
 
 function actorKey(id: string): string {
   return id.trim().toLowerCase();

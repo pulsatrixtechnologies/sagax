@@ -17,9 +17,9 @@ import {
   type ClaudeAiTurnInput,
   type HarnessConnectorRouteDeps,
 } from "./harness-connectors.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import { PASS, type RouteContext } from "./routes/table.ts";
-import type { SessionRecord } from "./sessions.ts";
+import type { SessionRecord } from "./auth/sessions.ts";
 
 const LOCAL = "pr_00000000-0000-4000-8000-000000000001";
 const ADA = "pr_00000000-0000-4000-8000-00000000000a";

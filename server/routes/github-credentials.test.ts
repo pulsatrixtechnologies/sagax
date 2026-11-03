@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { json, readBody } from "../harness/http.ts";
-import { CLIENT_ALLOW, type RequestAuth } from "../request-auth.ts";
+import { CLIENT_ALLOW, type RequestAuth } from "../auth/request-auth.ts";
 import { GithubCredentials } from "../github-credentials.ts";
 import { createGithubCredentialRoutes } from "./github-credentials.ts";
 

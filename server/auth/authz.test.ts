@@ -1,4 +1,4 @@
-// Slice 4 rights (server/authz.ts): levels, team grants, sections, managers.
+// Slice 4 rights (server/auth/authz.ts): levels, team grants, sections, managers.
 import { describe, expect, it } from "vitest";
 
 import {

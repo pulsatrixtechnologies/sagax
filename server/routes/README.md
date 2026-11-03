@@ -13,7 +13,7 @@ lower its number in that test.
 - Authenticated handlers register in `ROUTES` and run right after the auth gate.
   Public / pre-gate handlers register in `PRE_AUTH_ROUTES` (before `resolveRequestAuth`) or
   `PRE_AUTH_AFTER_RESOLVE` (after resolve, before the session refusal). Pre-auth `auth` may be null.
-- Scope rules stay keyed by path in `server/request-auth.ts`.
+- Scope rules stay keyed by path in `server/auth/request-auth.ts`.
 - `RouteContext` carries `req`, `res`, `url`, `path`, `method`, `auth`, `json`, `readBody`; the rest is `deps`.
 - Type-only imports must be `import type` (or an inline `type`): the server runs on type stripping, so
   a bare type import passes `tsc` and crashes at boot.

@@ -58,7 +58,7 @@ export function excludedWorkspaceAuthPath(path: string): boolean {
   if (/^principals\/[^/]+\/engine-api-keys\.enc(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
   // The person's web search provider and key (server/web-search/store.ts).
   if (/^(?:principals\/[^/]+\/)?web-search\.enc(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
-  // The private key of the bot's visit signature (server/web-bot-auth.ts).
+  // The private key of the bot's visit signature (server/auth/web-bot-auth.ts).
   if (/^(?:principals\/[^/]+\/)?web-bot-auth-key\.json(?:$|\.\d+\.[0-9a-f-]+\.tmp$)/.test(path)) return true;
   // The person's OpenAPI document, headers included (server/mcp/openapi-connector.ts).
   // The sealed file and a leftover plaintext copy.

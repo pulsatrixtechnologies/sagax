@@ -6,7 +6,7 @@
 import type { IncomingMessage } from "node:http";
 import type { Socket } from "node:net";
 
-import { isSameOrigin, type RequestAuth } from "../request-auth.ts";
+import { isSameOrigin, type RequestAuth } from "../auth/request-auth.ts";
 import { websocketAccept } from "../ws-bridge.ts";
 import { webSocketSession } from "../ws-session.ts";
 import { parseControlEvent, type ControlEvent } from "../../shared/remote-control.ts";

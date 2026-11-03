@@ -9,8 +9,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { initMediaProxy, mediaProxyPath, mintMediaProxyToken } from "../media-proxy.ts";
-import { resolveRequestAuth } from "../request-auth.ts";
-import { SessionRegistry } from "../sessions.ts";
+import { resolveRequestAuth } from "../auth/request-auth.ts";
+import { SessionRegistry } from "../auth/sessions.ts";
 import { handleMediaProxy } from "./media-widgets.ts";
 
 const listen = (server: Server) =>

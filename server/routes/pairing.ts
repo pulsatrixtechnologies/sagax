@@ -12,11 +12,11 @@
 // JSON-only CSRF, lockout via sessions.exchange, live-session check before
 // minting a code, and org admin-target refusal stay identical.
 import { phonePairingLink } from "../../shared/pairing-link.ts";
-import type { RequestAuth } from "../request-auth.ts";
-import { requestOrigin, requestSource } from "../request-auth.ts";
-import { labelFromUserAgent } from "../request-auth.ts";
-import type { Scope, SessionRecord } from "../sessions.ts";
-import { formatPairingCode } from "../sessions.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { requestOrigin, requestSource } from "../auth/request-auth.ts";
+import { labelFromUserAgent } from "../auth/request-auth.ts";
+import type { Scope, SessionRecord } from "../auth/sessions.ts";
+import { formatPairingCode } from "../auth/sessions.ts";
 import {
   PASS,
   type PreAuthRouteHandler,

@@ -15,10 +15,10 @@ import { CustomRuleStore, registeredCustomRuleStore } from "./custom-rules-store
 import { json, readBody } from "./harness/http.ts";
 import { opsRoutes, type OpsDeps } from "./org/org-admin-ops.ts";
 import { matchOwnerRule, ruleCoversExactScope, type OwnerRule } from "./approvals/owner-approval.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import { createCustomRuleRoutes } from "./routes/custom-rules.ts";
 import { dispatchRoutes } from "./routes/table.ts";
-import { alwaysAllowStepUp, approvalStepUp } from "./step-up-gate.ts";
+import { alwaysAllowStepUp, approvalStepUp } from "./auth/step-up-gate.ts";
 import { fakeConsole } from "./testing/console-context.ts";
 import { ruleTextDiff } from "../shared/custom-rules.ts";
 

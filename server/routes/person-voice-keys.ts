@@ -9,7 +9,7 @@
 // A solo server answers 404: its one person keeps the installation's keys.
 // The key is never in an answer and never logged.
 import { isPersonalVoiceKeyProvider } from "../../shared/person-voice-keys.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { normalizeVoiceKey, PersonVoiceKeysError, type PersonVoiceKeysStore } from "../voice/person-voice-keys.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

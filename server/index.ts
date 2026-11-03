@@ -107,7 +107,7 @@ import {
   withoutFinishUntilMarker
 } from "./finish-until.ts";
 import { finishUntilLineText, finishUntilRounds, type FinishUntilLine } from "../shared/finish-until-line.ts";
-import { staleSessionReason, type StaleSessionReason } from "./stale-session.ts";
+import { staleSessionReason, type StaleSessionReason } from "./auth/stale-session.ts";
 import { isSmallTalk, SMALL_TALK_TURN_NOTE } from "./small-talk.ts";
 import {
   composeStreamDigest,
@@ -165,7 +165,7 @@ import {
   requestConflict,
   requestNeedsInput,
   requestSourceForCard
-} from "./guarded-requests.ts";
+} from "./auth/guarded-requests.ts";
 import { botAvatarUrlFromStoredPath } from "../shared/bot-avatar.ts";
 import { botPublicProfile, type BotPublicProfile } from "../shared/bot-public-profile.ts";
 import { CLOUD_COMPUTER_BUSY_ERROR } from "../shared/computer-contention.ts";
@@ -585,7 +585,7 @@ import { createWebSearchRoutes } from "./routes/web-search.ts";
 import { createWebBotAuthRoutes } from "./routes/web-bot-auth.ts";
 import { createBotTailscaleRoutes, botTailscaleScopeFor } from "./routes/bot-tailscale.ts";
 import { BotTailscaleService } from "./bot-tailscale.ts";
-import { applySignedBrowserHeaders } from "./web-bot-auth-apply.ts";
+import { applySignedBrowserHeaders } from "./auth/web-bot-auth-apply.ts";
 import {
   browserOwner,
   noteBrowserOwner,
@@ -594,7 +594,7 @@ import {
   visitTarget,
   WebBotAuthStore,
   webBotAuthScope
-} from "./web-bot-auth.ts";
+} from "./auth/web-bot-auth.ts";
 import { createOpenApiRoutes } from "./routes/openapi-connector.ts";
 import { createOpenApiInternalRoutes } from "./routes/openapi-internal.ts";
 import { OpenApiStore, openApiScope } from "./mcp/openapi-connector.ts";
@@ -637,7 +637,7 @@ import { newPlanUsageAlerts, planAccountsFromInstances, planUsageAlertText } fro
 import { GroupUsageReader } from "./group-thread-usage.ts";
 import { ledgerCost, listPriceFor } from "./models/model-prices.ts";
 import type { PriceList } from "./prices.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import {
   BOT_FIELD_PERMISSIONS,
   can,
@@ -1513,7 +1513,7 @@ import {
   writePendingPurges
 } from "./engines/engine-transcripts.ts";
 import { createCustomDomainVerifier, customDomainIpv4, normalizeCustomDomain } from "./custom-domain.ts";
-import { allowedScopes, createServerEmailSignIn, parseAllowList } from "./account-signin.ts";
+import { allowedScopes, createServerEmailSignIn, parseAllowList } from "./auth/account-signin.ts";
 import { EmailOtpStore } from "./mail/email-otp.ts";
 import { resolveMailSettings } from "./mail/mail-config.ts";
 import { createCaptureMailer, createMailer, type Mailer } from "./mail/mailer.ts";
@@ -1702,22 +1702,22 @@ import {
   sessionCookieName,
   sessionPrincipal,
   secureTokenMatch
-} from "./request-auth.ts";
+} from "./auth/request-auth.ts";
 import {
   cookieMaxAgeSeconds,
   isBotActSession,
   SessionRegistry,
   type Scope,
   type SessionRecord
-} from "./sessions.ts";
-import { recentPersonSignIn } from "./recent-sign-in.ts";
-import { createAuthRefusalLogger } from "./auth-refusal-log.ts";
+} from "./auth/sessions.ts";
+import { recentPersonSignIn } from "./auth/recent-sign-in.ts";
+import { createAuthRefusalLogger } from "./auth/auth-refusal-log.ts";
 import {
   isAccountEmail,
   isPrincipalId,
   PrincipalRegistry,
   type Principal
-} from "./principals.ts";
+} from "./auth/principals.ts";
 import { OrgTeams } from "./org/org-teams.ts";
 import { compatServers } from "./openai-compat-servers.ts";
 import { createOpenAiCompatServerRoutes } from "./routes/openai-compat-servers.ts";
@@ -1845,7 +1845,7 @@ import {
   type SectionAccess,
   type TeamRef,
   type Viewer as AuthzViewer
-} from "./authz.ts";
+} from "./auth/authz.ts";
 import {
   canOnThread,
   migrationLogLine,
@@ -1968,7 +1968,7 @@ import { createBotLibraryRoutes } from "./routes/bot-library.ts";
 import { createBotSettingsRoutes } from "./routes/bot-settings.ts";
 import { createAutoReviewRuleRoutes } from "./routes/auto-review-rules.ts";
 import { createOwnerApprovalRoutes } from "./routes/owner-approvals.ts";
-import { SecurityKeys, SecurityKeyStore } from "./security-keys.ts";
+import { SecurityKeys, SecurityKeyStore } from "./auth/security-keys.ts";
 import {
   actionClassContext,
   alwaysAllowStepUp,
@@ -1977,7 +1977,7 @@ import {
   callStepUpClasses,
   cardRiskClasses,
   type StepUpDecision
-} from "./step-up-gate.ts";
+} from "./auth/step-up-gate.ts";
 import { createSecurityKeyRoutes, securityKeyCeremonyRoutes, settingsStepUp } from "./routes/security-keys.ts";
 import {
   SETTINGS_ACTION_CLASS,
@@ -2025,7 +2025,7 @@ import {
   type MarketplaceViewer
 } from "./plugins/plugin-marketplaces.ts";
 import { createAccountRoutes, type PerspicaxDeletion } from "./routes/account.ts";
-import { ACCOUNT_REAUTH_PATH, AccountReauth, perspicaxDeletion } from "./account-reauth.ts";
+import { ACCOUNT_REAUTH_PATH, AccountReauth, perspicaxDeletion } from "./auth/account-reauth.ts";
 import { createRegistrySearch } from "./plugins/plugin-registry.ts";
 import {
   BotPluginError,
@@ -2258,7 +2258,7 @@ import { createMeetingInternalRoutes } from "./routes/meeting-internal.ts";
 import { createPhoneCardScanRoutes, createPhoneToolInternalRoutes, createPhoneToolRoutes } from "./routes/phone-tools.ts";
 import { cardScanRequester, createPhoneToolBroker, phoneToolTurn } from "./phone/phone-tools.ts";
 import { phoneConnectionTransport } from "../shared/phone-transport.ts";
-import { ipcPeer } from "./request-auth.ts";
+import { ipcPeer } from "./auth/request-auth.ts";
 import {
   isPhoneToolCallName,
   PHONE_TOOL_OUTPUT_NOT_KEPT,
@@ -2365,8 +2365,8 @@ import {
   oidcSessionFields,
   profileManagement,
   writesManagedProfile
-} from "./oidc-login.ts";
-import { OidcRelyingParty } from "./oidc-rp.ts";
+} from "./auth/oidc-login.ts";
+import { OidcRelyingParty } from "./auth/oidc-rp.ts";
 import type { BotAttachment, BotFileRoot } from "./org/org-admin-files.ts";
 import { ADMIN_ACTIVITY_CATEGORIES } from "./admin-activity.ts";
 import {
@@ -2431,7 +2431,7 @@ import {
   type ApprovalAnswer,
   type OrgAdminViewer
 } from "./org/org-admin-routes.ts";
-import { RevocationQueue } from "./idp-revocations.ts";
+import { RevocationQueue } from "./auth/idp-revocations.ts";
 import {
   IDP_REFRESH_WAIT_MS,
   IDP_SWEEP_INTERVAL_MS,
@@ -2440,7 +2440,7 @@ import {
   refreshAfterMs,
   resolveIdpVaultKey,
   settledWithin
-} from "./idp-session.ts";
+} from "./auth/idp-session.ts";
 import {
   acceptOpenInvitesForEmail,
   createPublicInviteRoutes,
@@ -2449,7 +2449,7 @@ import {
   PUBLIC_INVITE_PATH,
   type OrgState
 } from "./org/org-routes.ts";
-import { createDirectGrantRoutes } from "./direct-grants.ts";
+import { createDirectGrantRoutes } from "./auth/direct-grants.ts";
 import { directoryIntervalMs, PerspicaxDirectory, type ModelProvider } from "./perspicax-link.ts";
 import { duplicateNote, PerspicaxMemory } from "./memory/perspicax-memory.ts";
 import { knownAgentToolName, PERSPICAX_TOOL_NAMES } from "./drivers/agents-catalog.ts";
@@ -2739,7 +2739,7 @@ if (existsSync(join(DATA_DIR, ".backups"))) {
 const workspaceMaintenance = new WorkspaceBackupMaintenance();
 // Only after ensureDirs(): it performs the one-time rename of the legacy data
 // dir, which must not find a freshly created ~/.sagax already there.
-// Remote clients (server/request-auth.ts, server/sessions.ts): a stable identity
+// Remote clients (server/auth/request-auth.ts, server/auth/sessions.ts): a stable identity
 // for this server, the paired sessions, and the cookie the served UI uses.
 const ENVIRONMENT_ID = loadEnvironmentId(DATA_DIR);
 // 2026-10-11: the server log tail of the console's Logs page survives a
@@ -3295,7 +3295,7 @@ const commandAllowlist = new CommandAllowlistStore(join(DATA_DIR, "command-allow
 // 2026-10-14: owners' approval rules
 // (docs/superpowers/specs/2026-10-14-bot-owner-permissions.md).
 const ownerApprovals = new OwnerApprovalStore(join(DATA_DIR, "owner-approvals.json"));
-// Security keys for sensitive approvals (server/security-keys.ts).
+// Security keys for sensitive approvals (server/auth/security-keys.ts).
 const securityKeys = new SecurityKeys({
   store: new SecurityKeyStore(join(DATA_DIR, "security-keys.json")),
   onRegistered: (person, key) => {
@@ -3332,10 +3332,10 @@ let workspaceAccess: WorkspaceAccess | null = null;
 const DESKTOP_MANAGED = process.env.SAGAX_DESKTOP_PARENT === "1";
 const SHARED_WORKSPACE_FULL_ACCESS = sharedWorkspaceFullAccessConfigured();
 const sharedWorkspaceFullAccessEnabled = () => SHARED_WORKSPACE_FULL_ACCESS && Boolean(workspaceAccess) && hostedAccessEntitled();
-// Who a loopback request without a session is (server/request-auth.ts
+// Who a loopback request without a session is (server/auth/request-auth.ts
 // LoopbackTrust): the owner on a desktop or a one-person server; a service on
 // a shared workspace, where every bot's shell is a loopback caller too.
-// Organization sign-in (server/oidc-login.ts): SAGAX_IDENTITY=perspicax. A
+// Organization sign-in (server/auth/oidc-login.ts): SAGAX_IDENTITY=perspicax. A
 // half-configured organization server stops here rather than fall back to
 // email codes.
 // An organization server is shared: loopback is a bot's shell, not an owner,
@@ -8400,7 +8400,7 @@ try {
 // Replay only after the secondary write above is durable. If reconciliation
 // failed, leave the committed journal in place and profile reuse blocked.
 if (browserCleanupReferencesReconciled) browserCleanup.startPending();
-// People by a stable principal id (server/principals.ts). Built once `store`
+// People by a stable principal id (server/auth/principals.ts). Built once `store`
 // and `sessions` exist and before any route serves. Stored emails and
 // "local-owner" become principal ids on every boot: ids pass through, so a
 // restored workspace or an imported team is mapped as well.
@@ -9072,7 +9072,7 @@ ROUTES.push(createCredentialVaultRoutes({
       return settingsStepUp(securityKeys, person, "credentials.export", { format: input.format }, input.stepUp, []);
     }
     // an interactive sign-in, never a session's age: a bot can redeem a
-    // pairing code into a new session (server/recent-sign-in.ts)
+    // pairing code into a new session (server/auth/recent-sign-in.ts)
     const fresh = recentPersonSignIn(auth, { desktopManaged: DESKTOP_MANAGED });
     return fresh ? null : { status: 403, body: { error: "Sign in again, then export your vault.", code: "reauth_required" } };
   },
@@ -21204,7 +21204,7 @@ function peerReplayText(m: Message, name: string, text: string): string {
 }
 
 /** Why this thread's engine session should not be resumed (left alone for
- * hours, or its saved file grown too large; server/stale-session.ts), or
+ * hours, or its saved file grown too large; server/auth/stale-session.ts), or
  * null. Only for an engine that resumes a session of its own here: one that
  * is handed the transcript every turn, a rewound thread or another engine
  * joining rebuild their context anyway. */
@@ -28474,7 +28474,7 @@ function configStatus() {
     // show the same durable session as an agent, but config PATCH validation
     // keeps it read-only and rejects callers that try to choose it.
     browserProfiles: cfg.browserProfiles ?? [],
-    // who may sign in with an emailed code (server/account-signin.ts); a
+    // who may sign in with an emailed code (server/auth/account-signin.ts); a
     // solo server's only: an organization server's people are in Perspicax
     ...(IDENTITY.kind === "perspicax" ? {} : { signIn: { admins: cfg.signIn?.admins ?? [], members: cfg.signIn?.members ?? [] } }),
     // whether that list decides anything here, or the organisation's Admin does
@@ -31969,7 +31969,7 @@ ROUTES.push(createShownPathRoutes({
     });
   }
 }));
-// The usage ledger (JSON and CSV). Admin scope stays in server/request-auth.ts.
+// The usage ledger (JSON and CSV). Admin scope stays in server/auth/request-auth.ts.
 ROUTES.push(createUsageRoutes({
   dataDir: DATA_DIR,
   prices: operatorPrices,
@@ -32224,7 +32224,7 @@ ROUTES.push(createOwnerApprovalRoutes({
   stepUp: (_auth, personId, action, detail, stepUp) => settingsStepUpGate(personId, action, detail, stepUp)
 }));
 // 2026-10-16 (wave 2, package E): security keys and passkeys for sensitive
-// approvals (server/security-keys.ts, server/routes/security-keys.ts,
+// approvals (server/auth/security-keys.ts, server/routes/security-keys.ts,
 // shared/step-up.ts). The Allow of a card in a class the answering person
 // chose needs a step-up signed by their key for that very card, its
 // content and that answer (`stepUpGate`, called by every answer path).
@@ -32234,7 +32234,7 @@ ROUTES.push(createSecurityKeyRoutes({
   // The first key needs a fresh interactive sign-in (15 minutes), or this
   // computer's own person at the desktop: a stolen old session cannot enroll
   // one, nor can a session a bot redeemed from a pairing code, nor a
-  // headless server's loopback (a bot's shell there). server/recent-sign-in.ts
+  // headless server's loopback (a bot's shell there). server/auth/recent-sign-in.ts
   recentSignIn: (auth) => recentPersonSignIn(auth, { desktopManaged: DESKTOP_MANAGED }),
   authorizeApprovalMode: (_auth, person, input) => {
     const bot = store.bot(input.botId);
@@ -35774,7 +35774,7 @@ function ruleManager(auth: RequestAuth): string | null {
 
 // ── security key step-up (wave 2, package E) ───────────────────────────
 /** Every answer path asks this before an Allow goes anywhere
- * (server/step-up-gate.ts). A path that cannot carry a step-up (a Live
+ * (server/auth/step-up-gate.ts). A path that cannot carry a step-up (a Live
  * call, the console, an AI client) passes none and is refused for a card
  * that needs one: never let through silently. */
 function stepUpGate(person: string | null, threadId: string, requestId: string, behavior: string, answer: StepUpAnswer, stepUp: unknown): StepUpDecision {
@@ -36283,7 +36283,7 @@ function roomSectionAccess(group: { id?: unknown; section?: unknown }): SectionA
   if (IDENTITY.kind !== "perspicax" || typeof group.section !== "string" || !group.section || typeof group.id !== "string") return null;
   return sectionChannels?.accessForRoom(group.section, group.id) ?? null;
 }
-/** Owner and grants of a bot, for server/authz.ts. Sections are personal:
+/** Owner and grants of a bot, for server/auth/authz.ts. Sections are personal:
  * a bot takes no access from one (the legacy shared sections became bot
  * grants at boot, section-channels.ts header). */
 function botFacts(bot: { id?: unknown; ownerUserId?: unknown; grants?: unknown; directGrants?: unknown; section?: unknown; createdAt?: unknown }): BotFacts {
@@ -39444,10 +39444,10 @@ const publicInvites = createPublicInviteRoutes({
   }
 });
 
-// "Sign in with Pulsatrix" (server/oidc-login.ts), only on an organization
+// "Sign in with Pulsatrix" (server/auth/oidc-login.ts), only on an organization
 // server. One relying party serves the sign-in routes, the grant refreshes
 // and the back-channel logout; the grants live in a sealed vault
-// (server/idp-session.ts).
+// (server/auth/idp-session.ts).
 const oidcRp = IDENTITY.kind === "perspicax"
   ? new OidcRelyingParty({ issuer: IDENTITY.issuer, clientId: IDENTITY.clientId, redirectUri: IDENTITY.redirectUri, resource: IDENTITY.publicOrigin, ...(IDENTITY.internalBase ? { internalBase: IDENTITY.internalBase } : {}) })
   : null;
@@ -39478,7 +39478,7 @@ if (accountReauth) {
   sessions.onSessionRevoked((sessionId) => accountReauth.forgetSession(sessionId));
 }
 /** 2026-10-20: one line per 401 for a presented session and per session the
- * server ends (server/auth-refusal-log.ts). */
+ * server ends (server/auth/auth-refusal-log.ts). */
 const authRefusals = createAuthRefusalLogger();
 const headerText = (value: string | string[] | undefined): string | undefined => Array.isArray(value) ? value[0] : value;
 const idpSessions = oidcRp && idpVault
@@ -44091,7 +44091,7 @@ async function originGates(req: IncomingMessage, res: ServerResponse, url: URL, 
 
 /** #1388 wave 4 step 2: PRE_AUTH_ROUTES, static, media, template and published pages. */
 async function runPreAuth(req: IncomingMessage, res: ServerResponse, url: URL, path: string, method: string): Promise<boolean> {
-  // ── who is asking (server/request-auth.ts) ──────────────────────────
+  // ── who is asking (server/auth/request-auth.ts) ──────────────────────────
   // #1388 wave 4: public pre-auth routes (healthz, environment, mcp-oauth,
   // domain-check, email, invites, pair, companion pair). Dispatched before
   // serveStatic so /healthz never becomes the SPA.
@@ -44191,7 +44191,7 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
   const auth = gate.auth;
   // Organization server: a person the provider signalled out is not
   // served, and a session whose grant the provider stopped refreshing ends
-  // (server/idp-session.ts). A grant due for its refresh is refreshed
+  // (server/auth/idp-session.ts). A grant due for its refresh is refreshed
   // before the request is served (bounded wait), so the very request that
   // found it due already carries the provider's answer: a demotion, a
   // disabled person.
@@ -45194,7 +45194,7 @@ async function fallback(req: IncomingMessage, res: ServerResponse, url: URL, pat
       json(res, 400, { error: "body must be a JSON object" });
       return true;
     }
-    // A security key step-up rides along (server/step-up-gate.ts); it is
+    // A security key step-up rides along (server/auth/step-up-gate.ts); it is
     // never a bot field.
     const patchStepUp = body.stepUp;
     delete body.stepUp;
@@ -46241,7 +46241,7 @@ async function fallback(req: IncomingMessage, res: ServerResponse, url: URL, pat
   }
   const fleetRoute = /^\/api\/fleet(?:\/(workspaces(?:\/([a-z0-9-]+)(?:\/(users|suspend|resume))?)?|upgrade))?$/.exec(path);
   if (fleetRoute) {
-    // Admin scope by default (server/request-auth.ts), checked before this
+    // Admin scope by default (server/auth/request-auth.ts), checked before this
     // point; the socket's own permissions decide whether this workspace may
     // drive the agent at all. The `admin` feature is always on in the
     // open-source edition: only an enterprise layer that withholds it ends here.

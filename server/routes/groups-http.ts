@@ -43,8 +43,8 @@ import {
   peopleDmUnreadPatch,
 } from "../people-dms.ts";
 import { promptWithReply } from "../messages/replies.ts";
-import type { RequestAuth } from "../request-auth.ts";
-import { clientGroupPatchViolation, requestSource } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { clientGroupPatchViolation, requestSource } from "../auth/request-auth.ts";
 import type { TurnSpeaker } from "../engines/engine-access.ts";
 import { speakerFor } from "../request-speaker.ts";
 import { roomMentionReadPatch } from "../room-mentions.ts";

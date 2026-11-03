@@ -11,7 +11,7 @@
 // The same gate as the Soul edit (2026-10-09: members manage their own
 // bots): an admin, the bot's owner, or someone granted edit on it; a person
 // who may only use shared bots is refused. The scope rule
-// (server/request-auth.ts CLIENT_ALLOW) lets a client session reach the
+// (server/auth/request-auth.ts CLIENT_ALLOW) lets a client session reach the
 // handler; `mayEdit` decides.
 import { basename } from "node:path";
 import type { IncomingMessage } from "node:http";
@@ -45,7 +45,7 @@ import {
 } from "../workspace/workspace-manage.ts";
 import { MemoryStoreError, RULES_PATH, parseMemoryPath, readMemoryDoc } from "../memory/memory-store.ts";
 import { journalMemoryDelete, journalMemoryWrite } from "../memory/memory-journal.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { renameDoc } from "../workspace/workspace-tools.ts";
 import { workspaceUsage } from "../workspace/workspace-usage.ts";
 import { PASS, type RouteHandler } from "./table.ts";

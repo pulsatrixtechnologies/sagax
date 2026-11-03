@@ -436,3 +436,15 @@ server/peer-provenance.ts
 server/peer-roster.test.ts
 server/peer-roster.ts
 server/room-coordination.e2e.test.ts
+server/account-signin.test.ts
+server/account-signin.ts
+server/guarded-requests.test.ts
+server/guarded-requests.ts
+server/request-auth.e2e.test.ts
+server/request-auth.test.ts
+server/request-auth.ts
+server/sessions.test.ts
+server/sessions.ts
+server/totp.test.ts
+server/totp.ts
+server/trust-controls.e2e.test.ts

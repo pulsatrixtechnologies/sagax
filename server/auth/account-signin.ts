@@ -10,10 +10,10 @@
 // The exchange happens server-side, so a browser
 // only ever talks to this server, and a server with an empty allow-list does
 // not expose the routes.
-import { resolveCompanionControlPlaneURL } from "../electron/companion-account-service.mjs";
-import { ControlPlaneError, createControlPlaneClient, normalizeAccountEmail, type ControlPlaneClient } from "../electron/control-plane-client.mjs";
-import type { EmailOtpStore } from "./mail/email-otp.ts";
-import type { Mailer } from "./mail/mailer.ts";
+import { resolveCompanionControlPlaneURL } from "../../electron/companion-account-service.mjs";
+import { ControlPlaneError, createControlPlaneClient, normalizeAccountEmail, type ControlPlaneClient } from "../../electron/control-plane-client.mjs";
+import type { EmailOtpStore } from "../mail/email-otp.ts";
+import type { Mailer } from "../mail/mailer.ts";
 import type { Scope } from "./sessions.ts";
 
 /** Who may sign in. `a@b.com` is that address; `@b.com` is everyone at b.com. */

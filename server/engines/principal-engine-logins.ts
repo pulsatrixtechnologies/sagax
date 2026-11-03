@@ -29,7 +29,7 @@ import { CodexDeviceAuthController } from "../drivers/codex-device-auth.ts";
 import { DeviceLoginController } from "../drivers/device-login.ts";
 import { probeGrokModels, readGrokModelsCache } from "../drivers/acp/grok.ts";
 import { ProviderAuthSessions } from "./provider-auth-sessions.ts";
-import { isPrincipalId } from "../principals.ts";
+import { isPrincipalId } from "../auth/principals.ts";
 
 export const LOGIN_MARKER = ".pulsabot-login.json";
 /** #1533: the provider refused this sign-in and could not refresh it (a

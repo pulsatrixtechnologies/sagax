@@ -1,7 +1,7 @@
 // The usage ledger: what this workspace spent over a period.
 // Read-only over the month files usage-ledger.ts appends at turn.completed.
 // Admin scope by default, like every route not opened to clients
-// (server/request-auth.ts).
+// (server/auth/request-auth.ts).
 //
 // GET /api/usage and GET /api/usage.csv: the whole ledger, admin (or the
 // usage.view permission on an organization server).
@@ -28,7 +28,7 @@ import {
   type UsageGroupBy,
 } from "../usage-ledger.ts";
 import { buildUsageTraces, parseTracePaging, USAGE_TRACE_MAX_JOBS } from "../usage-trace.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface UsageRouteDeps {

@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CONTROL_PLANE_ENV, stripControlPlaneEnv } from "../config.ts";
 import { json as sendJson, readBody } from "../harness/http.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { createComputerStatusRoutes } from "../routes/computer-status.ts";
 import { dispatchRoutes } from "../routes/table.ts";
 import { createUserSandboxRoutes } from "./user-sandbox-routes.ts";

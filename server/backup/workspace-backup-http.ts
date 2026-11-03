@@ -13,7 +13,7 @@ import {
   removeWorkspaceBackupJob,
   type WorkspaceBackupSummary,
 } from "../workspace-backup.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 
 const PREFIX = "/api/workspace-backup";
 const MAX_UPLOAD_BYTES = MAX_WORKSPACE_BACKUP_UPLOAD_BYTES;

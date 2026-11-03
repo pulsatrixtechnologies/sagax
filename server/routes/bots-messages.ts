@@ -13,7 +13,7 @@ import type { ResolvedSender } from "../../shared/wire.ts";
 import type { SteerOutcome } from "../contracts.ts";
 import type { TurnSpeaker } from "../engines/engine-access.ts";
 import type { ReplyTarget } from "../messages/replies.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { Message } from "../store.ts";
 import type { UsageTrigger } from "../usage-ledger.ts";
 import { PASS, type RouteHandler } from "./table.ts";
@@ -903,7 +903,7 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
       const reviewedSha256 = typeof body.reviewedSha256 === "string" ? body.reviewedSha256 : undefined;
       if (!behavior) return json(res, 400, { error: "behavior must be allow, deny, or answer" });
       // The security key comes first, before any path that settles a card
-      // (a bot act included): server/step-up-gate.ts.
+      // (a bot act included): server/auth/step-up-gate.ts.
       const stepUpRefusal = stepUpGate(ruleManager(auth), bot.threadId, String(body.requestId), behavior, stepUpAnswerOf(body), body.stepUp);
       if (stepUpRefusal) return json(res, stepUpRefusal.status, stepUpRefusal.body);
       if (delegatedRequest() && store.isConfidentialThread(bot.threadId)) return json(res, 403, { error: CONFIDENTIAL_CARD_DELEGATED, code: "confidential_thread" });

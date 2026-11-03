@@ -15,7 +15,7 @@
 // file routes, so no host path ever travels. Member scope (request-auth.ts
 // CLIENT_ALLOW); the export checks the owner itself.
 import { collectBotLinks, mergeBotFiles, pageOf, readPageQuery, type BotFileKind, type LinkSourceMessage } from "../bot-library.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { ThreadFile } from "../threads/thread-files.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

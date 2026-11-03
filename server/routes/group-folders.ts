@@ -10,7 +10,7 @@
 // auth gate in front already narrowed a person conversation to its two
 // people. A room or a bot-to-bot channel has no folders (400).
 import { parseFolderBody, parseFolderOrder } from "../threads/thread-folders.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 interface FolderLike { id: string; name: string; emoji?: string }

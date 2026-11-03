@@ -36,7 +36,7 @@
 // the card of a run refused on their credentials even when the run's thread
 // is another person's private one, and nothing else of that thread.
 import { redactSecretsInText } from "../redact.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { WireAccessCard } from "../../shared/wire.ts";
 import type { RoutineRun } from "../../shared/routines.ts";
 import {

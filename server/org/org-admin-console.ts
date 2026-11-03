@@ -75,9 +75,9 @@ export interface ConsoleRoute {
   path: string;
   min: ConsoleRole;
   /** The `grant` kind that lets a person below `min` through on this route
-   * for their own thing (server/oidc-rp.ts `ConsoleGrant`), bound to this
+   * for their own thing (server/auth/oidc-rp.ts `ConsoleGrant`), bound to this
    * method and path; the handler then sees `ctx.ownOnly`. */
-  ownerGrant?: import("../oidc-rp.ts").ConsoleGrantKind;
+  ownerGrant?: import("../auth/oidc-rp.ts").ConsoleGrantKind;
   /** Largest POST body read, in bytes (default 16 KiB). */
   maxBody?: number;
   /** A POST that is not JSON (a file upload) reaches the handler unread as

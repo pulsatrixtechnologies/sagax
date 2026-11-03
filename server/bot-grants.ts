@@ -6,12 +6,12 @@
 //   DELETE /api/bots/:id/grants/:target  remove one (target URL-encoded)
 //
 // A target is `user:<principal id>` or `team:<Perspicax team id>`; a level is
-// use, run, edit or manage (server/authz.ts). Who may administer: the owner,
+// use, run, edit or manage (server/auth/authz.ts). Who may administer: the owner,
 // manage holders (up to edit), organization admins, and team managers for
 // their teams and members under the anchor rule (decision D4).
 //
 // The slice 3 routes POST /api/bots/:id/direct-grants and DELETE
-// .../direct-grants/:principalId stay (server/direct-grants.ts): a user
+// .../direct-grants/:principalId stay (server/auth/direct-grants.ts): a user
 // target at level use, for the owner.
 import {
   canAdministerGrant,
@@ -26,8 +26,8 @@ import {
   type Level,
   type TeamRef,
   type Viewer,
-} from "./authz.ts";
-import type { RequestAuth } from "./request-auth.ts";
+} from "./auth/authz.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./routes/table.ts";
 
 export interface GrantedBot {

@@ -8,8 +8,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { WorkspaceBackupSummary } from "../../shared/workspace-backup.ts";
-import { resolveRequestAuth, type RequestAuth } from "../request-auth.ts";
-import { SessionRegistry } from "../sessions.ts";
+import { resolveRequestAuth, type RequestAuth } from "../auth/request-auth.ts";
+import { SessionRegistry } from "../auth/sessions.ts";
 import { WorkspaceBackupMaintenance } from "./workspace-backup-maintenance.ts";
 
 const archive = vi.hoisted(() => ({ create: vi.fn(), stage: vi.fn(), commit: vi.fn(), remove: vi.fn() }));

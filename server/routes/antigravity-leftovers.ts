@@ -9,7 +9,7 @@
 // is searched only here, when the person asks, because other apps start the
 // same runtime (server/drivers/antigravity-temp.ts).
 //
-// Admin-scoped by default (server/request-auth.ts lists no client rule for
+// Admin-scoped by default (server/auth/request-auth.ts lists no client rule for
 // these paths): it deletes files on the machine running Sagax. Hidden
 // on a hosted team workspace, like every other engine setting there. The
 // answers carry sizes and counts, never paths.

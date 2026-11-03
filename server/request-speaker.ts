@@ -4,8 +4,8 @@
 import { createHash } from "node:crypto";
 
 import type { TurnSpeaker } from "./engines/engine-access.ts";
-import type { RequestAuth } from "./request-auth.ts";
-import type { SessionRecord } from "./sessions.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
+import type { SessionRecord } from "./auth/sessions.ts";
 
 /** Who a request's turn speaks for (engine access): the signed-in person, or
  * the operator at this computer. A reduced-trust loopback caller (a bot's own
@@ -16,7 +16,7 @@ export function speakerFor(auth: RequestAuth): TurnSpeaker {
 }
 
 /** A stable key for the person behind a session: their principal id
- * (server/principals.ts), so a new device or a changed email is still them.
+ * (server/auth/principals.ts), so a new device or a changed email is still them.
  * A session without one falls back to the older hashed key. */
 export function personKey(session: Pick<SessionRecord, "id" | "email" | "principalId">): string {
   return session.principalId ?? legacyPersonKey(session);

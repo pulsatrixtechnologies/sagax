@@ -12,7 +12,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypt
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 
 export type Scope = "admin" | "client";
 export const SCOPES: readonly Scope[] = ["admin", "client"];
@@ -93,17 +93,17 @@ const sessionSchema = z.object({
   email: z.string().max(320).optional(),
   /** Set only by the internal verified-portal issuance path, never by email or pairing input. */
   membershipAuthority: z.literal("portal").optional(),
-  /** The person this session acts as (server/principals.ts). */
+  /** The person this session acts as (server/auth/principals.ts). */
   principalId: z.string().max(64).optional(),
   /** Set when the session came from an OpenID Connect sign-in
-   * (server/oidc-login.ts): the provider account and the role claim it
+   * (server/auth/oidc-login.ts): the provider account and the role claim it
    * carried. Its membership is the provider's, not the email sign-in list. */
   idp: z.object({
     iss: z.string().max(2048),
     sub: z.string().max(255),
     role: z.string().max(40).optional(),
     /** The identity provider grant this session lives on
-     * (server/idp-session.ts): refreshed on use, revoked with the session. */
+     * (server/auth/idp-session.ts): refreshed on use, revoked with the session. */
     grantRef: z.string().max(64).optional(),
   }).optional(),
   /** A browser sign-in (PairingCode `browser`): accepted only as its browser's cookie, never as a bearer token. */
@@ -119,7 +119,7 @@ const sessionSchema = z.object({
    * code (a bot reading the mailbox can type it), a pairing code, an invite
    * link, a bot-act copy, an act-as session or a renewal: those prove a
    * credential, not the person at the keyboard. The "sign-in younger than 15 minutes" gates read this, never
-   * `createdAt` (server/recent-sign-in.ts). */
+   * `createdAt` (server/auth/recent-sign-in.ts). */
   authAt: z.number().optional(),
 });
 
@@ -164,7 +164,7 @@ export interface PublicSession {
   expiresAt: number;
   /** The account that signed in, when it was an account and not a code. */
   email?: string;
-  /** The person this session acts as (server/principals.ts). */
+  /** The person this session acts as (server/auth/principals.ts). */
   principalId?: string;
   /** Whose OMB Cloud a browser sign-in signed in to. */
   owner?: string;
@@ -925,7 +925,7 @@ export class SessionRegistry {
     if (source.idp) record.idp = { ...source.idp };
     if (source.owner) record.owner = source.owner;
     // never authAt: a bot acting for its person is not the person signing in
-    // (server/recent-sign-in.ts)
+    // (server/auth/recent-sign-in.ts)
     this.sessions.push(record);
     return { token, session: publicSession(record) };
   }

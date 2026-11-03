@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { allowedScopes, createEmailSignIn, createServerEmailSignIn, parseAllowList, signInEnabled } from "./account-signin.ts";
-import { EmailOtpStore } from "./mail/email-otp.ts";
-import { startControlPlaneStub } from "./testing/control-plane-stub.ts";
+import { EmailOtpStore } from "../mail/email-otp.ts";
+import { startControlPlaneStub } from "../testing/control-plane-stub.ts";
 
 describe("the sign-in allow-list", () => {
   it("splits on commas, spaces and newlines and ignores case", () => {

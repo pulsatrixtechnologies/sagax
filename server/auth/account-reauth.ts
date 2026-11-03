@@ -14,7 +14,7 @@
 //      ACCOUNT_REAUTH_PATH with the ticket, which the client opens in a
 //      browser (the web app itself, or the phone's authentication sheet).
 //   2. GET ACCOUNT_REAUTH_PATH takes the ticket and starts an OpenID Connect
-//      flow of purpose `reauth` (server/oidc-rp.ts): `prompt=login`,
+//      flow of purpose `reauth` (server/auth/oidc-rp.ts): `prompt=login`,
 //      `max_age=0`, `login_hint` the person's subject, scope
 //      `openid pulsabot:erase` (Perspicax dates only a sign-in with that
 //      marker and warns on its page), the browser binding cookie as for a
@@ -28,7 +28,7 @@
 //      the extra sign-in leaves nothing live.
 //
 // Nothing here is written to disk or to a log; a token to revoke goes to
-// the durable revocation queue (server/idp-revocations.ts, sealed with the
+// the durable revocation queue (server/auth/idp-revocations.ts, sealed with the
 // vault key).
 import { randomBytes } from "node:crypto";
 

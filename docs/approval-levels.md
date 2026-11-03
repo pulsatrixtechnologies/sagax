@@ -156,7 +156,7 @@ administrator", and nobody else can change or remove it. With "Always
 allow" off, every card offers Deny and Allow once only and says that the
 organization requires an approval each time; every answer path refuses an
 answer that would save a standing grant (403 `org_always_allow_off`, in
-`server/step-up-gate.ts`), and the grants people saved before (allow rules
+`server/auth/step-up-gate.ts`), and the grants people saved before (allow rules
 in their words, saved commands, a gate's Always allow key, owner allow
 rules) stop answering (`autoVerdict`, `matchOwnerRule`, the custom rule
 store) until it is on again. An organization Refuse rule refuses even an email

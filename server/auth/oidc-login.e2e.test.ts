@@ -20,13 +20,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
-import { startFakeOidcProvider, type FakeOidcProvider } from "./testing/fake-oidc-provider.ts";
-import { freePortBlock } from "./testing/ports.ts";
+import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
+import { startFakeOidcProvider, type FakeOidcProvider } from "../testing/fake-oidc-provider.ts";
+import { freePortBlock } from "../testing/ports.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
-const FAKE_CLI = join(SERVER_DIR, "testing", "fake-acp-cli.ts");
-const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
+const FAKE_CLI = join(SERVER_DIR, "..", "testing", "fake-acp-cli.ts");
+const FAKE_CLAUDE = join(SERVER_DIR, "..", "testing", "fake-claude-cli.ts");
 // The organization key (Settings > Connections). Since 2026-10-01 the person
 // who speaks pays: the server's own sign-ins no longer serve an admin's bot,
 // so scenario A's turn runs on this key (org-sharing covers the refusals).
@@ -85,8 +85,8 @@ async function waitFor<T>(read: () => Promise<T | null | undefined>, ms = 30_000
 }
 
 async function start() {
-  child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
-    cwd: join(SERVER_DIR, ".."),
+  child = spawn(process.execPath, [join(SERVER_DIR, "..", "index.ts")], {
+    cwd: join(SERVER_DIR, "..", ".."),
     env: {
       ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
       HOME: home, USERPROFILE: home, SAGAX_LOCAL_VM_TEST_NAMESPACE: process.env.SAGAX_LOCAL_VM_TEST_NAMESPACE ?? "", SAGAX_PORT: String(PORT), SAGAX_WEBHOOK_PORT: String(PORT + 1),

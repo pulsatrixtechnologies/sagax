@@ -23,7 +23,7 @@ import { join } from "node:path";
 import { writeFileAtomic } from "../atomic.ts";
 import type { CapabilityMarketplacePolicy, LinkPostResult } from "../perspicax-link.ts";
 import type { OrgCapabilityView } from "../org/org-capabilities.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const PX_CAPABILITIES_PATH = "/api/v1/pulsabot/capabilities";

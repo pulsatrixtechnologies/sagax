@@ -6,7 +6,7 @@
 // conversation did not open is refused, so this is not a general forge proxy.
 import { CodeWorkCollector, type CodeWorkToolCall } from "../activity-code-work.ts";
 import { BranchActionError, BranchPulls, hostGit, type GitExec } from "../code-branches.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 import type { BranchCredentials } from "./bot-code-branches.ts";
 

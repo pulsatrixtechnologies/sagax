@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
 import { createBotWizardStore } from "../bot-wizard-store.ts";
-import { requiredScope } from "../request-auth.ts";
+import { requiredScope } from "../auth/request-auth.ts";
 import { createBotWizardRoutes, type BotWizardBot } from "./bot-wizard.ts";
 import { dispatchRoutes } from "./table.ts";
 

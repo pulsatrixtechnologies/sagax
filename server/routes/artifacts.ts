@@ -18,7 +18,7 @@
 import { z } from "zod";
 
 import type { ArtifactStore } from "../artifacts.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { isArtifactId, sortArtifacts, summarizeArtifact, type Artifact } from "../../shared/artifacts.ts";
 import type { InternalRouteHandler } from "./internal-route.ts";
 import { PASS, type RouteHandler } from "./table.ts";

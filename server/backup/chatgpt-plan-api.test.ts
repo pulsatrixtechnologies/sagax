@@ -6,12 +6,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { verificationServerEnvironment } from "../scripts/control-omb.ts";
-import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
-import { freePortBlock } from "./testing/ports.ts";
+import { verificationServerEnvironment } from "../../scripts/control-omb.ts";
+import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
+import { freePortBlock } from "../testing/ports.ts";
 import { excludedWorkspaceAuthPath } from "./workspace-backup-policy.ts";
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const FAKE_CODEX = join(ROOT, "server/testing/fake-codex-app-server.ts");
 let child: ChildProcess | undefined;
 let home: string;

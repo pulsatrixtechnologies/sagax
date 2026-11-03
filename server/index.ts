@@ -1388,7 +1388,7 @@ import {
 } from "./presets.ts";
 import { readPublishedTeam, writePublishedTeam } from "./published-teams.ts";
 import { OrgLibrary } from "./org/org-library.ts";
-import { createTeamBackup, importTeamBackup } from "./team-backup.ts";
+import { createTeamBackup, importTeamBackup } from "./backup/team-backup.ts";
 import { shouldMountLocalComputer } from "./local-routing.ts";
 import { autoLocalVmAttachable, type ContainerComputerStatus } from "./computer/container-computer.ts";
 import { startAutoVmClaim, type AutoVmClaimSlot, type AutoVmClaimTable } from "./computer/auto-vm-claims.ts";
@@ -1488,8 +1488,8 @@ import {
   pruneProblemLog,
   readProblems
 } from "./org/org-problem-log.ts";
-import { WorkspaceBackupMaintenance } from "./workspace-backup-maintenance.ts";
-import { createWorkspaceBackupRoutes, isWorkspaceBackupRoute, isWorkspaceBackupSessionControl } from "./workspace-backup-http.ts";
+import { WorkspaceBackupMaintenance } from "./backup/workspace-backup-maintenance.ts";
+import { createWorkspaceBackupRoutes, isWorkspaceBackupRoute, isWorkspaceBackupSessionControl } from "./backup/workspace-backup-http.ts";
 import {
   applyPendingWorkspaceRestore,
   CONFIDENTIAL_FORGOTTEN_MARKER,

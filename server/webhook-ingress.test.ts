@@ -14,7 +14,7 @@ import {
   type WebhookIngress,
 } from "./webhook-ingress.ts";
 import { WebhookManager } from "./webhooks.ts";
-import { WorkspaceBackupMaintenance } from "./workspace-backup-maintenance.ts";
+import { WorkspaceBackupMaintenance } from "./backup/workspace-backup-maintenance.ts";
 
 let dir: string;
 let ingress: WebhookIngress;

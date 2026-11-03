@@ -88,7 +88,7 @@
 
 ### Task 4: Persist scope and dispatch it everywhere
 
-**Files:** Modify `shared/wire.ts`, `server/contracts.ts`, `server/store.ts`, `server/index.ts`, `shared/new-bot-defaults.ts`, `server/new-bot-defaults.ts`, `shared/team-backup.ts`, `server/team-backup.ts`; add `server/tool-scope.e2e.test.ts` and extend existing persistence/defaults tests.
+**Files:** Modify `shared/wire.ts`, `server/contracts.ts`, `server/store.ts`, `server/index.ts`, `shared/new-bot-defaults.ts`, `server/new-bot-defaults.ts`, `shared/team-backup.ts`, `server/backup/team-backup.ts`; add `server/tool-scope.e2e.test.ts` and extend existing persistence/defaults tests.
 
 **Consumes:** Task 1 `ToolScope` and parser. **Produces:** owner-only PATCH field and validated scope on direct/group/queued/resumed turns.
 

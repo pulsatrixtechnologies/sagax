@@ -7,14 +7,14 @@ import { createServer, request, type IncomingMessage, type Server, type ServerRe
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { WorkspaceBackupSummary } from "../shared/workspace-backup.ts";
-import { resolveRequestAuth, type RequestAuth } from "./request-auth.ts";
-import { SessionRegistry } from "./sessions.ts";
+import type { WorkspaceBackupSummary } from "../../shared/workspace-backup.ts";
+import { resolveRequestAuth, type RequestAuth } from "../request-auth.ts";
+import { SessionRegistry } from "../sessions.ts";
 import { WorkspaceBackupMaintenance } from "./workspace-backup-maintenance.ts";
 
 const archive = vi.hoisted(() => ({ create: vi.fn(), stage: vi.fn(), commit: vi.fn(), remove: vi.fn() }));
-vi.mock("./workspace-backup.ts", async (original) => ({
-  ...await original<typeof import("./workspace-backup.ts")>(),
+vi.mock("../workspace-backup.ts", async (original) => ({
+  ...await original<typeof import("../workspace-backup.ts")>(),
   createWorkspaceBackup: archive.create, stageWorkspaceBackup: archive.stage,
   commitPendingWorkspaceRestore: archive.commit, removeWorkspaceBackupJob: archive.remove,
 }));

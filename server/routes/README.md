@@ -5,7 +5,7 @@ New HTTP routes go here as modules. Do not add route `if` blocks to `server/inde
 lower its number in that test.
 
 - A route module exports a factory with explicit dependencies, `createXRoutes(deps): RouteHandler`
-  (same shape as `server/workspace-backup-http.ts`). It never imports `server/index.ts`.
+  (same shape as `server/backup/workspace-backup-http.ts`). It never imports `server/index.ts`.
 - `index.ts` builds it next to its other wiring (one import, one `ROUTES.push(createXRoutes({...}))`);
   a module that needs no dependencies is listed in `ROUTES` in `table.ts` directly.
 - A handler returns `PASS` when the request is not its own; returning anything else means it answered.

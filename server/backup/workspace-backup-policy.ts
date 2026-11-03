@@ -1,6 +1,6 @@
 import { isMap, isScalar, isSeq, parseAllDocuments, visit as visitYaml } from "yaml";
-import { parseStoredConfig } from "./config.ts";
-import { WORKSPACE_BACKUP_RECONNECT, type WorkspaceBackupReconnect, type WorkspaceBackupReconnectCategory } from "../shared/workspace-backup.ts";
+import { parseStoredConfig } from "../config.ts";
+import { WORKSPACE_BACKUP_RECONNECT, type WorkspaceBackupReconnect, type WorkspaceBackupReconnectCategory } from "../../shared/workspace-backup.ts";
 
 // Connection sections deliberately stay on the destination as a whole: a
 // restored URL must never redirect an API key retained from that device.

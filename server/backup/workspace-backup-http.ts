@@ -5,15 +5,15 @@ import { join } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { z } from "zod";
-import type { WorkspaceBackupReconnect } from "../shared/workspace-backup.ts";
-import { WORKSPACE_BACKUP_CLIENT_KEYS } from "../shared/workspace-backup-client.ts";
+import type { WorkspaceBackupReconnect } from "../../shared/workspace-backup.ts";
+import { WORKSPACE_BACKUP_CLIENT_KEYS } from "../../shared/workspace-backup-client.ts";
 import {
   createWorkspaceBackup, stageWorkspaceBackup, commitPendingWorkspaceRestore,
   MAX_WORKSPACE_BACKUP_UPLOAD_BYTES,
   removeWorkspaceBackupJob,
   type WorkspaceBackupSummary,
-} from "./workspace-backup.ts";
-import type { RequestAuth } from "./request-auth.ts";
+} from "../workspace-backup.ts";
+import type { RequestAuth } from "../request-auth.ts";
 
 const PREFIX = "/api/workspace-backup";
 const MAX_UPLOAD_BYTES = MAX_WORKSPACE_BACKUP_UPLOAD_BYTES;

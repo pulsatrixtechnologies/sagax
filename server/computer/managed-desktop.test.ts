@@ -10,7 +10,7 @@ import { CodexDriver, managedCodexArgs } from "../drivers/codex.ts";
 import { ClaudeDriver } from "../drivers/claude.ts";
 import { recordEvents } from "../testing/events.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { excludedWorkspaceAuthPath } from "../workspace-backup-policy.ts";
+import { excludedWorkspaceAuthPath } from "../backup/workspace-backup-policy.ts";
 import type { ProviderInstance } from "../contracts.ts";
 import { selectDefaultModelSelection } from "../models/default-model-selection.ts";
 import { Store } from "../store.ts";

@@ -27,7 +27,7 @@ import { WORKSPACE_BACKUP_CLIENT_KEYS } from "../shared/workspace-backup-client.
 import {
   CLAUDE_AUTH_FIELDS, configSecretCounts, confidentialDataScopePath, destinationSignInFile, disposableEngineHomePath, engineSettingsPath, ephemeralWorkspaceTokenPath, excludedWorkspaceAuthPath, liveDataEnginePath,
   portableWorkspaceConfig, ReconnectTally, redownloadedOrgLibraryPath, registrySettingsPath, restoredLibraryIndexPath, restoredWorkspaceConfig, savedSignInPath, secretCategory, withoutEngineSecrets, withoutRegistrySecrets,
-} from "./workspace-backup-policy.ts";
+} from "./backup/workspace-backup-policy.ts";
 import { installationCapabilityBridge } from "./capabilities/installation-capability-bridge.ts";
 import {
   INSTALLATION_CAPABILITIES_FILE, SKILLS_LIBRARY_INDEX_FORMAT, SKILLS_LIBRARY_INDEX_PART, SKILLS_LIBRARY_INDEX_VERSION, SKILLS_LIBRARY_RESTORE_IMPORT,

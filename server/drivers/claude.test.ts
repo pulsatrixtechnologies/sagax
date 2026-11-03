@@ -49,7 +49,7 @@ import { AUTO_ALLOWLIST_COPY, claudeLaunchLevel } from "../testing/claude-level.
 import { removeTempDir } from "../testing/cleanup.ts";
 import { rebuiltSessionNotice } from "../resume-recovery.ts";
 import { BASH_MAX_TIMEOUT_MS } from "../system-prompt.ts";
-import { ephemeralWorkspaceTokenPath } from "../workspace-backup-policy.ts";
+import { ephemeralWorkspaceTokenPath } from "../backup/workspace-backup-policy.ts";
 import * as procs from "../procs.ts";
 import * as localInject from "./local-inject.ts";
 

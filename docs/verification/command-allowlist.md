@@ -76,7 +76,7 @@ The printed server log and screenshots remain.
 ## Server and provider verification
 
 ```sh
-pnpm exec vitest run server/command-allowlist.e2e.test.ts server/command-allowlist.test.ts server/approvals/auto-approve.test.ts server/workspace-backup-policy.test.ts
+pnpm exec vitest run server/command-allowlist.e2e.test.ts server/command-allowlist.test.ts server/approvals/auto-approve.test.ts server/backup/workspace-backup-policy.test.ts
 pnpm exec vitest run server/drivers/claude.test.ts server/drivers/codex.test.ts server/drivers/acp/acp.test.ts
 ```
 

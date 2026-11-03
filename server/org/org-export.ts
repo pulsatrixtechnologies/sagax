@@ -10,7 +10,7 @@ import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
 import type { Routine } from "../routines/routines.ts";
 import type { Store } from "../store.ts";
-import { createTeamBackup } from "../team-backup.ts";
+import { createTeamBackup } from "../backup/team-backup.ts";
 
 export const MAX_ORG_EXPORT_BOTS = 200;
 

@@ -45,7 +45,7 @@ codebase already enforces; a task that violates one is wrong even if its tests p
 - **Exports never carry** credentials, transcripts, memory, grants, absolute paths,
   engine bindings, or a schedule's active state. `server/package-export.ts` states
   this as its contract; every new export path inherits it. The one deliberate
-  exception is the private team backup (`server/team-backup.ts`): it exists to
+  exception is the private team backup (`server/backup/team-backup.ts`): it exists to
   move a person's own fleet between their own machines, so it carries transcripts
   and memory — redacted — and is never a shareable package.
 - **Imports land disabled.** Skills, connectors, routines, and MCP servers arriving

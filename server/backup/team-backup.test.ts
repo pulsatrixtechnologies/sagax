@@ -1,15 +1,15 @@
 import { readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createAgentCard } from "./chat-widgets.ts";
-import { DATA_DIR } from "./config.ts";
-import { Store, UNTITLED_TASK } from "./store.ts";
-import { RoutineManager } from "./routines/routines.ts";
+import { createAgentCard } from "../chat-widgets.ts";
+import { DATA_DIR } from "../config.ts";
+import { Store, UNTITLED_TASK } from "../store.ts";
+import { RoutineManager } from "../routines/routines.ts";
 import { createTeamBackup, importTeamBackup } from "./team-backup.ts";
-import { parseTeamBackup } from "../shared/team-backup.ts";
-import { WIDGET_SAMPLES } from "../shared/widget-samples.ts";
-import { soulFile, soulHash } from "./bot-folder.ts";
-import { appendMemoryLog, readMemoryFile, readMemoryLog, readMemoryTopic, searchMemoryFiles, updateMemory, workspaceDir, writeMemoryTopic } from "./workspace/workspace.ts";
+import { parseTeamBackup } from "../../shared/team-backup.ts";
+import { WIDGET_SAMPLES } from "../../shared/widget-samples.ts";
+import { soulFile, soulHash } from "../bot-folder.ts";
+import { appendMemoryLog, readMemoryFile, readMemoryLog, readMemoryTopic, searchMemoryFiles, updateMemory, workspaceDir, writeMemoryTopic } from "../workspace/workspace.ts";
 
 const selection = () => ({ instanceId: "fixture", model: "fixture-model" });
 

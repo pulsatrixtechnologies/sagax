@@ -32,7 +32,7 @@
 // removes everything the import wrote when any step fails.
 import { readAtRestSync } from "./encryption/content-at-rest.ts";
 import { botRuntimeSettingsShape } from "./bot-runtime-settings.ts";
-import { exportedSecretFile, registrySettingsPath, withoutRegistrySecrets } from "./workspace-backup-policy.ts";
+import { exportedSecretFile, registrySettingsPath, withoutRegistrySecrets } from "./backup/workspace-backup-policy.ts";
 import { randomUUID } from "node:crypto";
 import { closeSync, createWriteStream, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from "node:fs";
 import type { IncomingMessage } from "node:http";

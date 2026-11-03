@@ -3820,7 +3820,7 @@ remembered, exported, logged or shared beyond its owner
 The maintainer, 15:55: « Exclure tout ». A workspace backup (`.sagaxbackup`,
 `server/workspace-backup.ts`, also what a cloud move and the desktop's
 company backups carry) holds no secret: every rule is in
-`server/workspace-backup-policy.ts`, covered by
+`server/backup/workspace-backup-policy.ts`, covered by
 `workspace-backup-policy.test.ts` and `workspace-backup.test.ts` (one test
 fills every location below with obvious fakes and scans every byte of the
 decrypted archive, the staging and the restored folder).
@@ -8573,7 +8573,7 @@ peer proposals the Chief of Staff had. Stored and sent under the old field
 name `chiefOfStaff` (`shared/wire.ts`); everything a person reads says
 "Primary Bot" / "Robot principal". Keep these rules, covered by
 `server/store.test.ts`, `server/team-setup-requests.test.ts`,
-`server/team-backup.test.ts`, `src/lib/primary-bot.test.ts` and
+`server/backup/team-backup.test.ts`, `src/lib/primary-bot.test.ts` and
 `src/components/PrimaryBot.test.ts`:
 
 - One per person (one on a solo server), never per section:

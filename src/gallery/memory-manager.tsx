@@ -1,6 +1,8 @@
 /** Headless gallery for Tools > Memory (2026-11-02, the Perspicax console's shape). Synthetic data only.
- * ?skin=<id>&lang=<code>&view=notes|map|tags|quality|note|folder|trash&width=&height=
- * notes: All notes; folder: a Perspicax folder; note: a bot's note opened;
+ * ?skin=<id>&lang=<code>&view=notes|preview|map|columns|tags|quality|note|folder|collections|trash&width=&height=
+ * notes: All notes; preview: a row clicked (the preview panel); note: a row
+ * double-clicked (the note's page); folder: a Perspicax folder in Manual order;
+ * map: the radial brain; columns: the column map;
  * map, tags, quality: those views; trash: the Perspicax trash.
  */
 import { StrictMode, useEffect, useState } from "react";
@@ -172,6 +174,19 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   if (url.includes("/api/me/memory/archived")) {
     return json({ notes: [{ scope: "me", id: "a1", title: "Old onboarding", topic: "notes", tags: ["work"], archived_at: iso(40 * D), author_name: "Dana Reyes", may_restore: true }] });
   }
+  if (/\/api\/me\/memory\/collections\/[^/?]+/.test(url)) {
+    return json({ id: "c1", scope: "me", title: "Onboarding book", description: "Read in this order on day one", item_count: 3, may_edit: true, items: [
+      { note_scope: "org", note_id: "o4", rank: 0, title: "Backup policy", topic: "backup", readable: true },
+      { note_scope: "org", note_id: "o1", rank: 1, title: "Core switch layout", topic: "network", readable: true },
+      { note_scope: "team:ops", note_id: "p1", rank: 2, title: "Restore drill", topic: "runbooks", readable: true },
+    ] });
+  }
+  if (url.includes("/api/me/memory/collections")) {
+    return json({ collections: [
+      { id: "c1", scope: "me", title: "Onboarding book", description: "Read in this order on day one", author_name: "Dana Reyes", updated_at: iso(3 * D), item_count: 3, may_edit: true },
+      { id: "c2", scope: "org", title: "Network basics", description: "Switches, firewall, DNS", author_name: "Sam Okafor", updated_at: iso(12 * D), item_count: 3, may_edit: false },
+    ] });
+  }
   if (url.includes("/api/me/memory/entry")) return json(pxEntry(query.get("scope") ?? "me", query.get("id") ?? "n1"));
   if (url.includes("/api/me/memory/trash")) {
     return json({ notes: [{ id: "old", title: "Old draft", scope: "me", topic: "notes", tags: [], may_manage: true, deleted_at: iso(2 * D), author_name: "Dana Reyes" }], days: 30 });
@@ -213,13 +228,28 @@ function Shell() {
       await waitFor('[data-memory-note-row="o1"]');
       // let the bodies arrive (excerpts, links)
       await new Promise((done) => setTimeout(done, 700));
-      if (view === "map") { segment(/Map|Carte/); await waitFor("[data-memory-map]"); await new Promise((done) => setTimeout(done, 300)); }
+      if (view === "map" || view === "columns") {
+        segment(/Map|Carte/);
+        await waitFor("[data-memory-map]");
+        if (view === "columns") [...document.querySelectorAll<HTMLButtonElement>("[data-memory-map-layout-switch] button")].find((button) => /Columns|Colonnes/.test(button.textContent ?? ""))?.click();
+        await new Promise((done) => setTimeout(done, 900));
+      }
+      if (view === "collections") { click('[data-memory-nav="collections"]'); await waitFor("[data-memory-collection-row]"); click("[data-memory-collection-row]"); await waitFor("[data-memory-collection-items]"); }
       if (view === "tags") { segment(/Tags|Étiquettes/); await waitFor("[data-memory-tags-view]"); }
       if (view === "quality") { segment(/Quality|Qualité/); await waitFor("[data-memory-quality-view]"); }
       if (view === "trash") { click('[data-memory-nav="trash"]'); await waitFor("[data-memory-trash]"); }
-      if (view === "folder") { click('[data-memory-folder="org/network"]'); await new Promise((done) => setTimeout(done, 200)); }
-      if (view === "note") {
+      if (view === "folder") {
+        click('[data-memory-folder="org/network"]');
+        await new Promise((done) => setTimeout(done, 200));
+        [...document.querySelectorAll<HTMLButtonElement>("[data-memory-list-sort] button")].find((button) => /Manual|Manuel/.test(button.textContent ?? ""))?.click();
+      }
+      if (view === "preview") {
         click('[data-memory-row-key="perspicax|org/o1"] [data-memory-row-open]');
+        await waitFor("[data-memory-preview]");
+        await new Promise((done) => setTimeout(done, 300));
+      }
+      if (view === "note") {
+        document.querySelector('[data-memory-row-key="perspicax|org/o1"] [data-memory-row-open]')?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
         await waitFor("[data-memory-note]");
         await new Promise((done) => setTimeout(done, 300));
       }

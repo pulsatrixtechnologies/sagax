@@ -192,7 +192,11 @@ final class DesktopLot6ComputerSelectUITests: XCTestCase {
         XCTAssertTrue(control.waitForExistence(timeout: 30), "the Allow control section")
         control.tap()
         app.buttons["Open in a window"].firstMatch.tap()
-        XCTAssertTrue(element(app, "desktop-computer-window").waitForExistence(timeout: 20), "the computer window scene")
+        let window = element(app, "desktop-computer-window")
+        XCTAssertTrue(window.waitForExistence(timeout: 20), "the computer window scene")
         XCTAssertTrue(element(app, "desktop-computer-window-segments").exists, "Watching and Take control")
+        // close the scene: the next launch must restore the main window only
+        element(app, "desktop-computer-window-close").tap()
+        try eventually("the window scene closed", timeout: 10) { !window.exists }
     }
 }

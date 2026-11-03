@@ -4,11 +4,11 @@
 // conversation and no other thread is ever a destination: a thread outside
 // it (a job, a parallel task) opens in the side column beside it, and the
 // conversation on screen reads every topic of it, the one the bot was left
-// on too (no thread has a sidebar row to clear it later). With threads
-// shown the bot is selected first, as it always was, and a reply in the
-// thread it leaves stays unread until that thread is opened: the server
-// announces a switch on the live stream before it answers it
-// (store.switchTask emits). The real provider, its live stream, the real
+// on too, and a job the bot opened itself (no thread has a sidebar row to
+// clear it later, #1770). With threads shown the bot is selected first, as
+// it always was, and a reply in the thread it leaves stays unread until
+// that thread is opened: the server announces a switch on the live stream
+// before it answers it (store.switchTask emits). The real provider, its live stream, the real
 // display preference, and a fake server answering in the real one's order.
 import { createElement } from "react";
 import { flushSync } from "react-dom";
@@ -201,11 +201,13 @@ describe("opening a bot with threads hidden", () => {
     await settle();
     expect(sent().filter((request) => request.startsWith("/api/bots/scout/tasks/main-chat"))).toHaveLength(1);
     expect(scoutNow().threadId).toBe("main-chat");
-    // "left-behind" is an earlier topic of the conversation on screen
-    expect(reads()).toEqual(["left-behind"]);
+    // "left-behind" is an earlier topic of the conversation on screen; a
+    // job the bot opened has no row with threads hidden, so it is read with
+    // the conversation too, or it would keep the bot's badge up for good
+    // (#1770, 26dd37f25)
+    expect(reads()).toEqual(["left-behind", "finished"]);
     expect(unread("left-behind")).toBe(false);
-    // a job the bot opened is not part of it: still unread, on the bot's badge
-    expect(unread("finished")).toBe(true);
+    expect(unread("finished")).toBe(false);
   });
 
   // 2026-10-28: with one conversation, a thread outside the stream (a job
@@ -268,8 +270,10 @@ describe("launching the app on a bot", () => {
     expect(switches).toHaveLength(1);
     expect(switches[0]).toMatch(/^\/api\/bots\/scout\/tasks\/main-chat\b/);
     expect(scoutNow().threadId).toBe("main-chat");
-    expect(reads()).toEqual(["left-behind"]);
+    // the bot-opened job is read with it (#1770, 26dd37f25)
+    expect(reads()).toEqual(["left-behind", "finished"]);
     expect(unread("left-behind")).toBe(false);
+    expect(unread("finished")).toBe(false);
   });
 
   it("keeps the bot where it was while threads are shown, as it always has", async () => {

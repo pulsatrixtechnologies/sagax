@@ -719,6 +719,23 @@ besoin d'elle.
 
 ---
 
+### 2.23 Identité Perspicax du bot
+
+Ajouté le 2026-11-03, décision produit de JC. Dans les profils Perspicax du
+bot, un select natif « Agit comme (profil Perspicax) » montre les noms humains
+des profils détenus, avec « Identité par défaut » choisi au départ. Un profil
+explicite ou avec attribution au bot ne se choisit jamais automatiquement.
+Le choix partage le bouton Enregistrer de la section. L'en-tête du chat porte
+une petite puce « comme {nom} » dans le bouton du bot. Un ancien Perspicax
+sans cette fonction ne montre pas le select. Une lecture échouée offre de
+réessayer; un refus de switch paraît en mots dans l'activité du tour.
+
+Surface web et desktop; le réglage et la puce iOS restent à porter.
+Code : `PerspicaxSection.tsx`, `BotHeaderPill.tsx`. Tests DOM avec données
+synthétiques, aucun compte réel.
+
+---
+
 ## 3. Cursor : ce qu'on retient
 
 Repères tirés de ce qu'on sait publiquement de Cursor, utiles pour les surfaces de

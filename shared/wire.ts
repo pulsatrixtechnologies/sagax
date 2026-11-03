@@ -360,6 +360,7 @@ export interface WireBotConversation {
 }
 
 export interface WireBot {
+  perspicaxActAs?: { slug: string; name: string };
   waitingForTeammates?: boolean;
   /** Bot-to-bot conversations this viewer may read, both ends. Absent: none. */
   botConversations?: WireBotConversation[];

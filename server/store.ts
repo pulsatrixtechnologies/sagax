@@ -493,6 +493,8 @@ export interface BotRecord extends Omit<WireBot, "avatarUrl" | "tasks"> {
    * changed only through /api/bots/:id/perspicax, never PATCH, never in a
    * package or an export. */
   perspicax?: BotPerspicax;
+  /** Explicit identity for this bot's Perspicax work. Absent means default. */
+  perspicaxActAs?: { slug: string; name: string };
   /** Perspicax #321: made by create_agent (server/temporary-agents.ts).
    * Never on the wire: the Sagax app does not list such a bot. */
   temporary?: TemporaryAgent;
@@ -504,6 +506,7 @@ export interface BotRecord extends Omit<WireBot, "avatarUrl" | "tasks"> {
 /** Slice 5: at most 8 profile ids per bot. */
 export const MAX_BOT_PERSPICAX_PROFILES = 8;
 const PERSPICAX_PROFILE_ID = /^[0-9A-Za-z_.:-]{1,64}$/;
+export const perspicaxActAsSchema = z.object({ slug: z.string().trim().min(1).max(128), name: z.string().trim().min(1).max(200) });
 export const botPerspicaxSchema = z.object({
   profiles: z.array(z.string().regex(PERSPICAX_PROFILE_ID)).max(MAX_BOT_PERSPICAX_PROFILES).transform((ids) => [...new Set(ids)]),
 });
@@ -1172,6 +1175,11 @@ export class Store {
     }
     // Slice 5: a malformed Perspicax profile list is dropped.
     for (const b of this.bots) {
+      if (b.perspicaxActAs !== undefined) {
+        const identity = perspicaxActAsSchema.safeParse(b.perspicaxActAs);
+        if (identity.success) b.perspicaxActAs = identity.data;
+        else { delete b.perspicaxActAs; botsMigrated = true; }
+      }
       if (b.perspicax === undefined) continue;
       const clean = cleanBotPerspicax(b.perspicax);
       if (JSON.stringify(clean) !== JSON.stringify(b.perspicax)) {
@@ -2506,6 +2514,20 @@ export class Store {
     this.saveBots();
     this.emit({ type: "bot", botId: id });
     return bot;
+  }
+
+  setBotPerspicaxActAs(id: string, identity: { slug: string; name: string } | null): void {
+    const bot = this.bot(id);
+    if (!bot) return;
+    const previous = bot.perspicaxActAs;
+    if (identity) bot.perspicaxActAs = perspicaxActAsSchema.parse(identity);
+    else delete bot.perspicaxActAs;
+    try { this.saveBots(); } catch (error) {
+      if (previous) bot.perspicaxActAs = previous;
+      else delete bot.perspicaxActAs;
+      throw error;
+    }
+    this.emit({ type: "bot", botId: id });
   }
 
   /** `actorPrincipalId`: the person changing the bot. A level another

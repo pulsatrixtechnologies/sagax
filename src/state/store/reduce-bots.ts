@@ -150,7 +150,7 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
         // The slim deletion broadcast can arrive before the full snapshot.
         // Finish that switch once, replaying any events received in between.
         // Later duplicate HTTP snapshots must not overwrite newer messages.
-        return reduce(switching, { type: "taskSwitched", bot: { ...before, ...action.bot, computer: action.bot.computer, section: action.bot.section, toolScope: action.bot.toolScope, waitingApprovals: action.bot.waitingApprovals, botConversations: action.bot.botConversations, messages: action.bot.messages, browserProfile: action.bot.browserProfile } });
+        return reduce(switching, { type: "taskSwitched", bot: { ...before, ...action.bot, perspicaxActAs: action.bot.perspicaxActAs, computer: action.bot.computer, section: action.bot.section, toolScope: action.bot.toolScope, waitingApprovals: action.bot.waitingApprovals, botConversations: action.bot.botConversations, messages: action.bot.messages, browserProfile: action.bot.browserProfile } });
       }
       const patched = updateBot(switching, action.bot.id, (b) => ({
         ...b,
@@ -162,6 +162,8 @@ export function reduceBots(state: AppState, action: Action, reduce: ReduceFn): A
         // to Own browser (or deleting a shared profile). Do not retain the
         // previous profile's name and selection in another window.
         browserProfile: action.bot.browserProfile,
+        // Complete frames omit the identity after choosing the default.
+        perspicaxActAs: action.bot.perspicaxActAs,
         // Resetting Works on to Auto removes the field from the complete
         // server frame; merging alone would keep the old target highlighted.
         computer: action.bot.computer,

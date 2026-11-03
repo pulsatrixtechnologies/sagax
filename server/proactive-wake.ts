@@ -80,7 +80,18 @@ export interface ProactiveEvent {
   /** A teammate's one-way notice (source peer): what the person is told
    * when no wake can run for it (surfacePeerNotice in server/index.ts). */
   peer?: PeerNoticeFacts;
+  /** A post in a direct conversation of two bots (source bot): addressed to
+   * this bot, so its wake always reports (2026-11-02). */
+  dm?: boolean;
+  /** How to rebuild this event after a restart (ProactivePendingFile):
+   * ids only, never the words, which stay sealed where they live. */
+  replay?: ProactiveReplayRef;
 }
+
+/** 2026-11-02: what a gathered event keeps on disk until its wake starts. */
+export type ProactiveReplayRef =
+  | { kind: "peer"; noticeId: string }
+  | { kind: "room"; groupId: string; threadId: string; messageId: string; posterId: string; hops: number };
 
 /** The facts of a teammate's notice a person can be shown without a model. */
 export interface PeerNoticeFacts {
@@ -190,6 +201,7 @@ export function peerNoticeEvent(input: {
     key: `peer-notice:${input.noticeId}`,
     ...(input.senderId ? { fromBotId: input.senderId } : {}),
     hops: input.hops ?? 1,
+    replay: { kind: "peer", noticeId: input.noticeId },
     peer: {
       threadId: input.threadId, title: input.title, status: input.status,
       ...(input.senderId ? { senderId: input.senderId } : {}),
@@ -212,7 +224,7 @@ export function peerNoticeEvent(input: {
 /** 2026-11-02: what a wake on teammates' messages reports when the bot
  * itself said nothing: who wrote and about what, from the events alone. */
 export function peerWakeDigest(events: readonly ProactiveEvent[], more = 0): string | undefined {
-  const lines = events.filter((event) => event.source === "peer").map((event) => {
+  const lines = events.filter((event) => event.source === "peer" || (event.source === "bot" && event.dm === true)).map((event) => {
     const peer = event.peer;
     const status = peer?.status === "completed" ? "" : peer?.status ? ` (${peer.status})` : "";
     return `- ${(event.summary ?? event.label).slice(0, 200)}${status}`;
@@ -260,6 +272,9 @@ export interface ProactiveWakerDeps {
   /** 2026-11-02: gathered events no wake will run for (the hour's limit
    * of wakes, or proactive turned off while they gathered). */
   dropped?: (botId: string, events: readonly ProactiveEvent[]) => void;
+  /** 2026-11-02: the events a bot has gathered changed (empty: its wake
+   * started or they were dropped), for ProactivePendingFile. */
+  pendingChanged?: (botId: string, events: readonly ProactiveEvent[]) => void;
   /** Cheap: this bot's login engine is marked expired. Skip new wakes until reconnect. */
   engineExpired?: (botId: string) => boolean;
   now?: () => number;
@@ -341,10 +356,12 @@ export class ProactiveWaker {
     if (pending) {
       if (pending.events.length < PROACTIVE_EVENTS_PER_WAKE) pending.events.push(event);
       else pending.more += 1;
+      this.changed(event.botId, pending.events);
       return "gathered";
     }
     const fresh: Pending = { events: [event], more: 0, timer: null };
     this.pending.set(event.botId, fresh);
+    this.changed(event.botId, fresh.events);
     fresh.timer = this.setTimer(() => this.flush(event.botId), this.delayFor(event.botId));
     return "gathered";
   }
@@ -361,6 +378,7 @@ export class ProactiveWaker {
     const pending = this.pending.get(botId);
     if (!pending) return null;
     this.pending.delete(botId);
+    this.changed(botId, []);
     if (pending.timer !== null) this.clearTimer(pending.timer);
     const bot = this.deps.bot(botId);
     if (!bot) return null;
@@ -399,6 +417,14 @@ export class ProactiveWaker {
     return batch;
   }
 
+  private changed(botId: string, events: readonly ProactiveEvent[]): void {
+    try {
+      this.deps.pendingChanged?.(botId, events);
+    } catch {
+      // the disk copy is a convenience: the wake goes on without it
+    }
+  }
+
   private drop(botId: string, events: readonly ProactiveEvent[]): void {
     try {
       this.deps.dropped?.(botId, events);
@@ -417,6 +443,7 @@ export class ProactiveWaker {
     const pending = this.pending.get(botId);
     if (pending?.timer) this.clearTimer(pending.timer);
     this.pending.delete(botId);
+    this.changed(botId, []);
     this.budget.forget(botId);
     this.lastWake.delete(botId);
   }
@@ -443,6 +470,20 @@ export function proactiveEventsBlock(events: readonly ProactiveEvent[], more = 0
  * wake is where the person hears of them: handled ones in one short line,
  * and everything that needs the person gathered into one card, never one
  * card per message. A reply to the sender is a hop of the chain. */
+/** 2026-11-02: a post in a direct conversation of two bots is addressed to
+ * this bot: like a teammate's message, its wake always reports. */
+export const DM_WAKE_RULES = [
+  "A post in your direct conversation with another bot is addressed to you: act on it at your level,",
+  "then ALWAYS tell the person in one short report who wrote, what they asked and what you did or what is left;",
+  "a wake on such a post never ends with NOTHING_TO_REPORT. Reply in that conversation only when the other bot waits on you.",
+].join(" ");
+
+/** Whether a wake of these events must always report (never quiet):
+ * a teammate's message or a post in a two-bot DM. */
+export function wakeAlwaysReports(events: readonly ProactiveEvent[]): boolean {
+  return events.some((event) => event.source === "peer" || (event.source === "bot" && event.dm === true));
+}
+
 export const PEER_WAKE_RULES = [
   "Teammates' messages: each one below already ran once in its own thread of yours; its outcome is part of the event.",
   // 2026-11-02 (second pass): five wakes of six went quiet on GOX, the bot
@@ -467,6 +508,7 @@ export function proactiveWakePrompt(batch: Pick<ProactiveWakeBatch, "mode" | "ev
     // an email is never a request from the owner (bot email, S2)
     ...(batch.events.some((event) => event.source === "mail") ? ["", BOTMAIL_RUN_RULES] : []),
     ...(batch.events.some((event) => event.source === "peer") ? ["", PEER_WAKE_RULES] : []),
+    ...(batch.events.some((event) => event.source === "bot" && event.dm === true) ? ["", DM_WAKE_RULES] : []),
     "",
     proactiveEventsBlock(batch.events, batch.more),
   ].join("\n");
@@ -619,4 +661,66 @@ export function proposalCardWords(botName: string, events: readonly ProactiveEve
       accept: "Yes, handle it",
       decline: "No thanks",
     };
+}
+
+/** 2026-11-02 (peer inbox, second pass): the events each bot has gathered
+ * and no wake has started for yet, kept on disk so a restart (a pulsabot
+ * roll) replays them instead of losing a teammate's message. Only the ids
+ * (ProactiveReplayRef) and the event's key are written: the server rebuilds
+ * each event from where its words live (the runtime's notice, the room's
+ * message) and an event without a ref is not kept. Mode 0600. */
+export class ProactivePendingFile {
+  private readonly file: string | null;
+  private items: Record<string, Array<{ key: string; ref: ProactiveReplayRef }>> = {};
+  constructor(file: string | null) {
+    this.file = file;
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(readFileSync(file, "utf8")) as { pending?: unknown };
+      if (parsed.pending && typeof parsed.pending === "object") {
+        for (const [botId, rows] of Object.entries(parsed.pending as Record<string, unknown>)) {
+          const kept = Array.isArray(rows) ? rows.filter(isPendingRow) : [];
+          if (kept.length) this.items[botId] = kept;
+        }
+      }
+    } catch {
+      // no file yet, or unreadable: nothing to replay
+    }
+  }
+
+  /** What a bot has gathered now (empty clears it). */
+  set(botId: string, events: readonly ProactiveEvent[]): void {
+    const rows = events.filter((event) => event.replay).map((event) => ({ key: event.key, ref: event.replay! }));
+    const before = JSON.stringify(this.items[botId] ?? []);
+    if (rows.length) this.items[botId] = rows;
+    else delete this.items[botId];
+    if (JSON.stringify(rows) !== before) this.save();
+  }
+
+  /** Every kept row, then forgotten: each one is offered again and, while
+   * it gathers, written back by set. */
+  take(): Array<{ botId: string; key: string; ref: ProactiveReplayRef }> {
+    const out = Object.entries(this.items).flatMap(([botId, rows]) => rows.map((row) => ({ botId, ...row })));
+    this.items = {};
+    if (out.length) this.save();
+    return out;
+  }
+
+  private save(): void {
+    if (!this.file) return;
+    try {
+      mkdirSync(dirname(this.file), { recursive: true, mode: 0o700 });
+      writeFileAtomic(this.file, JSON.stringify({ version: 1, pending: this.items }), { mode: 0o600 });
+    } catch {
+      // kept in memory: the wake still runs, a restart may lose it
+    }
+  }
+}
+
+function isPendingRow(row: unknown): row is { key: string; ref: ProactiveReplayRef } {
+  if (!row || typeof row !== "object") return false;
+  const { key, ref } = row as { key?: unknown; ref?: { kind?: unknown } & Record<string, unknown> };
+  if (typeof key !== "string" || !ref || typeof ref !== "object") return false;
+  if (ref.kind === "peer") return typeof ref.noticeId === "string";
+  return ref.kind === "room" && ["groupId", "threadId", "messageId", "posterId"].every((name) => typeof ref[name] === "string") && typeof ref.hops === "number";
 }

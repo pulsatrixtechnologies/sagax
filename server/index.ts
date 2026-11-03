@@ -200,6 +200,8 @@ import {
   peerNoticeDropped,
   peerNoticeEvent,
   peerWakeDigest,
+  ProactivePendingFile,
+  wakeAlwaysReports,
   proactiveWakePrompt,
   runFailureWakesBot,
   type ProactiveEvent,
@@ -24065,7 +24067,10 @@ const proactiveEngine = new ProactiveEngine({
     return bot ? approvalModeFor(bot) : undefined;
   }
 });
+/** 2026-11-02: gathered events survive a restart (ids only). */
+const proactivePending = new ProactivePendingFile(join(DATA_DIR, "proactive-pending.json"));
 const proactiveWaker = new ProactiveWaker({
+  pendingChanged: (botId, events) => proactivePending.set(botId, events),
   bot: (botId) => {
     const bot = store.bot(botId);
     // a hidden or temporary bot has no conversation to act in
@@ -24696,6 +24701,32 @@ function surfacePeerNotice(receiverId: string, peer: PeerNoticeFacts): void {
   }
 }
 
+/** 2026-11-02: the events gathered before a restart are offered again,
+ * rebuilt from where their words live: a teammate's notice from the job
+ * runtime (a settled one: its wake, or its line when no wake can run), a
+ * room post from the room. One already gone is left out. */
+function replayPendingProactive(): void {
+  for (const row of proactivePending.take()) {
+    try {
+      if (row.ref.kind === "peer") {
+        const child = coordinator.node(row.ref.noticeId);
+        if (!child || child.botId !== row.botId || !child.oneWay || !["completed", "failed", "cancelled", "expired"].includes(child.status)) continue;
+        offerPeerNotice(child, child.parentId ? coordinator.node(child.parentId) : undefined);
+      } else {
+        const ref = row.ref;
+        const room = store.group(ref.groupId);
+        const poster = store.bot(ref.posterId);
+        if (!room || !poster || room.threadId !== ref.threadId) continue;
+        const posted = store.messagesFor(room.threadId).find((message) => message.id === ref.messageId);
+        if (!posted || typeof posted.text !== "string" || !posted.text.trim()) continue;
+        offerRoomPostToBots(room, poster, posted.text, posted.id, ref.hops, row.botId);
+      }
+    } catch (error) {
+      console.warn(`[proactive] a pending event could not be replayed: ${error instanceof Error ? error.name : "error"}`);
+    }
+  }
+}
+
 /** One event for one bot; never throws into the path that saw it. */
 function offerProactive(event: ProactiveEvent): ProactiveOfferVerdict | undefined {
   try {
@@ -24708,15 +24739,17 @@ function offerProactive(event: ProactiveEvent): ProactiveOfferVerdict | undefine
 
 /** A bot's post in a room, offered to the room's other bots: it concerns
  * one of them when it names it (@name or the name). */
-function offerRoomPostToBots(room: GroupRecord, poster: BotRecord, text: string, messageId: string, hops: number): void {
+function offerRoomPostToBots(room: GroupRecord, poster: BotRecord, text: string, messageId: string, hops: number, onlyBotId?: string): void {
   for (const memberId of room.memberIds) {
-    if (memberId === poster.id) continue;
+    if (memberId === poster.id || (onlyBotId !== undefined && memberId !== onlyBotId)) continue;
     const member = store.bot(memberId);
     if (!member) continue;
     // a direct conversation of two bots: every post is for the other one
     const mentionsBot = room.dm === true || textNamesBot(text, member.name);
     offerProactive({
       botId: member.id, source: "bot", key: `room-post:${messageId}`, fromBotId: poster.id, hops, mentionsBot,
+      ...(room.dm === true ? { dm: true } : {}),
+      replay: { kind: "room", groupId: room.id, threadId: room.threadId, messageId, posterId: poster.id, hops },
       label: `Post by ${poster.name} in ${room.name}`,
       detail: `Room: ${room.name} (id ${room.id})\nFrom: ${poster.name}\n\n${text}`
     });
@@ -24754,6 +24787,7 @@ function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?:
   const person = runAs || effectiveBotOwner(bot) || undefined;
   const sources = [...new Set(batch.events.map((event) => event.source))];
   const peerDigest = peerWakeDigest(batch.events, batch.more);
+  const alwaysReport = wakeAlwaysReports(batch.events);
   routines.enqueueProactive({
     botId: batch.botId,
     name: `Proactive: ${sources.map((source) => PROACTIVE_RUN_NAMES[source]).join(", ")}`,
@@ -24764,7 +24798,8 @@ function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?:
       sources,
       ...(batch.confined ? { confined: true as const } : {}),
       ...(accepted ? { accepted: true as const } : {}),
-      ...(peerDigest ? { peerDigest } : {})
+      ...(peerDigest ? { peerDigest } : {}),
+      ...(alwaysReport ? { alwaysReport: true as const } : {})
     },
     ...(person ? { runAs: person } : {})
   });
@@ -24812,6 +24847,12 @@ markRoutineResultsThreads();
 // bot routine reports into the one conversation. Cleared at each start (a
 // file an older version wrote), except a Cloud guest's results thread.
 routines.clearChosenResultsThreads(() => false);
+// 2026-11-02: what the proactive waker had gathered before this start (a
+// roll) wakes its bots now, once the job runtime has reconciled.
+{
+  const replay = setTimeout(replayPendingProactive, Number(process.env.SAGAX_PROACTIVE_REPLAY_MS) >= 0 && process.env.SAGAX_PROACTIVE_REPLAY_MS ? Number(process.env.SAGAX_PROACTIVE_REPLAY_MS) : 5_000);
+  (replay as { unref?: () => void }).unref?.();
+}
 orgLibrary = new OrgLibrary({
   dataDir: DATA_DIR,
   store,

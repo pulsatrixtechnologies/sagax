@@ -7,7 +7,7 @@
 // one result, one source wake, and a terminal or explicit waiting state.
 // No provider is called and no user data is read.
 import { spawn, type ChildProcess } from "node:child_process";
-import { closeSync, existsSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
@@ -1000,3 +1000,35 @@ it("peer inbox (second pass): a notice no wake runs for (proactive off) is shown
   expect(((await f.api("/api/routines", undefined, "GET")).runs as any[]).filter((run) => run.botId === teammate.id && run.proactive)).toEqual([]);
   expect(runtimeInvariants(f)).toEqual([]);
 }), 150_000);
+
+it("peer inbox (second pass): a teammate's notice gathered before a restart (a pulsabot roll) wakes its receiver after it, with only ids on disk", () => withFixture(async (f) => {
+  const sender = (await f.cli("new-bot", "--name", "Katarina")).bot;
+  const receiver = (await f.cli("new-bot", "--name", "Melonie")).bot;
+  f.plan[sender.id] = {
+    steps: [{ tool: "send_to_bot", arguments: { bot_id: receiver.id, title: "Urgent Alubar 299372 client reply", message: "ROLL_SECRET_WORDS Carl answered on 299372" } }],
+    reply: "Sent",
+  };
+  f.plan[receiver.id] = { byPrompt: [{ promptIncludes: "Proactive wake", plan: { reply: "AFTER_ROLL_REPORT: Carl answered on 299372" } }], reply: "Noted in the notice thread" };
+  f.save();
+  await f.api(`/api/bots/${sender.id}/messages`, { text: "Tell Melonie.", threadId: sender.activeTaskId });
+  // the gather window outlasts the roll: the notice waits on disk
+  const pendingFile = join(f.dataDir, "proactive-pending.json");
+  await expect.poll(() => existsSync(pendingFile) ? Object.keys(JSON.parse(readFileSync(pendingFile, "utf8")).pending) : [], { timeout: 60_000, interval: 250 }).toEqual([receiver.id]);
+  const onDisk = readFileSync(pendingFile, "utf8");
+  expect(onDisk).not.toContain("ROLL_SECRET_WORDS");
+  expect(onDisk).not.toContain("Alubar");
+  expect(JSON.parse(onDisk).pending[receiver.id]).toEqual([{ key: expect.stringMatching(/^peer-notice:/), ref: { kind: "peer", noticeId: expect.any(String) } }]);
+  expect(statSync(pendingFile).mode & 0o777).toBe(0o600);
+  await f.restart({ SAGAX_PROACTIVE_GATHER_MS: "1000", SAGAX_PROACTIVE_REPLAY_MS: "0" });
+  const wakes = async () => ((await f.api("/api/routines", undefined, "GET")).runs as any[]).filter((run) => run.botId === receiver.id && run.proactive);
+  await expect.poll(async () => (await wakes()).map((run) => run.status), { timeout: 60_000, interval: 250 }).toEqual(["completed"]);
+  expect((await wakes())[0].proactive).toMatchObject({ sources: ["peer"], alwaysReport: true });
+  const wakePrompt = JSON.stringify(f.evidence().find((turn) => turn.botId === receiver.id && JSON.stringify(turn.prompt).includes("Proactive wake"))!.prompt);
+  expect(wakePrompt).toContain("ROLL_SECRET_WORDS Carl answered on 299372");
+  const bots = (await f.api("/api/bots?messages=0", undefined, "GET")).bots as any[];
+  const main = bots.find((bot) => bot.id === receiver.id).threadId as string;
+  await expect.poll(async () => (await f.messages(main)).some((message) => message.kind === "routine.run" && String(message.text ?? "").includes("AFTER_ROLL_REPORT")), { timeout: 20_000 }).toBe(true);
+  // replayed once: the file is empty again
+  await expect.poll(() => JSON.parse(readFileSync(pendingFile, "utf8")).pending, { timeout: 10_000 }).toEqual({});
+}, { env: { SAGAX_PROACTIVE_GATHER_MS: "600000" } }), 150_000);
+

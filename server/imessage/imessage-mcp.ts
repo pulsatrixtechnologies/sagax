@@ -4,7 +4,7 @@
 import { statSync } from "node:fs";
 import { basename } from "node:path";
 
-import { sendRecipientsAllowed } from "../shared/allowed-recipients.ts";
+import { sendRecipientsAllowed } from "../../shared/allowed-recipients.ts";
 import {
   MESSAGES_SEND_MCP_NAME,
   MESSAGES_SEND_TOOL,
@@ -14,7 +14,7 @@ import {
   planImessageSend,
   type MessagesHost,
   type MessageService,
-} from "../shared/imessage.ts";
+} from "../../shared/imessage.ts";
 import { stageImessageSend, type PendingImessage } from "./imessage-cards.ts";
 import { fileInsideRoots, messagesDbPresent, openMessagesReader, type MessageRow } from "./imessage-db.ts";
 import { probeFullDiskAccess } from "./imessage-permissions.ts";

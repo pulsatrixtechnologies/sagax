@@ -2069,12 +2069,12 @@ import {
 } from "./capabilities/capability-plugin-mounts.ts";
 import { createLifecycleHookRoutes } from "./routes/lifecycle-hooks.ts";
 import { createMessagesRoutes } from "./routes/messages.ts";
-import { handleMessagesMcp } from "./imessage-mcp.ts";
-import { bindImessageMessage, takeImessageSend } from "./imessage-cards.ts";
-import { createOsascriptSender } from "./imessage-send.ts";
-import { readMessagesSettings } from "./imessage-settings.ts";
+import { handleMessagesMcp } from "./imessage/imessage-mcp.ts";
+import { bindImessageMessage, takeImessageSend } from "./imessage/imessage-cards.ts";
+import { createOsascriptSender } from "./imessage/imessage-send.ts";
+import { readMessagesSettings } from "./imessage/imessage-settings.ts";
 import { messagesOnBotMac } from "../shared/imessage.ts";
-import { fileInsideRoots } from "./imessage-db.ts";
+import { fileInsideRoots } from "./imessage/imessage-db.ts";
 import {
   chooseHookTarget,
   commandWithFiles,

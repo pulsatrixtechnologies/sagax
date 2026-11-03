@@ -3,7 +3,7 @@
 // card in the conversation then answers that the send expired.
 import { randomBytes } from "node:crypto";
 
-import { IMESSAGE_REQUEST_PREFIX, type MessageService } from "../shared/imessage.ts";
+import { IMESSAGE_REQUEST_PREFIX, type MessageService } from "../../shared/imessage.ts";
 
 export type PendingImessage = {
   requestId: string;

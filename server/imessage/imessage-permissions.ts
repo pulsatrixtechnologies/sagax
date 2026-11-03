@@ -13,8 +13,8 @@ import {
   type MessagesSetupPermissions,
   type MessagesSetupStatus,
   type MessagesSetupTestResult,
-} from "../shared/mac-messages-setup.ts";
-import type { MessagesHost } from "../shared/imessage.ts";
+} from "../../shared/mac-messages-setup.ts";
+import type { MessagesHost } from "../../shared/imessage.ts";
 import { openMessagesReader } from "./imessage-db.ts";
 import { readMessagesSettings } from "./imessage-settings.ts";
 

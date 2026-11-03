@@ -2,7 +2,7 @@
 // launch it. Tests inject a sender and never call the script runner.
 import { execFile } from "node:child_process";
 
-import type { MessageService } from "../shared/imessage.ts";
+import type { MessageService } from "../../shared/imessage.ts";
 
 export type ImessageSend = {
   to: string;

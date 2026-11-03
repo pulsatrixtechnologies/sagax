@@ -63,7 +63,7 @@ export type DesktopSystemInfo = z.infer<typeof desktopSystemInfo>;
 
 // Messages (iMessage) is intentionally not a bridge action. It runs only
 // inside the solo Sagax process on the Mac where that process runs
-// (server/imessage-mcp.ts). An organization server must not ask the
+// (server/imessage/imessage-mcp.ts). An organization server must not ask the
 // signed-in desktop to read or send Messages.
 export const DESKTOP_BRIDGE_ACTIONS = [
   "run_command", "read_file", "write_file", "list_files", "search_files", "fetch_url", "browse",

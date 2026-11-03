@@ -34,7 +34,7 @@ export type SelectableComputer = {
 import { withCommandVariables } from "../vault/credential-command-env.ts";
 import type { DesktopBridgeOperation } from "../desktop/desktop-bridge.ts";
 import { handleDesktopBridgeMcp } from "../desktop/desktop-bridge-tools.ts";
-import { handleMessagesMcp } from "../imessage-mcp.ts";
+import { handleMessagesMcp } from "../imessage/imessage-mcp.ts";
 import { messagesOnBotMac } from "../../shared/imessage.ts";
 import { misusePathRefusal, misuseRefusal, misuseToolFrameText } from "../misuse-guardrails.ts";
 import { serverPathAnswer, serverPathInCommand } from "../sandbox/sandbox-server-path.ts";

@@ -6566,14 +6566,14 @@ sounds stay the existing choice in `NotificationSounds.swift`.
 ## Messages and lifecycle hooks (2026-10-21)
 
 Messages (iMessage and SMS) run only in the solo Sagax process on the Mac
-where that process runs (`shared/imessage.ts`, `server/imessage-mcp.ts`).
+where that process runs (`shared/imessage.ts`, `server/imessage/imessage-mcp.ts`).
 The Use Messages switch is `messages.json` in the data dir. Sends to someone
 on the bot's allowed recipients go through. Everyone else gets a card.
 Group chats are refused. This is not a desktop-bridge action: an
 organization server must not ask the signed-in Mac to open Messages.
 An image attached to a message is named on the read and returned by
 `read_attachment` only when the file is inside the Messages folder and
-at most 1.5 MB (`server/imessage-db.ts`). A file is sent only from the
+at most 1.5 MB (`server/imessage/imessage-db.ts`). A file is sent only from the
 bot's own folder, by iMessage, and the card shows the file's name, not
 its path.
 
@@ -6594,7 +6594,7 @@ branding only (`docs/design/ux-reference-grokbot-cursor.md` §2.8bis).
   own enable; org Ask/Deny and person isolation stay.
 - API (solo darwin only; else 404): `GET`/`PUT /api/messages`,
   `POST /api/messages/test`, `POST /api/messages/permissions/open`. Shared
-  helpers: `shared/mac-messages-setup.ts`, `server/imessage-permissions.ts`.
+  helpers: `shared/mac-messages-setup.ts`, `server/imessage/imessage-permissions.ts`.
 - Computer Settings keeps a shortcut that deep-links to this setup
   (`sagax:open-mac-messages`). iOS mirrors the same Installed > This Mac >
   Messages flow (`ios/App/Features/Plugins/MacMessagesSetupView.swift`).

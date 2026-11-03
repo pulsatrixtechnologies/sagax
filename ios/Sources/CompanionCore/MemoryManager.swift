@@ -191,6 +191,15 @@ public struct TeamMemoryEntry: Codable, Hashable, Sendable, Identifiable {
     public var detail: String
     public var status: String?
     public var updatedAt: Double?
+    /// Other names it goes by ("also …").
+    public var aliases: [String]? = nil
+    /// The bot that proposed it (TeamMemoryDialog "from …").
+    public var source: Source? = nil
+
+    public struct Source: Codable, Hashable, Sendable {
+        public var botId: String?
+        public var botName: String?
+    }
 
     public init(id: String, kind: String, name: String, detail: String, status: String? = nil, updatedAt: Double? = nil) {
         self.id = id

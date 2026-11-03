@@ -766,6 +766,16 @@
         }
       }
     },
+    "%@ detail": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Détail de %@"
+          }
+        }
+      }
+    },
     "%@ failing": {
       "localizations": {
         "fr": {
@@ -1550,6 +1560,16 @@
         }
       }
     },
+    "%@ shared instructions": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Instructions partagées de %@"
+          }
+        }
+      }
+    },
     "%@ steps done, I'm still going.": {
       "localizations": {
         "fr": {
@@ -1606,6 +1626,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Equipe %@"
+          }
+        }
+      }
+    },
+    "%@ team memory": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mémoire d'équipe %@"
           }
         }
       }
@@ -7076,6 +7106,16 @@
         }
       }
     },
+    "Add an entry": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter une entrée"
+          }
+        }
+      }
+    },
     "Add an instruction…": {
       "localizations": {
         "en": {
@@ -9984,6 +10024,16 @@
         }
       }
     },
+    "Another viewer has paused bot control on this desktop": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un autre utilisateur a suspendu le contrôle des bots sur ce bureau"
+          }
+        }
+      }
+    },
     "Answer": {
       "localizations": {
         "en": {
@@ -11562,6 +11612,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vous demande avant chaque commande, modification de fichier ou outil. Vos règles passent d'abord : « Autoriser automatiquement » passe sans carte, « Refuser » refuse."
+          }
+        }
+      }
+    },
+    "Assign %@ to %@?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Assigner %@ à %@?"
           }
         }
       }
@@ -17390,6 +17450,16 @@
         }
       }
     },
+    "Close computers": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fermer les ordinateurs"
+          }
+        }
+      }
+    },
     "Close conversation": {
       "localizations": {
         "en": {
@@ -17516,6 +17586,16 @@
         }
       }
     },
+    "Close shared instructions": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fermer les instructions partagées"
+          }
+        }
+      }
+    },
     "Close slash commands": {
       "localizations": {
         "fr": {
@@ -17528,6 +17608,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fechar comandos de barra"
+          }
+        }
+      }
+    },
+    "Close team dialog": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fermer la boîte de l'équipe"
+          }
+        }
+      }
+    },
+    "Close team memory": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fermer la mémoire d'équipe"
           }
         }
       }
@@ -17724,6 +17824,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Computador na nuvem"
+          }
+        }
+      }
+    },
+    "Cloud computer · %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordinateur infonuagique · %@"
           }
         }
       }
@@ -19094,6 +19204,16 @@
         }
       }
     },
+    "Connect Boat": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecter Boat"
+          }
+        }
+      }
+    },
     "Connect GitHub": {
       "localizations": {
         "en": {
@@ -19436,6 +19556,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connectez votre compte %@ pour l'utiliser."
+          }
+        }
+      }
+    },
+    "Connect your Boat account before creating a cloud computer.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connectez votre compte Boat avant de créer un ordinateur infonuagique."
           }
         }
       }
@@ -21892,6 +22022,16 @@
         }
       }
     },
+    "Create cloud computer": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Créer l'ordinateur infonuagique"
+          }
+        }
+      }
+    },
     "Create folder": {
       "localizations": {
         "en": {
@@ -22134,6 +22274,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Criada localmente"
+          }
+        }
+      }
+    },
+    "Creates a cloud computer in your connected boat.dev account. Your Boat plan and usage charges apply. It stays unassigned until you choose a team.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crée un ordinateur infonuagique dans votre compte boat.dev connecté. Votre forfait Boat et les frais d'utilisation s'appliquent. Il reste non assigné tant que vous n'avez pas choisi une équipe."
           }
         }
       }
@@ -24188,6 +24338,16 @@
         }
       }
     },
+    "Detail": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Détail"
+          }
+        }
+      }
+    },
     "Detailed art for the characters that have it. Colors and skins apply to the classic look.": {
       "localizations": {
         "en": {
@@ -25302,12 +25462,32 @@
         }
       }
     },
+    "Drag %@ to a team": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glisser %@ vers une équipe"
+          }
+        }
+      }
+    },
     "Drag a bot from the left sidebar onto a time to schedule it.": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Glisse un bot de la barre de gauche sur une heure pour le planifier."
+          }
+        }
+      }
+    },
+    "Drag a computer onto a team, or choose its team below. Bots on Auto will use it.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glissez un ordinateur sur une équipe, ou choisissez son équipe ci-dessous. Les bots en mode Auto l'utiliseront."
           }
         }
       }
@@ -34696,6 +34876,16 @@
         }
       }
     },
+    "In use": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilisée"
+          }
+        }
+      }
+    },
     "In your own Teams chat, through your engine's connector. Your reply is read for 40 minutes.": {
       "localizations": {
         "en": {
@@ -36936,6 +37126,16 @@
         }
       }
     },
+    "Kind": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type"
+          }
+        }
+      }
+    },
     "Label": {
       "localizations": {
         "fr": {
@@ -38776,6 +38976,16 @@
         }
       }
     },
+    "Loading team memory": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chargement de la mémoire d'équipe"
+          }
+        }
+      }
+    },
     "Loading the Perspicax profiles": {
       "localizations": {
         "en": {
@@ -38978,6 +39188,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "VM local"
+          }
+        }
+      }
+    },
+    "Local VM and other computers…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VM locale et autres ordinateurs…"
           }
         }
       }
@@ -43170,6 +43390,16 @@
         }
       }
     },
+    "New cloud computer": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouvel ordinateur infonuagique"
+          }
+        }
+      }
+    },
     "New confidential thread": {
       "localizations": {
         "en": {
@@ -46814,6 +47044,16 @@
         }
       }
     },
+    "Not assigned": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non assigné"
+          }
+        }
+      }
+    },
     "Not assigned to this bot": {
       "localizations": {
         "en": {
@@ -48150,6 +48390,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nada agendado neste dia. Toque em um horário para agendar uma rotina."
+          }
+        }
+      }
+    },
+    "Nothing shared yet. Review what bots propose as they learn who is who and where things live, or add one yourself below.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien de partagé pour l'instant. Révisez ce que les bots proposent à mesure qu'ils apprennent qui est qui et où se trouvent les choses, ou ajoutez une entrée vous-même."
           }
         }
       }
@@ -51060,6 +51310,16 @@
         }
       }
     },
+    "Open secure desktop ↗": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir le bureau sécurisé ↗"
+          }
+        }
+      }
+    },
     "Open settings": {
       "localizations": {
         "fr": {
@@ -53678,6 +53938,16 @@
         }
       }
     },
+    "Pauses bot control while you use the desktop": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suspend le contrôle des bots pendant que vous utilisez le bureau"
+          }
+        }
+      }
+    },
     "Pay": {
       "localizations": {
         "en": {
@@ -53916,6 +54186,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Personnes invitées"
+          }
+        }
+      }
+    },
+    "People, places, decisions and terms every bot in this section shares. Every bot proposal waits for a member of this team, or an organization admin, before it is shared. Your own additions are shared immediately. Edit or remove anything.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les personnes, lieux, décisions et termes que partagent tous les bots de cette section. Chaque proposition d'un bot attend la révision d'un membre de cette équipe, ou d'un admin, avant d'être partagée. Vos propres ajouts sont partagés tout de suite. Vous pouvez tout modifier ou retirer."
           }
         }
       }
@@ -58532,6 +58812,16 @@
         }
       }
     },
+    "Refresh computers": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualiser les ordinateurs"
+          }
+        }
+      }
+    },
     "Refresh engine commands": {
       "localizations": {
         "en": {
@@ -58964,6 +59254,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cota restante em cada provedor conectado. Janelas de 5 horas e semanais, quando o plano as tem."
+          }
+        }
+      }
+    },
+    "Remember": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retenir"
           }
         }
       }
@@ -61122,6 +61422,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tentar enviar %@ de novo"
+          }
+        }
+      }
+    },
+    "Return to bots": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redonner aux bots"
           }
         }
       }
@@ -63344,6 +63654,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Salvar servidor"
+          }
+        }
+      }
+    },
+    "Save shared instructions": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer les instructions partagées"
           }
         }
       }
@@ -66462,6 +66782,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Partagé par %@"
+          }
+        }
+      }
+    },
+    "Shared instructions shown to every bot in this team at the start of each turn. Only you can edit them.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Instructions partagées montrées à chaque bot de cette équipe au début de chaque tour. Vous seul pouvez les modifier."
           }
         }
       }
@@ -70064,6 +70394,16 @@
         }
       }
     },
+    "Start / retry": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Démarrer / réessayer"
+          }
+        }
+      }
+    },
     "Start a helper": {
       "localizations": {
         "en": {
@@ -70408,6 +70748,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Commence à"
+          }
+        }
+      }
+    },
+    "Starts this cloud computer; your provider's usage charges apply": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Démarre cet ordinateur infonuagique; les frais d'utilisation de votre fournisseur s'appliquent"
           }
         }
       }
@@ -72586,6 +72936,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Equipe"
+          }
+        }
+      }
+    },
+    "Team computers": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordinateurs d'équipe"
+          }
+        }
+      }
+    },
+    "Team for %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Équipe de %@"
           }
         }
       }
@@ -81430,6 +81800,36 @@
         }
       }
     },
+    "Unassign %@ from %@ before moving it to another team. Its files and signed-in accounts stay on the computer.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirez l'assignation de %@ de %@ avant de le passer à une autre équipe. Ses fichiers et ses comptes connectés restent sur l'ordinateur."
+          }
+        }
+      }
+    },
+    "Unassign %@?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer l'assignation de %@?"
+          }
+        }
+      }
+    },
+    "Unassign to move to another team.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirez l'assignation pour passer à une autre équipe."
+          }
+        }
+      }
+    },
     "Unassigned": {
       "localizations": {
         "en": {
@@ -85072,6 +85472,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "O que um backup inclui"
+          }
+        }
+      }
+    },
+    "What every bot should know about it": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce que chaque bot doit en savoir"
           }
         }
       }
@@ -92194,6 +92604,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "durante uma tarefa"
+          }
+        }
+      }
+    },
+    "e.g. Engineering desktop": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "p. ex. Poste d'ingénierie"
           }
         }
       }

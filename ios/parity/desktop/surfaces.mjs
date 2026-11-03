@@ -370,7 +370,7 @@ add({ id: "routine-edit", phase: "main", note: "Automations list: a routine open
     await ctx.click({ text: /^Scan skills populaires mensuel/ });
     await ctx.sleep(1200);
   } });
-for (const section of ["account", "voice", "updates", "about", "providers", "security"]) {
+for (const section of ["account", "voice", "updates", "about", "providers", "security", "credentials", "import"]) {
   add({ id: `settings-${section}`, phase: "main", note: `Settings > ${section}`,
     open: async (ctx) => {
       await openSettings(ctx, section, { retries: 3 });

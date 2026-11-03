@@ -13,28 +13,28 @@ final class DesktopSettingsTests: XCTestCase {
 
     func testAnAdminSessionListsTheDesktopSectionsInOrder() {
         let expected: [DesktopSettingsSection] = [
-            .general, .appearance, .providers, .engines, .voice, .organization, .computer, .usage, .backups,
-            .experimental, .updates, .about,
+            .general, .security, .vault, .appearance, .notifications, .providers, .engines, .voice, .organization,
+            .computer, .usage, .backups, .importBot, .experimental, .updates, .about,
         ]
         XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: .serverAdmin)), expected)
         // an organization server adds My engines (#1098) and My connections
         // after Models
         var organization = expected
-        organization.insert(contentsOf: [.myEngines, .myConnections], at: 4)
+        organization.insert(contentsOf: [.myEngines, .myConnections], at: 7)
         XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: .serverAdmin, organization: true)), organization)
     }
 
     func testAClientOnAnOrganizationServerGetsMyConnections() {
         XCTAssertEqual(
             DesktopSettingsSection.available(for: SurfaceGate(scope: .serverClient, organization: true)),
-            [.appearance, .myEngines, .myConnections, .organization, .updates, .about]
+            [.appearance, .notifications, .myEngines, .myConnections, .organization, .updates, .about]
         )
         XCTAssertTrue(DesktopSettingsSection.myConnections.matches("mes connexions", label: "My connections"))
     }
 
     func testASidecarAndAClientSessionGetTheRemoteClientSections() {
         for scope in [PairingScope.sidecar, .serverClient] {
-            XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: scope)), [.appearance, .organization, .updates, .about])
+            XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: scope)), [.appearance, .notifications, .organization, .updates, .about])
         }
     }
 

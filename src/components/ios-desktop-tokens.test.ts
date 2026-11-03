@@ -49,3 +49,18 @@ describe("iPad desktop shell tokens", () => {
     });
   }
 });
+
+const switchCss = readFileSync(join(root, "src", "styles", "skin-switch.css"), "utf8");
+const kit = readFileSync(join(root, "ios", "App", "Desktop", "DesktopSettingsKit.swift"), "utf8");
+
+describe("iPad desktop switches", () => {
+  for (const cssId of Object.values(SKINS)) {
+    it(`${cssId}: the switch tracks match skin-switch.css`, () => {
+      const block = switchCss.match(new RegExp(`\\[data-skin="${cssId}"\\]\\s*\\{([\\s\\S]*?)\\}`))?.[1] ?? "";
+      const on = block.match(/--color-switch-on:\s*(?:var\([^,]+,\s*)?(#[0-9a-f]+)/i)?.[1]?.toLowerCase();
+      const off = block.match(/--color-switch-off:\s*(#[0-9a-f]+)/i)?.[1]?.toLowerCase();
+      const row = kit.match(new RegExp(`"${cssId}": \\("(#[0-9a-f]+)", "(#[0-9a-f]+)"\\)`, "i"));
+      expect([row?.[1], row?.[2]], cssId).toEqual([on, off]);
+    });
+  }
+});

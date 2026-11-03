@@ -15,6 +15,8 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
     /// SECTIONS): Providers (every account, key and server), Voice, this
     /// app's Updates and About.
     case providers, voice, updates, about
+    /// Security, Vault (`credentials`), Notifications and Import (lot 2b).
+    case security, vault = "credentials", notifications, importBot = "import"
 
     /// Search words beside the label (the desktop's `keywords`).
     public var keywords: [String] {
@@ -58,6 +60,10 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
         case .voice: ["voice", "voix", "tts", "speech", "parole", "speed", "language", "microphone", "micro", "audio"]
         case .updates: ["updates", "update", "version", "mise à jour", "testflight", "app store"]
         case .about: ["about", "à propos", "version", "license", "licence", "github", "documentation", "release notes"]
+        case .security: ["security", "sécurité", "security key", "passkey", "approval rules", "règles d'approbation", "tool access", "always allow", "always deny"]
+        case .vault: ["vault", "coffre", "password", "mot de passe", "credentials", "identifiants", "login", "card", "carte"]
+        case .notifications: ["notifications", "sound", "son", "badge", "chime", "nudge", "blocked", "bloqué"]
+        case .importBot: ["import", "importer", "grok", "grok bot", "share link", "preferences", "préférences"]
         }
     }
 
@@ -93,10 +99,10 @@ public enum DesktopSettingsSection: String, CaseIterable, Hashable, Sendable {
         // Updates, About).
         switch gate.scope {
         case .sidecar, .serverClient:
-            return [.appearance] + engines + mine + [.organization, .updates, .about]
+            return [.appearance, .notifications] + engines + mine + [.organization, .updates, .about]
         case .serverAdmin:
-            return [.general, .appearance, .providers, .engines] + engines + mine
-                + [.voice, .organization, .computer, .usage, .backups, .experimental, .updates, .about]
+            return [.general, .security, .vault, .appearance, .notifications, .providers, .engines] + engines + mine
+                + [.voice, .organization, .computer, .usage, .backups, .importBot, .experimental, .updates, .about]
         }
     }
 
@@ -130,9 +136,9 @@ public enum DesktopSettingsNavGroup: String, CaseIterable, Hashable, Sendable {
     /// The group a section sits in.
     public static func of(_ section: DesktopSettingsSection) -> DesktopSettingsNavGroup {
         switch section {
-        case .general, .appearance: .personal
+        case .general, .security, .vault, .appearance, .notifications: .personal
         case .providers, .engines, .myEngines, .myConnections, .voice, .connections, .decisionModel: .ai
-        case .organization, .computer, .usage, .backups, .companion, .people, .mail, .activity: .installation
+        case .organization, .computer, .usage, .backups, .importBot, .companion, .people, .mail, .activity: .installation
         case .experimental, .updates, .about: .app
         }
     }
@@ -141,8 +147,8 @@ public enum DesktopSettingsNavGroup: String, CaseIterable, Hashable, Sendable {
     /// empty groups are left out.
     public static func grouped(_ sections: [DesktopSettingsSection]) -> [(group: DesktopSettingsNavGroup, sections: [DesktopSettingsSection])] {
         let order: [DesktopSettingsSection] = [
-            .general, .appearance, .providers, .engines, .myEngines, .myConnections, .voice,
-            .organization, .computer, .usage, .backups, .experimental, .updates, .about,
+            .general, .security, .vault, .appearance, .notifications, .providers, .engines, .myEngines, .myConnections, .voice,
+            .organization, .computer, .usage, .backups, .importBot, .experimental, .updates, .about,
         ]
         let ranked = sections.sorted { (order.firstIndex(of: $0) ?? 99) < (order.firstIndex(of: $1) ?? 99) }
         return allCases.compactMap { group in
@@ -209,6 +215,12 @@ public struct DesktopSettingsConfig: Decodable, Equatable, Sendable {
         public var installable: Bool?
     }
     public struct LocalVm: Decodable, Equatable, Sendable { public var mode: String? }
+    /// Settings > Voice > Advanced: the Chatterbox server and the Fish Audio model.
+    public struct Tts: Decodable, Equatable, Sendable {
+        public var baseUrl: String?
+        public var model: String?
+        public var fishModel: String?
+    }
 
     public var profile: Profile?
     public var language: String?
@@ -221,6 +233,7 @@ public struct DesktopSettingsConfig: Decodable, Equatable, Sendable {
     public var decider: Decider?
     public var browserEngine: BrowserEngine?
     public var localVm: LocalVm?
+    public var tts: Tts?
     public var openai, anthropic, xai, openrouter, mistral, openaiCompat, vps: Flag?
 
     public init() {}
@@ -280,6 +293,10 @@ public enum DesktopConfigChange: Equatable, Sendable {
     case deciderRoomRouting(Bool)
     /// A write-only key; an empty string clears it.
     case apiKey(DesktopAPIKeyProvider, String)
+    /// Settings > Voice > Advanced: the Chatterbox server (`tts.baseUrl`, `tts.model`).
+    case ttsServer(baseUrl: String, model: String)
+    /// Settings > Voice > Advanced: the Fish Audio model.
+    case fishModel(String)
 
     /// The features the Experimental and General switches may set.
     public static let switchableFeatures: Set<String> = [
@@ -323,6 +340,13 @@ public enum DesktopConfigChange: Equatable, Sendable {
             let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
             guard trimmed.count <= 4_096 else { return nil }
             return [provider.rawValue: ["key": trimmed]]
+        case let .ttsServer(baseUrl, model):
+            let url = baseUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard url.lowercased().hasPrefix("http://") || url.lowercased().hasPrefix("https://") else { return nil }
+            return ["tts": ["baseUrl": url, "model": model.trimmingCharacters(in: .whitespacesAndNewlines)]]
+        case let .fishModel(model):
+            guard ["s2.1-pro", "s2.1-pro-free"].contains(model) else { return nil }
+            return ["tts": ["fishModel": model]]
         }
     }
 }

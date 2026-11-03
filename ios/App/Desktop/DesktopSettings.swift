@@ -168,6 +168,10 @@ extension DesktopSettingsSection {
         case .voice: "Voice"
         case .updates: "Updates"
         case .about: "About"
+        case .security: "Security"
+        case .vault: "Vault"
+        case .notifications: "Notifications"
+        case .importBot: "Import"
         }
     }
 
@@ -194,6 +198,10 @@ extension DesktopSettingsSection {
         case .voice: AppStrings.localized("Voice")
         case .updates: AppStrings.localized("Updates")
         case .about: AppStrings.localized("About")
+        case .security: AppStrings.localized("Security")
+        case .vault: AppStrings.localized("Vault")
+        case .notifications: AppStrings.localized("Notifications")
+        case .importBot: AppStrings.localized("Import")
         }
     }
 
@@ -219,6 +227,10 @@ extension DesktopSettingsSection {
         case .voice: .audioLines
         case .updates: .download
         case .about: .info
+        case .security: .shield
+        case .vault: .keyRound
+        case .notifications: .bell
+        case .importBot: .download
         }
     }
 }
@@ -373,6 +385,10 @@ struct DesktopSettingsPage: View {
         case .voice: AnyView(DesktopVoiceSettings())
         case .updates: AnyView(DesktopUpdatesSettings())
         case .about: AnyView(EmptyView())
+        case .security: AnyView(DesktopSecuritySettings())
+        case .vault: AnyView(DesktopVaultSettings())
+        case .notifications: AnyView(DesktopNotificationsSettings())
+        case .importBot: AnyView(DesktopImportSettings())
         // #1098: the person's own subscription sign-in on each engine
         case .myEngines: AnyView(MyEnginesSection(style: .desktop))
         case .companion: AnyView(DesktopPairDevicesSettings())
@@ -447,6 +463,10 @@ extension IPadParityScreen {
         case .settingsVoice: (.settings, .voice, nil)
         case .settingsUpdates: (.settings, .updates, nil)
         case .settingsAbout: (.about, nil, nil)
+        case .settingsSecurity: (.settings, .security, nil)
+        case .settingsCredentials: (.settings, .vault, nil)
+        case .settingsNotifications: (.settings, .notifications, nil)
+        case .settingsImport: (.settings, .importBot, nil)
         default: nil
         }
     }

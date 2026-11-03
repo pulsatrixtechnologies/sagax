@@ -1221,7 +1221,7 @@ import {
   savedStepsEnabled
 } from "./saved-steps/saved-steps.ts";
 import { redactSecretsInText } from "./redact.ts";
-import { routineRunCard } from "./routines/routine-run-card.ts";
+import { routineRunCard, routineRunFallbackText } from "./routines/routine-run-card.ts";
 
 import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
 import type { HeadlessBot } from "./cli/headless-cli.ts";
@@ -23781,48 +23781,6 @@ function markRoutineResultsThreads(): void {
 
 function routineSourceThread(run: RoutineRun): string | null {
   return routineSourceOwner(run)?.threadId ?? null;
-}
-
-function routineRunFallbackText(card: NonNullable<Message["routineRun"]>): string {
-  const goalState = card.goalStatus === "needs-input"
-    ? "needs your input"
-    : card.goalStatus === "blocked"
-      ? "was blocked"
-      : card.goalStatus === "limit-reached"
-        ? "reached its limit"
-        : card.goalStatus === "stopped"
-          ? "was stopped"
-          : card.goalStatus === "failed"
-            ? "failed"
-            : undefined;
-  const state = goalState ?? (
-    card.status === "waiting"
-      ? "needs your attention"
-      : card.status === "completed"
-        ? "completed"
-        : card.status === "failed"
-          ? "failed"
-          : card.status === "cancelled"
-            ? "was cancelled"
-            : card.status === "missed"
-              ? "was missed"
-              : card.status === "nothing_to_report"
-                ? "had nothing to report"
-              : card.status === "queued" && card.deferredAt != null
-                ? "deferred: target busy"
-              : card.status
-  );
-  // Clients without the card (older phones) draw only this line, so it
-  // carries what the run said, not just that it finished.
-  const detail = card.summary ?? card.error;
-  // A report reads as the bot's own message, the routine named under it.
-  // 2026-11-01: a run that completed with problems says them, under its report.
-  const problems = card.status === "completed" && card.problems ? `\n\nCompleted with problems: ${card.problems}` : "";
-  if (card.status === "completed" && (!card.goalStatus || card.goalStatus === "completed") && card.summary) return `${card.summary}${problems}\n\nRoutine “${card.routineName}”`;
-  if (problems) return `Routine “${card.routineName}” completed with problems\n\n${card.problems}`;
-  // 2026-10-26: older clients without the notice still read the pause.
-  const paused = card.autoPausedAfter ? ` and was paused after ${card.autoPausedAfter} failures in a row` : "";
-  return `Routine “${card.routineName}” ${state}${paused}${detail ? `\n\n${detail}` : ""}`;
 }
 
 /** The bot's whole report for a completed run (2026-10-29): its final

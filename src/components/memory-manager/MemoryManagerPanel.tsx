@@ -1312,7 +1312,7 @@ export function MemoryManagerPanel() {
           <section className="flex min-h-0 min-w-0 flex-1 flex-col" data-memory-content="">
             {view === "map" && (
               <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", preview && "hidden")} data-memory-map-view="">
-                <MemoryMapView rows={scopeRows} tiers={scopeTiers} bodies={bodies} review={scopeReview} focusKey={mapFocus} onOpen={previewKey} onNew={targets.length ? () => startCreate() : undefined} />
+                <MemoryMapView rows={scopeRows} tiers={scopeTiers} bodies={bodies} review={scopeReview} focusKey={mapFocus} onOpen={previewKey} onOpenNote={(key) => openKey(key)} onNew={targets.length ? () => startCreate() : undefined} />
               </div>
             )}
             {view === "tags" && (

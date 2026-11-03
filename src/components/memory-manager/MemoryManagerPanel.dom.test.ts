@@ -161,6 +161,11 @@ describe("MemoryManagerPanel page", () => {
     await settle();
   };
   const segment = (label: string) => Array.from(host.querySelectorAll<HTMLButtonElement>("[data-memory-views] button")).find((button) => button.textContent?.includes(label))!;
+  // The map opens on Graph since the Obsidian-like view; the scope tests read the radial brain's node count.
+  const radial = async () => {
+    const button = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-memory-map-layout-switch] button")).find((b) => b.textContent === "Radial");
+    if (button) await act(async () => { button.click(); });
+  };
 
   it("is a full page with the console's views under the title and the explorer as the RIGHT rail", async () => {
     await render();
@@ -310,11 +315,14 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector("[data-memory-note-backlinks]")?.textContent).toContain("Travel");
   });
 
-  it("Map: the console's radial brain by default, the column map one press away, a note previews from it", async () => {
+  it("Map: the Obsidian-like graph by default, the radial brain and the column map one press away, a note previews from it", async () => {
     await render();
     await act(async () => { segment("Map").click(); });
     await settle();
     expect(host.querySelector("[data-memory-sources]")).not.toBeNull();
+    expect(host.querySelector('[data-memory-map-layout="graph"] [data-testid="memory-graph"] canvas')).not.toBeNull();
+    const radial = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-memory-map-layout-switch] button")).find((button) => button.textContent === "Radial")!;
+    await act(async () => { radial.click(); });
     expect(host.querySelector('[data-memory-map-layout="brain"] [data-testid="memory-brain"] canvas')).not.toBeNull();
     expect(host.querySelector('[data-testid="memory-brain"]')?.getAttribute("data-nodes")).toBe("5");
     expect(host.querySelector("[data-memory-map-search]")?.getAttribute("placeholder")).toBe("Find on the map");
@@ -538,6 +546,7 @@ describe("MemoryManagerPanel page", () => {
     await render();
     await act(async () => { segment("Map").click(); });
     await settle();
+    await radial();
     expect(host.querySelector('[data-testid="memory-brain"]')?.getAttribute("data-nodes")).toBe("5");
     expect(host.querySelector("[data-memory-scope-chip]")).toBeNull();
     // Atlas (a bot folder of My memory), picked on the Map tab: the tab stays.
@@ -580,6 +589,7 @@ describe("MemoryManagerPanel page", () => {
     await render();
     await act(async () => { segment("Map").click(); });
     await settle();
+    await radial();
     await act(async () => { (host.querySelector('[data-memory-nav="collections"]') as HTMLButtonElement).click(); });
     await wait();
     await settle();
@@ -604,6 +614,7 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector("[data-memory-scope-chip]")?.textContent).toBe("Scope: Collections / Onboarding book");
     await act(async () => { segment("Map").click(); });
     await settle();
+    await radial();
     expect(host.querySelector('[data-testid="memory-brain"]')?.getAttribute("data-nodes")).toBe("1");
     expect(host.querySelector("[data-memory-scope-chip]")?.textContent).toBe("Scope: Collections / Onboarding book");
     // Back on Notes, the collection is open again.

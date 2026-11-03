@@ -3,10 +3,10 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { DATA_DIR } from "./config.ts";
-import type { RoutineRunOn } from "./routines/routines.ts";
-import { parseJson, schemaIssue, type JsonValue } from "./schema.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { DATA_DIR } from "../config.ts";
+import type { RoutineRunOn } from "../routines/routines.ts";
+import { parseJson, schemaIssue, type JsonValue } from "../schema.ts";
 import {
   POLLER_INTERVAL_MAX,
   POLLER_KINDS_FOR,
@@ -23,7 +23,7 @@ import {
   type TriggerAutomationStatus,
   type TriggerFilterKey,
   type TriggerSourceConfig,
-} from "../shared/trigger-sources.ts";
+} from "../../shared/trigger-sources.ts";
 import {
   handshakeAfterAuth,
   matchSourceFilters,
@@ -33,7 +33,7 @@ import {
   type SourceHandshake,
   type SourceRequest,
 } from "./trigger-sources.ts";
-import { eventPayloadMaxChars, eventRawExcerptMaxChars } from "./cold-prompt-budget.ts";
+import { eventPayloadMaxChars, eventRawExcerptMaxChars } from "../cold-prompt-budget.ts";
 
 export type WebhookTriggerInput = z.input<typeof triggerInputSchema>;
 export type WebhookVerificationSample = z.output<typeof verificationSampleSchema>;
@@ -147,7 +147,7 @@ export interface WebhookManagerOptions {
    *  upstream issue #2071. */
   resolvePostThread?: (trigger: WebhookTrigger, forceNew: boolean) => string | undefined;
   /** Typed trigger with a poller: whether its credential is stored
-   *  (server/trigger-poller-credentials.ts). Only the boolean is shown. */
+   *  (server/triggers/trigger-poller-credentials.ts). Only the boolean is shown. */
   pollerCredentialsSet?: (webhookId: string) => boolean;
   /** Called after a trigger is deleted, with what it was: the Graph
    *  subscription it held is deleted at Microsoft, its poller credential

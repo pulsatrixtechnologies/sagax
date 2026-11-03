@@ -1,8 +1,8 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { z } from "zod";
 
-import { parseJson, type JsonValue } from "./schema.ts";
-import type { TriggerSourceSetup } from "../shared/trigger-sources.ts";
+import { parseJson, type JsonValue } from "../schema.ts";
+import type { TriggerSourceSetup } from "../../shared/trigger-sources.ts";
 import { handshakeBeforeAuth } from "./trigger-sources.ts";
 import type { WebhookManager } from "./webhooks.ts";
 

@@ -1,4 +1,4 @@
-// Credentials of typed-trigger pollers (server/trigger-pollers.ts): the IMAP
+// Credentials of typed-trigger pollers (server/triggers/trigger-pollers.ts): the IMAP
 // or CalDAV password, or the private ICS link (the link alone opens the
 // calendar, so it is a password too). Sealed like the other local secrets
 // with the mcp-oauth vault key (AES-256-GCM, AAD `sagax trigger-poller-
@@ -10,8 +10,8 @@ import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 
-import { writeFileAtomic } from "./atomic.ts";
-import type { VaultKeySource } from "./mcp/mcp-oauth.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
 
 export const TRIGGER_POLLER_CREDENTIALS_FILE = "trigger-poller-credentials.enc";
 const AAD = Buffer.from("sagax trigger-poller-credentials v1");

@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { AuthFailureLimiter, listenWebhookIngress, triggerSourceSetup, type WebhookIngress } from "./webhook-ingress.ts";
-import { TRIGGER_CATALOG_VERSION } from "../shared/trigger-sources.ts";
+import { TRIGGER_CATALOG_VERSION } from "../../shared/trigger-sources.ts";
 import { WebhookManager } from "./webhooks.ts";
 
 const dirs: string[] = [];

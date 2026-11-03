@@ -18,7 +18,7 @@ import { readAttachment, saveImage } from "./attachments.ts";
 import { botAvatarUrlFromStoredPath } from "../shared/bot-avatar.ts";
 import { botFolder } from "./bot-folder.ts";
 import { ZipWriter } from "./zip.ts";
-import type { WebhookTrigger } from "./webhooks.ts";
+import type { WebhookTrigger } from "./triggers/webhooks.ts";
 
 const PNG = Buffer.from("89504e470d0a1a0a0000000d4948445200000001000000010806000000", "hex");
 const selection = () => ({ instanceId: "fixture", model: "fixture-model" });

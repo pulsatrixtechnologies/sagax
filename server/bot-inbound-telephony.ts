@@ -69,7 +69,7 @@ import type { ConsoleAssertion, ConsoleAssertionActor } from "./auth/oidc-rp.ts"
 import { AssertionReplayCache } from "./org/org-admin-routes.ts";
 import { reachMeSmsReply } from "./reach-me/inbound.ts";
 import { isOwnText } from "./sms-conversation.ts";
-import { maskedCaller, type WebhookReceiveResult } from "./webhooks.ts";
+import { maskedCaller, type WebhookReceiveResult } from "./triggers/webhooks.ts";
 
 export const TELEPHONY_PATH = "/api/org/telephony/inbound";
 export const TELEPHONY_CONTRACT = "perspicax-voice/1";

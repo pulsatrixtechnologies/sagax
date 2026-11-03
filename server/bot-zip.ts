@@ -73,7 +73,7 @@ import { memberImportReset } from "./routes/bot-catalog.ts";
 import type { Routine, RoutineManager } from "./routines/routines.ts";
 import { restoreSkillManifest, setSkillEnabled, skillManifestForExport } from "./skills/skills.ts";
 import { cleanBotGrants, cleanBotPerspicax, type BotRecord, type Message, type Store, type TaskRecord } from "./store.ts";
-import type { WebhookTrigger } from "./webhooks.ts";
+import type { WebhookTrigger } from "./triggers/webhooks.ts";
 import { TRIGGER_SOURCES, type TriggerSourceConfig } from "../shared/trigger-sources.ts";
 import { storedTeamMemorySharing } from "../shared/team-memory-sharing.ts";
 import { syncMemoryIndex, workspaceDir } from "./workspace/workspace.ts";

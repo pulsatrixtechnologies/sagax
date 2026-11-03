@@ -263,7 +263,7 @@
   "server/threads/thread-title-regenerate.e2e.test.ts": 10,
   "server/tool-results.e2e.test.ts": 30,
   "server/tool-scope.e2e.test.ts": 51,
-  "server/trigger-pollers.e2e.test.ts": 6,
+  "server/triggers/trigger-pollers.e2e.test.ts": 6,
   "server/auth/trust-controls.e2e.test.ts": 19,
   "server/turns/turn-clock.e2e.test.ts": 1,
   "server/turns/turn-run.e2e.test.ts": 9,

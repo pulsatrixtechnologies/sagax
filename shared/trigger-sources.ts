@@ -4,7 +4,7 @@
  * is authenticated by that provider's own signature scheme on its own path
  * (`/sources/<endpointId>`), its events are normalized to one shape, filtered
  * and deduplicated before a run is queued, and the event reaches the routine
- * as fenced, untrusted data. See server/trigger-sources.ts. */
+ * as fenced, untrusted data. See server/triggers/trigger-sources.ts. */
 
 export const TRIGGER_SOURCE_TYPES = [
   "github",

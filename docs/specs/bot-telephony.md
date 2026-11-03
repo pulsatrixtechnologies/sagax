@@ -165,7 +165,7 @@ Speech-to-Speech (rejeté : il remplacerait le cerveau).
   vous, bot terminé) ; la livraison est un cadre écouté par le bureau, le
   téléphone appairé et APNs. Le SMS et l'appel deviennent deux canaux de
   livraison de plus, derrière les mêmes règles.
-- Webhooks entrants : `server/webhooks.ts` et `webhook-ingress.ts` écoutent
+- Webhooks entrants : `server/triggers/webhooks.ts` et `webhook-ingress.ts` écoutent
   sur un port à part (`SAGAX_WEBHOOK_PORT`, défaut PORT+1) avec
   `SAGAX_WEBHOOK_PUBLIC_URL`, authentifiés par jeton porteur. Twilio
   n'envoie pas de jeton porteur : il signe (`X-Twilio-Signature`). Il faut

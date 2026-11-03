@@ -1332,9 +1332,9 @@ import { DEFAULT_OUTBOUND_POLICY, isOutboundTool, normalizeOutboundPolicy } from
 import { normalizeAllowedRecipients, sendRecipientsAllowed } from "../shared/allowed-recipients.ts";
 import { standingGrantsAllowed } from "./custom-rules-org.ts";
 import { bindThreadLogCapProvider } from "./threads/thread-log-rotation.ts";
-import { listenWebhookIngress, resolveWebhookPublicUrl, type WebhookIngress } from "./webhook-ingress.ts";
+import { listenWebhookIngress, resolveWebhookPublicUrl, type WebhookIngress } from "./triggers/webhook-ingress.ts";
 import { assertModelVariantSupported, memberTurnSelection } from "./turns/member-turn.ts";
-import { WebhookManager } from "./webhooks.ts";
+import { WebhookManager } from "./triggers/webhooks.ts";
 import {
   cardStandingGrants,
   orgServerExecRouting,
@@ -1342,9 +1342,9 @@ import {
   workplaceIsBotComputer
 } from "./exec-target.ts";
 import { GraphSubscriptions, graphConnectorOptions, type GraphTokenSource } from "./graph-subscriptions.ts";
-import { TriggerPollers } from "./trigger-pollers.ts";
-import { TriggerPollerCredentials } from "./trigger-poller-credentials.ts";
-import { openTriggerSeenStore } from "./trigger-seen-store.ts";
+import { TriggerPollers } from "./triggers/trigger-pollers.ts";
+import { TriggerPollerCredentials } from "./triggers/trigger-poller-credentials.ts";
+import { openTriggerSeenStore } from "./triggers/trigger-seen-store.ts";
 import type { WebhookTrigger } from "../shared/webhooks.ts";
 import { SPAWNED_PROXIES } from "./proxy-paths.ts";
 import {

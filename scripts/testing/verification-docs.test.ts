@@ -43,7 +43,7 @@ const featureRouteModules = featureRouteDirs
   .sort();
 const serverSource = [join(ROOT, "server", "index.ts"), ...routeModules.map((name) => join(ROUTES_DIR, name)), ...featureRouteModules]
   .map((file) => readFileSync(file, "utf8")).join("\n");
-const hooksSource = readFileSync(join(ROOT, "server", "webhook-ingress.ts"), "utf8");
+const hooksSource = readFileSync(join(ROOT, "server", "triggers", "webhook-ingress.ts"), "utf8");
 // The hosted workspace adapter lives in the private enterprise layer, which
 // this tree stopped shipping with the Sagax 0.1.0 line (8a563e929). When it is
 // absent, the server's delegation prefix is what a doc may cite.

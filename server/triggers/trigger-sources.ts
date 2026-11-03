@@ -19,8 +19,8 @@ import {
   type TriggerFilterKey,
   type TriggerSourceConfig,
   type TriggerSourceType,
-} from "../shared/trigger-sources.ts";
-import type { JsonValue } from "./schema.ts";
+} from "../../shared/trigger-sources.ts";
+import type { JsonValue } from "../schema.ts";
 
 export interface SourceRequest {
   /** Lower-case header names. */

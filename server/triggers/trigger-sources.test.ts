@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import { TRIGGER_CATALOG_VERSION, type TriggerSourceConfig, type TriggerSourceType } from "../shared/trigger-sources.ts";
+import { TRIGGER_CATALOG_VERSION, type TriggerSourceConfig, type TriggerSourceType } from "../../shared/trigger-sources.ts";
 import {
   handshakeAfterAuth,
   handshakeBeforeAuth,

@@ -207,7 +207,7 @@ export const GUIDES: Guide[] = [
     access: "organization: server.settings (admin)",
     keywords: "webhook declencheur trigger github gitlab ticket issue evenement event slack sentry pagerduty linear demarrer start",
     text: "A webhook starts a task from outside: Automations (account menu) > Webhooks creates one with a bearer token shown once. Each webhook runs its task on the bot's own computer (This computer or its cloud computer), not on the organization's server. Typed triggers verified by the provider's own signature (GitHub, GitLab, Slack, Microsoft Teams, Outlook, Sentry, PagerDuty, Linear) exist on the server, but the app has no button to open their panel yet: say so rather than promising it. A bot cannot create either without the person's Allow (act on POST /api/webhooks). On an organization server a person creates and manages a webhook on the bot's own computer themselves, no admin and no server.settings needed; only a Microsoft trigger (it names a mailbox sign-in) or a webhook that would run on the organization's server is an admin's.",
-    refs: ["menu:sidebar.nav.automations", "tool:act", "file:shared/trigger-sources.ts", "file:server/webhooks.ts"],
+    refs: ["menu:sidebar.nav.automations", "tool:act", "file:shared/trigger-sources.ts", "file:server/triggers/webhooks.ts"],
   },
   {
     id: "pages",

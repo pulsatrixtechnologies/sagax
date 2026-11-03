@@ -62,7 +62,7 @@ drift as `server/index.ts` grows; the symbol names are the stable reference.
 
 - Zero occurrences of retry in `server/drivers/claude.ts`, `codex.ts`, `grok.ts`.
 - Retry exists in `server/computer/boat.ts`, `server/computer-proxy.ts`,
-  `server/drivers/acp/core.ts`, `server/webhooks.ts`, `server/drivers/antigravity.ts`.
+  `server/drivers/acp/core.ts`, `server/triggers/webhooks.ts`, `server/drivers/antigravity.ts`.
 - The peripheral systems are resilient; the conversation path is not.
 
 **No liveness, and one coarse state.**

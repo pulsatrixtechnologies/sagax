@@ -24,8 +24,8 @@ import {
 } from "./bot-inbound-telephony.ts";
 import type { ConsoleAssertion } from "./auth/oidc-rp.ts";
 import { ORG_MEMBER_ASSERTION_ACTORS } from "./org/org-member-routes.ts";
-import { matchSourceFilters, verifySource } from "./trigger-sources.ts";
-import { WebhookManager, maskedCaller } from "./webhooks.ts";
+import { matchSourceFilters, verifySource } from "./triggers/trigger-sources.ts";
+import { WebhookManager, maskedCaller } from "./triggers/webhooks.ts";
 
 const ORIGIN = "https://sagax.example";
 const ISS = "https://perspicax.example";

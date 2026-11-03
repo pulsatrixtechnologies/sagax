@@ -23,7 +23,7 @@ const LABEL = "w-24 shrink-0 text-[11.5px] font-medium text-ink-secondary";
 const VALUE = "min-w-0 flex-1 truncate font-mono text-[12px] text-ink";
 const ICON = "flex size-7 shrink-0 items-center justify-center rounded-md text-ink-secondary hover:bg-raised hover:text-ink disabled:opacity-40";
 
-/** The address a delivery posts to (server/webhook-ingress.ts). */
+/** The address a delivery posts to (server/triggers/webhook-ingress.ts). */
 export function routineWebhookUrl(baseUrl: string | undefined, webhook: Pick<WebhookTrigger, "endpointId">): string {
   return `${(baseUrl ?? "").replace(/\/$/, "")}/hooks/${webhook.endpointId}`;
 }

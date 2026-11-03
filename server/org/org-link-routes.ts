@@ -29,7 +29,7 @@
 //     404 `{error: "not_found"}`.
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { AuthFailureLimiter } from "../webhook-ingress.ts";
+import { AuthFailureLimiter } from "../triggers/webhook-ingress.ts";
 
 export const ORG_LINK_PREFIX = "/api/org/link/";
 export const DIRECTORY_REFRESH_PATH = "/api/org/link/directory-refresh";

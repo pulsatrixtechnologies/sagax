@@ -210,7 +210,7 @@ unfinished work remains deduplicated beyond that window. A full retry ledger
 rejects new work rather than discarding identities that senders may still retry.
 
 ```sh
-pnpm exec vitest run server/webhook-idempotency.test.ts server/webhook-restart.e2e.test.ts
+pnpm exec vitest run server/triggers/webhook-idempotency.test.ts server/webhook-restart.e2e.test.ts
 ```
 
 The restart test launches a disposable fake-engine server, creates a webhook,

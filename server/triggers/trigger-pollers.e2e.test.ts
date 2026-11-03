@@ -4,7 +4,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { launchVerificationServer } from "../scripts/control-omb.ts";
+import { launchVerificationServer } from "../../scripts/control-omb.ts";
 
 const PASSWORD = "e2e-Poller-SECRET-pass-91f";
 

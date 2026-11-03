@@ -1,5 +1,5 @@
 // A small iCalendar (RFC 5545) reader for the calendar poller
-// (server/trigger-pollers.ts): the VEVENTs of a feed, and the start times
+// (server/triggers/trigger-pollers.ts): the VEVENTs of a feed, and the start times
 // of each one inside a window. Recurrence: DAILY, WEEKLY (BYDAY), MONTHLY
 // (by month day) and YEARLY with INTERVAL, COUNT, UNTIL and EXDATE, plus
 // overridden instances (RECURRENCE-ID). Time zones by IANA TZID, a few

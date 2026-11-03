@@ -5,7 +5,7 @@
 // `WebhookManager.ingest()`: the trigger's events, filters, deduplication,
 // rate limit and untrusted-data fence, like a signed delivery.
 //
-// Rules, covered by server/trigger-pollers.test.ts:
+// Rules, covered by server/triggers/trigger-pollers.test.ts:
 // - The password or ICS link comes from TriggerPollerCredentials (sealed,
 //   write only). It is sent to the mail or calendar server only, over TLS,
 //   and never reaches a status, a log, an event, a prompt or an export: a
@@ -33,9 +33,9 @@ import {
   POLLER_LEAD_DEFAULT,
   type NormalizedTriggerEvent,
   type TriggerAutomationStatus,
-} from "../shared/trigger-sources.ts";
-import { instancesBetween, parseIcs } from "./ics.ts";
-import { blockedAddressReason } from "./media-proxy-guard.ts";
+} from "../../shared/trigger-sources.ts";
+import { instancesBetween, parseIcs } from "../ics.ts";
+import { blockedAddressReason } from "../media-proxy-guard.ts";
 import type { PollerCredential } from "./trigger-poller-credentials.ts";
 import { openTriggerSeenStore, type TriggerSeenStore } from "./trigger-seen-store.ts";
 import type { AutomationPatch, AutomationTarget, WebhookReceiveResult } from "./webhooks.ts";

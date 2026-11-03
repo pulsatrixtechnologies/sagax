@@ -49,7 +49,7 @@ pnpm exec vitest run server/workspace-backup-worker.test.ts \
   server/workspace-backup.test.ts server/backup/workspace-backup-policy.test.ts \
   server/backup/workspace-backup-http.test.ts server/backup/workspace-backup-maintenance.test.ts \
   server/workspace-backup-workflow.e2e.test.ts \
-  server/webhook-ingress.test.ts server/auth/request-auth.test.ts
+  server/triggers/webhook-ingress.test.ts server/auth/request-auth.test.ts
 pnpm lint
 pnpm typecheck
 pnpm test:packaged-server

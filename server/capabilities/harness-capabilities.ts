@@ -7,9 +7,9 @@
 // uses one envelope profile and lets the per-driver capability decide the
 // delta; the tool names themselves come from the real catalog, so this
 // never drifts from what a turn is actually shown.
-import { APPROVAL_MODES, type ApprovalMode, supportsApprovalMode as driverKindSupportsApprovalMode } from "../shared/approval-mode.ts";
-import { availableTools, type CatalogProfile } from "./drivers/agents-catalog.ts";
-import type { ModelSelection } from "./contracts.ts";
+import { APPROVAL_MODES, type ApprovalMode, supportsApprovalMode as driverKindSupportsApprovalMode } from "../../shared/approval-mode.ts";
+import { availableTools, type CatalogProfile } from "../drivers/agents-catalog.ts";
+import type { ModelSelection } from "../contracts.ts";
 
 export interface DriverCapabilities {
   driverKind: string | undefined;

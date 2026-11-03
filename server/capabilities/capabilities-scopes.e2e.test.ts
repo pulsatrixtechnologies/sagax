@@ -3,8 +3,8 @@
 import { expect, it } from "vitest";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { launchVerificationServer } from "../scripts/control-omb.ts";
-import { seedMarketplaceBeforeBoot } from "./testing/seed-marketplace.ts";
+import { launchVerificationServer } from "../../scripts/control-omb.ts";
+import { seedMarketplaceBeforeBoot } from "../testing/seed-marketplace.ts";
 it("serves the three scopes through the real routes and keeps personal references shared", async () => {
   const fixture = await launchVerificationServer(process.env, undefined, undefined, undefined, undefined, undefined, [], undefined, undefined, {
     prepareDataDir(dataDir) {

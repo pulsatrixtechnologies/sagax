@@ -95,7 +95,7 @@ physical limits: `docs/plans/grok-convergence-media-evidence.md` (iOS section).
 
 The turn, preview, Capabilities `promptIndex` and `skills_list` share
 `scopedSkillInventory` and `server/skills/skill-discovery.ts`. The prompt renders
-it per capability (`server/capability-prompt.ts`, lot 3: 4,000 bytes and 30
+it per capability (`server/capabilities/capability-prompt.ts`, lot 3: 4,000 bytes and 30
 files each, whole-file omission); native Claude plugins stay native.
 `skills_list` reads independently of skill authoring and pages by stable
 scoped identity. Never restore the plugin scanner's silent 40-file cutoff.
@@ -578,7 +578,7 @@ old connections. Keep the existing file/AAD compatibility tests.
 One server function says, for ONE bot and ITS engine, everything the bot
 receives on top of its engine, read from today's stores with nothing
 migrated and nothing a turn mounts changed: `resolveBotCapabilities`
-(`server/capabilities.ts`), served by `GET /api/bots/:id/capabilities`
+(`server/capabilities/capabilities.ts`), served by `GET /api/bots/:id/capabilities`
 (`server/routes/bot-capabilities.ts`, member scope `orgDirectory`, the
 handler checks `viewerBotLevel`; `?engine=<instanceId>` previews another
 engine), by the console admin API's `GET bots/{id}/capabilities`
@@ -587,7 +587,7 @@ manager in reach or the owner by `own-bot`, `docs/org-admin-api.md`) and by
 the main bot's `sagax_settings` get `bot.capabilities` (read only).
 Every screen reads this list (Capabilities > Installed in the
 bot's scope, Bot > Capabilities, the iPhone, the Perspicax console's bot
-sheet). Keep these rules, covered by `server/capabilities.test.ts`,
+sheet). Keep these rules, covered by `server/capabilities/capabilities.test.ts`,
 `shared/capabilities.test.ts` and `server/routes/bot-capabilities.test.ts`:
 
 - The contract is `shared/capabilities.ts` (`Capability`, `BotCapabilities`):
@@ -605,7 +605,7 @@ sheet). Keep these rules, covered by `server/capabilities.test.ts`,
   agents through the turn's per-capability file index; engines without
   files (`ENGINES_WITHOUT_FILES`, which `supportsWorkspaceFiles` reads)
   always receive whole instruction files from the same selected scopes
-  (`server/capability-prompt.ts`, Q8 C): named by alias with those tools
+  (`server/capabilities/capability-prompt.ts`, Q8 C): named by alias with those tools
   for the rest when `skills_list` and `workspace_read` are allowed
   (`skillDiscovery`), by file name when the tools are off. The organization's Flow reaches every
   engine through this contract (lot 3). MCP is `mounted` by an
@@ -664,7 +664,7 @@ An existing new file always wins, including an empty document; a corrupt
 new file is never replaced from the legacy copy. A store that cannot be
 decrypted is never overwritten.
 
-Plugin records share `server/capability-plugin-state.ts`. `BotPlugins` takes
+Plugin records share `server/capabilities/capability-plugin-state.ts`. `BotPlugins` takes
 an optional scoped storage adapter; `personalPluginStorage`
 (`server/plugins/person-plugins.ts`) keeps its state and values encrypted and its
 source files under that person's `capability-plugins/`. It writes no
@@ -687,7 +687,7 @@ deprecation window: `shared/capability-stores.ts`
 - Person: `principals/<pid>/capabilities.enc` (lot 2). Legacy
   `connections.enc` is backed up and retired after verify.
 - Installation: `installation-capabilities.enc`
-  (`server/installation-capability-store.ts`, vault key, AAD
+  (`server/capabilities/installation-capability-store.ts`, vault key, AAD
   `sagax installation-capabilities v1`). Absorbs marketplaces state,
   skills-library index, org-flow and org-capabilities state, and
   `config.json` mcpServers. Org and marketplace GitHub tokens stay in
@@ -695,11 +695,11 @@ deprecation window: `shared/capability-stores.ts`
   those sources migrated.
 
 Migration at boot: `migrateCapabilitiesStores`
-(`server/capabilities-store-migration.ts`), same shape as
+(`server/capabilities/capabilities-store-migration.ts`), same shape as
 `migrateGithubCredentials` (backup `.capabilities-l5.bak`, write new,
 verify, retire to `.migrated`). Idempotent; crash-safe; sealing and person
 isolation preserved. Bridge:
-`server/installation-capability-bridge.ts`. Optional `capabilityStore` on
+`server/capabilities/installation-capability-bridge.ts`. Optional `capabilityStore` on
 `BotPlugins` and `installationStore` on `PluginMarketplaces`.
 The installation store holds the ORGANIZATION's library index only
 (`skills-library/`): `server/skills/skill-library.ts` consults the bridge for
@@ -718,9 +718,9 @@ Canonical routes: `GET /api/me/capabilities`,
 `GET /api/bots/:id/capabilities`). Legacy `/api/me/connections`,
 `/api/marketplaces`, `/api/skills-library` and related fragments stay as
 aliases with `Deprecation` / `Link` / `Warning` headers
-(`server/capability-route-deprecation.ts`). Tests:
-`server/capabilities-store-migration.test.ts`,
-`server/capability-route-deprecation.test.ts`. Bot package store shape:
+(`server/capabilities/capability-route-deprecation.ts`). Tests:
+`server/capabilities/capabilities-store-migration.test.ts`,
+`server/capabilities/capability-route-deprecation.test.ts`. Bot package store shape:
 `docs/bot-package.md`.
 
 ## Proactive bots, wired for real (2026-10-30; on/off 2026-11-01)

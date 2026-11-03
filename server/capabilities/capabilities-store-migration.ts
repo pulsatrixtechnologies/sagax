@@ -9,14 +9,14 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 
 import { capabilityPluginStateSchema, capabilityPluginValuesSchema } from "./capability-plugin-state.ts";
-import { BotCapabilityStore, emptyBotCapabilityDocument } from "./bot-capability-store.ts";
+import { BotCapabilityStore, emptyBotCapabilityDocument } from "../bot-capability-store.ts";
 import { InstallationCapabilityStore, emptyInstallationCapabilityDocument } from "./installation-capability-store.ts";
-import { principalDir } from "./person-connections.ts";
-import { isSkillLibraryEntry } from "./skills/skill-library.ts";
-import { SKILLS_LIBRARY_INDEX_FORMAT, SKILLS_LIBRARY_INDEX_VERSION, SKILLS_LIBRARY_RESTORE_IMPORT } from "../shared/capability-stores.ts";
+import { principalDir } from "../person-connections.ts";
+import { isSkillLibraryEntry } from "../skills/skill-library.ts";
+import { SKILLS_LIBRARY_INDEX_FORMAT, SKILLS_LIBRARY_INDEX_VERSION, SKILLS_LIBRARY_RESTORE_IMPORT } from "../../shared/capability-stores.ts";
 
 const BACKUP_SUFFIX = ".capabilities-l5.bak";
 const RETIRED_SUFFIX = ".migrated";

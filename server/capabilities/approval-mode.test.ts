@@ -10,7 +10,7 @@ import {
   liveApprovalChange,
   liveApprovalTightens,
   isApprovalMode,
-} from "../shared/approval-mode.ts";
+} from "../../shared/approval-mode.ts";
 import { createApprovalModeSupport } from "./harness-capabilities.ts";
 
 describe("approval modes", () => {

@@ -1579,7 +1579,7 @@ export function truncateSkillIndexDescription(description: string, maxChars: num
 
 /** The skills index exactly as the prompt carries it, without touching the
  * native links or the log: the turn (skillsSystemPrompt) and the
- * capabilities resolver (server/capabilities.ts promptIndex, #1748) read it.
+ * capabilities resolver (server/capabilities/capabilities.ts promptIndex, #1748) read it.
  * Descriptions shrink (shared max length) before any enabled skill is
  * dropped, so every id stays reachable until even name+path lines no longer
  * fit (or INDEX_MAX_SKILLS). */

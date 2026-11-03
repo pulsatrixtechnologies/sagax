@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { capabilityPrompt, capabilityPromptGroups } from "../capability-prompt.ts";
+import { capabilityPrompt, capabilityPromptGroups } from "../capabilities/capability-prompt.ts";
 import { skillDiscoveryPage, type DiscoveredSkill } from "./skill-discovery.ts";
 import {
   installLibrarySkill,

@@ -1,5 +1,5 @@
 // A bot's capabilities: the one resolved list of what it receives on top of
-// its engine (shared/capabilities.ts, server/capabilities.ts).
+// its engine (shared/capabilities.ts, server/capabilities/capabilities.ts).
 //
 //   GET /api/bots/:id/capabilities[?engine=<instanceId>]   -> BotCapabilities
 //

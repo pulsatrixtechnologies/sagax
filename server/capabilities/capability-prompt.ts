@@ -3,9 +3,9 @@
 // named by their workspace_read alias when the managed tools are mounted.
 // The rows come from the one scoped inventory (server/skills/skill-discovery.ts)
 // that also feeds skills_list and the Capabilities receipt.
-import type { CapabilityPromptIndex } from "../shared/capabilities.ts";
-import { engineWorksInFiles } from "../shared/capabilities.ts";
-import type { DiscoveredSkill } from "./skills/skill-discovery.ts";
+import type { CapabilityPromptIndex } from "../../shared/capabilities.ts";
+import { engineWorksInFiles } from "../../shared/capabilities.ts";
+import type { DiscoveredSkill } from "../skills/skill-discovery.ts";
 
 export interface CapabilityPromptFile {
   kind: "skill" | "command" | "agent";

@@ -22,7 +22,7 @@
 // scope (request-auth.ts CLIENT_ALLOW). No answer carries a token.
 import type { IncomingMessage } from "node:http";
 
-import { setCapabilityDeprecationHeaders } from "../capability-route-deprecation.ts";
+import { setCapabilityDeprecationHeaders } from "../capabilities/capability-route-deprecation.ts";
 import type { GithubStatus } from "../github-connect.ts";
 import type { PersonalMcpListing } from "../person-connections.ts";
 import type { RequestAuth } from "../request-auth.ts";

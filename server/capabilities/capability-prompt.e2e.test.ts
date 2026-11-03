@@ -4,9 +4,9 @@ import { createServer } from "node:http";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
-import { fixtureApi } from "../scripts/testing/preview-fixture.ts";
-import { seedMarketplaceBeforeBoot } from "./testing/seed-marketplace.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
+import { fixtureApi } from "../../scripts/testing/preview-fixture.ts";
+import { seedMarketplaceBeforeBoot } from "../testing/seed-marketplace.ts";
 
 it("sends whole personal and plugin instructions to an API with the same visible per-capability budget", async () => {
   const requests: unknown[] = [];

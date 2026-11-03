@@ -9,7 +9,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
 import { copySanitizedPlugin } from "../bot-plugins.ts";
-import { installationCapabilityBridge } from "../installation-capability-bridge.ts";
+import { installationCapabilityBridge } from "../capabilities/installation-capability-bridge.ts";
 import { ZipReader } from "../zip.ts";
 import type { FlowPluginsDeclaration } from "../perspicax-link.ts";
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { skillDiscoveryAvailable, skillDiscoveryPage, type DiscoveredSkill } from "./skill-discovery.ts";
-import { CAPABILITY_PROMPT_MAX_BYTES, capabilityPrompt, capabilityPromptGroups } from "../capability-prompt.ts";
+import { CAPABILITY_PROMPT_MAX_BYTES, capabilityPrompt, capabilityPromptGroups } from "../capabilities/capability-prompt.ts";
 import { availableTools, catalogProfileFromEnv } from "../drivers/agents-catalog.ts";
 
 const row = (id: number, extra: Partial<DiscoveredSkill> = {}): DiscoveredSkill => ({

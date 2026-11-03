@@ -2,12 +2,12 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { CAPABILITY_ROUTE_DEPRECATION } from "../shared/capability-stores.ts";
+import { CAPABILITY_ROUTE_DEPRECATION } from "../../shared/capability-stores.ts";
 import { capabilityRouteAliasActive, setCapabilityDeprecationHeaders } from "./capability-route-deprecation.ts";
-import { json, readBody } from "./harness/http.ts";
-import type { RequestAuth } from "./request-auth.ts";
-import { createPersonConnectionRoutes } from "./routes/person-connections.ts";
-import { dispatchRoutes, type RouteHandler } from "./routes/table.ts";
+import { json, readBody } from "../harness/http.ts";
+import type { RequestAuth } from "../request-auth.ts";
+import { createPersonConnectionRoutes } from "../routes/person-connections.ts";
+import { dispatchRoutes, type RouteHandler } from "../routes/table.ts";
 
 describe("capability route deprecation", () => {
   it("marks the alias window open through 2027-11-01", () => {

@@ -11,7 +11,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
 import { DATA_DIR } from "../config.ts";
-import { installationCapabilityBridge, type InstallationCapabilityBridge } from "../installation-capability-bridge.ts";
+import { installationCapabilityBridge, type InstallationCapabilityBridge } from "../capabilities/installation-capability-bridge.ts";
 import { isSkillName, parseSkillMd, SKILL_FILE_MAX_BYTES } from "../../shared/skill-md.ts";
 import type { SkillPackageStamp } from "./skills.ts";
 

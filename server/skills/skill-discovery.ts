@@ -1,6 +1,6 @@
 // One inventory feeds the turn, its Capabilities receipt and skills_list.
 // Paths are workspace_read references, never authority supplied by a caller.
-// The prompt renders it per capability (server/capability-prompt.ts).
+// The prompt renders it per capability (server/capabilities/capability-prompt.ts).
 import { allowsTool } from "../../shared/tool-scope.ts";
 
 export interface DiscoveredSkill {
@@ -18,7 +18,7 @@ export interface DiscoveredSkill {
   native?: boolean;
   /** The capability this reference belongs to (its key in the resolved
    * list, never shown) and its readable name: the prompt budgets per
-   * capability (server/capability-prompt.ts). */
+   * capability (server/capabilities/capability-prompt.ts). */
   capability?: { key: string; name: string };
 }
 

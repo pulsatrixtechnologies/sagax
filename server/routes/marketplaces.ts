@@ -21,7 +21,7 @@
 // carries a token (`hasToken` only says there is one).
 import type { IncomingMessage } from "node:http";
 
-import { setCapabilityDeprecationHeaders } from "../capability-route-deprecation.ts";
+import { setCapabilityDeprecationHeaders } from "../capabilities/capability-route-deprecation.ts";
 import { MarketplaceError, type MarketplaceView, type MarketplaceViewer, type MarketplaceVisibility, type PluginMarketplaces } from "../plugins/plugin-marketplaces.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import type { MarketplaceCredentialView } from "../../shared/github-credentials.ts";

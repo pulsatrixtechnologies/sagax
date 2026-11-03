@@ -46,8 +46,8 @@ import type { McpServerSpec } from "./contracts.ts";
 import { parseStoredMcpServer } from "./mcp/mcp-registry.ts";
 import { readPluginMcpServers } from "./plugins/plugin-mcp.ts";
 import { SANDBOX_PLUGINS_DIR } from "./sandbox/sandbox-plugins.ts";
-import { capabilityPluginRecordSchema as pluginRecord, capabilityPluginStateSchema as stateSchema } from "./capability-plugin-state.ts";
-import type { CapabilityPluginValues } from "./capability-plugin-state.ts";
+import { capabilityPluginRecordSchema as pluginRecord, capabilityPluginStateSchema as stateSchema } from "./capabilities/capability-plugin-state.ts";
+import type { CapabilityPluginValues } from "./capabilities/capability-plugin-state.ts";
 import { capturePluginHooks, type LifecycleHook } from "./lifecycle-hooks.ts";
 import { pluginUpdateAvailable, type MarketplaceViewer, type MarketplaceVisibility, type PluginMarketplaces } from "./plugins/plugin-marketplaces.ts";
 import { probeGithubRepo, type GithubCredential, type GithubProbe } from "./github-access.ts";
@@ -1070,7 +1070,7 @@ export class BotPlugins {
   }
 
   /** One installed plugin's folder (what a turn loads) and whether it is
-   * there: the capabilities list (server/capabilities.ts) reads it. */
+   * there: the capabilities list (server/capabilities/capabilities.ts) reads it. */
   installedFolder(botId: string, plugin: { marketplace: string; name: string }): { dir: string; present: boolean } {
     const dir = this.pluginDir(botId, plugin.marketplace, plugin.name);
     return { dir, present: existsSync(dir) };

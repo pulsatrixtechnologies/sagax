@@ -1,9 +1,9 @@
 // What a turn mounts, as small pure functions shared by the turn
-// (server/index.ts) and the capabilities resolver (server/capabilities.ts,
+// (server/index.ts) and the capabilities resolver (server/capabilities/capabilities.ts,
 // GET /api/bots/:id/capabilities). The turn calls them to build its
 // integrations; the resolver calls the same ones to say what a bot
 // receives, so the list and the turn cannot drift (test "a turn mounts
-// exactly what the list says", server/capabilities.test.ts).
+// exactly what the list says", server/capabilities/capabilities.test.ts).
 import type { McpServerSpec } from "../contracts.ts";
 import { githubServersAsPerson, withGithubToken } from "../github-mcp-token.ts";
 import { personalAuthHeaders, type GithubConnection, type PersonalMcpServer } from "../person-connections.ts";

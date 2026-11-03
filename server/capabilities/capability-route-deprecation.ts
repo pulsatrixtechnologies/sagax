@@ -3,7 +3,7 @@
 // canonical surfaces are the Capabilities APIs and the three stores.
 import type { ServerResponse } from "node:http";
 
-import { CAPABILITY_ROUTE_DEPRECATION } from "../shared/capability-stores.ts";
+import { CAPABILITY_ROUTE_DEPRECATION } from "../../shared/capability-stores.ts";
 
 /** Successor path for a legacy capability route (documentation / Link). */
 export const CAPABILITY_ROUTE_SUCCESSORS: Readonly<Record<string, string>> = {

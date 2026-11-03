@@ -348,7 +348,7 @@ add({
   },
 });
 // 2026-10-30 (Capabilities, lot 1a): the one resolved list of what a bot
-// receives (server/capabilities.ts), read only; the actions that change it
+// receives (server/capabilities/capabilities.ts), read only; the actions that change it
 // are bot.plugin, bot.skill, bot.mcpServers and bot.perspicaxProfiles
 add({
   key: "bot.capabilities", family: "bot", target: "bot", value: "object",

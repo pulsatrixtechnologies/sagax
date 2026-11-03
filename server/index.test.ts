@@ -36,7 +36,7 @@ import {
   phoneSecretAAD,
   type PhoneSecretContext,
 } from "./phone/phone-secret.ts";
-import { InstallationCapabilityStore } from "./installation-capability-store.ts";
+import { InstallationCapabilityStore } from "./capabilities/installation-capability-store.ts";
 import { resolveVaultKey } from "./mcp/mcp-oauth.ts";
 
 /** Lot 5: MCP servers (and secret env) live in the sealed installation store. */

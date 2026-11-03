@@ -5,11 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { BotCapabilityStore } from "./bot-capability-store.ts";
+import { BotCapabilityStore } from "../bot-capability-store.ts";
 import { InstallationCapabilityStore } from "./installation-capability-store.ts";
 import { PERSON_SKILLS_SPLIT_ID, migrateCapabilitiesStores } from "./capabilities-store-migration.ts";
 import { createHash } from "node:crypto";
-import { CAPABILITY_STORE_INVENTORY } from "../shared/capability-stores.ts";
+import { CAPABILITY_STORE_INVENTORY } from "../../shared/capability-stores.ts";
 import { capabilityPluginStateSchema } from "./capability-plugin-state.ts";
 
 const dirs: string[] = [];

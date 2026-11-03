@@ -77,7 +77,7 @@ native Claude `--plugin-dir` loading and Flow receipts are unchanged.
 ## Verification run (worker)
 
 ```
-pnpm exec vitest run shared/capabilities.test.ts server/capabilities.test.ts \
+pnpm exec vitest run shared/capabilities.test.ts server/capabilities/capabilities.test.ts \
   server/plugins/plugin-metadata-cache.test.ts server/turns/plugin-turn.test.ts \
   server/skills/skill-discovery.test.ts server/turns/turn-connectors.test.ts \
   server/plugin-api-delivery.e2e.test.ts
@@ -93,7 +93,7 @@ not run in this worker (root owns the integration gate).
 ## Verification run (second review)
 
 ```
-pnpm exec vitest run shared/capabilities.test.ts server/capabilities.test.ts \
+pnpm exec vitest run shared/capabilities.test.ts server/capabilities/capabilities.test.ts \
   server/plugins/plugin-metadata-cache.test.ts server/turns/plugin-turn.test.ts \
   server/bot-plugins.test.ts server/plugins/installation-plugins.test.ts \
   server/skills/skill-discovery.test.ts server/skills/skill-discovery.e2e.test.ts \

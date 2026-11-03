@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
-import { capabilityPluginStateSchema, capabilityPluginValuesSchema, type CapabilityPluginState, type CapabilityPluginValues } from "./capability-plugin-state.ts";
+import { capabilityPluginStateSchema, capabilityPluginValuesSchema, type CapabilityPluginState, type CapabilityPluginValues } from "./capabilities/capability-plugin-state.ts";
 import { isPublicDomainAddress } from "./custom-domain.ts";
 import { isReservedMcpEnvEntry, mcpServerNameError } from "./mcp/mcp-registry.ts";
 import type { VaultKeySource } from "./vault/vault-key-source.ts";

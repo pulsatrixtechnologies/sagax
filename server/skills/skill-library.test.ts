@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { deleteLibrarySkill, installLibrarySkill, listLibrarySkills, loadBundledSkills, loadUserSkills, mergeSkills, parseSkillManifest, readLibrarySkillFile, readSkillLibraryIndex, renderSkillInstructions, selectBundledSkills, skillsLibraryRoot, updateLibrarySkill, type BundledSkill } from "./skill-library.ts";
-import { InstallationCapabilityStore } from "../installation-capability-store.ts";
-import { makeInstallationCapabilityBridge, setInstallationCapabilityBridge } from "../installation-capability-bridge.ts";
+import { InstallationCapabilityStore } from "../capabilities/installation-capability-store.ts";
+import { makeInstallationCapabilityBridge, setInstallationCapabilityBridge } from "../capabilities/installation-capability-bridge.ts";
 
 const instructionsFor = (text: string, capabilities: string[], skills: BundledSkill[], options?: { includeRoot?: boolean }) =>
   renderSkillInstructions(selectBundledSkills(text, capabilities, skills), options);

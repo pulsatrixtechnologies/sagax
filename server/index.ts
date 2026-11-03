@@ -233,7 +233,7 @@ import {
   createCwActionPasses
 } from "./cw-widget-actions.ts";
 import { cwActionInstruction, parseCwAction } from "../shared/cw-widgets/actions.ts";
-import { createApprovalModeSupport } from "./harness-capabilities.ts";
+import { createApprovalModeSupport } from "./capabilities/harness-capabilities.ts";
 import { escapeAttribute } from "../src/lib/composer-attachments.ts";
 import { threadRefUrl } from "../src/lib/thread-refs.ts";
 import { markDeadThreadChip } from "./threads/dead-thread-chips.ts";
@@ -2054,19 +2054,19 @@ import {
   type CapabilityInputs,
   type InstallationServerInput,
   type OrgDeclarationInput
-} from "./capabilities.ts";
+} from "./capabilities/capabilities.ts";
 import { createBotCapabilitiesRoutes, type BotCapabilitiesAnswer } from "./routes/bot-capabilities.ts";
 import { engineWorksInFiles, type BotCapabilities } from "../shared/capabilities.ts";
 import { reservedMcpName } from "../shared/mcp-reserved-names.ts";
 import { createBotPluginRoutes, createPersonalPluginRoutes } from "./routes/bot-plugins.ts";
 import { personalPluginStorage } from "./plugins/person-plugins.ts";
-import { capabilityPrompt, capabilityPromptGroups } from "./capability-prompt.ts";
+import { capabilityPrompt, capabilityPromptGroups } from "./capabilities/capability-prompt.ts";
 import {
   pluginMcpPrecheck,
   pluginSpecOnComputer,
   selectPluginScopes,
   type PluginScope
-} from "./capability-plugin-mounts.ts";
+} from "./capabilities/capability-plugin-mounts.ts";
 import { createLifecycleHookRoutes } from "./routes/lifecycle-hooks.ts";
 import { createMessagesRoutes } from "./routes/messages.ts";
 import { handleMessagesMcp } from "./imessage-mcp.ts";
@@ -2096,9 +2096,9 @@ import { createOrgCapabilityRoutes, ORG_CAPABILITIES_CALL, OrgSettingOwnedElsewh
 import { OrgGithubTokens } from "./org/org-github-tokens.ts";
 import { GithubCredentials, LOCAL_OWNER, ORG_OWNER } from "./github-credentials.ts";
 import { BotCapabilityStore } from "./bot-capability-store.ts";
-import { InstallationCapabilityStore } from "./installation-capability-store.ts";
-import { installationCapabilityBridge, makeInstallationCapabilityBridge, setInstallationCapabilityBridge } from "./installation-capability-bridge.ts";
-import { discoverBotPluginIds, discoverPersonIds, migrateCapabilitiesStores } from "./capabilities-store-migration.ts";
+import { InstallationCapabilityStore } from "./capabilities/installation-capability-store.ts";
+import { installationCapabilityBridge, makeInstallationCapabilityBridge, setInstallationCapabilityBridge } from "./capabilities/installation-capability-bridge.ts";
+import { discoverBotPluginIds, discoverPersonIds, migrateCapabilitiesStores } from "./capabilities/capabilities-store-migration.ts";
 import { OrgBotSecrets } from "./org/org-bot-secrets.ts";
 import { MarketplaceTokens } from "./plugins/marketplace-tokens.ts";
 import { type GithubCredential } from "./github-access.ts";
@@ -9524,7 +9524,7 @@ function syncOrgCapabilities(reason: string): Promise<void> {
   return orgCapabilities.sync(reason).then(announce, () => undefined);
 }
 /** The resolver's view of the organization's declarations for one person
- * (server/capabilities.ts OrgDeclarationInput): public fields, never a
+ * (server/capabilities/capabilities.ts OrgDeclarationInput): public fields, never a
  * configuration. */
 function orgDeclarationInputs(principal: string | undefined): OrgDeclarationInput[] {
   if (IDENTITY.kind !== "perspicax") return [];
@@ -10174,7 +10174,7 @@ function scopedSkillInventory(bot: BotRecord, instance: { driverKind: string } |
   return { rows: orderedSkillDiscovery(rows), incomplete: false };
 }
 /** The selected skill and plugin instructions of one turn, budgeted per
- * capability (server/capability-prompt.ts): file engines get readable paths,
+ * capability (server/capabilities/capability-prompt.ts): file engines get readable paths,
  * engines without files the whole files, read through the same checks as
  * workspace_read. `syncNative` refreshes Claude's skill links on a real turn
  * only: the preview and the receipt never touch them. */
@@ -10207,7 +10207,7 @@ function scopedSkillsPrompt(bot: BotRecord, instance: { driverKind: string } | n
   return capabilityPrompt(kind, capabilityPromptGroups(kind, inventory.rows, { managedTools: options.managedTools, read }),
     { managedTools: options.managedTools, incomplete: inventory.incomplete && kind !== "claudeAgent", indexOnly: options.indexOnly === true });
 }
-// ── a bot's capabilities: one resolved list (server/capabilities.ts) ──
+// ── a bot's capabilities: one resolved list (server/capabilities/capabilities.ts) ──
 /** Everything a bot receives on top of its engine, for the person looking
  * (their own servers, GitHub and Roles stand in for the speaker of a turn),
  * on its engine or on `engineId` (a preview). Reads only: nothing is
@@ -28635,7 +28635,7 @@ function mcpServerBody(body: unknown): Record<string, unknown> {
  * the organisation's allow-list filters them; config.json is never changed. */
 function engineMcpServers(bot: BotRecord, threadId?: string) {
   // the selection is server/turns/turn-mounts.ts engineServerMcp, which the
-  // capabilities resolver (server/capabilities.ts) reads too
+  // capabilities resolver (server/capabilities/capabilities.ts) reads too
   const servers = engineServerMcp({
     configured: customMcpServers(cfg, bot.mcpServers),
     organization: IDENTITY.kind === "perspicax",

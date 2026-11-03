@@ -944,13 +944,13 @@ it("peer inbox (second pass): a wake on a teammate's notice that ends NOTHING_TO
   await f.api(`/api/bots/${primary.id}`, { chiefOfStaff: true, acknowledgePeerScope: true }, "PATCH");
   f.plan[sender.id] = {
     steps: [
-      { tool: "send_to_bot", arguments: { bot_id: primary.id, title: "Urgent Alubar 299372 client reply", message: "Carl answered on 299372; Zachary has the box" } },
+      { tool: "send_to_bot", arguments: { bot_id: primary.id, title: "Urgent Northwind 100200 client reply", message: "Sam answered on 100200; Alex has the box" } },
       { tool: "send_to_bot", arguments: { bot_id: solo.id, title: "Claude Team invite action JC", message: "JC must accept the Claude Team invite" } },
     ],
     reply: "Sent",
   };
   // In production: the bot writes why it thinks the person knows, then the marker
-  f.plan[primary.id] = { byPrompt: [{ promptIncludes: "Proactive wake", plan: { reply: "Already told you at 1:32 p.m. ET: Zachary has the box.\n\nNOTHING_TO_REPORT" } }], reply: "Noted in this thread" };
+  f.plan[primary.id] = { byPrompt: [{ promptIncludes: "Proactive wake", plan: { reply: "Already told you at 1:32 p.m. ET: Alex has the box.\n\nNOTHING_TO_REPORT" } }], reply: "Noted in this thread" };
   // the marker alone: the digest names who wrote and about what
   f.plan[solo.id] = { byPrompt: [{ promptIncludes: "Proactive wake", plan: { reply: "NOTHING_TO_REPORT" } }], reply: "Noted" };
   f.save();
@@ -961,7 +961,7 @@ it("peer inbox (second pass): a wake on a teammate's notice that ends NOTHING_TO
   }
   const primaryWake = (await wakes(primary.id))[0];
   expect(primaryWake.quiet).toBeUndefined();
-  expect(primaryWake.output).toBe("Already told you at 1:32 p.m. ET: Zachary has the box.");
+  expect(primaryWake.output).toBe("Already told you at 1:32 p.m. ET: Alex has the box.");
   const soloWake = (await wakes(solo.id))[0];
   expect(soloWake.quiet).toBeUndefined();
   expect(soloWake.output).toContain("Katarina: Claude Team invite action JC");
@@ -971,7 +971,7 @@ it("peer inbox (second pass): a wake on a teammate's notice that ends NOTHING_TO
   const bots = (await f.api("/api/bots?messages=0", undefined, "GET")).bots as any[];
   const mainOf = (id: string) => bots.find((bot) => bot.id === id).threadId as string;
   const runCard = async (botId: string) => (await f.messages(mainOf(botId))).filter((message) => message.kind === "routine.run").map((message) => String(message.text ?? ""));
-  await expect.poll(async () => (await runCard(primary.id)).some((text) => text.includes("Zachary has the box")), { timeout: 20_000 }).toBe(true);
+  await expect.poll(async () => (await runCard(primary.id)).some((text) => text.includes("Alex has the box")), { timeout: 20_000 }).toBe(true);
   await expect.poll(async () => (await runCard(solo.id)).some((text) => text.includes("Claude Team invite action JC")), { timeout: 20_000 }).toBe(true);
   expect(runtimeInvariants(f)).toEqual([]);
 }, { env: { SAGAX_PROACTIVE_GATHER_MS: "2000" } }), 150_000);
@@ -1005,10 +1005,10 @@ it("peer inbox (second pass): a teammate's notice gathered before a restart (a p
   const sender = (await f.cli("new-bot", "--name", "Katarina")).bot;
   const receiver = (await f.cli("new-bot", "--name", "Melonie")).bot;
   f.plan[sender.id] = {
-    steps: [{ tool: "send_to_bot", arguments: { bot_id: receiver.id, title: "Urgent Alubar 299372 client reply", message: "ROLL_SECRET_WORDS Carl answered on 299372" } }],
+    steps: [{ tool: "send_to_bot", arguments: { bot_id: receiver.id, title: "Urgent Northwind 100200 client reply", message: "ROLL_SECRET_WORDS Sam answered on 100200" } }],
     reply: "Sent",
   };
-  f.plan[receiver.id] = { byPrompt: [{ promptIncludes: "Proactive wake", plan: { reply: "AFTER_ROLL_REPORT: Carl answered on 299372" } }], reply: "Noted in the notice thread" };
+  f.plan[receiver.id] = { byPrompt: [{ promptIncludes: "Proactive wake", plan: { reply: "AFTER_ROLL_REPORT: Sam answered on 100200" } }], reply: "Noted in the notice thread" };
   f.save();
   await f.api(`/api/bots/${sender.id}/messages`, { text: "Tell Melonie.", threadId: sender.activeTaskId });
   // the gather window outlasts the roll: the notice waits on disk
@@ -1016,7 +1016,7 @@ it("peer inbox (second pass): a teammate's notice gathered before a restart (a p
   await expect.poll(() => existsSync(pendingFile) ? Object.keys(JSON.parse(readFileSync(pendingFile, "utf8")).pending) : [], { timeout: 60_000, interval: 250 }).toEqual([receiver.id]);
   const onDisk = readFileSync(pendingFile, "utf8");
   expect(onDisk).not.toContain("ROLL_SECRET_WORDS");
-  expect(onDisk).not.toContain("Alubar");
+  expect(onDisk).not.toContain("Northwind");
   expect(JSON.parse(onDisk).pending[receiver.id]).toEqual([{ key: expect.stringMatching(/^peer-notice:/), ref: { kind: "peer", noticeId: expect.any(String) } }]);
   expect(statSync(pendingFile).mode & 0o777).toBe(0o600);
   await f.restart({ SAGAX_PROACTIVE_GATHER_MS: "1000", SAGAX_PROACTIVE_REPLAY_MS: "0" });
@@ -1024,7 +1024,7 @@ it("peer inbox (second pass): a teammate's notice gathered before a restart (a p
   await expect.poll(async () => (await wakes()).map((run) => run.status), { timeout: 60_000, interval: 250 }).toEqual(["completed"]);
   expect((await wakes())[0].proactive).toMatchObject({ sources: ["peer"], alwaysReport: true });
   const wakePrompt = JSON.stringify(f.evidence().find((turn) => turn.botId === receiver.id && JSON.stringify(turn.prompt).includes("Proactive wake"))!.prompt);
-  expect(wakePrompt).toContain("ROLL_SECRET_WORDS Carl answered on 299372");
+  expect(wakePrompt).toContain("ROLL_SECRET_WORDS Sam answered on 100200");
   const bots = (await f.api("/api/bots?messages=0", undefined, "GET")).bots as any[];
   const main = bots.find((bot) => bot.id === receiver.id).threadId as string;
   await expect.poll(async () => (await f.messages(main)).some((message) => message.kind === "routine.run" && String(message.text ?? "").includes("AFTER_ROLL_REPORT")), { timeout: 20_000 }).toBe(true);

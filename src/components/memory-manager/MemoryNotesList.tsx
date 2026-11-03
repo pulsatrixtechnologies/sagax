@@ -6,7 +6,7 @@
 // swatch and name, the folder, the tags, the links, then the author and
 // when it changed. Ticked rows bring the bar of the bulk actions.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileStack, FolderInput, Link2, Plus, RotateCcw, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { BookOpen, FileStack, FolderInput, GripVertical, Link2, Plus, RotateCcw, SlidersHorizontal, Trash2, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -57,6 +57,9 @@ export function MemoryNotesList({
   busy,
   loading,
   initialQuery,
+  onReorder,
+  collections,
+  onAddToCollection,
 }: {
   title: string;
   line: string;
@@ -85,7 +88,15 @@ export function MemoryNotesList({
   busy: boolean;
   loading: boolean;
   initialQuery?: string;
+  /** A Perspicax folder in Manual order: the new order of its notes (their ids), by dragging. */
+  onReorder?: (ids: string[]) => Promise<void>;
+  /** Perspicax collections the person may edit (the bulk bar's "Add to collection"). */
+  collections?: Array<{ id: string; title: string }>;
+  onAddToCollection?: (keys: string[], collection: string) => void;
 }) {
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [overKey, setOverKey] = useState<string | null>(null);
+  const [collectionOpen, setCollectionOpen] = useState(false);
   const [view, setView] = useState<ListView>("active");
   const [query, setQuery] = useState(initialQuery ?? "");
   const [filters, setFilters] = useState<ListFilters>(NO_FILTERS);
@@ -134,6 +145,18 @@ export function MemoryNotesList({
   });
   const toggleAll = () => setPicked(allOn ? new Set() : new Set(selectable.map((entry) => entry.key)));
   const keys = selected.map((entry) => entry.key);
+  // The console's rule: Manual order, one Perspicax folder, nothing archived, more than one note.
+  const canReorder = Boolean(onReorder) && sort === "manual" && shown.length > 1 && !query.trim() && active === 0
+    && shown.every((entry) => entry.source.kind === "perspicax" && !entry.row.archived && entry.row.scope === shown[0]!.row.scope && entry.row.folder === shown[0]!.row.folder);
+  const dropOn = (target: string) => {
+    if (!dragKey || dragKey === target || !onReorder) return;
+    const moving = shown.find((entry) => entry.key === dragKey);
+    if (!moving) return;
+    const rest = shown.filter((entry) => entry.key !== dragKey);
+    const at = rest.findIndex((entry) => entry.key === target);
+    rest.splice(at < 0 ? rest.length : at, 0, moving);
+    void onReorder(rest.map((entry) => entry.row.id));
+  };
   const movable = onMove && selected.length > 0 && selected.every((entry) => entry.source.kind === "perspicax");
 
   const viewLabel: Record<ListView, string> = {
@@ -277,6 +300,22 @@ export function MemoryNotesList({
               <FolderInput size={14} aria-hidden="true" />{t("memoryManager.move")}
             </button>
           )}
+          {movable && collections && collections.length > 0 && onAddToCollection && (
+            <span className="relative">
+              <button type="button" aria-expanded={collectionOpen} className="inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] shadow-[inset_0_0_0_1px_currentColor] hover:bg-ink/10" onClick={() => setCollectionOpen((open) => !open)} data-memory-bulk-collection="">
+                <BookOpen size={14} aria-hidden="true" />{t("memoryManager.collections.add")}
+              </button>
+              {collectionOpen && (
+                <span role="menu" className="absolute left-0 top-full z-30 mt-1.5 flex w-[240px] flex-col rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-ink popover-surface">
+                  {collections.map((collection) => (
+                    <button key={collection.id} type="button" role="menuitem" className="truncate rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-hover" onClick={() => { setCollectionOpen(false); onAddToCollection(keys, collection.id); }}>
+                      {collection.title}
+                    </button>
+                  ))}
+                </span>
+              )}
+            </span>
+          )}
           {onRestore && (
             <button type="button" className="inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] shadow-[inset_0_0_0_1px_currentColor] hover:bg-ink/10" onClick={() => onRestore(keys)} disabled={busy} data-memory-bulk-restore="">
               <RotateCcw size={14} aria-hidden="true" />{restoreLabel ?? t("memoryManager.restore")}
@@ -299,6 +338,7 @@ export function MemoryNotesList({
             ? <input type="checkbox" checked={allOn} ref={(el) => { if (el) el.indeterminate = selected.length > 0 && !allOn; }} onChange={toggleAll} aria-label={t("memoryManager.selectAll")} data-memory-select-all="" />
             : <span className="w-[13px]" />}
           <span>{fixedView ? t("memoryManager.listHintFixed", { n: shown.length }) : t("memoryManager.listHint", { n: shown.length })}</span>
+          {canReorder && <span className="ml-auto text-ink-tertiary" data-memory-reorder-hint="">{t("memoryManager.reorderHint")}</span>}
         </div>
       )}
 
@@ -308,7 +348,18 @@ export function MemoryNotesList({
           const row = entry.row;
           const when = relLabel(row.updatedAt, now);
           return (
-            <div key={entry.key} role="listitem" className={cn("grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-lg border-b border-hairline/40 px-2.5 py-3 hover:bg-hover", on && "bg-accent/10")} data-memory-note-row={row.id} data-memory-row-key={entry.key}>
+            <div
+              key={entry.key}
+              role="listitem"
+              className={cn("grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 rounded-lg border-b border-hairline/40 px-2.5 py-3 hover:bg-hover", on && "bg-accent/10", canReorder && overKey === entry.key && dragKey !== entry.key && "shadow-[inset_0_2px_0_var(--color-accent)]", dragKey === entry.key && "opacity-50")}
+              data-memory-note-row={row.id}
+              data-memory-row-key={entry.key}
+              draggable={canReorder}
+              onDragStart={canReorder ? (event) => { setDragKey(entry.key); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", row.title); } : undefined}
+              onDragOver={canReorder ? (event) => { event.preventDefault(); setOverKey(entry.key); } : undefined}
+              onDrop={canReorder ? (event) => { event.preventDefault(); dropOn(entry.key); setDragKey(null); setOverKey(null); } : undefined}
+              onDragEnd={canReorder ? () => { setDragKey(null); setOverKey(null); } : undefined}
+            >
               {canSelect(entry)
                 ? <input type="checkbox" checked={on} onChange={() => toggle(entry.key)} className="mt-[3px]" aria-label={t("memoryManager.selectNote", { title: row.title })} />
                 : <span className="w-[13px]" />}
@@ -323,6 +374,7 @@ export function MemoryNotesList({
                 data-memory-row-open=""
               >
                 <span className="flex min-w-0 items-center gap-2">
+                  {canReorder && <GripVertical size={14} className="shrink-0 cursor-grab text-ink-tertiary" aria-hidden="true" />}
                   <span className={cn("truncate text-[14px] font-semibold", row.archived ? "text-ink-secondary" : "text-ink")}>{row.title || row.id}</span>
                   {row.status === "proposed" && <span className="shrink-0 rounded-full bg-warning/15 px-1.5 text-[11px] text-warning">{t("memoryManager.proposed")}</span>}
                 </span>

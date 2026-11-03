@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { MemoryManagerSource } from "./memory-manager";
+import { buildBrain, pageGraph, pageTree, spotlight, veilOf } from "./memory-brain";
 import { buildMemoryPageGraph } from "./memory-map";
 import {
   activeSeries,
@@ -106,5 +107,23 @@ describe("memory-page", () => {
     expect(roots.length).toBe(2);
     expect(roots[1]!.x).toBeGreaterThan(roots[0]!.x);
     expect(graph.edges.filter((edge) => edge.kind === "link").length).toBe(1);
+  });
+
+  it("feeds the console's radial brain: tiers, folders, notes keyed by row, links by title", () => {
+    const tiers = [{ key: "mine", name: "My memory", kind: "mine" as const, color: "green" }, { key: "perspicax:org", name: "Organization", kind: "org" as const, color: "blue" }];
+    const rows = [
+      row("bot:a|memory/x.md", "Alpha", { createdAt: now - 10 * DAY, updatedAt: now - DAY, tags: ["t"] }, bot, "mine", "Atlas / Topics"),
+      row("perspicax|org/o1", "Beta", { createdAt: now - 2 * DAY, updatedAt: now - DAY }, px, "perspicax:org", "network"),
+    ];
+    const brain = buildBrain(pageTree(rows, tiers), pageGraph(rows, { "bot:a|memory/x.md": "See [[Beta]]." }), { own: "mine", focus: "all", names: { all: "All", untitled: "Untitled", tier: (tier) => tier.name } });
+    expect(brain.notes).toBe(2);
+    expect(brain.nodes.filter((node) => node.kind === "tier").map((node) => node.label)).toEqual(["My memory", "Organization"]);
+    expect(brain.nodes.find((node) => node.kind === "topic" && node.scope === "mine")?.label).toBe("Atlas / Topics");
+    expect(brain.nodes.find((node) => node.kind === "note" && node.label === "Alpha")?.id).toBe("bot:a|memory/x.md");
+    expect(brain.links.length).toBe(1);
+    expect(spotlight(brain, "beta")?.hits.size).toBe(1);
+    // The timeline before Beta was written hides it; the tag filter dims what lacks the tag.
+    expect(veilOf(brain, { at: now - 5 * DAY })?.notes).toBe(1);
+    expect(veilOf(brain, { tags: ["t"] })?.matches).toBe(1);
   });
 });

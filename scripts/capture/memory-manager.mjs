@@ -16,7 +16,7 @@ const arg = (name) => { const index = process.argv.indexOf(name); return index >
 const outDir = resolve(arg("--out") ?? join(root, "docs", "screenshots", "memory-manager"));
 const port = Number(arg("--port") ?? 5341);
 const skins = [{ id: "pulsatrix-light", label: "light" }, { id: "pulsatrix", label: "dark" }];
-const shots = ["notes", "map", "tags", "quality", "note"].map((view) => ({ view, name: view }));
+const shots = (arg("--views") ?? "notes,preview,map,columns,tags,quality,note,collections").split(",").map((view) => ({ view, name: view }));
 const prefix = arg("--prefix") ?? "memory";
 
 async function waitForServer(url, ms = 120_000) {

@@ -59,6 +59,8 @@ export function MemoryNoteView({
   onNeighbourhood,
   onOpenLink,
   linkColor,
+  variant = "page",
+  onEditPage,
 }: {
   entry: PageRow;
   detail: MemoryNoteDetail;
@@ -80,7 +82,12 @@ export function MemoryNoteView({
   onOpenLink: (key: string) => void;
   /** The swatch of the tier a linked note lives in. */
   linkColor: (key: string) => string | undefined;
+  /** "panel": the console's preview (a click on a row): no back link, and
+   * Edit opens the note's page in edit mode (`onEditPage`). */
+  variant?: "page" | "panel";
+  onEditPage?: () => void;
 }) {
+  const panel = variant === "panel";
   const [editing, setEditing] = useState(Boolean(startEditing && detail.mayEdit));
   const [draft, setDraft] = useState(detail.body);
   const [draftTitle, setDraftTitle] = useState(detail.title);
@@ -153,10 +160,12 @@ export function MemoryNoteView({
   if (entry.row.path) props.push([t("memoryManager.note.propFile"), <code className="text-[12px]">{entry.row.path}</code>]);
 
   return (
-    <article className="relative mx-auto flex w-full max-w-[920px] flex-col gap-4 pb-20" data-memory-note="" data-memory-note-key={entry.key}>
-      <button type="button" className="inline-flex items-center gap-1.5 self-start rounded-md text-[13px] text-ink-secondary hover:text-ink" onClick={onBack} data-memory-note-back="">
-        <ArrowLeft size={14} aria-hidden="true" />{t("memoryManager.title")}
-      </button>
+    <article className={cn("relative mx-auto flex w-full max-w-[920px] flex-col gap-4", panel ? "pb-4" : "pb-20")} {...(panel ? { "data-memory-preview": "" } : { "data-memory-note": "" })} data-memory-note-key={entry.key}>
+      {!panel && (
+        <button type="button" className="inline-flex items-center gap-1.5 self-start rounded-md text-[13px] text-ink-secondary hover:text-ink" onClick={onBack} data-memory-note-back="">
+          <ArrowLeft size={14} aria-hidden="true" />{t("memoryManager.title")}
+        </button>
+      )}
       <header className="min-w-0">
         {editing ? (
           <input value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} className={cn(FIELD, "text-[20px] font-semibold")} aria-label={t("memoryManager.titleField")} data-memory-rename="" />
@@ -201,7 +210,7 @@ export function MemoryNoteView({
         {backlinks.length ? linkList(backlinks, "data-memory-note-backlinks") : <p className="text-[13px] text-ink-secondary">{t("memoryManager.note.noBacklinks")}</p>}
       </section>
 
-      <div className="pointer-events-none sticky bottom-4 z-20 flex justify-end">
+      <div className={cn("pointer-events-none sticky z-20 flex justify-end", panel ? "bottom-0" : "bottom-4")}>
         <div className="pointer-events-auto relative flex items-center gap-1.5 rounded-full border border-hairline/60 bg-elevated p-1 shadow-sm" data-memory-note-toolbar="">
           {editing ? (
             <>
@@ -239,7 +248,7 @@ export function MemoryNoteView({
                 <Network size={14} aria-hidden="true" />{t("memoryManager.note.neighbourhood")}
               </button>
               {detail.mayEdit && (
-                <button type="button" className={PRIMARY_BUTTON} onClick={() => setEditing(true)} data-memory-note-edit="">
+                <button type="button" className={PRIMARY_BUTTON} onClick={() => (panel && onEditPage ? onEditPage() : setEditing(true))} data-memory-note-edit="">
                   <Pencil size={14} aria-hidden="true" />{t("memoryManager.edit")}
                 </button>
               )}

@@ -42,14 +42,14 @@ vi.mock("@/state/store", async () => {
           sources: [
             { id: "bot:atlas", kind: "bot", name: "Atlas", detail: "Bot memory", mayWrite: true, botId: "atlas" },
             // A bot the memory routes refuse (an older server still lists it).
-            { id: "bot:alubar", kind: "bot", name: "Alubar", detail: "Bot memory", mayWrite: true, botId: "alubar" },
+            { id: "bot:northwind", kind: "bot", name: "Northwind", detail: "Bot memory", mayWrite: true, botId: "northwind" },
             ...(wide ? [{ id: "team:general", kind: "team", name: "General", detail: "1 team note", mayWrite: true, section: "" }] : []),
             { id: "perspicax", kind: "perspicax", name: "Perspicax", mayWrite: true, mayManage: true, scope: "me" },
           ],
           perspicax: { available: true },
         };
       }
-      if (path.startsWith("/api/bots/alubar/")) throw new actual.ApiError("no such bot", 404);
+      if (path.startsWith("/api/bots/northwind/")) throw new actual.ApiError("no such bot", 404);
       if (path.startsWith("/api/team-memory")) {
         if (init?.method && init.method !== "GET") return {};
         return { entries: [{ id: "tm1", kind: "term", name: "OMB", detail: "Open MAUS Bot", status: "proposed", updatedAt: now, source: { botId: "atlas", botName: "Atlas", threadId: "t", at: now - 1000 } }] };
@@ -81,7 +81,10 @@ vi.mock("@/state/store", async () => {
         return {
           tiers: [{
             scope: "me", kind: "me", name: "Personal", may_write: true, may_manage: true, trashed: 0,
-            topics: [{ topic: "notes", count: 1, entries: [{ id: "n1", title: "Brief", topic: "notes", tags: ["work", "area:plan"], excerpt: "Keep", author_name: "Dana Reyes", created: new Date(now - 5 * 86_400_000).toISOString(), updated: new Date(now - 7_200_000).toISOString() }] }],
+            topics: [{ topic: "notes", count: 2, entries: [
+              { id: "n1", title: "Brief", topic: "notes", tags: ["work", "area:plan"], excerpt: "Keep", author_name: "Dana Reyes", created: new Date(now - 5 * 86_400_000).toISOString(), updated: new Date(now - 7_200_000).toISOString(), rank: 1 },
+              { id: "n3", title: "Agenda", topic: "notes", tags: [], excerpt: "Monday", author_name: "Dana Reyes", updated: new Date(now - 9 * 86_400_000).toISOString(), rank: 0 },
+            ] }],
           }, ...(wide ? [{
             scope: "team:ops", kind: "team", name: "Ops", may_write: true, may_manage: false, trashed: 0,
             topics: [{ topic: "runbooks", count: 1, entries: [{ id: "n2", title: "Runbook", topic: "runbooks", tags: [], excerpt: "{\"steps\":3,\"owner\":\"ops\"}" }] }],
@@ -99,6 +102,14 @@ vi.mock("@/state/store", async () => {
           links_out: [], backlinks: [{ scope: "me", id: "n9", title: "Plan", context: "See the Brief first." }],
         };
       }
+      if (path === "/api/me/memory/collections") {
+        if (init?.method === "POST") return { id: "c2", scope: "me", title: "New", description: "", item_count: 0, may_edit: true, items: [] };
+        return { collections: [{ id: "c1", scope: "me", title: "Onboarding book", description: "Read in order", author_name: "Dana Reyes", item_count: 1, may_edit: true }] };
+      }
+      if (path.startsWith("/api/me/memory/collections/")) {
+        return { id: "c1", scope: "me", title: "Onboarding book", description: "Read in order", item_count: 1, may_edit: true, items: [{ note_scope: "me", note_id: "n1", rank: 0, title: "Brief", topic: "notes", readable: true }] };
+      }
+      if (path.startsWith("/api/me/memory/order")) return {};
       if (path.startsWith("/api/me/memory/bulk")) return { action: "delete", done: 1, review: 0, refused: 0, items: [], batch: "b1" };
       return {};
     }),
@@ -156,6 +167,9 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector("[data-memory-manager-page]")).not.toBeNull();
     expect(host.querySelector('[role="dialog"]')).toBeNull();
     expect(host.querySelector("[data-memory-header] h1")?.textContent).toBe("Memory");
+    // The console's large title, no icon before it.
+    expect(host.querySelector("[data-memory-header] h1")?.className).toContain("text-[30px]");
+    expect(host.querySelector("[data-memory-header] [data-page-title] svg")).toBeNull();
     expect(Array.from(host.querySelectorAll("[data-memory-views] button")).map((button) => button.textContent)).toEqual(["Notes", "Map", "Tags", "Quality"]);
     expect(host.querySelector("[data-memory-create]")?.textContent).toContain("New note");
     const body = host.querySelector("[data-memory-row] .content-card-body")!;
@@ -169,11 +183,11 @@ describe("MemoryManagerPanel page", () => {
     await render();
     const lists = Array.from(host.querySelectorAll("[data-memory-nav-list] [data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"));
     expect(lists).toEqual(["all", "pinned", "recent", "review"]);
-    expect(host.querySelector('[data-memory-nav="all"]')?.textContent).toContain("4");
-    expect(Array.from(host.querySelectorAll("[data-memory-tidy-list] [data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"))).toEqual(["archived", "trash"]);
+    expect(host.querySelector('[data-memory-nav="all"]')?.textContent).toContain("5");
+    expect(Array.from(host.querySelectorAll("[data-memory-tidy-list] [data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"))).toEqual(["collections", "archived", "trash"]);
     const mine = host.querySelector('[data-memory-tier="mine"]') as HTMLElement;
     expect(mine.textContent).toContain("My memory");
-    expect(mine.textContent).toContain("4");
+    expect(mine.textContent).toContain("5");
     // The bot is a folder of My memory.
     expect(host.querySelector('[data-memory-source="bot:atlas"]')?.textContent).toContain("Atlas");
     expect(host.querySelector('[data-memory-source="bot:atlas"]')?.textContent).not.toContain("Bot memory");
@@ -181,8 +195,8 @@ describe("MemoryManagerPanel page", () => {
     expect(Array.from(folder.querySelectorAll("[data-memory-row-action]")).map((node) => node.getAttribute("data-memory-row-action"))).toEqual(["new", "rename", "delete"]);
     // The list card, its toolbar and its rows.
     expect(host.querySelector("[data-memory-list-title]")?.textContent).toBe("All notes");
-    expect(host.querySelector("[data-memory-list-count]")?.textContent).toBe("4 of 4");
-    expect(host.querySelectorAll('[data-memory-nav-view="all"] [data-memory-note-row]').length).toBe(4);
+    expect(host.querySelector("[data-memory-list-count]")?.textContent).toBe("5 of 5");
+    expect(host.querySelectorAll('[data-memory-nav-view="all"] [data-memory-note-row]').length).toBe(5);
     const brief = host.querySelector('[data-memory-row-key="perspicax|me/n1"]')!;
     expect(brief.textContent).toContain("Dana Reyes");
     expect(brief.textContent).toContain("work");
@@ -224,33 +238,56 @@ describe("MemoryManagerPanel page", () => {
     expect(calls.filter((call) => call.method === "DELETE" && call.path.includes("/api/bots/atlas/memory/file")).length).toBe(3);
   });
 
-  it("Note detail: a page with its properties and backlinks, Edit opens the editor", async () => {
+  it("Preview: a click opens the console's preview beside the list, with its properties and backlinks", async () => {
     await render();
     await act(async () => { (host.querySelector('[data-memory-row-key="perspicax|me/n1"] [data-memory-row-open]') as HTMLButtonElement).click(); });
     await wait();
     await settle();
-    const page = host.querySelector("[data-memory-note]")!;
-    expect(page).not.toBeNull();
-    expect(page.querySelector("[data-memory-note-back]")?.textContent).toContain("Memory");
-    expect(page.querySelector("[data-memory-note-line]")?.textContent).toContain("My memory / notes");
-    expect(page.querySelector("[data-memory-note-line]")?.textContent).toContain("by Dana Reyes");
-    const props = page.querySelector("[data-memory-note-props]")!.textContent!;
+    expect(host.querySelector("[data-memory-note]")).toBeNull();
+    const panel = host.querySelector("[data-memory-preview-panel]")!;
+    expect(panel).not.toBeNull();
+    expect(host.querySelector("[data-memory-list]")).not.toBeNull();
+    expect(panel.querySelector("[data-memory-note-back]")).toBeNull();
+    expect(panel.querySelector("[data-memory-note-line]")?.textContent).toContain("My memory / notes");
+    expect(panel.querySelector("[data-memory-note-line]")?.textContent).toContain("by Dana Reyes");
+    const props = panel.querySelector("[data-memory-note-props]")!.textContent!;
     for (const label of ["Tier", "Author", "Created", "Changed", "Provenance", "Source", "Versions"]) expect(props).toContain(label);
     expect(props).toContain("3 versions");
-    expect(page.querySelector("[data-memory-note-backlinks]")?.textContent).toContain("Plan");
-    expect(page.querySelector("[data-memory-note-toolbar]")?.textContent).toContain("Neighbourhood");
-    await act(async () => { (page.querySelector("[data-memory-note-edit]") as HTMLButtonElement).click(); });
+    expect(panel.querySelector("[data-memory-note-backlinks]")?.textContent).toContain("Plan");
+    expect(panel.querySelector("[data-memory-note-toolbar]")?.textContent).toContain("Neighbourhood");
+    // Edit in the preview opens the note's page, in edit mode.
+    await act(async () => { (panel.querySelector("[data-memory-note-edit]") as HTMLButtonElement).click(); });
+    await wait();
+    await settle();
+    expect(host.querySelector("[data-memory-preview-panel]")).toBeNull();
+    expect(host.querySelector("[data-memory-note]")).not.toBeNull();
     expect(host.querySelector("[data-memory-rename]")).not.toBeNull();
     expect(host.querySelector("[data-memory-tags]")).not.toBeNull();
     await act(async () => { (host.querySelector("[data-memory-note-back]") as HTMLButtonElement).click(); });
     expect(host.querySelector("[data-memory-list]")).not.toBeNull();
   });
 
-  it("Note detail: a bot note folds its JSON block and counts its versions from the journal", async () => {
+  it("Preview: Escape and the scrim close it; a double click opens the note's page", async () => {
     await render();
-    await act(async () => { (host.querySelector('[data-memory-row-key="bot:atlas|memory/dining.md"] [data-memory-row-open]') as HTMLButtonElement).click(); });
+    const open = host.querySelector('[data-memory-row-key="perspicax|me/n1"] [data-memory-row-open]') as HTMLButtonElement;
+    await act(async () => { open.click(); });
+    await wait();
+    expect(host.querySelector("[data-memory-preview-panel]")).not.toBeNull();
+    await act(async () => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); });
+    expect(host.querySelector("[data-memory-preview-panel]")).toBeNull();
+    await act(async () => { open.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); });
     await wait();
     await settle();
+    expect(host.querySelector("[data-memory-preview-panel]")).toBeNull();
+    expect(host.querySelector("[data-memory-note]")).not.toBeNull();
+  });
+
+  it("Note page: a bot note folds its JSON block and counts its versions from the journal", async () => {
+    await render();
+    await act(async () => { (host.querySelector('[data-memory-row-key="bot:atlas|memory/dining.md"] [data-memory-row-open]') as HTMLButtonElement).dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); });
+    await wait();
+    await settle();
+    await act(async () => { (Array.from(host.querySelectorAll("button")).find((button) => button.textContent === "Cancel") as HTMLButtonElement | undefined)?.click(); });
     expect(host.querySelector("[data-memory-read-body]")).not.toBeNull();
     expect(host.querySelector("[data-memory-json-tree]")).not.toBeNull();
     expect(host.querySelector("[data-memory-note-props]")?.textContent).toContain("2 versions");
@@ -258,20 +295,58 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector("[data-memory-note-backlinks]")?.textContent).toContain("Travel");
   });
 
-  it("Map: the console's chrome around Sagax's map, a note opens from it", async () => {
+  it("Map: the console's radial brain by default, the column map one press away, a note previews from it", async () => {
     await render();
     await act(async () => { segment("Map").click(); });
     await settle();
     expect(host.querySelector("[data-memory-sources]")).toBeNull();
+    expect(host.querySelector('[data-memory-map-layout="brain"] [data-testid="memory-brain"] canvas')).not.toBeNull();
+    expect(host.querySelector('[data-testid="memory-brain"]')?.getAttribute("data-nodes")).toBe("5");
     expect(host.querySelector("[data-memory-map-search]")?.getAttribute("placeholder")).toBe("Find on the map");
-    expect(host.querySelector('[data-memory-map-tier="mine"]')?.textContent).toContain("4");
-    expect(host.querySelector("[data-memory-map-count]")?.textContent).toMatch(/^4 notes, \d+ links/);
-    expect(host.querySelector("[data-memory-map-timeline]")?.textContent).toContain("Today · 4 notes");
+    expect(host.querySelector('[data-memory-map-tier="mine"]')?.textContent).toContain("5");
+    expect(host.querySelector("[data-memory-map-count]")?.textContent).toMatch(/^5 notes, \d+ links/);
+    expect(host.querySelector("[data-memory-map-timeline]")?.textContent).toContain("Today · 5 notes");
+    const columns = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-memory-map-layout-switch] button")).find((button) => button.textContent === "Columns")!;
+    await act(async () => { columns.click(); });
     const note = host.querySelector('[data-memory-map-node="note"]') as HTMLButtonElement;
     await act(async () => { note.click(); });
     await wait();
     await settle();
-    expect(host.querySelector("[data-memory-note]")).not.toBeNull();
+    expect(host.querySelector("[data-memory-preview-panel]")).not.toBeNull();
+  });
+
+  it("Collections: the list, one collection, its notes in order", async () => {
+    await render();
+    await act(async () => { (host.querySelector('[data-memory-nav="collections"]') as HTMLButtonElement).click(); });
+    await settle();
+    expect(host.querySelector("[data-memory-collection-row]")?.textContent).toContain("Onboarding book");
+    await act(async () => { (host.querySelector("[data-memory-collection-row]") as HTMLButtonElement).click(); });
+    await settle();
+    expect(host.querySelector("[data-memory-collection-items]")?.textContent).toContain("Brief");
+    expect(calls.some((call) => call.path === "/api/me/memory/collections/c1")).toBe(true);
+  });
+
+  it("Manual order: a Perspicax folder's notes follow their rank, and a drop saves the new order", async () => {
+    await render();
+    await act(async () => { (host.querySelector('[data-memory-folder="me/notes"]') as HTMLButtonElement).click(); });
+    await settle();
+    const manual = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-memory-list-sort] button")).find((button) => button.textContent === "Manual")!;
+    await act(async () => { manual.click(); });
+    expect(host.querySelector("[data-memory-reorder-hint]")).not.toBeNull();
+    const rows = () => Array.from(host.querySelectorAll<HTMLElement>("[data-memory-note-row]"));
+    expect(rows().map((row) => row.getAttribute("data-memory-note-row"))).toEqual(["n3", "n1"]);
+    const [first, second] = rows();
+    const drag = (type: string, target: HTMLElement) => {
+      const event = new Event(type, { bubbles: true, cancelable: true }) as Event & { dataTransfer: unknown };
+      event.dataTransfer = { setData() {}, effectAllowed: "", dropEffect: "" };
+      target.dispatchEvent(event);
+    };
+    await act(async () => { drag("dragstart", second!); });
+    await act(async () => { drag("dragover", first!); drag("drop", first!); });
+    await settle();
+    const order = calls.find((call) => call.path === "/api/me/memory/order");
+    expect(order?.method).toBe("PUT");
+    expect(JSON.parse(order!.body!)).toEqual({ scope: "me", kind: "note", topic: "notes", ids: ["n1", "n3"] });
   });
 
   it("Tags: the tiles from the vocabulary and the notes, the most used and the free tags", async () => {
@@ -295,7 +370,7 @@ describe("MemoryManagerPanel page", () => {
     await act(async () => { segment("Quality").click(); });
     await settle();
     expect(Array.from(host.querySelectorAll("[data-memory-stat]")).map((node) => node.getAttribute("data-memory-stat"))).toEqual(["active", "review", "aging", "duplicates", "orphans"]);
-    expect(host.querySelector('[data-memory-stat="active"]')?.textContent).toContain("4");
+    expect(host.querySelector('[data-memory-stat="active"]')?.textContent).toContain("5");
     expect(host.querySelector("[data-memory-quality-area]")).not.toBeNull();
     expect(host.querySelector("[data-memory-quality-bars]")).not.toBeNull();
     const journal = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-memory-quality-tabs] button")).find((button) => button.textContent === "Journal")!;
@@ -320,9 +395,9 @@ describe("MemoryManagerPanel page", () => {
   it("never shows an error for any row of the explorer", async () => {
     (globalThis as { __memoryWide?: boolean }).__memoryWide = true;
     await render();
-    expect(host.querySelector('[data-memory-source="bot:alubar"]')).toBeNull();
-    expect(host.textContent).not.toContain("Alubar");
-    expect(Array.from(host.querySelectorAll("[data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"))).toEqual(["all", "teams", "pinned", "recent", "review", "archived", "trash"]);
+    expect(host.querySelector('[data-memory-source="bot:northwind"]')).toBeNull();
+    expect(host.textContent).not.toContain("Northwind");
+    expect(Array.from(host.querySelectorAll("[data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"))).toEqual(["all", "teams", "pinned", "recent", "review", "collections", "archived", "trash"]);
     // A JSON excerpt reads in words.
     expect(host.querySelector('[data-memory-row-key="perspicax|team:ops/n2"]')?.textContent).toContain("JSON · 2 keys: steps, owner");
     const rows = [

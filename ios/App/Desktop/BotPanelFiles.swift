@@ -36,6 +36,8 @@ struct BotPanelFiles: View {
     @State private var status: String?
     /// The bot's links, one more chip (`BotLibraryChip.links`), as on the phone.
     @State private var showingLinks = false
+    /// The row under the pointer (its actions show).
+    @State private var hoveredRow: String?
     @StateObject private var links = LibraryLoader<BotLink>()
 
     private var threadId: String { bot.threadId }
@@ -257,9 +259,33 @@ struct BotPanelFiles: View {
             .disabled(!available)
             .accessibilityLabel(Text("Open \(name)"))
             .accessibilityIdentifier("desktop-file.\(name)")
-            actions(entry)
+            // the desktop shows a row's actions on hover; a finger reaches
+            // them by a long press (the same items)
+            if hoveredRow == ThreadFilesView.name(entry) { actions(entry) }
         }
         .frame(minHeight: 40)
+        .padding(.horizontal, 8)
+        .contentShape(Rectangle())
+        .onHover { inside in hoveredRow = inside ? ThreadFilesView.name(entry) : (hoveredRow == ThreadFilesView.name(entry) ? nil : hoveredRow) }
+        .contextMenu { menuItems(entry) }
+    }
+
+    @ViewBuilder
+    private func menuItems(_ entry: LibraryEntry) -> some View {
+        Button(entry.pinned ? String(localized: "Unpin") : String(localized: "Pin"), systemImage: "pin") { Task { await setPinned(entry, !entry.pinned) } }
+        if case let .page(page) = entry {
+            Button(String(localized: "Share…"), systemImage: "square.and.arrow.up") { sharingPage = page }
+            Button(String(localized: "Delete…"), systemImage: "trash", role: .destructive) { deletingPage = page }
+        }
+        if case let .file(file) = entry {
+            Button(String(localized: "Show in chat"), systemImage: "bubble.left") { jump(file) }
+            if file.available {
+                Button(String(localized: "Download"), systemImage: "arrow.down.to.line") { Task { await fetch(file, share: true) } }
+                if let path = ThreadFileRules.copyablePath(of: file) {
+                    Button(String(localized: "Copy path"), systemImage: "square.on.square") { copy(path) }
+                }
+            }
+        }
     }
 
     private func actions(_ entry: LibraryEntry) -> some View {

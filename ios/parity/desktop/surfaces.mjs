@@ -360,6 +360,16 @@ for (const section of ["general", "memory", "privacy", "notifications", "organiz
 // 2026-11-03 (iPad 1:1 audit): the desktop surfaces added since the I-series.
 add({ id: "memory-page", phase: "main", note: "Memory page (main column, Perspicax console shape)",
   open: async (ctx) => { await ctx.dispatch({ type: "toggleMemoryManager", open: true }); await ctx.sleep(1500); } });
+for (const [id, label] of [["memory-map", "Map"], ["memory-tags", "Tags"], ["memory-quality", "Quality"]]) {
+  add({ id, phase: "main", note: `Memory page, the ${label} view`,
+    open: async (ctx) => {
+      await ctx.dispatch({ type: "toggleMemoryManager", open: true });
+      await ctx.sleep(1500);
+      if (!(await ctx.exists({ text: new RegExp(`^${label}$`) }))) return { skip: `${label} tab not shown` };
+      await ctx.click({ text: new RegExp(`^${label}$`) });
+      await ctx.sleep(1500);
+    } });
+}
 add({ id: "capabilities", phase: "main", note: "Capabilities (centred modal)",
   open: async (ctx) => { await ctx.dispatch({ type: "togglePlugins", open: true }); await ctx.sleep(1500); } });
 add({ id: "routine-edit", phase: "main", note: "Automations list: a routine open in the side panel",

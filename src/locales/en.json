@@ -5727,8 +5727,6 @@
   "sandboxDesktop.connecting": "Starting the desktop…",
   "sandboxDesktop.controlHint": "You have control. Your bots' clicks wait until you release it.",
   "sandboxDesktop.controlling": "You have control",
-  "sandboxDesktop.exitFullscreen": "Exit full screen",
-  "sandboxDesktop.fullscreen": "Full screen",
   "sandboxDesktop.help": "Bots working for you in your server environment use this desktop for computer use. Only you can see it. Show it to watch them live.",
   "sandboxDesktop.inWindow": "You have control in the large window.",
   "sandboxDesktop.openWindow": "Open in a window",

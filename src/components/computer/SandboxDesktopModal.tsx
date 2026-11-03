@@ -22,7 +22,7 @@
 // Opening moves keyboard focus into the window; closing gives it back.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Eye, Hand, Maximize2, Minimize2 } from "lucide-react";
+import { Eye, Hand, Minimize2 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import type { ScreenState } from "@/lib/desktop-local-vm";
@@ -43,7 +43,6 @@ export function SandboxDesktopModal({ title, state, onClose, onConnected, screen
   kind?: "sandbox" | "browser";
 }) {
   const [control, setControl] = useState(true);
-  const [fullscreen, setFullscreen] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   const screen = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
@@ -60,23 +59,15 @@ export function SandboxDesktopModal({ title, state, onClose, onConnected, screen
       event.stopImmediatePropagation();
       close.current();
     };
-    const screenChange = () => setFullscreen(document.fullscreenElement === panel.current && panel.current !== null);
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     panel.current?.focus({ preventScroll: true });
     window.addEventListener("keydown", capture, true);
-    document.addEventListener("fullscreenchange", screenChange);
     return () => {
       window.removeEventListener("keydown", capture, true);
-      document.removeEventListener("fullscreenchange", screenChange);
-      if (document.fullscreenElement && document.fullscreenElement === panel.current) void document.exitFullscreen().catch(() => {});
       if (opener?.isConnected) opener.focus({ preventScroll: true });
     };
   }, []);
 
-  const toggleFullscreen = () => {
-    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
-    else void panel.current?.requestFullscreen().catch(() => {});
-  };
 
   const setWatching = () => setControl(false);
   const setDriving = () => setControl(true);
@@ -86,7 +77,7 @@ export function SandboxDesktopModal({ title, state, onClose, onConnected, screen
       <div ref={panel} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}
         className={cn(
           "flex flex-col overflow-hidden bg-[#161618] text-white shadow-2xl outline-none dark:bg-[#121214]",
-          fullscreen ? "h-full w-full" : "h-[88vh] w-[92vw] rounded-2xl border border-white/10",
+          "h-[88vh] w-[92vw] rounded-2xl border border-white/10",
         )}>
         {/* Window chrome only: collapse back to the panel, top right. */}
         <div className="flex shrink-0 items-center justify-end px-3 py-2.5">
@@ -155,22 +146,6 @@ export function SandboxDesktopModal({ title, state, onClose, onConnected, screen
               </div>
             )}
 
-            <button
-              type="button"
-              aria-label={t(fullscreen ? "sandboxDesktop.exitFullscreen" : "sandboxDesktop.fullscreen")}
-              title={t(fullscreen ? "sandboxDesktop.exitFullscreen" : "sandboxDesktop.fullscreen")}
-              aria-pressed={fullscreen}
-              data-takeover-fullscreen=""
-              onClick={toggleFullscreen}
-              className={cn(
-                "flex size-8 items-center justify-center rounded-full text-white/55 hover:bg-white/10 hover:text-white",
-                kind !== "browser" && "absolute right-0",
-              )}
-            >
-              {fullscreen
-                ? <Minimize2 size={16} aria-hidden="true" />
-                : <Maximize2 size={16} aria-hidden="true" />}
-            </button>
           </div>
         </div>
       </div>

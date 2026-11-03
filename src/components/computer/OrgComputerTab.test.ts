@@ -350,7 +350,8 @@ describe("taking control of the server environment desktop", () => {
     expect(markup).toMatch(/data-takeover-control="release"/);
     expect(markup).toMatch(/data-takeover-control="drive"/);
     expect(markup).not.toContain("data-takeover-more");
-    expect(markup).toMatch(/aria-label="Full screen" title="Full screen"[^>]*data-takeover-fullscreen=""/);
+    // 2026-11-03 (JC): no full screen button, it did not work in the app.
+    expect(markup).not.toContain("data-takeover-fullscreen");
     // One close: the collapse button, labelled; no red close dot (2026-11-02).
     expect(markup).toMatch(/aria-label="Close and release control[^"]*"[^>]*data-takeover-close[^>]*data-takeover-collapse/);
     expect(markup.match(/data-takeover-close/g)).toHaveLength(1);

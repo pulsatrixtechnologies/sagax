@@ -4226,8 +4226,6 @@
   "sandboxDesktop.connecting": "Démarrage du bureau…",
   "sandboxDesktop.controlHint": "Vous avez le contrôle. Les clics de vos bots attendent que vous le rendiez.",
   "sandboxDesktop.controlling": "Vous avez le contrôle",
-  "sandboxDesktop.exitFullscreen": "Quitter le plein écran",
-  "sandboxDesktop.fullscreen": "Plein écran",
   "sandboxDesktop.help": "Les bots qui travaillent pour vous dans votre environnement serveur utilisent ce bureau pour contrôler l'ordinateur. Vous seul pouvez le voir. Affichez-le pour les regarder travailler en direct.",
   "sandboxDesktop.inWindow": "Vous avez le contrôle dans la grande fenêtre.",
   "sandboxDesktop.openWindow": "Ouvrir dans une fenêtre",

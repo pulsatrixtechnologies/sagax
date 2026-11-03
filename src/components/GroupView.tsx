@@ -1302,7 +1302,7 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
     memberIds: group.memberIds,
   });
   // Your own bots: a member who does not own the room still brings them in
-  // and takes them out (server/group-ownership.ts).
+  // and takes them out (server/groups/group-ownership.ts).
   const ownBotIds = new Set(state.bots.filter((bot) => actorId !== "" && (bot.ownerUserId ?? "").trim().toLowerCase() === actorId).map((bot) => bot.id));
   // "+ Add" under Bots: bots this person may add that are not in the room yet.
   // A member sees only their own; the owner sees every bot they may add.

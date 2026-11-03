@@ -542,3 +542,9 @@ server/service-unit.test.ts
 server/service-unit.ts
 server/published-pages.e2e.test.ts
 server/published-teams.ts
+server/group-goal-run.e2e.test.ts
+server/group-goal-run.test.ts
+server/group-goal-run.ts
+server/group-thread-usage.e2e.test.ts
+server/group-thread-usage.test.ts
+server/group-thread-usage.ts

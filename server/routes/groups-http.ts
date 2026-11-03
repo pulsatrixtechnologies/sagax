@@ -25,12 +25,12 @@ import {
 import { channelViewerId } from "../rooms/channel-visibility.ts";
 import { cloudThreadRefusal } from "../cloud-thread-refusal.ts";
 import type { SteerOutcome } from "../contracts.ts";
-import { groupLeftLine, planGroupLeave } from "../group-leave.ts";
+import { groupLeftLine, planGroupLeave } from "../groups/group-leave.ts";
 import {
   groupPatchOwnerRefusal,
   mayDeleteGroup,
   type GroupActor,
-} from "../group-ownership.ts";
+} from "../groups/group-ownership.ts";
 import { deleteGroupMemory } from "../memory/group-memory.ts";
 import type { HarnessCommandCatalog, HarnessCommandSource } from "../harness-commands.ts";
 import { typedCommandForTurn, unavailableCommandError } from "../harness-commands.ts";
@@ -501,7 +501,7 @@ export function createGroupsHttpRoutes(deps: GroupsHttpDeps): RouteHandler {
         if (placed) return json(res, 403, { error: placed, code: "bot_place_owner_only" });
       }
       // Organization server: only the group's owner changes its settings;
-      // anyone listed may still leave it (server/group-ownership.ts).
+      // anyone listed may still leave it (server/groups/group-ownership.ts).
       const ownerRule = Boolean(existingGroup && !existingGroup.dm && groupOwnerRuleApplies(auth));
       if (existingGroup && ownerRule) {
         const refusal = groupPatchOwnerRefusal(existingGroup, body, groupActor(auth), (botId) => {

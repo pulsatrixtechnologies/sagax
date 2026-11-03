@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import type { GroupThreadUsage } from "../shared/wire.ts";
+import type { GroupThreadUsage } from "../../shared/wire.ts";
 
 type Row = { at: string; threadId: string; botId: string; botName?: string; input: number; output: number; cachedInput?: number; costUsd?: number | null };
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;

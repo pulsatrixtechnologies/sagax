@@ -17,8 +17,8 @@ import "./safety/network-guard.ts";
 import { serverLog } from "./server-log-capture.ts";
 import { startEventLoopLagMonitor } from "./event-loop-lag.ts";
 import { settledChipLabel } from "./waiting-chip.ts";
-import { groupOwnerId, ownsGroup, type GroupActor } from "./group-ownership.ts";
-import { groupLeftFrameAllowed } from "./group-leave.ts";
+import { groupOwnerId, ownsGroup, type GroupActor } from "./groups/group-ownership.ts";
+import { groupLeftFrameAllowed } from "./groups/group-leave.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
   createHash,
@@ -634,7 +634,7 @@ import {
 } from "./usage/usage-ledger.ts";
 import type { PlanUsageReport } from "./usage/plan-usage.ts";
 import { newPlanUsageAlerts, planAccountsFromInstances, planUsageAlertText } from "./usage/plan-usage.ts";
-import { GroupUsageReader } from "./group-thread-usage.ts";
+import { GroupUsageReader } from "./groups/group-thread-usage.ts";
 import { ledgerCost, listPriceFor } from "./models/model-prices.ts";
 import type { PriceList } from "./usage/prices.ts";
 import type { RequestAuth } from "./auth/request-auth.ts";
@@ -828,7 +828,7 @@ import {
   resolveGroupGoalMember,
   selectGroupGoalCoordinator,
   type GoalRunMember
-} from "./group-goal-run.ts";
+} from "./groups/group-goal-run.ts";
 import type { GroupGoalRunCardData, GroupGoalRunStatus } from "../shared/group-goal-run.ts";
 
 import { BUILT_IN_DRIVERS } from "./drivers/builtIn.ts";
@@ -15567,7 +15567,7 @@ function sseFrameFor(
   if (payload?.kind === DEVICE_SETTINGS_FRAME && !deviceSettingsFrameAllowed(payload, client.viewerId, localPrincipalId())) return null;
   // a person's preferences reach that person's own devices only
   if (payload?.kind === "preferences" && !preferencesFrameAllowed(payload, client.viewerId)) return null;
-  // a person left a group: that person's own streams only (server/group-leave.ts)
+  // a person left a group: that person's own streams only (server/groups/group-leave.ts)
   if (payload?.kind === "group.left") return groupLeftFrameAllowed(payload, client.viewerId, localPrincipalId()) ? clientFrame ?? frame : null;
   if ((payload?.kind === "nudge" || payload?.kind === "nudge.sent") && !nudgeFrameAllowed(payload, client.viewerId, localPrincipalId())) return null;
   if ((payload?.kind === "voice.opener" || payload?.kind === "voice.call.ended") && !voiceOpenerFrameAllowed(payload, client.viewerId, localPrincipalId())) return null;
@@ -33959,7 +33959,7 @@ function notifyRoomMentions(groupId: string, threadId: string, text: string, aut
   if (updated) broadcast({ kind: "group", group: publicGroupState(updated) });
   broadcast({ kind: "notify", notification });
 }
-/** The owner of a group, as server/group-ownership.ts decides on an
+/** The owner of a group, as server/groups/group-ownership.ts decides on an
  * organization server (its creator, else its first person, else its
  * admins); on a solo server the operator or an admin session. */
 function groupOwnerCaller(auth: RequestAuth, group: Pick<GroupRecord, "createdBy" | "humanIds">): boolean {
@@ -36315,7 +36315,7 @@ function authzViewerFor(auth: RequestAuth): AuthzViewer | undefined {
 /** channel.read on a room: listed people (by id or `team:`), and the members
  * of its shared section. */
 function groupVisible(group: { id?: unknown; humanIds?: string[]; section?: unknown; peopleDm?: boolean; archivedAt?: number }, viewerId: string | undefined): boolean {
-  // The last person left it (server/group-leave.ts): kept, listed to no one.
+  // The last person left it (server/groups/group-leave.ts): kept, listed to no one.
   if (group.archivedAt) return false;
   // A conversation between two people is theirs alone (server/people/people-dms.ts):
   // not an admin's, a section's, nor the operator's at this computer.
@@ -37344,7 +37344,7 @@ function refusePlacedBots(auth: RequestAuth, botIds: readonly unknown[], already
 }
 
 /** Organization server: a person's request falls under the group owner rule
- * (server/group-ownership.ts). The server's own services do not. */
+ * (server/groups/group-ownership.ts). The server's own services do not. */
 function groupOwnerRuleApplies(auth: RequestAuth): boolean {
   return IDENTITY.kind === "perspicax" && !(auth.kind === "loopback" && auth.trust === "service");
 }

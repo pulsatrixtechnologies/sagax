@@ -748,7 +748,7 @@ export interface WireMessage extends WaitLineField {
   nudge?: { fromId: string; fromName: string; toId: string; toName: string; groupId?: string };
   /** kind "roster" (#1480): one neutral line in a group chat about its
    * people, drawn centred, never a bubble. `left`: that person left the
-   * group (server/group-leave.ts). `text` is the fallback line for clients
+   * group (server/groups/group-leave.ts). `text` is the fallback line for clients
    * that do not know the kind. */
   roster?: { event: "left"; personId: string; name: string };
   /** kind "access" (organization server, slice 3): a turn that could not run
@@ -1377,7 +1377,7 @@ export interface WireGroup {
   createdBy?: string;
   /** Organization server: who owns the room's settings (its creator, else
    * the first person listed; null when its organization admins do). Only
-   * The owner changes them (server/group-ownership.ts). Absent on a solo
+   * The owner changes them (server/groups/group-ownership.ts). Absent on a solo
    * server. */
   ownerId?: string | null;
   /** true for auto-created bot-bot channels. */
@@ -1505,7 +1505,7 @@ export type ServerFrame =
   | { kind: "notify-withdraw"; threadId: string; requestId: string }
   | { kind: "group.deleted"; groupId: string }
   /** #1480: the viewer left this group; only their own streams get it
-   * (server/group-leave.ts). `roomId`, not `groupId`: the group's own frame
+   * (server/groups/group-leave.ts). `roomId`, not `groupId`: the group's own frame
    * filters would drop it, since they no longer see the group. */
   | { kind: "group.left"; roomId: string; audience: string }
   | { kind: "routine"; routine: Routine }

@@ -88,7 +88,7 @@ export type GroupRecord = Omit<WireGroup, "working" | "usage"> & {
   /** A person conversation went through the threads migration once
    * (server/people/people-dms.ts migratePeopleDmToThreads). */
   personThreads?: 1;
-  /** The last person left (server/group-leave.ts, #1480): the group is kept
+  /** The last person left (server/groups/group-leave.ts, #1480): the group is kept
    * and listed to no one. */
   archivedAt?: number;
 };

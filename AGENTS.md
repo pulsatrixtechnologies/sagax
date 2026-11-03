@@ -1467,7 +1467,7 @@ the app (Show the token): a bot's replay of `POST /api/webhooks/:id/rotate`
 
 On an organization server a person listed in a group in their own name
 leaves it on their own, owner included, without an admin:
-`POST /api/groups/:id/leave` (server/group-leave.ts `planGroupLeave`). The
+`POST /api/groups/:id/leave` (server/groups/group-leave.ts `planGroupLeave`). The
 session names who leaves, never the body. They leave `humanIds` under every
 id they are listed by; their private bots (owned by them, no grant) leave
 with them, a shared bot stays. The owner hands the group to the person
@@ -1479,7 +1479,7 @@ fallback); their own devices get `group.left` (`roomId`, their streams
 only) and drop the group. Leave group sits in the sidebar menu, the
 conversation's « … » and the group panel on desktop (LeaveGroupDialog
 confirms), and in the row menu and Room info on iOS. They can be added back
-like anyone. Tests: `server/group-leave.test.ts`, `src/lib/group-leave.test.ts`,
+like anyone. Tests: `server/groups/group-leave.test.ts`, `src/lib/group-leave.test.ts`,
 `src/components/Sidebar.member-menu.test.ts`, iOS `GroupLeaveTests`.
 
 ## Shopping cards, order tracking, subscription templates (2026-10-29)
@@ -5130,7 +5130,7 @@ workspace. Keep these rules, each covered by `server/memory/group-memory.test.ts
 - Entries, budget and expiry are the bot memory's (`applyMemoryUpdate`);
   secrets are redacted on every write; it goes away with its group.
 - `GET/PUT /api/groups/<id>/memory`: the group's people read, its owner
-  (`ownsGroup` in `server/group-ownership.ts`; on a solo server the
+  (`ownsGroup` in `server/groups/group-ownership.ts`; on a solo server the
   operator or an admin session) edits it or switches it off (`memoryEnabled`). A removed member
   gets 404 at once (the channel gate).
 
@@ -8369,8 +8369,8 @@ working folder (empty means each bot's own folder). Keep these rules:
 ### Group owner (organization server)
 
 On an organization server (`SAGAX_IDENTITY=perspicax`) only a group's owner
-changes its settings (`server/group-ownership.ts`, client
-`src/lib/group-owner.ts`; covered by `server/group-ownership.test.ts` and
+changes its settings (`server/groups/group-ownership.ts`, client
+`src/lib/group-owner.ts`; covered by `server/groups/group-ownership.test.ts` and
 PT-4 in `server/org/org-private-threads.e2e.test.ts`):
 
 - The owner is `createdBy`, else the first person in `humanIds`, else

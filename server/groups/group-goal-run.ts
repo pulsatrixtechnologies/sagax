@@ -1,4 +1,4 @@
-import type { GroupDefaultResponder } from "./store.ts";
+import type { GroupDefaultResponder } from "../store.ts";
 
 // Odd by design: coordinator/worker alternation must always leave the final
 // bounded turn to the coordinator for an honest completion decision.

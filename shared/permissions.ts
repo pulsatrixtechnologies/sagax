@@ -196,7 +196,7 @@ const definitions = [
   },
   {
     // 2026-10-28 (#1098): the owner of a group sets where it works; only
-    // the group's owner (server/group-ownership.ts), the path still checked.
+    // the group's owner (server/groups/group-ownership.ts), the path still checked.
     key: "folders.roomWorkingFolder", group: "folders", memberDefault: true, adminOnly: false, memberAlways: true,
     label: { en: "Set the working folder of their groups", fr: "Choisir le dossier de travail de leurs groupes" },
     description: {

@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
-import { appendUsage, flushUsageLedger } from "./usage/usage-ledger.ts";
-import type { WireBot, WireGroup } from "../shared/wire.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
+import { appendUsage, flushUsageLedger } from "../usage/usage-ledger.ts";
+import type { WireBot, WireGroup } from "../../shared/wire.ts";
 
 it("projects historical usage, clears it on thread switch, and refreshes after a real fixture turn", async () => {
   const fixture = await launchVerificationServer();

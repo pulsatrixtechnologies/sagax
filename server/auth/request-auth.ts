@@ -780,7 +780,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // This person's phones for APNs pushes (server/routes/push-devices.ts):
   // register, list (tokens masked) and remove their own devices only.
   { methods: ["GET", "POST", "DELETE"], path: /^\/api\/push\/devices$/ },
-  // Organization server: a group's owner deletes it (server/group-ownership.ts);
+  // Organization server: a group's owner deletes it (server/groups/group-ownership.ts);
   // the route refuses a client session anywhere else.
   { methods: ["DELETE"], path: /^\/api\/groups\/[\w-]+$/ },
   { methods: ["POST"], path: /^\/api\/threads\/[\w-]+\/messages\/[\w-]+\/reactions$/ },

@@ -1,4 +1,4 @@
-// The server log tail (server/server-log-ring.ts): bounded, redacted,
+// The server log tail (server/process/server-log-ring.ts): bounded, redacted,
 // newest first, filtered by level, paged by seq.
 import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

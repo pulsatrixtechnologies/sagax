@@ -1,4 +1,4 @@
-// Event loop lag in the server log (server/event-loop-lag.ts): a block over
+// Event loop lag in the server log (server/process/event-loop-lag.ts): a block over
 // the threshold is reported once the loop is back, with the blocked stack
 // when the inspector can read it, and the periodic summary carries p99/max.
 import { describe, expect, it } from "vitest";

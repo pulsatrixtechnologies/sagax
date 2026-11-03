@@ -23,7 +23,7 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
-import { folderBytes } from "../disk-usage.ts";
+import { folderBytes } from "../process/disk-usage.ts";
 
 // ── schedule ────────────────────────────────────────────────────────────
 

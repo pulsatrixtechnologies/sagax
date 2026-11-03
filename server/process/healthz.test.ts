@@ -19,7 +19,7 @@ describe("healthz", () => {
   });
 
   it("is served before the SPA fallback and does not require an empty session", () => {
-    const source = readFileSync(join(import.meta.dirname, "index.ts"), "utf8");
+    const source = readFileSync(join(import.meta.dirname, "..", "index.ts"), "utf8");
     const route = source.indexOf('path === "/healthz"');
     const spa = source.indexOf("serveStatic(res, path)");
     const stranger = source.indexOf('path === "/api/health" && !gate.auth');
@@ -35,7 +35,7 @@ describe("healthz", () => {
   });
 
   it("drains HTTP and closes SSE streams before exit during shutdown", () => {
-    const source = readFileSync(join(import.meta.dirname, "index.ts"), "utf8");
+    const source = readFileSync(join(import.meta.dirname, "..", "index.ts"), "utf8");
     const drain = source.indexOf("async function drainTurnsBeforeShutdown");
     expect(drain).toBeGreaterThan(0);
     const body = source.slice(drain, drain + 2_000);

@@ -593,3 +593,8 @@ server/chat-widgets.test.ts
 server/chat-widgets.ts
 server/options-card.test.ts
 server/options-card.ts
+server/exit.ts
+server/graceful-shutdown.test.ts
+server/graceful-shutdown.ts
+server/restart.test.ts
+server/restart.ts

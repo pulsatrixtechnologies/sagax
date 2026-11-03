@@ -274,7 +274,7 @@ Server logs survive a container recreation on that same volume:
 for `GET /api/org/admin/logs`. Stdout from the container runtime is separate
 and can still rotate away with the old container; use the data-volume files
 (or the admin Logs page) when you need history across a deploy. See
-`server/server-log-ring.ts` and AGENTS.md ("Server log on disk").
+`server/process/server-log-ring.ts` and AGENTS.md ("Server log on disk").
 
 A local build keeps the Chrome for Testing (and any `ENGINES`) it installed
 first, because those layers sit beneath the app and stay cached across code

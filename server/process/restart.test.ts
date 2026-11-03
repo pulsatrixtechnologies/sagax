@@ -1,4 +1,4 @@
-// Exit code 75, "start me again" (server/restart.ts): a server whose copied
+// Exit code 75, "start me again" (server/process/restart.ts): a server whose copied
 // workspace committed exits with it, and every launcher in this repo starts
 // it again: the `openmausbot serve` loop (systemd, launchd, fleet and a
 // terminal all run that) and the container launcher. The Cloud launcher and
@@ -6,10 +6,10 @@
 import { EventEmitter } from "node:events";
 import type { ChildProcess } from "node:child_process";
 import { expect, it, vi } from "vitest";
-import type { CliOptions } from "./cli.ts";
-import { serveUntilStopped } from "./cli.ts";
+import type { CliOptions } from "../cli.ts";
+import { serveUntilStopped } from "../cli.ts";
 import { RESTART_EXIT_CODE, restartPolicy, STABLE_RUN_MS } from "./restart.ts";
-import { superviseServer } from "./server-launcher.ts";
+import { superviseServer } from "../server-launcher.ts";
 
 it("one policy counts for every launcher: again only on 75, not while stopping, at most five in a row, and a run that stayed up starts the count again", () => {
   expect(RESTART_EXIT_CODE).toBe(75);

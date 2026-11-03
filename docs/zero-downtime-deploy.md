@@ -8,7 +8,7 @@ Three layers work together.
 
 ## 1. Server graceful shutdown
 
-On `SIGTERM` / `SIGINT` (`server/graceful-shutdown.ts`, wired in
+On `SIGTERM` / `SIGINT` (`server/process/graceful-shutdown.ts`, wired in
 `server/index.ts`):
 
 1. Mark probes unready (`markShuttingDown`): `/healthz` and `/api/health`
@@ -19,7 +19,7 @@ On `SIGTERM` / `SIGINT` (`server/graceful-shutdown.ts`, wired in
    (`SAGAX_SHUTDOWN_DRAIN_MS`, default 5 s on a server, 0 under the
    desktop app).
 4. Stop accepting and finish in-flight HTTP
-   (`server/http-shutdown.ts`), then flush durable state (bus, sessions,
+   (`server/process/http-shutdown.ts`), then flush durable state (bus, sessions,
    ledgers) and exit.
 
 Runtime state is already durable on disk. Interrupted turns resume once
@@ -112,8 +112,8 @@ a rendered manifest.
 
 ## Tests
 
-- `server/http-shutdown.test.ts`, `server/graceful-shutdown.test.ts`,
-  `server/healthz.test.ts`
+- `server/process/http-shutdown.test.ts`, `server/process/graceful-shutdown.test.ts`,
+  `server/process/healthz.test.ts`
 - `server/caddy.test.ts`, `server/fleet/fleet.test.ts`
 - `src/lib/deploy-reconnect.test.ts`, `src/components/ChatErrorBanner.test.ts`
 - `companion/test/upstream-failure.test.ts`

@@ -2,7 +2,7 @@
 // failure on an organization host: /api/health behind Caddy did not answer in 10 s three times
 // in a row, with nothing in the log to say why).
 //
-// Two probes, both written to the server log tail (server/server-log-ring.ts),
+// Two probes, both written to the server log tail (server/process/server-log-ring.ts),
 // so they survive a container recreation on the data disk:
 //
 // - A periodic summary (`[loop-lag] p50 .. p99 .. max ..`) from

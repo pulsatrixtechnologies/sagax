@@ -98,7 +98,7 @@ export function restoredLibraryIndexPath(path: string): boolean {
  * process that wrote them, so they are never exported or installed, and a restore
  * leaves the destination's own markers where they are (workspace-backup.ts). */
 export function ephemeralWorkspaceTokenPath(path: string): boolean {
-  // The server log window (server/server-log-ring.ts) belongs to the machine
+  // The server log window (server/process/server-log-ring.ts) belongs to the machine
   // and the process that wrote it, like the marker.
   // The internal bearers handed to a turn (`comms-tokens/<digest>.token`,
   // server/drivers/spawn-contract.ts) die with it like the hook tokens.

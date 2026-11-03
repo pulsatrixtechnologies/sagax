@@ -20,7 +20,7 @@ import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, renameS
 import { join } from "node:path";
 import { format } from "node:util";
 
-import { redactSecretsInText } from "./redact.ts";
+import { redactSecretsInText } from "../redact.ts";
 
 export type LogLevel = "info" | "warn" | "error";
 export const LOG_LEVELS: readonly LogLevel[] = ["info", "warn", "error"];

@@ -7,15 +7,15 @@ import { isReadOnlyCommand, runCommandOf } from "../shared/read-only-command.ts"
 import { grantRemoteExecApproval, noteRemoteExecRequest, remoteSessionToolCall } from "./remote-support/remote-session-exec.ts";
 import "../electron/legacy-env-boot.mjs";
 import { ENVIRONMENT_PATHS, HEALTH_IDENTITY } from "../electron/legacy-names.mjs";
-import { healthzBody, healthzUnreadyBody } from "./healthz.ts";
-import { drainHttpServers, isShuttingDown, markShuttingDown } from "./http-shutdown.ts";
+import { healthzBody, healthzUnreadyBody } from "./process/healthz.ts";
+import { drainHttpServers, isShuttingDown, markShuttingDown } from "./process/http-shutdown.ts";
 import { citeAppFigures, noteAppRead, type AppPiece } from "./app-figure.ts";
 import { harnessMcpHttpKind, serveHarnessMcpHttp } from "./mcp/harness-mcp-http.ts";
 // Then the upstream/analytics network block (network-guard.ts).
 import "./safety/network-guard.ts";
 // The console's server log tail captures from here on (server-log-ring.ts).
-import { serverLog } from "./server-log-capture.ts";
-import { startEventLoopLagMonitor } from "./event-loop-lag.ts";
+import { serverLog } from "./process/server-log-capture.ts";
+import { startEventLoopLagMonitor } from "./process/event-loop-lag.ts";
 import { settledChipLabel } from "./waits/waiting-chip.ts";
 import { groupOwnerId, ownsGroup, type GroupActor } from "./groups/group-ownership.ts";
 import { groupLeftFrameAllowed } from "./groups/group-leave.ts";
@@ -650,7 +650,7 @@ import { effectivePermissions, permissionList, type EffectivePermissions } from 
 import { PROVIDER_KEY_KINDS } from "./engines/provider-key-check.ts";
 import { forgetKey, onKeyRejectionChange } from "./key-rejections.ts";
 import { personalCapNotice, setPersonalCapOrganization } from "./usage/personal-spend-cap.ts";
-import { startLowDiskWatch } from "./low-disk-alert.ts";
+import { startLowDiskWatch } from "./process/low-disk-alert.ts";
 import { voiceCostUsd } from "./voice/voice-cost.ts";
 import {
   assertWithinBudget,
@@ -1435,7 +1435,7 @@ import {
   isTurnAdmissionBlocked,
   isTurnEventQuarantined
 } from "./turns/turn-dispatch-guard.ts";
-import { createGracefulShutdown } from "./graceful-shutdown.ts";
+import { createGracefulShutdown } from "./process/graceful-shutdown.ts";
 import {
   drainTurns,
   saveInterruptedTurns,
@@ -2127,7 +2127,7 @@ import { testStdioMcpCommand, testStdioMcpStream } from "./mcp/mcp-stdio-test.ts
 import { roomMentionNotification } from "./rooms/room-mentions.ts";
 import { PERSONAL_STDIO_TOOL_SERVER } from "./user-sandbox-proxy.ts";
 import { PLUGIN_CATALOG } from "../shared/plugin-catalog.ts";
-import { diskSpace, folderBytes } from "./disk-usage.ts";
+import { diskSpace, folderBytes } from "./process/disk-usage.ts";
 import {
   autoReviewThreadMode,
   createBotSettingsStore,
@@ -2743,12 +2743,12 @@ const workspaceMaintenance = new WorkspaceBackupMaintenance();
 // for this server, the paired sessions, and the cookie the served UI uses.
 const ENVIRONMENT_ID = loadEnvironmentId(DATA_DIR);
 // 2026-10-11: the server log tail of the console's Logs page survives a
-// restart, after ensureDirs (server/server-log-ring.ts): a bounded window on disk.
+// restart, after ensureDirs (server/process/server-log-ring.ts): a bounded window on disk.
 serverLog.persistTo(join(DATA_DIR, "server-log"));
 process.once("exit", () => serverLog.flush());
 // 2026-10-28: event loop lag (p50/p99/max every minute) and any block over
 // 1 s, with the blocked stack when the inspector can read it, in the same
-// log (server/event-loop-lag.ts). SAGAX_LOOP_LAG=0 turns it off.
+// log (server/process/event-loop-lag.ts). SAGAX_LOOP_LAG=0 turns it off.
 if (process.env.SAGAX_LOOP_LAG !== "0") {
   // console, so the line reaches both docker logs and the log tail (captureConsole).
   startEventLoopLagMonitor({ info: (m) => console.log(m), warn: (m) => console.warn(m) });
@@ -33229,7 +33229,7 @@ cloudAgentManager = new CloudAgentManager({
 const CLOUD_AGENT_SYNC_MS = 15_000;
 setInterval(() => { void cloudAgentManager.syncActive(); }, CLOUD_AGENT_SYNC_MS).unref?.();
 setPersonalCapOrganization(IDENTITY.kind === "perspicax");
-// The disk holding the data folder is nearly full (server/low-disk-alert.ts).
+// The disk holding the data folder is nearly full (server/process/low-disk-alert.ts).
 startLowDiskWatch({ dir: DATA_DIR, notify: (text) => broadcast({ kind: "notify", notification: { kind: "spend", botId: "", botName: "", threadId: "", title: text.title, body: text.body } }, { adminOnly: true }) });
 
 ROUTES.push(createCloudAgentRoutes({

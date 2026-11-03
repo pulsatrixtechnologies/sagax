@@ -25,7 +25,7 @@ import {
 } from "./org-admin-console.ts";
 import type { EngineVia } from "./org-admin-people.ts";
 import { INCIDENT_KINDS, reasonLabel, type ProblemKind, type ProblemRow } from "./org-problem-log.ts";
-import { LOG_LEVELS, type LogLevel, type LogLine } from "../server-log-ring.ts";
+import { LOG_LEVELS, type LogLevel, type LogLine } from "../process/server-log-ring.ts";
 
 export interface ConnectionsView {
   engines: Array<{ id: string; name: string; installed: boolean; version: string | null; orgKey: boolean; people: number }>;

@@ -36,7 +36,7 @@ import { appendAdminAction, flushAdminActivity, sharedSignIn } from "./activity/
 import { bindDecisionRetention, decisionRetentionDays } from "./decision-log.ts";
 import { hostedWorkspaceConfigured } from "./enterprise.ts";
 import { resolveLoopbackTrust } from "./auth/request-auth.ts";
-import { restartPolicy } from "./restart.ts";
+import { restartPolicy } from "./process/restart.ts";
 import { writeFileAtomic } from "./atomic.ts";
 import { ensureCaddy, normalizeDomainOption, startCaddy, type RunningCaddy } from "./caddy.ts";
 import { runServiceCommand } from "./cli/service-cli.ts";
@@ -1157,7 +1157,7 @@ export async function runServe(options: CliOptions, log: (line: string) => void 
  * RESTART_EXIT_CODE (a copied workspace committed; docs/copy-workspace.md)
  * is started again in this process, with its tunnel, Tailscale or domain
  * address unchanged, and without a second pairing code or browser tab; at
- * most MAX_RESTARTS times in a row (server/restart.ts restartPolicy). */
+ * most MAX_RESTARTS times in a row (server/process/restart.ts restartPolicy). */
 export async function serveUntilStopped(options: CliOptions, run: (options: CliOptions) => Promise<number> = runServe, now: () => number = Date.now): Promise<number> {
   const policy = restartPolicy(now);
   let launch = options;

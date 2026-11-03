@@ -1,4 +1,4 @@
-import { HEALTH_IDENTITY } from "../electron/legacy-names.mjs";
+import { HEALTH_IDENTITY } from "../../electron/legacy-names.mjs";
 
 /** `GET /healthz` for deploy probes and `docker exec`. Registered before
  * the SPA fallback: a path with no file is index.html. Loopback has a

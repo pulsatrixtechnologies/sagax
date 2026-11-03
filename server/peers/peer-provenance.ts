@@ -37,8 +37,8 @@
 // on, and what the renderer strips off a stored line (src/lib/peer-message.ts).
 
 import { z } from "zod";
-import { redactSecretsInText } from "../shared/redact.ts";
-import type { WireMessage as Message } from "../shared/wire.ts";
+import { redactSecretsInText } from "../../shared/redact.ts";
+import type { WireMessage as Message } from "../../shared/wire.ts";
 import { peerName } from "./peer-roster.ts";
 
 const REQUEST_QUOTE_MAX = 400;

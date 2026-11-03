@@ -14,12 +14,12 @@
 // the user-facing Always-allow flow already mirrors that key back into
 // `alwaysAllow`, so the two sides never disagree about what was granted.
 
-import { botRecipientAllowed } from "../shared/allowed-recipients.ts";
-import { newId } from "./contracts.ts";
-import { standingGrantsAllowed } from "./custom-rules-org.ts";
-import { deliverableNotification, type Notification } from "./notify.ts";
+import { botRecipientAllowed } from "../../shared/allowed-recipients.ts";
+import { newId } from "../contracts.ts";
+import { standingGrantsAllowed } from "../custom-rules-org.ts";
+import { deliverableNotification, type Notification } from "../notify.ts";
 import { peerAllowKey, type PeerAction } from "./peer-approval-key.ts";
-import type { BotRecord, Message, Store } from "./store.ts";
+import type { BotRecord, Message, Store } from "../store.ts";
 
 export { peerAllowKey } from "./peer-approval-key.ts";
 

@@ -1,5 +1,5 @@
 // A conversation between this bot and another bot, named on both ends
-// (`WireBot.botConversations`, server/inter-bot-conversations.ts). The phone
+// (`WireBot.botConversations`, server/peers/inter-bot-conversations.ts). The phone
 // shows it as a quiet centered line in the chat; opening it reads the thread
 // through the ordinary messages route. Nothing here sends.
 import Foundation

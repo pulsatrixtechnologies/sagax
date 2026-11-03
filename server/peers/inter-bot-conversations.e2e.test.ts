@@ -15,12 +15,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
-import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "./testing/fake-oidc-provider.ts";
-import { freePortBlock } from "./testing/ports.ts";
+import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
+import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
+import { freePortBlock } from "../testing/ports.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
-const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
+const FAKE_CLAUDE = join(SERVER_DIR, "..", "testing", "fake-claude-cli.ts");
 const posixOnly = describe.skipIf(process.platform === "win32");
 const BOB: FakeOidcUser = { sub: "01J9BCBOB00000000000000B", email: "bob@example.test", name: "Bob", preferred_username: "bob", role: "admin" };
 const ANA: FakeOidcUser = { sub: "01J9BCANA00000000000000A", email: "ana@example.test", name: "Ana", preferred_username: "ana", role: "employee" };
@@ -92,8 +92,8 @@ posixOnly("organization: a bot-to-bot conversation in both chats", () => {
         ]),
       }, config: { cli: FAKE_CLAUDE, fullAuto: true } } },
     }));
-    child = spawn(process.execPath, ["--experimental-strip-types", join(SERVER_DIR, "index.ts")], {
-      cwd: join(SERVER_DIR, ".."),
+    child = spawn(process.execPath, ["--experimental-strip-types", join(SERVER_DIR, "..", "index.ts")], {
+      cwd: join(SERVER_DIR, "..", ".."),
       env: {
         PATH: process.env.PATH ?? "", HOME: home, USERPROFILE: home, SAGAX_PORT: String(port), SAGAX_WEBHOOK_PORT: String(port + 1),
         SAGAX_LOCAL_VM_TEST_NAMESPACE: process.env.SAGAX_LOCAL_VM_TEST_NAMESPACE ?? "",

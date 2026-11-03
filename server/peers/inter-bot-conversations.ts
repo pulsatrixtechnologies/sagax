@@ -18,7 +18,7 @@
 // rule as any thread. `mayRead` is that rule applied to the conversation: on
 // an organization server a person who cannot read the thread, or cannot use
 // both bots, gets no entry at all (see botForViewer in server/index.ts).
-import type { WireBotConversation } from "../shared/wire.ts";
+import type { WireBotConversation } from "../../shared/wire.ts";
 
 export interface ConversationTask {
   threadId: string;

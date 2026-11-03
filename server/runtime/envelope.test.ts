@@ -6,7 +6,7 @@
 // closing instruction. Drop one and a test here goes red.
 import { describe, expect, it } from "vitest";
 
-import { CONSENT_RULE } from "../peer-provenance.ts";
+import { CONSENT_RULE } from "../peers/peer-provenance.ts";
 import { composeEnvelope, composeQuestion, composeReport, composeResume, ENVELOPE_MARK, escapeEnvelope } from "./envelope.ts";
 import type { Assignment, EnvelopeNames } from "./types.ts";
 

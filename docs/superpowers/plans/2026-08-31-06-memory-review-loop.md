@@ -4,7 +4,7 @@
 
 **Goal:** Turn memory from a file the bot silently overwrites into a reviewed change: the bot proposes a typed diff, the person sees what changed and why, and approve/reject/edit is one click — with every accepted change recorded in the profile version log and reversible.
 
-**Architecture:** The bot stops writing `MEMORY.md` directly and instead calls a `propose_memory` tool on the existing agents MCP proxy. The proposal becomes a card in the transcript using the same mechanism `server/peer-approval.ts` already uses — appending straight to the store rather than crossing the runtime bus. An accepted proposal is applied by `writeMemoryFile` and appended to the P2 version log, which is what makes rollback free.
+**Architecture:** The bot stops writing `MEMORY.md` directly and instead calls a `propose_memory` tool on the existing agents MCP proxy. The proposal becomes a card in the transcript using the same mechanism `server/peers/peer-approval.ts` already uses — appending straight to the store rather than crossing the runtime bus. An accepted proposal is applied by `writeMemoryFile` and appended to the P2 version log, which is what makes rollback free.
 
 **Tech Stack:** TypeScript, Node 24, Vitest, React.
 
@@ -134,7 +134,7 @@ writes down something wrong on Tuesday is still acting on it in March.
 - [ ] Write a failing test for the pure diff renderer: additions render with a `+` and their kind label, removals with a `−`, and an entry that appears in both lists renders once as a **change** rather than twice. A rewritten line shown as an unrelated add and remove is unreadable.
 - [ ] Run; expect FAIL.
 - [ ] Implement the card: the reason the bot gave, the diff, and Approve / Edit / Reject. Edit opens the proposed text inline and Approve then applies the edited version.
-- [ ] Append the card to the thread the same way `server/peer-approval.ts` does — straight to the store, not across the runtime bus. Its module comment explains why, and `server/decision-log.ts:19` records the consequence: cards appended this way do not reach the decision log. Accept that here too; the profile version log from Task 2 is this feature's audit trail.
+- [ ] Append the card to the thread the same way `server/peers/peer-approval.ts` does — straight to the store, not across the runtime bus. Its module comment explains why, and `server/decision-log.ts:19` records the consequence: cards appended this way do not reach the decision log. Accept that here too; the profile version log from Task 2 is this feature's audit trail.
 - [ ] Add a Memory tab to the bot's settings showing current entries by kind and the proposal history, with restore wired to P2's rollback.
 - [ ] Run the focused test, `pnpm typecheck`, `pnpm check:contrast`.
 - [ ] Commit `feat(memory): review card with approve, edit, and reject`.

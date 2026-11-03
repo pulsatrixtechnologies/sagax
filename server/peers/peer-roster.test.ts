@@ -23,8 +23,8 @@ import {
   teammateAvailabilityPrompt,
   type RosterMember,
 } from "./peer-roster.ts";
-import { chiefOfStaffSystemPrompt } from "./chief-of-staff.ts";
-import { buildSystemPrompt, teamAvailabilityPart } from "./system-prompt.ts";
+import { chiefOfStaffSystemPrompt } from "../chief-of-staff.ts";
+import { buildSystemPrompt, teamAvailabilityPart } from "../system-prompt.ts";
 
 import type { LivePeer } from "./peer-roster.ts";
 

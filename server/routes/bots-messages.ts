@@ -61,7 +61,7 @@ import { spokenLineFields } from "../voice/live-call-record.ts";
 import { cancelledChatFollowup } from "../messages/message-db.ts";
 import { misuseRefusal } from "../misuse-guardrails.ts";
 import { ORG_FULL_ACCESS_DISABLED } from "../org/org-full-access.ts";
-import { resolvePeerComms } from "../peer-approval.ts";
+import { resolvePeerComms } from "../peers/peer-approval.ts";
 import { promptWithReply } from "../messages/replies.ts";
 import {
   personKey,

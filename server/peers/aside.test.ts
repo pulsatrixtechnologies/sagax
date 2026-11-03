@@ -1,10 +1,10 @@
 // The aside lane's envelope, its transcript line, and the one-time hand-over
-// of the asides an older release left queued (server/aside.ts).
+// of the asides an older release left queued (server/peers/aside.ts).
 import { describe, expect, it } from "vitest";
 
 import { asideEnvelope, legacyPendingAsides, recordInjectedAside } from "./aside.ts";
-import { chatFollowups, saveChatFollowup } from "./messages/message-db.ts";
-import type { Message } from "./store.ts";
+import { chatFollowups, saveChatFollowup } from "../messages/message-db.ts";
+import type { Message } from "../store.ts";
 
 describe("aside", () => {
   it("frames peer words as context, not steering", () => {

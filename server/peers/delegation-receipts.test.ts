@@ -1,4 +1,4 @@
-// What is left of the delegation ledger (server/delegation-receipts.ts):
+// What is left of the delegation ledger (server/peers/delegation-receipts.ts):
 // the receipt drawer, the one-time hand-over of an older release's queue,
 // and the pure wake and status helpers.
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
@@ -19,8 +19,8 @@ import {
   summarizeDelegatedActivity,
   takeLegacyDelegations,
 } from "./delegation-receipts.ts";
-import { DATA_DIR } from "./config.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
+import { DATA_DIR } from "../config.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
 
 describe("receipts", () => {
   it("persists receipts across a restart and prunes the drawer by count", () => {

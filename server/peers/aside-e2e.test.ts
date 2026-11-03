@@ -15,13 +15,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
-import { freePortBlock } from "./testing/ports.ts";
-import { withoutTurnClock } from "./testing/turn-clock-text.ts";
+import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
+import { freePortBlock } from "../testing/ports.ts";
+import { withoutTurnClock } from "../testing/turn-clock-text.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
-const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
-const FAKE_ACP = join(SERVER_DIR, "testing", "fake-acp-cli.ts");
+const FAKE_CLAUDE = join(SERVER_DIR, "..", "testing", "fake-claude-cli.ts");
+const FAKE_ACP = join(SERVER_DIR, "..", "testing", "fake-acp-cli.ts");
 const PORT = await freePortBlock([0, 1]);
 const BASE = `http://127.0.0.1:${PORT}`;
 const posixOnly = describe.skipIf(process.platform === "win32");
@@ -101,8 +101,8 @@ posixOnly("peer aside lane e2e", () => {
         },
       }),
     );
-    child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
-      cwd: join(SERVER_DIR, ".."),
+    child = spawn(process.execPath, [join(SERVER_DIR, "..", "index.ts")], {
+      cwd: join(SERVER_DIR, "..", ".."),
       env: { ...(process.env.PATH ? { PATH: process.env.PATH } : {}), HOME: home, USERPROFILE: home, SAGAX_PORT: String(PORT) },
       stdio: ["ignore", "pipe", "pipe"],
     });

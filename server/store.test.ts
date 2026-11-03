@@ -21,8 +21,8 @@ import {
 } from "./memory/memory-journal.ts";
 import type { ModelSelection } from "./contracts.ts";
 import * as mdb from "./messages/message-db.ts";
-import { peerAllowKey } from "./peer-approval-key.ts";
-import { canAccessTeam } from "./peer-roster.ts";
+import { peerAllowKey } from "./peers/peer-approval-key.ts";
+import { canAccessTeam } from "./peers/peer-roster.ts";
 import { Store, toWireTask, type BotRecord } from "./store.ts";
 import type { TeamSetupRequest } from "../shared/team-setup.ts";
 import { SECTION_CONTEXTS_FILE, readSectionContext, writeSectionContext } from "./section-context.ts";

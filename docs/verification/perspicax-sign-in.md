@@ -580,7 +580,7 @@ pnpm exec vitest run server/oidc-rp.test.ts server/org/org-admin-routes.test.ts 
   server/admin-activity.test.ts server/bot-grants.test.ts server/section-channels.test.ts \
   src/lib/open-thread-hash.test.ts server/org/org-admin.e2e.test.ts \
   server/org/org-routines.e2e.test.ts server/org/org-mcp.e2e.test.ts server/org/org-sharing.e2e.test.ts \
-  server/oidc-session.e2e.test.ts server/peer-approval.e2e.test.ts
+  server/oidc-session.e2e.test.ts server/peers/peer-approval.e2e.test.ts
 pnpm -s typecheck && pnpm -s lint && pnpm -s i18n:check
 ```
 

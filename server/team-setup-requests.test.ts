@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { TeamSetupError, TeamSetupRequestService, teamSetupDirectApply } from "./team-setup-requests.ts";
-import { canAccessTeam } from "./peer-roster.ts";
+import { canAccessTeam } from "./peers/peer-roster.ts";
 import type { BotRecord, OptionCardData } from "./store.ts";
 import type { TeamSetupRequest, TeamSetupResult } from "../shared/team-setup.ts";
 

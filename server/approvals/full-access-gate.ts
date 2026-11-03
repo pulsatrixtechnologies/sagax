@@ -112,7 +112,7 @@ export const FULL_ACCESS_SURFACES = {
   /** The Sagax ask_choice tool (server/chat-widgets.ts createChoiceCard). */
   "ask-choice": "server/chat-widgets.ts createChoiceCard",
   /** Ask before contacting bots (index.ts peerReviewRequired, peer-approval.ts). */
-  "peer-contact": "server/peer-approval.ts requestPeerApproval behind peerReviewRequired",
+  "peer-contact": "server/peers/peer-approval.ts requestPeerApproval behind peerReviewRequired",
   /** A proposal the bot makes about itself or its team: profile, routine,
    * team setup, model, rule, terminal (index.ts fullAccessForSource). */
   "proposal": "server/*-requests.ts cards, applied under Full (fullAccessForSource)",

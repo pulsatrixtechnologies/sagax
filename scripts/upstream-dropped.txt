@@ -422,3 +422,17 @@ server/outbound-counts.test.ts
 server/outbound-counts.ts
 server/outbound-requests.test.ts
 server/outbound-requests.ts
+server/incidents.e2e.test.ts
+server/incidents.test.ts
+server/incidents.ts
+server/peer-approval-key.ts
+server/peer-approval.e2e.test.ts
+server/peer-approval.test.ts
+server/peer-approval.ts
+server/peer-delivery.test.ts
+server/peer-delivery.ts
+server/peer-provenance.test.ts
+server/peer-provenance.ts
+server/peer-roster.test.ts
+server/peer-roster.ts
+server/room-coordination.e2e.test.ts

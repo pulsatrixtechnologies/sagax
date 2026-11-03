@@ -166,7 +166,7 @@ the pending job to catch up.
 
 ```sh
 pnpm exec vitest run server/runtime/runtime.test.ts server/runtime/scenarios.test.ts server/runtime/import-legacy.test.ts
-pnpm exec vitest run server/direct-coordination.e2e.test.ts server/peer-roster.test.ts server/drivers/agents-proxy.test.ts
+pnpm exec vitest run server/direct-coordination.e2e.test.ts server/peers/peer-roster.test.ts server/drivers/agents-proxy.test.ts
 pnpm exec vitest run server/workspace/independent-threads-api.test.ts -t "holds coordinated work behind a peer's approval"
 pnpm exec vitest run server/workspace/independent-threads-api.test.ts -t "unanswered|what became of each teammate approval"
 pnpm exec vitest run server/comms.test.ts

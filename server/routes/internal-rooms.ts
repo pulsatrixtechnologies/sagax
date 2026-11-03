@@ -17,7 +17,7 @@ import { CONFIDENTIAL_PEER_REFUSED } from "../threads/confidential-threads.ts";
 import type { HandoffView } from "../coordinator.ts";
 import { newId } from "../contracts.ts";
 import { appendDecision } from "../decision-log.ts";
-import { peerApprovalFailure, requestPeerApproval, type ApprovalBus } from "../peer-approval.ts";
+import { peerApprovalFailure, requestPeerApproval, type ApprovalBus } from "../peers/peer-approval.ts";
 import {
   PEER_ACCESS_HELP,
   canAccessBot,
@@ -25,7 +25,7 @@ import {
   peerInScope,
   roomRecruitIds,
   type RosterMember,
-} from "../peer-roster.ts";
+} from "../peers/peer-roster.ts";
 import { planPriorityWake, parseWakePriority, releasePriorityNow } from "../priority-wake.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { decideRoomPost, emptyRoomPostBudget, type RoomPostAttempt, type RoomPostBudget } from "../room-post-budget.ts";

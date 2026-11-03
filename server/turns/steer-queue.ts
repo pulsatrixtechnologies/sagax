@@ -22,7 +22,7 @@ import { chatFollowups, saveChatFollowup, settleChatFollowups } from "../message
 import { drainCoalesceHead, WAITING_LINES_COALESCE_WINDOW_MS } from "../admission.ts";
 import { SAFE_POINT_NOTE } from "../safe-point-preempt.ts";
 import { spokenLineFields } from "../voice/live-call-record.ts";
-import { workOriginSchema, type WorkOrigin } from "../peer-provenance.ts";
+import { workOriginSchema, type WorkOrigin } from "../peers/peer-provenance.ts";
 import { voiceQueuePrompt } from "../voice/voice-turn.ts";
 import type { ResolvedSender, SteerQueueReason } from "../../shared/wire.ts";
 import type { BotRecord, Message } from "../store.ts";

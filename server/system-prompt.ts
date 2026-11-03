@@ -7,7 +7,7 @@
 // here too, so neither path can drift from the other or from the preview.
 import { MISUSE_POLICY_PROMPT } from "../shared/misuse-guardrails.ts";
 import { soulSystemPrompt } from "./bot-folder.ts";
-import { teammateAvailabilityPrompt, type RosterMember } from "./peer-roster.ts";
+import { teammateAvailabilityPrompt, type RosterMember } from "./peers/peer-roster.ts";
 import { ROUTINE_REPORT_CONTRACT } from "./routines/routine-report.ts";
 import { CW_FAMILIES, CW_REQUIRED_FIELDS, CW_VIEWS, CW_WIDGET_EXAMPLE, cwOrList } from "../shared/cw-widgets/schema.ts";
 

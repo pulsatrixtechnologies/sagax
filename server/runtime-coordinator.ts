@@ -12,7 +12,7 @@
 import { join } from "node:path";
 
 import type { Coordinator, CoordinatorHost, CoordinatorOptions, HandedOutOutcome, HandoffView, LiveHandoffEdge, RoomAddress } from "./coordinator.ts";
-import type { WorkOrigin } from "./peer-provenance.ts";
+import type { WorkOrigin } from "./peers/peer-provenance.ts";
 import { composeEnvelope, composeQuestion, composeReport, composeResume, envelopeNote } from "./runtime/envelope.ts";
 import { Runtime } from "./runtime/runtime.ts";
 import { importLegacyHandoffs } from "./runtime/import-legacy.ts";

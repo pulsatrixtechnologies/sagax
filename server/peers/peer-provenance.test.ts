@@ -5,7 +5,7 @@
 // these goes red.
 import { describe, expect, it } from "vitest";
 
-import { peerLine } from "../src/lib/peer-message.ts";
+import { peerLine } from "../../src/lib/peer-message.ts";
 import {
   CONSENT_RULE, escapeNotes, OUTSIDE, peerLineText, peerProvenanceAuthor, peerProvenanceNote, reportNote, requestWorkOrigin,
   withPeerProvenance, workOrigin, type PeerProvenance, type WorkOrigin,

@@ -13,7 +13,7 @@
 //   server builds that prompt. A bot that only got a summary has not seen
 //   it. Its id is `bot:<botId>`.
 // - A peer bot reached through ask_bot keeps its delivery receipt
-//   (server/peer-delivery.ts); this is separate.
+//   (server/peers/peer-delivery.ts); this is separate.
 //
 // Privacy: in a conversation between two people (peopleDm), a person who
 // turned off "Send read receipts" (preference `sagax.readReceipts.v1` =

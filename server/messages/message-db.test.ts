@@ -25,7 +25,7 @@ import { closeMessageDb,
   searchMessages,
   setActiveLeaf,
   updateMessage, describeMissingFts5 } from "./message-db.ts";
-import { withPeerProvenance } from "../peer-provenance.ts";
+import { withPeerProvenance } from "../peers/peer-provenance.ts";
 import { Store, type Message } from "../store.ts";
 import type { ModelSelection } from "../contracts.ts";
 

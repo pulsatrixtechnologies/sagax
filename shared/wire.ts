@@ -340,7 +340,7 @@ export interface WireWaitingApproval {
 }
 
 /** A conversation between this bot and another bot, named on both ends
- * (server/inter-bot-conversations.ts). The messages are read through
+ * (server/peers/inter-bot-conversations.ts). The messages are read through
  * GET /api/threads/:threadId/messages. */
 export interface WireBotConversation {
   threadId: string;
@@ -954,7 +954,7 @@ export interface WireMessage extends WaitLineField {
   /** Set on the user-role line another bot delivered into this bot's own
    * conversation (ask_bot, start_thread). `incident`: the line is
    * Sagax's Team incidents report about that bot's broken run in
-   * `threadId` (server/incidents.ts), not its words; `notified`: that
+   * `threadId` (server/peers/incidents.ts), not its words; `notified`: that
    * failure already buzzed the person (a run that could not start, a
    * failed routine). */
   peerAsk?: { botId: string; name: string; unattended?: boolean; incident?: { threadId: string; notified?: boolean } };

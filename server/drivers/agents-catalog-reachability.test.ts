@@ -24,8 +24,8 @@ import { GUEST_CONFINED_CODEX_ARGS } from "./codex.ts";
 import { engineHasNativeWebSearch } from "../web-search/native.ts";
 import { chiefOfStaffSystemPrompt } from "../chief-of-staff.ts";
 import { engineConnectorsPrompt } from "../harness-connectors.ts";
-import { incidentText } from "../incidents.ts";
-import { peerRosterSystemPrompt } from "../peer-roster.ts";
+import { incidentText } from "../peers/incidents.ts";
+import { peerRosterSystemPrompt } from "../peers/peer-roster.ts";
 import {
   CREDENTIAL_PROMPT, LEARN_PROMPT, PROFILE_CREATOR_PROMPT, PROFILE_PROMPT, REACTION_PROMPT, richOutputPrompt,
   ROUTINE_PROMPT, TEAM_MEMORY_PROMPT, WIDGET_APPROVAL_PROMPT, WIDGET_PROMPT,

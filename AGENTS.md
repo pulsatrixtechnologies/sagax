@@ -2752,7 +2752,7 @@ routines at once, no card, several bots in one order (one call per bot):
 - Scope (2026-10-20, 0.6.4): a Primary Bot SEES and reaches
   every bot its person owns (on an organization server also the ones the
   person may manage), whatever the team: `canAccessBot` / `primaryCovers`
-  (`server/peer-roster.ts`, cover set by index.ts `setPrimaryCover`) feed
+  (`server/peers/peer-roster.ts`, cover set by index.ts `setPrimaryCover`) feed
   `canReachPeer` (list_bots, roster), `list_team_setup`, team setup
   (`covers`), delegations and every "different section" refusal.
   `managedSections` only widens coordination of other teams now. An
@@ -8094,15 +8094,15 @@ shares nothing (2026-10-02). Keep these rules, covered by
 Owner report: a member's bots kept naming a bot ("Nova") the member
 could not see. Why: once sections became personal, `bot.section` stayed
 empty for everyone, so the section rule of `reachablePeers`
-(`server/peer-roster.ts`) put every person's bots in one "General" team.
+(`server/peers/peer-roster.ts`) put every person's bots in one "General" team.
 Each bot's roster, `list_bots`, @mentions, `ask_bot`, `delegate_bot` and
 peer threads reached the whole organization. Keep these rules, covered by
-`server/peer-scope.test.ts`, `server/incidents.test.ts` and S3-12 in
+`server/peers/peer-scope.test.ts`, `server/peers/incidents.test.ts` and S3-12 in
 `server/org/org-sharing.e2e.test.ts`:
 
 - On an organization server a bot reaches only its owner's bots and the
   bots shared with that owner (any level, `botLevel`), the bots the owner
-  sees in the sidebar (`orgPeerInScope` in `server/peer-scope.ts`,
+  sees in the sidebar (`orgPeerInScope` in `server/peers/peer-scope.ts`,
   installed by index.ts through `setPeerScope`). It is the owner's, not the
   speaker's, and it is not symmetric: sharing a bot with Bob opens it to
   Bob's bots, never Bob's bots to it.

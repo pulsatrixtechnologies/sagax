@@ -27,7 +27,7 @@ prompt or dialog: visibility is access control and the log is a record.
     that becomes visible arrives whole with a transcript page;
   - rooms need every bot visible; teams need a visible bot or room;
   - bots reach teammates only with exactly the same audience
-    (`peerAllowed` in `server/peer-roster.ts`, used by rosters, `list_bots`,
+    (`peerAllowed` in `server/peers/peer-roster.ts`, used by rosters, `list_bots`,
     asks, delegations, @mentions and the Chief's team);
   - admins, the owner on this machine and a session-less local service see
     everything; members never receive a bot's audience list.
@@ -48,7 +48,7 @@ prompt or dialog: visibility is access control and the log is a record.
 
 ```sh
 pnpm exec vitest run server/bot-visibility.test.ts server/bot-visibility.e2e.test.ts \
-  server/admin-activity.test.ts server/admin-activity.e2e.test.ts server/peer-roster.test.ts \
+  server/admin-activity.test.ts server/admin-activity.e2e.test.ts server/peers/peer-roster.test.ts \
   server/cli.test.ts src/components/ActivitySection.test.ts \
   src/components/bot-settings/VisibilitySection.test.ts
 ```

@@ -143,7 +143,7 @@ describe("perspicaxSelfAnswer", () => {
 });
 
 describe("owner setup prompts", async () => {
-  const { peerRosterSystemPrompt } = await import("../peer-roster.ts");
+  const { peerRosterSystemPrompt } = await import("../peers/peer-roster.ts");
   const { aiClientPrompt } = await import("../system-prompt.ts");
   it("an ordinary bot reads the descriptions of its own owner's teammates only", () => {
     const team = [

@@ -12,7 +12,7 @@
 //
 // The policy here is pure so it can be read and tested on its own; the
 // harness (server/index.ts) supplies the store and starts the turns.
-import type { WireMessage as Message } from "../shared/wire.ts";
+import type { WireMessage as Message } from "../../shared/wire.ts";
 import { withoutDeliveredNote } from "./peer-provenance.ts";
 import { canAccessTeam } from "./peer-roster.ts";
 

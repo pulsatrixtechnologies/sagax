@@ -463,8 +463,8 @@ import {
   roomRosterLine,
   uniquePeerName,
   PEER_ACCESS_HELP
-} from "./peer-roster.ts";
-import { orgPeerInScope } from "./peer-scope.ts";
+} from "./peers/peer-roster.ts";
+import { orgPeerInScope } from "./peers/peer-scope.ts";
 import {
   containerComputerAction,
   containerComputerExists,
@@ -855,13 +855,13 @@ import {
   isEngineEmptyFailure,
   type Incident,
   type IncidentKind
-} from "./incidents.ts";
+} from "./peers/incidents.ts";
 import { createEmptyResponseRetry, shouldEmptyResponseRetry } from "./empty-response-retry.ts";
 import { limitKindOf } from "./limit-reset-time.ts";
 
 /** A session_read answer competes with the transcript for the context
  * window; a computer-use turn's output can run to hundreds of KB. */
-import { legacyPendingAsides } from "./aside.ts";
+import { legacyPendingAsides } from "./peers/aside.ts";
 import { promptWithReply, transcriptText } from "./messages/replies.ts";
 import { type DataContext } from "./data-context.ts";
 import { DevPodsThreads, devPodsPrompt } from "./dev-pods-prompt.ts";
@@ -876,7 +876,7 @@ import {
   summarizeDelegatedActivity,
   takeLegacyDelegations,
   type DelegationReceipt
-} from "./delegation-receipts.ts";
+} from "./peers/delegation-receipts.ts";
 import {
   drainSteeredMessages,
   cancelThreadQueue,
@@ -975,8 +975,8 @@ import {
   requestPeerApproval,
   resolvePeerComms,
   type ApprovalBus
-} from "./peer-approval.ts";
-import { peerDeliveryReceipt } from "./peer-delivery.ts";
+} from "./peers/peer-approval.ts";
+import { peerDeliveryReceipt } from "./peers/peer-delivery.ts";
 import {
   READ_RECEIPTS_PREFERENCE,
   botParticipant,
@@ -996,7 +996,7 @@ import {
   requestWorkOrigin,
   webhookPostText,
   type WorkOrigin
-} from "./peer-provenance.ts";
+} from "./peers/peer-provenance.ts";
 import { type RoomPostBudget } from "./room-post-budget.ts";
 import {
   mentionedBots,
@@ -1865,7 +1865,7 @@ import {
   type ApprovalViewer
 } from "./approvals/approval-audience.ts";
 import { interBotWaiting } from "./approvals/inter-bot-approvals.ts";
-import { interBotConversations } from "./inter-bot-conversations.ts";
+import { interBotConversations } from "./peers/inter-bot-conversations.ts";
 import type { BotHost } from "./turns/turn-route.ts";
 import { signInListWithOpenInvites, type OrgRole } from "./org/org-directory.ts";
 import { createOwnerAvatarRoute, OwnerIdentityStore, parseOwnerIdentityMessage } from "./owner-identity.ts";
@@ -8464,7 +8464,7 @@ function memoryPromptFor(bot: BotRecord, opts: { managedWrites?: boolean; fileTo
   });
 }
 // Organization server: a bot reaches its owner's bots and the bots shared
-// with them, never the rest of the organization (server/peer-scope.ts).
+// with them, never the rest of the organization (server/peers/peer-scope.ts).
 if (IDENTITY.kind === "perspicax") {
   setPeerScope((from, target) => {
     const fromBot = store.bot(from.id);
@@ -12422,7 +12422,7 @@ function roomHandoffProblem(node: Pick<HandoffView, "groupId" | "threadId" | "bo
     // A room the sender sits in keeps its own rule: people chose its
     // members. Anywhere else (another bot's direct thread, a room the
     // sender is not in) the organization scope applies, to every reader
-    // of the destination (server/peer-scope.ts).
+    // of the destination (server/peers/peer-scope.ts).
     if (!group?.memberIds.includes(from.id)) {
       const readers = group ? group.memberIds.map(id => store.bot(id)).filter((member): member is BotRecord => Boolean(member)) : [bot];
       if (readers.some(member => !peerInScope(from, member))) return "The recipient is outside the sender's owner's bots";
@@ -20229,7 +20229,7 @@ bus.subscribe((event: RuntimeEvent) => {
           }) : Promise.resolve();
         if (resourceOwner) settlingResourceOwners.set(resourceOwner.threadId, resourceOwner.generation);
         liveTurnByThread.delete(event.threadId);
-        // A Team incidents report (server/incidents.ts): the Primary Bot
+        // A Team incidents report (server/peers/incidents.ts): the Primary Bot
         // worked in its "Team incidents" thread, beside its conversation;
         // what it has to say arrives as its own message in the person's one
         // conversation with it (2026-10-28, the reference design: one
@@ -20887,7 +20887,7 @@ function wakeDelegationSource(source: BotRecord, threadId: string, targetName: s
 // with a link to the broken thread and retry_thread to act on it. What the
 // Primary Bot has to say then arrives as its message in the person's one
 // conversation with it (turn end, `incidentsReport`), so the person reads
-// one place: their conversation. Policy in server/incidents.ts.
+// one place: their conversation. Policy in server/peers/incidents.ts.
 const incidentLedger = new IncidentLedger();
 
 /** What the broken thread was about: the last thing asked there
@@ -47554,7 +47554,7 @@ const onListening = async () => {
   limitReset.start();
   memoryUpkeep.start();
   // Asides an older release left queued are handed to the job runtime once,
-  // as one-way notices from their sender (server/aside.ts).
+  // as one-way notices from their sender (server/peers/aside.ts).
   for (const aside of legacyPendingAsides((threadId) => store.messagesFor(threadId))) {
     const sender = store.bot(aside.fromBotId);
     if (!sender || !store.taskByThread(aside.botId, aside.threadId)) continue;

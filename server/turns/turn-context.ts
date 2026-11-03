@@ -1,5 +1,5 @@
 import type { DriverKind } from "../contracts.ts";
-import { peerName } from "../peer-roster.ts";
+import { peerName } from "../peers/peer-roster.ts";
 import { wrapUntrusted } from "../../shared/safety-review.ts";
 import { replaysTranscriptNatively } from "../runtime/capabilities.ts";
 

@@ -22,7 +22,7 @@ import { expect, it } from "vitest";
 
 import { launchVerificationServer, runControlOmb, verificationServerArgs, verificationServerEnvironment } from "../scripts/control-omb.ts";
 import { CONTROL_WAITED } from "./control-client.ts";
-import { CONSENT_RULE } from "./peer-provenance.ts";
+import { CONSENT_RULE } from "./peers/peer-provenance.ts";
 import { ENVELOPE_MARK } from "./runtime/envelope.ts";
 import { waitForExit } from "./testing/cleanup.ts";
 import { handDesktopComputer } from "./testing/desktop-computer.ts";

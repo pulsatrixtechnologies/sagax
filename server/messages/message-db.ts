@@ -20,7 +20,7 @@ import { provideContentKeys, type ExportedContentKey } from "../content-export.t
 import { ContentKeyring, ContentKeyUnavailable, ensureContentKeySchema, localKekProvider, WORKSPACE_OWNER, type KekProvider, type LiveKey } from "../encryption/content-keys.ts";
 import { resolveVaultKey } from "../mcp/mcp-oauth.ts";
 import { blindSnippet, indexColumns, indexSourcesOf, recallHolds, recallMatch, recallTermsFor, skeletonOf, type RecallTerm } from "../encryption/message-sealing.ts";
-import { peerProvenanceAuthor, WEBHOOK_AUTHOR, type WorkOrigin } from "../peer-provenance.ts";
+import { peerProvenanceAuthor, WEBHOOK_AUTHOR, type WorkOrigin } from "../peers/peer-provenance.ts";
 import type { ResolvedSender, SteerQueueReason, WireMessage as Message } from "../../shared/wire.ts";
 import type { UsageTrigger } from "../usage-ledger.ts";
 import { MessageSearchWorker } from "../message-search-worker.ts";

@@ -2,7 +2,7 @@ import { createSecretKey, type KeyObject } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
 import { BlindTokenizer, ContentSealError, bloomHas, deriveSubkey, gramCodesOf, messageAad, openText } from "../encryption/content-crypto.ts";
-import { WEBHOOK_AUTHOR } from "../peer-provenance.ts";
+import { WEBHOOK_AUTHOR } from "../peers/peer-provenance.ts";
 
 /** An unwrapped content key, as the search needs it (content-keys.ts LiveKey). */
 export interface OpenKey {

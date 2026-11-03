@@ -18,7 +18,7 @@ import { removeBotFolder, soulFile, soulHash, writeSoulMirror } from "./bot-fold
 import { cleanTemporaryAgent, type TemporaryAgent } from "./temporary-agents.ts";
 import { createdByBotMark, type BotCreatedBy } from "./bot-creation.ts";
 import type { BotProfilePatch } from "./bot-profile.ts";
-import { peerAllowKey, type PeerAction } from "./peer-approval-key.ts";
+import { peerAllowKey, type PeerAction } from "./peers/peer-approval-key.ts";
 import { DATA_DIR, EVENTS_DIR, NATIVE_DIR, loadBrowserProfileIdAliases } from "./config.ts";
 import * as mdb from "./messages/message-db.ts";
 import { ThreadCache, type ThreadState } from "./threads/thread-cache.ts";

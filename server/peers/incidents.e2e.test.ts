@@ -10,9 +10,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
-import { openSse } from "./testing/sse.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
+import { openSse } from "../testing/sse.ts";
 
 // Drives a fixed Works on through the HTTP API (scripts/control-omb.ts passes
 // the seam to the fixture): Workspace is always Auto otherwise (owner 2026-10-18).

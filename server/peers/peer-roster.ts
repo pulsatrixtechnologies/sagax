@@ -4,8 +4,8 @@
 // caps, one sanitizer, and one reachability rule to audit rather than two
 // that drift.
 
-import type { BotActivity } from "../shared/wire.ts";
-import { sameAudience } from "./bot-visibility.ts";
+import type { BotActivity } from "../../shared/wire.ts";
+import { sameAudience } from "../bot-visibility.ts";
 
 export interface RosterMember {
   id: string;

@@ -7,7 +7,7 @@ import type { Json } from "../agents-client.ts";
 import type { HarnessClient } from "../agents-client.ts";
 import { boundedAgentResult } from "../agents-result.ts";
 import type { ToolCallContext } from "../agents-call-types.ts";
-import { renderPeerDeliveryReceipts, type PeerDeliveryOutcome, type PeerDeliveryReceipt } from "../../peer-delivery.ts";
+import { renderPeerDeliveryReceipts, type PeerDeliveryOutcome, type PeerDeliveryReceipt } from "../../peers/peer-delivery.ts";
 
 export const WEEKDAYS = [
   "monday",

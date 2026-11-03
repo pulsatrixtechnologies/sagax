@@ -9,8 +9,8 @@
 import { existsSync, readFileSync, renameSync } from "node:fs";
 import { join } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { DATA_DIR } from "./config.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { DATA_DIR } from "../config.ts";
 import { workOriginSchema, type WorkOrigin } from "./peer-provenance.ts";
 
 const DELEGATIONS_FILE = join(DATA_DIR, "delegations.json");

@@ -5,8 +5,8 @@
 import { rmSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { DATA_DIR } from "./config.ts";
-import type { ModelSelection } from "./contracts.ts";
+import { DATA_DIR } from "../config.ts";
+import type { ModelSelection } from "../contracts.ts";
 import {
   cancelPeerApprovalsFor,
   cancelPeerApprovalsForThread,
@@ -16,9 +16,9 @@ import {
   resolvePeerComms,
   type ApprovalBus,
 } from "./peer-approval.ts";
-import { closeMessageDb } from "./messages/message-db.ts";
-import type { Notification } from "./notify.ts";
-import { Store, type BotRecord } from "./store.ts";
+import { closeMessageDb } from "../messages/message-db.ts";
+import type { Notification } from "../notify.ts";
+import { Store, type BotRecord } from "../store.ts";
 
 const selection = (): ModelSelection => ({ instanceId: "claude", model: "fake-model" });
 

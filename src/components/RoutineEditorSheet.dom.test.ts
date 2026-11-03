@@ -211,14 +211,11 @@ describe("Format with AI (2026-11-03)", () => {
     const { getDraft } = await import("@/lib/drafts");
     vi.stubGlobal("requestAnimationFrame", (callback: () => void) => { callback(); return 0; });
     const onClose = mount(routine({ type: "cron", expression: "0 9 * * *", timeZone: "UTC" }), vi.fn(), { presentation: "panel" });
-    for (const mode of ["view", "edit"] as const) {
-      if (mode === "edit") edit();
-      const button = host.querySelector<HTMLButtonElement>("[data-routine-editor-section=what] [data-routine-format-ai]");
-      expect(button, mode).not.toBeNull();
-      expect(button!.textContent).toBe("Format with AI");
-      expect(button!.querySelector("svg.lucide-sparkles")).not.toBeNull();
-    }
-    flushSync(() => host.querySelector<HTMLButtonElement>("[data-routine-format-ai]")!.click());
+    const button = host.querySelector<HTMLButtonElement>("[data-routine-editor-section=what] [data-routine-format-ai]");
+    expect(button).not.toBeNull();
+    expect(button!.textContent).toBe("Format with AI");
+    expect(button!.querySelector("svg.lucide-sparkles")).not.toBeNull();
+    flushSync(() => button!.click());
     const draft = getDraft(localStorage, "bot:runner:main");
     expect(draft).toContain("reformat the instruction of my routine “Weekly digest” (id r1)");
     expect(draft).toContain("Keep every rule, fact, date and decision exactly");
@@ -230,6 +227,16 @@ describe("Format with AI (2026-11-03)", () => {
     expect(fixture.calls.some((call) => call.includes("/messages"))).toBe(false);
     expect(onClose).not.toHaveBeenCalled();
     expect(host.querySelector("[data-routine-editor-presentation=panel]")).not.toBeNull();
+  });
+
+  // 2026-11-03 (audit N-1): in edit mode the form keeps its copy of the
+  // instruction; a reformat approved meanwhile was overwritten by Save.
+  it("is offered in view mode only, never while the form holds its own copy of the instruction", () => {
+    mount(routine({ type: "cron", expression: "0 9 * * *", timeZone: "UTC" }), vi.fn(), { presentation: "panel" });
+    expect(host.querySelector("[data-routine-format-ai]")).not.toBeNull();
+    edit();
+    expect(host.querySelector("[data-routine-editor-section=what]")).not.toBeNull();
+    expect(host.querySelector("[data-routine-format-ai]")).toBeNull();
   });
 
   it("shows the whole instruction in view mode, folding a long one behind Show more", () => {

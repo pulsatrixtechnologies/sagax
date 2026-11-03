@@ -1076,7 +1076,10 @@ function EventEditorBody({
             <section data-routine-editor-section="what" className="min-w-0 space-y-1">
               <div className="flex min-w-0 items-center justify-between gap-2">
                 <h3 className={PANEL_LABEL}>{t("routineEditor.instruction")}</h3>
-                {existingRoutine && !readOnly && formatBot && <FormatWithAiButton bot={formatBot} routine={existingRoutine} />}
+                {/* 2026-11-03 (audit N-1): view mode only. In edit mode the form
+                    keeps its own copy of the instruction, so Save would put the
+                    old text back over the bot's reformatted one. */}
+                {viewing && existingRoutine && !readOnly && formatBot && <FormatWithAiButton bot={formatBot} routine={existingRoutine} />}
               </div>
               {viewing
                 ? <InstructionText text={description} />
@@ -2444,7 +2447,7 @@ export function EventDetails({
         onOpenRoom={onOpenRoom}
       />
     );
-    // Chat column host present: portal into it like Melonie <-> Katarina.
+    // Chat column host present: portal into it like Melonie <-> Osprey.
     // Automations alone: the detail panel holds it.
     if (getExchangeColumnHost()) return exchange;
     return <DetailPanel bare label={t("routineCalendar.eventDetails")} onClose={onClose} data-event-details="run">{exchange}</DetailPanel>;
@@ -3143,7 +3146,7 @@ export const RoutinesPage = memo(function RoutinesPage({ onBack: _onBack, onOpen
           {groupBy === "none" ? <RoutineList routines={filteredRoutines} viewerPrincipalId={state.config?.viewer?.principalId ?? null} runs={scopedRuns} bots={state.bots} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpen={openRoutine} onLogs={openLogs}
             onRowMenu={(routine, at, trigger) => setRowMenu({ routine, x: at.x, y: at.y, trigger })}
             renamingId={renamingId} onRenameStart={(routine) => setRenamingId(routine.id)} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)} />
-            : <RoutineGroupedList key={groupBy} groupBy={groupBy} routines={filteredRoutines} viewerPrincipalId={viewerId} runs={scopedRuns} bots={state.bots} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpen={openRoutine}
+            : <RoutineGroupedList key={groupBy} groupBy={groupBy} routines={filteredRoutines} allRoutines={scopedRoutines} viewerPrincipalId={viewerId} runs={scopedRuns} bots={state.bots} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpen={openRoutine}
               onCreate={createInGroup} onDuplicate={duplicateRoutine}
               onRowMenu={(routine, at, trigger) => setRowMenu({ routine, x: at.x, y: at.y, trigger })}
               renamingId={renamingId} onRenameStart={(routine) => setRenamingId(routine.id)} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)} />}

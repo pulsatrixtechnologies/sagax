@@ -60,6 +60,23 @@ export interface SearchHit {
 }
 
 /** Shared query and snippet logic; the worker never calls the write-side open(). */
+/** 2026-11-03 (audit S-5): the threads whose stored messages mention each
+ * fragment, in ONE pass over messages (the CROSS JOIN keeps messages as the
+ * outer loop), where the tidy used to run one full scan per fragment.
+ * Literal substring semantics, like threadsReferencing. */
+export function threadsReferencingInDatabase(database: DatabaseSync, fragments: readonly string[]): Map<string, string[]> {
+  const wanted = [...new Set(fragments.filter((fragment) => fragment.length > 0))];
+  const out = new Map<string, string[]>(wanted.map((fragment) => [fragment, []]));
+  for (let start = 0; start < wanted.length; start += 500) {
+    const chunk = wanted.slice(start, start + 500);
+    const values = chunk.map(() => "(?)").join(", ");
+    const rows = database.prepare(`WITH f(x) AS (VALUES ${values}) SELECT DISTINCT f.x AS fragment, m.thread_id AS thread_id FROM messages m CROSS JOIN f WHERE instr(m.json, f.x) > 0`)
+      .all(...chunk) as Array<{ fragment: string; thread_id: string }>;
+    for (const row of rows) out.get(row.fragment)?.push(row.thread_id);
+  }
+  return out;
+}
+
 export function searchMessagesInDatabase(database: DatabaseSync, query: string, limit = 40, threadId?: string, sealed?: SealedSearch): SearchHit[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return [];

@@ -94,7 +94,7 @@ it("an engine's card: Always allow keeps the command's program, a security key s
   };
   const shown = async (id: string) => expect.poll(async () => Boolean(await card(id)), { timeout: 15_000 }).toBe(true);
   try {
-    const bot = (await api("POST", "/api/bots", { name: "Katarina", modelSelection: { instanceId: "claude", model: "claude-sonnet-5" } }, 201)).bot;
+    const bot = (await api("POST", "/api/bots", { name: "Osprey", modelSelection: { instanceId: "claude", model: "claude-sonnet-5" } }, 201)).bot;
     threadId = bot.threadId;
     await api("PATCH", `/api/bots/${bot.id}/tasks/${bot.threadId}`, { approvalMode: "ask" });
     const dump = join(dataDir, "fake-claude-dump.json");
@@ -114,7 +114,7 @@ it("an engine's card: Always allow keeps the command's program, a security key s
     await expect.poll(() => first.answer()?.behavior, { timeout: 10_000 }).toBe("allow");
     const rules = (await api("GET", "/api/approval-rules")).rules as any[];
     const saved = rules.find((row) => row.botId === bot.id && row.scope?.program === "printf");
-    expect(saved).toMatchObject({ behavior: "allow", tool: "Bash", botName: "Katarina" });
+    expect(saved).toMatchObject({ behavior: "allow", tool: "Bash", botName: "Osprey" });
 
     // the same command: no card, and the journal names the rule
     const again = await ask("printf always-a");

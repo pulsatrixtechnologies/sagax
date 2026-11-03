@@ -91,23 +91,23 @@ describe("ComputerRecoverRow", () => {
   });
 
   it("lists one working bot with a Stop button and disables Update (1 working)", async () => {
-    const loadWorkingBotsFn = vi.fn().mockResolvedValue([{ id: "b-uuid-1", name: "Katarina", threadId: "t1" }]);
+    const loadWorkingBotsFn = vi.fn().mockResolvedValue([{ id: "b-uuid-1", name: "Osprey", threadId: "t1" }]);
     await act(async () => root.render(createElement(ComputerRecoverRow, { initial: running, loadWorkingBotsFn })));
     await flush();
     expect(container.querySelectorAll("[data-working-bot]")).toHaveLength(1);
-    expect(container.querySelector("[data-stop-bot='b-uuid-1']")?.textContent).toContain("Stop Katarina");
+    expect(container.querySelector("[data-stop-bot='b-uuid-1']")?.textContent).toContain("Stop Osprey");
     expect((container.querySelector("[data-computer-recover]") as HTMLButtonElement).disabled).toBe(true);
     expect(container.textContent).toMatch(/An agent is working/i);
     // human label only; the id lives in the tooltip and data attribute, never as the text
     const label = container.querySelector("[data-working-bot='b-uuid-1'] [data-bot-id]") as HTMLElement;
-    expect(label.textContent).toBe("Katarina");
+    expect(label.textContent).toBe("Osprey");
     expect(label.getAttribute("title")).toBe("b-uuid-1");
     expect(container.textContent).not.toContain("b-uuid-1");
   });
 
   it("lists several working bots, each with its own Stop (N working)", async () => {
     const loadWorkingBotsFn = vi.fn().mockResolvedValue([
-      { id: "b1", name: "Katarina", threadId: "t1" },
+      { id: "b1", name: "Osprey", threadId: "t1" },
       { id: "b2", name: "Ember", threadId: "t2" },
     ]);
     await act(async () => root.render(createElement(ComputerRecoverRow, { initial: running, loadWorkingBotsFn })));
@@ -118,7 +118,7 @@ describe("ComputerRecoverRow", () => {
 
   it("stops a bot through the stop mechanism, then enables Update when the last one is done", async () => {
     const loadWorkingBotsFn = vi.fn()
-      .mockResolvedValueOnce([{ id: "b1", name: "Katarina", threadId: "t1" }])
+      .mockResolvedValueOnce([{ id: "b1", name: "Osprey", threadId: "t1" }])
       .mockResolvedValue([]);
     const stopWorkingBotFn = vi.fn().mockResolvedValue(undefined);
     await act(async () => root.render(createElement(ComputerRecoverRow, { initial: running, loadWorkingBotsFn, stopWorkingBotFn })));
@@ -126,7 +126,7 @@ describe("ComputerRecoverRow", () => {
     expect((container.querySelector("[data-computer-recover]") as HTMLButtonElement).disabled).toBe(true);
     await act(async () => (container.querySelector("[data-stop-bot='b1']") as HTMLButtonElement).click());
     await flush();
-    expect(stopWorkingBotFn).toHaveBeenCalledWith({ id: "b1", name: "Katarina", threadId: "t1" });
+    expect(stopWorkingBotFn).toHaveBeenCalledWith({ id: "b1", name: "Osprey", threadId: "t1" });
     expect(container.querySelector("[data-working-bots]")).toBeNull();
     expect((container.querySelector("[data-computer-recover]") as HTMLButtonElement).disabled).toBe(false);
   });

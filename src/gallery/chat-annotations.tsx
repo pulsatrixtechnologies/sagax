@@ -19,7 +19,7 @@ applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? ski
 await loadLocale(params.get("lang") ?? "fr");
 const only = params.get("only");
 
-const trigger: Message = { id: "u3", role: "user", kind: "text", text: "passe le mot aussi a katarina sur sagax", at: 3 };
+const trigger: Message = { id: "u3", role: "user", kind: "text", text: "passe le mot aussi a osprey sur sagax", at: 3 };
 const userBubble = (text: string) => (
   <div className="self-end rounded-[18px] bg-bubble-user px-3 py-2 text-[13px] text-ink">{text}</div>
 );
@@ -33,10 +33,10 @@ const samples: Array<{ id: string; render: () => React.ReactNode }> = [
       <div className="flex w-[520px] flex-col gap-2">
         {userBubble("salut, peux-tu regarder les billets ACME")}
         {userBubble("et me faire un résumé ce soir")}
-        {userBubble("passe le mot aussi a katarina sur sagax")}
+        {userBubble("passe le mot aussi a osprey sur sagax")}
         <div className="flex max-w-[460px] flex-col gap-2 self-start rounded-[18px] bg-card px-3 py-2 text-[13px] text-ink">
           <ReplyQuote message={trigger} fallbackName="Toi" compact onJump={() => {}} />
-          <span>C'est fait : j'ai transmis la note à Katarina sur Sagax.</span>
+          <span>C'est fait : j'ai transmis la note à Osprey sur Sagax.</span>
         </div>
       </div>
     ),

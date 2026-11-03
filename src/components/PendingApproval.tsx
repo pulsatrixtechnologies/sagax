@@ -535,7 +535,7 @@ export function PendingApprovalActions({
   ) : null;
   // 2026-10-21 (parité R10, ligne 80): a screen action on the person's own
   // computer whose app the server read says which app, and what Always
-  // allow then covers ("Katarina peut voir Safari, y cliquer et y saisir du
+  // allow then covers ("Osprey peut voir Safari, y cliquer et y saisir du
   // texte sur cet ordinateur").
   const computerApp = ownerRule?.tool === "computer_app" && typeof ownerRule.scope?.app === "string" ? ownerRule.scope.app : null;
   const appLine = computerApp ? (

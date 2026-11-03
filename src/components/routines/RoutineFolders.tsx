@@ -79,9 +79,13 @@ export function canManageRoutineFolders(routines: Routine[], supported: boolean)
 
 const MENU_ITEM = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover focus-visible:bg-hover focus-visible:outline-none disabled:opacity-50";
 
-export function RoutineFolderList({ bot, routines, runs, grouped, loading, error, viewerPrincipalId, onOpen, onCreateIn, onDuplicate, controlRef, folderIcon = false }: {
+export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, loading, error, viewerPrincipalId, onOpen, onCreateIn, onDuplicate, controlRef, folderIcon = false }: {
   bot: Bot;
   routines: Routine[];
+  /** 2026-11-03 (audit N-4): every routine of the bot, when `routines` is a
+   * filtered list. A folder action (pause, delete and its Undo) touches all
+   * of them, never only the rows shown. */
+  allRoutines?: Routine[];
   runs: RoutineRun[];
   grouped: boolean;
   loading?: boolean;
@@ -99,6 +103,14 @@ export function RoutineFolderList({ bot, routines, runs, grouped, loading, error
 }) {
   const { state, dispatch } = useStore();
   const order = state.routineFolders?.[bot.id] ?? EMPTY;
+  // What a folder action reaches: the bot's routines in the store and the
+  // caller's full list, the shown rows winning (their copy is the newest).
+  const botRoutines = useMemo(() => {
+    const byId = new Map<string, Routine>();
+    for (const routine of [...(state.routines ?? []), ...(allRoutines ?? [])]) if (routine.botId === bot.id) byId.set(routine.id, routine);
+    for (const routine of routines) byId.set(routine.id, routine);
+    return [...byId.values()];
+  }, [state.routines, allRoutines, routines, bot.id]);
   const groups = useMemo(() => groupRoutinesByFolder(routines, order), [routines, order]);
   const folders = groups.flatMap((group) => group.folder ? [group.folder] : []);
   const editable = routines.length === 0 || routines.some((routine) => routine.canEdit !== false);
@@ -206,13 +218,13 @@ export function RoutineFolderList({ bot, routines, runs, grouped, loading, error
   };
   const setFolderEnabled = (folder: string, enabled: boolean) => {
     const key = routineFolderKey(folder);
-    for (const routine of routines) {
+    for (const routine of botRoutines) {
       if (routine.folder && routineFolderKey(routine.folder) === key && routine.enabled !== enabled) void flipRoutine(routine, pending.current, api, dispatch);
     }
   };
   const removeFolder = async (folder: string) => {
     const key = routineFolderKey(folder);
-    const inside = routines.filter((routine) => routine.folder && routineFolderKey(routine.folder) === key);
+    const inside = botRoutines.filter((routine) => routine.folder && routineFolderKey(routine.folder) === key);
     const undo: RoutineFolderUndo = { botId: bot.id, folders: [...folders], routines: inside.map((routine) => ({ id: routine.id, name: routine.name, folder: routine.folder })) };
     const answer = await act({ action: "delete", botId: bot.id, name: folder });
     if (answer) setNotice({ text: t("routineFolders.deleted", { name: folder }), undo });
@@ -415,8 +427,8 @@ export function RoutineFolderList({ bot, routines, runs, grouped, loading, error
           : <FolderMenuItems
             canMoveUp={folders.indexOf(menu.folder) > 0}
             canMoveDown={folders.indexOf(menu.folder) < folders.length - 1}
-            anyOn={routines.some((routine) => routine.folder && routineFolderKey(routine.folder) === routineFolderKey(menu.folder) && routine.enabled)}
-            anyRoutine={routines.some((routine) => routine.folder && routineFolderKey(routine.folder) === routineFolderKey(menu.folder))}
+            anyOn={botRoutines.some((routine) => routine.folder && routineFolderKey(routine.folder) === routineFolderKey(menu.folder) && routine.enabled)}
+            anyRoutine={botRoutines.some((routine) => routine.folder && routineFolderKey(routine.folder) === routineFolderKey(menu.folder))}
             onRename={() => { closeMenu(false); setRenaming(menu.folder); }}
             onMove={(direction) => { closeMenu(); reorder(menu.folder, direction); }}
             onSetEnabled={(enabled) => { closeMenu(); setFolderEnabled(menu.folder, enabled); }}

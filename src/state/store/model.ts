@@ -1329,7 +1329,7 @@ export interface AppState {
    * line in the conversation was clicked); RoutinesSection opens it once. */
   routineFocus: { botId: string; routineId: string } | null;
   /** 2026-11-01: a routine run open as an exchange sheet over the chat
-   * column (same place as Melonie <-> Katarina). ChatView renders it. */
+   * column (same place as Melonie <-> Osprey). ChatView renders it. */
   routineRunSheet: { runId: string; routineId?: string } | null;
   /** a link that opens Connect apps on one tab: Pages (the published
    * pages), Providers (once My accounts: the old name "accounts" still

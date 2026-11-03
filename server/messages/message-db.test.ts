@@ -8,6 +8,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { commandReceipt, runCommand } from "../commands.ts";
 import { DATA_DIR } from "../config.ts";
 import { closeMessageDb,
+  closeMessageSearch,
+  threadsReferencing,
+  threadsReferencingAsync,
   deleteThread,
   indexMemoryFile,
   indexedMemoryFiles,
@@ -26,6 +29,7 @@ import { closeMessageDb,
   setActiveLeaf,
   updateMessage, describeMissingFts5 } from "./message-db.ts";
 import { withPeerProvenance } from "../peers/peer-provenance.ts";
+import { threadsReferencingInDatabase } from "./message-search-query.ts";
 import { Store, type Message } from "../store.ts";
 import type { ModelSelection } from "../contracts.ts";
 
@@ -45,6 +49,34 @@ describe("message-db", () => {
     closeMessageDb();
     rmSync(DATA_DIR, { recursive: true, force: true });
     mkdirSync(DATA_DIR, { recursive: true });
+  });
+
+  // 2026-11-03 (audit S-5): the workspace tidy looked up to 400 fragments
+  // with one synchronous full scan each; now one pass, in the search worker.
+  it("finds the threads of many fragments in one pass, off the server's thread, like threadsReferencing", async () => {
+    insertMessage("t-a", msg("a1", "wrote /workspace/report.pdf and notes.txt"));
+    insertMessage("t-b", msg("b1", "see /workspace/report.pdf"));
+    insertMessage("t-c", msg("c1", "nothing here"));
+    const fragments = ["/workspace/report.pdf", "notes.txt", "/workspace/absent.bin", ""];
+    try {
+      const found = await threadsReferencingAsync(fragments);
+      for (const fragment of fragments.filter(Boolean)) expect((found.get(fragment) ?? []).sort()).toEqual(threadsReferencing(fragment).sort());
+      expect(found.get("/workspace/report.pdf")!.sort()).toEqual(["t-a", "t-b"]);
+      expect(found.get("/workspace/absent.bin")).toEqual([]);
+    } finally {
+      await closeMessageSearch();
+    }
+    // one statement for the whole batch (a chunk of up to 500 fragments)
+    const database = new DatabaseSync(join(DATA_DIR, "messages.db"), { readOnly: true });
+    let prepared = 0;
+    const counting = { prepare: (sql: string) => { prepared += 1; return database.prepare(sql); } } as unknown as DatabaseSync;
+    try {
+      const many = Array.from({ length: 400 }, (_, n) => `/workspace/file-${n}.txt`);
+      expect(threadsReferencingInDatabase(counting, many).size).toBe(400);
+      expect(prepared).toBe(1);
+    } finally {
+      database.close();
+    }
   });
 
   it("finds only open permission cards (startup expiry after a restart)", () => {

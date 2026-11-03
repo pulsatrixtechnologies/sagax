@@ -8870,7 +8870,10 @@ apps, so those paths stay ours on every later merge. To repeat:
   brought back, which settles their modify/delete conflicts; `--check` only
   lists them. To restore one of those files on purpose, remove its line
   first (`scripts/upstream-drop.test.mjs` fails while a listed path is
-  tracked).
+  tracked). A line `old -> new` is a file Sagax moved (server/ by domain):
+  its old path coming back carries an upstream change git did not follow
+  through the rename, so the script never removes it and lists where to
+  port it (exit 1); port the change, then `git rm` the old path.
 - On conflict our behavior wins and upstream improvements are layered in.
   Merge `src/locales/*.json` and `source-hashes.json` as a union of keys and
   run `pnpm i18n:check`.

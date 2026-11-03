@@ -187,3 +187,21 @@ describe("the row's state word (2026-10-28)", () => {
     expect(row("r1").textContent?.match(/Running/g)?.length).toBe(1);
   });
 });
+
+// 2026-11-03 (audit N-4): with a filter on, the grouped list passed only the
+// rows shown, so pausing a folder or deleting it (and its Undo) missed the
+// bot's other routines in that folder.
+describe("a folder action under a filter", () => {
+  it("pauses every routine of the folder, not only the rows shown", async () => {
+    const fetchMock = vi.fn(async (..._args: unknown[]) => json(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+    const hidden = routine("r4", "Hidden by the filter", "Daily");
+    await act(async () => { root.render(createElement(RoutineFolderList, { bot: bot as never, routines: [routines[0]!], allRoutines: [...routines, hidden], runs: runs as never, grouped: true, viewerPrincipalId: null, onOpen: () => {}, onCreateIn: () => {} })); });
+    await flush();
+    act(() => { (section("Daily").querySelector("[data-routine-folder-more]") as HTMLButtonElement).click(); });
+    act(() => { (document.querySelector("[data-routine-folder-action=pause]") as HTMLButtonElement).click(); });
+    await flush();
+    const patched = fetchMock.mock.calls.map((call) => String(call[0])).filter((url) => /\/api\/routines\/r\d$/.test(url)).sort();
+    expect(patched).toEqual([expect.stringContaining("/api/routines/r1"), expect.stringContaining("/api/routines/r4")]);
+  });
+});

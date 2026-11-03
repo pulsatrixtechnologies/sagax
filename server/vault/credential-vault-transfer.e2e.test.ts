@@ -13,7 +13,7 @@ import { expect, it } from "vitest";
 import { exportVaultItems, parseVaultImportFile } from "../../shared/credential-vault-transfer.ts";
 import { launchVerificationServer } from "../../scripts/control-omb.ts";
 
-const FIXTURE = fileURLToPath(new URL("../shared/fixtures/credential-vault-import/bitwarden.json", import.meta.url));
+const FIXTURE = fileURLToPath(new URL("../../shared/fixtures/credential-vault-import/bitwarden.json", import.meta.url));
 
 it("imports a manager's file, exports it back through the gate, and audits counts only", async () => {
   const owner = randomBytes(32).toString("base64url");

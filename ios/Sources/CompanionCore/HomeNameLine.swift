@@ -6,7 +6,7 @@ public enum HomeNameLine {
     public static let separator = " · "
 
     /// The name alone when the role is empty or the name already carries
-    /// it (a bot named "Katarina · Ops" with the role "Ops").
+    /// it (a bot named "Osprey · Ops" with the role "Ops").
     public static func text(name: String, role: String) -> String {
         let trimmedRole = role.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedRole.isEmpty else { return name }

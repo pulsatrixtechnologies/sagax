@@ -144,7 +144,7 @@ describe("the bot's own run status (2026-11-01)", () => {
 describe("a wake on teammates' messages is never quiet (production, 2026-11-02)", async () => {
   const { peerWakeOutcome } = await import("./routines.ts");
   const { routineReportOutcome } = await import("./routine-report.ts");
-  const peer = { proactive: { mode: "proactive" as const, hops: 1, sources: ["peer"], peerDigest: "Messages from teammates:\n- Katarina: Urgent 100200" } };
+  const peer = { proactive: { mode: "proactive" as const, hops: 1, sources: ["peer"], peerDigest: "Messages from teammates:\n- Osprey: Urgent 100200" } };
 
   it("keeps the bot's words without the marker", () => {
     const outcome = peerWakeOutcome(peer, routineReportOutcome("Already told you at 1:32 p.m. ET. Nothing new.\n\nNOTHING_TO_REPORT"));
@@ -157,7 +157,7 @@ describe("a wake on teammates' messages is never quiet (production, 2026-11-02)"
   });
 
   it("a wake on a post in a two-bot DM (alwaysReport) is never quiet either", () => {
-    const dm = { proactive: { mode: "proactive" as const, hops: 1, sources: ["bot"], alwaysReport: true as const, peerDigest: "Messages from teammates:\n- Post by Katarina in K and M" } };
+    const dm = { proactive: { mode: "proactive" as const, hops: 1, sources: ["bot"], alwaysReport: true as const, peerDigest: "Messages from teammates:\n- Post by Osprey in K and M" } };
     expect(peerWakeOutcome(dm, routineReportOutcome("NOTHING_TO_REPORT"))).toMatchObject({ quiet: false, report: dm.proactive.peerDigest });
     const room = { proactive: { mode: "proactive" as const, hops: 1, sources: ["bot"] } };
     expect(peerWakeOutcome(room, routineReportOutcome("NOTHING_TO_REPORT")).quiet).toBe(true);

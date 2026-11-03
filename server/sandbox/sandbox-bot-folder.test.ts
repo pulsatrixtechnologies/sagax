@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,6 +9,8 @@ import {
   SANDBOX_ROOT_KEEP,
   TIDY_SCRIPT,
   WorkspaceTidier,
+  attributeEntries,
+  attributionFragments,
   botFolderNote,
   inBotFolder,
   rewriteMovedPaths,
@@ -120,6 +122,37 @@ function scriptExec(root: string, mark: string) {
   return { calls, exec };
 }
 
+// 2026-11-03 (audit S-6): the attribution ignored the person, so a file of
+// A's environment named only in B's bot's threads went to B's bot folder.
+describe("attributeEntries", () => {
+  const threadOf = (threadId: string) => ({
+    "a-thread": { botId: "bot-a", person: "Person-A" },
+    "b-thread": { botId: "bot-b", person: "person-b" },
+    "a-on-b": { botId: "bot-b", person: "person-a" },
+  } as Record<string, { botId: string; person: string }>)[threadId];
+
+  it("counts only the person's own threads: another person's bot never claims a file", () => {
+    const names = ["only-b.csv", "shared-name.txt", "mine-and-b.pdf", "a-on-shared-bot.md"];
+    const threads = new Map<string, string[]>([
+      ["/workspace/only-b.csv", ["b-thread"]],
+      ["/workspace/mine-and-b.pdf", ["a-thread", "b-thread"]],
+      ["shared-name.txt", ["b-thread", "gone-thread"]],
+      ["/workspace/a-on-shared-bot.md", ["a-on-b"]],
+    ]);
+    const owners = attributeEntries("person-a", names, threads, threadOf);
+    expect(owners.has("only-b.csv")).toBe(false);
+    expect(owners.has("shared-name.txt")).toBe(false);
+    expect(owners.get("mine-and-b.pdf")).toBe("bot-a");
+    // A's own private thread with B's shared bot is A's work
+    expect(owners.get("a-on-shared-bot.md")).toBe("bot-b");
+    expect(attributeEntries("person-b", names, threads, threadOf).get("only-b.csv")).toBe("bot-b");
+  });
+
+  it("looks up the absolute path, and the bare name only when distinctive", () => {
+    expect(attributionFragments(["report.pdf", "a"])).toEqual(["/workspace/report.pdf", "report.pdf", "/workspace/a"]);
+  });
+});
+
 describe("WorkspaceTidier", () => {
   it("moves loose root entries to their bot or to _unsorted, writes the manifest, deletes nothing, once per start", async () => {
     const root = scratch();
@@ -187,6 +220,70 @@ describe("WorkspaceTidier", () => {
     await later.ensure("person");
     expect(existsSync(join(root, "late.txt"))).toBe(true);
     expect(calls.filter((call) => call.argv[4] === "apply")).toHaveLength(2);
+  });
+
+  // 2026-11-03 (audit S-3): /workspace/tmp, attributed to a bot, became
+  // bots/<slug>/tmp, and the same apply deleted its files older than 7 days.
+  it("never moves a root tmp folder, never empties a moved folder, never deletes outside a bot's tmp", async () => {
+    const root = scratch();
+    const outside = scratch();
+    const mark = join(root, "..", `mark-s3-${Date.now()}`);
+    dirs.push(mark);
+    const tenDaysAgo = Date.now() / 1000 - 10 * 86400;
+    const old = (path: string) => { writeFileSync(path, "old"); utimesSync(path, tenDaysAgo, tenDaysAgo); };
+    // the person's own /workspace/tmp, with an old file, named by a bot
+    mkdirSync(join(root, "tmp"));
+    old(join(root, "tmp", "keep-me.csv"));
+    mkdirSync(join(root, "Downloads"));
+    // an environment already tidied by 0.8.31: its moved tmp is in moves.json
+    mkdirSync(join(root, "bots", "legacy", "tmp"), { recursive: true });
+    old(join(root, "bots", "legacy", "tmp", "moved-in-0831.txt"));
+    mkdirSync(join(root, "_unsorted"), { recursive: true });
+    writeFileSync(join(root, "_unsorted", "moves.json"), JSON.stringify({ [`${root}/tmp-0831`]: `${root}/bots/legacy/tmp` }));
+    // a bot's real tmp: an old file goes, a link to a file outside goes as a
+    // link only, a linked folder is never walked
+    mkdirSync(join(root, "bots", "fleet", "tmp"), { recursive: true });
+    old(join(root, "bots", "fleet", "tmp", "scratch.bin"));
+    old(join(outside, "precious.txt"));
+    symlinkSync(join(outside, "precious.txt"), join(root, "bots", "fleet", "tmp", "link.txt"));
+    symlinkSync(outside, join(root, "bots", "fleet", "tmp", "linked-dir"));
+    // a bot folder whose tmp is a link out of /workspace/bots
+    mkdirSync(join(root, "bots", "evil"), { recursive: true });
+    symlinkSync(outside, join(root, "bots", "evil", "tmp"));
+
+    const { exec } = scriptExec(root, mark);
+    const lines: string[] = [];
+    const tidier = new WorkspaceTidier({
+      exec,
+      attribute: (_person, names) => new Map(names.map((name) => [name, "bot-fleet"])),
+      folderOf: () => `${root}/bots/fleet`,
+      now: () => Date.parse("2026-11-03T12:00:00Z"),
+      log: (line) => lines.push(line),
+      root,
+    });
+    await tidier.ensure("person");
+    expect(lstatSync(join(root, "tmp")).isDirectory()).toBe(true);
+    expect(readFileSync(join(root, "tmp", "keep-me.csv"), "utf8")).toBe("old");
+    expect(lstatSync(join(root, "Downloads")).isDirectory()).toBe(true);
+    expect(existsSync(join(root, "bots", "fleet", "tmp (2)"))).toBe(false);
+    expect(readFileSync(join(root, "bots", "legacy", "tmp", "moved-in-0831.txt"), "utf8")).toBe("old");
+    expect(lines.join("\n")).toContain("left 1 moved tmp folder as is");
+    expect(existsSync(join(root, "bots", "fleet", "tmp", "scratch.bin"))).toBe(false);
+    expect(readFileSync(join(outside, "precious.txt"), "utf8")).toBe("old");
+    expect(SANDBOX_ROOT_KEEP).toEqual(expect.arrayContaining(["tmp", "Downloads"]));
+  });
+
+  it("a root tmp in a plan aimed at a bot folder is refused by the script itself", () => {
+    const root = scratch();
+    const mark = join(root, "..", `mark-s3b-${Date.now()}`);
+    dirs.push(mark);
+    mkdirSync(join(root, "tmp"));
+    mkdirSync(join(root, "bots", "fleet"), { recursive: true });
+    const plan = Buffer.from(JSON.stringify({ date: "2026-11-03", moves: [{ name: "tmp", dest: `${root}/bots/fleet` }] }));
+    // an empty keep list: only the script's own reserved-name rule stands
+    const out = execFileSync("python3", ["-I", "-c", TIDY_SCRIPT, "apply", "[]", String(plan.length), "7"], { input: plan, env: { ...process.env, SAGAX_TIDY_ROOT: root, SAGAX_TIDY_MARK: mark }, encoding: "utf8" });
+    expect(JSON.parse(out.trim()).moved).toEqual([]);
+    expect(lstatSync(join(root, "tmp")).isDirectory()).toBe(true);
   });
 
   it("keeps the system folders in one list", () => {

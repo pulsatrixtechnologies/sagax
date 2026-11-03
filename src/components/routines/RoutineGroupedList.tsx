@@ -39,9 +39,11 @@ import { RoutineList } from "./RoutineList";
 
 type RowMenu = (routine: Routine, at: { x: number; y: number }, trigger: HTMLElement) => void;
 
-export function RoutineGroupedList({ groupBy, routines, runs, bots, viewerPrincipalId, loading, error, onOpen, onCreate, onDuplicate, onRowMenu, renamingId, onRenameStart, onRenameSave, onRenameCancel }: {
+export function RoutineGroupedList({ groupBy, routines, allRoutines, runs, bots, viewerPrincipalId, loading, error, onOpen, onCreate, onDuplicate, onRowMenu, renamingId, onRenameStart, onRenameSave, onRenameCancel }: {
   groupBy: Exclude<RoutineGroupBy, "none">;
   routines: Routine[];
+  /** 2026-11-03 (audit N-4): the unfiltered routines, for folder actions. */
+  allRoutines?: Routine[];
   runs: RoutineRun[];
   bots: Bot[];
   viewerPrincipalId: string | null;
@@ -83,7 +85,7 @@ export function RoutineGroupedList({ groupBy, routines, runs, bots, viewerPrinci
     {groupBy === "bot" ? byBot.map((group) => {
       const bot = bots.find((candidate) => candidate.id === group.botId);
       const key = botGroupKey(group.botId);
-      return <BotSection key={group.botId} botId={group.botId} bot={bot} routines={group.routines} runs={runs} collapsed={collapsed.has(key)} onToggle={() => toggle(key)}
+      return <BotSection key={group.botId} botId={group.botId} bot={bot} routines={group.routines} allRoutines={allRoutines} runs={runs} collapsed={collapsed.has(key)} onToggle={() => toggle(key)}
         viewerPrincipalId={viewerPrincipalId} onOpen={onOpen} onCreate={onCreate} onDuplicate={onDuplicate} onRowMenu={onRowMenu} rename={rename} />;
     }) : byFolder.map((group) => {
       const key = folderGroupKey(group.folder);
@@ -100,10 +102,11 @@ export function RoutineGroupedList({ groupBy, routines, runs, bots, viewerPrinci
   </div>;
 }
 
-function BotSection({ botId, bot, routines, runs, collapsed, onToggle, viewerPrincipalId, onOpen, onCreate, onDuplicate, onRowMenu, rename }: {
+function BotSection({ botId, bot, routines, allRoutines, runs, collapsed, onToggle, viewerPrincipalId, onOpen, onCreate, onDuplicate, onRowMenu, rename }: {
   botId: string;
   bot: Bot | undefined;
   routines: Routine[];
+  allRoutines?: Routine[];
   runs: RoutineRun[];
   collapsed: boolean;
   onToggle: () => void;
@@ -117,7 +120,7 @@ function BotSection({ botId, bot, routines, runs, collapsed, onToggle, viewerPri
   const control = useRef<RoutineFolderControl | null>(null);
   const supported = useServerFeature("routineFolders") !== "no";
   const name = bot?.name ?? routines[0]?.bot?.name ?? t("routines.group.unknownBot");
-  const health = routineGroupHealth(routines, runs);
+  const health = useMemo(() => routineGroupHealth(routines, runs), [routines, runs]);
   const editable = routines.some((routine) => routine.canEdit !== false);
   const manage = Boolean(bot) && canManageRoutineFolders(routines, supported);
   return <section data-routine-group-bot={botId} aria-label={name} className="flex flex-col">
@@ -136,7 +139,7 @@ function BotSection({ botId, bot, routines, runs, collapsed, onToggle, viewerPri
       </> : undefined} />
     {!collapsed && <div className="pl-4">
       {bot
-        ? <RoutineFolderList bot={bot} routines={routines} runs={runs} grouped={false} folderIcon viewerPrincipalId={viewerPrincipalId} controlRef={control}
+        ? <RoutineFolderList bot={bot} routines={routines} allRoutines={allRoutines} runs={runs} grouped={false} folderIcon viewerPrincipalId={viewerPrincipalId} controlRef={control}
           onOpen={onOpen} onCreateIn={(folder) => onCreate(botId, folder)} onDuplicate={onDuplicate} />
         : <RoutineList routines={routines} viewerPrincipalId={viewerPrincipalId} runs={runs} label={name} onOpen={onOpen} onRowMenu={onRowMenu} {...rename} />}
     </div>}

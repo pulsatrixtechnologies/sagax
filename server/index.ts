@@ -835,7 +835,7 @@ import { BUILT_IN_DRIVERS } from "./drivers/builtIn.ts";
 import { orgWithholdHostTools } from "./org/org-engine-admission.ts";
 import { openCodeProviderKeysAllowed, setOpenCodeProviderKeyPolicy } from "./drivers/acp/opencode-go.ts";
 import { getOrCreateChannel, mirrorActivity, mirrorReply, type CommsBus } from "./comms-visibility.ts";
-import { openApprovalCardMessages, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
+import { openApprovalCardMessages, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, threadsReferencingAsync, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
 import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
 import { contentEncryptionFromEnv } from "./encryption/content-encryption-env.ts";
 import { briefCrossingLabel, claimRecallCrossings } from "./recall/recall-disclosure.ts";
@@ -2564,7 +2564,7 @@ import {
   USER_SANDBOX_MCP_NAME
 } from "./sandbox/user-sandbox-routing.ts";
 import { handleUserSandboxMcp } from "./sandbox/user-sandbox-tools.ts";
-import { BotFolderRegistry, WorkspaceTidier, botFolderNote, botFolderPath, inBotFolder, rewriteMovedPaths, workspaceDiskWarning, type TidyMove } from "./sandbox/sandbox-bot-folder.ts";
+import { BotFolderRegistry, WorkspaceTidier, attributeEntries, attributionFragments, botFolderNote, botFolderPath, inBotFolder, rewriteMovedPaths, workspaceDiskWarning, type TidyMove } from "./sandbox/sandbox-bot-folder.ts";
 import { enginePluginCommandRefusal } from "./people/person-integrations.ts";
 import { SandboxControlHolds } from "./sandbox/sandbox-control.ts";
 import { DesktopBridges, resolveBotWorkplace, type WorkplaceDecision } from "./desktop/desktop-bridge.ts";
@@ -4473,15 +4473,20 @@ function adminActorFor(auth: RequestAuth, req: IncomingMessage): AdminActor {
 /** The admin whose request is running, for config saves made while it runs.
  * Each save records exactly what it wrote, so a slow request never takes
  * the blame (or the credit) for another admin's change made meanwhile. */
-const adminActorScope = new AsyncLocalStorage<{ actor: AdminActor; sharedAtStart: boolean } | null>();
-onConfigSaved((before, after) => {
+type AdminActorScope = { actor: AdminActor; sharedAtStart: boolean } | null;
+const adminActorScope = new AsyncLocalStorage<AdminActorScope>();
+onConfigSaved((before, after) => recordAdminConfigChange(before, after));
+/** The rows of an admin-scope save, put down to the admin whose request runs.
+ * Also called for settings kept outside config.json (MCP servers in the
+ * installation capability store, audit S-1 follow-up). */
+function recordAdminConfigChange(before: unknown, after: unknown): void {
   const scope = adminActorScope.getStore();
   if (!scope || DESKTOP_MANAGED) return;
   // Shared when the request began, or now: the change that makes a server
   // shared, or stops it being, is kept.
   if (!scope.sharedAtStart && !adminActivityRecording() && !sharedSignIn(signInListsOf(before)) && !sharedSignIn(signInListsOf(after))) return;
   for (const row of configChangeRows(before, after)) appendAdminAction(DATA_DIR, { ...row, actor: scope.actor });
-});
+}
 
 interface AuditPlan {
   /** An admin-scope change: config saves made while it runs are recorded. */
@@ -4551,15 +4556,19 @@ function requestedBotFields(req: IncomingMessage, path: string): string[] {
 /** Record this request's admin changes once it has answered successfully.
  * Each row compares only what this request named or created, never a whole
  * snapshot, so another admin's change made meanwhile is not attributed here. */
-function beginAdminAudit(req: IncomingMessage, res: ServerResponse, method: string, path: string, auth: RequestAuth): void {
+/** Returns the admin scope of this request (config saves made while it runs
+ * are put down to it). It runs inside async authenticate, after awaits, so
+ * an enterWith here never reaches handleRequest's frame (audit S-1, the
+ * defect 0.8.32 fixed for the request scopes): handleRequest enters it from
+ * RequestScopes.adminActor, with the others (enterRequestScopes). */
+function beginAdminAudit(req: IncomingMessage, res: ServerResponse, method: string, path: string, auth: RequestAuth): AdminActorScope {
   const plan = DESKTOP_MANAGED ? null : adminAuditPlan(method, path);
   const actor = plan ? adminActorFor(auth, req) : null;
   // Whether several people share the workspace as the request begins: a
   // change that ends sharing (the last chat-only phone signed out) is kept.
   const sharedAtStart = plan ? adminActivityRecording() : false;
-  // Set for every request, so a kept-alive connection never inherits one.
-  adminActorScope.enterWith(plan?.config && actor ? { actor, sharedAtStart } : null);
-  if (!plan || !actor) return;
+  const scope: AdminActorScope = plan?.config && actor ? { actor, sharedAtStart } : null;
+  if (!plan || !actor) return scope;
   const before = {
     bot: auditBot(plan.botId ?? plan.deletesBot),
     botName: store.bot(plan.botId ?? plan.deletesBot ?? "")?.name,
@@ -4577,6 +4586,7 @@ function beginAdminAudit(req: IncomingMessage, res: ServerResponse, method: stri
       console.warn(`admin activity: could not record ${method} ${path}: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
+  return scope;
 }
 
 function adminAuditRows(
@@ -8547,17 +8557,28 @@ function sandboxBotFolder(botId: string): string | null {
 /** Which bot made each loose root entry: the bots whose conversations
  * (messages and tool calls) name /workspace/<entry>, else the bare name
  * when it is distinctive. Exactly one bot, or nobody. */
-function attributeSandboxEntries(_principalId: string, names: readonly string[]): Map<string, string> {
-  const out = new Map<string, string>();
-  // Each lookup scans the stored messages: the first 200 entries only, the
-  // rest go to _unsorted (a root that messy is mostly one bot's output).
-  for (const name of names.slice(0, 200)) {
-    const botsFor = (fragment: string) => new Set(threadsReferencing(fragment).map((threadId) => store.botByThread(threadId)?.id).filter((id): id is string => Boolean(id)));
-    let bots = botsFor(`/workspace/${name}`);
-    if (bots.size === 0 && name.length >= 8 && /[._-]/.test(name)) bots = botsFor(name);
-    if (bots.size === 1) out.set(name, [...bots][0]!);
+async function attributeSandboxEntries(principalId: string, names: readonly string[]): Promise<Map<string, string>> {
+  // The first 200 entries only, the rest go to _unsorted (a root that messy
+  // is mostly one bot's output). 2026-11-03 (audit S-5): every fragment in
+  // ONE pass over messages, in the search worker, where this used to run up
+  // to 400 synchronous full scans and block the server at its first start.
+  const listed = names.slice(0, 200);
+  let threads: Map<string, string[]>;
+  try {
+    threads = await threadsReferencingAsync(attributionFragments(listed));
+  } catch (error) {
+    // busy or interrupted: nothing is attributed, the entries go to _unsorted
+    console.warn(`[workspace-tidy] attribution skipped: ${error instanceof Error ? error.message : String(error)}`);
+    return new Map();
   }
-  return out;
+  // 2026-11-03 (audit S-6): only this person's threads (the thread's owner,
+  // else the bot owner) attribute an entry of this person's environment
+  return attributeEntries(principalId, listed, threads, (threadId) => {
+    const bot = store.botByThread(threadId);
+    if (!bot) return undefined;
+    const person = store.taskByThread(bot.id, threadId)?.ownerPrincipalId || effectiveBotOwner(bot);
+    return person ? { botId: bot.id, person } : undefined;
+  });
 }
 /** After a tidy: routines whose prompt or watched path named a moved file
  * now name its new place (the move breaks nothing they do). */
@@ -24216,6 +24237,12 @@ const proactiveEngine = new ProactiveEngine({
 const proactivePending = new ProactivePendingFile(join(DATA_DIR, "proactive-pending.json"));
 const proactiveWaker = new ProactiveWaker({
   pendingChanged: (botId, events) => proactivePending.set(botId, events),
+  // 2026-11-03 (audit S-2): events gather per (bot, person); an event
+  // without runAs is the owner's
+  owner: (botId) => {
+    const bot = store.bot(botId);
+    return bot ? effectiveBotOwner(bot) || undefined : undefined;
+  },
   bot: (botId) => {
     const bot = store.bot(botId);
     // a hidden or temporary bot has no conversation to act in
@@ -28841,9 +28868,12 @@ function persistMcpServers(next: Record<string, unknown>): void {
   try {
     if (installationCapabilityStore.hasMigrated("config-mcp-servers")) {
       const document = installationCapabilityStore.read();
+      const previous = document.mcpServers ?? {};
       document.mcpServers = next;
       installationCapabilityStore.write(document);
       cfg.mcpServers = next;
+      // not a config.json save: the admin journal is told here (mcp.update)
+      recordAdminConfigChange({ mcpServers: previous }, { mcpServers: next });
       return;
     }
   } catch {
@@ -44207,8 +44237,12 @@ type RequestScopes = {
   delegated: boolean;
   continuation: ReturnType<typeof takeOwnerContinuation>;
   actConfirmed: ReturnType<typeof takeActConfirmation> | null;
+  /** The admin whose config saves this request records (beginAdminAudit). */
+  adminActor?: AdminActorScope;
 };
 function enterRequestScopes(scopes: RequestScopes): void {
+  // Set for every request (null when none), so a kept-alive connection never inherits one.
+  adminActorScope.enterWith(scopes.adminActor ?? null);
   threadViewerScope.enterWith(scopes.viewer);
   delegatedRequestScope.enterWith(scopes.delegated);
   continuationThreadScope.enterWith(scopes.continuation);
@@ -44512,7 +44546,7 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
       }
     }
   }
-  beginAdminAudit(req, res, method, path, auth);
+  scopes.adminActor = beginAdminAudit(req, res, method, path, auth);
 
   if (method === "POST" && path === "/api/workspace-backup/restore" && teamComputers.list().some(computer => computer.section !== null)) {
     json(res, 409, { error: "Unassign team computers before restoring a workspace; restored team names must not gain access to existing desktops" });

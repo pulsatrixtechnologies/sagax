@@ -11,7 +11,7 @@ import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 // may mount the phone tools, but computer:phone is claimed only at the first
 // real tool call and released when the turn settles. A concurrent caller
 // gets a blocked tool result, never a dead turn.
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 let child: ChildProcess;
 let fixtureHome = "";
 let base = "";

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { McpAuditRecord } from "../mcp/mcp-permissions.ts";
 import type { SubjectTokenOutcome } from "../auth/idp-session.ts";
 import type { ExchangeResult } from "./perspicax-link.ts";
-import { PERSPICAX_ACCESS_ENDED, PERSPICAX_ROUTINE_RETRY_MS, PERSPICAX_SESSION_RESET, PERSPICAX_UNAVAILABLE_WHY, PerspicaxMcp, parseMcpBody, perspicaxReplayable, reviewedReadsOf, perspicaxSessionLost, perspicaxUnavailableRow, perspicaxUnavailableWhy, type PerspicaxMcpLink, type PerspicaxMcpOptions } from "./perspicax-mcp.ts";
+import { PERSPICAX_ACCESS_ENDED, PERSPICAX_ROUTINE_RETRY_MS, PERSPICAX_SESSION_RESET, PERSPICAX_UNAVAILABLE_WHY, PerspicaxMcp, parseMcpBody, perspicaxReadOnlyToolsOf, perspicaxReplayable, reviewedReadsOf, perspicaxSessionLost, perspicaxUnavailableRow, perspicaxUnavailableWhy, type PerspicaxMcpLink, type PerspicaxMcpOptions } from "./perspicax-mcp.ts";
 
 const ISS = "https://px.example.test";
 const ALICE = "pr_alice";
@@ -545,7 +545,7 @@ describe("perspicaxUnavailableRow", () => {
 
 /** Perspicax as rmcp serves it in legacy session mode: initialize opens a
  * session; a call naming an unknown session is 404, a call naming none is 422. */
-function sessionServer() {
+function sessionServer(tools?: unknown[]) {
   const live = new Set<string>();
   let opened = 0;
   const ran: string[] = [];
@@ -563,6 +563,10 @@ function sessionServer() {
     if (!live.has(session)) return new Response("Not Found: Session not found", { status: 404 });
     if (body.id === undefined) return new Response(null, { status: 202 });
     if (body.method === "tools/call") ran.push(body.params.name);
+    if (body.method === "tools/list" && tools) {
+      ran.push("tools/list");
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { tools } }), { status: 200, headers: { "content-type": "application/json" } });
+    }
     return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { ok: true, session } }), { status: 200, headers: { "content-type": "application/json" } });
   };
   return { mcp, live, ran, opened: () => opened, forget: () => live.clear() };
@@ -572,8 +576,8 @@ describe("PerspicaxMcp: a session Perspicax dropped", () => {
   const call = (name: string, id: number) => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: {} } });
   const init = { jsonrpc: "2.0", id: 0, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "grok", version: "1" } } };
 
-  async function started() {
-    const server = sessionServer();
+  async function started(tools?: unknown[]) {
+    const server = sessionServer(tools);
     const h = harness({ mcp: server.mcp });
     await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
     await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: init });
@@ -590,9 +594,71 @@ describe("PerspicaxMcp: a session Perspicax dropped", () => {
     expect(perspicaxReplayable(call("memory_search", 1))).toBe(true);
     expect(perspicaxReplayable(call("memory_find", 1))).toBe(true);
     expect(perspicaxReplayable({ jsonrpc: "2.0", id: 1, method: "tools/list" })).toBe(true);
-    for (const name of ["cw_psa_write", "cw_psa_action", "memory_write", "memory_save", "memory_remove", "memory_suggestions", "sagax_send", "flow_action", "unknown"]) {
+    for (const name of ["cw_psa_write", "cw_psa_action", "memory_write", "memory_save", "memory_remove", "memory_suggestions", "sagax_send", "unknown"]) {
       expect(perspicaxReplayable(call(name, 1)), name).toBe(false);
     }
+    // a Flow action writes only on a confirmed call: without confirm it reads
+    expect(perspicaxReplayable(call("flow_action", 1))).toBe(true);
+    expect(perspicaxReplayable({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "flow_action", arguments: { name: "free-slot-find", params: { member: "osprey", minutes: 60 } } } })).toBe(true);
+    expect(perspicaxReplayable({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "flow_action", arguments: { name: "schedule-slot-create", params: {}, confirm: true } } })).toBe(false);
+    // what Perspicax lists as read-only
+    const readOnly = new Set(["cw_psa_find_schedule_entries"]);
+    expect(perspicaxReplayable(call("cw_psa_find_schedule_entries", 1))).toBe(false);
+    expect(perspicaxReplayable(call("cw_psa_find_schedule_entries", 1), readOnly)).toBe(true);
+    expect(perspicaxReplayable(call("cw_psa_update_ticket", 1), readOnly)).toBe(false);
+  });
+
+  const LISTED = [
+    { name: "cw_psa_find_schedule_entries", annotations: { readOnlyHint: true, destructiveHint: false } },
+    { name: "cw_psa_get_ticket", annotations: { readOnlyHint: true, destructiveHint: false } },
+    { name: "cw_psa_update_ticket", annotations: { readOnlyHint: false, destructiveHint: true } },
+    { name: "odd_tool", annotations: { readOnlyHint: true, destructiveHint: true } },
+    { name: "bare_tool" },
+  ];
+
+  it("reads which tools only read from tools/list annotations, never a destructive or unannotated one", () => {
+    expect(perspicaxReadOnlyToolsOf({ jsonrpc: "2.0", id: 1, result: { tools: LISTED } })).toEqual(["cw_psa_find_schedule_entries", "cw_psa_get_ticket"]);
+    expect(perspicaxReadOnlyToolsOf({ result: {} })).toEqual([]);
+    expect(perspicaxReadOnlyToolsOf(null)).toEqual([]);
+  });
+
+  // 2026-11-03 (production): find_schedule_entries, get_ticket and flow_action
+  // free-slot-find were all refused "can change data" after a dropped session
+  it("404 on a read Perspicax listed as read-only: sends it again on the new session", async () => {
+    const { server, h, relay } = await started(LISTED);
+    await relay({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+    server.forget();
+    const answer = await relay({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "cw_psa_find_schedule_entries", arguments: { member: "Osprey", period: "this_week", limit: 100 } } });
+    expect(answer).toMatchObject({ status: 200, body: { id: 5, result: { ok: true, session: "s-2" } } });
+    expect(server.ran).toEqual(["tools/list", "cw_psa_find_schedule_entries"]);
+    expect(h.logs.join("\n")).toContain("read sent again");
+  });
+
+  it("404 on a read before this entry saw tools/list: lists on the new session, then sends the read again", async () => {
+    const { server, relay } = await started(LISTED);
+    server.forget();
+    const answer = await relay(call("cw_psa_get_ticket", 6));
+    expect(answer).toMatchObject({ status: 200, body: { id: 6, result: { ok: true } } });
+    expect(server.ran).toEqual(["tools/list", "cw_psa_get_ticket"]);
+  });
+
+  it("404 on a write listed by Perspicax: still never replayed", async () => {
+    const { server, relay } = await started(LISTED);
+    server.forget();
+    const answer = await relay(call("cw_psa_update_ticket", 7));
+    expect(answer).toEqual({ status: 200, body: { jsonrpc: "2.0", id: 7, error: { code: -32000, message: PERSPICAX_SESSION_RESET } } });
+    expect(server.ran).toEqual(["tools/list"]);
+  });
+
+  it("404 on a Flow action without confirm is sent again; a confirmed one is not", async () => {
+    const { server, relay } = await started();
+    server.forget();
+    const read = await relay({ jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "flow_action", arguments: { name: "free-slot-find", params: { member: "osprey", minutes: 60, days: 4, limit: 3 } } } });
+    expect(read).toMatchObject({ status: 200, body: { id: 8, result: { ok: true } } });
+    server.forget();
+    const write = await relay({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "flow_action", arguments: { name: "schedule-slot-create", params: {}, confirm: true } } });
+    expect(write).toEqual({ status: 200, body: { jsonrpc: "2.0", id: 9, error: { code: -32000, message: PERSPICAX_SESSION_RESET } } });
+    expect(server.ran).toEqual(["flow_action"]);
   });
 
   it("404 on a read: opens a new session once and sends the read again, transparently", async () => {

@@ -216,16 +216,39 @@ export function perspicaxWriteOnceTool(name: string): boolean {
 const READ_ONLY_METHODS = new Set(["tools/list", "resources/list", "resources/templates/list", "resources/read", "prompts/list", "prompts/get", "ping", "completion/complete"]);
 
 /** Whether a frame may be sent again after a new session: a read-only method,
- * or tools/call of a Perspicax tool reviewed as read-only (grok-read-only-tools.ts).
- * Writes, actions, sends and unknown tools are never replayed. */
-export function perspicaxReplayable(frame: Record<string, unknown>): boolean {
+ * tools/call of a Perspicax tool reviewed as read-only (grok-read-only-tools.ts)
+ * or one Perspicax itself lists as read-only (`readOnly`: its tools/list
+ * `readOnlyHint`, not destructive), or a Pulsatrix Flow action call that
+ * cannot write (no `confirm: true`: Perspicax sends an action's writes only
+ * on a confirmed call holding its batch key, so a call without it answers
+ * reads, a dry run, a choice or needs_confirmation).
+ * 2026-11-03 (production): a session dropped during a long turn, and
+ * cw_psa_find_schedule_entries, cw_psa_get_ticket and flow_action
+ * free-slot-find, all reads, came back "did not replay this call because it
+ * can change data". Writes, sends and unknown tools are still never replayed. */
+export function perspicaxReplayable(frame: Record<string, unknown>, readOnly?: ReadonlySet<string>): boolean {
   const method = frame.method;
   if (typeof method !== "string") return false;
   if (READ_ONLY_METHODS.has(method)) return true;
   if (method !== "tools/call") return false;
   const params = frame.params;
-  const name = params && typeof params === "object" && !Array.isArray(params) ? (params as Record<string, unknown>).name : undefined;
-  return typeof name === "string" && PERSPICAX_READ_ONLY_TOOLS.has(name);
+  const record = params && typeof params === "object" && !Array.isArray(params) ? params as Record<string, unknown> : {};
+  const name = record.name;
+  if (typeof name !== "string") return false;
+  if (PERSPICAX_READ_ONLY_TOOLS.has(name) || readOnly?.has(name) === true) return true;
+  const args = record.arguments && typeof record.arguments === "object" && !Array.isArray(record.arguments) ? record.arguments as Record<string, unknown> : {};
+  return name === "flow_action" && args.confirm !== true;
+}
+
+/** The tools a tools/list answer marks read-only (`readOnlyHint` true and
+ * not `destructiveHint`): Perspicax derives them from the vendor method. */
+export function perspicaxReadOnlyToolsOf(body: unknown): string[] {
+  const result = isObject(body) && isObject(body.result) ? body.result : null;
+  const tools = result && Array.isArray(result.tools) ? result.tools : [];
+  return tools
+    .filter((tool): tool is Json => isObject(tool) && typeof tool.name === "string" && isObject(tool.annotations)
+      && tool.annotations.readOnlyHint === true && tool.annotations.destructiveHint !== true)
+    .map((tool) => String(tool.name));
 }
 
 /** Perspicax (rmcp streamable HTTP, legacy session mode) answers 404
@@ -253,6 +276,8 @@ interface Entry {
   identity?: PerspicaxIdentity;
   implicitIdentity?: string;
   servedTools?: Set<string>;
+  /** The served tools Perspicax lists as read-only (perspicaxReadOnlyToolsOf). */
+  readOnlyTools?: Set<string>;
   twilioTools?: Set<string>;
   /** One re-initialize at a time (relay, a session Perspicax dropped). */
   reopening?: Promise<boolean>;
@@ -504,6 +529,7 @@ export class PerspicaxMcp {
     const body = parseMcpBody(sent.text, id);
     if (method === "tools/list" && isObject(body) && isObject(body.result) && Array.isArray(body.result.tools)) {
       entry.servedTools = new Set(body.result.tools.filter(isObject).map((tool) => String(tool.name)).slice(0, 2000));
+      entry.readOnlyTools = new Set(perspicaxReadOnlyToolsOf(body).slice(0, 2000));
       entry.twilioTools = new Set(twilioToolsOf(body).slice(0, 500));
     }
     return body;
@@ -817,7 +843,12 @@ export class PerspicaxMcp {
       // initialize again, once; send a read again, never a write.
       // a concurrent call may have opened the new session already
       const reopened = entry.mcpSessionId !== undefined && entry.mcpSessionId !== usedSession ? true : await this.reopen(link, entry);
-      const replay = reopened && !notification && perspicaxReplayable(frame);
+      // an entry that never saw a tools/list (the engine listed on an earlier
+      // turn) reads it on the new session to know which tools only read
+      if (reopened && !notification && frame.method === "tools/call" && !entry.readOnlyTools && !perspicaxReplayable(frame)) {
+        await this.identityRpc(entry, "tools/list").catch(() => undefined);
+      }
+      const replay = reopened && !notification && perspicaxReplayable(frame, entry.readOnlyTools);
       this.log(`perspicax mcp: profile ${entry.profileId} session lost (HTTP ${response.status}); ${reopened ? "a new one is open" : "a new one could not be opened"}; ${replay ? "read sent again" : notification ? "notification dropped" : "call not replayed"}`);
       if (notification) return { status: 202 };
       if (!reopened) return { status: 200, body: rpcError(id, -32000, `Perspicax answered HTTP ${response.status}`) };
@@ -865,6 +896,7 @@ export class PerspicaxMcp {
         const served = isObject(body) && isObject(body.result) && Array.isArray(body.result.tools)
           ? body.result.tools.filter((tool): tool is Json => isObject(tool) && typeof tool.name === "string").map((tool) => String(tool.name)) : [];
         entry.servedTools = new Set(served.slice(0, 2000));
+        entry.readOnlyTools = new Set(perspicaxReadOnlyToolsOf(body).slice(0, 2000));
         const named = twilioToolsOf(body);
         entry.twilioTools = new Set(named.slice(0, 500));
       }
@@ -1024,7 +1056,7 @@ export class PerspicaxMcp {
    * run: never sent, or answered 503 (unavailable, not processed); a 502 or
    * a cut answer may have run it, so the bot gets the failure instead. */
   private async sendForRoutine(link: PerspicaxMcpLink, entry: Entry, frame: Json): Promise<{ response: Response; text: string } | "ended" | "unreachable"> {
-    const replayable = perspicaxReplayable(frame) || frame.method === "initialize";
+    const replayable = perspicaxReplayable(frame, entry.readOnlyTools) || frame.method === "initialize";
     for (let attempt = 0; ; attempt += 1) {
       const note: { unsent?: boolean } = {};
       const sent = await this.send(link, entry, frame, note);
@@ -1193,6 +1225,7 @@ export class PerspicaxMcp {
       await entry.identity?.clear();
       entry.identity = undefined;
       entry.servedTools = undefined;
+      entry.readOnlyTools = undefined;
       entry.twilioTools = undefined;
       if (keep && !entry.ended && entry.expiresAt - this.now() >= PERSPICAX_TOKEN_MIN_LIFE_MS) {
         const warm = warmKey(entry.threadId, entry.profileId, entry.principalId, entry.source);

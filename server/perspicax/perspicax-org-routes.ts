@@ -20,14 +20,14 @@
 //
 // Registered before the interim organization routes, which answer only in
 // solo mode (server/org/org-routes.ts).
-import type { OrgBotSecretPublic } from "../shared/org-bot-secrets.ts";
+import type { OrgBotSecretPublic } from "../../shared/org-bot-secrets.ts";
 import type { DirectoryPerson, DirectoryState } from "./perspicax-link.ts";
-import { OrgBotSecretsError, parseOrgBotSecretChange, type OrgBotSecretChange } from "./org/org-bot-secrets.ts";
-import type { OrgFlowPluginsStatus } from "./org/org-flow-plugins.ts";
-import type { Principal } from "./auth/principals.ts";
-import type { RequestAuth } from "./auth/request-auth.ts";
-import { PASS, type RouteHandler } from "./routes/table.ts";
-import { personAvatarUrl, personDisplayName } from "./viewer-identity.ts";
+import { OrgBotSecretsError, parseOrgBotSecretChange, type OrgBotSecretChange } from "../org/org-bot-secrets.ts";
+import type { OrgFlowPluginsStatus } from "../org/org-flow-plugins.ts";
+import type { Principal } from "../auth/principals.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { PASS, type RouteHandler } from "../routes/table.ts";
+import { personAvatarUrl, personDisplayName } from "../viewer-identity.ts";
 
 export interface OrgSettings {
   /** The server has a key for at least one engine (Settings > Connections):

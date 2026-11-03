@@ -426,7 +426,7 @@ Rappels de ce dépôt: versions les plus récentes vérifiées sur crates.io au 
 |---|---|
 | `server/auth/oidc-rp.ts` | découverte, PKCE, `state` et `nonce` en mémoire (10 min, usage unique, 20 au plus comme `MAX_PENDING_FLOWS`), échange du code, vérification ES256 par `node:crypto`, cache JWKS |
 | `server/auth/idp-session.ts` | coffre des refresh Perspicax, rafraîchissement en vol unique, déconnexion par canal arrière, révocation |
-| `server/perspicax-link.ts` | lecture du fichier de lien, annuaire (ETag), client d'échange de jeton |
+| `server/perspicax/perspicax-link.ts` | lecture du fichier de lien, annuaire (ETag), client d'échange de jeton |
 | `server/auth/authz.ts` | `can()` (section 3) |
 | `server/perspicax-mcp-bridge.ts` | le pont stdio (section 4), sur le patron de `connector-proxy.ts` et `mcp-bridge.ts` |
 | Routes | `GET /auth/oidc/start`, `GET /auth/oidc/callback`, `POST /api/auth/oidc/backchannel-logout`, `POST /api/org/import`, `/api/org/admin/*` (assertion de la console), `POST /api/org/routine-delegation` |

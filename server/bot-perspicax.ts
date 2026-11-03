@@ -6,7 +6,7 @@
 //
 // Reading needs bot.use, changing needs bot.edit (server/auth/authz.ts). Each
 // person who talks to the bot uses their own Perspicax access
-// (server/perspicax-mcp.ts), so the list only says which profiles the bot
+// (server/perspicax/perspicax-mcp.ts), so the list only says which profiles the bot
 // offers. Adding a profile needs holding it now (a bot editor never offers a
 // profile they cannot use themselves); a profile someone else put there may
 // stay, and may be removed by anyone who edits the bot.
@@ -14,7 +14,7 @@
 // Spec: docs/superpowers/specs/2026-09-29-perspicax-multiuser-design.md,
 // section 4 ("Quel profil, pour qui"), decision D4 of the slice 5 plan.
 import { canOnBot, type BotFacts, type Viewer } from "./auth/authz.ts";
-import type { DirectoryProfile } from "./perspicax-link.ts";
+import type { DirectoryProfile } from "./perspicax/perspicax-link.ts";
 import type { RequestAuth } from "./auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./routes/table.ts";
 import { MAX_BOT_PERSPICAX_PROFILES } from "./store.ts";

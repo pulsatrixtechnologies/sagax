@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { avatarContentType, DIRECTORY_ABSENT_CONFIRM_MS, directoryIntervalMs, isSubjectRefusal, PerspicaxDirectory, readLinkFile, type Directory } from "./perspicax-link.ts";
-import { PrincipalRegistry } from "./auth/principals.ts";
+import { PrincipalRegistry } from "../auth/principals.ts";
 
 const ISSUER = "https://px.example.test";
 const ORIGIN = "https://bot.example.test";

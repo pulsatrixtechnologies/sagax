@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { PerspicaxDirectory, SUBJECT_TOKEN_HEADER } from "./perspicax-link.ts";
+import { PerspicaxDirectory, SUBJECT_TOKEN_HEADER } from "./perspicax/perspicax-link.ts";
 import { PrincipalRegistry } from "./auth/principals.ts";
 
 const ISSUER = "https://px.example.test";

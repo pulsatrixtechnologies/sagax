@@ -11,7 +11,7 @@
 // The state is memory only: a restart ends every call, and a call the page
 // never closed (a crash, a lost network) expires after VOICE_CALL_IDLE_MS
 // without a turn. A call's tools stay stable through it: Perspicax keeps
-// the call's tokens between turns (server/perspicax-mcp.ts keepWarm), and
+// the call's tokens between turns (server/perspicax/perspicax-mcp.ts keepWarm), and
 // every change of a call turn's MCP set is logged (noteMcp). The call's
 // start and each heartbeat also count as use of the person's server
 // environment (UserSandboxManager.markUsed), so its idle stop never takes
@@ -187,7 +187,7 @@ export class VoiceCallSessions {
    * never put back here: one that left was removed or refused on purpose
    * (a person, a policy); the call's flapping tools came from per-turn
    * token exchanges, which keep their tokens through the call instead
-   * (server/perspicax-mcp.ts keepWarm). */
+   * (server/perspicax/perspicax-mcp.ts keepWarm). */
   noteMcp(threadId: string, names: readonly string[]): { added: string[]; removed: string[] } {
     const record = this.live(threadId);
     if (!record) return { added: [], removed: [] };

@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { PerspicaxDirectory } from "../perspicax-link.ts";
+import { PerspicaxDirectory } from "../perspicax/perspicax-link.ts";
 import {
   checkedWorkRow,
   DUPLICATES_PATH,

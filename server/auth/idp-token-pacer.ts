@@ -11,7 +11,7 @@
 //   - "revoke" only uses what leaves a reserve for sign-ins and refreshes,
 //     and never while paused (server/auth/idp-revocations.ts retries it).
 //
-// The link-authenticated exchange (server/perspicax-link.ts) has its own
+// The link-authenticated exchange (server/perspicax/perspicax-link.ts) has its own
 // budget at Perspicax and is not paced here.
 
 /** Calls Perspicax allows one address per rolling minute. */

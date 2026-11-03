@@ -1,5 +1,5 @@
 import { VideoJobError, type VideoCredential, type VideoPayer } from "./video-generation.ts";
-import type { ProviderKeyResult } from "../perspicax-link.ts";
+import type { ProviderKeyResult } from "../perspicax/perspicax-link.ts";
 
 /** Same sealed personal accounts and explicit xaiImage org grant as the
  * existing media pipeline. Recovery never changes who pays for a job. */

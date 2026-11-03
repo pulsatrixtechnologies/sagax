@@ -75,7 +75,7 @@
 import { join } from "node:path";
 
 import { routineLineage, speakerPrincipal, type EngineAccessRefusal, type TurnSpeaker } from "./engine-access.ts";
-import type { ModelProvider, ProviderKeyResult } from "../perspicax-link.ts";
+import type { ModelProvider, ProviderKeyResult } from "../perspicax/perspicax-link.ts";
 import type { TurnPayerMode } from "../../shared/turn-payer.ts";
 
 /** `server` is solo mode only (and rows written before 2026-10-01). */

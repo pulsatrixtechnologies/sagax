@@ -1,12 +1,12 @@
-// Claims through Perspicax (server/perspicax-claims.ts): the native tools are
+// Claims through Perspicax (server/perspicax/perspicax-claims.ts): the native tools are
 // listed only while a Perspicax profile is mounted, the dispatcher posts to
 // the harness route, the harness pins the holder to the bot and calls
 // Perspicax with the speaker's exchanged token (PerspicaxMcp.callTool), and a
 // refusal comes back as a result with the current holder.
 import { describe, expect, it } from "vitest";
 
-import { availableTools, catalogProfileFromEnv } from "./drivers/agents-catalog.ts";
-import { callTool, type ToolCallContext } from "./drivers/agents-call.ts";
+import { availableTools, catalogProfileFromEnv } from "../drivers/agents-catalog.ts";
+import { callTool, type ToolCallContext } from "../drivers/agents-call.ts";
 import type { ExchangeResult } from "./perspicax-link.ts";
 import { CLAIM_TOOL_NAMES, claimArguments, claimHolder, runClaimTool, withClaimsFlag } from "./perspicax-claims.ts";
 import { PerspicaxMcp, type PerspicaxMcpLink } from "./perspicax-mcp.ts";

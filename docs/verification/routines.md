@@ -314,9 +314,9 @@ Who reaches `/api/org/routine-delegation` (GET only, read-only status):
 pnpm exec vitest run server/auth/oidc-rp.test.ts server/auth/idp-token-pacer.test.ts \
   server/auth/idp-revocations.test.ts server/auth/idp-session.test.ts \
   server/org/org-routine-consent.test.ts server/routines/routines.test.ts \
-  server/perspicax-mcp.test.ts server/auth/oidc-login.test.ts \
-  server/perspicax-org-routes.test.ts server/org/org-routines.e2e.test.ts \
-  server/perspicax-link.test.ts \
+  server/perspicax/perspicax-mcp.test.ts server/auth/oidc-login.test.ts \
+  server/perspicax/perspicax-org-routes.test.ts server/org/org-routines.e2e.test.ts \
+  server/perspicax/perspicax-link.test.ts \
   src/pair/PairPage.test.ts src/components/routines/RoutineOwnerName.test.ts
 ```
 

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import type { TurnSpeaker } from "./engine-access.ts";
 import { materializeEngineAccess, paidByPerson, providerOfDriver, providersOfDriver, resolveEngineAccess, subscriptionDriver, turnPayer, type EngineCredentialInput, type PersonFacts } from "./engine-credentials.ts";
-import type { ModelProvider, ProviderKeyResult } from "../perspicax-link.ts";
+import type { ModelProvider, ProviderKeyResult } from "../perspicax/perspicax-link.ts";
 
 const OWNER = "pr_00000000-0000-4000-8000-000000000001";
 const BOB = "pr_00000000-0000-4000-8000-000000000002";

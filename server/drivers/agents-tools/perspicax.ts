@@ -2,8 +2,8 @@
 // Never import server/index.ts.
 
 import { agentToolAnnotations } from "../../agent-tool-policy.ts";
-import { CLAIM_TOOL_NAMES } from "../../perspicax-claims.ts";
-import { isClaimTool } from "../../perspicax-claims.ts";
+import { CLAIM_TOOL_NAMES } from "../../perspicax/perspicax-claims.ts";
+import { isClaimTool } from "../../perspicax/perspicax-claims.ts";
 import { handleRemoteSupportCall } from "../../remote-support/remote-support-local.ts";
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
@@ -61,7 +61,7 @@ export const PERSPICAX_TOOLS = [
 export const PERSPICAX_TOOL_NAMES: ReadonlySet<string> = new Set(PERSPICAX_TOOLS.map((tool) => tool.name));
 
 
-// Claims (server/perspicax-claims.ts): named leases kept by Perspicax so two
+// Claims (server/perspicax/perspicax-claims.ts): named leases kept by Perspicax so two
 // agents, of any harness, do not run the same job at once. The holder is the
 // person speaking and this bot; no argument names it.
 const CLAIM_NAME = {

@@ -110,7 +110,7 @@ export interface CatalogProfile {
   /** The Perspicax gateway tools (PERSPICAX_TOOLS): an organization server
    * linked to Perspicax. The route re-checks that a profile is mounted. */
   perspicax?: boolean;
-  /** The claim tools (server/perspicax-claims.ts): a Perspicax profile is
+  /** The claim tools (server/perspicax/perspicax-claims.ts): a Perspicax profile is
    * mounted for the person speaking in this turn. Absent is off. */
   claims?: boolean;
   /** The tools a phone of the person speaking offers right now (phone_tool,

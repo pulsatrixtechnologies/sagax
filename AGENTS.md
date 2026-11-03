@@ -2155,7 +2155,7 @@ back (`place_phone_call` mode `conversation`). Spec: section 10 of
 - Every call goes through `place_phone_call` (decision of 2026-10-28): a
   bot's own Perspicax `voice_call`, by its name, a server-prefixed name,
   `call_tool` or `use_tool`, is turned into the `place_phone_call` with its
-  arguments on the Perspicax relay (`server/perspicax-mcp.ts`,
+  arguments on the Perspicax relay (`server/perspicax/perspicax-mcp.ts`,
   `voiceToolCall` in `server/telephony-guard.ts`, `placeArgsFromVoiceCall`
   in `shared/outbound-call.ts`): the same card, AI disclosure, pilot and
   do-not-call list. A dry run and the harness's own call go as they are. A
@@ -4183,12 +4183,12 @@ repositories, the whole lifecycle, auto included), `src/lib/org-memory.test.ts`,
 A Perspicax server guard (the Flow guard: dry run, GO, read back) asks the
 person for a GO during a `tools/call` with MCP elicitation
 (`elicitation/create` on the call's SSE stream). The harness relay
-(`server/perspicax-mcp.ts`) declares the `elicitation` capability on every
+(`server/perspicax/perspicax-mcp.ts`) declares the `elicitation` capability on every
 Perspicax session (`withElicitation`), reads the call's stream as it comes
 (`readBounded` with `onRequest`) and shows the GO as an approval card on the
 turn's thread (`askGo`, `confirmHeldCard` in `server/index.ts`: Full access and
 Approve for me never answer it). Keep these rules, covered by
-`server/perspicax-mcp.test.ts` ("the Flow guard's GO"):
+`server/perspicax/perspicax-mcp.test.ts` ("the Flow guard's GO"):
 
 - Only the person's Allow is a GO (`accept` with `decision: allow`); Deny is
   `decline`, no answer in time is `cancel`. The model never answers it.
@@ -4269,7 +4269,7 @@ resolved list lives in Plugins > Installed (JC, 2026-11-01). Form mirror:
 Perspicax keeps the organization's work log and a duplicate detector over
 it (its `docs/memory.md` "Work log" and "Duplicate detector"). Sagax feeds
 them with the link token (`server/memory/perspicax-memory.ts`, `linkPostJson` in
-`server/perspicax-link.ts`). Keep these rules, covered by
+`server/perspicax/perspicax-link.ts`). Keep these rules, covered by
 `server/memory/perspicax-memory.test.ts` (a fake Perspicax over HTTP) and
 `server/routines/routines.test.ts` ("the organization memory before a run"):
 
@@ -4597,7 +4597,7 @@ Covered by `src/components/SettingsModal.orgCleanup.test.ts`,
   shows Export disabled with the reason. Imports are not affected. Each
   change is an `org.settings` audit row. Tests:
   `server/routes/credential-vault.test.ts`,
-  `server/perspicax-org-routes.test.ts`, `server/org/org-admin-ops.test.ts`, C5
+  `server/perspicax/perspicax-org-routes.test.ts`, `server/org/org-admin-ops.test.ts`, C5
   in `server/org/org-admin-console.e2e.test.ts`.
 - Sharing in the organization is one compact row per bot (avatar, owner,
   sharing count, running or idle from `/api/org/bots` `look`/`running`);
@@ -4644,7 +4644,7 @@ Rights changed in Perspicax reach Sagax through the directory, read every
 `SAGAX_PERSPICAX_DIRECTORY_SECONDS` (300). `POST
 /api/org/link/directory-refresh` (`server/org/org-link-routes.ts`) lets
 Perspicax have it read now. Keep these rules, covered by
-`server/org/org-link-routes.test.ts` and `server/perspicax-link.test.ts`:
+`server/org/org-link-routes.test.ts` and `server/perspicax/perspicax-link.test.ts`:
 
 - The only credential is the link token of the link file, `Authorization:
   Bearer`, compared in constant time (`PerspicaxDirectory.linkTokenMatches`,
@@ -6948,7 +6948,7 @@ had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.tes
   only when something was removed. One target that is missing is 404 with
   no audit; remove-all of nothing is 200 and no audit.
   Tests: `server/person-integrations.test.ts`,
-  `server/perspicax-link.test.ts`, `server/org/org-person-connections.test.ts`,
+  `server/perspicax/perspicax-link.test.ts`, `server/org/org-person-connections.test.ts`,
   OC-7, OC-8 and OC-9, `MyConnectionsSettings.test.ts`,
   `PersonConnectionsSection.test.ts`.
 
@@ -10068,7 +10068,7 @@ engine must list the model for this payer (`AutoEngine.fast`, set by
 `autoEnginesFor`, custom and local rows included); otherwise Auto picks as
 before. The pick's chain goes on to the larger model, so a refusal climbs.
 A turn with Perspicax tools mounted also gets
-`PERSPICAX_CONVENTIONS_PROMPT` (`server/perspicax-conventions.ts`): fields in
+`PERSPICAX_CONVENTIONS_PROMPT` (`server/perspicax/perspicax-conventions.ts`): fields in
 `set` with `action`, `parent`/`id`, `expect`, dry run first, ids and flags,
 local times without an offset, one projection for a big result, totals by
 aggregate. The server's own instructions win if they differ.

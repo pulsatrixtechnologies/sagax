@@ -2141,7 +2141,7 @@ import { ComputerTeachRecordings } from "./computer/computer-teach.ts";
 import { createLocalComputerAutoRoutes } from "./routes/local-computer-auto.ts";
 import { createUserPreferenceRoutes } from "./routes/user-preferences.ts";
 import { replaceDashes, voiceDashesEnabled, VOICE_DASHES_PREFERENCE } from "../shared/voice-dashes.ts";
-import { PERSPICAX_CONVENTIONS_PROMPT } from "./perspicax-conventions.ts";
+import { PERSPICAX_CONVENTIONS_PROMPT } from "./perspicax/perspicax-conventions.ts";
 import { createUserPreferenceStore, preferencesFrameAllowed, type PersonPreferences } from "./user-preferences.ts";
 import { createViewerBotOverrideRoutes } from "./routes/viewer-bot-overrides.ts";
 import { createViewerBotOverrideStore } from "./viewer-bot-overrides.ts";
@@ -2450,7 +2450,7 @@ import {
   type OrgState
 } from "./org/org-routes.ts";
 import { createDirectGrantRoutes } from "./auth/direct-grants.ts";
-import { directoryIntervalMs, PerspicaxDirectory, type ModelProvider } from "./perspicax-link.ts";
+import { directoryIntervalMs, PerspicaxDirectory, type ModelProvider } from "./perspicax/perspicax-link.ts";
 import { duplicateNote, PerspicaxMemory } from "./memory/perspicax-memory.ts";
 import { knownAgentToolName, PERSPICAX_TOOL_NAMES } from "./drivers/agents-catalog.ts";
 import { measureContextBuckets, toolDefinitionBytes } from "./context/context-buckets.ts";
@@ -2461,14 +2461,14 @@ import {
   perspicaxUnavailableRow,
   perspicaxUnavailableWhy,
   type PerspicaxUnavailableReason
-} from "./perspicax-mcp.ts";
-import { withClaimsFlag } from "./perspicax-claims.ts";
+} from "./perspicax/perspicax-mcp.ts";
+import { withClaimsFlag } from "./perspicax/perspicax-claims.ts";
 import { createPerspicaxClaimsInternalRoutes } from "./routes/perspicax-claims-internal.ts";
 import { dispatchInternalRoutes, type InternalCapabilityView, type InternalRouteHandler } from "./routes/internal-route.ts";
 import { createPerspicaxToolInternalRoutes } from "./routes/perspicax-tool-internal.ts";
 import { createMcpAuditInternalRoutes } from "./routes/mcp-audit-internal.ts";
 import { createRoutineRunInternalRoutes, routineRunNowAllowed } from "./routes/routine-run-internal.ts";
-import { createPerspicaxOrgRoutes, orgDirectoryEntries, type OrgSettings, type PendingAdminApproval } from "./perspicax-org-routes.ts";
+import { createPerspicaxOrgRoutes, orgDirectoryEntries, type OrgSettings, type PendingAdminApproval } from "./perspicax/perspicax-org-routes.ts";
 import { createMemorySyncTokenRoute } from "./memory/perspicax-memory-sync-token.ts";
 import { PerspicaxMemoryNotesClient } from "./memory/perspicax-memory-notes.ts";
 import { createMeMemoryNotesRoutes } from "./routes/me-memory-notes.ts";
@@ -5122,7 +5122,7 @@ type InternalCapability = {
 // synchronously and app restart destroys this in-memory set.
 const INTERNAL_CAPABILITY_ORPHAN_MS = 30 * 24 * 60 * 60_000;
 const internalCapabilities = new Map<string, InternalCapability>();
-/** Slice 5: per-turn Perspicax MCP tokens (server/perspicax-mcp.ts), set once
+/** Slice 5: per-turn Perspicax MCP tokens (server/perspicax/perspicax-mcp.ts), set once
  * the server is linked to Perspicax; declared here because capability revokes
  * reach it. */
 let perspicaxMcp: PerspicaxMcp | null = null;
@@ -5573,7 +5573,7 @@ function agentsIntegration(
       // Who the permission layer judges (server/mcp/mcp-permissions.ts).
       ...mcpIdentityEnv(mcpIdentityOf(botId, threadId)),
       ...mcpPolicyEnv(process.env),
-      // The claim tools (server/perspicax-claims.ts) while this turn has a
+      // The claim tools (server/perspicax/perspicax-claims.ts) while this turn has a
       // Perspicax profile mounted for the person speaking; the route re-checks.
       SAGAX_CLAIMS: perspicaxMcp?.hasMounted(threadId, generation, botId) ? "1" : "0",
       // sagax_web_search: an engine without a web search of its own, for a

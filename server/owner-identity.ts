@@ -19,7 +19,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
-import { avatarContentType, AVATAR_MAX_BYTES } from "./perspicax-link.ts";
+import { avatarContentType, AVATAR_MAX_BYTES } from "./perspicax/perspicax-link.ts";
 import { PASS, type RouteHandler } from "./routes/table.ts";
 
 export const OWNER_IDENTITY_MESSAGE = "openmausbot:owner-identity";

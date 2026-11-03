@@ -70,7 +70,7 @@ export const ROUTINE_DELEGATION_ISSUE_RETRY_MS = 60_000;
 export const ROUTINE_DELEGATION_UNSUPPORTED_RETRY_MS = 600_000;
 
 /** What issuing a delegation from a sign-in access token answered
- * (server/perspicax-link.ts issueRoutineDelegation). */
+ * (server/perspicax/perspicax-link.ts issueRoutineDelegation). */
 export type RoutineDelegationIssue =
   | { ok: true; refreshToken: string; accessToken?: string; accessExpiresAt?: number }
   | { ok: false; error: "unsupported" | "subject" | "link" | "rate_limited" | "unreachable"; retryAfterMs?: number };

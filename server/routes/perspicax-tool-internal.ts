@@ -3,7 +3,7 @@
 // the profile mounted in this turn, in the speaker's name, after the same
 // misuse and safety review as a Perspicax MCP call. Behind the agents
 // capability (see internal-route.ts).
-import type { PerspicaxMcp } from "../perspicax-mcp.ts";
+import type { PerspicaxMcp } from "../perspicax/perspicax-mcp.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 

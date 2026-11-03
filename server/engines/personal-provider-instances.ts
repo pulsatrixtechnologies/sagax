@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ProviderAccountsView } from "../../shared/provider-accounts.ts";
 import type { InstanceConfigMap } from "../contracts.ts";
-import type { ModelProvider } from "../perspicax-link.ts";
+import type { ModelProvider } from "../perspicax/perspicax-link.ts";
 
 export interface PersonalProviderInstance { owner: string; serverId: string; provider: ModelProvider }
 /** Names and endpoints belong to one person even if two people choose the

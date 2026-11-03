@@ -166,7 +166,7 @@ key leaves everyone on `mine`, as before.
 |---|---|---|---|---|
 | `backup.workspace` | Back up and restore the server | `/api/workspace-backup/*` (admin scope), `manageBackups` | no | **yes** |
 | `host.shell` | Run commands on the server | `server/engines/engine-access.ts:136` `memberBotAdminApproval` (a member bot's host-level tools wait for an admin), `server/index.ts:7838` (answering those cards), `:30495` command rules, `:30531` always-allow, `/api/mcp/servers*` `:33968`, engine `cli`/`configDir`, `/api/cli-test`, installation computers (`/api/computers/*` `:33029`, `/api/local-computer*`) | no | **yes** |
-| `server.settings` | Change the server's settings | every other admin-scope route: `PUT /api/config`, keys, mail (`server/mail/mail-routes.ts:94`), webhooks (`server/index.ts:28261`), `PATCH /api/org/settings` (`server/perspicax-org-routes.ts:209`), budgets | no | **yes** |
+| `server.settings` | Change the server's settings | every other admin-scope route: `PUT /api/config`, keys, mail (`server/mail/mail-routes.ts:94`), webhooks (`server/index.ts:28261`), `PATCH /api/org/settings` (`server/perspicax/perspicax-org-routes.ts:209`), budgets | no | **yes** |
 | `server.link` | Link the server | the link file, sign-in list, invites, interim attach window | no | **yes** |
 
 ### Summary
@@ -231,7 +231,7 @@ permissions.
   `BOT_FIELD_PERMISSIONS`, `permissionRefusal`, `permissionCatalogue`.
 - `server/org/org-permissions.ts`: `effectivePermissions` (admin, Perspicax
   list or defaults, person sheet narrowing).
-- `server/perspicax-link.ts`: the directory schema and `permissionsOf`.
+- `server/perspicax/perspicax-link.ts`: the directory schema and `permissionsOf`.
 - `server/auth/request-auth.ts`: `PERMISSION_ROUTES` and `routePermission`; the
   gate asks `permits(session, key)` before refusing an admin-scope route.
 - `server/index.ts`: `principalPermissions`, `callerPermissions`,
@@ -247,7 +247,7 @@ permissions.
 - `shared/permissions.test.ts`: catalogue invariants, `can`, normalization.
 - `server/org/org-permissions.test.ts`: effective permissions.
 - `server/auth/request-auth.test.ts`: permission routes and the gate.
-- `server/perspicax-link.test.ts`: the directory field.
+- `server/perspicax/perspicax-link.test.ts`: the directory field.
 - `server/org/org-admin-routes.test.ts`, `server/org/org-admin-console.e2e.test.ts`:
   catalogue in capabilities, person permissions.
 - `server/org/org-permissions.e2e.test.ts` (PM-1 to PM-5): defaults, a route gate

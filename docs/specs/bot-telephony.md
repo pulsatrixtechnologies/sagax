@@ -284,7 +284,7 @@ partagé auquel l'admin Perspicax lui a donné accès : pour Sagax, c'est le mê
 cas, « le profil Twilio que cette personne détient ».
 
 Comment Sagax obtient les droits, en réutilisant le mécanisme existant
-(`server/perspicax-mcp.ts`, `perspicax-link.ts`, spec
+(`server/perspicax/perspicax-mcp.ts`, `perspicax-link.ts`, spec
 `2026-09-29-perspicax-multiuser-design.md`) :
 
 | Situation | Identité utilisée | Mécanisme |
@@ -325,7 +325,7 @@ Deux chemins mènent à Twilio, avec les mêmes garde-fous (R9) :
   (`twilio_api_write` : `CreateCall`, `CreateMessage`), permis par R9.
 
 Les deux passent par la **garde téléphonique** de Sagax (6.5), placée dans le
-relais MCP Perspicax du serveur (`server/perspicax-mcp.ts`, qui voit déjà
+relais MCP Perspicax du serveur (`server/perspicax/perspicax-mcp.ts`, qui voit déjà
 chaque trame) : liste blanche, heures, plafonds, carte pour un tiers,
 divulgation, interdiction d'acheter un numéro.
 
@@ -821,7 +821,7 @@ réservé à un choix explicite (R3).
 Les bots **peuvent** créer des appels et des SMS par `twilio_api_write`
 (`CreateCall`, `CreateMessage`), en plus des outils du service téléphonique.
 Pour que ce chemin n'échappe à aucun garde-fou, la **garde téléphonique**
-s'insère dans le relais MCP Perspicax de Sagax (`server/perspicax-mcp.ts`,
+s'insère dans le relais MCP Perspicax de Sagax (`server/perspicax/perspicax-mcp.ts`,
 fonction `relay`), avant l'envoi à Perspicax :
 
 | Appel d'outil du bot | Décision de la garde |
@@ -876,7 +876,7 @@ Partie interne sûre, sans compte ni infrastructure nouvelle, en **pilote
 interne** (conditions de l'ÉFVP Loi 25 du 2026-10-22) :
 
 - **Garde téléphonique** (`server/telephony-guard.ts`, branchée dans le relais
-  `server/perspicax-mcp.ts`) : liste blanche. Avec les outils Twilio, un bot
+  `server/perspicax/perspicax-mcp.ts`) : liste blanche. Avec les outils Twilio, un bot
   lit, et envoie un texto (`Messages` create, qui garde sa carte
   `external-message`, sans aucun champ `*Url` ni `*Callback`). Les recettes de
   lecture (`read_action`, `find_*`) passent ; une action de lecture sur un outil

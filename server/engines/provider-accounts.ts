@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import type { ProviderAccountsView, PersonalProviderServer } from "../../shared/provider-accounts.ts";
 import { writeFileAtomic } from "../atomic.ts";
-import { isKeyProvider, type PerspicaxDirectory, type KeyProvider, type ProviderKeyResult } from "../perspicax-link.ts";
+import { isKeyProvider, type PerspicaxDirectory, type KeyProvider, type ProviderKeyResult } from "../perspicax/perspicax-link.ts";
 import { ProviderKeysStore, type ProviderKeyScope } from "./provider-keys.ts";
 
 const INSTANCE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;

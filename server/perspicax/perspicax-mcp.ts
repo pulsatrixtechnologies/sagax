@@ -3,7 +3,7 @@
 // A bot on an organization server lists Perspicax profiles
 // (server/bot-perspicax.ts). When a turn starts, the harness takes the
 // speaker's current sign-in access token (server/auth/idp-session.ts, memory
-// only) and exchanges it at Perspicax (RFC 8693, server/perspicax-link.ts)
+// only) and exchanges it at Perspicax (RFC 8693, server/perspicax/perspicax-link.ts)
 // for one short MCP token per profile. Those tokens stay here: the engine
 // mounts a stdio bridge per profile (server/perspicax-mcp-bridge.ts) that
 // holds only this turn's capability and posts every JSON-RPC frame to
@@ -24,13 +24,13 @@
 //     a fresh subject; when that fails the call answers "Perspicax access
 //     for this turn ended" (a disabled person mid-turn, S5-10);
 //   - no token is ever logged or put in an error.
-import { guardToolCall, type GuardOptions } from "./mcp/mcp-permissions.ts";
-import { telephonyRefusal, voiceToolCall } from "./telephony-guard.ts";
-import { placeArgsFromVoiceCall } from "../shared/outbound-call.ts";
-import type { SubjectTokenOutcome } from "./auth/idp-session.ts";
+import { guardToolCall, type GuardOptions } from "../mcp/mcp-permissions.ts";
+import { telephonyRefusal, voiceToolCall } from "../telephony-guard.ts";
+import { placeArgsFromVoiceCall } from "../../shared/outbound-call.ts";
+import type { SubjectTokenOutcome } from "../auth/idp-session.ts";
 import type { DirectoryProfile, ExchangeResult } from "./perspicax-link.ts";
-import { PERSPICAX_READ_ONLY_TOOLS } from "./drivers/acp/grok-read-only-tools.ts";
-import { executionKey, WriteOnce } from "./write-once.ts";
+import { PERSPICAX_READ_ONLY_TOOLS } from "../drivers/acp/grok-read-only-tools.ts";
+import { executionKey, WriteOnce } from "../write-once.ts";
 
 export type PerspicaxUnavailableReason = "not_held" | "no_session" | "unreachable" | "rate_limited" | "no_delegation" | "unknown_speaker" | "unknown_profile";
 

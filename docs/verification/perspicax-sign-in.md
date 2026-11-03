@@ -217,7 +217,7 @@ by hand.
 ### Automated (fake provider)
 
 ```sh
-pnpm exec vitest run server/perspicax-link.test.ts server/engines/engine-access.test.ts server/auth/direct-grants.test.ts \
+pnpm exec vitest run server/perspicax/perspicax-link.test.ts server/engines/engine-access.test.ts server/auth/direct-grants.test.ts \
   server/auth/principals.test.ts server/auth/oidc-rp.test.ts server/auth/oidc-login.test.ts server/auth/idp-session.test.ts \
   server/auth/request-auth.test.ts server/rooms/channel-visibility.test.ts server/org/org-sharing.e2e.test.ts \
   server/oidc-session.e2e.test.ts server/auth/oidc-login.e2e.test.ts server/environment.test.ts server/wire.test.ts \
@@ -228,7 +228,7 @@ The fake provider now serves `GET /api/v1/pulsabot/directory` behind its
 link token (`linkToken`), with an ETag and 304, settable `directoryPeople`
 and `directoryTeams`, and `setDirectoryStatus(sub, status)`.
 
-- `server/perspicax-link.test.ts`: the link file (0644 refused, 0640 and
+- `server/perspicax/perspicax-link.test.ts`: the link file (0644 refused, 0640 and
   0600 accepted, another issuer, origin or client, extra keys, a bad token,
   more than 4 KiB, and the token never in a refusal) and the directory sync
   (principals created before any sign-in, attributes updated, `disabledAt`
@@ -288,7 +288,7 @@ backstop when the back-channel push cannot arrive, and the engines in
 ```sh
 pnpm exec vitest run server/auth/authz.test.ts server/bot-grants.test.ts server/engines/engine-credentials.test.ts \
   server/rooms/section-channels.test.ts server/engines/principal-engine-logins.test.ts server/org/org-teams.test.ts \
-  server/auth/principals.test.ts server/perspicax-link.test.ts server/auth/oidc-rp.test.ts server/auth/idp-session.test.ts \
+  server/auth/principals.test.ts server/perspicax/perspicax-link.test.ts server/auth/oidc-rp.test.ts server/auth/idp-session.test.ts \
   server/engines/engine-access.test.ts server/auth/direct-grants.test.ts server/rooms/channel-visibility.test.ts \
   server/auth/request-auth.test.ts server/drivers/claude.test.ts server/drivers/codex.test.ts \
   server/org/org-rights.e2e.test.ts server/org/org-sharing.e2e.test.ts server/oidc-session.e2e.test.ts \
@@ -391,8 +391,8 @@ lists `engines`.
 ### Automated (fake provider)
 
 ```sh
-pnpm exec vitest run server/perspicax-mcp.test.ts server/perspicax-mcp-bridge.test.ts server/bot-perspicax.test.ts \
-  server/perspicax-link.test.ts server/auth/idp-session.test.ts server/auth/oidc-rp.test.ts server/auth/request-auth.test.ts \
+pnpm exec vitest run server/perspicax/perspicax-mcp.test.ts server/perspicax-mcp-bridge.test.ts server/bot-perspicax.test.ts \
+  server/perspicax/perspicax-link.test.ts server/auth/idp-session.test.ts server/auth/oidc-rp.test.ts server/auth/request-auth.test.ts \
   server/org/org-mcp.e2e.test.ts server/org/org-sharing.e2e.test.ts server/oidc-session.e2e.test.ts \
   src/components/bot-settings/PerspicaxSection.test.ts
 pnpm -s i18n:check
@@ -406,7 +406,7 @@ tool. The fake Claude CLI calls MCP tools from `FAKE_CLAUDE_MCP_CALLS`
 (for example `[{"server":"perspicax_*","tool":"api_list","arguments":{}}]`)
 and writes what it saw to `FAKE_CLAUDE_MCP_DUMP`.
 
-- `server/perspicax-mcp.test.ts`: who speaks for a turn (the Direct's
+- `server/perspicax/perspicax-mcp.test.ts`: who speaks for a turn (the Direct's
   person, a hop through `ask_bot` or `coordinate_bots`, a room member, a
   routine's person), the exchange per profile, `invalid_target` for a
   profile not held, the per-turn tokens revoked after the turn, no cache
@@ -460,10 +460,10 @@ slice 5 acceptance:
 
 ```sh
 pnpm exec vitest run server/org/org-routine-consent.test.ts server/routines/routines.test.ts server/auth/idp-session.test.ts \
-  server/perspicax-mcp.test.ts server/auth/authz.test.ts server/auth/request-auth.test.ts \
+  server/perspicax/perspicax-mcp.test.ts server/auth/authz.test.ts server/auth/request-auth.test.ts \
   server/org/org-routines.e2e.test.ts server/org/org-mcp.e2e.test.ts server/org/org-sharing.e2e.test.ts \
   server/oidc-session.e2e.test.ts server/routines/routine-delegation.e2e.test.ts \
-  server/perspicax-link.test.ts server/auth/oidc-login.test.ts \
+  server/perspicax/perspicax-link.test.ts server/auth/oidc-login.test.ts \
   src/components/routines/RoutineOwnerName.test.ts
 pnpm -s i18n:check
 ```
@@ -656,7 +656,7 @@ their own addresses).
 ```sh
 pnpm -s vitest run shared/org-import.test.ts server/identity-migration.test.ts \
   server/org/org-export.test.ts server/org/org-import-routes.test.ts server/interim-attach-routes.test.ts \
-  server/auth/principals.test.ts server/org/org-routes.test.ts server/perspicax-org-routes.test.ts \
+  server/auth/principals.test.ts server/org/org-routes.test.ts server/perspicax/perspicax-org-routes.test.ts \
   server/org/org-import.e2e.test.ts server/org/org-interim-attach.e2e.test.ts \
   server/auth/member-identity.e2e.test.ts server/org/org-identity.e2e.test.ts \
   src/lib/org-join.test.ts src/components/OrgImportDialog.test.ts

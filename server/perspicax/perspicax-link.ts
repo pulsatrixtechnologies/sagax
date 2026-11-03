@@ -19,8 +19,8 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
 import { z } from "zod";
 
-import { normalizePermissions, type PermissionKey } from "../shared/permissions.ts";
-import type { Principal } from "./auth/principals.ts";
+import { normalizePermissions, type PermissionKey } from "../../shared/permissions.ts";
+import type { Principal } from "../auth/principals.ts";
 
 export const LINK_FILE_MAX_BYTES = 4 * 1024;
 export const DIRECTORY_MAX_BYTES = 4 * 1024 * 1024;

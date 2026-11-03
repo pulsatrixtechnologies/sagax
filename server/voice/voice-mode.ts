@@ -117,7 +117,7 @@ import {
   type VoiceKeyRefusal,
   type VoiceKeys,
 } from "./voice-keys.ts";
-import type { ProviderKeyResult } from "../perspicax-link.ts";
+import type { ProviderKeyResult } from "../perspicax/perspicax-link.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "../routes/table.ts";
 import type { Audio, Voice } from "../tts/elevenlabs.ts";

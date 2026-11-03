@@ -402,7 +402,7 @@ export function createInternalIntegrationsRoutes(deps: InternalIntegrationsDeps)
 
     // Slice 5: a Perspicax MCP frame from the stdio bridge of this turn
     // (server/perspicax-mcp-bridge.ts). The Perspicax token never leaves
-    // this process: server/perspicax-mcp.ts holds it and relays.
+    // this process: server/perspicax/perspicax-mcp.ts holds it and relays.
     if (method === "POST" && path === "/api/internal/perspicax/mcp") {
       const profileId = url?.searchParams.get("profile") ?? "";
       if (!deps.perspicaxMounted(capability, profileId)) {

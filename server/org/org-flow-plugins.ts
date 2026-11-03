@@ -11,7 +11,7 @@ import { writeFileAtomic } from "../atomic.ts";
 import { copySanitizedPlugin } from "../bot-plugins.ts";
 import { installationCapabilityBridge } from "../capabilities/installation-capability-bridge.ts";
 import { ZipReader } from "../zip.ts";
-import type { FlowPluginsDeclaration } from "../perspicax-link.ts";
+import type { FlowPluginsDeclaration } from "../perspicax/perspicax-link.ts";
 
 export type OrgFlowPluginState = "installed" | "pending" | "failed";
 

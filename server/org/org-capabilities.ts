@@ -1,6 +1,6 @@
 // Capabilities lot 4: Perspicax declares the organization's capabilities,
 // this linked server executes them. The declarations come from the
-// directory (server/perspicax-link.ts `capabilities`, configuration
+// directory (server/perspicax/perspicax-link.ts `capabilities`, configuration
 // included on that authenticated channel only); this module turns them into
 // what a turn mounts, once for the whole installation:
 //
@@ -37,7 +37,7 @@ import { copySanitizedPlugin, readPluginContents, type PluginContents } from "..
 import type { McpServerSpec } from "../contracts.ts";
 import { installationCapabilityBridge } from "../capabilities/installation-capability-bridge.ts";
 import { applyPluginConfig, readPluginConfigFields } from "../plugins/plugin-config.ts";
-import type { OrgCapabilityDeclaration } from "../perspicax-link.ts";
+import type { OrgCapabilityDeclaration } from "../perspicax/perspicax-link.ts";
 
 export const ORG_FLOW_MOUNT_PREFIX = "pulsatrix-flow";
 /** The key prefix of an organization declaration's MCP server on a turn

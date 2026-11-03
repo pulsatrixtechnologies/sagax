@@ -535,7 +535,7 @@ export function createPublicInviteRoutes(deps: PublicInviteRouteDeps) {
 //
 // An organization server refuses the email and invitation routes with 403
 // identity_perspicax before the auth gate (server/auth/oidc-login.ts) and serves
-// its own /api/org (server/perspicax-org-routes.ts).
+// its own /api/org (server/perspicax/perspicax-org-routes.ts).
 
 export const INTERIM_ORG_REMOVED = {
   error: "Organizations on a personal Sagax were removed. Join a Perspicax server from Settings > Organization.",

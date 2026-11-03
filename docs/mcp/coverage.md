@@ -19,7 +19,7 @@ Reading the table:
   shown.
 - **covered (bridge)**: a Perspicax tool the agents catalog does not list
   natively but a bot reaches through the Perspicax bridge
-  (`server/perspicax-mcp.ts`, a profile mounted on the turn). The relay judges
+  (`server/perspicax/perspicax-mcp.ts`, a profile mounted on the turn). The relay judges
   it with the same permission, so enforce never refuses it by omission.
 - **MISSING**: no MCP tool.
 - Tool names are the ones Perspicax 1.8.28 serves (connector

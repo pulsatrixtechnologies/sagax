@@ -11,7 +11,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { freePortBlock } from "../testing/ports.ts";
 
-const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
+// The test lives one level under server/ since #1380.
+const SERVER_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ROOT = join(SERVER_DIR, "..");
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const TEST_CAPABILITY_KEY = "routine-run-fixture-capability-key-01";

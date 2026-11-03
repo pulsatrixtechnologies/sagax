@@ -29,7 +29,7 @@ import {
 } from "./codex.ts";
 import { codexCliOverrides } from "./codex-process.ts";
 import { CODEX_SIGN_IN_EXPIRED, codexContextFull, codexNotSignedIn, codexSignInRefused, codexUserError } from "./codex-errors.ts";
-import { contextFullMessage, contextRenewedNotice } from "../context-renewal.ts";
+import { contextFullMessage, contextRenewedNotice } from "../context/context-renewal.ts";
 import { CODEX_USAGE_LIMIT_REACHED } from "../../shared/codex-usage-limit.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
 import { rebuiltSessionNotice } from "../resume-recovery.ts";

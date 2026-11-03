@@ -122,7 +122,7 @@ export function createAgentCard(args: {
   input: unknown;
   /** Told the row a widget call wrote. The calling turn's own session made
    * it, so it must not be offered back to that session as a message it has
-   * not seen (server/delta-context.ts Handoffs.authored). */
+   * not seen (server/context/delta-context.ts Handoffs.authored). */
   authored?(messageId: string): void;
   /** propose_page (server/published-pages.ts): stores a proposed version,
    * never a published one. Absent: the tool is refused. */

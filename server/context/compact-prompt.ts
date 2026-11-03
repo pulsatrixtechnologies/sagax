@@ -35,8 +35,8 @@ import { createHash } from "node:crypto";
 import { constants, copyFileSync, lstatSync, mkdirSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import type { CompactPromptInput } from "./contracts.ts";
-import { isPiLocalModel } from "./models/pi-local-model.ts";
+import type { CompactPromptInput } from "../contracts.ts";
+import { isPiLocalModel } from "../models/pi-local-model.ts";
 
 export type LocalPromptMode = "compact" | "full";
 

@@ -20,8 +20,8 @@
 // confidential, hidden, routine, parallel or bot-opened thread), narrowed by
 // the caller with privateRecallFilter (the same person's threads only on an
 // organization server). Pure apart from the types: no store, no request.
-import { boundedContextText, type ReplayEntry } from "./context-rebuild.ts";
-import { keyFacts } from "./compaction-summary.ts";
+import { boundedContextText, type ReplayEntry } from "./context/context-rebuild.ts";
+import { keyFacts } from "./context/compaction-summary.ts";
 import { isStreamSegment, type StreamTaskFacts } from "../shared/single-stream.ts";
 
 export const SEGMENT_DIGEST_MAX_CHARS = 900;

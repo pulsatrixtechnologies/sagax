@@ -25,7 +25,7 @@ import { ThreadCache, type ThreadState } from "./threads/thread-cache.ts";
 import { forgetBotMemoryJournal, journalFile } from "./memory/memory-journal.ts";
 import { forgetLogMemory } from "./encryption/content-at-rest.ts";
 import { forgetWorkspaceUsage } from "./workspace/workspace-usage.ts";
-import { nextContext } from "./context-reading.ts";
+import { nextContext } from "./context/context-reading.ts";
 import { runCommand, type Command } from "./commands.ts";
 import { workspaceDir } from "./workspace/workspace.ts";
 import { autoOnlyDestination, type Destination } from "./surface.ts";
@@ -43,7 +43,7 @@ import type { SegmentDigest } from "./single-stream.ts";
 import type { TeamSetupRequest, TeamSetupResult } from "../shared/team-setup.ts";
 import type { GroupGoalRunCardData } from "../shared/group-goal-run.ts";
 import { isMentionBoundary, isMentionNameContinuation } from "../shared/mention-boundary.ts";
-import type { HandedState } from "./delta-context.ts";
+import type { HandedState } from "./context/delta-context.ts";
 import type { AgentPart, PartPair, RoomPart } from "./package-parts.ts";
 import type { BotHost } from "./turns/turn-route.ts";
 import { advancesPosition, type ReadMap, type ReadPosition } from "./messages/read-receipts.ts";
@@ -122,12 +122,12 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
    * inline replay. Absent on tasks from before the field existed. */
   lastInstanceId?: string;
   /** per instance: the stored messages that instance's current native
-   * session has been handed on this task (server/delta-context.ts) */
+   * session has been handed on this task (server/context/delta-context.ts) */
   handedMessages?: Record<string, HandedState>;
   /** Last compaction represented by a dispatched session on this task. */
   appliedCompactionId?: string;
   /** Summaries Sagax wrote when it folded this thread on its own, newest
-   * last (server/context-rebuild.ts CompactionRecord with an anchorId). They
+   * last (server/context/context-rebuild.ts CompactionRecord with an anchorId). They
    * are the thread's memory of its older turns and stay off the chat: the
    * person never sees a fold, only the bot's next session reads it. */
   /** stale: written (or re-applied) for a stale engine session

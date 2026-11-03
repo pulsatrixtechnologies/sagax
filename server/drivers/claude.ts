@@ -19,7 +19,7 @@ import { claudeProtectedDenyRules } from "../engines/engine-protected-paths.ts";
 import { augmentedPath } from "../env-path.ts";
 import { brokerSocketPath, execCli } from "../procs.ts";
 import { rebuiltSessionNotice } from "../resume-recovery.ts";
-import { contextRenewedNotice } from "../context-renewal.ts";
+import { contextRenewedNotice } from "../context/context-renewal.ts";
 import { ClaudeLoginController } from "./claude-login-auth.ts";
 
 import type {

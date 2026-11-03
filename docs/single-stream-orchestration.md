@@ -93,8 +93,8 @@ mode.
   (Sagax: hidden AI-client conversations, #291; parallel tasks) stays out of
   the chat and reports back into it.
 - **Context today**: Sagax folds a long thread itself
-  (`compactConversation`, `server/context-budget.ts`,
-  `server/compaction-summary.ts`): two latest exchanges verbatim, the rest
+  (`compactConversation`, `server/context/context-budget.ts`,
+  `server/context/compaction-summary.ts`): two latest exchanges verbatim, the rest
   summarized by the engine's tool-free `generateText` with a deterministic,
   extractive fallback, stored on the task (`contextSummaries`, server-private).
   Every 1:1 turn also carries automatic recall (`server/recall.ts`, FTS

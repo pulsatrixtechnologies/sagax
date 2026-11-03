@@ -30,7 +30,7 @@ export interface TurnContextInput {
   externallyUpdated: boolean;
   /** transcript-replay drivers get history via SendTurnInput.transcript instead */
   replaysNatively: boolean;
-  /** Sagax folded the older turns into a summary (server/context-budget.ts):
+  /** Sagax folded the older turns into a summary (server/context/context-budget.ts):
    * the same bot, the same person, the same conversation, in a new session.
    * Told as a continuation, never as a hand-over or a rewind, so the bot
    * carries on as if nothing happened. */

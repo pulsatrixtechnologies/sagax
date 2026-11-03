@@ -13,7 +13,7 @@ import { newId } from "../../contracts.ts";
 import { commandSummary } from "../../tool-summary.ts";
 import { CODEX_MISSING_CREDENTIALS, codexContextFull, codexSignInExpired, codexSignInRefused, codexUserError } from "../codex-errors.ts";
 import { classifyError, RETRY_MAX_ATTEMPTS } from "../retry.ts";
-import { renewalPrompt } from "../../context-renewal.ts";
+import { renewalPrompt } from "../../context/context-renewal.ts";
 
 export const DENY_TIMEOUT_NOTE =
   "Sagax: nobody answered this permission request in time. Skip this action and finish what you can without it.";

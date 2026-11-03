@@ -93,7 +93,7 @@
   "server/decider-included.e2e.test.ts": 6,
   "server/decider-rooms.e2e.test.ts": 6,
   "server/memory/delete-bot-memory.e2e.test.ts": 5,
-  "server/delta-context.e2e.test.ts": 548,
+  "server/context/delta-context.e2e.test.ts": 548,
   "server/desktop/desktop-bridge.e2e.test.ts": 1,
   "server/digest-control.e2e.test.ts": 7,
   "server/digest.e2e.test.ts": 1,

@@ -10,7 +10,7 @@
 
 同型の洗い出し: ラベルが 1M と書く行は Cursor の `claude-sonnet-5-thinking-high` が 1 件。モデルページが無いので、この PR では 200,000 のままにする。Fable 5.1 と Sonnet 5 もこの PR では従来の 200,000（`[1m]` 付きを除く）のままにする。1M にするかは別件。
 
-Claude の harness compaction は `autoCompactWindow` の既定 200,000 のままです。1M は使用量チップの分母（`server/index.ts` の `modelContextWindow` 呼び出し）と、`contextWindowFor`（`server/context-budget.ts`）がカタログ宣言を読んだときの幅です。`--autocompact` の既定は動きません。
+Claude の harness compaction は `autoCompactWindow` の既定 200,000 のままです。1M は使用量チップの分母（`server/index.ts` の `modelContextWindow` 呼び出し）と、`contextWindowFor`（`server/context/context-budget.ts`）がカタログ宣言を読んだときの幅です。`--autocompact` の既定は動きません。
 
 古い Claude Code が `claude-opus-5-5` を知らないと、そのモデルのターンは失敗します。フラグ用の version floor はモデル id には無く、Fable や Opus 5 を足したときと同じです。
 
@@ -21,7 +21,7 @@ Claude の harness compaction は `autoCompactWindow` の既定 200,000 のま�
 | Claude の静的一覧 | `server/drivers/claude.ts` `STATIC_CLAUDE_MODELS` | 機能 | 1 行追加。既定と既存ボットは不変 |
 | コンテキスト幅 | `server/models/model-context-window.ts` | 機能 | Opus 5.5 と、スラッシュまたはドットで区切った転送形だけ 1M |
 | 使用量チップ | `server/index.ts` の `modelContextWindow` | 機能 | カタログが窓を返さないときの分母。compaction は変えない |
-| 窓の解決 | `server/context-budget.ts` `contextWindowFor` | 機能 | カタログの `contextWindow` をパターン表より先に使う |
+| 窓の解決 | `server/context/context-budget.ts` `contextWindowFor` | 機能 | カタログの `contextWindow` をパターン表より先に使う |
 | Droid の `MODELS` | `server/drivers/acp/droid.ts` | なし | Factory 側のスナップショットなので触らない |
 | カタログ検査 | `claude-catalog.test.ts` | テスト | 位置と既定を固定 |
 | 幅の検査 | `model-context-window.test.ts` | テスト | 5.5 は 1M、5 は 200k |

@@ -1,4 +1,4 @@
-import { prefixBytes } from "../context-rebuild.ts";
+import { prefixBytes } from "../context/context-rebuild.ts";
 import type { ChatContentPart } from "./chat-images.ts";
 import type { OpenAIChatMessage } from "./openai-chat.ts";
 import { object } from "./openai-chat-protocol.ts";

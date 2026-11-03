@@ -75,7 +75,7 @@ The differing addresses are disposable fixtures.
 
 `pnpm test` was not fully green: Vitest completed with 7,348 passing tests,
 2 failures, 60 skipped and 1 todo. The failure in
-`server/delta-context.e2e.test.ts` (delegate source session replay, line 963)
+`server/context/delta-context.e2e.test.ts` (delegate source session replay, line 963)
 reproduced in a pristine worktree at base `0c327bca`. The Electron case in
 `server/local-computer-proxy.test.ts` timed out in the full run but passed
 when rerun on both pristine main and this patch. Neither server test nor its

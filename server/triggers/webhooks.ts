@@ -33,7 +33,7 @@ import {
   type SourceHandshake,
   type SourceRequest,
 } from "./trigger-sources.ts";
-import { eventPayloadMaxChars, eventRawExcerptMaxChars } from "../cold-prompt-budget.ts";
+import { eventPayloadMaxChars, eventRawExcerptMaxChars } from "../context/cold-prompt-budget.ts";
 
 export type WebhookTriggerInput = z.input<typeof triggerInputSchema>;
 export type WebhookVerificationSample = z.output<typeof verificationSampleSchema>;
@@ -207,7 +207,7 @@ export type WebhookManagerEvent =
 const MAX_DELIVERIES = 2_000;
 const MAX_ATTEMPTS = 2_000;
 /** Generic webhook / non-email event fence. Email and botmail use the tighter
- * cold-prompt budget (server/cold-prompt-budget.ts) so watch routines stay
+ * cold-prompt budget (server/context/cold-prompt-budget.ts) so watch routines stay
  * under the model context window. */
 const MAX_EVENT_CHARS = 48_000;
 const RATE_WINDOW_MS = 60_000;

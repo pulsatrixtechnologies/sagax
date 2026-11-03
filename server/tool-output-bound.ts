@@ -10,7 +10,7 @@
 // each later call; a few such results in one model call (a port scan and a
 // recursive search for keys run side by side) refill a Claude Code session
 // right after it compacts, until the CLI gives up on the turn (Autocompact is
-// thrashing, server/context-renewal.ts).
+// thrashing, server/context/context-renewal.ts).
 //
 // So a text answer is cut to a budget the size of Claude Code's own Bash
 // output (30,000 characters), keeping its start and its end (a command's

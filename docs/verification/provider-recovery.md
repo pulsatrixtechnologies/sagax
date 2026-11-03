@@ -46,7 +46,7 @@ and the account selected in OMB; never request the user's keys or tokens.
 ## ACP internal-error recovery
 
 ```sh
-pnpm exec vitest run server/drivers/acp/acp.test.ts server/acp-recovery.e2e.test.ts server/resume-recovery.test.ts server/delta-context.test.ts server/peers/incidents.e2e.test.ts server/peers/room-coordination.e2e.test.ts
+pnpm exec vitest run server/drivers/acp/acp.test.ts server/acp-recovery.e2e.test.ts server/resume-recovery.test.ts server/context/delta-context.test.ts server/peers/incidents.e2e.test.ts server/peers/room-coordination.e2e.test.ts
 ```
 
 The ACP transport fixture injects an internal RPC error, including one after

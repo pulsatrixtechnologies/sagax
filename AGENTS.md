@@ -1077,7 +1077,7 @@ contextWindowExceeded). Three halves:
 - Claude Code and Codex (`server/drivers/claude.ts`, `server/drivers/codex.ts`,
   `claudeContextFull` / `codexContextFull`): the turn closes its process and
   goes on in a fresh session with the chat's rebuild and a bounded note of
-  the steps it took (`server/context-renewal.ts`); the Events lens gets
+  the steps it took (`server/context/context-renewal.ts`); the Events lens gets
   `contextRenewedNotice`, the chat nothing. A second overflow in that session
   is one plain error (`contextFullMessage`) and the next send starts fresh
   (`freshNextTurn`). Fake CLI: `[fake:context-thrash]` /
@@ -1089,7 +1089,7 @@ contextWindowExceeded). Three halves:
   the already-full native session. Tests: `server/drivers/claude.test.ts`
   ("fresh session"), `server/drivers/codex.test.ts` ("fresh Codex thread"),
   `server/drivers/acp/acp.test.ts` ("lightened Grok session"),
-  `server/tool-output-bound.test.ts`, `server/context-renewal.test.ts`.
+  `server/tool-output-bound.test.ts`, `server/context/context-renewal.test.ts`.
 
 ## Recall by meaning, on by default (#1327, 2026-10-29)
 
@@ -7672,7 +7672,7 @@ exported and read by older builds, no client reads it). Rules, covered by
 
 - Sagax folds a long thread itself, between turns, before the engine would
   compact its own session: `compactConversation` in `server/index.ts`, with
-  the budget in `server/context-budget.ts` (80% of the window, and 10% under
+  the budget in `server/context/context-budget.ts` (80% of the window, and 10% under
   `nativeCompactionPoint`: Claude's `--autocompact` window, Codex 90%,
   Gemini CLI 50%, Qwen 83.5%, pi window less 16384, other ACP agents 80%).
   The engines that are handed the stored transcript every turn (the OpenAI
@@ -7704,7 +7704,7 @@ exported and read by older builds, no client reads it). Rules, covered by
   one. Server log lines start with `[context]`.
 - Tests: `server/context-compaction.e2e.test.ts`,
   `server/context-compaction-replay.e2e.test.ts`, the compaction block of
-  `server/hooks.e2e.test.ts` (mid tool call), `server/context-budget.test.ts`.
+  `server/hooks.e2e.test.ts` (mid tool call), `server/context/context-budget.test.ts`.
 
 ## Stale engine sessions and small talk (2026-10-20)
 

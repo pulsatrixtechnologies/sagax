@@ -98,8 +98,8 @@ import {
   MAX_SUMMARY_BYTES,
   type CompactionRecord,
   type ReplayEntry
-} from "./context-rebuild.ts";
-import { deterministicSummary, draftSummary, foldPoint } from "./compaction-summary.ts";
+} from "./context/context-rebuild.ts";
+import { deterministicSummary, draftSummary, foldPoint } from "./context/compaction-summary.ts";
 import {
   FinishUntilRuns,
   finishUntilPrompt,
@@ -135,7 +135,7 @@ import {
   defaultCompactAt,
   nativeCompactionPoint,
   shouldCompact
-} from "./context-budget.ts";
+} from "./context/context-budget.ts";
 import {
   autoCompactWindow,
   claudeSignedIn,
@@ -759,7 +759,7 @@ import { sendBlockFor, type SendBlock } from "../shared/send-state.ts";
 import { repeatsShownFailure } from "../shared/failure-dedup.ts";
 import { limitFailoverText, resetClockText, type LimitFailoverLine } from "../shared/limit-failover.ts";
 import { isTechnicalNoticeName } from "../shared/chat-notices.ts";
-import { renewalPrompt, type RenewalStep } from "./context-renewal.ts";
+import { renewalPrompt, type RenewalStep } from "./context/context-renewal.ts";
 import { ModelCatalogStore } from "./model-catalog/catalog.ts";
 import { turnRunFor, type TurnRun } from "./turns/turn-run.ts";
 import {
@@ -1076,7 +1076,7 @@ import {
   unseenMessages,
   withUnseenMessages,
   type ContextMessage
-} from "./delta-context.ts";
+} from "./context/delta-context.ts";
 import { extractTurnImages } from "./turns/turn-images.ts";
 import { fitTurnImagesForModel, modelImageCopyPath } from "./models/model-image.ts";
 import {
@@ -1188,7 +1188,7 @@ import {
   teamAvailabilityPart,
   modelPrompt
 } from "./system-prompt.ts";
-import { lightenColdPrompt } from "./cold-prompt-budget.ts";
+import { lightenColdPrompt } from "./context/cold-prompt-budget.ts";
 import { shellTimeoutHookResult } from "./shell-timeout-hint.ts";
 import { readCuaConnection, readCuaUnavailableReason, gatedLocalComputer } from "./local-computer.ts";
 import { launchedByDesktopApp, listenForDesktopComputer } from "./computer/desktop-computer.ts";
@@ -1311,7 +1311,7 @@ import {
   usesCompactPrompt,
   usesStablePrompt,
   type ToolUse
-} from "./compact-prompt.ts";
+} from "./context/compact-prompt.ts";
 import {
   buildJournal,
   journalWire,
@@ -2453,7 +2453,7 @@ import { createDirectGrantRoutes } from "./auth/direct-grants.ts";
 import { directoryIntervalMs, PerspicaxDirectory, type ModelProvider } from "./perspicax-link.ts";
 import { duplicateNote, PerspicaxMemory } from "./memory/perspicax-memory.ts";
 import { knownAgentToolName, PERSPICAX_TOOL_NAMES } from "./drivers/agents-catalog.ts";
-import { measureContextBuckets, toolDefinitionBytes } from "./context-buckets.ts";
+import { measureContextBuckets, toolDefinitionBytes } from "./context/context-buckets.ts";
 import {
   PERSPICAX_PROTOCOL_VERSION,
   PERSPICAX_UNAVAILABLE_WHY,
@@ -16273,7 +16273,7 @@ const limitFailover = createLimitFailoverHost({
     if (next === "resumed") return coordinator.continueRoot(previous!, randomUUID()) === "resumed";
     const replyTo = message.replyToId ? path.find((candidate) => candidate.id === message.replyToId) : undefined;
     // The same turn goes on: the next engine is told the steps it already
-    // took (as a fresh session is, server/context-renewal.ts), so it never
+    // took (as a fresh session is, server/context/context-renewal.ts), so it never
     // runs them again. The person's message stays as they wrote it.
     const text = resume?.turnId ? limitResumeText(threadId, resume.turnId, message.text) : message.text;
     try {

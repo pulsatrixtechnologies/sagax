@@ -40,7 +40,7 @@ scripted voice, so their recipe is the end-to-end test:
 
 ```sh
 pnpm exec vitest run server/voice/live-call.e2e.test.ts server/chat-followups-restart.test.ts
-pnpm exec vitest run server/voice/live-call-record.test.ts server/voice/live-call-controller.test.ts server/turns/steer-queue.test.ts server/threads/thread-title.test.ts server/delta-context.test.ts server/voice/live-call.test.ts server/store.test.ts
+pnpm exec vitest run server/voice/live-call-record.test.ts server/voice/live-call-controller.test.ts server/turns/steer-queue.test.ts server/threads/thread-title.test.ts server/context/delta-context.test.ts server/voice/live-call.test.ts server/store.test.ts
 pnpm exec vitest run src/lib/call-record.test.ts src/lib/live-activity.test.ts src/lib/activity-runs.test.ts src/components/CallRecordRow.test.ts src/components/ChatView.via-call.test.ts src/components/ChatView.rows.test.ts
 pnpm typecheck
 pnpm i18n:check

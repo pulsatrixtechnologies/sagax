@@ -259,7 +259,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
         ? buildTurnContext({ text: userTurnText, transcript: state.transcript, rewound: false, fresh: false, externallyUpdated: true, replaysNatively: false }).turnText
         : buildRecoveryText({ text: userTurnText, transcript: state.transcript });
       // What this turn puts in front of the provider, for each session it can end
-      // up in (server/delta-context.ts). buildTurnContext prepends a replay only
+      // up in (server/context/delta-context.ts). buildTurnContext prepends a replay only
       // when it replays, so a changed text means the transcript was sent.
       const carried = [...skipTranscript];
       const windowIds = state.selection.representedIds;

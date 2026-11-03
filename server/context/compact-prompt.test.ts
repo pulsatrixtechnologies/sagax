@@ -19,10 +19,10 @@ import {
   usesCompactPrompt,
   usesStablePrompt,
 } from "./compact-prompt.ts";
-import { availableTools, catalogProfileFromEnv, compactListed, compactToolsFromEnv } from "./drivers/agents-catalog.ts";
-import { parseGateSearch, searchedCatalog } from "./mcp/mcp-gate-search.ts";
-import { searchedToolCall } from "../shared/searched-tool-call.ts";
-import { workspaceCwdPrompt, workspaceLocationsPrompt } from "./workspace/workspace.ts";
+import { availableTools, catalogProfileFromEnv, compactListed, compactToolsFromEnv } from "../drivers/agents-catalog.ts";
+import { parseGateSearch, searchedCatalog } from "../mcp/mcp-gate-search.ts";
+import { searchedToolCall } from "../../shared/searched-tool-call.ts";
+import { workspaceCwdPrompt, workspaceLocationsPrompt } from "../workspace/workspace.ts";
 
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });

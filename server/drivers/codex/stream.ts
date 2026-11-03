@@ -7,7 +7,7 @@ import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../../shared
 import { filesField, writtenFilesFromToolInput } from "../../threads/thread-files.ts";
 import { extractMcpImages } from "../../mcp/mcp-tool-images.ts";
 import { CALL_TOOL, directoryCallTarget } from "../../mcp/mcp-directory.ts";
-import { pushRenewalStep } from "../../context-renewal.ts";
+import { pushRenewalStep } from "../../context/context-renewal.ts";
 import { codexNativeIncomingLogMessage } from "./native-log.ts";
 import type { CodexSession } from "./session-types.ts";
 import { homedir } from "node:os";

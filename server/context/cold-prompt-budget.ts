@@ -7,7 +7,7 @@
 // 4 KB each); this module applies a tighter per-section budget on
 // automation turns, replaces oversized blocks with a short summary that
 // points at on-demand tools, and bounds email-watch event payloads.
-import type { PromptPart } from "./system-prompt.ts";
+import type { PromptPart } from "../system-prompt.ts";
 
 /** Soft ceiling for the whole system prompt of one cold / automation turn. */
 export const COLD_PROMPT_TOTAL_BUDGET = 40_000;

@@ -10,15 +10,15 @@ import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, it } from "vitest";
 
-import { launchVerificationServer, runControlOmb, verificationServerEnvironment } from "../scripts/control-omb.ts";
-import { request } from "../scripts/mcp-server.ts";
-import { ENVELOPE_MARK } from "./runtime/envelope.ts";
-import { waitForExit } from "./testing/cleanup.ts";
-import { readHandoffs } from "./testing/handoff-rows.ts";
-import { hostTimeout } from "./testing/host-timeout.ts";
-import { jsLiteral } from "../scripts/testing/js-literal.mjs";
-import { openSse } from "./testing/sse.ts";
-import { withoutTurnClock } from "./testing/turn-clock-text.ts";
+import { launchVerificationServer, runControlOmb, verificationServerEnvironment } from "../../scripts/control-omb.ts";
+import { request } from "../../scripts/mcp-server.ts";
+import { ENVELOPE_MARK } from "../runtime/envelope.ts";
+import { waitForExit } from "../testing/cleanup.ts";
+import { readHandoffs } from "../testing/handoff-rows.ts";
+import { hostTimeout } from "../testing/host-timeout.ts";
+import { jsLiteral } from "../../scripts/testing/js-literal.mjs";
+import { openSse } from "../testing/sse.ts";
+import { withoutTurnClock } from "../testing/turn-clock-text.ts";
 
 const count = (text: string, needle: string) => text.split(needle).length - 1;
 
@@ -181,8 +181,8 @@ async function fixture(test: (f: any) => Promise<void>, options: { env?: NodeJS.
       writeFileSync(join(dataDir, "bots.json"), JSON.stringify(bots, null, 2));
       const env = { ...verificationServerEnvironment(parentEnv, dataDir, Number(new URL(session.info.url).port)), ...extraEnv };
       const log = openSync(session.info.logPath, "a", 0o600);
-      restarted = spawn(process.execPath, ["--experimental-strip-types", fileURLToPath(new URL("./index.ts", import.meta.url))],
-        { cwd: fileURLToPath(new URL("..", import.meta.url)), env, stdio: ["ignore", log, log] });
+      restarted = spawn(process.execPath, ["--experimental-strip-types", fileURLToPath(new URL("../index.ts", import.meta.url))],
+        { cwd: fileURLToPath(new URL("../..", import.meta.url)), env, stdio: ["ignore", log, log] });
       closeSync(log);
       await expect.poll(async () => {
         try { return (await fetch(`${session.info.url}/api/health`, { signal: AbortSignal.timeout(1_000) })).ok; } catch { return false; }

@@ -5,7 +5,7 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { AUTO_COMPUTER_MCP_NAME } from "../../computer/auto-computer.ts";
 import { cleanCommandVariables } from "../../vault/credential-command-env.ts";
-import { adoptLegacyAutoMemory, legacyClaudeAutoMemoryDir } from "../../compact-prompt.ts";
+import { adoptLegacyAutoMemory, legacyClaudeAutoMemoryDir } from "../../context/compact-prompt.ts";
 import { writeFileAtomicIfChanged } from "../../atomic.ts";
 import { commandVariablesDigest } from "../../vault/credential-command-env.ts";
 import { customServerGate, gateQueryTools, gateServer } from "../../mcp/mcp-gate-config.ts";

@@ -372,7 +372,7 @@ if (typeof usage.inputTokens === "number" || typeof usage.outputTokens === "numb
       ? { cachedInput: exclusive ? cachedRead : Math.min(cachedRead, input) }
       : {}),
     // What fills the window now, so Sagax folds the thread before
-    // the agent compacts it on its own (server/context-budget.ts).
+    // the agent compacts it on its own (server/context/context-budget.ts).
     ...(state.usageLast !== null && state.usageLast > 0 ? { contextTokens: state.usageLast } : {}),
     ...(state.usageSize ? { contextWindow: state.usageSize } : {}),
   });

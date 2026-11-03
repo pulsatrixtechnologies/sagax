@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { RuntimeEvent } from "./contracts.ts";
+import type { RuntimeEvent } from "../contracts.ts";
 import {
   Handoffs,
   UNSEEN_MAX_BYTES,

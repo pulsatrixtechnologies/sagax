@@ -9,7 +9,7 @@ A visible, expandable note explains what was summarized, even with tool chips of
 
 ```sh
 pnpm exec vitest run server/context-compaction.e2e.test.ts
-pnpm exec vitest run server/context-rebuild.test.ts server/compaction-summary.test.ts server/context-budget.test.ts server/delta-context.e2e.test.ts
+pnpm exec vitest run server/context/context-rebuild.test.ts server/context/compaction-summary.test.ts server/context/context-budget.test.ts server/context/delta-context.e2e.test.ts
 pnpm exec vitest run server/store.test.ts server/config.test.ts src/components/DigestChip.test.ts
 pnpm test:packaged-server
 ```

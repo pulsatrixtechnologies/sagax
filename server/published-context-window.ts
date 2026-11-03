@@ -1,5 +1,5 @@
 // A context window the service point published on a model row. The hardcoded
-// table is only the fallback when this is absent (server/context-budget.ts).
+// table is only the fallback when this is absent (server/context/context-budget.ts).
 
 const KEYS = ["context_window", "context_length", "max_context_length", "max_model_len", "contextWindow"] as const;
 

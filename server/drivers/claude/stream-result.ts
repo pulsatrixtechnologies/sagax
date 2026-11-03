@@ -1,5 +1,5 @@
 /** Claude stream-json `result` frame handling (#1383). */
-import { isContextFullText } from "../../context-renewal.ts";
+import { isContextFullText } from "../../context/context-renewal.ts";
 import { appendNative } from "../native.ts";
 import { USAGE_LIMIT } from "../retry.ts";
 import {

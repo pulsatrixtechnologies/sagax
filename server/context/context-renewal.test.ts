@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyError } from "./drivers/retry.ts";
+import { classifyError } from "../drivers/retry.ts";
 import { contextFullMessage, isContextFullText, pushRenewalStep, renewalPrompt, type RenewalStep } from "./context-renewal.ts";
 
 describe("context renewal", () => {

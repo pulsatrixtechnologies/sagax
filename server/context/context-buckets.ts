@@ -3,7 +3,7 @@
 // definitions that turn would mount, and how many messages it handed over.
 // A bucket with nothing measured is left out. Nothing here is a share of
 // the model's window.
-import { AGENT_API_TOOL_NAMES, availableTools, catalogProfileFromEnv } from "./drivers/agents-catalog.ts";
+import { AGENT_API_TOOL_NAMES, availableTools, catalogProfileFromEnv } from "../drivers/agents-catalog.ts";
 
 export const CONTEXT_BUCKET_KEYS = ["messages", "messageBytes", "tools", "memory", "skills", "agents", "prompt"] as const;
 export type ContextBucketKey = typeof CONTEXT_BUCKET_KEYS[number];

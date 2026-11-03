@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contextWindowFor } from "./context-budget.ts";
+import { contextWindowFor } from "./context/context-budget.ts";
 import { publishedContextWindow } from "./published-context-window.ts";
 
 describe("publishedContextWindow", () => {

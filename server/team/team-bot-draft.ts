@@ -17,7 +17,7 @@
 //
 // Pure; covered by team-bot-draft.test.ts.
 import { redactSecretsInText } from "../redact.ts";
-import type { ReplayEntry } from "../context-rebuild.ts";
+import type { ReplayEntry } from "../context/context-rebuild.ts";
 
 export const DRAFT_EXCERPT_MAX_CHARS = 12_000;
 const LINE_MAX_CHARS = 1_200;

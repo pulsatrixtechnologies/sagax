@@ -499,3 +499,12 @@ server/webhook-ingress.test.ts
 server/webhook-ingress.ts
 server/webhooks.test.ts
 server/webhooks.ts
+server/compaction-summary.test.ts
+server/compaction-summary.ts
+server/context-budget.test.ts
+server/context-budget.ts
+server/context-rebuild.test.ts
+server/context-rebuild.ts
+server/delta-context.e2e.test.ts
+server/delta-context.test.ts
+server/delta-context.ts

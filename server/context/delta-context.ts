@@ -10,8 +10,8 @@
 // its record, so they stay unseen for the next turn. Whenever the record cannot
 // say what the session holds, the turn replays as it would without records.
 
-import type { WireMessage as Message } from "../shared/wire.ts";
-import type { RuntimeEvent } from "./contracts.ts";
+import type { WireMessage as Message } from "../../shared/wire.ts";
+import type { RuntimeEvent } from "../contracts.ts";
 
 /** One active-branch message as a provider would read it. */
 export interface ContextMessage {

@@ -18,7 +18,7 @@ import { CALL_MARK, ENDED_MARK, INTERRUPTED_MARK, voiceCallTurn } from "../testi
 import { DATA_DIR, ensureDirs, instanceConfigs, NATIVE_DIR } from "../config.ts";
 import { TurnAuthenticationRefusedError, type ProviderInstance } from "../contracts.ts";
 import { recordEvents, type EventRecorder } from "../testing/events.ts";
-import { contextFullMessage, contextRenewedNotice } from "../context-renewal.ts";
+import { contextFullMessage, contextRenewedNotice } from "../context/context-renewal.ts";
 import {
   autoCompactWindow,
   brokerSocketCandidates,

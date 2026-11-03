@@ -140,7 +140,7 @@ export interface TurnAccessInput {
 }
 
 /** #1276: Claude Code, local or cloud, sends a compact tool list. The
- * stable prefix is every engine (server/compact-prompt.ts). */
+ * stable prefix is every engine (server/context/compact-prompt.ts). */
 export interface CompactPromptInput {
   /** Claude Code's auto memory folder: one per bot and person, the same for
    * every conversation, so the system prompt does not change between them. */
@@ -701,7 +701,7 @@ export interface ModelCatalog {
      * same model id stay distinguishable. */
     provider?: string;
     /** total context window in tokens, when the driver knows it — sizes
-     * the model-facing rebuild (server/context-rebuild.ts). Unknown falls
+     * the model-facing rebuild (server/context/context-rebuild.ts). Unknown falls
      * back to a pattern table over the model id, then a conservative default. */
     contextWindow?: number;
     /** Discovery hints; the native session revalidates these before each turn. */

@@ -34,7 +34,7 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
           // A support whose agent reports no usage_update gives the context
           // size another way: Grok's per-round usage (the whole prompt of the
           // round, cached part included) is what fills its window now. Sagax
-          // folds the thread on it (server/context-budget.ts).
+          // folds the thread on it (server/context/context-budget.ts).
           const roundUsed = support.roundContextUsage?.(msg);
           if (roundUsed !== undefined) {
             const current = getSession().current;

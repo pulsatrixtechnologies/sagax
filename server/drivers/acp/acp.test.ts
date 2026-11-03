@@ -20,7 +20,7 @@ import { TurnNotStartedError } from "../../contracts.ts";
 import { recordEvents, type EventRecorder } from "../../testing/events.ts";
 import { promptSplitFingerprints, writePromptSplitReceipt } from "../prompt-split.ts";
 import { GROK_TOOL_REUSE_HINT as HINT } from "./grok.ts";
-import { contextFullMessage, contextRenewedNotice } from "../../context-renewal.ts";
+import { contextFullMessage, contextRenewedNotice } from "../../context/context-renewal.ts";
 import { createAcpDriver, DEFAULT_ACP_PROMPT_IDLE_MS, skipSubscriptionAuthForLocalInject, type AcpSupport } from "./core.ts";
 import { GrokAgentDriver, grokAcceptsUnadvertisedImages, grokCloudConnectorEnv, grokConfigDeclaresMcp, grokConnectableConnectors, grokPermissionMode } from "./grok.ts";
 import { grokAccountReach } from "./grok-tool-catalog.ts";

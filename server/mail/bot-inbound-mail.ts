@@ -38,7 +38,7 @@ import { planMailDelivery, plusTag, type MailTagRoutine } from "../../shared/rou
 import { isRelaySource, isTriggerSourceType, type NormalizedTriggerEvent, type TriggerSourceConfig } from "../../shared/trigger-sources.ts";
 import type { ConsoleAssertion, ConsoleAssertionActor } from "../auth/oidc-rp.ts";
 import { AssertionReplayCache } from "../org/org-admin-routes.ts";
-import { EMAIL_WATCH_PAYLOAD_MAX_CHARS } from "../cold-prompt-budget.ts";
+import { EMAIL_WATCH_PAYLOAD_MAX_CHARS } from "../context/cold-prompt-budget.ts";
 import { BOTMAIL_RUN_RULES, defang, type WebhookReceiveResult } from "../triggers/webhooks.ts";
 
 export const BOT_MAIL_PATH = "/api/org/inbound-mail";

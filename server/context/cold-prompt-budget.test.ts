@@ -16,7 +16,7 @@ import {
   syntheticColdPromptParts,
   truncateSectionText,
 } from "./cold-prompt-budget.ts";
-import { buildSystemPrompt } from "./system-prompt.ts";
+import { buildSystemPrompt } from "../system-prompt.ts";
 
 describe("cold prompt section budgets", () => {
   it("pins every budgeted section of a synthetic cold turn under its cap and the total", () => {

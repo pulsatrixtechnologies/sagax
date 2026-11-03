@@ -16,9 +16,9 @@
 // others through one replay). A call turn that needs real work hands it to
 // a parallel task on the bot's main model (start_thread with report_back,
 // see the call instruction), whose result comes back into the conversation.
-import { boundedContextText, selectReplay, type CompactionRecord, type ReplayEntry } from "../context-rebuild.ts";
-import { deterministicSummary } from "../compaction-summary.ts";
-import { renderUnseen, type ContextMessage } from "../delta-context.ts";
+import { boundedContextText, selectReplay, type CompactionRecord, type ReplayEntry } from "../context/context-rebuild.ts";
+import { deterministicSummary } from "../context/compaction-summary.ts";
+import { renderUnseen, type ContextMessage } from "../context/delta-context.ts";
 
 /** How much of the conversation a call session starts from (bytes): the
  * summary of the older part and the latest turns word for word. */

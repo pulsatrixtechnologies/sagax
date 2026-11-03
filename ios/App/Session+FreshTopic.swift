@@ -71,6 +71,13 @@ extension Session {
         else if !force { freshTopics[bot.id] = nil }
     }
 
+    /// The chat header's New topic (threads off): a fresh, empty draft over
+    /// the live topic, as the desktop's `startNewTopic`.
+    func startNewTopic(_ bot: Bot) {
+        createdFreshTopics[bot.id] = nil
+        freshTopics[bot.id] = (state.bot(bot.id) ?? bot).threadId
+    }
+
     /// The topic under the draft again ("Earlier topics").
     func showTopicUnderFresh(_ botId: String) {
         freshTopics[botId] = nil

@@ -174,10 +174,10 @@ add({ id: "chat-composer-draft", phase: "main", note: "composer focused with a m
   } });
 add({ id: "chat-composer-slash", phase: "main", note: "composer slash-command popup",
   open: async (ctx) => { await ctx.click('textarea, [contenteditable="true"]'); await ctx.type("/"); await ctx.sleep(500); } });
-add({ id: "chat-export-menu", phase: "main", note: "chat header: Export conversation menu",
-  open: async (ctx) => { await ctx.click('[aria-label="Export conversation"]'); } });
-add({ id: "chat-model-picker", phase: "main", note: "composer model chip: model picker",
-  open: async (ctx) => { await ctx.click('[data-tour="model"]'); await ctx.sleep(500); } });
+add({ id: "chat-export-menu", phase: "main", note: "chat header: More options menu (Copy as Markdown, Export, Inspector)",
+  open: async (ctx) => { await ctx.click('[aria-label="More options"]'); } });
+add({ id: "chat-model-picker", phase: "main", note: "composer + menu: Attach files and the Model row (2026-10-18: no model chip)",
+  open: async (ctx) => { await ctx.click('[data-composer-plus]'); await ctx.sleep(500); } });
 add({ id: "chat-approval-mode", phase: "main", note: "composer approval-mode menu",
   open: async (ctx) => {
     const trigger = 'button[aria-haspopup="menu"][aria-label$=" for Fixture engine"]';

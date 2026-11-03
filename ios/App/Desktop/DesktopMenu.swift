@@ -326,6 +326,15 @@ struct DesktopSidebarMenus {
         let copyId = DesktopMenuEntry(id: "copy-id", title: String(localized: "Copy conversation ID"), icon: .clipboardCopy, kind: .action {
             model.threadActions.copyConversationId(bot)
         })
+        // BotContextMenu.tsx (2026-11-03 reference): New topic (threads
+        // off), Pin, Move to ›, then Rename the bot, Edit bot, Share, Make
+        // primary bot, then Hide from sidebar, Archive, Delete.
+        if !DesktopSidebarState.threadsOn(model: model, prefs: prefs) {
+            out.append(DesktopMenuEntry(id: "new-topic", title: String(localized: "New topic"), icon: .plus, kind: .action {
+                model.open(session.returning(to: .bot(bot)))
+                session.startNewTopic(bot)
+            }))
+        }
         out.append(pinBot(bot))
         if gate.scope == .sidecar {
             // Sidecar keeps Pin (the reference design). Electron remoteClient omits it.
@@ -338,15 +347,21 @@ struct DesktopSidebarMenus {
             return out
         }
         if let move = moveBot(bot) { out.append(move) }
-        out.append(DesktopMenuEntry(id: "mark-unread", title: String(localized: "Mark as Unread"), icon: .bellDot, kind: .action {
-            model.threadActions.markUnread(bot, session: session)
-        }))
         out.append(.divider("d1"))
-        out.append(DesktopMenuEntry(id: "rename", title: String(localized: "Rename Bot"), icon: .pencil, kind: .action {
+        out.append(DesktopMenuEntry(id: "rename", title: String(localized: "Rename the bot"), icon: .pencil, kind: .action {
             model.renameDraft = bot.name
             model.renamingBot = bot
         }))
-        out.append(copyId)
+        if gate.allows(.botOwnerExtras, bot: bot) {
+            out.append(DesktopMenuEntry(id: "edit-bot", title: String(localized: "Edit bot"), icon: .squarePen, kind: .action {
+                model.open(session.returning(to: .bot(bot)))
+                model.showPersona()
+            }))
+        }
+        out.append(DesktopMenuEntry(id: "share", title: String(localized: "Share"), icon: .share, kind: .action {
+            model.sharingBotLink = URL(string: "sagax://bot/\(bot.id)")
+        }))
+        out += primaryEntries(bot)
         out.append(.divider("d2"))
         out.append(DesktopMenuEntry(id: "hide", title: String(localized: "Hide from sidebar"), icon: .eyeOff, kind: .action {
             prefs.hide(session, .bot, bot.id)
@@ -360,23 +375,24 @@ struct DesktopSidebarMenus {
                 model.deletingBot = bot
             }))
         }
-        // The Primary Bot (one per person): its own menu hands the role to
-        // another of the viewer's bots, the viewer's other bots take it.
+        return out
+    }
+
+    /// The Primary Bot (one per person): its own menu hands the role to
+    /// another of the viewer's bots, the viewer's other bots take it.
+    private func primaryEntries(_ bot: Bot) -> [DesktopMenuEntry] {
         switch PrimaryBotRules.menuAction(for: bot, viewerId: DesktopSidebarFlags.shared.viewerId) {
         case .make:
-            out.append(.divider("primary"))
-            out.append(DesktopMenuEntry(id: "make-primary", title: String(localized: "Make primary bot"), icon: .star, kind: .action {
+            return [DesktopMenuEntry(id: "make-primary", title: String(localized: "Make primary bot"), icon: .star, kind: .action {
                 Task { await PrimaryBotActions.make(bot.id, session: session, done: { _ in }, working: .constant(false)) }
-            }))
+            })]
         case .replace:
-            out.append(.divider("primary"))
-            out.append(DesktopMenuEntry(id: "replace-primary", title: String(localized: "Replace with different Bot"), icon: .arrowLeftRight, kind: .action {
+            return [DesktopMenuEntry(id: "replace-primary", title: String(localized: "Replace with different Bot"), icon: .arrowLeftRight, kind: .action {
                 model.replacingPrimary = bot
-            }))
+            })]
         case nil:
-            break
+            return []
         }
-        return out
     }
 
     private func pinBot(_ bot: Bot) -> DesktopMenuEntry {
@@ -556,36 +572,74 @@ struct DesktopSidebarMenus {
 
     // MARK: Account (SidebarProfileMenu)
 
+    /// SidebarProfileMenu.tsx `accountMenuItems` (2026-10-28): Usage ›,
+    /// Get Sagax on mobile, Help › (Keyboard shortcuts, Release notes,
+    /// About), Settings, Tools › (Automations, Memory, Team map,
+    /// Achievements, and Browse Bots while Templates is on), then the
+    /// archived bots. The desktop's update row and its account switching
+    /// are the Mac app's (the iPad updates through the App Store).
     func profile() -> [DesktopMenuEntry] {
         var out: [DesktopMenuEntry] = []
+        if DesktopSettingsSection.available(for: gate).contains(.usage) {
+            out.append(DesktopMenuEntry(id: "usage", title: String(localized: "Usage"), icon: .gauge, kind: .submenu([
+                DesktopMenuEntry(id: "view-usage", title: String(localized: "View usage"), kind: .action {
+                    model.settingsSection = .usage
+                    model.modal = .settings
+                }),
+            ])))
+        }
         // The desktop's phone row: here it opens Pair devices, where another
         // phone or iPad pairs with the same computer.
         if DesktopSettingsSection.available(for: gate).contains(.companion) {
-            out.append(DesktopMenuEntry(id: "phone", title: String(localized: "Get Sagax for iOS"), icon: .smartphone, kind: .action {
+            out.append(DesktopMenuEntry(id: "phone", title: String(localized: "Get Sagax on mobile"), icon: .smartphone, kind: .action {
                 model.settingsSection = .companion
                 model.modal = .settings
             }))
         }
+        out.append(DesktopMenuEntry(id: "help", title: String(localized: "Help"), icon: .bookOpen, kind: .submenu([
+            DesktopMenuEntry(id: "shortcuts", title: String(localized: "Keyboard shortcuts"), icon: .keyboard, shortcut: "⌘ /", kind: .action {
+                model.modal = .shortcuts
+            }),
+            DesktopMenuEntry(id: "releaseNotes", title: String(localized: "Release notes"), icon: .fileText, kind: .action {
+                model.modal = .releaseNotes
+            }),
+            DesktopMenuEntry(id: "about", title: String(localized: "About"), icon: .info, kind: .action {
+                model.modal = .about
+            }),
+        ])))
         out.append(DesktopMenuEntry(id: "settings", title: String(localized: "Settings"), icon: .settings, kind: .action {
             model.modal = .settings
         }))
-        for item in NavigationMenus.accountShortcuts(gate: gate, connected: session.connection != nil) {
-            switch item {
-            case .teamMap:
-                out.append(DesktopMenuEntry(id: "teamMap", title: String(localized: "Team map"), icon: .network, kind: .action {
-                    model.show(.teamMap)
-                }))
-            case .automations:
-                out.append(DesktopMenuEntry(id: "automations", title: String(localized: "Automations"), icon: .calendarDays, kind: .action {
-                    model.show(.automations)
-                }))
-            case .memory:
-                out.append(DesktopMenuEntry(id: "memory", title: String(localized: "Memory"), icon: .fileText, kind: .action {
-                    model.modal = .memory
-                }))
-            case .archivedBots, .settings, .achievements, .releaseNotes, .about, .help:
-                break
-            }
+        var tools: [DesktopMenuEntry] = []
+        let shortcuts = NavigationMenus.accountShortcuts(gate: gate, connected: session.connection != nil)
+        if shortcuts.contains(.automations) {
+            tools.append(DesktopMenuEntry(id: "automations", title: String(localized: "Automations"), icon: .calendarDays, kind: .action {
+                model.show(.automations)
+            }))
+        }
+        if shortcuts.contains(.memory) {
+            tools.append(DesktopMenuEntry(id: "memory", title: String(localized: "Memory"), icon: .brain, kind: .action {
+                model.modal = .memory
+            }))
+        }
+        if shortcuts.contains(.teamMap) {
+            tools.append(DesktopMenuEntry(id: "teamMap", title: String(localized: "Team map"), icon: .network, kind: .action {
+                model.show(.teamMap)
+            }))
+        }
+        if AchievementStore.shared.status == .ready {
+            tools.append(DesktopMenuEntry(id: "achievements", title: String(localized: "Achievements"), icon: .trophy, kind: .action {
+                model.modal = .achievements
+            }))
+        }
+        // Browse Bots (Templates, Experimental features)
+        if DesktopSidebarFlags.shared.features?.templates == true, gate.allows(.browseBots) {
+            tools.append(DesktopMenuEntry(id: "templates", title: String(localized: "Browse Bots"), icon: .library, kind: .action {
+                model.modal = .templates
+            }))
+        }
+        if !tools.isEmpty {
+            out.append(DesktopMenuEntry(id: "tools", title: String(localized: "Tools"), icon: .wrench, kind: .submenu(tools)))
         }
         // an admin restores every archived bot, a member their own (2026-10-26)
         let archived = DesktopBotArchive.archived(session.state.bots).filter { gate.allows(.botOwnerExtras, bot: $0) }
@@ -596,31 +650,9 @@ struct DesktopSidebarMenus {
                     Task { await DesktopBotArchiving.set(bot, archived: false, session: session, model: model) }
                 })
             }
+            out.append(.divider("archived"))
             out.append(DesktopMenuEntry(id: "archived", title: String(localized: "Archived bots"), icon: .archive, kind: .submenu(children)))
         }
-        if AchievementStore.shared.status == .ready {
-            out.append(DesktopMenuEntry(id: "achievements", title: String(localized: "Achievements"), icon: .trophy, kind: .action {
-                model.modal = .achievements
-            }))
-        }
-        out += [
-            DesktopMenuEntry(id: "shortcuts", title: String(localized: "Keyboard shortcuts"), icon: .keyboard, shortcut: "⌘ /", kind: .action {
-                model.modal = .shortcuts
-            }),
-            .divider("about"),
-            // Release notes above About, as the phone's account menu (DC21)
-            DesktopMenuEntry(id: "releaseNotes", title: String(localized: "Release notes"), icon: .fileText, kind: .action {
-                model.modal = .releaseNotes
-            }),
-            DesktopMenuEntry(id: "about", title: String(localized: "About"), icon: .info, kind: .action {
-                model.modal = .about
-            }),
-            DesktopMenuEntry(id: "help", title: String(localized: "Help Center"), icon: .help, kind: .action {
-                if let url = URL(string: "https://github.com/pulsatrixtechnologies/sagax/tree/main/docs") {
-                    UIApplication.shared.open(url)
-                }
-            }),
-        ]
         return out
     }
 

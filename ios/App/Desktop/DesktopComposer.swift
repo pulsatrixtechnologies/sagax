@@ -1,11 +1,14 @@
 // iPad I3: the desktop composer pill (Composer.tsx), measured in
-// desktop-1366x1024-03-main.json: 46 tall with its ring, radius 22, padded
-// 6 x 8; from the left, attach (28), the approval mode (32, Hand), where this
-// conversation works (32, Sparkles for Auto), the field (13/20, 4 pt in),
-// the model chip (13, chevron 14), dictation (28, ringed; hidden once there
-// is text), voice (32) and, with text, send (32, accent). 4 pt between.
-// Its two policy menus and the "/" menu float above it, as the desktop's
-// popovers do, instead of pushing the transcript up.
+// desktop-1376x1032-03-main.json (2026-11-03): 46 tall with its ring,
+// radius 22, padded 6 x 8; from the left, the + (28, `SECONDARY_CIRCLE`:
+// 6 % ink, a 0.5 pt inset border, a 15 pt plus in the tertiary ink), the
+// field (13/20, 4 pt in), dictation (28, the same circle; hidden once there
+// is text) and the call button (28, filled with the bot's colour), which
+// becomes send while there is text. 4 pt between. The + opens the menu of
+// the reference design: Attach files, then the Model row (the composer has
+// no model chip and no approval control since 2026-10-18: the approval
+// level lives in the bot's settings). The + menu and the "/" menu float
+// above it, as the desktop's popovers do.
 import SwiftUI
 import UIKit
 import CompanionCore
@@ -13,6 +16,8 @@ import CompanionCore
 /// Which popover of the pill is open.
 enum DesktopComposerMenu: Equatable {
     case approval
+    /// The + menu (`ComposerPlusMenu`).
+    case plus
 }
 
 struct DesktopComposerPill: View {
@@ -111,45 +116,127 @@ struct DesktopComposerPill: View {
 
     @ViewBuilder
     private var chips: some View {
-        attach
-        // an admin, or the bot's owner on an organization server (2026-10-26)
-        if let bot, session.canAdminister || session.canEditBotField(bot, "approvalMode") {
-            DesktopApprovalButton(bot: bot, open: menuBinding(.approval), openAllowlist: openAllowlist)
-            // No place chip (owner 2026-10-18): Workspace is always Auto and
-            // the bot picks where each task runs.
-        }
+        plusButton
     }
 
     @ViewBuilder
     private var actions: some View {
-        if let modelLabel { modelChip(modelLabel) }
         if !hasText { dictationButton }
-        voiceButton
-        if canSend || busy { sendButton }
+        if canSend || busy { sendButton } else { voiceButton }
     }
 
     private func menuBinding(_ which: DesktopComposerMenu) -> Binding<Bool> {
         Binding(get: { menu == which }, set: { menu = $0 ? which : nil })
     }
 
-    private var attach: some View {
-        Menu {
-            Button(action: attachPhotos) { Label("Photo library", systemImage: "photo.on.rectangle") }
-            Button(action: attachFiles) { Label("Files", systemImage: "folder") }
-            Divider()
-            Button(action: more) { Label("More", systemImage: "ellipsis.circle") }
-        } label: {
-            DesktopLucideGlyph(paths: DesktopLucide.paperclip, size: 17)
-                .foregroundStyle(theme.inkSecondary)
-                .frame(width: 28, height: 28)
-                .contentShape(Circle())
+    /// `SECONDARY_CIRCLE`: 28, 6 % ink, a 0.5 pt inset ring at 15 % ink,
+    /// the glyph in the tertiary ink (the ink on hover). 44 pt for a finger.
+    private func secondaryCircle<Glyph: View>(_ glyph: Glyph, tint: Color? = nil) -> some View {
+        glyph
+            .foregroundStyle(tint ?? theme.inkTertiary)
+            .frame(width: 28, height: 28)
+            .background(theme.ink.opacity(0.06), in: Circle())
+            .overlay(Circle().strokeBorder(theme.border, lineWidth: 0.5))
+            .frame(width: 32, height: 32)
+            .contentShape(Circle())
+    }
+
+    private var plusButton: some View {
+        Button { menu = menu == .plus ? nil : .plus } label: {
+            secondaryCircle(DesktopIconView(icon: .plus, size: 15, strokeWidth: 2.25), tint: menu == .plus ? theme.ink : nil)
         }
+        .buttonStyle(.plain)
         .disabled(busy)
-        .padding(.leading, 1)
-        .padding(.bottom, 2)
         .hoverEffect(.highlight)
-        .accessibilityLabel(Text("Attach a file"))
-        .accessibilityIdentifier("desktop-composer-attach")
+        .accessibilityLabel(Text("Composer actions"))
+        .accessibilityIdentifier("desktop-composer-plus")
+        .overlay(alignment: .topLeading) {
+            if menu == .plus { plusMenu }
+        }
+        .popover(isPresented: $modelMenuOpen) {
+            if let bot {
+                ModelMenuSheet(bot: bot, close: { modelMenuOpen = false })
+                    .environmentObject(session)
+                    .frame(minWidth: 340, idealWidth: 360, minHeight: 480, idealHeight: 560)
+            }
+        }
+        .onValueChange(of: modelMenuOpen) { open in
+            if !open { Task { await loadModelLabel() } }
+        }
+    }
+
+    /// `ComposerPlusMenu`: min 220 wide, 6 in, rows 30 tall; Attach files
+    /// (the iPad's two sources under it: the photo library and Files), then,
+    /// after a hairline, the Model row with the model in use at its end.
+    private var plusMenu: some View {
+        DesktopComposerMenuPanel(label: "Composer actions") {
+            DesktopMenuRow(systemImage: "paperclip", title: Text("Attach files")) {
+                menu = nil
+                attachFiles()
+            }
+            DesktopMenuRow(systemImage: "photo.on.rectangle", title: Text("Photo library")) {
+                menu = nil
+                attachPhotos()
+            }
+            if bot != nil {
+                // Teach a task: the same as picking /learn in the "/" menu
+                Button {
+                    menu = nil
+                    draft = "/learn "
+                    focused.wrappedValue = true
+                } label: {
+                    HStack(spacing: 8) {
+                        Circle().strokeBorder(theme.danger, lineWidth: 1.5)
+                            .overlay(Circle().fill(theme.danger).padding(3.5))
+                            .frame(width: 14, height: 14)
+                            .frame(width: 16, height: 16)
+                        Text("Teach a task").font(theme.font(13)).lineLimit(1)
+                        Spacer(minLength: 4)
+                        Text(verbatim: "/learn")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(theme.inkTertiary)
+                    }
+                    .foregroundStyle(theme.ink)
+                    .padding(.horizontal, 8)
+                    .frame(height: 30)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .hoverEffect(.highlight)
+                .accessibilityIdentifier("desktop-composer-teach")
+            }
+            if let modelLabel {
+                Rectangle().fill(theme.border).frame(height: 0.5).padding(.horizontal, 8).padding(.vertical, 4)
+                Button {
+                    menu = nil
+                    if bot != nil { modelMenuOpen = true } else { openModel() }
+                } label: {
+                    HStack(spacing: 8) {
+                        DesktopIconView(icon: .brain, size: 16)
+                        Text("Model").font(theme.font(13)).lineLimit(1)
+                        Spacer(minLength: 4)
+                        Text(verbatim: modelLabel)
+                            .font(theme.font(13))
+                            .foregroundStyle(theme.inkTertiary)
+                            .lineLimit(1)
+                            .frame(maxWidth: 140, alignment: .trailing)
+                        DesktopIconView(icon: .chevronRight, size: 14).foregroundStyle(theme.inkTertiary)
+                    }
+                    .foregroundStyle(theme.ink)
+                    .padding(.horizontal, 8)
+                    .frame(height: 30)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .hoverEffect(.highlight)
+                .accessibilityLabel(Text("Model: \(modelLabel)"))
+                .accessibilityIdentifier("desktop-composer-model")
+            }
+        }
+        .fixedSize()
+        .frame(height: 0, alignment: .bottom)
+        .offset(x: 0, y: -10)
+        .accessibilityIdentifier("desktop-composer-plus-menu")
     }
 
     private var field: some View {
@@ -169,59 +256,37 @@ struct DesktopComposerPill: View {
             .onHardwareReturn(hardwareReturn)
     }
 
-    private func modelChip(_ label: String) -> some View {
-        Button { if bot != nil { modelMenuOpen = true } else { openModel() } } label: {
-            HStack(spacing: 4) {
-                Text(verbatim: label)
-                    .font(theme.font(13))
-                    .lineLimit(1)
-                DesktopLucideGlyph(paths: DesktopLucide.chevronDown, size: 14)
-            }
-            .foregroundStyle(theme.inkSecondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
-            .frame(height: 27.5)
-            .contentShape(RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-        .hoverEffect(.highlight)
-        .padding(.bottom, 2.25)
-        .accessibilityLabel(Text("Model: \(label)"))
-        .accessibilityIdentifier("desktop-composer-model")
-        .popover(isPresented: $modelMenuOpen) {
-            if let bot {
-                ModelMenuSheet(bot: bot, close: { modelMenuOpen = false })
-                    .environmentObject(session)
-                    .frame(minWidth: 340, idealWidth: 360, minHeight: 480, idealHeight: 560)
-            }
-        }
-        .onValueChange(of: modelMenuOpen) { open in
-            if !open { Task { await loadModelLabel() } }
-        }
-    }
-
     private var dictationButton: some View {
         Button(action: toggleDictation) {
-            DesktopLucideGlyph(paths: DesktopLucide.mic, size: 18)
-                .foregroundStyle(listening ? theme.danger : theme.inkSecondary)
-                .frame(width: 28, height: 28)
-                .overlay(Circle().strokeBorder(theme.hairline.opacity(0.6), lineWidth: 1))
-                .contentShape(Circle())
+            secondaryCircle(DesktopLucideGlyph(paths: DesktopLucide.mic, size: 15), tint: listening ? theme.danger : nil)
         }
         .buttonStyle(.plain)
         .disabled(busy)
-        .padding(.bottom, 2)
         .hoverEffect(.highlight)
         .accessibilityLabel(Text(listening ? "Stop dictation" : "Start dictation"))
     }
 
+    /// The call-to-action circle (`CTA_CIRCLE`): 28, filled with the bot's
+    /// colour (my bubble's, BubbleColors.user), its ink; the call while the
+    /// field is empty, send while there is text.
+    private var cta: (fill: Color, ink: Color) {
+        if let paint = BubbleColors.user(botColor: bot?.color) { return (paint.fill.color, paint.ink.color) }
+        return (theme.accent, theme.accentInk)
+    }
+
     private var voiceButton: some View {
         Button(action: voice) {
-            DesktopLucideGlyph(paths: DesktopLucide.audioLines, size: 15)
-                .foregroundStyle(theme.inkTertiary)
-                .frame(width: 32, height: 32)
-                .background(theme.composer, in: Circle())
-                .contentShape(Circle())
+            if bot != nil {
+                DesktopLucideGlyph(paths: DesktopLucide.audioLines, size: 16)
+                    .foregroundStyle(cta.ink)
+                    .frame(width: 28, height: 28)
+                    .background(cta.fill, in: Circle())
+                    .frame(width: 32, height: 32)
+                    .contentShape(Circle())
+            } else {
+                // a group's call: the quiet circle, no bot colour to wear
+                secondaryCircle(DesktopLucideGlyph(paths: DesktopLucide.audioLines, size: 16))
+            }
         }
         .buttonStyle(.plain)
         .disabled(blocked)
@@ -238,15 +303,15 @@ struct DesktopComposerPill: View {
         } label: {
             Group {
                 if busy {
-                    ProgressView().controlSize(.small)
+                    ProgressView().controlSize(.small).tint(cta.ink)
                 } else {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 15, weight: .semibold))
+                    DesktopIconView(icon: .arrowUp, size: 16, strokeWidth: 2.25)
                 }
             }
-            .foregroundStyle(theme.accentInk)
+            .foregroundStyle(cta.ink)
+            .frame(width: 28, height: 28)
+            .background(cta.fill, in: Circle())
             .frame(width: 32, height: 32)
-            .background(theme.accent, in: Circle())
             .contentShape(Circle())
         }
         .buttonStyle(.plain)

@@ -198,8 +198,8 @@ extension ChatView {
     var desktopPrompt: String {
         if sendingMessage { return String(localized: "Sending…") }
         if dictation.isListening { return String(localized: "Listening…") }
-        // Composer.tsx: an open approval holds the conversation
-        if !dockApprovals.isEmpty { return String(localized: "Answer the approval above to continue") }
+        // Composer.tsx: an open approval stays open while the person writes
+        if !dockApprovals.isEmpty { return String(localized: "Answer the approval above, or write something else: it stays open") }
         return String(localized: "Message \(PeopleDirectory.shared.name(current, session: session))")
     }
 
@@ -317,6 +317,15 @@ struct DesktopFindClip: ViewModifier {
 /// name 14 medium) centred at y 7.5, and 36 pt round buttons 20 pt from the
 /// trailing edge at y 10: Export, then the panel toggle. With the panel
 /// docked open, the panel's own top bar holds them.
+/// The chat header (ChatView.tsx `content-topbar`, measured in
+/// desktop-1376x1032-03-main.json): the bot pill centred (`BotHeaderPill`:
+/// mascot 24, the name 14/20 medium, a 14 pt chevron in the tertiary ink
+/// that turns while the panel is open; the pill opens and closes the panel,
+/// ⌘.), and at the right, 8 apart: one round "More options" (36) for the
+/// conversation (Copy as Markdown, Export ›, Inspector), the thread picker
+/// while threads show in the header, Dev pods, and the round New topic (32)
+/// while threads are off. While the docked panel is open its top bar holds
+/// the same menu.
 struct DesktopChatHeader: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
@@ -329,12 +338,15 @@ struct DesktopChatHeader: View {
     var devPods: (() -> Void)? = nil
     var devPodsOpen = false
     let openProfile: () -> Void
-    @State private var exportOpen = DesktopChatHeader.parityExport
+    @State private var moreOpen = DesktopChatHeader.parityExport
+    @State private var exportOpen = false
     /// Appearance > Inspector button (off by default, as on the desktop).
     @AppStorage(DesktopInspectorButton.key) private var showInspector = false
     @EnvironmentObject private var model: DesktopShellModel
     @ObservedObject private var prefs = SidebarPrefsModel.shared
     @State private var threadsOpen = DesktopChatHeader.parityThreads
+
+    private var panelOpen: Bool { chrome.panelOpen }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -349,29 +361,42 @@ struct DesktopChatHeader: View {
                     if ConfidentialBanner.shows(for: chat) {
                         ConfidentialMark()
                     }
+                    do {
+                        DesktopIconView(icon: .chevronRight, size: 14, strokeWidth: 2)
+                            .foregroundStyle(theme.inkTertiary)
+                            .rotationEffect(.degrees(panelOpen ? 90 : 0))
+                            .animation(.easeOut(duration: 0.16), value: panelOpen)
+                    }
                 }
                 .padding(.leading, 8)
-                .padding(.trailing, 14)
+                .padding(.trailing, 12)
                 .frame(height: 41)
                 .background(theme.elevated, in: Capsule())
-                .overlay(Capsule().strokeBorder(theme.hairlineWeak, lineWidth: 1))
+                .overlay(Capsule().strokeBorder(theme.hairlineWeak, lineWidth: 0.5))
                 .contentShape(Capsule())
             }
             .buttonStyle(.plain)
             .hoverEffect(.highlight)
+            .keyboardShortcut(".", modifiers: .command)
             .frame(maxWidth: 360)
             .padding(.top, 7.5)
-            .accessibilityLabel(Text(chat.isBot ? "Open \(chat.name)'s profile" : chat.name))
+            .accessibilityLabel(Text(chat.isBot
+                ? (panelOpen ? "Close \(chat.name)'s panel" : "Open \(chat.name)'s panel")
+                : LocalizedStringKey(chat.name)))
             .accessibilityIdentifier("desktop-chat-pill")
 
             if !(chrome.panelOpen && chrome.panelDocked) {
                 HStack(spacing: 8) {
                     Spacer(minLength: 0)
-                    DesktopRoundButton(systemImage: "square.and.arrow.up", label: "Export conversation", active: exportOpen, lucide: DesktopLucide.share) { exportOpen.toggle() }
-                        .overlay(alignment: .topTrailing) {
-                            if exportOpen { exportMenu }
-                        }
-                        .zIndex(1)
+                    DesktopRoundButton(systemImage: "ellipsis", label: "More options", active: moreOpen, icon: .ellipsis) {
+                        exportOpen = false
+                        moreOpen.toggle()
+                    }
+                    .overlay(alignment: .topTrailing) {
+                        if moreOpen { moreMenu }
+                    }
+                    .zIndex(1)
+                    .accessibilityIdentifier("desktop-chat-more")
                     if case let .bot(bot) = chat, DesktopSidebarState.headerThreads(model: model, prefs: prefs) {
                         DesktopThreadPickerButton(bot: bot, open: $threadsOpen)
                     }
@@ -379,15 +404,8 @@ struct DesktopChatHeader: View {
                         DesktopRoundButton(systemImage: "sidebar.squares.right", label: "devPods.toggle.show", active: devPodsOpen, action: devPods)
                             .accessibilityIdentifier("desktop-dev-pods-toggle")
                     }
-                    if case let .bot(chatBot) = chat {
-                        // an admin's, or the bot's owner on an organization server
-                        if showInspector && session.surfaceGate.allows(.inspector, bot: session.state.bot(chatBot.id) ?? chatBot) {
-                            DesktopRoundButton(systemImage: "ladybug", label: "Inspector", active: chrome.inspectorOpen, lucide: DesktopInspectorPanel.bug, action: chrome.toggleInspector)
-                                .accessibilityIdentifier("desktop-inspector-toggle")
-                        }
-                        DesktopRoundButton(systemImage: "sidebar.right", label: "Open agent profile", icon: .panelRight, action: chrome.togglePanel)
-                            .keyboardShortcut(".", modifiers: .command)
-                            .accessibilityIdentifier("desktop-panel-toggle")
+                    if case let .bot(bot) = chat, !DesktopSidebarState.threadsOn(model: model, prefs: prefs) {
+                        DesktopNewTopicButton(bot: bot)
                     }
                 }
                 .padding(.top, 10)
@@ -396,48 +414,83 @@ struct DesktopChatHeader: View {
         }
         .frame(maxWidth: .infinity)
     }
+
+    /// The Inspector row: an admin's, or the bot's owner on an organization server.
+    private var inspectorAllowed: Bool {
+        guard showInspector, case let .bot(bot) = chat else { return false }
+        return session.surfaceGate.allows(.inspector, bot: session.state.bot(bot.id) ?? bot)
+    }
 }
 
 extension DesktopChatHeader {
-    /// ChatView.tsx's export menu: "Export Conversation", Copy as Markdown,
-    /// Download as .md; 4 pt under the button, its trailing edge aligned.
-    var exportMenu: some View {
+    /// `ExportTranscriptMenu`: Copy as Markdown, Export › (Download as .md),
+    /// then the Inspector. 4 pt under the button, its trailing edge aligned;
+    /// Export's submenu opens to its left. Split right and Split down are
+    /// the desktop window's (iPadOS has no split of its own window).
+    var moreMenu: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("Export Conversation")
-                .font(theme.font(12))
-                .foregroundStyle(theme.inkSecondary)
-                .padding(.horizontal, 8)
-                .frame(height: 24)
-            exportRow(DesktopLucide.copy, Text("Copy as Markdown")) {
-                exportOpen = false
+            menuRow(DesktopLucide.copy, Text("Copy as Markdown")) {
+                moreOpen = false
                 copyMarkdown()
             }
-            exportRow(DesktopLucide.download, Text("Download as .md")) {
+            menuRow(DesktopLucide.share, Text("Export"), chevron: true, active: exportOpen) {
+                exportOpen.toggle()
+            }
+            .overlay(alignment: .topLeading) {
+                if exportOpen { exportSubmenu }
+            }
+            .zIndex(1)
+            if inspectorAllowed {
+                Rectangle().fill(theme.border).frame(height: 0.5).padding(.horizontal, 8).padding(.vertical, 4)
+                menuRow(nil, Text("Inspector"), checked: chrome.inspectorOpen, icon: .activity) {
+                    moreOpen = false
+                    chrome.toggleInspector()
+                }
+            }
+        }
+        .padding(6)
+        .frame(width: 218, alignment: .leading)
+        .background(theme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.border, lineWidth: 0.5))
+        .fixedSize()
+        // 4 pt under the 36 pt button, its trailing edge on the button's
+        .offset(y: 40)
+        .accessibilityIdentifier("desktop-export-menu")
+    }
+
+    private var exportSubmenu: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            menuRow(DesktopLucide.download, Text("Download as .md")) {
                 exportOpen = false
+                moreOpen = false
                 export()
             }
         }
         .padding(6)
         .frame(width: 218, alignment: .leading)
-        .padding(1)
         .background(theme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.border, lineWidth: 0.5))
         .fixedSize()
-        .alignmentGuide(.top) { d in d[.top] - 40 }
-        .accessibilityIdentifier("desktop-export-menu")
+        // beside the Export row, to its left (the menu sits at the window's edge)
+        .offset(x: -(218 + 12 + 4), y: -6)
     }
 
-    /// `flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-[18px]`.
-    private func exportRow(_ glyph: [String], _ title: Text, _ action: @escaping () -> Void) -> some View {
+    /// `flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-[18px]`, 30 tall.
+    private func menuRow(_ glyph: [String]?, _ title: Text, chevron: Bool = false, active: Bool = false,
+                         checked: Bool? = nil, icon: DesktopIcon? = nil, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                DesktopLucideGlyph(paths: glyph, size: 16)
+                if let glyph { DesktopLucideGlyph(paths: glyph, size: 16) }
+                else if let icon { DesktopIconView(icon: icon, size: 16) }
                 title.font(theme.font(13)).lineLimit(1)
                 Spacer(minLength: 0)
+                if chevron { DesktopIconView(icon: .chevronRight, size: 14).foregroundStyle(theme.inkTertiary) }
+                if let checked { DesktopIconView(icon: .check, size: 14).foregroundStyle(theme.accent).opacity(checked ? 1 : 0) }
             }
             .foregroundStyle(theme.ink)
             .padding(.horizontal, 8)
             .frame(height: 30)
+            .background(active ? theme.hover : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -451,6 +504,37 @@ extension DesktopChatHeader {
     static let parityExport = false
     static let parityThreads = false
     #endif
+}
+
+/// `NewTopicButton` (ChatView.tsx), while threads are off: a 32 pt circle,
+/// the hairline ring on the elevated fill, a 15 pt square-pen in the
+/// secondary ink. A fresh empty draft over the live topic; nothing is
+/// deleted, the server makes the topic with its first message.
+struct DesktopNewTopicButton: View {
+    @Environment(\.desktopTheme) private var theme
+    @EnvironmentObject private var session: Session
+    let bot: Bot
+    @State private var hovering = false
+
+    var body: some View {
+        Button {
+            session.startNewTopic(bot)
+        } label: {
+            DesktopIconView(icon: .squarePen, size: 15)
+                .foregroundStyle(hovering ? theme.ink : theme.inkSecondary)
+                .frame(width: 32, height: 32)
+                .background(hovering ? theme.elevatedHover : theme.elevated, in: Circle())
+                .overlay(Circle().strokeBorder(theme.hairlineWeak, lineWidth: 0.5))
+                // 44 pt for a finger
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .padding(-6)
+        .onHover { hovering = $0 }
+        .accessibilityLabel(Text("Start a new topic with \(bot.name)"))
+        .accessibilityIdentifier("desktop-new-topic")
+    }
 }
 
 /// A 36 pt round chrome button: card fill, hairline ring, 18 pt glyph.

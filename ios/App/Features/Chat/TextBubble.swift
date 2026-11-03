@@ -105,10 +105,7 @@ struct TextBubble: View {
                     )
                 }
                 if desktop != nil {
-                    if !mine, !message.generatedImages.isEmpty || !message.fileAttachments.isEmpty {
-                        DesktopAttachmentGallery(images: message.generatedImages, files: message.fileAttachments,
-                                                 threadId: chat.threadId, messageId: message.id)
-                    }
+                    // the bot's attachments come under its words (below)
                 } else {
                     ForEach(message.generatedImages, id: \.path) { attachment in
                         TranscriptAttachmentView(
@@ -217,6 +214,11 @@ struct TextBubble: View {
                         // line within 1.5 pt of the edge wraps there, not here
                         .padding(.trailing, desktop != nil && desktopFills(mine: false) ? 1.5 : 0)
                 }
+                if desktop != nil, !mine, !message.generatedImages.isEmpty || !message.fileAttachments.isEmpty {
+                    DesktopAttachmentGallery(images: message.generatedImages, files: message.fileAttachments,
+                                             threadId: chat.threadId, messageId: message.id)
+                        .padding(.top, 10)
+                }
             }
             .frame(maxWidth: desktopFills(mine: mine) ? .infinity : nil, alignment: .leading)
             .padding(.horizontal, customCard ? 0 : (desktop != nil ? DesktopChatMetrics.bubblePadding.leading : Theme.Chat.bubblePaddingH))
@@ -294,9 +296,9 @@ struct TextBubble: View {
         guard let desktop else { return false }
         let text = mine ? Citations.split(attachedContent.text).display : (message.text ?? "")
         if let cap = desktopCap(mine: mine), DesktopChatMetrics.wraps(text, in: cap - 24, theme: desktop) { return true }
-        if mine { return !attachedContent.attachments.isEmpty }
-        return !message.generatedImages.isEmpty || !message.fileAttachments.isEmpty
-            || (wideCap != nil && DesktopChatMetrics.prefersWide(message.text ?? ""))
+        // attachments keep the bubble's own width (`w-fit`)
+        if mine { return false }
+        return wideCap != nil && DesktopChatMetrics.prefersWide(message.text ?? "")
     }
 }
 

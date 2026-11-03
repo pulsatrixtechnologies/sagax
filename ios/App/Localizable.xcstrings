@@ -314,6 +314,16 @@
         }
       }
     },
+    "%@ already there word for word: left as they are.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ déjà là mot pour mot : laissées telles quelles."
+          }
+        }
+      }
+    },
     "%@ archived": {
       "localizations": {
         "en": {
@@ -732,6 +742,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ foi excluído. O dono foi avisado."
+          }
+        }
+      }
+    },
+    "%@ files look like they hold a secret: they are never imported.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ fichiers semblent contenir un secret : ils ne sont jamais importés."
           }
         }
       }
@@ -1204,6 +1224,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ precisa da permissão %2$@. Peça a um administrador para adicioná-la no Perspicax."
+          }
+        }
+      }
+    },
+    "%@ notes deleted": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ notes supprimées"
+          }
+        }
+      }
+    },
+    "%@ notes imported": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ notes importées"
           }
         }
       }
@@ -1992,6 +2032,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ : %2$@"
+          }
+        }
+      }
+    },
+    "%@: %@ files": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : %@ fichiers"
           }
         }
       }
@@ -4706,6 +4756,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Un bot sans liste à lui monte tous les serveurs activés : la modification part de cet ensemble."
+          }
+        }
+      }
+    },
+    "A bot’s memory has no folders: the folder starts each note’s name.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La mémoire d’un bot n’a pas de dossiers : le dossier commence le nom de chaque note."
+          }
+        }
+      }
+    },
+    "A built-in group of team memory: delete its notes one by one": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un groupe intégré de la mémoire d’équipe : supprimez ses notes une à une"
           }
         }
       }
@@ -9118,6 +9188,16 @@
         }
       }
     },
+    "Already there": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déjà là"
+          }
+        }
+      }
+    },
     "Already there: %@": {
       "localizations": {
         "fr": {
@@ -11352,6 +11432,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No minuto"
+          }
+        }
+      }
+    },
+    "At most %@ files, %@ MB a note, %@ MB an image or PDF.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Au plus %@ fichiers, %@ Mo par note, %@ Mo par image ou PDF."
           }
         }
       }
@@ -15556,6 +15646,16 @@
         }
       }
     },
+    "Choose a .zip": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisir un .zip"
+          }
+        }
+      }
+    },
     "Choose a PNG, JPEG or WebP image.": {
       "localizations": {
         "fr": {
@@ -15666,6 +15766,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choisir un autre ordinateur"
+          }
+        }
+      }
+    },
+    "Choose a folder": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisir un dossier"
           }
         }
       }
@@ -18612,6 +18722,16 @@
         }
       }
     },
+    "Conflicts": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conflits"
+          }
+        }
+      }
+    },
     "Connect": {
       "localizations": {
         "pt-BR": {
@@ -20248,6 +20368,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copier la demande d'export"
+          }
+        }
+      }
+    },
+    "Copy images and PDFs embedded with ![[...]]": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copier les images et PDF intégrés avec ![[...]]"
           }
         }
       }
@@ -23224,6 +23354,16 @@
         }
       }
     },
+    "Delete the folder %@ and its %@ notes? They go to the Trash, where you can restore them.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer le dossier %@ et ses %@ notes ? Elles vont à la corbeille, d’où vous pourrez les restaurer."
+          }
+        }
+      }
+    },
     "Delete the folder %@?": {
       "localizations": {
         "en": {
@@ -24582,6 +24722,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Concluída · resposta abaixo"
+          }
+        }
+      }
+    },
+    "Done: %@ written, %@ unchanged, %@ skipped, %@ refused.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terminé : %@ écrites, %@ inchangées, %@ ignorées, %@ refusées."
           }
         }
       }
@@ -26082,6 +26232,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "E-mails, mensagens, posts, convites e pagamentos pelos apps conectados. Ler e rascunhar nunca contam. Isso vale em todos os níveis de aprovação, inclusive Acesso total."
+          }
+        }
+      }
+    },
+    "Empty": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vide"
           }
         }
       }
@@ -28818,6 +28978,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "First check"
+          }
+        }
+      }
+    },
+    "First notes": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Premières notes"
           }
         }
       }
@@ -32046,6 +32216,16 @@
         }
       }
     },
+    "Hidden file": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fichier caché"
+          }
+        }
+      }
+    },
     "Hidden from the sidebar": {
       "localizations": {
         "en": {
@@ -33406,6 +33586,16 @@
         }
       }
     },
+    "Import %@ notes": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importer %@ notes"
+          }
+        }
+      }
+    },
     "Import a Grok Bot": {
       "localizations": {
         "fr": {
@@ -33450,6 +33640,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Importer un fichier zip"
+          }
+        }
+      }
+    },
+    "Import an Obsidian vault": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importer un coffre Obsidian"
           }
         }
       }
@@ -33520,6 +33720,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Importer de Grok Bot ou Claude Code"
+          }
+        }
+      }
+    },
+    "Import it under a new name": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’importer sous un nouveau nom"
           }
         }
       }
@@ -33640,6 +33850,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Importando…"
+          }
+        }
+      }
+    },
+    "Importing… %@ of %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importation… %@ sur %@"
           }
         }
       }
@@ -35904,6 +36124,26 @@
         }
       }
     },
+    "Keep the folder structure": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Garder la structure des dossiers"
+          }
+        }
+      }
+    },
+    "Keep the front matter as properties": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Garder l’en-tête comme propriétés"
+          }
+        }
+      }
+    },
     "Keep your connected apps unavailable to this bot.": {
       "localizations": {
         "en": {
@@ -36784,6 +37024,16 @@
         }
       }
     },
+    "Left out (%@)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laissés de côté (%@)"
+          }
+        }
+      }
+    },
     "Left out (set these up by hand)": {
       "localizations": {
         "en": {
@@ -37376,6 +37626,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vincule esta instalação ao Perspicax para navegar notas pessoais, de equipe e da organização aqui."
+          }
+        }
+      }
+    },
+    "Linked to %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liée à %@"
+          }
+        }
+      }
+    },
+    "Linked to %@; remove or archive the bot first": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liée à %@ ; retirez ou archivez d’abord le bot"
           }
         }
       }
@@ -38414,6 +38684,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recherche dans ton coffre…"
+          }
+        }
+      }
+    },
+    "Looks like a secret": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Semble être un secret"
           }
         }
       }
@@ -42086,6 +42366,22 @@
         }
       }
     },
+    "New (vault note)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouvelle"
+          }
+        }
+      }
+    },
     "New Bot": {
       "localizations": {
         "en": {
@@ -42418,6 +42714,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Novas mensagens"
+          }
+        }
+      }
+    },
+    "New name": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau nom"
           }
         }
       }
@@ -43356,6 +43662,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nenhum bot corresponde."
+          }
+        }
+      }
+    },
+    "No bot owns it; the bots of this section read it: %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun bot n’en est propriétaire ; les bots de cette section la lisent : %@"
           }
         }
       }
@@ -45752,6 +46068,16 @@
         }
       }
     },
+    "Not a note, an image or a PDF": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ni une note, ni une image, ni un PDF"
+          }
+        }
+      }
+    },
     "Not allowed by the organization": {
       "localizations": {
         "en": {
@@ -46082,6 +46408,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Inconnu"
+          }
+        }
+      }
+    },
+    "Not linked": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non liée"
+          }
+        }
+      }
+    },
+    "Not linked to any bot.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liée à aucun bot."
           }
         }
       }
@@ -46652,6 +46998,16 @@
         }
       }
     },
+    "Notes, folders, links and tags from a vault folder or its .zip.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les notes, dossiers, liens et étiquettes d’un dossier de coffre ou de son .zip."
+          }
+        }
+      }
+    },
     "Notes: %@": {
       "localizations": {
         "fr": {
@@ -47204,6 +47560,16 @@
         }
       }
     },
+    "Nothing to import": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien à importer"
+          }
+        }
+      }
+    },
     "Nothing to search yet": {
       "localizations": {
         "en": {
@@ -47558,6 +47924,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Objectif :"
+          }
+        }
+      }
+    },
+    "Obsidian settings or trash": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réglages ou corbeille d’Obsidian"
           }
         }
       }
@@ -50710,6 +51086,16 @@
         }
       }
     },
+    "Options": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Options"
+          }
+        }
+      }
+    },
     "Or paste an access key": {
       "localizations": {
         "en": {
@@ -51192,6 +51578,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hors de la liste de votre organisation : seul votre propre abonnement ou votre clé le fait rouler."
+          }
+        }
+      }
+    },
+    "Over the vault’s limit": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Au-delà de la limite du coffre"
           }
         }
       }
@@ -52356,6 +52752,16 @@
         }
       }
     },
+    "Path outside the vault": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chemin hors du coffre"
+          }
+        }
+      }
+    },
     "Pause": {
       "localizations": {
         "en": {
@@ -53132,6 +53538,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "O Perspicax está ocupado agora. Espere um minuto e autorize suas rotinas de novo."
+          }
+        }
+      }
+    },
+    "Perspicax keeps no attachments": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perspicax ne garde pas de pièces jointes"
           }
         }
       }
@@ -56614,6 +57030,16 @@
         }
       }
     },
+    "Reading the vault…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lecture du coffre…"
+          }
+        }
+      }
+    },
     "Reading the xAI Bot Marketplace…": {
       "localizations": {
         "en": {
@@ -57384,6 +57810,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Refusées"
+          }
+        }
+      }
+    },
+    "Refused (vault note)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refused"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refusé"
           }
         }
       }
@@ -58654,6 +59096,16 @@
         }
       }
     },
+    "Replace it": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La remplacer"
+          }
+        }
+      }
+    },
     "Replace the Local VM?": {
       "localizations": {
         "en": {
@@ -58780,6 +59232,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remplacée par une demande plus récente"
+          }
+        }
+      }
+    },
+    "Replaces": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remplace"
           }
         }
       }
@@ -60758,6 +61220,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "As rotinas nunca foram autorizadas a agir em nome desta pessoa."
+          }
+        }
+      }
+    },
+    "Routines: %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Routines : %@"
           }
         }
       }
@@ -67696,6 +68168,26 @@
         }
       }
     },
+    "Skip .obsidian/ and .trash/": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignorer .obsidian/ et .trash/"
+          }
+        }
+      }
+    },
+    "Skip it": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’ignorer"
+          }
+        }
+      }
+    },
     "Skip scheduled occurrences while this routine is working. Manual runs are separate.": {
       "localizations": {
         "en": {
@@ -67736,6 +68228,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pular esta ocorrência"
+          }
+        }
+      }
+    },
+    "Skipped": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignorée"
           }
         }
       }
@@ -69792,6 +70294,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Parada"
+          }
+        }
+      }
+    },
+    "Stopped after %@ of %@. Run it again to finish: what is there already is skipped.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêtée après %@ sur %@. Relancez-la pour finir : ce qui est déjà là est ignoré."
           }
         }
       }
@@ -78634,6 +79146,16 @@
         }
       }
     },
+    "Too large": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trop gros"
+          }
+        }
+      }
+    },
     "Too many removals. Try again in a minute.": {
       "localizations": {
         "en": {
@@ -79556,6 +80078,16 @@
         }
       }
     },
+    "Turn #tags and front matter tags into tags": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changer les #tags et les tags de l’en-tête en étiquettes"
+          }
+        }
+      }
+    },
     "Turn %lld of %lld": {
       "localizations": {
         "en": {
@@ -79574,6 +80106,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vez %1$lld de %2$lld"
+          }
+        }
+      }
+    },
+    "Turn [[wikilinks]] into note links": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changer les [[wikilinks]] en liens de notes"
           }
         }
       }
@@ -80070,6 +80612,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Inchangé"
+          }
+        }
+      }
+    },
+    "Unchanged (vault note)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unchanged"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inchangée"
           }
         }
       }
@@ -84008,6 +84566,16 @@
         }
       }
     },
+    "When a note of that name is there": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Si une note de ce nom existe"
+          }
+        }
+      }
+    },
     "When a webhook arrives": {
       "localizations": {
         "en": {
@@ -84232,6 +84800,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quand ton ordinateur n'a pas de voix pour un bot, les appels parlent avec ElevenLabs directement depuis ce téléphone. La clé reste dans le trousseau de ce téléphone. Obtiens-en une sur elevenlabs.io, puis Developers, puis API keys."
+          }
+        }
+      }
+    },
+    "Where": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Où"
           }
         }
       }
@@ -85940,6 +86518,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vous ne pouvez écrire que dans les conversations que vous avez commencées sur ce Cloud."
+          }
+        }
+      }
+    },
+    "You can read this folder, not change it": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous pouvez lire ce dossier, pas le modifier"
           }
         }
       }

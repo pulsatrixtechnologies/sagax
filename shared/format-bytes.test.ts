@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatArchiveBytes, formatBytes, formatDebuggerBytes, formatPanelBytes } from "./format-bytes";
+import { formatArchiveBytes, formatBytes, formatDebuggerBytes, formatMemoryBytes, formatPanelBytes } from "./format-bytes";
 
 describe("format-bytes", () => {
   it("keeps the archive wording", () => {
@@ -17,6 +17,14 @@ describe("format-bytes", () => {
     expect(formatPanelBytes(undefined)).toBe("?");
     expect(formatPanelBytes(5 * 1024 * 1024)).toBe("5 MiB");
     expect(formatPanelBytes(1.5 * 1024 ** 3)).toBe("1.5 GiB");
+  });
+
+  it("keeps memory rounding, locale fallback and the kilobyte ceiling", () => {
+    const words = { bytes: (count: number) => `${count} B`, kilobytes: (count: string) => `${count} KB` };
+    expect(formatMemoryBytes(120, "en", words)).toBe("120 B");
+    expect(formatMemoryBytes(1536, "fr", words)).toBe("1,5 KB");
+    expect(formatMemoryBytes(1024 ** 2, "en", words)).toBe("1,024 KB");
+    expect(formatMemoryBytes(1536, "invalid_locale", words)).toBe("1.5 KB");
   });
 
   it("folds bytes into readable units, French and English", () => {

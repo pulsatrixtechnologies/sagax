@@ -4,6 +4,7 @@ import { gunzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { acceptsGzip, gzipTunnelReplies, sendTunnelJson, varyOnEncoding } from "./tunnel-gzip.ts";
+import { generated } from "../../scripts/gen-companion-tunnel-gzip.mjs";
 import * as shared from "../../shared/tunnel-gzip.ts";
 
 const big = JSON.stringify({ text: "x".repeat(4000) });
@@ -57,7 +58,7 @@ describe("tunnel gzip (port of OpenMausBot #3009)", () => {
     expect(varyOnEncoding("accept-encoding")).toBe("accept-encoding");
     expect(varyOnEncoding("*")).toBe("*");
   });
-  it("re-exports the shared module from the harness; the companion keeps an equal copy", () => {
+  it("re-exports the shared module from the harness; the standalone companion is generated from it", () => {
     expect(gzipTunnelReplies).toBe(shared.gzipTunnelReplies);
     expect(sendTunnelJson).toBe(shared.sendTunnelJson);
     const code = (text: string) => text.split("\n").filter((line) => !line.startsWith("//")).join("\n");
@@ -65,7 +66,8 @@ describe("tunnel gzip (port of OpenMausBot #3009)", () => {
     const sharedSource = readFileSync(new URL("../../shared/tunnel-gzip.ts", import.meta.url), "utf8");
     const harness = readFileSync(new URL("./tunnel-gzip.ts", import.meta.url), "utf8");
     // The companion builds alone (rootDir companion/src): it cannot import shared/.
-    expect(companion).not.toContain("../../shared/");
+
+    expect(companion).toBe(generated());
     expect(code(companion)).toBe(code(sharedSource));
     expect(harness).toContain("../../shared/tunnel-gzip.ts");
   });

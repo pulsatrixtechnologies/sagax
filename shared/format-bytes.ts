@@ -1,6 +1,6 @@
 /** Byte strings that look alike and are not the same contract. Each caller
  * keeps its own wording. `formatBytes` is the locale ladder ("1,5 Ko").
- * src/lib/memory.ts stays on memoryText and stops at kilobytes. */
+ * The memory adapter supplies memoryText and stops at kilobytes. */
 
 /** Archive trees: "512 B", "1.5 KB", "2.0 MB", "1.0 GB". */
 export function formatArchiveBytes(bytes: number): string {
@@ -46,4 +46,17 @@ export function formatBytes(bytes: number, locale: string): string {
   }
   const digits = unit === 0 ? 0 : value < 10 ? 1 : 0;
   return `${number(value, locale, digits)} ${units[unit]}`;
+}
+
+/** Memory notes keep their own words and stop at kilobytes, even for large files. */
+export function formatMemoryBytes(bytes: number, locale: string, words: { bytes: (count: number) => string; kilobytes: (count: string) => string }): string {
+  if (bytes < 1024) return words.bytes(bytes);
+  const kb = Math.round(bytes / 102.4) / 10;
+  let shown = String(kb);
+  try {
+    shown = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(kb);
+  } catch {
+    /* an unknown locale keeps the plain number */
+  }
+  return words.kilobytes(shown);
 }

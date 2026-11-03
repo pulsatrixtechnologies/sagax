@@ -37,7 +37,7 @@ The checks cover:
   work, and nothing written afterwards names it. ask_bot's refused review,
   delegate_bot and coordinate_bots after an allow, a poll-only caller's
   answers and the aside answer keep only the addressed id (`receiptName`,
-  `server/peer-delivery.ts`); a result withheld for that reason reaches the
+  `server/peers/peer-delivery.ts`); a result withheld for that reason reaches the
   requester as "Teammate" in its chip, its resume and the report in it
   (`teammateNameFor`, `server/direct-coordination.e2e.test.ts`).
   `server/org/org-sharing.e2e.test.ts` S3-13 proves it across two people: a bot

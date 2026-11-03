@@ -3,7 +3,7 @@
 // room-targets, coordinate-bots.
 import type { ServerResponse } from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { setPeerScope } from "../peer-roster.ts";
+import { setPeerScope } from "../peers/peer-roster.ts";
 import type { InternalRouteContext } from "./internal-route.ts";
 import {
   createInternalBotChatRoutes,

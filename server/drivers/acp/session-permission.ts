@@ -63,7 +63,11 @@ export function createPermissionHandler(deps: PermissionHandlerDeps) {
               message: `${DRIVER_KIND} offered no "${want}" permission option — cancelling the request instead of guessing`,
             });
 
-          const toolCall = params.toolCall ?? {};
+          // #1931: an ask may carry only the call's id, its arguments having
+          // come with the earlier tool_call: the card reads those
+          const asked = params.toolCall ?? {};
+          const streamed = typeof asked.toolCallId === "string" ? current.toolInputs?.get(asked.toolCallId) : undefined;
+          const toolCall = asked.rawInput === undefined && streamed !== undefined ? { ...asked, rawInput: streamed } : asked;
           const isQuestion = String(toolCall.toolCallId ?? "").startsWith("interaction_");
           // Organization server: the engine's own tools are withheld by its
           // profile (server/drivers/host-tools.ts). Should one still ask to

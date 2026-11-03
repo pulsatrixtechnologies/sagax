@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { APPROVAL_EN, approvalPlain, describeAllowRule, mcpAllowKey, parseToolId } from "./approval-describe.ts";
+import { APPROVAL_EN, approvalAction, approvalPlain, describeAllowRule, describeApproval, mcpAllowKey, parseToolId } from "./approval-describe.ts";
 
 const en = JSON.parse(readFileSync(join(import.meta.dirname, "..", "src", "locales", "en.json"), "utf8")) as Record<string, string>;
 const flat = (obj: Record<string, unknown>, prefix = ""): Record<string, string> =>
@@ -103,5 +103,29 @@ describe("the engines' mail, Teams, calendar and SharePoint connectors on the ca
 
   it("leaves reads worded as before", () => {
     expect(approvalPlain({ botName: "Dot", tool: `${M365}outlook_calendar_search`, toolInput: "{}" }).title).not.toMatch(/invitation/);
+  });
+});
+
+describe("a Grok gateway tool on the card (#1931)", () => {
+  const ID = "cursor__user-pulsatrix-connectwise-profile_5fuse___23";
+
+  it("names the connector and the tool, never 'use 23' nor the escaped id", () => {
+    const plain = approvalPlain({ botName: "Quasar", tool: ID, toolInput: '{"profile":"gox"}', detail: ID });
+    expect(plain.title).not.toMatch(/\b23\b|5f|Cursor|User /);
+    expect(plain.title).toContain("Pulsatrix Connectwise");
+    expect(plain.title).toMatch(/profile/i);
+    const described = describeApproval(ID, '{"profile":"gox"}');
+    expect(described).toMatchObject({ server: "pulsatrix-connectwise", tool: "profile_use", product: "Pulsatrix Connectwise" });
+    expect(described.argsJson).toContain('"profile": "gox"');
+  });
+
+  it("reads a known connector by grok.com's name and its verb", () => {
+    const described = describeApproval("cursor__user-Outlook-calendar-create_5fcalendar_5fevent___21", "{}");
+    expect(described).toMatchObject({ server: "Outlook-calendar", tool: "create_calendar_event" });
+    expect(approvalAction("cursor__user-Teams-list_5fchats___10", "{}")).not.toMatch(/\b10\b|5f/);
+  });
+
+  it("keeps the rule key on the exact gateway tool", () => {
+    expect(mcpAllowKey(ID)).toBe(`mcp:${ID}`);
   });
 });

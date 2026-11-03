@@ -13,7 +13,7 @@
 //   - a question about connectors or tools is answered with no call;
 //   - a known tool is called with use_tool directly, no search first.
 // Measured on the local bench (perf/instant-tool-turns): see the PR.
-import { GROK_CLOUD_CONNECTORS, grokGatewayServerConnector, grokGatewayToolConnector, isGrokGatewayServer } from "../../../shared/grok-cloud-connectors.ts";
+import { gatewayServerNames, GROK_CLOUD_CONNECTORS, grokGatewayServerConnector, grokGatewayToolConnector, isGrokGatewayServer } from "../../../shared/grok-cloud-connectors.ts";
 import { GROK_KNOWN_TOOLS_SECTION } from "./grok-tool-usage.ts";
 
 export interface GrokCatalogServer {
@@ -132,8 +132,10 @@ export function grokGatewayConnectors(catalog: readonly GrokCatalogServer[]): Gr
     if (!server.gateway || server.status !== "ready") continue;
     // a server of one connector (`managed_gateway:outlook`) names it itself
     const serverConnector = grokGatewayServerConnector(server.name, server.displayName);
+    // a member's server named with dashes reads whole (#1931)
+    const names = gatewayServerNames(server.tools);
     for (const tool of server.tools) {
-      const connector = grokGatewayToolConnector(tool) ?? serverConnector;
+      const connector = grokGatewayToolConnector(tool, names) ?? serverConnector;
       const known = connector?.id ? GROK_CLOUD_CONNECTORS.find((entry) => entry.id === connector.id) : undefined;
       const label = known?.name ?? connector?.name ?? server.displayName ?? server.name;
       const key = known?.id ?? label.toLowerCase();

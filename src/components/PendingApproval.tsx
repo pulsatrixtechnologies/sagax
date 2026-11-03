@@ -129,9 +129,9 @@ export function spokenApprovalPrompt(pending: Pending, requester: string): strin
     // Raw JSON arguments are not read aloud: the plain summary is.
     const card = pending.message.card;
     const input = card?.toolInput ?? pending.detail;
-    const tool = toolLabel(pending.tool, input, card?.toolHints);
-    const detail = isTechnicalText(pending.detail)
-      ? describeApproval(pending.tool, input, card?.toolHints).summary
+    const tool = toolLabel(card?.mcpTool ?? pending.tool, input, card?.toolHints);
+    const detail = isTechnicalText(pending.detail) || (card?.mcpTool && pending.detail?.trim() === card.mcpTool)
+      ? describeApproval(card?.mcpTool ?? pending.tool, input, card?.toolHints).summary
       : pending.detail;
     // asked as a question with its two options; the spoken answer must pick
     // one (src/lib/voice-mode/answers.ts). Always allow is never offered by
@@ -185,7 +185,7 @@ export function readOnlyApprovals(approvals: Pending[]): Pending[] {
     const card = pending.message.card;
     if (!card || card.adminApproval) return false;
     if (card.routineRequest || card.skillRequest || card.profileRequest || card.ruleRequest || card.teamSetupRequest || card.questionRequest || card.terminalRequest || card.meetingRequest || card.phoneCallConsent) return false;
-    return describeApproval(pending.tool, card.toolInput ?? card.subtitle, card.toolHints).risk === "read";
+    return describeApproval(card.mcpTool ?? pending.tool, card.toolInput ?? card.subtitle, card.toolHints).risk === "read";
   });
 }
 
@@ -325,7 +325,7 @@ export const PendingApprovalPanel = memo(function PendingApprovalPanel({
                 </pre>
               )}
               {view && (view.args || pending.tool) && (
-                <TechnicalDetails key={pending.requestId} tool={pending.tool} server={view.server} args={view.args} argsLabel={t("approval.aria.reviewDetails")} defaultOpen />
+                <TechnicalDetails key={pending.requestId} tool={view.tool ?? pending.tool} server={view.server} args={view.args} argsLabel={t("approval.aria.reviewDetails")} defaultOpen />
               )}
             </>
           )}

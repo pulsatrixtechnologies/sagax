@@ -37,4 +37,13 @@ describe("an engine connector call in an ACP ask (review of #943)", () => {
     expect(connectorAsk({ kind: "execute", title: "rm -rf /", rawInput: { command: "rm -rf /" } }, mounted)).toEqual({ engineConnector: false, outward: false });
     expect(connectorAsk(null, mounted)).toEqual({ engineConnector: false, outward: false });
   });
+
+  it("reads tool_input sent as JSON text, and an empty one as no arguments (#1931)", () => {
+    const id = "cursor__user-pulsatrix-connectwise-profile_5fuse___23";
+    const ask = connectorAsk(useTool(id, JSON.stringify({ profile: "gox" })), mounted);
+    expect(ask).toMatchObject({ target: id, engineConnector: true });
+    expect(ask.input).toContain('"profile"');
+    expect(connectorAsk(useTool(id, {}), mounted).input).toBe("{}");
+    expect(connectorAsk(useTool(id, "not json"), mounted).input).toBeUndefined();
+  });
 });

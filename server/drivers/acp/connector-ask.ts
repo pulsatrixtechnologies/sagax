@@ -31,6 +31,20 @@ function mountedTarget(target: string, mounted: ReadonlySet<string> | undefined)
   return false;
 }
 
+/** use_tool's arguments: an object, or the JSON text of one. */
+function inputObject(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text.startsWith("{")) return undefined;
+    try {
+      return inputObject(JSON.parse(text));
+    } catch {
+      return undefined;
+    }
+  }
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
 export function connectorAsk(toolCall: unknown, mounted: ReadonlySet<string> | undefined): ConnectorAsk {
   if (!toolCall || typeof toolCall !== "object") return { engineConnector: false, outward: false };
   const call = toolCall as { kind?: unknown; title?: unknown; rawInput?: unknown; _meta?: unknown };
@@ -44,8 +58,13 @@ export function connectorAsk(toolCall: unknown, mounted: ReadonlySet<string> | u
   const title = typeof call.title === "string" ? call.title.trim() : "";
   const named = useTool && typeof raw?.tool_name === "string" ? raw.tool_name.trim() : title;
   const target = named && named.length <= 200 ? named : undefined;
-  const args = useTool ? raw?.tool_input : raw;
-  const input = args && typeof args === "object" ? askInputDetail(args) : undefined;
+  const args = useTool ? inputObject(raw?.tool_input) : raw;
+  // #1931: Grok may send tool_input as the JSON text of the arguments, and a
+  // call with no arguments sent them too: `{}` is the detail, never "Grok
+  // did not share it"
+  const input = args && typeof args === "object"
+    ? askInputDetail(args) ?? (useTool && Object.keys(args).length === 0 ? "{}" : undefined)
+    : undefined;
   const engineConnector = useTool && !(target && mountedTarget(target, mounted));
   const outward = engineConnector
     ? !(target && connectorCallReads(target))

@@ -5,13 +5,15 @@
 //   POST /api/limit-resets/after-reset  {routineId, engine}: move only that automation's next run past the reset
 import { AFTER_RESET_MS, type LimitResetSchedule } from "../../shared/limit-reset.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
-import type { LimitResetClock } from "../usage/limit-resets.ts";
+import type { LimitResetView } from "../usage/limit-reset-host.ts";
 import type { RoutineRequestService } from "../routines/routine-requests.ts";
 import type { Routine, RoutineManager } from "../routines/routines.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface LimitResetRouteDeps {
-  clock: LimitResetClock;
+  /** The asking person's limits (#1918): each engine from the account that pays their turns on it, their own
+   * subscription or key, or the server's only when their turns run on it. Solo: the server's accounts. */
+  limits: (auth: RequestAuth) => LimitResetView;
   routines: RoutineManager;
   requests: Pick<RoutineRequestService, "submit">;
   /** The conversation's title, or null when the bot has no such conversation. */
@@ -43,9 +45,10 @@ export function createLimitResetRoutes(deps: LimitResetRouteDeps): RouteHandler 
   return async ({ req, res, url, path, method, auth, json, readBody }) => {
     if (path === "/api/limit-resets" && method === "GET") {
       res.setHeader("cache-control", "no-store");
-      const fresh = deps.clock.ensureFresh();
-      if (url.searchParams.get("refresh") === "1" || deps.clock.report().checkedAt === 0) await fresh;
-      return json(res, 200, deps.clock.report());
+      const limits = deps.limits(auth);
+      const fresh = limits.ensureFresh();
+      if (url.searchParams.get("refresh") === "1" || limits.report().checkedAt === 0) await fresh;
+      return json(res, 200, limits.report());
     }
     if (path === "/api/limit-resets/continue" && method === "POST") {
       const body = await readBody(req, 4096) as Record<string, unknown> | null;
@@ -76,7 +79,7 @@ export function createLimitResetRoutes(deps: LimitResetRouteDeps): RouteHandler 
       const body = await readBody(req, 4096) as Record<string, unknown> | null;
       const routineId = text(body?.routineId, 200), engine = text(body?.engine, 128);
       if (!routineId || !engine) return json(res, 400, { error: "routineId and engine are required" });
-      const reset = deps.clock.resetAt(engine);
+      const reset = deps.limits(auth).resetAt(engine);
       if (reset === null) return json(res, 409, { error: "That limit's reset time is not known yet." });
       const routine = deps.routines.deferNextRun(routineId, Math.max(reset + AFTER_RESET_MS, Date.now()));
       return routine ? json(res, 200, { routine }) : json(res, 404, { error: "no such automation" });

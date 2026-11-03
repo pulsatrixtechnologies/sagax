@@ -1,11 +1,11 @@
 // One prompt budget per capability. File engines receive paths; chat-only
 // engines receive whole instruction files within the same visible budget,
 // named by their workspace_read alias when the managed tools are mounted.
-// The rows come from the one scoped inventory (server/skill-discovery.ts)
+// The rows come from the one scoped inventory (server/skills/skill-discovery.ts)
 // that also feeds skills_list and the Capabilities receipt.
 import type { CapabilityPromptIndex } from "../shared/capabilities.ts";
 import { engineWorksInFiles } from "../shared/capabilities.ts";
-import type { DiscoveredSkill } from "./skill-discovery.ts";
+import type { DiscoveredSkill } from "./skills/skill-discovery.ts";
 
 export interface CapabilityPromptFile {
   kind: "skill" | "command" | "agent";

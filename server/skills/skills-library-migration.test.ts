@@ -11,7 +11,7 @@ process.env.SAGAX_DATA_DIR = mkdtempSync(join(tmpdir(), "omb-skills-migration-")
 const library = await import("./skill-library.ts");
 const skills = await import("./skills.ts");
 const migration = await import("./skills-library-migration.ts");
-const { workspaceDir } = await import("./workspace.ts");
+const { workspaceDir } = await import("../workspace.ts");
 
 const SKILL = (name: string, body = "Do the thing.") =>
   `---\nname: ${name}\ndescription: Reviews a PR the way this team reviews PRs.\n---\n\n# ${name}\n\n${body}\n`;
@@ -29,7 +29,7 @@ describe("skills library migration", () => {
     try {
       for (const args of [["--data-dir"], ["--data-dir", "--other-option"]]) {
         const result = spawnSync(process.execPath, ["--experimental-strip-types",
-          fileURLToPath(new URL("../scripts/migrate-skills-library.ts", import.meta.url)), ...args], {
+          fileURLToPath(new URL("../../scripts/migrate-skills-library.ts", import.meta.url)), ...args], {
           cwd: directory, env: { ...process.env, HOME: directory, USERPROFILE: directory, SAGAX_DATA_DIR: directory }, encoding: "utf8",
         });
         expect(result.status).toBe(2);

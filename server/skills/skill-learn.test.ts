@@ -9,7 +9,7 @@ import {
     parseLearnCommand,
     parseSaveRunRequest,
 } from "./skill-learn.ts";
-import { SAVE_RUN_AS_SKILL_LINE } from "../shared/learn-request.ts";
+import { SAVE_RUN_AS_SKILL_LINE } from "../../shared/learn-request.ts";
 
 describe("parseLearnCommand", () => {
     it("recognises /learn with and without a request", () => {

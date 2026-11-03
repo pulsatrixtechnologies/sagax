@@ -12,7 +12,7 @@ as (a portable Bot Profile, a real connections surface, and a machine that stays
 for a multi-engine architecture, harness-level memory, engine-independent learning, and
 a vendor-neutral control plane. Those exist today — `server/contracts.ts` makes the model
 a data value rather than a service binding, `server/workspace.ts` owns memory outside any
-engine, `server/skills.ts` owns skills, and a mid-thread engine switch already replays the
+engine, `server/skills/skills.ts` owns skills, and a mid-thread engine switch already replays the
 thread into the new engine (`server/branching.test.ts:253`). The gap is packaging and
 surface area, not architecture. Every plan below is scoped to that gap.
 
@@ -50,7 +50,7 @@ codebase already enforces; a task that violates one is wrong even if its tests p
   and memory — redacted — and is never a shareable package.
 - **Imports land disabled.** Skills, connectors, routines, and MCP servers arriving
   from outside are inert until a person enables them after reading. See the policy
-  comment at the top of `server/skills.ts`.
+  comment at the top of `server/skills/skills.ts`.
 - **Audit what you authorize.** Any new allow/deny decision writes a row through
   `appendDecision` (`server/decision-log.ts`), fire-and-forget — an audit log must
   never take down the decision it audits.

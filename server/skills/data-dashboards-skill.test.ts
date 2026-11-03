@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { ARTIFACT_LIMITS } from "../shared/artifacts.ts";
+import { ARTIFACT_LIMITS } from "../../shared/artifacts.ts";
 import { loadBundledSkills, selectBundledSkills } from "./skill-library.ts";
 
 // The server's TypeScript has no DOM library: the happy-dom globals are read

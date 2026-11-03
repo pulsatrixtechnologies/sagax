@@ -16,8 +16,8 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
-import { removeTempDir } from "./testing/cleanup.ts";
-import { DATA_DIR } from "./config.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
+import { DATA_DIR } from "../config.ts";
 import {
   applyStagedSkillWrite,
   applySkillWriteWithReceipt,
@@ -40,8 +40,8 @@ import {
   undoSkillWrite,
 } from "./skills.ts";
 import { parseSkillSource } from "./skill-fetch.ts";
-import { buildSystemPrompt } from "./system-prompt.ts";
-import { workspaceDir } from "./workspace.ts";
+import { buildSystemPrompt } from "../system-prompt.ts";
+import { workspaceDir } from "../workspace.ts";
 
 // skills.ts resolves storage through workspaceDir(botId) → DATA_DIR, which
 // reads SAGAX_DATA_DIR at import time — so point the suite at a scratch dir

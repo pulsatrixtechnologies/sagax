@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AppConfig } from "./config.ts";
+import type { AppConfig } from "../config.ts";
 
 // config.ts resolves DATA_DIR at import time, so point this suite at a
 // scratch dir before any module under test loads.
@@ -11,7 +11,7 @@ process.env.SAGAX_DATA_DIR = mkdtempSync(join(tmpdir(), "omb-skills-library-"));
 
 const library = await import("./skill-library.ts");
 const skills = await import("./skills.ts");
-const config = await import("./config.ts");
+const config = await import("../config.ts");
 
 const SKILL = (name: string, body = "Do the thing.") =>
   `---\nname: ${name}\ndescription: Reviews a PR the way this team reviews PRs.\n---\n\n# ${name}\n\n${body}\n`;

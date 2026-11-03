@@ -37,7 +37,7 @@ import type { NewBotDefaults } from "./new-bot-defaults.ts";
 import type { ExportablePackageSkill, TeamExportSkip } from "./package-export.ts";
 import type { OrgImportContext } from "./package-import.ts";
 import { pair } from "./package-parts.ts";
-import type { SkillListing, SkillPackageStamp } from "./skills.ts";
+import type { SkillListing, SkillPackageStamp } from "./skills/skills.ts";
 import type { InstalledPackageMetadata, Store } from "./store.ts";
 import {
   AGENT_MAX_SKILLS,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { skillDiscoveryAvailable, skillDiscoveryPage, type DiscoveredSkill } from "./skill-discovery.ts";
-import { CAPABILITY_PROMPT_MAX_BYTES, capabilityPrompt, capabilityPromptGroups } from "./capability-prompt.ts";
-import { availableTools, catalogProfileFromEnv } from "./drivers/agents-catalog.ts";
+import { CAPABILITY_PROMPT_MAX_BYTES, capabilityPrompt, capabilityPromptGroups } from "../capability-prompt.ts";
+import { availableTools, catalogProfileFromEnv } from "../drivers/agents-catalog.ts";
 
 const row = (id: number, extra: Partial<DiscoveredSkill> = {}): DiscoveredSkill => ({
   id: `person:skill:skill-${String(id).padStart(2, "0")}`, name: `skill-${id}`, scope: "person", source: "Me", kind: "skill",

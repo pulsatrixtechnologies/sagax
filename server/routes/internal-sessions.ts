@@ -17,8 +17,8 @@ import { peerStatus, peerStatusWords, reachablePeers } from "../peer-roster.ts";
 import { claimRecallCrossings, recallCrossingLabel } from "../recall-disclosure.ts";
 import { sessionMemoryHitFor } from "../recall.ts";
 import { parseSince, parseUntil } from "../recent-work.ts";
-import { learnSource } from "../skill-learn.ts";
-import { skillDiscoveryPage } from "../skill-discovery.ts";
+import { learnSource } from "../skills/skill-learn.ts";
+import { skillDiscoveryPage } from "../skills/skill-discovery.ts";
 import {
   applySkillWriteWithReceipt,
   listSkills,
@@ -26,7 +26,7 @@ import {
   readSkillFile,
   rejectStagedSkillWrite,
   stageSkillWrite,
-} from "../skills.ts";
+} from "../skills/skills.ts";
 import { queuedThreadPosition } from "../turns/steer-queue.ts";
 import { searchMemoryFiles } from "../workspace.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";

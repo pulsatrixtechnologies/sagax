@@ -18,7 +18,7 @@ async function installation(options: { refuse?: (name: string) => string | undef
   vi.stubEnv("USERPROFILE", home);
   const { Store } = await import("./store.ts");
   const { RoutineManager } = await import("./routines/routines.ts");
-  const skills = await import("./skills.ts");
+  const skills = await import("./skills/skills.ts");
   const workspace = await import("./workspace.ts");
   const sections = await import("./section-context.ts");
   const { saveImage } = await import("./attachments.ts");

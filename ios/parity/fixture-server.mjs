@@ -836,12 +836,12 @@ async function main() {
 }
 
 /** PARITY_OWNER=1: one imported skill on Ara, disabled as an import lands,
- * through the server's own installer (server/skills.ts) while the server is
+ * through the server's own installer (server/skills/skills.ts) while the server is
  * stopped, for the advanced panel's Skills UI tests (WP16). */
 export const OWNER_SKILL = "fixture-check";
 function seedOwnerSkill(seeded) {
   const skill = `---\nname: ${OWNER_SKILL}\ndescription: Placeholder skill that checks the fixture.\n---\n\nPlaceholder: run the fixture check and report.\n`;
-  const script = `import { installSkill } from ${JSON.stringify(join(ROOT, "server", "skills.ts"))};
+  const script = `import { installSkill } from ${JSON.stringify(join(ROOT, "server", "skills", "skills.ts"))};
     const result = installSkill(${JSON.stringify(seeded.ids.ara.id)}, "parity/fixture", [{ path: "SKILL.md", content: ${JSON.stringify(skill)} }]);
     if ("error" in result) { console.error(result.error); process.exit(1); }`;
   const run = spawnSync(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", script], {

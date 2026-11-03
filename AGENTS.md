@@ -94,7 +94,7 @@ physical limits: `docs/plans/grok-convergence-media-evidence.md` (iOS section).
 ## Scoped skill discovery and API plugin delivery (2026-10-31)
 
 The turn, preview, Capabilities `promptIndex` and `skills_list` share
-`scopedSkillInventory` and `server/skill-discovery.ts`. The prompt renders
+`scopedSkillInventory` and `server/skills/skill-discovery.ts`. The prompt renders
 it per capability (`server/capability-prompt.ts`, lot 3: 4,000 bytes and 30
 files each, whole-file omission); native Claude plugins stay native.
 `skills_list` reads independently of skill authoring and pages by stable
@@ -702,14 +702,14 @@ isolation preserved. Bridge:
 `server/installation-capability-bridge.ts`. Optional `capabilityStore` on
 `BotPlugins` and `installationStore` on `PluginMarketplaces`.
 The installation store holds the ORGANIZATION's library index only
-(`skills-library/`): `server/skill-library.ts` consults the bridge for
+(`skills-library/`): `server/skills/skill-library.ts` consults the bridge for
 that root alone (`installationLibraryBridge`). A person's Me library
 (`PersonalSkills.root`, `principals/<pid>/capability-skills/index.json`)
 and every other root stay on disk under their own directory; never route a
 per-person or per-bot root through the installation bridge (2026-11-01:
 two persons' Me skills collided and leaked into the room prompt). The
 one-time repair `skills-library-person-split` returns entries a dev build
-misplaced. Regression: `server/skill-library.test.ts` ("library roots"),
+misplaced. Regression: `server/skills/skill-library.test.ts` ("library roots"),
 `server/org/org-harness-commands.e2e.test.ts` (two persons, Me skills and
 personal MCP secrets apart from each other and from the installation).
 
@@ -1410,8 +1410,8 @@ GitHub, SKILL.md or skills.sh link) imports a skill onto the speaking bot or
 another of the person's bots by Persona > Skills' own route
 (`POST /api/bots/:id/skills`), with the person's own GitHub connection for a
 private repository (#1558, #1624); `bot.skill` {name, enabled} turns it on or
-off. `owner/repo/<folder>` is now a source of its own (server/skill-fetch.ts,
-the default branch). The level decides. Tests: `server/skill-fetch.test.ts`,
+off. `owner/repo/<folder>` is now a source of its own (server/skills/skill-fetch.ts,
+the default branch). The level decides. Tests: `server/skills/skill-fetch.test.ts`,
 `server/settings-actions.test.ts`.
 ## A bot writes the memory's topic files (2026-10-29)
 

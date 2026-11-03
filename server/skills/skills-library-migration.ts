@@ -11,7 +11,7 @@ import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 import {
   installLibrarySkill,
   libraryArchiveDirectory,

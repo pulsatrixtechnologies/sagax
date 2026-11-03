@@ -12,15 +12,15 @@ import {
 } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { DATA_DIR } from "./config.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { DATA_DIR } from "../config.ts";
 import {
   composeSkillMd,
   isSkillName,
   parseSkillMd,
   scanSkillText,
   SKILL_FILE_MAX_BYTES,
-} from "../shared/skill-md.ts";
+} from "../../shared/skill-md.ts";
 import {
   librarySkillDirectory,
   librarySkillManagedByOrganization,
@@ -38,7 +38,7 @@ import {
   updateBotSkillByPerson as updateBotSkillBytes,
   type SkillListing,
 } from "./skills.ts";
-import { workspaceDir } from "./workspace.ts";
+import { workspaceDir } from "../workspace.ts";
 
 const SUPPORTING_TEXT_EXT = new Set([
   ".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".csv", ".tsv",

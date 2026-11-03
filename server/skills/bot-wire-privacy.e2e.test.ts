@@ -12,15 +12,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import { freePortBlock } from "./testing/ports.ts";
-import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
+import { freePortBlock } from "../testing/ports.ts";
+import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 
 // Library store import is root-explicit, so the spawned server’s DATA_DIR never has to match this process.
 import { installLibrarySkill } from "./skill-library.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(SERVER_DIR, "..");
-const FAKE_CLI = join(SERVER_DIR, "testing", "fake-acp-cli.ts");
+const ROOT = join(SERVER_DIR, "..", "..");
+const FAKE_CLI = join(SERVER_DIR, "..", "testing", "fake-acp-cli.ts");
 
 describe("bot wire privacy against the real server", () => {
   let home = "";
@@ -47,7 +47,7 @@ describe("bot wire privacy against the real server", () => {
       features: { skillsLibrary },
       instances: { grok: { driver: "grokAgent", config: { cli: FAKE_CLI, fullAuto: false } } },
     }));
-    const proc = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
+    const proc = spawn(process.execPath, [join(SERVER_DIR, "..", "index.ts")], {
       cwd: ROOT,
       env: {
         PATH: dirname(process.execPath), ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),

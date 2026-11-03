@@ -1,8 +1,8 @@
 // A person's skills are one library, referenced by every one of their bots.
 // Only reviewed SKILL.md files leave it for that person's environment.
 import { join } from "node:path";
-import { composeSkillMd, parseSkillMd, scanSkillText } from "../shared/skill-md.ts";
-import { principalDir, type PersonCapabilities } from "./person-connections.ts";
+import { composeSkillMd, parseSkillMd, scanSkillText } from "../../shared/skill-md.ts";
+import { principalDir, type PersonCapabilities } from "../person-connections.ts";
 import { deleteLibrarySkill, installLibrarySkill, listLibrarySkills, readLibrarySkillFile, setLibrarySkillReviewState, updateLibrarySkill } from "./skill-library.ts";
 import {
   acceptLibrarySkillReview,
@@ -14,8 +14,8 @@ import {
   revertLibrarySkillReview,
 } from "./skill-person-edit.ts";
 import { botsUsingSharedSkill } from "./skill-share.ts";
-import { PASS, type RouteHandler } from "./routes/table.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import { PASS, type RouteHandler } from "../routes/table.ts";
+import type { RequestAuth } from "../request-auth.ts";
 
 export class PersonalSkills {
   private dataDir: string;

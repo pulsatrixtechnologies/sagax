@@ -5,7 +5,7 @@
 import { writeFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { launchVerificationServer, type VerificationServer } from "../scripts/control-omb.ts";
+import { launchVerificationServer, type VerificationServer } from "../../scripts/control-omb.ts";
 
 const SKILL_MD = [
   "---",

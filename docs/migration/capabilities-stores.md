@@ -17,7 +17,7 @@ Person isolation stays under `principals/<pid>/`. A person's Me skill
 library (`principals/<pid>/capability-skills/`, index.json and SKILL.md
 files) is NOT part of the installation store: `skills-library-index`
 covers the organization's `skills-library/index.json` only, and
-`server/skill-library.ts` applies the installation bridge to that root
+`server/skills/skill-library.ts` applies the installation bridge to that root
 alone. Installation secrets
 (MCP env and headers) leave plaintext `config.json` for the sealed file.
 GitHub org and marketplace tokens were already folded by
@@ -112,7 +112,7 @@ Code: `server/capability-route-deprecation.ts`,
 - `server/capabilities-store-migration.test.ts`: inventory, fresh migrate,
   partial crash (backup present, new store absent), rerun no-op, person
   isolation, Me skill repair (once), mcpServers clear after verify.
-- `server/skill-library.test.ts` ("library roots after the lot 5
+- `server/skills/skill-library.test.ts` ("library roots after the lot 5
   installation store"): two persons' Me libraries apart from each other
   and from the installation index; the organization's index read through
   the bridge only.

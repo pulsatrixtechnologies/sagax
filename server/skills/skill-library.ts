@@ -9,10 +9,10 @@ import { EventEmitter } from "node:events";
 import { mkdirSync, rmSync } from "node:fs";
 import { z } from "zod";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { DATA_DIR } from "./config.ts";
-import { installationCapabilityBridge, type InstallationCapabilityBridge } from "./installation-capability-bridge.ts";
-import { isSkillName, parseSkillMd, SKILL_FILE_MAX_BYTES } from "../shared/skill-md.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { DATA_DIR } from "../config.ts";
+import { installationCapabilityBridge, type InstallationCapabilityBridge } from "../installation-capability-bridge.ts";
+import { isSkillName, parseSkillMd, SKILL_FILE_MAX_BYTES } from "../../shared/skill-md.ts";
 import type { SkillPackageStamp } from "./skills.ts";
 
 export interface SkillManifest {
@@ -264,7 +264,7 @@ type SkillLibraryIndexRead =
 /** Lot 5 moved the organization's library index (skills-library/index.json)
  * into the sealed installation store. Only that root reads and writes it
  * there. Every other root is a person's Me library
- * (principals/<pid>/capability-skills, server/personal-skills.ts) and keeps
+ * (principals/<pid>/capability-skills, server/skills/personal-skills.ts) and keeps
  * its own index.json under the person's directory: one person's skills
  * never reach the installation index or another person's. */
 function installationLibraryBridge(root: string): InstallationCapabilityBridge | null {

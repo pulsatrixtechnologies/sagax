@@ -1,5 +1,5 @@
 // Plugins > Manage > a private skill: Save (edit, rename) and Delete Skill
-// on the skills library store (server/skill-library.ts).
+// on the skills library store (server/skills/skill-library.ts).
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 process.env.SAGAX_DATA_DIR = mkdtempSync(join(tmpdir(), "sagax-skill-edit-"));
 
 const library = await import("./skill-library.ts");
-const { composeSkillMd, parseSkillMd } = await import("../shared/skill-md.ts");
+const { composeSkillMd, parseSkillMd } = await import("../../shared/skill-md.ts");
 
 const SKILL = (name: string, extra = "") =>
   `---\nname: ${name}\ndescription: Writes the release notes.\n${extra}---\n\n# ${name}\n\nList the changes.\n`;

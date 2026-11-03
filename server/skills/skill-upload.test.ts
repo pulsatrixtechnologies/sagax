@@ -1,4 +1,4 @@
-// Skills > Upload (server/skill-upload.ts, server/routes/bot-skill-upload.ts):
+// Skills > Upload (server/skills/skill-upload.ts, server/routes/bot-skill-upload.ts):
 // a SKILL.md file and a zipped skill folder are previewed, then added
 // disabled; unsafe paths, invalid frontmatter, names the bot has and
 // non-skill files are refused with a reason, and nothing is written.
@@ -6,13 +6,13 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { DATA_DIR } from "./config.ts";
-import { createBotSkillUploadRoutes } from "./routes/bot-skill-upload.ts";
-import { PASS } from "./routes/table.ts";
+import { DATA_DIR } from "../config.ts";
+import { createBotSkillUploadRoutes } from "../routes/bot-skill-upload.ts";
+import { PASS } from "../routes/table.ts";
 import { readSkillUpload } from "./skill-upload.ts";
 import { installSkill, listSkills } from "./skills.ts";
-import { ensureWorkspace, workspaceDir } from "./workspace.ts";
-import { ZipWriter } from "./zip.ts";
+import { ensureWorkspace, workspaceDir } from "../workspace.ts";
+import { ZipWriter } from "../zip.ts";
 
 const skillMd = (name: string, description = `Does ${name}.`) => `---\nname: ${name}\ndescription: ${description}\n---\n\n# ${name}\n\nSteps.\n`;
 

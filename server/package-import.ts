@@ -27,7 +27,7 @@ import {
 } from "./package-parts.ts";
 import type { PresetRegistry } from "./presets.ts";
 import type { Routine, RoutineInput, RoutineManager } from "./routines/routines.ts";
-import type { SkillListing, SkillPackageStamp } from "./skills.ts";
+import type { SkillListing, SkillPackageStamp } from "./skills/skills.ts";
 import type { BotRecord, GroupRecord, InstalledPackageMetadata, Store } from "./store.ts";
 import { importedMemberProfile, type ParsedTeamManifest, type TeamManifestMember } from "./team-manifest.ts";
 import { takeImportName } from "../shared/import-name.ts";

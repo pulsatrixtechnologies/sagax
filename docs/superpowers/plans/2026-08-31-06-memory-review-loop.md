@@ -144,7 +144,7 @@ writes down something wrong on Tuesday is still acting on it in March.
 ### Task 5: Sharing a skill across bots
 
 **Files:**
-- Modify: `server/skills.ts`, `server/skills.test.ts`
+- Modify: `server/skills/skills.ts`, `server/skills/skills.test.ts`
 - Modify: `server/index.ts`
 
 - [ ] Write a failing test that `copySkill(fromBotId, toBotId, name)` installs the skill on the target with its provenance (`source`, `sha256`) intact and **disabled**, matching the import policy.

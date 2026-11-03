@@ -1,4 +1,4 @@
-// Skills > Upload in the persona editor (server/skill-upload.ts): a SKILL.md
+// Skills > Upload in the persona editor (server/skills/skill-upload.ts): a SKILL.md
 // file, a zipped skill folder, or several at once, previewed first and then
 // added DISABLED to the bot's skill store, like a GitHub import.
 //
@@ -24,7 +24,7 @@ import {
   previewItem,
   readSkillUpload,
   type SkillUploadFile,
-} from "../skill-upload.ts";
+} from "../skills/skill-upload.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface BotSkillUploadDeps {
@@ -33,7 +33,7 @@ export interface BotSkillUploadDeps {
   refusal(auth: RequestAuth, botId: string): { status: number; body: Record<string, unknown> } | null;
   /** The skill names the bot already has (its own, and assigned library ones). */
   existingNames(botId: string): string[];
-  /** server/skills.ts installSkill */
+  /** server/skills/skills.ts installSkill */
   install(botId: string, source: string, files: Array<{ path: string; content: string }>): { name: string } | { error: string };
   audit?(auth: RequestAuth, req: IncomingMessage, row: { botId: string; names: string[]; files: string[] }): void;
 }

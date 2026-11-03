@@ -12,7 +12,7 @@ not claim real provider or comparative Grok Bot qualification.
 
 | Acceptance | Code | Tests |
 | --- | --- | --- |
-| Enabled plugin skills/commands/agents discoverable on API engines when `skills_list` and `workspace_read` are allowed | `scopedSkillInventory` in `server/index.ts` includes plugins for every instance; Flow folders stay Claude-only; `skillDiscoveryIndex` / `skills_list` page them | `server/plugin-api-delivery.e2e.test.ts` (real turn prompt + tools); `server/skill-discovery.e2e.test.ts` (Lot 1 regression) |
+| Enabled plugin skills/commands/agents discoverable on API engines when `skills_list` and `workspace_read` are allowed | `scopedSkillInventory` in `server/index.ts` includes plugins for every instance; Flow folders stay Claude-only; `skillDiscoveryIndex` / `skills_list` page them | `server/plugin-api-delivery.e2e.test.ts` (real turn prompt + tools); `server/skills/skill-discovery.e2e.test.ts` (Lot 1 regression) |
 | Bodies readable through managed aliases (`plugins/<name>/...`) | `workspace_read` via `readWorkspaceText` + `scopedPluginFolders` | e2e tool loop calls `workspace_read` and receives unique skill bytes |
 | Declared MCP dependencies keep existing proxied path on API engines | plugin `.mcp.json` / plugin.json mcpServers sanitized into turn mounts; receipt MCP branch `proxied` when `customMcp` | e2e installs packing with `packing-track`; prompt and reach list it; `shared/capabilities.test.ts` |
 | Truthful supported/unsupported receipts | `engineReceipt` serves plugin skills/commands/agents as `prompt` when `skillDiscovery`; Flow remains `none` on non-Claude; tools-off / denied list stays `none` | e2e denied `skills_list` asserts `engine.skills === "none"` and no `promptIndex`; capabilities unit tests |
@@ -79,7 +79,7 @@ native Claude `--plugin-dir` loading and Flow receipts are unchanged.
 ```
 pnpm exec vitest run shared/capabilities.test.ts server/capabilities.test.ts \
   server/plugin-metadata-cache.test.ts server/turns/plugin-turn.test.ts \
-  server/skill-discovery.test.ts server/turns/turn-connectors.test.ts \
+  server/skills/skill-discovery.test.ts server/turns/turn-connectors.test.ts \
   server/plugin-api-delivery.e2e.test.ts
 # 7 files, 58 tests passed
 
@@ -96,7 +96,7 @@ not run in this worker (root owns the integration gate).
 pnpm exec vitest run shared/capabilities.test.ts server/capabilities.test.ts \
   server/plugin-metadata-cache.test.ts server/turns/plugin-turn.test.ts \
   server/bot-plugins.test.ts server/installation-plugins.test.ts \
-  server/skill-discovery.test.ts server/skill-discovery.e2e.test.ts \
+  server/skills/skill-discovery.test.ts server/skills/skill-discovery.e2e.test.ts \
   server/turns/turn-connectors.test.ts server/workspace-files.test.ts \
   server/plugin-api-delivery.e2e.test.ts server/plugin-engine-continuity.e2e.test.ts
 # 12 files, 114 tests passed

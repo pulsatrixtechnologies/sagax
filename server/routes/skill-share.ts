@@ -9,7 +9,7 @@ import {
   sharePrivateSkillToOrganization,
   unshareSkillForBot,
   type ShareBotRef,
-} from "../skill-share.ts";
+} from "../skills/skill-share.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 const shareBody = z.object({

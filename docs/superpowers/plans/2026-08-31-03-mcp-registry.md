@@ -83,7 +83,7 @@ merges but does not manage.
   export function isMcpServerName(name: string): boolean;
   export function redactServer(name: string, cfg: McpServerConfig, probe?: McpProbeRecord): McpServerListing;
   ```
-- `isMcpServerName` uses the same rule as `isSkillName` (`server/skills.ts:41`): lowercase alphanumerics with single hyphens, 1–64 chars. That regex is the traversal gate — the name becomes a filename for the probe cache.
+- `isMcpServerName` uses the same rule as `isSkillName` (`server/skills/skills.ts:41`): lowercase alphanumerics with single hyphens, 1–64 chars. That regex is the traversal gate — the name becomes a filename for the probe cache.
 
 - [ ] Write failing tests: a valid stdio entry parses; a valid http entry parses; an `http://` URL that is not loopback is **rejected** (a remote MCP server reached without TLS would carry its bearer header in clear text); a `file://` or other scheme is rejected; an empty `command` is rejected; a name with a dot, slash, or uppercase is rejected.
 - [ ] Write a failing test that `redactServer` returns `secretKeys: ["GITHUB_TOKEN"]` for `env: { GITHUB_TOKEN: "ghp_real" }` and that the serialized listing does not contain `ghp_real`. Same for HTTP `headers`.

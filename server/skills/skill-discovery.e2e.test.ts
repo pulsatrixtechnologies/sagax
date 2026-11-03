@@ -2,8 +2,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { launchVerificationServer } from "../scripts/control-omb.ts";
-import { seedMarketplaceBeforeBoot } from "./testing/seed-marketplace.ts";
+import { launchVerificationServer } from "../../scripts/control-omb.ts";
+import { seedMarketplaceBeforeBoot } from "../testing/seed-marketplace.ts";
 
 const key = "isolated-skill-discovery-capability-20261031";
 const skillText = (name: string) => `---\nname: ${name}\ndescription: Vérifier les colis.\n---\nRead the synthetic shipping checklist for ${name}.\n`;

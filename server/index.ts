@@ -1141,7 +1141,7 @@ import {
   expandSkillCommandTurnText,
   skillCommandInline,
   undoSkillWrite
-} from "./skills.ts";
+} from "./skills/skills.ts";
 import { newBotDefaultsSchema } from "./new-bot-defaults.ts";
 import { greetingLanguage } from "./new-bot-greeting.ts";
 import {
@@ -1156,7 +1156,7 @@ import { relayAccountLabel } from "./run-with-engine.ts";
 import { approvalLevelPrompt, peerContactPrompt } from "./approvals/approval-level-prompt.ts";
 // #1905: Full access, one decision for every approval and choice card
 import { fullAccessActs, fullAccessChoiceAnswer, fullAccessChoiceLine, fullAccessDecision, peerContactCardRequired } from "./approvals/full-access-gate.ts";
-import { expandLearnTurnText } from "./skill-learn.ts";
+import { expandLearnTurnText } from "./skills/skill-learn.ts";
 import { expandSetupTurnText, setupModeActive, setupSystemPrompt } from "./setup-mode.ts";
 import type { SkillRequestCardData } from "../shared/skill-request.ts";
 import {
@@ -1359,11 +1359,11 @@ import {
   renderSkillInstructions,
   selectBundledSkills,
   updateLibrarySkill,
-} from "./skill-library.ts";
+} from "./skills/skill-library.ts";
 import { InstallationPlugins } from "./installation-plugins.ts";
-import { PersonalSkills, createPersonalSkillRoutes } from "./personal-skills.ts";
+import { PersonalSkills, createPersonalSkillRoutes } from "./skills/personal-skills.ts";
 import { createSkillShareRoutes } from "./routes/skill-share.ts";
-import { runSkillsLibraryBootSweep } from "./skills-library-migration.ts";
+import { runSkillsLibraryBootSweep } from "./skills/skills-library-migration.ts";
 import { installedPlaybookInstructions } from "./installed-playbooks.ts";
 import {
   createLibraryPackageExport,
@@ -2042,7 +2042,7 @@ import {
 } from "./bot-plugins.ts";
 import { pluginMetadataCacheRoot } from "./plugin-metadata-cache.ts";
 import { pluginTurnInventory } from "./turns/plugin-turn.ts";
-import { orderedSkillDiscovery, skillDiscoveryAvailable, type DiscoveredSkill } from "./skill-discovery.ts";
+import { orderedSkillDiscovery, skillDiscoveryAvailable, type DiscoveredSkill } from "./skills/skill-discovery.ts";
 import {
   engineServerMcp,
   perspicaxServerName,

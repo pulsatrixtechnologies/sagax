@@ -11,8 +11,8 @@ import type { GithubCredential } from "../github-access.ts";
 import { githubSkillFetch } from "../github-access.ts";
 import { botSkillTemplateSchema } from "../new-bot-defaults.ts";
 import type { RequestAuth } from "../request-auth.ts";
-import { fetchSkillFromSource } from "../skill-fetch.ts";
-import type { LibrarySkillListing } from "../skill-library.ts";
+import { fetchSkillFromSource } from "../skills/skill-fetch.ts";
+import type { LibrarySkillListing } from "../skills/skill-library.ts";
 import {
   acceptBotSkillReview,
   acceptLibrarySkillReview,
@@ -27,8 +27,8 @@ import {
   revertBotSkillReview,
   revertLibrarySkillReview,
   updateBotSkillByPerson,
-} from "../skill-person-edit.ts";
-import { botsUsingSharedSkill } from "../skill-share.ts";
+} from "../skills/skill-person-edit.ts";
+import { botsUsingSharedSkill } from "../skills/skill-share.ts";
 import {
   installLibrarySkill,
   listLibrarySkills,
@@ -37,7 +37,7 @@ import {
   setLibrarySkillReviewState,
   updateLibrarySkill,
   deleteLibrarySkill,
-} from "../skill-library.ts";
+} from "../skills/skill-library.ts";
 import {
   installSkill,
   listBotSkillsWithOrigin,
@@ -46,7 +46,7 @@ import {
   setSkillEnabled,
   type SkillListing,
   type StagedSkillWrite,
-} from "../skills.ts";
+} from "../skills/skills.ts";
 import type { BotRecord } from "../store.ts";
 import { composeSkillMd, parseSkillMd, scanSkillText } from "../../shared/skill-md.ts";
 import { permissionRefusal, type PermissionKey } from "../../shared/permissions.ts";

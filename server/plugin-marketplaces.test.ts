@@ -358,7 +358,7 @@ describe("per-marketplace visibility (private to a person vs org-wide)", () => {
 
 describe("uninstalling a plugin's skills", () => {
   it("removes a library skill only when it came from that marketplace", async () => {
-    const { installLibrarySkill, listLibrarySkills, removeLibrarySkillFrom } = await import("./skill-library.ts");
+    const { installLibrarySkill, listLibrarySkills, removeLibrarySkillFrom } = await import("./skills/skill-library.ts");
     const root = join(dir, "library");
     expect("error" in installLibrarySkill({ name: "release-notes", instructions: SKILL, source: "devjc", root })).toBe(false);
     expect(removeLibrarySkillFrom("release-notes", "other", root)).toEqual({ removed: false });

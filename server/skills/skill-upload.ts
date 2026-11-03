@@ -1,7 +1,7 @@
 // Skills uploaded from the person's computer (persona editor > Skills >
 // Upload): a SKILL.md file, a zipped skill folder (SKILL.md plus its files),
 // or several of either at once. They land in the bot's skill store exactly
-// like a GitHub import (server/skills.ts installSkill): SKILL.md only, the
+// like a GitHub import (server/skills/skills.ts installSkill): SKILL.md only, the
 // other files of the folder named as skipped, DISABLED until the person reads
 // it and switches it on.
 //
@@ -20,9 +20,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { isSkillName, parseSkillMd, scanSkillText, SKILL_FILE_MAX_BYTES } from "../shared/skill-md.ts";
+import { isSkillName, parseSkillMd, scanSkillText, SKILL_FILE_MAX_BYTES } from "../../shared/skill-md.ts";
 import { MAX_SKILLS_PER_IMPORT } from "./skill-fetch.ts";
-import { ZipError, ZipReader } from "./zip.ts";
+import { ZipError, ZipReader } from "../zip.ts";
 
 /** At most this many files in one upload. */
 export const SKILL_UPLOAD_MAX_FILES = 10;

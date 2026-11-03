@@ -160,7 +160,7 @@ function nest(path: string, value: unknown): Record<string, unknown> {
 }
 
 /** A GitHub skill source from {repo, path?, ref?} or a link, as Persona >
- * Skills takes it (server/skill-fetch.ts parseSkillSource). */
+ * Skills takes it (server/skills/skill-fetch.ts parseSkillSource). */
 export function skillSourceOf(value: unknown): string | undefined {
   if (typeof value === "string") return value.trim() || undefined;
   const r = value && typeof value === "object" ? value as { repo?: unknown; path?: unknown; ref?: unknown; source?: unknown } : {};

@@ -1,7 +1,7 @@
 // One inventory feeds the turn, its Capabilities receipt and skills_list.
 // Paths are workspace_read references, never authority supplied by a caller.
 // The prompt renders it per capability (server/capability-prompt.ts).
-import { allowsTool } from "../shared/tool-scope.ts";
+import { allowsTool } from "../../shared/tool-scope.ts";
 
 export interface DiscoveredSkill {
   id: string;

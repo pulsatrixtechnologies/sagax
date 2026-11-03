@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { launchVerificationServer } from "../scripts/control-omb.ts";
+import { launchVerificationServer } from "../../scripts/control-omb.ts";
 
 describe("skills library config visibility", () => {
   it("returns the saved flag to the actual settings client, on by default", async () => {

@@ -250,36 +250,41 @@ posixOnly("confidential thread of a person on a team bot someone else owns", () 
     writeFileSync(join(home, "link", "pulsabot.json"), JSON.stringify({
       version: 1, issuer: idp.issuer, client_id: "pulsa-bot", server_id: idp.serverId, origin: BASE, link_token: idp.linkToken,
     }), { mode: 0o640 });
+    const claudeFixture = {
+      driver: "claudeAgent",
+      environment: {
+        FAKE_CLAUDE_MCP_DUMP: mcpDump,
+        FAKE_CLAUDE_MCP_TEXT_LIMIT: "200000",
+        FAKE_CLAUDE_MCP_CALLS: JSON.stringify([
+          { server: "agents", tool: "memory_update", arguments: { action: "append", text: `${SECRET} fact` }, when: "MEM-WRITE" },
+          { server: "agents", tool: "memory_log", arguments: { text: `${SECRET} event` }, when: "MEM-LOG" },
+          { server: "agents", tool: "propose_routine", arguments: { name: "Leak", instructions: `${SECRET} every day`, schedule: { type: "interval", every_minutes: 60 } }, when: "MAKE-ROUTINE" },
+          { server: "agents", tool: "session_search", arguments: { query: SECRET }, when: "SEARCH-SECRET" },
+          { server: "agents", tool: "list_threads", arguments: {}, when: "LIST-THREADS" },
+          { server: "agents", tool: "coordinate_bots", arguments: { bot_ids: ["Equipe"], message: "PEER-HELLO from a teammate", request_key: "peer-1" }, when: "COORD-EQUIPE" },
+          { server: "agents", tool: "start_thread", arguments: { title: "Enfant", message: "child work" }, when: "OPEN-CHILD" },
+          { server: "agents", tool: "coordinate_bots", arguments: { bot_ids: ["Messager"], message: "COORD leak", request_key: "leak-1" }, when: "COORD-OUT" },
+          { server: "agents", tool: "coordinate_bots", arguments: { bot_ids: ["Messager"], message: `${SECRET}-RTBRIEF`, request_key: "rt-1" }, when: "RT-GO" },
+          { server: "agents", tool: "act", arguments: { method: "GET", path: "/api/bots" }, when: "ACT-LIST" },
+          // an outbound tool of another MCP server: the bot's data tools
+          { server: "data", tool: "data_sql", arguments: { sql: "CREATE TABLE confidential_probe AS SELECT 1 AS x" }, when: "DATA-WRITE" },
+          { server: "data", tool: "data_sql", arguments: { sql: "CREATE TABLE confidential_probe AS SELECT 1 AS x" }, when: "make exactly the call" },
+          { server: "agents", tool: "act", arguments: { method: "GET", path: "/api/search", query: { q: `${SECRET}-ALPHA` } }, when: "ACT-SEARCH" },
+        ]),
+        // the session on disk, as the real CLI keeps it (CT-16, CT-17)
+        FAKE_CLAUDE_TRANSCRIPTS: "1",
+      },
+      config: { cli: FAKE_CLAUDE, fullAuto: true },
+    };
     writeFileSync(join(data, "config.json"), JSON.stringify({
       // the organization's key for Grok Build (the asker bot of CT-7)
       xai: { key: "xai-test-org-key" },
       instances: {
-        claude: {
-          driver: "claudeAgent",
-          environment: {
-            FAKE_CLAUDE_MCP_DUMP: mcpDump,
-            FAKE_CLAUDE_MCP_TEXT_LIMIT: "200000",
-            FAKE_CLAUDE_MCP_CALLS: JSON.stringify([
-              { server: "agents", tool: "memory_update", arguments: { action: "append", text: `${SECRET} fact` }, when: "MEM-WRITE" },
-              { server: "agents", tool: "memory_log", arguments: { text: `${SECRET} event` }, when: "MEM-LOG" },
-              { server: "agents", tool: "propose_routine", arguments: { name: "Leak", instructions: `${SECRET} every day`, schedule: { type: "interval", every_minutes: 60 } }, when: "MAKE-ROUTINE" },
-              { server: "agents", tool: "session_search", arguments: { query: SECRET }, when: "SEARCH-SECRET" },
-              { server: "agents", tool: "list_threads", arguments: {}, when: "LIST-THREADS" },
-              { server: "agents", tool: "ask_bot", arguments: { bot_id: "Equipe", message: "PEER-HELLO from a teammate" }, when: "ASK-EQUIPE" },
-              { server: "agents", tool: "start_thread", arguments: { title: "Enfant", message: "child work" }, when: "OPEN-CHILD" },
-              { server: "agents", tool: "coordinate_bots", arguments: { bot_ids: ["Messager"], message: "COORD leak", request_key: "leak-1" }, when: "COORD-OUT" },
-              { server: "agents", tool: "coordinate_bots", arguments: { bot_ids: ["Messager"], message: `${SECRET}-RTBRIEF`, request_key: "rt-1" }, when: "RT-GO" },
-              { server: "agents", tool: "act", arguments: { method: "GET", path: "/api/bots" }, when: "ACT-LIST" },
-              // an outbound tool of another MCP server: the bot's data tools
-              { server: "data", tool: "data_sql", arguments: { sql: "CREATE TABLE confidential_probe AS SELECT 1 AS x" }, when: "DATA-WRITE" },
-              { server: "data", tool: "data_sql", arguments: { sql: "CREATE TABLE confidential_probe AS SELECT 1 AS x" }, when: "make exactly the call" },
-              { server: "agents", tool: "act", arguments: { method: "GET", path: "/api/search", query: { q: `${SECRET}-ALPHA` } }, when: "ACT-SEARCH" },
-            ]),
-            // the session on disk, as the real CLI keeps it (CT-16, CT-17)
-            FAKE_CLAUDE_TRANSCRIPTS: "1",
-          },
-          config: { cli: FAKE_CLAUDE, fullAuto: true },
-        },
+        claude: claudeFixture,
+        // #1154 + fcce56775 (#1812): a member with no Claude sign-in speaks on
+        // the organization's key, which only the claudeApi instance carries.
+        // The same fake CLI, never the machine's own claude.
+        claudeApi: { ...claudeFixture, access: "api" },
         asker: { driver: "grokAgent", environment: { FAKE_ACP_MODE: "permission", FAKE_ACP_PERMISSION_TOOL_CALL: JSON.stringify({ kind: "other", title: "mcp__notes__save_note", rawInput: { text: "a note" } }) }, config: { cli: FAKE_ACP, fullAuto: false } },
       },
     }));
@@ -633,9 +638,13 @@ posixOnly("confidential thread of a person on a team bot someone else owns", () 
     const messenger = await api("POST", "/api/bots", bob, { name: "Messager" });
     expect(messenger.status, messenger.text).toBe(201);
     const messengerId = messenger.body.bot.id as string;
-    expect((await api("PATCH", `/api/bots/${messengerId}`, bob, { modelSelection: { instanceId: "claude", model: "fake-model" } })).status).toBe(200);
-    // a routine's turn asks Equipe with ask_bot (a Direct turn would coordinate instead)
-    const routine = await api("POST", "/api/routines", bob, { name: "Ask Equipe", botId: messengerId, prompt: "ASK-EQUIPE now.", enabled: false,
+    // A routine has no person to fall back for (#1154 is a person's turn), and
+    // since fcce56775 (#1812) only claudeApi carries the organization's key:
+    // the routine's bot runs on it.
+    expect((await api("PATCH", `/api/bots/${messengerId}`, bob, { modelSelection: { instanceId: "claudeApi", model: "fake-model" } })).status).toBe(200);
+    // a routine's turn hands Equipe work with coordinate_bots: since 84841aeed
+    // (0.8.24, runtime contract lot 3) a routine run coordinates like a chat
+    const routine = await api("POST", "/api/routines", bob, { name: "Ask Equipe", botId: messengerId, prompt: "COORD-EQUIPE now.", enabled: false,
       schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 86_400_000 } });
     expect(routine.status, routine.text).toBe(201);
     const ran = await api("POST", `/api/routines/${routine.body.routine.id}/run`, bob, {});

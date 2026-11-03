@@ -115,6 +115,12 @@ function tarEntry(path: string, type: "File" | "Directory" | "SymbolicLink" | "L
   const body = Buffer.from(content);
   return Buffer.concat([block, body, Buffer.alloc((512 - body.length % 512) % 512)]);
 }
+/** A real manifest as the releases before the skills library index part
+ * wrote it (0.8.33 and older): the forged archives built from it hold no part. */
+function olderReleaseManifest(manifest: any): any {
+  const { parts: _parts, ...rest } = manifest;
+  return rest;
+}
 afterEach(() => { for (const root of scratch.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
 describe("encrypted full workspace backups", () => {
@@ -371,6 +377,54 @@ describe("encrypted full workspace backups", () => {
     }
   });
 
+  it("carries the organization skills library index as its own versioned part, never the sealed store, and leaves it for the boot to adopt", async () => {
+    const source = directory(), target = directory();
+    json(join(source, "bots.json"), []);
+    const text = "---\nname: lib-check\ndescription: Library fixture.\n---\nLIBRARY_SKILL_MARKER\n";
+    mkdirSync(join(source, "skills-library", "skills", "lib-check"), { recursive: true });
+    writeFileSync(join(source, "skills-library", "skills", "lib-check", "SKILL.md"), text);
+    // a pending import of an earlier restore is that restore's, never exported
+    writeFileSync(join(source, "skills-library", "restore-import.json"), "{}");
+    // the sealed store itself never leaves, whatever it holds
+    writeFileSync(join(source, "installation-capabilities.enc"), "SEALED_STORE_MARKER");
+    writeFileSync(join(target, "installation-capabilities.enc"), "DESTINATION_STORE");
+    const entries = { "lib-check": { name: "lib-check", description: "Library fixture.", source: "local-import", sha256: createHash("sha256").update(text).digest("hex"), importedAt: "2026-11-01T00:00:00.000Z", reviewState: "approved", warnings: [], skippedFiles: [] } };
+    const exported = await createWorkspaceBackup(source, { password: PASSWORD, skillsLibraryIndex: { entries } });
+    const staged = await stageWorkspaceBackup(target, exported.path, { password: PASSWORD });
+    const staging = join(target, ".backups", staged.id, "staged");
+    const manifest = readJson(join(staging, "manifest.json"));
+    expect(manifest.parts.skillsLibraryIndex).toMatchObject({ path: "skills-library-index.json", version: 1, entries: 1 });
+    expect(readJson(join(staging, "skills-library-index.json"))).toEqual({ format: "sagax.skills-library-index", version: 1, entries });
+    const paths: string[] = manifest.entries.map((entry: { path: string }) => entry.path);
+    expect(paths).toContain("skills-library/skills/lib-check/SKILL.md");
+    expect(paths.some((path) => path.includes("installation-capabilities") || path.includes("restore-import"))).toBe(false);
+    expect(readFileSync(exported.path).includes(Buffer.from("LIBRARY_SKILL_MARKER"))).toBe(false);
+    commitPendingWorkspaceRestore(target, staged.id);
+    expect(applyPendingWorkspaceRestore(target).restored).toBe(true);
+    expect(readJson(join(target, "skills-library", "restore-import.json"))).toEqual({ format: "sagax.skills-library-index", version: 1, mode: "replace", restoreId: staged.id, entries });
+    expect(readFileSync(join(target, "skills-library", "skills", "lib-check", "SKILL.md"), "utf8")).toBe(text);
+    expect(readFileSync(join(target, "installation-capabilities.enc"), "utf8")).toBe("DESTINATION_STORE");
+  });
+
+  it("says so when the library index cannot be read, and refuses a tampered or undeclared index part", async () => {
+    const source = directory();
+    json(join(source, "bots.json"), []);
+    const unreadable = await createWorkspaceBackup(source, { password: PASSWORD, skillsLibraryIndex: { unreadable: true } });
+    expect(unreadable.summary.warnings.some((warning) => /skills library index could not be read/.test(warning))).toBe(true);
+    const target = directory();
+    const staged = await stageWorkspaceBackup(target, unreadable.path, { password: PASSWORD });
+    expect(readJson(join(target, ".backups", staged.id, "staged", "manifest.json")).parts).toBeUndefined();
+    writeFileSync(join(target, ".backups", staged.id, "staged", "skills-library-index.json"), "{}");
+    expect(() => commitPendingWorkspaceRestore(target, staged.id)).toThrow(/absent from its manifest/);
+
+    const exported = await createWorkspaceBackup(source, { password: PASSWORD, skillsLibraryIndex: { entries: {} } });
+    const other = directory();
+    const tampered = await stageWorkspaceBackup(other, exported.path, { password: PASSWORD });
+    writeFileSync(join(other, ".backups", tampered.id, "staged", "skills-library-index.json"), JSON.stringify({ format: "sagax.skills-library-index", version: 1, entries: { x: {} } }));
+    expect(() => commitPendingWorkspaceRestore(other, tampered.id)).toThrow(/checksum/);
+    expect(readPendingWorkspaceRestoreMetadata(other)).toBeNull();
+  });
+
   it("keeps the destination's local operator when restoring an archive without principals", async () => {
     const source = directory();
     writeFileSync(join(source, "note.txt"), "from before principals");
@@ -601,7 +655,7 @@ describe("encrypted full workspace backups", () => {
     const probeSource = directory();
     const probeArchive = await createWorkspaceBackup(probeSource, { password: PASSWORD });
     const probe = await stageWorkspaceBackup(probeSource, probeArchive.path, { password: PASSWORD });
-    const base = readJson(join(probeSource, ".backups", probe.id, "staged", "manifest.json"));
+    const base = olderReleaseManifest(readJson(join(probeSource, ".backups", probe.id, "staged", "manifest.json")));
     const entries: Array<{ path: string; type: "file" | "directory"; size: number; mode: number; sha256?: string }> = [];
     const blocks: Buffer[] = [];
     const add = (dir: string, prefix = "") => {
@@ -665,7 +719,7 @@ describe("encrypted full workspace backups", () => {
     const source = directory();
     const exported = await createWorkspaceBackup(source, { password: PASSWORD });
     const probe = await stageWorkspaceBackup(source, exported.path, { password: PASSWORD });
-    const base = readJson(join(source, ".backups", probe.id, "staged", "manifest.json"));
+    const base = olderReleaseManifest(readJson(join(source, ".backups", probe.id, "staged", "manifest.json")));
     const sheet = '{"cards":[{"sql":"SELECT CONFIDENTIAL_SHEET"}]}';
     const other = '{"cards":[{"sql":"SELECT PERSON_SHEET"}]}';
     const file = (path: string, content: string) => ({ path, type: "file", size: Buffer.byteLength(content), mode: 0o600, sha256: createHash("sha256").update(content).digest("hex") });
@@ -772,7 +826,7 @@ describe("encrypted full workspace backups", () => {
     const source = directory();
     const exported = await createWorkspaceBackup(source, { password: PASSWORD });
     const probe = await stageWorkspaceBackup(source, exported.path, { password: PASSWORD });
-    const base = readJson(join(source, ".backups", probe.id, "staged", "manifest.json"));
+    const base = olderReleaseManifest(readJson(join(source, ".backups", probe.id, "staged", "manifest.json")));
     const file = (path: string, content: string) => ({ path, type: "file", size: Buffer.byteLength(content), mode: 0o600, sha256: createHash("sha256").update(content).digest("hex") });
     const dir = (path: string) => ({ path, type: "directory", size: 0, mode: 0o700 });
     const token = '{"claudeAiOauth":{"accessToken":"OLD_ENGINE_TOKEN"}}';
@@ -1004,7 +1058,7 @@ describe("encrypted full workspace backups", () => {
     const source = directory();
     const exported = await createWorkspaceBackup(source, { password: PASSWORD });
     const probe = await stageWorkspaceBackup(source, exported.path, { password: PASSWORD });
-    const base = readJson(join(source, ".backups", probe.id, "staged", "manifest.json"));
+    const base = olderReleaseManifest(readJson(join(source, ".backups", probe.id, "staged", "manifest.json")));
     const file = (path: string, content: string) => ({ path, type: "file", size: Buffer.byteLength(content), mode: 0o600, sha256: createHash("sha256").update(content).digest("hex") });
     const dir = (path: string) => ({ path, type: "directory", size: 0, mode: 0o700 });
     const secret = (i: number) => `FAKE_SECRET_DO_NOT_USE_OLD_${i}`;
@@ -1045,7 +1099,7 @@ describe("encrypted full workspace backups", () => {
     const source = directory();
     const exported = await createWorkspaceBackup(source, { password: PASSWORD });
     const probe = await stageWorkspaceBackup(source, exported.path, { password: PASSWORD });
-    const base = readJson(join(source, ".backups", probe.id, "staged", "manifest.json"));
+    const base = olderReleaseManifest(readJson(join(source, ".backups", probe.id, "staged", "manifest.json")));
     const token = "STALE_TURN_BEARER";
     const note = "kept";
     const file = (path: string, content: string) => ({ path, type: "file", size: Buffer.byteLength(content), mode: 0o600, sha256: createHash("sha256").update(content).digest("hex") });
@@ -1070,7 +1124,7 @@ describe("encrypted full workspace backups", () => {
     const source = directory();
     const exported = await createWorkspaceBackup(source, { password: PASSWORD });
     const staged = await stageWorkspaceBackup(source, exported.path, { password: PASSWORD });
-    const base = readJson(join(source, ".backups", staged.id, "staged", "manifest.json"));
+    const base = olderReleaseManifest(readJson(join(source, ".backups", staged.id, "staged", "manifest.json")));
     for (const variant of [
       { credentials: { xaiApiKey: "secret" } },
       { summary: { ...base.summary, includesCredentials: false } },

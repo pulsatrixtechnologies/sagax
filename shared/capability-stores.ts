@@ -42,3 +42,17 @@ export const BOT_CAPABILITIES_DIR = "bot-capabilities";
 export const BOT_CAPABILITIES_FILE = "capabilities.json";
 export const INSTALLATION_CAPABILITIES_FILE = "installation-capabilities.enc";
 export const INSTALLATION_CAPABILITIES_AAD = "sagax installation-capabilities v1";
+
+/**
+ * The organization skills library index in a workspace backup
+ * (docs/verification/workspace-backups.md « Archive format »). The index
+ * lives in the sealed installation store, which a backup never carries, so
+ * the archive holds it as its own versioned part beside manifest.json: the
+ * library entries only, never another field of that store.
+ */
+export const SKILLS_LIBRARY_INDEX_PART = "skills-library-index.json";
+export const SKILLS_LIBRARY_INDEX_FORMAT = "sagax.skills-library-index";
+export const SKILLS_LIBRARY_INDEX_VERSION = 1;
+/** Where a restore leaves that part for the next boot, which adopts it into
+ * the sealed index once the installation store can be read, then removes it. */
+export const SKILLS_LIBRARY_RESTORE_IMPORT = "skills-library/restore-import.json";

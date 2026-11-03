@@ -357,6 +357,29 @@ for (const section of ["general", "memory", "privacy", "notifications", "organiz
 }
 
 // notes for the spec: not capturable here
+// 2026-11-03 (iPad 1:1 audit): the desktop surfaces added since the I-series.
+add({ id: "memory-page", phase: "main", note: "Memory page (main column, Perspicax console shape)",
+  open: async (ctx) => { await ctx.dispatch({ type: "toggleMemoryManager", open: true }); await ctx.sleep(1500); } });
+add({ id: "capabilities", phase: "main", note: "Capabilities (centred modal)",
+  open: async (ctx) => { await ctx.dispatch({ type: "togglePlugins", open: true }); await ctx.sleep(1500); } });
+add({ id: "routine-edit", phase: "main", note: "Automations list: a routine open in the side panel",
+  open: async (ctx) => {
+    await ctx.dispatch({ type: "showRoutines", section: "schedule", view: "list" });
+    await ctx.sleep(1000);
+    if (!(await ctx.exists({ text: /^Scan skills populaires mensuel/ }))) return { skip: "routine row not listed" };
+    await ctx.click({ text: /^Scan skills populaires mensuel/ });
+    await ctx.sleep(1200);
+  } });
+for (const section of ["account", "voice", "updates", "about", "providers", "security"]) {
+  add({ id: `settings-${section}`, phase: "main", note: `Settings > ${section}`,
+    open: async (ctx) => {
+      await openSettings(ctx, section, { retries: 3 });
+      const current = await ctx.eval(`__parity.state().appSettingsSection ?? null`);
+      if (current && current !== section) return { skip: `section ${section} not shown on this page (opened ${current})` };
+      await ctx.sleep(700);
+    } });
+}
+
 export const NOT_CAPTURED = [
   { id: "floating-mascot", why: "desktop-only: a bot floated onto the macOS desktop is its own frameless always-on-top Electron window (electron/floating-bot-window.mjs); nothing is drawn in the main window" },
   { id: "update-banner", why: "needs the Electron updater bridge (window.ogb.updater); the iPad updates through the App Store" },

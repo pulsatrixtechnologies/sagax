@@ -158,7 +158,7 @@ export function GotoGroupChip({
   const count = group.targets.length;
   const named = gotoNamedCounts(entries);
   // Per-bot counts when one bot appears more than once ("3 conversations
-  // with Katarina, 1 with Ember"); otherwise the faces + "N agents" line.
+  // with Osprey, 1 with Ember"); otherwise the faces + "N agents" line.
   const namedSummary = named.some((entry) => entry.count > 1)
     ? named
         .map((entry, index) =>

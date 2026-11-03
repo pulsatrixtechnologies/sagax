@@ -106,7 +106,7 @@ const store = {
   ...initialState,
   bots: [
     { id: "bot-nova", name: "Nova", color: "orange", kind: "personal" },
-    { id: "bot-katarina", name: "Katarina", color: "violet", kind: "personal" },
+    { id: "bot-osprey", name: "Osprey", color: "violet", kind: "personal" },
   ],
 };
 

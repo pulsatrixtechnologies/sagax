@@ -56,7 +56,7 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
 
   // 2026-11-01: a run opened from the routine's history (or Run now) opens
   // as an exchange sheet over the chat column (same place as Melonie <->
-  // Katarina), not as a modal over the app.
+  // Osprey), not as a modal over the app.
   let runSheet: React.ReactNode = null;
   if (detail && openedRun) {
     const run = state.routineRuns.find((candidate) => candidate.id === openedRun.id) ?? openedRun;

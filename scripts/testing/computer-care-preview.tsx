@@ -17,7 +17,7 @@ applySkin(params.get("theme") === "light" ? "atelier" : "midnight");
 const busy = params.get("state") === "busy";
 const workers: WorkingBot[] = busy
   ? [
-      { id: "bot-9f2c-katarina", name: "Katarina", threadId: "thr-1" },
+      { id: "bot-9f2c-osprey", name: "Osprey", threadId: "thr-1" },
       { id: "bot-3a71-ember", name: "Ember", threadId: "thr-2" },
     ]
   : [];

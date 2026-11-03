@@ -2444,7 +2444,7 @@ export function EventDetails({
         onOpenRoom={onOpenRoom}
       />
     );
-    // Chat column host present: portal into it like Melonie <-> Katarina.
+    // Chat column host present: portal into it like Melonie <-> Osprey.
     // Automations alone: the detail panel holds it.
     if (getExchangeColumnHost()) return exchange;
     return <DetailPanel bare label={t("routineCalendar.eventDetails")} onClose={onClose} data-event-details="run">{exchange}</DetailPanel>;

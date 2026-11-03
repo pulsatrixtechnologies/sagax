@@ -864,7 +864,7 @@ it("an external runtime's delegate_bot that needs the person's review is not hel
 }), 150_000);
 
 it("peer inbox (2026-11-02): teammates' one-way notices wake each proactive receiver once, batched, Primary Bot and team bot alike; nothing resumes the sender", () => withFixture(async (f) => {
-  const sender = (await f.cli("new-bot", "--name", "Katarina")).bot;
+  const sender = (await f.cli("new-bot", "--name", "Osprey")).bot;
   const primary = (await f.cli("new-bot", "--name", "Melonie")).bot;
   const teammate = (await f.cli("new-bot", "--name", "Harrie")).bot;
   await f.api(`/api/bots/${primary.id}`, { chiefOfStaff: true, acknowledgePeerScope: true }, "PATCH");
@@ -916,7 +916,7 @@ it("peer inbox (2026-11-02): teammates' one-way notices wake each proactive rece
 }, { env: { SAGAX_PROACTIVE_GATHER_MS: "3000" } }), 150_000);
 
 it("peer inbox (2026-11-02): a one-way notice's question reaches its receiver's own conversation as a card", () => withFixture(async (f) => {
-  const sender = (await f.cli("new-bot", "--name", "Katarina")).bot;
+  const sender = (await f.cli("new-bot", "--name", "Osprey")).bot;
   const teammate = (await f.cli("new-bot", "--name", "Harrie")).bot;
   await f.api(`/api/bots/${teammate.id}`, { proactiveMode: "off" }, "PATCH");
   f.plan[sender.id] = {
@@ -935,10 +935,10 @@ it("peer inbox (2026-11-02): a one-way notice's question reaches its receiver's 
 // 2026-11-02 (peer inbox, second pass, production): the wakes ran, but five
 // of six ended NOTHING_TO_REPORT ("Already told you at 1:32 p.m. ET"): the bot
 // took the reply of the notice's own thread, which its person never sees, for
-// one they had read, so nothing of Katarina's or Harrie's messages reached
+// one they had read, so nothing of Osprey's or Harrie's messages reached
 // the person. A wake on teammates' messages now always reports.
 it("peer inbox (second pass): a wake on a teammate's notice that ends NOTHING_TO_REPORT still reports to the person, with the bot's words or the digest", () => withFixture(async (f) => {
-  const sender = (await f.cli("new-bot", "--name", "Katarina")).bot;
+  const sender = (await f.cli("new-bot", "--name", "Osprey")).bot;
   const primary = (await f.cli("new-bot", "--name", "Melonie")).bot;
   const solo = (await f.cli("new-bot", "--name", "Harrie")).bot;
   await f.api(`/api/bots/${primary.id}`, { chiefOfStaff: true, acknowledgePeerScope: true }, "PATCH");
@@ -964,7 +964,7 @@ it("peer inbox (second pass): a wake on a teammate's notice that ends NOTHING_TO
   expect(primaryWake.output).toBe("Already told you at 1:32 p.m. ET: Alex has the box.");
   const soloWake = (await wakes(solo.id))[0];
   expect(soloWake.quiet).toBeUndefined();
-  expect(soloWake.output).toContain("Katarina: Claude Team invite action JC");
+  expect(soloWake.output).toContain("Osprey: Claude Team invite action JC");
   // the wake was told the person never sees the notice threads
   const wakePrompt = JSON.stringify(f.evidence().find((turn) => turn.botId === primary.id && JSON.stringify(turn.prompt).includes("Proactive wake"))!.prompt);
   expect(wakePrompt).toContain("The person never sees those threads");
@@ -977,7 +977,7 @@ it("peer inbox (second pass): a wake on a teammate's notice that ends NOTHING_TO
 }, { env: { SAGAX_PROACTIVE_GATHER_MS: "2000" } }), 150_000);
 
 it("peer inbox (second pass): a notice no wake runs for (proactive off) is shown in the receiver's own conversation, once, unread", () => withFixture(async (f) => {
-  const sender = (await f.cli("new-bot", "--name", "Katarina")).bot;
+  const sender = (await f.cli("new-bot", "--name", "Osprey")).bot;
   const teammate = (await f.cli("new-bot", "--name", "Harrie")).bot;
   await f.api(`/api/bots/${teammate.id}`, { proactiveMode: "off" }, "PATCH");
   f.plan[sender.id] = {
@@ -989,8 +989,8 @@ it("peer inbox (second pass): a notice no wake runs for (proactive off) is shown
   await f.api(`/api/bots/${sender.id}/messages`, { text: "Tell Harrie about the bank.", threadId: sender.activeTaskId });
   const bots = (await f.api("/api/bots?messages=0", undefined, "GET")).bots as any[];
   const main = bots.find((bot) => bot.id === teammate.id).threadId as string;
-  const lines = async () => (await f.messages(main)).filter((message) => String(message.tool?.name ?? "").startsWith("Message from Katarina"));
-  await expect.poll(async () => (await lines()).map((message) => message.tool.name), { timeout: 60_000, interval: 250 }).toEqual(["Message from Katarina: #Bank threshold"]);
+  const lines = async () => (await f.messages(main)).filter((message) => String(message.tool?.name ?? "").startsWith("Message from Osprey"));
+  await expect.poll(async () => (await lines()).map((message) => message.tool.name), { timeout: 60_000, interval: 250 }).toEqual(["Message from Osprey: #Bank threshold"]);
   const [line] = await lines();
   expect(line.threadRef).toMatchObject({ botId: teammate.id });
   expect(line.threadRef.threadId).not.toBe(main);
@@ -1002,7 +1002,7 @@ it("peer inbox (second pass): a notice no wake runs for (proactive off) is shown
 }), 150_000);
 
 it("peer inbox (second pass): a teammate's notice gathered before a restart (a pulsabot roll) wakes its receiver after it, with only ids on disk", () => withFixture(async (f) => {
-  const sender = (await f.cli("new-bot", "--name", "Katarina")).bot;
+  const sender = (await f.cli("new-bot", "--name", "Osprey")).bot;
   const receiver = (await f.cli("new-bot", "--name", "Melonie")).bot;
   f.plan[sender.id] = {
     steps: [{ tool: "send_to_bot", arguments: { bot_id: receiver.id, title: "Urgent Northwind 100200 client reply", message: "ROLL_SECRET_WORDS Sam answered on 100200" } }],

@@ -693,7 +693,7 @@ droite ; c'est une page comme Automations et la carte d'équipe).
 
 ### 2.22 Messages d'un autre bot (boîte d'entrée du bot)
 
-Ajouté le 2026-11-02 (JC : « tu as reçu plein de messages de Katarina, pourquoi tu ne
+Ajouté le 2026-11-02 (JC : « tu as reçu plein de messages de Osprey, pourquoi tu ne
 t'en occupes pas ? », et c'est pareil pour tous les bots). Comme Grok Bot : un bot traite
 les messages de ses coéquipiers à leur arrivée et ne montre à la personne que ce qui a
 besoin d'elle.

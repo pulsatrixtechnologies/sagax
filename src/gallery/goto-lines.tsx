@@ -20,7 +20,7 @@ await loadLocale(params.get("lang") ?? "en");
 const view = params.get("view") ?? "after";
 
 const bots = [
-  { id: "kat", name: "Katarina", color: "violet" },
+  { id: "kat", name: "Osprey", color: "violet" },
   { id: "emb", name: "Ember", color: "orange" },
   { id: "ts", name: "Timesheets", color: "blue" },
   { id: "sales", name: "Sales", color: "green" },
@@ -47,9 +47,9 @@ const items = [
 const group = collapseGotoLines(items, (item) => silentChatItem(item, false))[0] as GotoGroup;
 
 const namedRows = [
-  { threadId: "k1", otherBotId: "kat", otherName: "Katarina", direction: "out" as const, startedAt: 1, updatedAt: 2 },
-  { threadId: "k2", otherBotId: "kat", otherName: "Katarina", direction: "in" as const, startedAt: 2, updatedAt: 3 },
-  { threadId: "k3", otherBotId: "kat", otherName: "Katarina", direction: "out" as const, startedAt: 3, updatedAt: 4 },
+  { threadId: "k1", otherBotId: "kat", otherName: "Osprey", direction: "out" as const, startedAt: 1, updatedAt: 2 },
+  { threadId: "k2", otherBotId: "kat", otherName: "Osprey", direction: "in" as const, startedAt: 2, updatedAt: 3 },
+  { threadId: "k3", otherBotId: "kat", otherName: "Osprey", direction: "out" as const, startedAt: 3, updatedAt: 4 },
   { threadId: "e1", otherBotId: "emb", otherName: "Ember", direction: "out" as const, startedAt: 4, updatedAt: 5 },
 ];
 const namedGroup = gotoGroupFromConversations(namedRows, self)!;
@@ -63,7 +63,7 @@ function ChatPane() {
       <div ref={scrollRef} className="absolute inset-0 overflow-y-auto px-6 pb-[110px] pt-6">
         <div className="flex min-h-full flex-col justify-end gap-3">
           <div className="self-end rounded-[18px] bg-accent px-3 py-2 text-[13px] text-white">Catch me up on the bot-to-bot threads</div>
-          <div className="self-start rounded-[18px] bg-card px-3 py-2 text-[13px] text-ink">Katarina asked three times about the invoices.</div>
+          <div className="self-start rounded-[18px] bg-card px-3 py-2 text-[13px] text-ink">Osprey asked three times about the invoices.</div>
           <GotoGroupChip group={namedGroup} bots={bots} onSelect={() => false} />
         </div>
       </div>

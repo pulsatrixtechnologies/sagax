@@ -101,7 +101,7 @@ export function gotoGroupFromConversations(
 }
 
 /** Per-bot conversation counts for the compact chip label, highest count
- * first: "3 conversations with Katarina, 1 with Ember". */
+ * first: "3 conversations with Osprey, 1 with Ember". */
 export function gotoNamedCounts(
   entries: readonly GotoEntryView[],
 ): { name: string; count: number; bot: NonNullable<GotoEntryView["bot"]> }[] {

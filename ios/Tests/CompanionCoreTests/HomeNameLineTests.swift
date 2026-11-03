@@ -12,6 +12,6 @@ final class HomeNameLineTests: XCTestCase {
     }
 
     func testARoleAlreadyInTheNameIsNotRepeated() {
-        XCTAssertEqual(HomeNameLine.text(name: "Katarina · Ops lead", role: "ops lead"), "Katarina · Ops lead")
+        XCTAssertEqual(HomeNameLine.text(name: "Osprey · Ops lead", role: "ops lead"), "Osprey · Ops lead")
     }
 }

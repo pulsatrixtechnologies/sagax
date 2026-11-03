@@ -42,7 +42,7 @@ window.fetch = async (input, init) => {
 
 const message = {
   id: "vault-m1", role: "bot", kind: "secret", at: 0, text: "Login for example.test",
-  from: { botId: "bot-katarina", name: "Katarina", color: "violet" },
+  from: { botId: "bot-osprey", name: "Osprey", color: "violet" },
   secret: {
     target: "vaultLogin", label: "Login for example.test", description: "", placeholder: "", helpUrl: "", requestKey: "k1",
     vault: { principalId: "local", domain: "example.test", ...(allowed ? { itemId: "x", itemName: "Exemple travail", mode: "once", onePassword: true } : {}), ...(turn ? { itemName: "example.test", mode: "once", turnOnly: true } : {}) },
@@ -50,13 +50,13 @@ const message = {
   },
 } as unknown as Message;
 
-const store = { state: { bots: [{ id: "bot-katarina", name: "Katarina", color: "violet" }] }, dispatch: () => {}, flushBotPatches: async () => null } as unknown as ReturnType<typeof useStore>;
+const store = { state: { bots: [{ id: "bot-osprey", name: "Osprey", color: "violet" }] }, dispatch: () => {}, flushBotPatches: async () => null } as unknown as ReturnType<typeof useStore>;
 
 function Gallery() {
   return (
     <div className="min-h-screen bg-canvas p-6 text-ink">
       <div className="mx-auto max-w-[760px]" data-gallery-card>
-        <VaultRequestCard botId="bot-katarina" threadId="thread-1" message={message} />
+        <VaultRequestCard botId="bot-osprey" threadId="thread-1" message={message} />
       </div>
     </div>
   );

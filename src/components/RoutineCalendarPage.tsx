@@ -1076,7 +1076,10 @@ function EventEditorBody({
             <section data-routine-editor-section="what" className="min-w-0 space-y-1">
               <div className="flex min-w-0 items-center justify-between gap-2">
                 <h3 className={PANEL_LABEL}>{t("routineEditor.instruction")}</h3>
-                {existingRoutine && !readOnly && formatBot && <FormatWithAiButton bot={formatBot} routine={existingRoutine} />}
+                {/* 2026-11-03 (audit N-1): view mode only. In edit mode the form
+                    keeps its own copy of the instruction, so Save would put the
+                    old text back over the bot's reformatted one. */}
+                {viewing && existingRoutine && !readOnly && formatBot && <FormatWithAiButton bot={formatBot} routine={existingRoutine} />}
               </div>
               {viewing
                 ? <InstructionText text={description} />

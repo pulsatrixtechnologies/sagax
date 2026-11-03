@@ -1483,6 +1483,15 @@ export function threadsReferencing(fragment: string): string[] {
   return rows.map((row) => row.thread_id);
 }
 
+/** 2026-11-03 (audit S-5): threadsReferencing for many fragments at once,
+ * one pass over messages in the search worker, never on the server's thread. */
+export function threadsReferencingAsync(fragments: readonly string[]): Promise<Map<string, string[]>> {
+  if (!fragments.some((fragment) => fragment.length > 0)) return Promise.resolve(new Map());
+  db(); // the owner initializes/migrates the schema before any read-only scan
+  searchWorker ??= new MessageSearchWorker(DB_FILE());
+  return searchWorker.references(fragments);
+}
+
 /** Case-insensitive substring search over text messages, newest first.
  * Keep literal substring semantics; HTTP callers run the scan off-thread. */
 export function searchMessages(query: string, limit = 40, threadId?: string): SearchHit[] {

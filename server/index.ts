@@ -835,7 +835,7 @@ import { BUILT_IN_DRIVERS } from "./drivers/builtIn.ts";
 import { orgWithholdHostTools } from "./org/org-engine-admission.ts";
 import { openCodeProviderKeysAllowed, setOpenCodeProviderKeyPolicy } from "./drivers/acp/opencode-go.ts";
 import { getOrCreateChannel, mirrorActivity, mirrorReply, type CommsBus } from "./comms-visibility.ts";
-import { openApprovalCardMessages, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
+import { openApprovalCardMessages, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, threadsReferencingAsync, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
 import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
 import { contentEncryptionFromEnv } from "./encryption/content-encryption-env.ts";
 import { briefCrossingLabel, claimRecallCrossings } from "./recall/recall-disclosure.ts";
@@ -8557,14 +8557,27 @@ function sandboxBotFolder(botId: string): string | null {
 /** Which bot made each loose root entry: the bots whose conversations
  * (messages and tool calls) name /workspace/<entry>, else the bare name
  * when it is distinctive. Exactly one bot, or nobody. */
-function attributeSandboxEntries(_principalId: string, names: readonly string[]): Map<string, string> {
+async function attributeSandboxEntries(_principalId: string, names: readonly string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
-  // Each lookup scans the stored messages: the first 200 entries only, the
-  // rest go to _unsorted (a root that messy is mostly one bot's output).
-  for (const name of names.slice(0, 200)) {
-    const botsFor = (fragment: string) => new Set(threadsReferencing(fragment).map((threadId) => store.botByThread(threadId)?.id).filter((id): id is string => Boolean(id)));
+  // The first 200 entries only, the rest go to _unsorted (a root that messy
+  // is mostly one bot's output). 2026-11-03 (audit S-5): every fragment in
+  // ONE pass over messages, in the search worker, where this used to run up
+  // to 400 synchronous full scans and block the server at its first start.
+  const listed = names.slice(0, 200);
+  const bare = (name: string) => name.length >= 8 && /[._-]/.test(name);
+  const fragments = listed.flatMap((name) => [`/workspace/${name}`, ...(bare(name) ? [name] : [])]);
+  let threads: Map<string, string[]>;
+  try {
+    threads = await threadsReferencingAsync(fragments);
+  } catch (error) {
+    // busy or interrupted: nothing is attributed, the entries go to _unsorted
+    console.warn(`[workspace-tidy] attribution skipped: ${error instanceof Error ? error.message : String(error)}`);
+    return out;
+  }
+  const botsFor = (fragment: string) => new Set((threads.get(fragment) ?? []).map((threadId) => store.botByThread(threadId)?.id).filter((id): id is string => Boolean(id)));
+  for (const name of listed) {
     let bots = botsFor(`/workspace/${name}`);
-    if (bots.size === 0 && name.length >= 8 && /[._-]/.test(name)) bots = botsFor(name);
+    if (bots.size === 0 && bare(name)) bots = botsFor(name);
     if (bots.size === 1) out.set(name, [...bots][0]!);
   }
   return out;

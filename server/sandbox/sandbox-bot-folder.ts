@@ -365,8 +365,9 @@ export interface TidyMove {
 export interface WorkspaceTidyDeps {
   exec(principalId: string, input: SandboxExecInput, botId?: string): Promise<SandboxExecOutput>;
   /** Which bot made each of these root entries, by its conversations and
-   * tool calls; a name no single bot can be found for is left out. */
-  attribute(principalId: string, names: readonly string[]): Map<string, string>;
+   * tool calls; a name no single bot can be found for is left out. May
+   * answer later (one pass off the server's thread, audit S-5). */
+  attribute(principalId: string, names: readonly string[]): Map<string, string> | Promise<Map<string, string>>;
   /** The folder of a bot (null: the bot is gone). */
   folderOf(botId: string): string | null;
   /** After moves: update what pointed at the old paths (routines). */
@@ -429,7 +430,7 @@ export class WorkspaceTidier {
     if (found.tidied) return;
     const names = (found.entries ?? []).map((entry) => entry.name).filter((name): name is string => typeof name === "string" && name.length > 0);
     const date = new Date(this.now()).toISOString().slice(0, 10);
-    const owners = names.length ? this.deps.attribute(principalId, names) : new Map<string, string>();
+    const owners = names.length ? await this.deps.attribute(principalId, names) : new Map<string, string>();
     const moves = names.map((name) => {
       const owner = owners.get(name);
       const folder = owner ? this.deps.folderOf(owner) : null;

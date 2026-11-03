@@ -71,7 +71,7 @@ const {
   saveImageUpload,
   validateAttachmentUploadId,
 } = await import("./attachments.ts");
-const { setSharedHost } = await import("./host-kind.ts");
+const { setSharedHost } = await import("../host-kind.ts");
 
 // The cache tracks committed bytes in memory; anything that mutates
 // ATTACHMENTS_DIR directly on disk (rmSync/truncateSync/writeFileSync, all
@@ -678,7 +678,7 @@ describe("shared files", () => {
 describe("image size limit shared with the iOS app", () => {
   it("keeps AttachmentPolicy.maximumImageBytes equal to IMAGE_MAX_BYTES", async () => {
     const { readFileSync } = await import("node:fs");
-    const swift = readFileSync(new URL("../ios/Sources/CompanionCore/MessageAttachments.swift", import.meta.url), "utf8");
+    const swift = readFileSync(new URL("../../ios/Sources/CompanionCore/MessageAttachments.swift", import.meta.url), "utf8");
     const match = /maximumImageBytes = (\d+) \* 1_024 \* 1_024/.exec(swift);
     expect(match).not.toBeNull();
     expect(Number(match![1]) * 1024 * 1024).toBe(IMAGE_MAX_BYTES);
@@ -686,7 +686,7 @@ describe("image size limit shared with the iOS app", () => {
 
   it("keeps the iOS picture budget, count, file and video ceilings equal to the server's", async () => {
     const { readFileSync } = await import("node:fs");
-    const swift = readFileSync(new URL("../ios/Sources/CompanionCore/MessageAttachments.swift", import.meta.url), "utf8");
+    const swift = readFileSync(new URL("../../ios/Sources/CompanionCore/MessageAttachments.swift", import.meta.url), "utf8");
     const bytes = (name: string) => {
       const match = new RegExp(`${name} = ([\\d_* ]+)\\n`).exec(swift);
       expect(match, name).not.toBeNull();

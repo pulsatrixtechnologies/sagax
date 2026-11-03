@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
-import { startOrgServer } from "./testing/org-server-harness.ts";
-import type { FakeOidcUser } from "./testing/fake-oidc-provider.ts";
+import { startOrgServer } from "../testing/org-server-harness.ts";
+import type { FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 
 const alice: FakeOidcUser = { sub: "upload-alice", email: "alice@example.test", name: "Alice", preferred_username: "alice", role: "admin" };
 const bob: FakeOidcUser = { sub: "upload-bob", email: "bob@example.test", name: "Bob", preferred_username: "bob", role: "employee" };

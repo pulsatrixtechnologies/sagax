@@ -99,14 +99,14 @@ export const GUIDES: Guide[] = [
     title: "Read a .zip or other archive",
     keywords: "zip archive archives tar gz 7z lire read fichier compresse decompresser unzip piece jointe attachment",
     text: "Yes, when the person attaches it in the chat: the bot gets the archive and a manifest of its files (zip, tar, tar.gz, 7z), then reads the files with its tools. Solo: unpacked next to the upload. Organization: listed on the host, then copied and unpacked where the bot's tools run (its server environment, or the person's computer through the desktop app) at its first tool call. Limits: 5,000 files, 512 MB unpacked, 200:1 ratio.",
-    refs: ["file:server/attachment-archives.ts", "file:electron/archive-extract.mjs"],
+    refs: ["file:server/attachments/attachment-archives.ts", "file:electron/archive-extract.mjs"],
   },
   {
     id: "attachment-upload-recovery",
     title: "Attach a large file or retry an interrupted upload",
     keywords: "attachment upload retry interrupted large file video fichier piece jointe televersement reprendre reessayer",
     text: "Attach or drop a file in the composer. Documents, audio and archives accept up to 250 MB each; videos accept up to 1 GB. Pictures keep 32 MB on a shared host and 90 MB on a solo host. Files larger than 4 MB upload in resumable chunks with progress. Removing the chip cancels the upload; Retry upload resumes the acknowledged bytes of that same file, including after the server restarts. The file is committed only after its content checks pass. Existing buffered previews have a separate 25 MB shared or 90 MB solo limit. Archives keep their unpacked-size and path rules. No extra administrator action is needed to attach your files.",
-    refs: ["file:server/attachments.ts", "file:src/lib/attachment-uploads.ts"],
+    refs: ["file:server/attachments/attachments.ts", "file:src/lib/attachment-uploads.ts"],
   },
   {
     id: "create-bot",

@@ -19,7 +19,7 @@ import {
 import { dirname, join, sep } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
-import { FILE_MAX_BYTES } from "../attachments.ts";
+import { FILE_MAX_BYTES } from "../attachments/attachments.ts";
 import { noteAtRestWrite } from "../encryption/content-at-rest.ts";
 import { journalMemoryDelete, journalMemoryWrite } from "../memory/memory-journal.ts";
 import { MemoryStoreError, parseMemoryPath, readMemoryDoc } from "../memory/memory-store.ts";

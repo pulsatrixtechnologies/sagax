@@ -11,7 +11,7 @@ import {
   maxBytesForFileMime,
   saveFile,
   saveImage,
-} from "../attachments.ts";
+} from "../attachments/attachments.ts";
 import { mimeFor, openFileSavedSince, openMessageFile, type OpenedMessageFile } from "../messages/message-file.ts";
 import type { Message } from "../store.ts";
 

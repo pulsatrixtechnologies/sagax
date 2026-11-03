@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { readAttachment, saveFile, saveImage, setAttachmentStillShown } from "../attachments.ts";
+import { readAttachment, saveFile, saveImage, setAttachmentStillShown } from "../attachments/attachments.ts";
 import { DATA_DIR, EVENTS_DIR, NATIVE_DIR } from "../config.ts";
 import {
   ContentErased,

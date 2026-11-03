@@ -49,7 +49,7 @@ const load = <T>(path: string) => import(pathToFileURL(join(repo, path)).href) a
 type Any = Record<string, (...args: never[]) => unknown> & Record<string, unknown>;
 const db = await load<Any>("server/messages/message-db.ts");
 const workspace = await load<Any>("server/workspace/workspace.ts");
-const attachments = await load<Any>("server/attachments.ts");
+const attachments = await load<Any>("server/attachments/attachments.ts");
 const messageFile = await load<Any>("server/messages/message-file.ts");
 const native = await load<Any>("server/drivers/native.ts");
 const threadEvents = await load<Any>("server/threads/thread-events.ts");

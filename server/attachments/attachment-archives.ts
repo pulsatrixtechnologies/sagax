@@ -8,7 +8,7 @@
 // - organization server: never on the Sagax host. The upload is only LISTED
 //   here (read-only; a bounded walk of the directory or the tar stream). The
 //   archive is copied where the turn's tools run (server environment or the
-//   person's computer, server/attachment-staging.ts) and unpacked there at
+//   person's computer, server/attachments/attachment-staging.ts) and unpacked there at
 //   the bot's first tool call: by sandboxArchiveScript in the server
 //   environment, by the desktop app's `extract_archive` on the computer.
 //
@@ -25,9 +25,9 @@ import {
   listArchive,
   readSmallArchiveTexts,
   type ArchiveManifest,
-} from "../electron/archive-extract.mjs";
-import { formatArchiveBytes as formatBytes } from "../shared/format-bytes.ts";
-import { readAtRestTextSync } from "./encryption/content-at-rest.ts";
+} from "../../electron/archive-extract.mjs";
+import { formatArchiveBytes as formatBytes } from "../../shared/format-bytes.ts";
+import { readAtRestTextSync } from "../encryption/content-at-rest.ts";
 import { ATTACHMENTS_DIR } from "./attachments.ts";
 import { INLINE_FILE_MAX_BYTES, INLINE_TOTAL_MAX_BYTES } from "./attachment-staging.ts";
 

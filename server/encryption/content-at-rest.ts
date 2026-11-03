@@ -164,7 +164,7 @@ interface AtRestRoot {
 
 const roots: AtRestRoot[] = [];
 
-/** server/workspace/workspace.ts (memory) and server/attachments.ts register theirs. */
+/** server/workspace/workspace.ts (memory) and server/attachments/attachments.ts register theirs. */
 export function registerAtRestRoot(root: AtRestRoot): void {
   const index = roots.findIndex((entry) => entry.id === root.id);
   if (index >= 0) roots[index] = root;

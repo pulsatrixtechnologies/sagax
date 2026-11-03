@@ -313,7 +313,7 @@ import {
   saveAudio,
   saveFile,
   saveImage
-} from "./attachments.ts";
+} from "./attachments/attachments.ts";
 import {
   messageAttachmentTags,
   messageFileRoots,
@@ -2598,9 +2598,9 @@ import {
   createDesktopBridgeRoutes
 } from "./desktop/desktop-bridge-routes.ts";
 import { DesktopTunnels, startEgressProxy, type EgressProxy } from "./desktop/desktop-egress.ts";
-import { attachedFilesInText, attachmentChunks, attachmentIsTheirs, stageTurnAttachments, stagedName, SANDBOX_ATTACHMENTS_DIR, type StagingTarget, type TurnAttachedFile } from "./attachment-staging.ts";
+import { attachedFilesInText, attachmentChunks, attachmentIsTheirs, stageTurnAttachments, stagedName, SANDBOX_ATTACHMENTS_DIR, type StagingTarget, type TurnAttachedFile } from "./attachments/attachment-staging.ts";
 import { OFFICE_IMAGE_MAX_COUNT, OFFICE_IMAGES_MAX_TOTAL_BYTES, officeKind, officeMediaFolder, officeNote, readOfficeMedia } from "./office-media.ts";
-import { archiveInlineTexts, archiveNote, extractedFolderName, localExtractedPath, recoverArchiveUpload, sandboxArchiveArgv, storedArchiveManifest } from "./attachment-archives.ts";
+import { archiveInlineTexts, archiveNote, extractedFolderName, localExtractedPath, recoverArchiveUpload, sandboxArchiveArgv, storedArchiveManifest } from "./attachments/attachment-archives.ts";
 import { BOT_WORKPLACE_PREFERENCE, DESKTOP_BRIDGE_MCP_NAME, parseBotWorkplace, type BotWorkplace } from "../shared/bot-workplace.ts";
 import { accessCardAudience, accessCardForViewer, engineNameForViewer, keyEngineProvider, orgKeyEngineName, signInExpiredCard, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberOwnedBot, resolveTurnSpeaker, routineAccessNotifications, routineLineage, speakerPrincipal, type EngineAccessRefusal, type MemberHostToolPlace, type TurnSpeaker } from "./engines/engine-access.ts";
 import {
@@ -6866,7 +6866,7 @@ function decideWorkplace(input: { desktopTargeted: boolean; routine: boolean; pr
   });
 }
 
-/** Stored files (server/attachments.ts) a text names by their path here. */
+/** Stored files (server/attachments/attachments.ts) a text names by their path here. */
 function storedNamesIn(text: string | undefined): string[] {
   if (!text || !text.includes(ATTACHMENTS_DIR)) return [];
   const out = new Set<string>();
@@ -6958,7 +6958,7 @@ function openForComingTurn(botId: string, threadId: string): void {
 }
 
 /** The provider text for this turn with the speaker's own attachments
- * pointed where the tools run (server/attachment-staging.ts). Another
+ * pointed where the tools run (server/attachments/attachment-staging.ts). Another
  * person's upload is left as is and never copied. */
 function workplaceTurnText(text: string, decision: WorkplaceDecision): { text: string; staging: TurnWorkplace["staging"]; annotated: boolean } {
   if (IDENTITY.kind !== "perspicax") return { ...soloArchiveText(text), staging: null };
@@ -6971,7 +6971,7 @@ function workplaceTurnText(text: string, decision: WorkplaceDecision): { text: s
     : decision.target === "user-sandbox" ? { kind: "user-sandbox" } : null;
   let annotated = false;
   // An archive also gets its manifest, and the folder it is unpacked into
-  // next to its copy at the first tool call (server/attachment-archives.ts).
+  // next to its copy at the first tool call (server/attachments/attachment-archives.ts).
   const staged = stageTurnAttachments(text, files, target, (file, where) => {
     if (!isArchiveAttachment(file.file)) return null;
     annotated = true;

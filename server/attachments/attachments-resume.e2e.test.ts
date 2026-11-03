@@ -1,8 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
-import { launchVerificationServer, verificationServerArgs, verificationServerEnvironment } from "../scripts/control-omb.ts";
-import { waitForExit } from "./testing/cleanup.ts";
+import { launchVerificationServer, verificationServerArgs, verificationServerEnvironment } from "../../scripts/control-omb.ts";
+import { waitForExit } from "../testing/cleanup.ts";
 
 it("resumes a real HTTP upload after the fixture server restarts and serves the committed bytes", async () => {
   const fixture = await launchVerificationServer({ ...process.env, SAGAX_CONTENT_ENCRYPTION: "off" });

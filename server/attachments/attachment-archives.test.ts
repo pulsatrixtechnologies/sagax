@@ -1,5 +1,5 @@
 // Attached archives: manifest kept at upload, unpacked only where the bot
-// works, a short manifest in the bot's message (server/attachment-archives.ts).
+// works, a short manifest in the bot's message (server/attachments/attachment-archives.ts).
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -18,9 +18,9 @@ import {
   storedArchiveManifest,
   type StoredArchiveManifest,
 } from "./attachment-archives.ts";
-import { readSmallArchiveTexts } from "../electron/archive-extract.mjs";
+import { readSmallArchiveTexts } from "../../electron/archive-extract.mjs";
 import { attachedFilesInText, displayName, stageTurnAttachments, stagedName } from "./attachment-staging.ts";
-import { tarArchive, zipArchive } from "./testing/archive-fixtures.mjs";
+import { tarArchive, zipArchive } from "../testing/archive-fixtures.mjs";
 
 const UPLOAD = "0b5a3c1e-1111-4222-8333-444455556666";
 const scratch = () => mkdtempSync(join(tmpdir(), "sagax-archives-"));

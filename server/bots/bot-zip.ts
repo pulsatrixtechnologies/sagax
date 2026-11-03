@@ -64,7 +64,7 @@ import { isPackageDocument, parsePackageDocument } from "../../shared/package-fo
 import { redactSecretsInText } from "../../shared/redact.ts";
 import { parseToolScope } from "../../shared/tool-scope.ts";
 import { EFFORT_LEVELS, type ModelSelection } from "../../shared/wire.ts";
-import { ATTACHMENTS_DIR, readAttachment, saveImage, saveImportedAttachment } from "../attachments.ts";
+import { ATTACHMENTS_DIR, readAttachment, saveImage, saveImportedAttachment } from "../attachments/attachments.ts";
 import { botFolder, SOUL_FILE } from "./bot-folder.ts";
 import type { BotPlugins } from "./bot-plugins.ts";
 import { profilePatchSchema } from "./bot-profile.ts";

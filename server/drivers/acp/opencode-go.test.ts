@@ -24,7 +24,7 @@ import {
   resetOpenCodeModelCache,
   setOpenCodeProviderKeyPolicy,
 } from "./opencode-go.ts";
-import { ATTACHMENTS_DIR } from "../../attachments.ts";
+import { ATTACHMENTS_DIR } from "../../attachments/attachments.ts";
 import { OPENCODE_PROVIDER_ENV } from "../../config.ts";
 import { hostedWorkspaceConfigured } from "../../enterprise.ts";
 import { TASK_WORKSPACES_DIR, workspaceDir } from "../../workspace/workspace.ts";

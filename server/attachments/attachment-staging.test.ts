@@ -1,4 +1,4 @@
-// Attachments where the bot's tools run (server/attachment-staging.ts): the
+// Attachments where the bot's tools run (server/attachments/attachment-staging.ts): the
 // tag the bot sees names the copy in its target, small text files come
 // inline, and only the speaker's own uploads are ever copied.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";

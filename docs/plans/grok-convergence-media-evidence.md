@@ -119,7 +119,7 @@ Remaining in Lot 4:
 - The Perspicax control-plane proxy for AKS sandboxes lives in another
   repository and was not inspected here. It must forward Range and keep
   no-transform responses unencoded.
-- Done at integration: `server/attachments.test.ts` keeps the native
+- Done at integration: `server/attachments/attachments.test.ts` keeps the native
   `AttachmentPolicy` picture budget, count, file and video ceilings equal to
   the server's.
 - Provider request size with 32 scaled pictures (up to 3.75 MB each) has not

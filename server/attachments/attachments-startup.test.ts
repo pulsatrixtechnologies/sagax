@@ -3,7 +3,7 @@ import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
 
 // Obstruct only the attachments directory in the launcher's disposable home.
 // The real child still boots normally and handles real HTTP requests.

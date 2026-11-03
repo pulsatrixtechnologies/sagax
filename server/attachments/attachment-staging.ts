@@ -23,7 +23,7 @@ import { dirname, extname, posix, resolve, win32 } from "node:path";
 
 import { fromMarkdown } from "mdast-util-from-markdown";
 
-import { atRestChunks, atRestSizeSync, readAtRestSync } from "./encryption/content-at-rest.ts";
+import { atRestChunks, atRestSizeSync, readAtRestSync } from "../encryption/content-at-rest.ts";
 import { maxBytesForAttachment } from "./attachments.ts";
 
 const OWNED_FILE_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.[a-z0-9]{1,8}$/;
@@ -161,7 +161,7 @@ function inlineText(file: TurnAttachedFile): string | null {
 /** The provider-facing text: each of the speaker's own attachment tags
  * names the copy in the target and, for small text files, carries the
  * content; `annotate` may add a block after a tag (an archive's manifest,
- * server/attachment-archives.ts). Tags for files that are not theirs are
+ * server/attachments/attachment-archives.ts). Tags for files that are not theirs are
  * left untouched (and are never copied). Returns the files to copy at the
  * first tool call. */
 export function stageTurnAttachments(

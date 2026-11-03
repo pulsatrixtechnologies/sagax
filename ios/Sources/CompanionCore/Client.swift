@@ -1195,7 +1195,7 @@ public struct CompanionClient: Sendable {
     /// Fetch a parked voice note with the paired-device bearer token — the
     /// same authenticated /api/attachments route avatar bytes ride, never a
     /// bare URL a page could steer. The name follows the route's own
-    /// discipline (readAttachment in server/attachments.ts): one bare
+    /// discipline (readAttachment in server/attachments/attachments.ts): one bare
     /// generated mp3 filename.
     public func voiceNote(path: String) async throws -> Data {
         guard let name = Self.voiceNoteFileName(path) else { throw APIError.badURL }

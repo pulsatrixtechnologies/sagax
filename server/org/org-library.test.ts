@@ -89,7 +89,7 @@ async function installation(from?: string) {
   const skills = await import("../skills/skills.ts");
   const workspace = await import("../workspace/workspace.ts");
   const sections = await import("../rooms/section-context.ts");
-  const { saveImage } = await import("../attachments.ts");
+  const { saveImage } = await import("../attachments/attachments.ts");
   const { botAvatarUrlFromStoredPath } = await import("../../shared/bot-avatar.ts");
   const { DATA_DIR } = await import("../config.ts");
   const { OrgLibrary, parseOrgLibraryCatalog } = await import("./org-library.ts");

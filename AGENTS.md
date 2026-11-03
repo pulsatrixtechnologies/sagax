@@ -6623,7 +6623,7 @@ person run the solo-mode tools on that person's own computer, as the MCP
 server `sagax-desktop` (shell, files, search, fetch, offscreen browser,
 computer use, Local VM), and the engine's own network traffic leaves through
 it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
-`server/desktop/desktop-egress.test.ts`, `server/attachment-staging.test.ts`,
+`server/desktop/desktop-egress.test.ts`, `server/attachments/attachment-staging.test.ts`,
 `electron/local-vm.node-test.mjs`, `electron/desktop-bridge.node-test.mjs`,
 `server/computer/local-vm-computer.test.ts` or
 `scripts/verify/dev/verify-desktop-bridge.ts`:
@@ -6725,7 +6725,7 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
   message naming them is theirs; small text ones are inlined, all are copied
   where the tools run at the first tool call, and the tag names that path.
 - Archives (zip, tar, tar.gz, 7z; 250 MB per file): the server only LISTS
-  them (`server/attachment-archives.ts`); they are unpacked where the bot
+  them (`server/attachments/attachment-archives.ts`); they are unpacked where the bot
   works, next to the copy, at the first tool call (python3 in the server
   environment, `extract_archive` on the desktop, `electron/archive-extract.mjs`;
   solo: next to the upload). No links, nothing outside the folder, bomb limits
@@ -6736,13 +6736,13 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
   server, so the bot applies a profile with `propose_profile`,
   `skill_manage`, `memory_update` and `propose_routine` and does not
   download the zip or open a browser to read it. Tests:
-  `electron/archive-extract.node-test.mjs`, `server/attachment-archives.test.ts`,
+  `electron/archive-extract.node-test.mjs`, `server/attachments/attachment-archives.test.ts`,
   `server/archive-attachments.e2e.test.ts`, `server/desktop/desktop-bridge.e2e.test.ts`.
 - Large conversation files: documents and audio stop at 250 MB, videos at
   1 GB, shared images at 32 MB and solo images at 90 MB. Pictures in one
   message share 200 MiB and at most 32 images on every host
   (`IMAGE_AGGREGATE_MAX_BYTES`/`MESSAGE_IMAGE_MAX_COUNT` in
-  `server/attachments.ts`, mirrored in `src/lib/composer-attachments.ts`,
+  `server/attachments/attachments.ts`, mirrored in `src/lib/composer-attachments.ts`,
   enforced by `server/turns/turn-images.ts` and refused before upload by
   `startAttachmentUpload` with a composer notice). Other files keep no
   message count. `attach_file` copies use the same per-kind ceilings. The exact-message
@@ -6762,7 +6762,7 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
   Caddy's `encode`, Cloudflare and other proxies never compress a body whose
   Content-Length and Content-Range describe stored bytes; Caddy already skips
   206. Tests:
-  `server/threads/thread-files.e2e.test.ts`, `server/attachments-resume-org.e2e.test.ts`,
+  `server/threads/thread-files.e2e.test.ts`, `server/attachments/attachments-resume-org.e2e.test.ts`,
   `server/media-proxy.test.ts`, `src/components/AttachmentGallery.test.ts`,
   `src/components/bot-settings/FilesSection.media.dom.test.ts`,
   `server/turns/turn-images.test.ts`, `src/lib/attachment-uploads.test.ts`,

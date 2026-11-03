@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const DATA_ROOT = mkdtempSync(join(tmpdir(), "omb-bot-attachment-"));
 process.env.SAGAX_DATA_DIR = join(DATA_ROOT, "data");
 const { attachForTurn, deliveredCopy, guestWorkspaceToHost, saveBotAttachment } = await import("./bot-attachment.ts");
-const { ATTACHMENTS_DIR } = await import("../attachments.ts");
+const { ATTACHMENTS_DIR } = await import("../attachments/attachments.ts");
 
 const WORK = join(DATA_ROOT, "work");
 const VM_HOME = join(DATA_ROOT, "vm-home");

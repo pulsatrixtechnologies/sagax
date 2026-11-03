@@ -19,12 +19,12 @@ import {
 } from "node:fs";
 import { link, open, unlink } from "node:fs/promises";
 import { basename, dirname, join, extname, resolve, sep } from "node:path";
-import { DATA_DIR } from "./config.ts";
-import { atRestChunks, atRestInfoSync, holdPlain, isAtRestTemp, noteAtRestWrite, readAtRestSync, registerAtRestRoot, releasePlain, type ContentScope } from "./encryption/content-at-rest.ts";
-import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
+import { DATA_DIR } from "../config.ts";
+import { atRestChunks, atRestInfoSync, holdPlain, isAtRestTemp, noteAtRestWrite, readAtRestSync, registerAtRestRoot, releasePlain, type ContentScope } from "../encryption/content-at-rest.ts";
+import { WORKSPACE_OWNER } from "../encryption/content-keys.ts";
 import { UploadContentError, assertContentMatches, checkUploadedFile } from "./upload-content-check.ts";
-import { isSharedHost } from "./host-kind.ts";
-import { privateMediaIdentity } from "./media-proxy.ts";
+import { isSharedHost } from "../host-kind.ts";
+import { privateMediaIdentity } from "../media-proxy.ts";
 
 export const ATTACHMENTS_DIR = join(DATA_DIR, "attachments");
 
@@ -156,7 +156,7 @@ const IMAGE_MIMES: Record<string, string> = {
 };
 
 /** Archives a person may attach: the bot gets the archive and, unpacked
- * where it works, its contents (server/attachment-archives.ts). A gzip
+ * where it works, its contents (server/attachments/attachment-archives.ts). A gzip
  * upload is a tar.gz: it is stored as .tgz. */
 const ARCHIVE_MIMES: Readonly<Record<string, string>> = {
   "application/zip": ".zip",

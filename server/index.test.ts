@@ -28,7 +28,7 @@ import { startFakeHttpMcp } from "./testing/fake-http-mcp-server.ts";
 import { startFakeOAuthMcp } from "./testing/fake-oauth-mcp-server.ts";
 import { freePortBlock } from "./testing/ports.ts";
 import { openSse } from "./testing/sse.ts";
-import { fileMaxBytes, imageMaxBytes } from "./attachments.ts";
+import { fileMaxBytes, imageMaxBytes } from "./attachments/attachments.ts";
 import { MISUSE_POLICY_PROMPT } from "../shared/misuse-guardrails.ts";
 import { computerPrompt, RUN_YOURSELF_PROMPT, SIGN_IN_PROMPT, VERIFY_FIRST_PROMPT } from "./system-prompt.ts";
 import {

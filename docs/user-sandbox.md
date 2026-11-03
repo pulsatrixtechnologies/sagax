@@ -48,7 +48,7 @@ Code: `server/sandbox/user-sandbox-routing.ts` (targets, owner), `server/sandbox
 (`run_command`, `read_file`, `write_file`, `list_files`, `browse`,
 `computer_list_tools`, `computer_use`, mounted as the MCP server
 `sagax-environment`), `server/sandbox/user-sandbox-manager.ts` (lifecycle on
-the Sagax side), `server/sandboxd*.ts` (the provisioner), `server/sandbox/user-sandbox-spec.ts`
+the Sagax side), `server/sandboxd.ts` and `server/sandbox/sandboxd-*.ts` (the provisioner), `server/sandbox/user-sandbox-spec.ts`
 (the exact container, network and egress policy).
 
 `read_file`, `list_files` and `write_file` resolve their path inside the environment first

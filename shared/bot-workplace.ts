@@ -1,7 +1,7 @@
 // Where bots work for a person on an organization server (server mode):
 // "computer", their own PC through their Sagax desktop app (the desktop
 // bridge, server/desktop/desktop-bridge.ts), or "server", their server environment
-// (server/user-sandbox-*.ts). A per-person preference that travels with the
+// (server/sandbox/user-sandbox-*.ts). A per-person preference that travels with the
 // person (shared/user-preferences.ts) and that the server reads at each turn.
 //
 // Stored as one JSON string under BOT_WORKPLACE_PREFERENCE, like every

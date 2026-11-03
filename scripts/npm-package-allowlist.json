@@ -32,7 +32,7 @@
   },
   {
     "term": "grok-bot",
-    "files": "^dist-server/(?:shared/grok-import|server/team-library|server/routes/team-library-grok)\\.js$",
+    "files": "^dist-server/(?:shared/grok-import|server/team/team-library|server/routes/team-library-grok)\\.js$",
     "context": "Grok Bot|grok-bot",
     "reason": "The bot importer and its x.ai share-card reader (shared/grok-import.ts, server/team/team-library.ts, server/routes/team-library-grok.ts): Grok Bot is the public name of the x.ai product whose shared bots they import, so their messages, defaults and the grok-bot id fallback name it. Only these compiled files."
   },

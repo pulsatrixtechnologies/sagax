@@ -135,7 +135,7 @@ job: progress, receipts, replaced by the MP4) and `routes/video-internal.ts`.
 The journal is written before the billable POST and never holds prompts,
 keys or signed URLs. Never resubmit an unacknowledged POST; retry resumes the
 same request_id. Restart resumes pending/downloading only. Unknown poll
-states stay pending. Tests: `server/video-*.test.ts` and the two
+states stay pending. Tests: `server/video/video-*.test.ts` and the two
 `video-generation*.e2e.test.ts` (loopback xAI stand-in, SIGKILL restart).
 Evidence: `docs/plans/grok-convergence-media-evidence.md`.
 
@@ -5088,7 +5088,7 @@ onboarding tests:
   to `GET /api/auth/session` and serves `/api/people/<operator>/avatar?v=`;
   the companion sidecar lets that route through. Refreshed at server start,
   after a sign-in, when saved servers change and every 15 minutes. Tests:
-  `server/owner-identity*.test.ts`, `electron/owner-identity.node-test.mjs`,
+  `server/people/owner-identity*.test.ts`, `electron/owner-identity.node-test.mjs`,
   `PARITY_OWNER=1` with `OrgAvatarUITests`.
 
 ## Settings layout: one card level, sub-pages for long settings
@@ -6503,8 +6503,8 @@ conversation, the bot OWNER's for routines, the asker's or else the room
 creator's in a room (`sandboxPrincipalForTurn`). One isolated container per
 person, never per bot, never on the Sagax host (`docs/user-sandbox.md`).
 A cloud routine and a room stay on that environment. A team computer does
-not open a shared machine. Keep these rules, each covered by `server/user-sandbox*.test.ts`,
-`server/sandboxd*.test.ts` or `server/user-sandbox.e2e.test.ts`:
+not open a shared machine. Keep these rules, each covered by `server/sandbox/user-sandbox*.test.ts`,
+`server/sandboxd.test.ts`, `server/sandbox/sandboxd-*.test.ts` or `server/user-sandbox.e2e.test.ts`:
 
 - Only `sagax-sandboxd` (`server/sandboxd.ts`) holds the Docker socket; the
   Sagax server calls it with signed requests (`server/sandbox/sandboxd-auth.ts`).
@@ -6618,11 +6618,11 @@ server; failure delivery has its own bounded cancellation signal.
 
 In server mode the desktop app is the bridge between the organization server
 and the person's PC (`electron/desktop-bridge.mjs`, `electron/desktop-tunnel.mjs`,
-`server/desktop-bridge*.ts`, `server/desktop/desktop-egress.ts`). Bots working for a
+`server/desktop/desktop-bridge*.ts`, `server/desktop/desktop-egress.ts`). Bots working for a
 person run the solo-mode tools on that person's own computer, as the MCP
 server `sagax-desktop` (shell, files, search, fetch, offscreen browser,
 computer use, Local VM), and the engine's own network traffic leaves through
-it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
+it. Keep these rules, each covered by `server/desktop/desktop-bridge*.test.ts`,
 `server/desktop/desktop-egress.test.ts`, `server/attachments/attachment-staging.test.ts`,
 `electron/local-vm.node-test.mjs`, `electron/desktop-bridge.node-test.mjs`,
 `server/computer/local-vm-computer.test.ts` or

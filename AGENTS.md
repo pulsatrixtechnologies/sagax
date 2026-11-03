@@ -7504,15 +7504,32 @@ so the card shows what the bot did to it until GitHub says more.
 Rules, none optional (`server/routes/bot-code-branches.ts`, git in
 `server/code-branches.ts`):
 
-- Where: the coding thread's own folder (`task.cwd`) when it is a git
-  repository on this server; a branch is acted on only if that thread
-  worked on it (its own calls; never the folder's checked-out branch just
-  because it is there). A branch
-  whose repository is elsewhere (the person's sandbox, a Local VM, their
-  computer through the bridge) reads `place: "elsewhere"` and nothing runs
-  (known gap: those places have exec paths, `UserSandboxManager.exec`,
-  `containerExec`, the bridge's `run_command`, but no thread records the
-  repository's folder there).
+- Where (2026-11-02, a branch the bot made on the owner's cloud computer read
+  "elsewhere" with every action greyed): a branch is acted on only if its
+  thread worked on it (its own calls; never the folder's checked-out branch
+  just because it is there), WHERE that thread's git ran for it
+  (`server/remote-support/branch-place.ts`: the newest call that created,
+  checked out, committed on or pushed it, its `cd`s and `git -C` followed).
+  On one of the bot's computers the actions run there, through the channel
+  the bot's own commands used (`branch-channels.ts`, `place: "remote"`,
+  `computer` says which): `sagax-environment` run_command, the viewer's own
+  cloud computer (server environment, in the bot's folder there);
+  `sagax-desktop` run_command and `local_vm`, the viewer's own computer and
+  its Local VM through their desktop app (its text answer framed: output
+  and errors come back base64 on one marker line, exact); `vm_exec`, a solo
+  server's Local VM (never an organization server's host); a remote
+  session. The folder is probed in one round trip (where the bot ran git,
+  else another folder it ran git in there) and used by its real path. Only
+  the viewer's own cloud computer and desktop are ever reached, never the
+  bot owner's. Else the thread's own folder (`task.cwd`) when it is a git
+  repository on this server. A branch no channel reaches (no computer of
+  the person's, a tool no channel names, Boat cloud computers) reads
+  `place: "elsewhere"`; an offline computer, an unknown folder, Windows or
+  an unknown OS read as such. In each of those the menu says why in plain
+  words and what to do, and each action becomes one click that asks the bot
+  to do it ("Ask <bot> to do it", the request sent as the person's message
+  in the branch's own conversation; a delete asks to confirm first). Never
+  a silent grey menu, never "this server".
 - Who: the thread must pass `thread.post` for the viewer (not theirs reads
   as 404). Their own branch asks no approval. Push and pull requests use
   their own credentials: on a solo server the host's git and gh are theirs;
@@ -7522,7 +7539,14 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
   `GH_TOKEN` and an empty config; without it the action is refused
   (`github_not_connected`), never done with the server's or the
   organization's tokens. The token rides the push call only (and the
-  remote HEAD read with it), never status, add, commit or diff. On an
+  remote HEAD read with it), never status, add, commit or diff. The
+  viewer's cloud computer follows the same rule: their GitHub connection
+  signs a push to `https://github.com/<repo>.git` and gh, through the
+  exec's `SAGAX_GH_TOKEN` variable (never a command line), else
+  `github_not_connected`; a remote elsewhere than GitHub takes that
+  environment's own sign-in. Their own computer, its Local VM and a
+  client's computer use that computer's own sign-in: no token is ever sent
+  there (a push or pull request on a client's computer asks to confirm). On an
   organization server: a request with no person is refused (`no_person`),
   never run as the server; git and gh get no `HOME`, ssh agent or config
   folder of the server's (`isolated`); a commit needs the person's name and
@@ -7558,8 +7582,13 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
   branches yet; the card and a subset of actions (Push, PR, Archive) are
   for later.
 - Tests: `server/routes/bot-code-branches.e2e.test.ts` (real git, a bare
-  local remote), `src/components/bot-settings/CodeBranchList.test.ts`,
-  `ActivitySection.test.ts`, `server/activity-code-work.test.ts`.
+  local remote; each computer kind, each action through the remote path,
+  the credential rule), `server/remote-support/branch-place.test.ts`,
+  `branch-channels.test.ts` (framing on sh, bash and zsh; reach per kind),
+  `remote-code-branches.test.ts`,
+  `src/components/bot-settings/CodeBranchList.test.ts`,
+  `CodeBranchList.ask.test.ts` (the ask click), `ActivitySection.test.ts`,
+  `server/activity-code-work.test.ts`.
   Screenshots: `node scripts/capture/bot-panel-coding.mjs` (headless, the
   gallery `src/gallery/bot-panel-coding.html`).
 

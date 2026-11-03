@@ -50,7 +50,7 @@ function Panel() {
       <div className="flex flex-col gap-6 px-4 pb-6 pt-4">
         <section data-bot-settings-section="coding" className="flex flex-col gap-2">
           <SectionHeader icon={<SquareTerminal size={16} aria-hidden="true" className="text-ink-secondary" />} title={t("botPanel.coding.title")} name="coding" onOpenHistory={() => {}} />
-          <CodeWorkList work={work} now={NOW} branchActions={{ botId: "pepper", onArchive: async () => {} }} />
+          <CodeWorkList work={work} now={NOW} branchActions={{ botId: "pepper", botName: "Pepper", onArchive: async () => {} }} />
         </section>
         <section data-bot-settings-section="routines" className="flex flex-col gap-3">
           <div className="flex items-center gap-2">

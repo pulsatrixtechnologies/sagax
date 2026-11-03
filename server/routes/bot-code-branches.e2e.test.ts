@@ -288,6 +288,18 @@ describe("Coding branches: acted on where the repository is", () => {
     }
   });
 
+  it("keeps acting on this server's repository when the computer a call names has no channel here", async () => {
+    // a solo server: a host shell that carries a computer tool's name, no cloud computer
+    const asked: string[] = [];
+    const api = await serve(deps({
+      messages: () => ({ messages: [{ at: NOW - 60_000, tool: { name: "run_command", ok: true, input: JSON.stringify({ command: "git worktree add -b feat/widgets ../wt" }) } }] }),
+      remote: { reach: (_b, _t, _v, place) => { asked.push(place.computer); return null; }, exec: () => async () => ({ error: "none" }) },
+    }));
+    const { body } = await api.get(`/api/bots/pepper/code/branch?${q("feat/widgets")}`);
+    expect(body).toMatchObject({ place: "server", folderName: "repo", state: { exists: true } });
+    expect(asked).toEqual(["sandbox"]);
+  });
+
   it("says a branch whose repository is elsewhere has no actions here", async () => {
     const api = await serve(deps({ tasks: () => [{ threadId: "t1", title: "x", cwd: join(dir, "not-a-repo") }] }));
     mkdirSync(join(dir, "not-a-repo"), { recursive: true });
@@ -388,6 +400,196 @@ describe("Coding branches: on the bot's own computer", () => {
 
     const windows = await serve(deps(remoteOverrides({ computer: true, online: true, host: "PC", osKnown: true, windows: true })));
     expect((await windows.get(`/api/bots/pepper/code/branch?${qr()}`)).body).toMatchObject({ place: "remote", publishBlocked: "unknown_os", canPublish: false });
+  });
+
+  // The reported case (2026-11-02): the bot made the branch with its
+  // sagax-environment run_command (Grok names it without the mcp__ prefix),
+  // in the person's cloud computer; the thread's own folder is a server
+  // path (no repository there) and no remote session is connected. The
+  // route looks where the bot ran git, and acts there.
+  it("finds a branch the bot made on the person's cloud computer, and acts there", async () => {
+    const asked: Array<{ computer: string; folder?: string; viewer?: string }> = [];
+    const api = await serve(deps({
+      tasks: () => [{ threadId: "t-env", title: "Peer tools are not outbound", cwd: join(dir, "server-folder") }],
+      threadWritable: (_bot, threadId) => threadId === "t-env",
+      viewerId: () => "sam",
+      messages: () => ({ messages: [{ at: NOW - 60_000, tool: { name: "sagax-environment__run_command", ok: true, input: JSON.stringify({ command: `cd ${botRepo} && git checkout -b feat/on-bot` }), output: "Switched to a new branch 'feat/on-bot'" } }] }),
+      repository: () => undefined,
+      remote: {
+        reach: (_bot, _thread, viewer, place) => {
+          asked.push({ computer: place.computer, ...(place.folder ? { folder: place.folder } : {}), ...(viewer ? { viewer } : {}) });
+          return place.computer === "sandbox" ? { computer: true, online: true, osKnown: true } : null;
+        },
+        exec: () => shellExec,
+      },
+    }));
+    const { status, body } = await api.get("/api/bots/pepper/code/branch?threadId=t-env&branch=feat%2Fon-bot");
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ place: "remote", computer: "sandbox", canPublish: true });
+    expect(body.state).toMatchObject({ exists: true, worktree: botRepo, changes: [{ path: "x.ts", status: "untracked" }] });
+    // the viewer's own cloud computer, at the folder the bot's git ran in
+    expect(asked).toEqual([{ computer: "sandbox", folder: botRepo, viewer: "sam" }]);
+    const commit = await api.post("/api/bots/pepper/code/branch/commit", { threadId: "t-env", branch: "feat/on-bot", message: "From the panel" });
+    expect(commit.status).toBe(200);
+    expect(git(botRepo, "log", "-1", "--format=%s")).toBe("From the panel");
+  });
+
+  const onComputer = (name: string, input: Record<string, unknown>, reach: RemoteBranchReach | null, record?: Array<{ computer: string; vm?: string; container?: string; env?: Record<string, string> }>, extra: Partial<BotCodeBranchRouteDeps> = {}): Partial<BotCodeBranchRouteDeps> => ({
+    tasks: () => [{ threadId: "t-pc", title: "On the computer", cwd: join(dir, "server-folder") }],
+    threadWritable: (_bot, threadId) => threadId === "t-pc",
+    viewerId: () => "sam",
+    messages: () => ({ messages: [{ at: NOW - 60_000, tool: { name, ok: true, input: JSON.stringify(input) } }] }),
+    repository: () => undefined,
+    remote: {
+      reach: (_bot, _thread, _viewer, place) => {
+        record?.push({ computer: place.computer, ...(place.vm ? { vm: place.vm } : {}), ...(place.container ? { container: place.container } : {}) });
+        return reach;
+      },
+      exec: () => async (command, timeoutMs, env) => {
+        if (env) record?.push({ computer: "env", env });
+        return shellExec(command, timeoutMs);
+      },
+    },
+    ...extra,
+  });
+  const qp = (branch = "feat/on-bot") => q(branch, "t-pc");
+  const up: RemoteBranchReach = { computer: true, online: true, osKnown: true };
+
+  it("reaches each computer kind through its own channel: cloud computer, own computer, Local VM, solo Local VM, remote session", async () => {
+    const kinds: Array<[string, Record<string, unknown>, Record<string, string>]> = [
+      ["mcp__sagax-environment__run_command", { command: `cd ${botRepo} && git checkout -b feat/on-bot` }, { computer: "sandbox" }],
+      ["mcp__sagax-desktop__run_command", { command: "git checkout -b feat/on-bot", cwd: botRepo }, { computer: "desktop" }],
+      ["mcp__sagax-desktop__local_vm", { action: "run", container: "vm-1", command: `cd ${botRepo} && git checkout -b feat/on-bot` }, { computer: "local_vm", vm: "desktop", container: "vm-1" }],
+      ["mcp__agents__vm_exec", { command: `cd ${botRepo} && git checkout -b feat/on-bot` }, { computer: "local_vm", vm: "host" }],
+      ["mcp__agents__remote_session_exec", { command: `cd ${botRepo} && git checkout -b feat/on-bot` }, { computer: "remote_session" }],
+    ];
+    for (const [name, input, expected] of kinds) {
+      const record: Array<{ computer: string }> = [];
+      const api = await serve(deps(onComputer(name, input, up, record)));
+      const { body } = await api.get(`/api/bots/pepper/code/branch?${qp()}`);
+      expect(record, name).toEqual([expected]);
+      expect(body, name).toMatchObject({ place: "remote", computer: expected.computer, state: { exists: true, worktree: botRepo } });
+    }
+  });
+
+  it("runs commit, diff, push and delete on the cloud computer, and audits it there", async () => {
+    const routeDeps = deps(onComputer("mcp__sagax-environment__run_command", { command: `cd ${botRepo} && git checkout -b feat/on-bot` }, up));
+    const api = await serve(routeDeps);
+    expect((await api.post("/api/bots/pepper/code/branch/commit", { threadId: "t-pc", branch: "feat/on-bot", message: "On the cloud computer" })).status).toBe(200);
+    const diff = await api.get(`/api/bots/pepper/code/branch/diff?${qp()}`);
+    expect(diff.body.files.map((file: { path: string }) => file.path)).toEqual(["x.ts"]);
+    // origin is not on GitHub here: that environment's own sign-in (the person's)
+    const push = await api.post("/api/bots/pepper/code/branch/push", { threadId: "t-pc", branch: "feat/on-bot" });
+    expect(push.status).toBe(200);
+    expect(push.body.state).toMatchObject({ pushed: true, ahead: 0 });
+    git(botRepo, "checkout", "main");
+    const removed = await api.post("/api/bots/pepper/code/branch/delete", { threadId: "t-pc", branch: "feat/on-bot" });
+    expect(removed.status).toBe(200);
+    expect(git(botRepo, "branch", "--list", "feat/on-bot")).toBe("");
+    expect(routeDeps.audits).toEqual(["code.branch.commit", "code.branch.push", "code.branch.delete"]);
+  });
+
+  it("signs a push and a pull request from the cloud computer with the person's own GitHub connection, and nothing else", async () => {
+    const commands: Array<{ command: string; env?: Record<string, string> }> = [];
+    const github: RemoteExec = async (command, timeoutMs, env) => {
+      commands.push({ command, ...(env ? { env } : {}) });
+      if (/'remote' 'get-url' 'origin'/.test(command)) return { exitCode: 0, stdout: "https://github.com/acme/web.git\n", stderr: "" };
+      if (/'ls-remote'/.test(command)) return { exitCode: 0, stdout: "ref: refs/heads/main\tHEAD\n", stderr: "" };
+      if (/'push' '--porcelain'/.test(command)) return { exitCode: 0, stdout: "To https://github.com/acme/web.git\n", stderr: "" };
+      if (/ gh 'pr' 'list'/.test(command)) return { exitCode: 0, stdout: "[]", stderr: "" };
+      if (/ gh 'pr' 'create'/.test(command)) return { exitCode: 0, stdout: "https://github.com/acme/web/pull/12\n", stderr: "" };
+      return shellExec(command, timeoutMs);
+    };
+    const place = (token?: string) => deps({
+      ...onComputer("mcp__sagax-environment__run_command", { command: `cd ${botRepo} && git checkout -b feat/on-bot` }, up),
+      githubToken: () => token,
+      remote: { reach: () => up, exec: () => github },
+    });
+    // not connected: refused like on this server, never another credential
+    const none = await serve(place());
+    expect((await none.get(`/api/bots/pepper/code/branch?${qp()}`)).body).toMatchObject({ computer: "sandbox", canPublish: false, publishBlocked: "github_not_connected" });
+    const refused = await none.post("/api/bots/pepper/code/branch/push", { threadId: "t-pc", branch: "feat/on-bot" });
+    expect(refused).toMatchObject({ status: 403, body: { code: "github_not_connected" } });
+    expect((await none.post("/api/bots/pepper/code/branch/pr", { threadId: "t-pc", branch: "feat/on-bot" })).body.code).toBe("github_not_connected");
+    expect(commands.some((entry) => /'push'/.test(entry.command))).toBe(false);
+
+    const api = await serve(place("ghu_personToken000000000000000000000000"));
+    expect((await api.get(`/api/bots/pepper/code/branch?${qp()}`)).body).toMatchObject({ canPublish: true, repo: "acme/web" });
+    git(botRepo, "add", "."); git(botRepo, "commit", "-m", "work");
+    commands.length = 0;
+    const push = await api.post("/api/bots/pepper/code/branch/push", { threadId: "t-pc", branch: "feat/on-bot" });
+    expect(push.status).toBe(200);
+    expect(push.body.remote).toBe("https://github.com/acme/web");
+    const signed = commands.filter((entry) => entry.env);
+    expect(signed.map((entry) => (/'ls-remote'/.test(entry.command) ? "ls-remote" : /'push'/.test(entry.command) ? "push" : entry.command))).toEqual(["ls-remote", "push"]);
+    expect(signed.every((entry) => entry.env!.SAGAX_GH_TOKEN === "ghu_personToken000000000000000000000000" && Object.keys(entry.env!).length === 1)).toBe(true);
+    // to GitHub by its https address, never origin's URLs; the token never on a command line
+    expect(signed.every((entry) => entry.command.includes("'https://github.com/acme/web.git'") && entry.command.includes("$SAGAX_GH_TOKEN"))).toBe(true);
+    expect(commands.some((entry) => entry.command.includes("ghu_personToken"))).toBe(false);
+
+    commands.length = 0;
+    git(botRepo, "update-ref", "refs/remotes/origin/feat/on-bot", "HEAD");
+    const pr = await api.post("/api/bots/pepper/code/branch/pr", { threadId: "t-pc", branch: "feat/on-bot" });
+    expect(pr.status).toBe(200);
+    expect(pr.body.pull).toMatchObject({ number: 12 });
+    const gh = commands.filter((entry) => / gh '/.test(entry.command));
+    expect(gh.length).toBe(2);
+    expect(gh.every((entry) => entry.command.includes("GH_TOKEN=\"$SAGAX_GH_TOKEN\"") && entry.env?.SAGAX_GH_TOKEN)).toBe(true);
+    expect(commands.filter((entry) => !/ gh '/.test(entry.command)).every((entry) => !entry.env)).toBe(true);
+  });
+
+  it("never sends a token to the person's own computer, its Local VM or a client's computer", async () => {
+    for (const [name, input] of [
+      ["mcp__sagax-desktop__run_command", { command: "git checkout -b feat/on-bot", cwd: botRepo }],
+      ["mcp__sagax-desktop__local_vm", { action: "run", command: `cd ${botRepo} && git checkout -b feat/on-bot` }],
+      ["mcp__agents__remote_session_exec", { command: `cd ${botRepo} && git checkout -b feat/on-bot` }],
+    ] as const) {
+      const record: Array<{ computer: string; env?: Record<string, string> }> = [];
+      const api = await serve(deps(onComputer(name, input, up, record, { githubToken: () => "ghu_personToken000000000000000000000000" })));
+      git(botRepo, "add", "-A"); git(botRepo, "commit", "-q", "--allow-empty", "-m", `work ${name}`);
+      const push = await api.post("/api/bots/pepper/code/branch/push", { threadId: "t-pc", branch: "feat/on-bot" });
+      expect(push.status, name).toBe(200);
+      expect(record.filter((entry) => entry.computer === "env"), name).toEqual([]);
+    }
+  });
+
+  it("says plainly that the cloud computer is off, also when it stops in the middle of a read", async () => {
+    const off = await serve(deps(onComputer("mcp__sagax-environment__run_command", { command: `cd ${botRepo} && git checkout -b feat/on-bot` }, { computer: true, online: false, osKnown: true })));
+    expect((await off.get(`/api/bots/pepper/code/branch?${qp()}`)).body).toMatchObject({ place: "remote", computer: "sandbox", offline: true, canPublish: false, publishBlocked: "offline" });
+    expect(await off.post("/api/bots/pepper/code/branch/push", { threadId: "t-pc", branch: "feat/on-bot" })).toMatchObject({ status: 502, body: { code: "offline" } });
+
+    const gone = await serve(deps({ ...onComputer("mcp__sagax-environment__run_command", { command: `cd ${botRepo} && git checkout -b feat/on-bot` }, up), remote: { reach: () => up, exec: () => async () => ({ error: "unreachable" }) } }));
+    const read = await gone.get(`/api/bots/pepper/code/branch?${qp()}`);
+    expect(read).toMatchObject({ status: 200, body: { place: "remote", computer: "sandbox", offline: true } });
+  });
+
+  it("looks in the other folders the thread ran git in, and says when none holds the branch", async () => {
+    const messages = [
+      { at: NOW - 70_000, tool: { name: "mcp__sagax-environment__run_command", ok: true, input: JSON.stringify({ command: `cd ${botRepo} && git status` }) } },
+      { at: NOW - 60_000, tool: { name: "mcp__sagax-environment__run_command", ok: true, input: JSON.stringify({ command: "cd \"$REPO\" && git checkout -b feat/on-bot" }) } },
+    ];
+    const api = await serve(deps({ ...onComputer("x", {}, up), messages: () => ({ messages }) }));
+    expect((await api.get(`/api/bots/pepper/code/branch?${qp()}`)).body).toMatchObject({ computer: "sandbox", state: { exists: true, worktree: botRepo } });
+
+    const lost = [{ at: NOW - 60_000, tool: { name: "mcp__sagax-environment__run_command", ok: true, input: JSON.stringify({ command: `cd ${join(dir, "nowhere")} && git checkout -b feat/on-bot` }) } }];
+    const none = await serve(deps({ ...onComputer("x", {}, up), messages: () => ({ messages: lost }) }));
+    expect((await none.get(`/api/bots/pepper/code/branch?${qp()}`)).body).toMatchObject({ place: "remote", computer: "sandbox", noPath: true, canPublish: false });
+  });
+
+  it("says Windows and a computer it cannot name plainly, and never runs there", async () => {
+    let ran = false;
+    const windows = await serve(deps({
+      ...onComputer("mcp__sagax-desktop__run_command", { command: "git checkout -b feat/on-bot", cwd: botRepo }, { computer: true, online: true, host: "Bureau", osKnown: true, windows: true }),
+      remote: { reach: () => ({ computer: true, online: true, host: "Bureau", osKnown: true, windows: true }), exec: () => async () => { ran = true; return { error: "no" }; } },
+    }));
+    expect((await windows.get(`/api/bots/pepper/code/branch?${qp()}`)).body).toMatchObject({ place: "remote", computer: "desktop", host: "Bureau", windows: true, publishBlocked: "unknown_os", canPublish: false });
+    expect(ran).toBe(false);
+
+    const asked: string[] = [];
+    const other = await serve(deps({ ...onComputer("mcp__computer__exec", { command: `cd ${botRepo} && git checkout -b feat/on-bot` }, up), remote: { reach: (_b, _t, _v, place) => { asked.push(place.computer); return null; }, exec: () => shellExec } }));
+    expect((await other.get(`/api/bots/pepper/code/branch?${qp()}`)).body).toMatchObject({ place: "elsewhere", canPublish: false });
+    // nothing names it: only the thread's own folder on a remote session is tried
+    expect(asked).toEqual(["remote_session"]);
   });
 
   it("stays 'elsewhere' when the bot has no computer at all", async () => {

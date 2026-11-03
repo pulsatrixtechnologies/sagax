@@ -5,7 +5,7 @@ import { api } from "@/state/store";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import type { BotCodeBranch, BotCodePullRequest } from "../../shared/bot-activity.ts";
-import { branchArchiveKey, type BotBranchActionBody, type BotBranchActionResult, type BotBranchDiff, type BotBranchInfo, type BotBranchPull, type BotBranchState } from "../../shared/bot-code-branches.ts";
+import { branchArchiveKey, type BotBranchActionBody, type BotBranchActionResult, type BotBranchComputer, type BotBranchDiff, type BotBranchInfo, type BotBranchPull, type BotBranchState } from "../../shared/bot-code-branches.ts";
 
 export type { BotBranchInfo, BotBranchState, BotBranchPull, BotBranchDiff };
 
@@ -97,24 +97,70 @@ export function branchActions(info: BotBranchInfo | undefined, pull: BotBranchPu
 }
 
 /** Why the branch cannot be acted on at all (every action disabled), as a
- * locale key, or null when it can. Keeps the menu from showing five
- * identical disabled rows: one plain reason instead. */
+ * locale key, or null when it can: it is not the person's conversation, or
+ * it no longer exists. A branch the panel cannot reach is not this: it says
+ * why and offers to ask the bot (branchAway). */
 export function branchUnavailable(info: BotBranchInfo | undefined, branch: CodingBranch): LocaleKey | null {
   if (!branch.threadId) return "botPanel.branch.hint.noThread";
-  if (info?.place === "elsewhere") return "botPanel.branch.hint.elsewhere";
-  if (info?.place === "remote") {
-    if (info.offline) return "botPanel.branch.hint.offline";
-    if (info.noPath) return "botPanel.branch.hint.noPath";
-    if (info.publishBlocked === "unknown_os") return "botPanel.branch.hint.unknownOs";
-  }
   if (info?.state && !info.state.exists) return "botPanel.branch.gone";
   return null;
 }
 
-/** Push, open a pull request and delete a branch on the bot's own computer
- * run on a client's machine, so they ask the person to confirm first. */
+const OFF_REASON: Record<BotBranchComputer, LocaleKey> = {
+  sandbox: "botPanel.branch.away.sandboxOff",
+  desktop: "botPanel.branch.away.desktopOff",
+  local_vm: "botPanel.branch.away.vmOff",
+  remote_session: "botPanel.branch.away.remoteOff",
+};
+
+/** Why the panel cannot run this branch's actions itself, in plain words
+ * with what to do (its params: `{ bot }`), or null when it can: the
+ * computer that holds it is off or not known, runs Windows, its folder is
+ * not known, or the branch could not be read. Each action then asks the bot
+ * to do it, in the conversation the branch came from: never a silent grey
+ * menu. */
+export function branchAway(info: BotBranchInfo | undefined, readFailed = false): LocaleKey | null {
+  if (!info) return readFailed ? "botPanel.branch.away.unread" : null;
+  if (info.place === "elsewhere") return "botPanel.branch.away.elsewhere";
+  if (info.place !== "remote") return null;
+  if (info.offline) return OFF_REASON[info.computer ?? "remote_session"];
+  if (info.noPath) return "botPanel.branch.away.noPath";
+  if (info.publishBlocked === "unknown_os") return info.windows ? "botPanel.branch.away.windows" : "botPanel.branch.away.unknownOs";
+  return null;
+}
+
+/** The actions the bot can be asked to do on a branch. */
+export type BranchAskAction = "commit" | "push" | "pr" | "diff" | "delete";
+
+const ASK_TEXT: Record<BranchAskAction, LocaleKey> = {
+  commit: "botPanel.branch.ask.commit",
+  push: "botPanel.branch.ask.push",
+  pr: "botPanel.branch.ask.pr",
+  diff: "botPanel.branch.ask.diff",
+  delete: "botPanel.branch.ask.delete",
+};
+
+/** The request the bot gets for that action on that branch, in the
+ * person's language (they send it as their own message). */
+export function branchAskText(action: BranchAskAction, branch: string): string {
+  return t(ASK_TEXT[action], { branch });
+}
+
+/** Where the branch is, for its row: the person's cloud computer, their own
+ * computer (by its name when known), their Local VM, or a computer's name. */
+export function branchWhere(info: BotBranchInfo | undefined): string | undefined {
+  if (info?.place !== "remote") return undefined;
+  if (info.computer === "sandbox") return t("botPanel.branch.onCloud");
+  if (info.computer === "local_vm") return t("botPanel.branch.onLocalVm");
+  if (info.host) return t("botPanel.branch.onComputer", { host: info.host });
+  return info.computer === "desktop" ? t("botPanel.branch.onYourComputer") : undefined;
+}
+
+/** Push and open a pull request on a client's computer (a remote session,
+ * or a server that does not say which computer) ask the person to confirm
+ * first. Their own cloud computer, own computer and Local VM do not. */
 export function remoteActionNeedsConfirm(info: BotBranchInfo | undefined, action: "push" | "pr"): boolean {
-  return info?.place === "remote" && (action === "push" || action === "pr");
+  return info?.place === "remote" && (info.computer === undefined || info.computer === "remote_session") && (action === "push" || action === "pr");
 }
 
 /** A commit message's first line is short; the rest stays. */

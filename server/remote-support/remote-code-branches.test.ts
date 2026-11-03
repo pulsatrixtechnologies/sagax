@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { BranchActionError } from "../code-branches.ts";
-import { RemoteBranchGit, type RemoteExec } from "./remote-code-branches.ts";
+import { cdTo, locateBranchFolder, RemoteBranchGit, type RemoteExec } from "./remote-code-branches.ts";
 
 let dir = "";
 let worktree = "";
@@ -157,5 +157,56 @@ describe("RemoteBranchGit: the same actions on the bot's computer", () => {
   it("refuses plainly when the computer is offline", async () => {
     const offline: RemoteExec = async () => ({ error: "no session" });
     await expect(new RemoteBranchGit(offline, repo, "feat/widgets").state()).rejects.toMatchObject({ code: "offline", status: 502 });
+  });
+
+  it("reaches a folder written home relative or relative to where commands start, never as an option", () => {
+    expect(cdTo("/workspace/web")).toBe("cd -- '/workspace/web'");
+    expect(cdTo("~")).toBe('cd "$HOME"');
+    expect(cdTo("~/code/it's")).toBe(`cd "$HOME"/'code/it'\\''s'`);
+    expect(cdTo("web")).toBe("cd -- 'web'");
+    expect(cdTo("-x")).toBe("cd -- '-x'");
+    expect(cdTo("")).toBe("cd -- '.'");
+    const landed = execFileSync("/bin/sh", ["-c", `${cdTo(`~/${worktree.slice(dir.length + 1)}`)} && pwd -P`], { encoding: "utf8", env: { ...process.env, HOME: dir } }).trim();
+    expect(landed).toBe(worktree);
+  });
+
+  it("finds which folder holds the branch, else a repository, in one round trip", async () => {
+    let calls = 0;
+    const counted: RemoteExec = async (command, timeoutMs) => { calls++; return shell(command, timeoutMs); };
+    expect(await locateBranchFolder(counted, "feat/widgets", [join(dir, "nope"), dir, repo])).toEqual({ folder: repo, hasBranch: true });
+    expect(calls).toBe(1);
+    expect(await locateBranchFolder(shell, "feat/gone", [join(dir, "nope"), repo])).toEqual({ folder: repo, hasBranch: false });
+    expect(await locateBranchFolder(shell, "feat/widgets", [join(dir, "nope")])).toBeNull();
+    // the branch name and folders reach the shell as quoted data
+    expect(await locateBranchFolder(shell, "--upload-pack=x", [repo])).toBeNull();
+    await expect(locateBranchFolder(async () => ({ error: "down" }), "feat/widgets", [repo])).rejects.toMatchObject({ code: "offline" });
+  });
+
+  it("signed by the person, pushes a remote elsewhere than GitHub with that environment's own sign-in, never a token", async () => {
+    const sent: Array<Record<string, string> | undefined> = [];
+    const recorded: RemoteExec = async (command, timeoutMs, env) => { sent.push(env); return shell(command, timeoutMs); };
+    const branch = new RemoteBranchGit(recorded, repo, "feat/widgets", { mode: "person", token: "ghu_personToken000000000000000000000000" });
+    await branch.commit("Add the widget");
+    await branch.push();
+    expect(git(remote, "rev-parse", "refs/heads/feat/widgets")).toMatch(/^[0-9a-f]{40}$/);
+    // origin is a local path: the token's header is for github.com only, and it is not sent
+    expect(sent.every((env) => env === undefined)).toBe(true);
+  });
+
+  it("refuses a push or pull request to GitHub signed by the person when they connected no GitHub account", async () => {
+    const github: RemoteExec = async (command, timeoutMs) => (/get-url/.test(command) ? { exitCode: 0, stdout: "git@github.com:acme/web.git\n", stderr: "" } : shell(command, timeoutMs));
+    const branch = new RemoteBranchGit(github, repo, "feat/widgets", { mode: "person" });
+    await expect(branch.push()).rejects.toMatchObject({ code: "github_not_connected", status: 403 });
+    await expect(branch.openPr("Add widgets")).rejects.toMatchObject({ code: "github_not_connected" });
+    // the computer's own sign-in, by contrast, needs no connection
+    await expect(new RemoteBranchGit(github, repo, "feat/widgets").openPr("Add widgets")).rejects.toMatchObject({ code: "not_pushed" });
+  });
+
+  it("keeps the whole files of a diff the channel cut, and says it was cut", async () => {
+    const file = (name: string, lines: number) => `diff --git a/${name} b/${name}\n--- a/${name}\n+++ b/${name}\n@@ -0,0 +1,${lines} @@\n${"+x\n".repeat(lines)}`;
+    const cutDiff: RemoteExec = async (command, timeoutMs) => (/'diff' '--no-color'/.test(command) ? { exitCode: 0, stdout: `${file("a.ts", 2)}${file("b.ts", 50).slice(0, 80)}`, stderr: "", truncated: true } : shell(command, timeoutMs));
+    const diff = await new RemoteBranchGit(cutDiff, repo, "feat/widgets").diff();
+    expect(diff.truncated).toBe(true);
+    expect(diff.files.map((entry) => entry.path)).toEqual(["a.ts"]);
   });
 });

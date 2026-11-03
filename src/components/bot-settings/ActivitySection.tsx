@@ -316,6 +316,7 @@ export function ActivitySection({ bot }: { bot: Bot }) {
   }, [bot.id, advanced]);
   const branchActions: BranchListActions = {
     botId: bot.id,
+    botName: bot.name,
     onArchive: async (key, value) => setArchived(new Set(await setBranchArchived(bot.id, key, value))),
     onChanged: () => { void feed.refresh(); },
   };

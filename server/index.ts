@@ -2197,6 +2197,8 @@ import { updateDoc, updateRules } from "./workspace-tools.ts";
 import { markWorkspaceUse, promptSectionPaths } from "./workspace-usage.ts";
 import { createBotActivityRoutes, type ActivityChildRef } from "./routes/bot-activity.ts";
 import { createBotCodeBranchRoutes, type BranchCredentials } from "./routes/bot-code-branches.ts";
+import { branchRemoteDeps } from "./remote-support/branch-channels.ts";
+import type { SandboxExecInput } from "./sandboxd-core.ts";
 import { createDevPullRoutes } from "./routes/dev-pull.ts";
 import { BranchArchive } from "./code-branches.ts";
 import { CloudAgentStore } from "./cloud-agents/store.ts";
@@ -33511,32 +33513,45 @@ ROUTES.push(createBotCodeBranchRoutes({
   organization: () => IDENTITY.kind === "perspicax",
   credentials: codeBranchCredentials,
   archive: codeBranchArchive,
-  // A branch whose repository is on the bot's own working computer runs its
-  // actions there, over that computer's connected session (the same Tailcat
-  // transport as the bot's remote_session shell, reused not duplicated). The
-  // principal is the person acting, else the bot's own session owner; only
-  // this bot's own sessions are ever reached (per-bot scope).
-  remote: {
-    reach: (botId, threadId, viewerId) => {
-      const person = (viewerId ?? "").trim().toLowerCase() || remoteSessions.principalFor(botId, threadId);
-      if (!person) return null;
-      const here = remoteSessions.reachFor({ principalId: person, botId, threadId });
-      if (here) return { computer: true, online: true, ...(here.host ? { host: here.host } : {}), osKnown: here.known, ...(here.os === "windows" ? { windows: true } : {}) };
-      // A session of this bot's in another conversation still means the bot
-      // has a computer (reachFor only looks at this conversation's).
-      const any = remoteSessions.list(person, botId);
-      const session = any[0];
-      if (!session) return null;
-      return { computer: true, online: true, ...(session.hostname ? { host: session.hostname } : {}), osKnown: session.osKnown !== false, ...(session.os === "windows" ? { windows: true } : {}) };
+  // A branch the thread's git made on one of the bot's computers runs its
+  // actions there, through the channel the bot's own commands used
+  // (server/remote-support/branch-channels.ts): the viewer's own cloud
+  // computer (in the bot's folder there), their own computer or its Local
+  // VM through their desktop app, a solo server's Local VM, or this bot's
+  // remote session (the same Tailcat transport as its remote_session
+  // shell). Never another person's computer.
+  remote: branchRemoteDeps({
+    organization: IDENTITY.kind === "perspicax",
+    ...(userSandbox ? {
+      sandbox: {
+        status: (principalId: string, botId: string) => userSandbox.status(principalId, botId),
+        exec: (principalId: string, input: SandboxExecInput, botId: string) => {
+          const known = sandboxBotFolders.known(botId);
+          return userSandbox.exec(principalId, known ? inBotFolder(input, botFolderPath(known)) : input, botId);
+        }
+      }
+    } : {}),
+    desktop: {
+      current: (principalId) => desktopBridges.current(principalId),
+      request: (principalId, operation) => desktopBridges.request(principalId, operation, () => true)
     },
-    exec: (botId, threadId, viewerId) => async (command, timeoutMs) => {
-      const person = (viewerId ?? "").trim().toLowerCase() || remoteSessions.principalFor(botId, threadId);
-      if (!person) return { error: "no person" };
-      const result = await remoteSessions.exec({ principalId: person, botId, threadId, command, ...(timeoutMs ? { timeoutMs } : {}) });
-      if ("error" in result) return { error: result.error };
-      return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr, timedOut: result.timedOut };
+    hostVm: {
+      running: async (botId, threadId) => (await containerComputerStatus(undefined, undefined, localVmTargetForStatus(botId, threadId), { probeDesktop: false })).container === "running",
+      exec: (botId, threadId, command, timeoutSeconds) => containerExec(localVmTargetForStatus(botId, threadId), command, { timeoutSeconds })
+    },
+    remoteSessions: {
+      principalFor: (botId, threadId) => remoteSessions.principalFor(botId, threadId),
+      reachFor: (input) => remoteSessions.reachFor(input),
+      list: (principalId, botId) => remoteSessions.list(principalId, botId),
+      exec: (input) => remoteSessions.exec(input)
     }
+  }),
+  sandboxFolder: (botId) => {
+    const known = sandboxBotFolders.known(botId);
+    return known ? botFolderPath(known) : null;
   },
+  // the viewer's own GitHub connection, for their cloud computer only
+  githubToken: (viewerId) => (viewerId ? usablePersonGithub(viewerId)?.token : undefined),
   audit: (auth, action, target, after) => appendAdminAction(DATA_DIR, {
     category: "bot",
     action,

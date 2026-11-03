@@ -34,10 +34,17 @@ export interface BotBranchState {
 
 /** Where the branch's repository is, and whether this person can act there.
  * - "server": a git repository on this server (the thread's own folder);
- * - "remote": the bot's own working computer, reached through its connected
- *   session (the repository is where the bot cloned and worked, not here);
- * - "elsewhere": nowhere this server can act (no computer, a sandbox, ...). */
+ * - "remote": the bot's own working computer, where it cloned and worked
+ *   (`computer` says which), reached through the same channel as its commands;
+ * - "elsewhere": no computer of this person's holds it as far as the server
+ *   can tell (the bot can still be asked to act there). */
 export type BotBranchPlace = "server" | "remote" | "elsewhere";
+
+/** Which computer holds a branch on place "remote": the person's cloud
+ * computer (their server environment), their own computer through the
+ * desktop app, a Local VM, or a computer reached through a remote session
+ * (a client's). */
+export type BotBranchComputer = "sandbox" | "desktop" | "local_vm" | "remote_session";
 
 /** GET /api/bots/:id/code/branch?threadId=&branch= */
 export interface BotBranchInfo {
@@ -49,15 +56,22 @@ export interface BotBranchInfo {
   repo?: string;
   /** place "remote": the bot's computer, by its name (never an address). */
   host?: string;
+  /** place "remote": which of the bot's computers. Absent from an older
+   * server: a remote session. */
+  computer?: BotBranchComputer;
   /** place "remote" and that computer cannot be reached right now. */
   offline?: boolean;
   /** place "remote" and the thread's working folder on it is not known. */
   noPath?: boolean;
+  /** place "remote" and that computer runs Windows (no command runs there
+   * from the panel yet). */
+  windows?: boolean;
   state?: BotBranchState;
   /** The commit message proposed for its changes (editable). */
   proposedMessage?: string;
-  /** Push and pull requests have credentials to run with here (the person's
-   * own on this server, the computer's own on the bot's computer). */
+  /** Push and pull requests have credentials to run with here: the person's
+   * own GitHub connection on this server and in their cloud computer, the
+   * computer's own sign-in on their own computer, a Local VM or a client's. */
   canPublish: boolean;
   /** Why not, when it cannot. */
   publishBlocked?: "github_not_connected" | "not_github" | "elsewhere" | "offline" | "unknown_os";

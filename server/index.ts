@@ -36701,7 +36701,12 @@ function viewerBotActivity(bot: BotRecord, viewerId: string): ReturnType<typeof 
   const selected = viewerSelections.get(selectionKey(bot.id, viewerId));
   // An AI client's hidden conversation (#291) is not the person's to wait on
   // or watch, unless they opened it.
-  return store.activityOf(bot.id, (task) => ownsThread(viewerId, task, owner) && (task.hidden !== true || task.threadId === selected));
+  const include = (task: TaskRecord) => ownsThread(viewerId, task, owner) && (task.hidden !== true || task.threadId === selected);
+  const activity = store.activityOf(bot.id, include);
+  // f9ddcfc437's wire-only continuation hold uses the same viewer scope
+  // as real activity (9501572bf), never another person's private thread.
+  if (!activity.busy && store.tasks(bot.id).some((task) => !task.routineRunId && include(task) && continuationHolds.has(task.threadId))) return HELD_ACTIVITY;
+  return activity;
 }
 /** A bot (wire shape) as one viewer receives it: their threads only, their
  * thread selected, nobody else's transcript (thread-privacy.ts). */

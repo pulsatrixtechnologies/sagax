@@ -47112,7 +47112,7 @@ const startTurnRunner = createStartTurn({
   engineReference,
   engineStartGate,
   engineTurnLevel,
-  enginesRead,
+  get enginesRead() { return enginesRead; },
   ensureTaskWorkspace,
   ensureWorkspace,
   expandLearnTurnText,

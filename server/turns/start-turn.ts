@@ -36,6 +36,7 @@ export function createStartTurn(host: StartTurnHost) {
     opts?: any,
   ) {
     const state = createTurnState({ botId, text, opts, startTurn });
+    state.enginesRead = host.enginesRead;
     {
       const validated = await prepareValidateStartTurn(state);
       if (validated.kind === "return") return validated.value;

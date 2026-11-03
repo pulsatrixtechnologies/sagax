@@ -1,6 +1,8 @@
+// @vitest-environment happy-dom
 // Browse Bots: the catalogue's sections, search and actions (src/lib/bot-catalog.ts),
 // the home pane, the detail pane and the modal's shell, drawn to markup.
-import { createElement } from "react";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -30,6 +32,7 @@ import { BotCatalogView, SECTION_PREVIEW, type BotCatalogViewProps } from "./Bot
 import { BotCatalogDetailView, templateDetail } from "./BotCatalogDetailView";
 import { BotCatalogModal, teamImportedText } from "./BotCatalogModal";
 import { CATEGORY_MODAL } from "../category-modal";
+import { closeBotCatalog } from "@/state/store";
 import type { OrgLibraryPackage } from "@/lib/org-library";
 
 const ME = "pr_00000000-0000-4000-8000-00000000000a";
@@ -372,12 +375,15 @@ describe("the detail pane", () => {
   });
 });
 
-describe("the catalog view shell (lot 5: no modal window)", () => {
-  it("fills a content frame with its title, loading the catalogue", () => {
+describe("the restored catalog window shell", () => {
+  // 619b200c8 restores the catalogue as a centred window after UX lot 5.
+  it("opens a labelled modal dialog with its title while loading the catalogue", () => {
     const html = renderToStaticMarkup(createElement(BotCatalogModal));
-    expect(html).not.toContain('role="dialog"');
-    expect(html).not.toContain("aria-modal");
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-modal="true"');
     expect(html).toContain('aria-labelledby="bot-catalog-title"');
+    expect(html).toMatch(/<h2 id="bot-catalog-title"[^>]*>Browse Bots<\/h2>/);
+    expect(html).toContain('tabindex="-1"');
     expect(html).toContain("data-bot-catalog-modal");
     expect(html).toContain("Loading the catalog");
   });
@@ -474,14 +480,71 @@ describe("the Templates section (the old Templates library)", () => {
   });
 });
 
-describe("the catalog view shell layout", () => {
-  it("does not use the category modal backdrop or close button", () => {
+describe("the catalog window shell layout", () => {
+  it("uses the shared modal shell and keeps closing and keyboard focus scoped to it", async () => {
     fixture.target = null;
+    fixture.dispatch.mockClear();
     const html = renderToStaticMarkup(createElement(BotCatalogModal));
     for (const classes of [CATEGORY_MODAL.backdrop, CATEGORY_MODAL.frame, CATEGORY_MODAL.close]) {
-      expect(html).not.toContain(`class="${classes}"`);
+      expect(html).toContain(`class="${classes}"`);
     }
-    expect(html).toContain("data-gallery-frame");
+    expect(html).not.toContain("data-gallery-frame");
+    const react = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    const previousAct = react.IS_REACT_ACT_ENVIRONMENT;
+    react.IS_REACT_ACT_ENVIRONMENT = true;
+    // As in BotCatalogPane.back.test.ts, keep loading local and pending.
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(() => new Promise<Response>(() => {}));
+    const trigger = document.createElement("button");
+    trigger.textContent = "Browse Bots";
+    const host = document.createElement("div");
+    document.body.append(trigger, host);
+    trigger.focus();
+    const root = createRoot(host);
+    let mounted = true;
+    try {
+      await act(async () => root.render(createElement(BotCatalogModal)));
+      const dialog = host.querySelector<HTMLElement>('[data-bot-catalog-modal][role="dialog"]')!;
+      expect(dialog).not.toBeNull();
+      expect(dialog.getAttribute("aria-modal")).toBe("true");
+      expect(dialog.querySelector(`#${dialog.getAttribute("aria-labelledby")}`)?.textContent).toBe("Browse Bots");
+      const close = dialog.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!;
+      expect(close).not.toBeNull();
+      expect(close.type).toBe("button");
+      expect(dialog.contains(document.activeElement)).toBe(true);
+      await act(async () => dialog.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })));
+      expect(fixture.dispatch).not.toHaveBeenCalled();
+      trigger.focus();
+      await act(async () => trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+      expect(fixture.dispatch).not.toHaveBeenCalled();
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter(node => node.checkVisibility());
+      expect(focusable.length).toBeGreaterThan(1);
+      const first = focusable[0]!;
+      const last = focusable.at(-1)!;
+      last.focus();
+      await act(async () => last.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true })));
+      expect(document.activeElement).toBe(first);
+      await act(async () => first.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true })));
+      expect(document.activeElement).toBe(last);
+      for (const dismiss of [
+        () => close.click(),
+        () => dialog.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })),
+        () => dialog.parentElement!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })),
+      ]) {
+        fixture.dispatch.mockClear();
+        await act(async () => { dismiss(); });
+        expect(fixture.dispatch).toHaveBeenCalledExactlyOnceWith(closeBotCatalog());
+      }
+      await act(async () => root.unmount());
+      mounted = false;
+      expect(document.activeElement).toBe(trigger);
+    } finally {
+      if (mounted) await act(async () => root.unmount());
+      host.remove();
+      trigger.remove();
+      fetch.mockRestore();
+      react.IS_REACT_ACT_ENVIRONMENT = previousAct;
+      fixture.dispatch.mockClear();
+    }
   });
 
   it("opens on its Templates section for the old library's entry points", () => {

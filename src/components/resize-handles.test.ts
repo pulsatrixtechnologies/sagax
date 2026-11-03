@@ -34,9 +34,15 @@ describe("resize handles", () => {
     expect(rule(".app-resize-handle:focus-visible")).toContain("outline: none");
   });
 
-  it.each(["Sidebar.tsx", "DockedPanelResize.tsx", "ComputerPanel.tsx-parts/PanelChrome.tsx"])(
+  it.each(["Sidebar.tsx-parts/SidebarResizeHandle.tsx", "DockedPanelResize.tsx", "ComputerPanel.tsx-parts/PanelChrome.tsx"])(
     "%s uses the shared handle, not a bright bar of its own",
     (file) => {
+      if (file.startsWith("Sidebar.tsx-parts/")) {
+        // 0db3d586d extracted the separator; keep its sidebar wiring pinned.
+        const sidebar = readFileSync(join(here, "Sidebar.tsx"), "utf8");
+        expect(sidebar).toContain('import { SidebarResizeHandle } from "./Sidebar.tsx-parts/SidebarResizeHandle"');
+        expect(sidebar).toContain("<SidebarResizeHandle");
+      }
       const source = readFileSync(join(here, file), "utf8");
       const separators = source.match(/role="separator"[\s\S]*?className=("[^"]*"|\{[^}]*\})/g) ?? [];
       expect(separators.length).toBeGreaterThan(0);

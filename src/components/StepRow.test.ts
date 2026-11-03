@@ -49,7 +49,9 @@ describe("a tool step row", () => {
     click(row);
     expect(row.getAttribute("aria-expanded")).toBe("true");
     const detail = node.querySelector("[data-step-detail]")!;
-    expect(detail.textContent).toContain("WebSearch");
+    // 997beba53: readable tool names in details; technical ids stay in JSON.
+    expect(detail.querySelector('[data-testid="tool-step-name"]')?.textContent).toBe("Search the web");
+    expect(detail.textContent).not.toContain("WebSearch");
     expect(detail.textContent).toContain("sagax");
     expect(detail.textContent).toContain("3 results");
     // the JSON stays folded until asked for

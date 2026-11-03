@@ -1,3 +1,4 @@
+// Provient de Perspicax, PTI (Pulsatrix Technologies Inc.); published in Sagax under Apache-2.0 with PTI's approval (JC, 2026-11-03).
 // Ported from the Perspicax console (console/src/pages/memory/brain-map.tsx,
 // 1.9.20) for Tools > Memory > Map; Sagax's skin tokens in place of the
 // console's, each tier's colour from the page (`colorOf`).

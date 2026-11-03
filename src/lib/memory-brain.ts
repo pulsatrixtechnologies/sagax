@@ -1,3 +1,4 @@
+// Provient de Perspicax, PTI (Pulsatrix Technologies Inc.); published in Sagax under Apache-2.0 with PTI's approval (JC, 2026-11-03).
 // The memory map read as a brain (Mémoire > Notes > Carte, 2026-10-19,
 // JC: « comme un vrai cerveau », something one leaves open on a second
 // screen). The pure half of `pages/memory/brain-map.tsx`, held by

@@ -192,6 +192,12 @@ export type RuntimeEvent = RuntimeEventBase &
          * badge the latter as agent-composed; untrusted-input rules apply
          * either way. */
         origin?: "tool" | "output";
+        /** 2026-11-03: raised by Sagax itself for the bot's ask_choice where
+         * the person is not watching (a routine run's task, an AI client's
+         * hidden conversation). No engine holds this request: the answer
+         * reaches the bot as the person's next message (the late answer), so
+         * no level answers it here and nothing is sent to an adapter. */
+        harnessAsk?: true;
         approvalScope?: "local-computer";
         /** Provider asks to widen its configured sandbox. Only explicit Full
          * access may answer this automatically; Auto/remembered grants may not. */

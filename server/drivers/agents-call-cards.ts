@@ -37,6 +37,11 @@ export async function callCardTool(name: string, args: Json, context: ToolCallCo
     if (answered) {
       return { text: `Full access answered this for the person: ${answered}. The person already authorized this work; continue in this same turn without waiting for a click, and do not ask again.` };
     }
+    // 2026-11-03: raised where the person is not watching (a routine run): the
+    // card waits for them in Approvals and a notification, and the run with it.
+    if (result && typeof result === "object" && (result as { waitsForPerson?: unknown }).waitsForPerson === true) {
+      return { text: "The question card is waiting for the person (their notification, Approvals and this run's status). End your turn now with no further text: this run waits, and their answer arrives as their next message." };
+    }
     return { text: "The question card is on the person's screen with your options. End your turn now with no further text: their click, or the answer they type under Other, arrives as their next message." };
   }
   if (name === "create_options_card") {

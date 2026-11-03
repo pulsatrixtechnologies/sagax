@@ -22,7 +22,7 @@ redo it by hand) before anything is created.
 Under the hood both sources become an ordinary Sagax package
 (`openmaus.package` v2) in the app. It is then staged and imported through the
 same bot import as **New bot > Zip file…** (`POST /api/bots/import/upload`,
-member scope), so the rules of `server/package-import.ts` apply unchanged.
+member scope), so the rules of `server/packages/package-import.ts` apply unchanged.
 
 ## From Grok Bot
 

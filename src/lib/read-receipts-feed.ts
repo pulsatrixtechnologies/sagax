@@ -1,5 +1,5 @@
 // Live read positions for the open conversation, and this person's own
-// report of what they saw (server/read-receipts.ts).
+// report of what they saw (server/messages/read-receipts.ts).
 //
 // - useThreadReads: GET /api/threads/<id>/read once per thread, then the
 //   live `thread.read` frames (store.tsx hands them here). A frame with

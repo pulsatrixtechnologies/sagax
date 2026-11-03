@@ -148,44 +148,60 @@ extension DesktopSettingsSection {
     /// The nav label (the desktop's `settings.section.*`, as the references read).
     var label: LocalizedStringKey {
         switch self {
-        case .general: "General"
+        case .general: "Account"
         case .organization: "Organization"
         case .appearance: "Appearance"
         case .experimental: "Experimental"
         case .connections: "API keys"
         case .myConnections: "My connections"
         case .decisionModel: "Decision model"
-        case .engines: "Models and voice"
+        case .engines: "Models"
         case .myEngines: "My engines"
         case .companion: "Pair devices"
-        case .computer: "Local VM"
+        case .computer: "Computer"
         case .usage: "Usage"
         case .people: "People"
         case .mail: "Email"
         case .activity: "Activity"
         case .backups: "Backups"
+        case .providers: "Providers"
+        case .voice: "Voice"
+        case .updates: "Updates"
+        case .about: "About"
+        case .security: "Security"
+        case .vault: "Vault"
+        case .notifications: "Notifications"
+        case .importBot: "Import"
         }
     }
 
     /// The label as a string, for search (in the app's language).
     var labelString: String {
         switch self {
-        case .general: AppStrings.localized("General")
+        case .general: AppStrings.localized("Account")
         case .organization: AppStrings.localized("Organization")
         case .appearance: AppStrings.localized("Appearance")
         case .experimental: AppStrings.localized("Experimental")
         case .connections: AppStrings.localized("API keys")
         case .myConnections: AppStrings.localized("My connections")
         case .decisionModel: AppStrings.localized("Decision model")
-        case .engines: AppStrings.localized("Models and voice")
+        case .engines: AppStrings.localized("Models")
         case .myEngines: AppStrings.localized("My engines")
         case .companion: AppStrings.localized("Pair devices")
-        case .computer: AppStrings.localized("Local VM")
+        case .computer: AppStrings.localized("Computer")
         case .usage: AppStrings.localized("Usage")
         case .people: AppStrings.localized("People")
         case .mail: AppStrings.localized("Email")
         case .activity: AppStrings.localized("Activity")
         case .backups: AppStrings.localized("Backups")
+        case .providers: AppStrings.localized("Providers")
+        case .voice: AppStrings.localized("Voice")
+        case .updates: AppStrings.localized("Updates")
+        case .about: AppStrings.localized("About")
+        case .security: AppStrings.localized("Security")
+        case .vault: AppStrings.localized("Vault")
+        case .notifications: AppStrings.localized("Notifications")
+        case .importBot: AppStrings.localized("Import")
         }
     }
 
@@ -207,6 +223,14 @@ extension DesktopSettingsSection {
         case .mail: .mail
         case .activity: .scrollText
         case .backups: .archive
+        case .providers: .plug
+        case .voice: .audioLines
+        case .updates: .download
+        case .about: .info
+        case .security: .shield
+        case .vault: .keyRound
+        case .notifications: .bell
+        case .importBot: .download
         }
     }
 }
@@ -214,11 +238,10 @@ extension DesktopSettingsSection {
 extension DesktopSettingsNavGroup {
     var label: LocalizedStringKey {
         switch self {
-        case .account: "Account"
-        case .bots: "Bots"
-        case .apps: "Apps and connections"
-        case .appearance: "Appearance"
-        case .privacySecurity: "Privacy and security"
+        case .personal: "Personal"
+        case .ai: "AI"
+        case .installation: "Installation"
+        case .app: "App"
         }
     }
 }
@@ -229,6 +252,7 @@ extension DesktopSettingsNavGroup {
 struct DesktopSettingsNav: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
+    @EnvironmentObject private var shell: DesktopShellModel
     let sections: [DesktopSettingsSection]
     let current: DesktopSettingsSection
     @Binding var query: String
@@ -239,13 +263,15 @@ struct DesktopSettingsNav: View {
         VStack(alignment: .leading, spacing: 2) {
             // The search sits on the row of the close button (its centre is
             // at 26 pt from the top: 10 pt inset, 32 pt tall), the title below.
+            // SettingsModal.tsx: "Settings" over the search, then the rail
+            // under the desktop's headings (Personal, AI, Installation, App).
+            DesktopText(Text("Settings"), size: 13, weight: .semibold, line: 18)
+                .padding(.horizontal, 9)
+                .padding(.top, -2)
+                .padding(.bottom, 8)
+                .accessibilityAddTraits(.isHeader)
             search
-                .padding(.top, -6)
                 .padding(.bottom, 4)
-            // The Grok Bot layout (2026-10-26): who is signed in at the top,
-            // then the sections under the phone's group labels.
-            profileHeader
-                .padding(.bottom, 6)
             if sections.isEmpty {
                 DesktopText(Text("No settings match “\(query.trimmingCharacters(in: .whitespaces))”."),
                             size: 12.5, line: 20.3, color: \.inkSecondary)
@@ -278,7 +304,8 @@ struct DesktopSettingsNav: View {
     }
 
     private func navRow(_ section: DesktopSettingsSection) -> some View {
-        Button { choose(section) } label: {
+        // About is the centred About window, as on the desktop
+        Button { if section == .about { shell.modal = .about } else { choose(section) } } label: {
             HStack(spacing: 9) {
                 DesktopSettingsIconView(icon: section.icon, size: 15)
                 DesktopText(Text(section.label))
@@ -294,57 +321,6 @@ struct DesktopSettingsNav: View {
         .buttonStyle(DesktopHoverFill(radius: 8))
         .accessibilityAddTraits(section == current ? .isSelected : [])
         .accessibilityIdentifier("desktop-settings.nav.\(section.rawValue)")
-    }
-
-    /// Photo, name and email; opens the section that holds the profile.
-    private var profileHeader: some View {
-        let target = sections.first { DesktopSettingsNavGroup.of($0) == .account }
-        return Button { if let target { choose(target) } } label: {
-            HStack(spacing: 10) {
-                Group {
-                    if let photo = session.accountPhoto {
-                        Image(uiImage: photo).resizable().scaledToFill()
-                    } else {
-                        DesktopText(Text(verbatim: initials), size: 13, weight: .medium, line: 18, color: \.inkSecondary)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .background(theme.raised)
-                    }
-                }
-                .frame(width: 36, height: 36)
-                .clipShape(Circle())
-                VStack(alignment: .leading, spacing: 1) {
-                    DesktopText(Text(verbatim: displayName), size: 13.5, weight: .semibold, line: 18)
-                        .lineLimit(1)
-                    if let detail {
-                        DesktopText(Text(verbatim: detail), size: 11.5, line: 15, color: \.inkSecondary)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
-            .background(theme.ink.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(DesktopHoverFill(radius: 12))
-        .accessibilityIdentifier("desktop-settings.profile")
-    }
-
-    private var displayName: String {
-        session.account?.name ?? session.account?.email ?? session.connection?.name ?? String(localized: "You")
-    }
-
-    private var detail: String? {
-        // The person's email, never the server's name (2026-10-26).
-        guard let email = session.account?.email, email != displayName else { return String(localized: "Personal account") }
-        return email
-    }
-
-    private var initials: String {
-        let words = displayName.split(whereSeparator: { $0 == " " || $0 == "@" || $0 == "." }).prefix(2)
-        let letters = words.compactMap(\.first).map { String($0).uppercased() }.joined()
-        return letters.isEmpty ? "?" : letters
     }
 
     private var search: some View {
@@ -404,7 +380,15 @@ struct DesktopSettingsPage: View {
         case .decisionModel: AnyView(DesktopDecisionModelSettings())
         // Models and voice (#518): the providers, then API keys and the
         // Decision model as cards of the page
-        case .engines: AnyView(DesktopModelsVoiceSettings())
+        case .providers: AnyView(DesktopProvidersSettings())
+        case .engines: AnyView(DesktopBotModelsPage())
+        case .voice: AnyView(DesktopVoiceSettings())
+        case .updates: AnyView(DesktopUpdatesSettings())
+        case .about: AnyView(EmptyView())
+        case .security: AnyView(DesktopSecuritySettings())
+        case .vault: AnyView(DesktopVaultSettings())
+        case .notifications: AnyView(DesktopNotificationsSettings())
+        case .importBot: AnyView(DesktopImportSettings())
         // #1098: the person's own subscription sign-in on each engine
         case .myEngines: AnyView(MyEnginesSection(style: .desktop))
         case .companion: AnyView(DesktopPairDevicesSettings())
@@ -419,19 +403,14 @@ struct DesktopSettingsPage: View {
 
 /// Models and voice: model providers and accounts, then the keys and the
 /// decision model that were pages of their own.
-struct DesktopModelsVoiceSettings: View {
+/// Providers (2026-10-30): every account, key and server of this computer
+/// that pays for a turn or a voice, in one page; API keys are its card.
+struct DesktopProvidersSettings: View {
     @Environment(\.desktopSettingsQuery) private var query
 
-    /// A search for a key or the decision model opens its card, as the
-    /// desktop's `cardsMatching` does.
-    private func searched(_ section: DesktopSettingsSection) -> Bool {
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return q.count >= 3 && section.matches(q, label: "")
-    }
-
     var body: some View {
-        let keys = searched(.connections)
-        let decision = searched(.decisionModel)
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let keys = q.count >= 3 && DesktopSettingsSection.connections.matches(q, label: "")
         AnyView(DesktopEnginesSettings())
         DesktopSettingsCard(Text("API keys"), summary: Text("Providers and connected apps"), open: keys, identifier: "engines.keys") {
             VStack(alignment: .leading, spacing: 12) {
@@ -440,12 +419,6 @@ struct DesktopModelsVoiceSettings: View {
         }
         .id("keys-\(keys)")
         .padding(.top, 12)
-        DesktopSettingsCard(Text("Decision model"), summary: Text(verbatim: "Jev"), open: decision, identifier: "engines.decisionModel") {
-            VStack(alignment: .leading, spacing: 12) {
-                AnyView(DesktopDecisionModelSettings())
-            }
-        }
-        .id("decision-\(decision)")
     }
 }
 
@@ -472,6 +445,7 @@ extension IPadParityScreen {
         switch self {
         case .searchPalette, .searchPaletteQuery: (.search, nil, nil)
         case .pluginsMcp: (.plugins, nil, .mcp)
+        case .capabilities: (.plugins, nil, nil)
         case .settingsGeneral, .settingsGeneralScrolled: (.settings, .general, nil)
         case .settingsOrganization: (.settings, .organization, nil)
         case .settingsAppearance: (.settings, .appearance, nil)
@@ -484,6 +458,16 @@ extension IPadParityScreen {
         case .settingsComputer: (.settings, .computer, nil)
         case .settingsUsage: (.settings, .usage, nil)
         case .settingsBackups: (.settings, .backups, nil)
+        // 2026-11-03: the desktop's pages of 2026-10-28 and 2026-10-30
+        case .settingsAccount: (.settings, .general, nil)
+        case .settingsProviders: (.settings, .providers, nil)
+        case .settingsVoice: (.settings, .voice, nil)
+        case .settingsUpdates: (.settings, .updates, nil)
+        case .settingsAbout: (.about, nil, nil)
+        case .settingsSecurity: (.settings, .security, nil)
+        case .settingsCredentials: (.settings, .vault, nil)
+        case .settingsNotifications: (.settings, .notifications, nil)
+        case .settingsImport: (.settings, .importBot, nil)
         default: nil
         }
     }

@@ -1,5 +1,5 @@
 // GET /api/bots/:id/capabilities: the one resolved list of a bot
-// (server/capabilities.ts), read only, with an optional engine preview.
+// (server/capabilities/capabilities.ts), read only, with an optional engine preview.
 import { describe, expect, it } from "vitest";
 
 import { createBotCapabilitiesRoutes, type BotCapabilitiesAnswer } from "./bot-capabilities.ts";

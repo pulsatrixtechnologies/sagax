@@ -25,7 +25,7 @@ import {
   type DataSource,
   type OmbChartSpec,
 } from "../../shared/data-surface.ts";
-import { compileToolSchema, schemaProblems } from "../mcp-schema-validator.ts";
+import { compileToolSchema, schemaProblems } from "../mcp/mcp-schema-validator.ts";
 import { downloadGuarded } from "./download.ts";
 import type { DataSheetStore } from "./sheet.ts";
 import { DataFailure, type BotDatabase, type ChartCompiler, type ChartRenderer, type DataConnection, type DataExtension, type RunOptions, type RunResult, type VegaLiteValidator } from "./types.ts";

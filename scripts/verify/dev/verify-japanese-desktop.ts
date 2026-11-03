@@ -27,7 +27,7 @@ try {
 }
 
 async function capture() {
-  const { containerRunArgs, perBotLocalVmTarget, CUA_EXECUTABLE, CUA_SOCKET } = await import("../../../server/container-computer.ts");
+  const { containerRunArgs, perBotLocalVmTarget, CUA_EXECUTABLE, CUA_SOCKET } = await import("../../../server/computer/container-computer.ts");
   const run = (args: string[]) => execFileSync(podman!, ["--connection", machine!, ...args], { env: podmanEnv, encoding: "utf8", timeout: 90_000 }).trim();
   const machineRun = (args: string[]) => execFileSync(podman!, ["machine", "ssh", machine!, ...args], { env: podmanEnv, encoding: "utf8", timeout: 90_000 }).trim();
   const driverEnv = ["-e", "DISPLAY=:1", "-e", "HOME=/home/cua", "-e", "CUA_DRIVER_INSTALL_CHANNEL=python_package", "-e", "CUA_DRIVER_RS_TELEMETRY_ENABLED=0"];

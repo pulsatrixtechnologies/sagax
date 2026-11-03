@@ -1,7 +1,7 @@
 // The live chat-app tools of the agents catalog (show_html, update_html),
 // spread into TOOL_DEFINITIONS in agents-catalog.ts next to the chat-widget
 // tools. Definitions only, like that file; agents-call-cards.ts carries a
-// call out and server/chat-apps.ts stores the result. Every word here is sent
+// call out and server/widgets/chat-apps.ts stores the result. Every word here is sent
 // to the model on every turn and pinned by agents-catalog-wire.test.ts.
 export const APP_TOOL_DEFINITIONS = [
   {

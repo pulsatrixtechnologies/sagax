@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import { ASK_CHOICE_TOOL, parseAskChoiceInput } from "../shared/options-card.ts";
-import { createAgentCard, type AgentCardStore } from "./chat-widgets.ts";
+import { createAgentCard, type AgentCardStore } from "./widgets/chat-widgets.ts";
 import { availableTools, type CatalogProfile } from "./drivers/agents-catalog.ts";
 import { BUILT_IN_DRIVERS } from "./drivers/builtIn.ts";
-import { MEMBER_OWN_SCOPE_AGENT_TOOLS } from "./member-tool-scope.ts";
+import { MEMBER_OWN_SCOPE_AGENT_TOOLS } from "./people/member-tool-scope.ts";
 import { buildSystemPrompt } from "./system-prompt.ts";
 import type { Message } from "./store.ts";
 

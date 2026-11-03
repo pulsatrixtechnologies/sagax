@@ -12,7 +12,7 @@ restart the first turn showed as cut, the bot was idle, and the second message
 stayed a user row with no reply and no notice. Cause: a crash wrote no cut-turn
 record, and the words steered into the engine were only held by that process.
 
-Fix: `server/held-steers.ts` records each steered acceptance durably. On boot,
+Fix: `server/turns/held-steers.ts` records each steered acceptance durably. On boot,
 when no cut-turn resume is scheduled for that thread, those rows become one
 follow-up turn ("Continuing messages sent before the restart"), same shape as
 busy lines draining as one follow-up. Cleared when the turn completes or the

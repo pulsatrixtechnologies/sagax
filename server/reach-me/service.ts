@@ -18,7 +18,7 @@
 //   security key is refused (the key is physical): Deny still works.
 // - The reply is untrusted: a question's answer reaches the bot inside
 //   `[UNTRUSTED REACH-ME REPLY <boundary>]`, markers defanged, like relayed
-//   triggers (server/webhooks.ts). A decision is one word read here, never
+//   triggers (server/triggers/webhooks.ts). A decision is one word read here, never
 //   text handed to a model.
 // - Nothing here logs or audits the text or a full number: the audit row is
 //   the bot, the channel and the outcome.
@@ -26,7 +26,7 @@ import { randomBytes } from "node:crypto";
 
 import { DEFAULT_REACH_ME, reachesBy, splitReachReply, readReachDecision, withinReachHours, type ReachChannelId, type ReachMeSettings, REACH_WIRED } from "../../shared/reach-me.ts";
 import type { PushMessage } from "../push/payload.ts";
-import { defang } from "../webhooks.ts";
+import { defang } from "../triggers/webhooks.ts";
 import type { ReachChannel, ReachInbound, ReachOutbound } from "./channel.ts";
 import type { ReachCode, ReachCodeStore, ReachMeStore } from "./store.ts";
 

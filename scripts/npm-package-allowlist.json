@@ -32,9 +32,9 @@
   },
   {
     "term": "grok-bot",
-    "files": "^dist-server/(?:shared/grok-import|server/team-library|server/routes/team-library-grok)\\.js$",
+    "files": "^dist-server/(?:shared/grok-import|server/team/team-library|server/routes/team-library-grok)\\.js$",
     "context": "Grok Bot|grok-bot",
-    "reason": "The bot importer and its x.ai share-card reader (shared/grok-import.ts, server/team-library.ts, server/routes/team-library-grok.ts): Grok Bot is the public name of the x.ai product whose shared bots they import, so their messages, defaults and the grok-bot id fallback name it. Only these compiled files."
+    "reason": "The bot importer and its x.ai share-card reader (shared/grok-import.ts, server/team/team-library.ts, server/routes/team-library-grok.ts): Grok Bot is the public name of the x.ai product whose shared bots they import, so their messages, defaults and the grok-bot id fallback name it. Only these compiled files."
   },
   {
     "term": "grok-bot",
@@ -46,7 +46,7 @@
     "term": "grok-bot",
     "files": "^dist-server/index\\.js$",
     "context": "did not show a Grok Bot\\.|That Grok Bot link (?:tried to leave x\\.ai|was not found)|did not show the Grok Bot page|Paste a Grok Bot link, like|or a Grok Bot marketplace page|That Grok Bot marketplace page was not found|did not link to a Grok Bot to add|A Grok Bot share link is required|The Grok Bot could not be loaded",
-    "reason": "The x.ai share-card reader (server/team-library.ts, server/routes/team-library-grok.ts) inlined into the server bundle: its error messages, phrase by phrase."
+    "reason": "The x.ai share-card reader (server/team/team-library.ts, server/routes/team-library-grok.ts) inlined into the server bundle: its error messages, phrase by phrase."
   },
   {
     "term": "grok-bot",

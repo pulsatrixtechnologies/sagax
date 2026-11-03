@@ -1,7 +1,7 @@
 // A voice call as one realtime session (the maintainer, 2026-11-02): never text to
 // speech. The page holds the microphone and the speaker; the server bridges
 // them to the configured realtime voice (xAI's Voice Agent API, GET
-// /api/bots/<id>/voice/realtime, server/realtime-call.ts), which listens,
+// /api/bots/<id>/voice/realtime, server/voice/realtime-call.ts), which listens,
 // decides the end of each turn, speaks, and is cut the moment the person
 // talks over it. The bot's work runs as its own turns on the thread.
 //

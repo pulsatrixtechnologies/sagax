@@ -2,13 +2,13 @@
 // proxy (docs/mcp/permissions.md, Audit), written to the activity log. Only
 // the whitelisted fields of mcpAuditRow are kept. Behind the agents
 // capability (see internal-route.ts); the bot is the capability's.
-import { mcpAuditRow, type McpAuditRecord } from "../mcp-permissions.ts";
+import { mcpAuditRow, type McpAuditRecord } from "../mcp/mcp-permissions.ts";
 import type { InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 
 export interface McpAuditInternalDeps {
   append(row: ReturnType<typeof mcpAuditRow>): void;
-  /** A confidential thread (server/confidential-threads.ts): its rows keep
+  /** A confidential thread (server/threads/confidential-threads.ts): its rows keep
    * the tool, permission and decision, never the resource a call named. */
   confidential?(threadId: string): boolean;
 }

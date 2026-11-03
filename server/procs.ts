@@ -23,10 +23,10 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { sagaxFolder } from "../shared/human-id.ts";
 import type { Readable, Writable } from "node:stream";
 import { join, posix, win32 } from "node:path";
-import { engineStartGate } from "./engine-start-gate.ts";
+import { engineStartGate } from "./engines/engine-start-gate.ts";
 import { markOomVictim, memoryGuardSettings } from "./memory/engine-memory-guard.ts";
 import { resolveCliSpawn, splitCliString, type ResolvedSpawn } from "./env-path.ts";
-import { noteEngineGroupEnded, noteEngineGroupStarted } from "./engine-groups.ts";
+import { noteEngineGroupEnded, noteEngineGroupStarted } from "./engines/engine-groups.ts";
 
 export function resolveCli(cli: string, args: string[] = [], env?: NodeJS.ProcessEnv): ResolvedSpawn {
   return resolveCliSpawn(cli, args, env);
@@ -343,7 +343,7 @@ export function execCli(
   };
   // A known engine CLI boots a whole runtime even to print its version:
   // while the server boots, those probes share the engine start limit
-  // (server/engine-start-gate.ts).
+  // (server/engines/engine-start-gate.ts).
   if (!engineStartGate.booting || !isEngineCli(cli)) {
     run();
     return;

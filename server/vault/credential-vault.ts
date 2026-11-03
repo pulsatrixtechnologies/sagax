@@ -6,7 +6,7 @@
 //   team bot (shared)     DATA_DIR/bots/<botId>/credential-vault.enc
 //
 // AES-256-GCM with a key derived (HKDF) from the server's vault key, the one
-// mcp-oauth.enc uses (server/mcp-oauth.ts resolveVaultKey): on the desktop
+// mcp-oauth.enc uses (server/mcp/mcp-oauth.ts resolveVaultKey): on the desktop
 // that key lives in the OS keychain through Electron safeStorage
 // (credentials.bin) and reaches the server as SAGAX_MCP_OAUTH_KEY; a
 // headless server keeps it in a 0600 key file beside its data. The
@@ -81,9 +81,9 @@ import {
   type PaymentsSettings,
 } from "../../shared/payments-settings.ts";
 import { writeFileAtomic } from "../atomic.ts";
-import type { VaultKeySource } from "../mcp-oauth.ts";
-import { principalDir } from "../person-connections.ts";
-import { parseTotpSeed, totp } from "../totp.ts";
+import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
+import { principalDir } from "../people/person-connections.ts";
+import { parseTotpSeed, totp } from "../auth/totp.ts";
 import type { IssuedCard, WalletIssuer } from "../wallet-issuer.ts";
 
 export const LOCAL_VAULT_PRINCIPAL = "local";
@@ -464,7 +464,7 @@ export class CredentialVault {
   private file(principalId: string): string {
     if (principalId === LOCAL_VAULT_PRINCIPAL) return join(this.dataDir, FILE);
     const botId = botIdFromVaultPrincipal(principalId);
-    // Same layout as server/bot-folder.ts, under this vault's dataDir so
+    // Same layout as server/bots/bot-folder.ts, under this vault's dataDir so
     // tests and a real server stay isolated.
     if (botId) return join(this.dataDir, "bots", botId, FILE);
     return join(principalDir(this.dataDir, principalId), FILE);
@@ -866,7 +866,7 @@ export class CredentialVault {
 
   /** Fill a granted field into the computer's focused form control. No page
    * origin check: the person already allowed the login for this bot. The
-   * caller types the value (server/computer-credential-fill.ts) and must
+   * caller types the value (server/computer/computer-credential-fill.ts) and must
    * never put it in a tool result, transcript, memory or log. */
   async resolveForComputerFill(
     principalId: string,

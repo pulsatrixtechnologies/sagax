@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CONTROL_BUSY, CONTROL_HANDED_BACK, CONTROL_WAIT_MS, CONTROL_WAITED, controlRefusal, type ControlState } from "../control-client.ts";
-import { computerPersonAwayText } from "../computer-wait.ts";
+import { computerPersonAwayText } from "../computer/computer-wait.ts";
 import { ChatMcpClient } from "../drivers/chat-mcp-tools.ts";
-import { createGateInterceptor } from "../mcp-bridge.ts";
+import { createGateInterceptor } from "../mcp/mcp-bridge.ts";
 import { callOutcome, openComputerCaller, STEP_TIMEOUT_MS } from "./computer-client.ts";
 
 const FAKE = fileURLToPath(new URL("../testing/fake-mcp-server.ts", import.meta.url));

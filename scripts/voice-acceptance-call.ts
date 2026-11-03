@@ -19,7 +19,7 @@ import { VAD_FRAME, type VoiceProbability } from "../src/lib/voice-mode/vad.ts";
 import { nextSpeakSlot, type SpeakItem } from "../src/lib/voice-mode/voice-speak-queue.ts";
 import { classifyVoiceIntent } from "../src/lib/voice-mode/voice-topics.ts";
 import { percentile } from "../src/lib/voice-mode/latency.ts";
-import { continuesSameUtterance } from "../server/voice-call-duplex.ts";
+import { continuesSameUtterance } from "../server/voice/voice-call-duplex.ts";
 import {
   BENCH_SAY_VOICE_FR,
   ClockPlayer,

@@ -13,12 +13,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import WebSocket, { WebSocketServer } from "ws";
 
 import { json, readBody } from "./harness/http.ts";
-import type { RequestAuth } from "./request-auth.ts";
+import type { RequestAuth } from "./auth/request-auth.ts";
 import { createDesktopViewer } from "./routes/desktop-viewer.ts";
 import { PASS, type RouteContext } from "./routes/table.ts";
-import type { SessionRecord } from "./sessions.ts";
+import type { SessionRecord } from "./auth/sessions.ts";
 import { startFakeXaiVoice, XAI_VOICE_PATHS, type FakeXaiVoice } from "./testing/fake-xai-voice.ts";
-import type { VoiceUsage } from "./voice-mode.ts";
+import type { VoiceUsage } from "./voice/voice-mode.ts";
 
 const KEY = "xai-CALLfake8Hq2Zr5Lp7Wd3";
 const ada: RequestAuth = {
@@ -30,7 +30,7 @@ let xai: FakeXaiVoice;
 /** A loopback xAI Voice Agent API: session.created on connect, session.updated on session.update. */
 let realtimeXai: WebSocketServer;
 let realtimeUrl = "";
-let socketGate: Pick<typeof import("./voice-mode.ts"), "isVoiceSocketPath" | "VOICE_SOCKET_ACTIONS">;
+let socketGate: Pick<typeof import("./voice/voice-mode.ts"), "isVoiceSocketPath" | "VOICE_SOCKET_ACTIONS">;
 const realtimeSeen: Array<{ authorization?: string; events: string[]; session?: Record<string, unknown> }> = [];
 let server: Server;
 let origin = "";
@@ -60,7 +60,7 @@ beforeAll(async () => {
   realtimeUrl = `ws://127.0.0.1:${realtimeAddress.port}/v1/realtime`;
   const grok = await import("./tts/grok.ts");
   // imported after SAGAX_XAI_TTS_API is set: tts/grok.ts reads it on load
-  const voiceMode = await import("./voice-mode.ts");
+  const voiceMode = await import("./voice/voice-mode.ts");
   const { createVoiceModeRoutes } = voiceMode;
   socketGate = voiceMode;
   const viewer = createDesktopViewer({

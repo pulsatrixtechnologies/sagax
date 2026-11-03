@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { CONTAINER, CUA_EXECUTABLE, CUA_SOCKET } from "./container-computer.ts";
+import { CONTAINER, CUA_EXECUTABLE, CUA_SOCKET } from "./computer/container-computer.ts";
 
 const temporary: string[] = [];
 

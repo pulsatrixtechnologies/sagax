@@ -3,7 +3,7 @@
 // The sign-in always runs in the person's own browser (RFC 8252), never in a
 // window of this app: their password manager, their single sign-on and
 // their passkeys (WebAuthn) live there. The server is the OIDC client
-// (server/oidc-login.ts); no provider token is ever seen here.
+// (server/auth/oidc-login.ts); no provider token is ever seen here.
 //
 // How the browser comes back to this app, in order of preference:
 //
@@ -54,7 +54,7 @@ function oidcLoginStartUrl(url, state) {
 /** The desktop sign-in's start address for the system browser, with the
  * loopback return when there is one. `fresh` is "Sign in again" (the page's
  * `?fresh=1`, src/lib/sign-in-again.ts): Perspicax asks for the factors
- * again (server/oidc-login.ts). */
+ * again (server/auth/oidc-login.ts). */
 function desktopStartUrl(origin, returnTo, fresh = false) {
   const url = new URL(OIDC_START_PATH, origin);
   url.searchParams.set("client", "desktop");
@@ -78,7 +78,7 @@ function signInSupport(descriptor) {
 }
 
 /** The scheme return a desktop start names on a server that offers sagax://
- * (server/oidc-login.ts sagaxReturnLink: the same string, compared exactly). */
+ * (server/auth/oidc-login.ts sagaxReturnLink: the same string, compared exactly). */
 function sagaxReturnLink(origin) {
   return `sagax://auth?origin=${encodeURIComponent(origin)}`;
 }

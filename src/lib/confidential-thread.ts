@@ -1,4 +1,4 @@
-// Confidential threads ("Fil confidentiel", server/confidential-threads.ts).
+// Confidential threads ("Fil confidentiel", server/threads/confidential-threads.ts).
 // A thread marked confidential is never remembered, exported or shared
 // beyond its owner, and it stays confidential until it is deleted: the
 // server refuses any change back, so the client offers none. To work

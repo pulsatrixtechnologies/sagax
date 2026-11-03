@@ -14,21 +14,21 @@ import { isMainThread, Worker } from "node:worker_threads";
 import * as tar from "tar";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { writeFileAtomic } from "./atomic.ts";
-import { exportPlainCopy, isAtRestTemp, pauseAtRestMigration, useExportedContentKeys } from "./content-at-rest.ts";
+import { exportPlainCopy, isAtRestTemp, pauseAtRestMigration, useExportedContentKeys } from "./encryption/content-at-rest.ts";
 import { contentKeysForExport, unsealDatabaseCopy, type ExportedContentKey } from "./content-export.ts";
-import { mergePrincipalFiles } from "./principals.ts";
+import { mergePrincipalFiles } from "./auth/principals.ts";
 import { removeThreadTrees } from "./runtime/store.ts";
 import {
   chatOfKeys, confidentialEngineSessionPath, dataEngineHomes, databaseSidecarOf, ENGINE_PURGE_DONE, ENGINE_PURGE_FILE,
   engineHomeOf, engineStoreFiltered, engineStoreKind, eventLogSessionIds, readPendingPurges, scrubEngineDatabase, taskEngineKeys, widenKeys,
-} from "./engine-transcripts.ts";
+} from "./engines/engine-transcripts.ts";
 import { escapeAttribute, splitTranscriptAttachments } from "../src/lib/composer-attachments.ts";
 import { WORKSPACE_BACKUP_CLIENT_KEYS } from "../shared/workspace-backup-client.ts";
 import {
   CLAUDE_AUTH_FIELDS, configSecretCounts, confidentialDataScopePath, destinationSignInFile, disposableEngineHomePath, engineSettingsPath, ephemeralWorkspaceTokenPath, excludedWorkspaceAuthPath, liveDataEnginePath,
   portableWorkspaceConfig, ReconnectTally, redownloadedOrgLibraryPath, registrySettingsPath, restoredLibraryIndexPath, restoredWorkspaceConfig, savedSignInPath, secretCategory, withoutEngineSecrets, withoutRegistrySecrets,
-} from "./workspace-backup-policy.ts";
-import { installationCapabilityBridge } from "./installation-capability-bridge.ts";
+} from "./backup/workspace-backup-policy.ts";
+import { installationCapabilityBridge } from "./capabilities/installation-capability-bridge.ts";
 import {
   INSTALLATION_CAPABILITIES_FILE, SKILLS_LIBRARY_INDEX_FORMAT, SKILLS_LIBRARY_INDEX_PART, SKILLS_LIBRARY_INDEX_VERSION, SKILLS_LIBRARY_RESTORE_IMPORT,
 } from "../shared/capability-stores.ts";
@@ -50,11 +50,11 @@ const EXCLUDED = new Set([
   // dead data whose briefs and results may be a confidential thread's
   "confidential-forgotten", "room-handoffs.json.migrated",
   // engine transcript purges left to retry, and the one-time purge's mark
-  // (server/engine-transcripts.ts): this machine's bookkeeping
+  // (server/engines/engine-transcripts.ts): this machine's bookkeeping
   ENGINE_PURGE_FILE, ENGINE_PURGE_DONE,
   ".openmausbot-server-child", "environment-id", "sessions.json", "tunnel-account.json",
   "team-computers.json",
-  // Identity provider grants (server/idp-session.ts): bound to this server's
+  // Identity provider grants (server/auth/idp-session.ts): bound to this server's
   // sessions, which are never carried over either.
   "idp-grants.enc", "idp-grants.key",
   // Typed-trigger poller passwords and ICS links (server/trigger-poller-
@@ -318,7 +318,7 @@ function hashFile(path: string): string {
     }
   } finally { closeSync(fd); }
 }
-// ── confidential threads (server/confidential-threads.ts) ───────────────
+// ── confidential threads (server/threads/confidential-threads.ts) ───────────────
 // A workspace backup is an export an admin downloads: a confidential
 // thread's content never rides in it. Its task record stays (id, dates, the
 // flag) so the roster restores whole, with its title replaced and nothing
@@ -443,7 +443,7 @@ export function stripConfidentialRuntime(databasePath: string, threads: Readonly
 }
 
 /** The keys that find the engines' own transcripts of a data folder's
- * confidential threads (server/engine-transcripts.ts): each one's id, its
+ * confidential threads (server/engines/engine-transcripts.ts): each one's id, its
  * folder's hashes and its session ids (its record, its event log), the
  * purges left to retry, widened over the engine homes in that folder.
  * `sourceDataDir` is where the folder was when the engines ran (an
@@ -681,7 +681,7 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
       // sealed transcripts leave in the clear, inside the password-encrypted archive
       if (name === "messages.db") {
         const keys = options.contentKeys ?? contentKeysForExport();
-        // the files and logs sealed at rest too (server/content-at-rest.ts), with
+        // the files and logs sealed at rest too (server/encryption/content-at-rest.ts), with
         // the same keys: a worker opens with them, never with the live keyring
         if (!isMainThread) useExportedContentKeys(keys, storedContentKeyIds(join(snapshot, snapshotName)));
         unsealDatabaseCopy(join(snapshot, snapshotName), keys);
@@ -694,7 +694,7 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
         if (!prefix && excluded(name)) { reconnect.path(name); continue; }
         const path = prefix ? `${prefix}/${name}` : name;
         // an at-rest replacement in progress, or the sealed originals kept while
-        // a turn reads files plain (server/content-at-rest.ts): never content
+        // a turn reads files plain (server/encryption/content-at-rest.ts): never content
         if (isAtRestTemp(name) || (!prefix && name === ".at-rest-originals")) continue;
         if (excludedWorkspaceAuthPath(path)) { reconnect.path(path); continue; }
         if (ephemeralWorkspaceTokenPath(path) || redownloadedOrgLibraryPath(path) || restoredLibraryIndexPath(path) || liveDataEnginePath(path) || confidentialDataScopePath(path)) continue;
@@ -766,7 +766,7 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
           walk(source, path, [...chain, source]);
         } else if (stat.isFile()) {
           let copied: { size: number; mode: number; sha256: string };
-          // an engine home's own stores (server/engine-transcripts.ts): its
+          // an engine home's own stores (server/engines/engine-transcripts.ts): its
           // databases are copied as compacted snapshots whenever a confidential
           // thread exists or one was deleted (no free page or WAL frame of it),
           // its histories, logs and chat records without the threads' entries
@@ -1210,7 +1210,7 @@ function withoutConfidentialDataScopes(staged: string, manifest: Manifest): Mani
 }
 
 /** An archive from a release that exported the engines' own transcripts
- * of its confidential threads (server/engine-transcripts.ts) leaves them in
+ * of its confidential threads (server/engines/engine-transcripts.ts) leaves them in
  * the staged copy at once: the entries their names give away, the lines of
  * prompt histories and logs, the rows of engine databases and Gemini-style
  * chat records of their sessions. The manifest follows, so the preview

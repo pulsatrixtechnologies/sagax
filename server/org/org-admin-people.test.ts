@@ -7,7 +7,7 @@ import { botLook, botPersona } from "./org-admin-look.ts";
 import type { AdminBot } from "./org-admin-routes.ts";
 import { routeNames } from "./org-admin-console.ts";
 import { fakeConsole } from "../testing/console-context.ts";
-import type { UsageRow } from "../usage-ledger.ts";
+import type { UsageRow } from "../usage/usage-ledger.ts";
 
 const NOW = Date.UTC(2026, 9, 8, 12);
 const person = (principalId: string, name: string, extra: Partial<PersonFacts> = {}): PersonFacts => ({

@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { ToolGrantStore } from "./tool-grants.ts";
-import { guardDecision } from "./tool-guard.ts";
+import { ToolGrantStore } from "./tools/tool-grants.ts";
+import { guardDecision } from "./tools/tool-guard.ts";
 import { describe, expect, it } from "vitest";
 
 import { createHmac } from "node:crypto";
@@ -10,7 +10,7 @@ import {
   HANDLE_TTL_MS, matchScore, SEND_FILES_MAX, signHandle, signTurnHandle, turnLabel, verifyHandle,
   type AgentApiDeps, type AgentCaller, type AgentScope, type AgentSummary, type AuditEntry, type FileInput, type StoredMessage, type TurnState,
 } from "./agent-api.ts";
-import { PRIORITY_DOWNGRADED_NOTE, resetPriorityWakeForTests, type PriorityDelivery } from "./priority-wake.ts";
+import { PRIORITY_DOWNGRADED_NOTE, resetPriorityWakeForTests, type PriorityDelivery } from "./proactive/priority-wake.ts";
 
 const SECRET = Buffer.alloc(32, 7);
 const ALL: AgentScope[] = ["agents.read", "agents.send", "agents.create"];

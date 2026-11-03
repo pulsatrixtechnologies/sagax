@@ -45,7 +45,9 @@ struct DesktopKeyCommands: View {
 
     /// Under the round New button (brand row, or the rail's second circle).
     private var newAnchor: CGPoint {
-        model.density == .icons ? CGPoint(x: 21.5, y: 124) : CGPoint(x: model.sidebarWidth - 49, y: 80)
+        // the head starts at the top without the logo (6 + 36 + 4), under the 36 pt band with it
+        let brand = SidebarLogoRuntime.isBrandVisible(UserDefaults.standard.object(forKey: SidebarLogoPreference.key) as? Bool ?? SidebarLogoPreference.defaultEnabled)
+        return model.density == .icons ? CGPoint(x: 21.5, y: 124) : CGPoint(x: model.sidebarWidth - 49, y: brand ? 82 : 46)
     }
 
     private func command(
@@ -99,6 +101,14 @@ struct DesktopSidebarPrompts: ViewModifier {
                 if let team = model.sharingTeam {
                     DesktopShareTeamSheet(team: team) { model.sharingTeam = nil }
                         .environmentObject(session)
+                }
+            }
+            .sheet(isPresented: Binding(
+                get: { model.sharingBotLink != nil },
+                set: { if !$0 { model.sharingBotLink = nil } }
+            )) {
+                if let link = model.sharingBotLink {
+                    DesktopActivityView(items: [link]) { model.sharingBotLink = nil }
                 }
             }
             .sheet(item: $model.replacingPrimary) { bot in

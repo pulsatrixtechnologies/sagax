@@ -1,4 +1,4 @@
-// A bot's versions, read from its profile history (server/profile-versions.ts):
+// A bot's versions, read from its profile history (server/profiles/profile-versions.ts):
 // the rows one save writes (same time, actor and origin) are one version.
 // Shared by the restore route (server/routes/bot-versions.ts) and the
 // Changes page (src/components/bot-settings/HistorySection.tsx), so what the

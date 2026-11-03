@@ -1,6 +1,6 @@
 /** Claude context-full, usage-limit and API-error helpers (issue #1383). */
-import { hostTimeZone } from "../../bot-settings.ts";
-import { isContextFullText } from "../../context-renewal.ts";
+import { hostTimeZone } from "../../bots/bot-settings.ts";
+import { isContextFullText } from "../../context/context-renewal.ts";
 import { USAGE_LIMIT } from "../retry.ts";
 import { engineFailureMessage, type EngineFailureKind } from "../engine-errors.ts";
 
@@ -80,7 +80,7 @@ const modelWindow = (window: string | null | undefined): boolean => /^seven_day_
  * every model shares holds the whole engine until it resets; a credits
  * refusal or one model's weekly window is `limitScope: "model"`, which
  * leaves the engine free for its other models
- * (server/limit-failover-host.ts). A credits refusal's reset is the billing
+ * (server/usage/limit-failover-host.ts). A credits refusal's reset is the billing
  * period's, no countdown to wait for, so it carries no `limitResetsAt`. */
 export function claudeLimitFields(limit: ClaudeLimit | null | undefined, now = Date.now()): { limitResetsAt?: number; limitScope?: "model" } {
   if (!limit) return {};

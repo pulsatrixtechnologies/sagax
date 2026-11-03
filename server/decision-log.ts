@@ -32,13 +32,13 @@ import { readdirSync, readFileSync } from "node:fs";
 import { appendFile, mkdir, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 
-import type { AutoVerdictSource } from "./auto-approve.ts";
+import type { AutoVerdictSource } from "./approvals/auto-approve.ts";
 import { DATA_DIR } from "./config.ts";
-import { appendLog, LogReader, registerSealedLog, sealLogLine, sealLogLines, withLogFileLock } from "./content-at-rest.ts";
-import { WORKSPACE_OWNER } from "./content-keys.ts";
-import { JOURNAL_GENESIS, sealLink, type JournalSealFields, type JournalSealLink } from "./journal-seal.ts";
+import { appendLog, LogReader, registerSealedLog, sealLogLine, sealLogLines, withLogFileLock } from "./encryption/content-at-rest.ts";
+import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
+import { JOURNAL_GENESIS, sealLink, type JournalSealFields, type JournalSealLink } from "./encryption/journal-seal.ts";
 import { redactSecrets } from "./redact.ts";
-import { csvCell, monthKey } from "./usage-ledger.ts";
+import { csvCell, monthKey } from "./usage/usage-ledger.ts";
 
 /** A verdict's outcome. auto-* rows came from a policy — connector grants,
  * auto-approve rules — with no card in front of a person; user-* rows
@@ -90,7 +90,7 @@ export type DecisionSource =
   /** the ask's own timeout (an `expired` row) */
   | "timeout"
   /** refused in a confidential thread: only its owner may answer, and could not
-   * (server/confidential-threads.ts) */
+   * (server/threads/confidential-threads.ts) */
   | "confidential"
   /** a member bot's command would run on the shared organization server, which
    * only an admin may use: it runs on the bot's own computer instead, or is
@@ -199,7 +199,7 @@ let retentionDays: () => number = () => DEFAULT_DECISION_RETENTION_DAYS;
 let confidentialThread: (threadId: string) => boolean = () => false;
 
 /** The server binds which threads are confidential
- * (server/confidential-threads.ts): their rows are written metadata only. */
+ * (server/threads/confidential-threads.ts): their rows are written metadata only. */
 export function bindConfidentialDecisions(isConfidential: (threadId: string) => boolean): void {
   confidentialThread = isConfidential;
 }
@@ -244,7 +244,7 @@ export function scrubThreadDecisions(dataDir: string, threadId: string): Promise
   let changed = 0;
   const queued = previous.then(async () => {
     for (const file of sources(dataDir)) {
-      // one rewrite at a time with the at-rest migration (server/content-at-rest.ts)
+      // one rewrite at a time with the at-rest migration (server/encryption/content-at-rest.ts)
       await withLogFileLock(file, async () => {
         let text: string;
         try {
@@ -511,7 +511,7 @@ function readRows(path: string, projectionOnly?: (projection: Record<string, unk
   }
   const rows: DecisionRow[] = [];
   const lines = text.split("\n");
-  // rows sealed at rest open here, a block at a time (server/content-at-rest.ts);
+  // rows sealed at rest open here, a block at a time (server/encryption/content-at-rest.ts);
   // a locked key throws rather than show a shorter history, a torn line is skipped
   const reader = new LogReader(path, projectionOnly);
   for (let index = 0; index < lines.length; index++) {
@@ -538,7 +538,7 @@ function sources(dataDir: string): string[] {
  * uses for thread events. Reads month files newest first and stops once it
  * has enough, so a long history costs no more than the page asked for. */
 /** `projectionOnly`: rows sealed at rest that the caller will drop by their
- * clear fields (another bot's) are not opened (server/content-at-rest.ts). */
+ * clear fields (another bot's) are not opened (server/encryption/content-at-rest.ts). */
 export function readDecisions(dataDir: string, limit: number, projectionOnly?: (projection: Record<string, unknown>) => boolean): DecisionRow[] {
   const files = sources(dataDir);
   const chunks: DecisionRow[][] = [];

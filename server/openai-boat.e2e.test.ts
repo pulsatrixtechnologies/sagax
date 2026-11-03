@@ -119,7 +119,7 @@ it("keeps the selected API model for direct, group and scheduled Boat turns and 
       expect(nativePrompts).toBe(0);
     }
     // Back to Approve for me: the owner's own routine on their own cloud
-    // computer runs without a card at that level (server/owner-autonomy.ts).
+    // computer runs without a card at that level (server/approvals/owner-autonomy.ts).
     await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "auto" });
     const beforeRoutine = requests.length;
     const { routine } = await api("POST", "/api/routines", { name: "Cloud fixture", botId: bot.id,
@@ -143,7 +143,7 @@ it("keeps the selected API model for direct, group and scheduled Boat turns and 
     boatReadsGate = undefined;
     readiness.release();
     // The owner's own routine runs on their own cloud computer without a
-    // card (owner lineage, server/owner-autonomy.ts), so the turn settles.
+    // card (owner lineage, server/approvals/owner-autonomy.ts), so the turn settles.
     const finished = await control(["wait", ...destination, "--timeout", "20"]);
     expect(finished.status, JSON.stringify(finished)).toBe("settled");
     const routineMessages = await api("GET", `/api/threads/${routineThread}/messages?limit=30`);

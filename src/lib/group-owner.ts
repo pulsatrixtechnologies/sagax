@@ -1,5 +1,5 @@
 // Organization server: only a group's owner changes its settings or deletes
-// it (server/group-ownership.ts); an organization admin may delete it for
+// it (server/groups/group-ownership.ts); an organization admin may delete it for
 // moderation. A solo server sends no `ownerId` and nothing changes there.
 import type { ConfigStatus, Group } from "@/state/store";
 import { viewerActorId } from "./viewer";

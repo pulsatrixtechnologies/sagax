@@ -1,4 +1,4 @@
-// The Local VM's automatic care, asked by the app (server/local-vm-auto.ts).
+// The Local VM's automatic care, asked by the app (server/computer/local-vm-auto.ts).
 //
 // POST /api/local-computer/ensure: "bot" when a bot's Computer tab needs the
 // VM, "person" for the person's own Start or Retry. Answers at once; the
@@ -10,9 +10,9 @@
 // one again. The workspace folders on this computer are kept.
 import { PASS, type RouteHandler } from "./table.ts";
 
-import type { LocalVmTarget } from "../container-computer.ts";
-import type { LocalVmAutoStarter } from "../local-vm-auto.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { LocalVmTarget } from "../computer/container-computer.ts";
+import type { LocalVmAutoStarter } from "../computer/local-vm-auto.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 
 export interface LocalComputerAutoRouteDeps {
   /** Null where no automatic start runs (organization server, cloud, self-hosted). */

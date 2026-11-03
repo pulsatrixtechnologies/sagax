@@ -93,7 +93,7 @@ per service. The data model supports multi-account; nothing assigns them.
     toolName: string,
   ): CallVerdict;
   ```
-  `CallVerdict` is P3 Task 3's type, imported from `server/mcp-bridge.ts`.
+  `CallVerdict` is P3 Task 3's type, imported from `server/mcp/mcp-bridge.ts`.
 
 - [ ] Write failing tests: a bot granted `{ gmail: { scopes: ["read"] } }` may call `GMAIL_FETCH_EMAILS` and is refused `GMAIL_SEND_EMAIL` with a message naming the tool and the missing class; a bot with no grants is refused everything; a bot granted a service is still refused a **different** service's tools.
 - [ ] Write a failing test for the migration: a `BotRecord` with legacy `composio: true` and no `connectorGrants` reads as **full grants on every connected service**, so an existing workspace does not silently lose its connectors on upgrade; a legacy `composio: false` reads as no grants.

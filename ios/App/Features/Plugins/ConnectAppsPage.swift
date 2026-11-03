@@ -222,12 +222,19 @@ enum ConnectAppsRoute: Hashable {
     /// Connect apps > Mac > Messages setup.
     case macMessages
     case tailscale
+    /// The published pages (the Pages tab's list).
+    case pages
 }
 
 /// The whole panel: the main view and what it pushes.
 struct ConnectAppsPage: View {
     /// the tab to open on (Settings > My connections' links); nil: Discover
     var initialTab: ConnectAppsTab? = nil
+    /// Drawn inside the iPad's desktop Capabilities window, which has its
+    /// own title and close button: no navigation bar of its own.
+    var embedded = false
+    /// The desktop window's own search field, when embedded.
+    var embeddedQuery: Binding<String>? = nil
     @Environment(\.themePalette) var themePalette
     @EnvironmentObject private var session: Session
     @StateObject private var model = ConnectAppsModel()
@@ -248,6 +255,7 @@ struct ConnectAppsPage: View {
             ConnectAppsMain(model: model, bots: bots, botsShown: botsShown, initialTab: initialTab, openBot: openBot) { path.append($0) }
                 .navigationTitle(String(localized: "Capabilities"))
                 .navigationBarTitleDisplayMode(.inline)
+                .toolbar(embedded ? .hidden : .automatic, for: .navigationBar)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button(String(localized: "Done")) {
@@ -266,12 +274,16 @@ struct ConnectAppsPage: View {
                         TailscaleConnectPage {
                             Task { await model.load(session) }
                         }
+                    case .pages: PublishedPagesPage()
                     }
                 }
                 // the Bots tab's cards, View all, publish, the imports
                 .modifier(BrowseBotsPresenters(model: bots, open: openBot))
         }
         .tint(Theme.textPrimary)
+        .onValueChange(of: embeddedQuery?.wrappedValue ?? "") { value in
+            if embedded { model.query = value }
+        }
         .task { await model.load(session) }
         .task { if botsShown { await bots.load(session) } }
         // back from an authorization page in the browser
@@ -450,7 +462,7 @@ struct ConnectAppsMain: View {
     /// Browse Bots did; Sources when the marketplaces can be read or changed from
     /// this pairing, or the person has a GitHub connection to manage.
     private var shownTabs: [ConnectAppsTab] {
-        [.discover] + (botsShown ? [.bots] : []) + [.installed]
+        [.discover] + (botsShown ? [.bots] : []) + [.installed, .pages]
             + (session.canAdminister || !model.marketplaces.isEmpty || session.surfaceGate.allows(.myConnections) ? [.sources] : [])
     }
 
@@ -494,6 +506,13 @@ struct ConnectAppsMain: View {
                 switch current {
                 case .discover: discover
                 case .bots: BrowseBotsContent(model: bots, open: openBot, importRow: true)
+                case .pages:
+                    Section {
+                        Button { push(.pages) } label: {
+                            Label(String(localized: "Pages a bot proposed and you published"), systemImage: "doc.richtext")
+                        }
+                        .accessibilityIdentifier("connect-apps-pages")
+                    }
                 default: ConnectAppsManage(model: model, tab: $tab, push: push)
                 }
             }
@@ -758,6 +777,9 @@ struct ConnectAppsMain: View {
 /// The tabs of Connect apps, as the desktop names them.
 enum ConnectAppsTab: Hashable, Identifiable {
     case installed, discover, bots, sources
+    /// The desktop's Pages tab (2026-11-03, iPad lot 3): the pages a bot
+    /// proposed and the person published.
+    case pages
 
     var id: Self { self }
 
@@ -767,6 +789,7 @@ enum ConnectAppsTab: Hashable, Identifiable {
         case .discover: String(localized: "Discover")
         case .bots: String(localized: "Bots")
         case .sources: String(localized: "Sources")
+        case .pages: String(localized: "Pages")
         }
     }
 
@@ -820,7 +843,7 @@ struct ConnectAppsManage: View {
             switch tab {
             case .installed: installed
             case .sources: sources
-            case .discover, .bots: EmptyView()
+            case .discover, .bots, .pages: EmptyView()
             }
         }
         .confirmationDialog(

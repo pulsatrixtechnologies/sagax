@@ -11,7 +11,7 @@
 //
 // Where: the repository of the coding thread the branch came from, which is
 // the thread's own folder (`cwd`) when that is a git repository on this
-// server (server/activity-code-work.ts). A branch whose repository is
+// server (server/activity/activity-code-work.ts). A branch whose repository is
 // elsewhere (the person's sandbox, a Local VM, their own computer) is read
 // as `place: "elsewhere"` and nothing runs.
 //
@@ -25,9 +25,9 @@
 // action is refused with `github_not_connected`). On an organization
 // server a request with no person is refused (`no_person`), never run with
 // the server's identity, and no answer carries a full server path.
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
-import { CodeWorkCollector, type CodeWorkToolCall, type RepositoryInfo } from "../activity-code-work.ts";
+import { CodeWorkCollector, type CodeWorkToolCall, type RepositoryInfo } from "../activity/activity-code-work.ts";
 import { BranchActionError, BranchArchive, BranchGit, BranchPulls, folderName, githubRepo, hostGit, proposedMessage, redactPaths, validBranchName, type GitExec } from "../code-branches.ts";
 import { RemoteBranchGit, type RemoteExec } from "../remote-support/remote-code-branches.ts";
 import type { BotBranchActionBody, BotBranchInfo, BotBranchState } from "../../shared/bot-code-branches.ts";

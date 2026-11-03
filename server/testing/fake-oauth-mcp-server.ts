@@ -1,5 +1,5 @@
 // A local MCP server behind a tiny OAuth 2.1 authorization server, for tests
-// of server/mcp-oauth.ts. No network: everything listens on 127.0.0.1. It
+// of server/mcp/mcp-oauth.ts. No network: everything listens on 127.0.0.1. It
 // checks what a real server would (PKCE S256, redirect URI, resource) and
 // records what it saw so a test can prove each step. Every value is fake.
 import { createHash } from "node:crypto";

@@ -20,7 +20,7 @@ import {
   type ConsoleContext,
   type ConsoleRoute,
 } from "./org-admin-console.ts";
-import type { UsageRow } from "../usage-ledger.ts";
+import type { UsageRow } from "../usage/usage-ledger.ts";
 
 const DAY_MS = 24 * 60 * 60_000;
 export type EngineVia = "subscription" | "key" | "org-key" | "none";

@@ -7,8 +7,8 @@
 //   POST /api/shared-computers/connect|copy|:id/(poll|lease|result|disconnect)
 import { z } from "zod";
 
-import type { RequestAuth } from "../request-auth.ts";
-import { sharedComputerRegistration } from "../shared-computers.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { sharedComputerRegistration } from "../computer/shared-computers.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface SharedComputersRouteDeps {

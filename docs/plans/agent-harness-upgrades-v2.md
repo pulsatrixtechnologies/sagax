@@ -109,7 +109,7 @@ included, results land via `switchBranch`).
 ### 2.1 Liveness reaper *(v1 item 6)* — design as v1. Prerequisite for 2.3 and Round 3 steering.
 ### 2.2 Portable context *(v1 item 7)* — design as v1, all four parts (catalog `contextWindow`, activity in replays, compaction kind, target-sized rebuild). The single largest item; the raw inspector (1.2) and the fixed rebuild path (1.1) are its scaffolding.
 ### 2.3 Durable delegations *(v1 item 8)* — design as v1; drain after 2.1's reconciliation.
-### 2.4 Tool-result redaction *(v1 item 10, rescoped)* — a result-side hook that calls the existing `redactSecrets` (`server/redact.ts`) before `store.appendMessage`, extended with *content* patterns (key-shaped values in file reads) alongside its current *key-name* rules, plus the `SENSITIVE` path list from `server/auto-approve.ts`. Redact the stored copy. New tests extend `server/redact.test.ts`.
+### 2.4 Tool-result redaction *(v1 item 10, rescoped)* — a result-side hook that calls the existing `redactSecrets` (`server/redact.ts`) before `store.appendMessage`, extended with *content* patterns (key-shaped values in file reads) alongside its current *key-name* rules, plus the `SENSITIVE` path list from `server/approvals/auto-approve.ts`. Redact the stored copy. New tests extend `server/redact.test.ts`.
 ### 2.5 Fail-closed approvals *(v1 item 11)* — design as v1 (`allowed-once | rejected | cancelled | unavailable`, `request.opened` references the tool item by `itemId`). Land alone.
 ### 2.6 Emit inside the store *(v1 item 13)* — design as v1: make `appendMessage`/`patchBot` emit as part of writing; explicitly **not** the universal `commit()` refactor.
 ### 2.7 Server-side activity state *(v1 item 14)* — design as v1: five states, `busy` kept as a derived getter, harness-only readers first (221 refs / 36 files migrate incrementally).
@@ -162,8 +162,8 @@ access groundwork, decomposing `server/index.ts`), plus:
 # Task 1: Fix model-switch context loss
 
 **Files:**
-- Create: `server/turn-context.ts`
-- Create: `server/turn-context.test.ts`
+- Create: `server/turns/turn-context.ts`
+- Create: `server/turns/turn-context.test.ts`
 - Modify: `server/index.ts:806-826` (transcript/turnText block), `:979` (resumeCursor line stays as-is — verify only)
 
 > **As built (#180):** the naive rule below — "fresh = this instance has no
@@ -177,14 +177,14 @@ access groundwork, decomposing `server/index.ts`), plus:
 > keeps resuming; anything ambiguous replays); a seeded greeting alone never
 > triggers a replay. `resumeCursor` is passed only when `resume` is true.
 > Steps below are kept as written for the record; where they differ, the
-> code and `server/turn-context.test.ts` are authoritative.
+> code and `server/turns/turn-context.test.ts` are authoritative.
 
 **Interfaces:**
 - Consumes: `store.activePath(threadId)` (exists), `task.resumeCursors: Record<InstanceId, unknown>` (exists, `server/store.ts:117`), `bot.rewound` (exists), `task.lastInstanceId` (new, see above).
-- Produces: `buildTurnContext(input: TurnContextInput): { turnText: string; resume: boolean }` and `engineIsFresh(...)` from `server/turn-context.ts`; `store.markTaskDispatched(botId, threadId, instanceId)` — item 2.2 (portable context) later replaces `buildTurnContext`'s internals; its signature is the seam.
+- Produces: `buildTurnContext(input: TurnContextInput): { turnText: string; resume: boolean }` and `engineIsFresh(...)` from `server/turns/turn-context.ts`; `store.markTaskDispatched(botId, threadId, instanceId)` — item 2.2 (portable context) later replaces `buildTurnContext`'s internals; its signature is the seam.
 
 ```ts
-// server/turn-context.ts — the produced interface, in full
+// server/turns/turn-context.ts — the produced interface, in full
 export interface TurnContextInput {
   /** the user's new message */
   text: string;
@@ -214,7 +214,7 @@ Read `server/index.ts` around the `slice(-40)` transcript block and confirm:
 - [ ] **Step 2: Write the failing unit tests**
 
 ```ts
-// server/turn-context.test.ts
+// server/turns/turn-context.test.ts
 import { describe, expect, it } from "vitest";
 
 import { buildTurnContext } from "./turn-context.ts";
@@ -263,10 +263,10 @@ describe("buildTurnContext", () => {
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `pnpm vitest run server/turn-context.test.ts`
+Run: `pnpm vitest run server/turns/turn-context.test.ts`
 Expected: FAIL — cannot find module `./turn-context.ts`.
 
-- [ ] **Step 4: Implement `server/turn-context.ts`**
+- [ ] **Step 4: Implement `server/turns/turn-context.ts`**
 
 ```ts
 // Building the text a driver actually receives. Two situations force an
@@ -310,7 +310,7 @@ export function buildTurnContext(input: TurnContextInput): { turnText: string; r
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `pnpm vitest run server/turn-context.test.ts`
+Run: `pnpm vitest run server/turns/turn-context.test.ts`
 Expected: PASS, 5 tests.
 
 - [ ] **Step 6: Wire it into dispatch**
@@ -343,7 +343,7 @@ resume the old engine's native session.
 
 - [ ] **Step 7: Typecheck and run the neighbouring suites**
 
-Run: `pnpm typecheck && pnpm vitest run server/turn-context.test.ts server/branching.test.ts server/index.test.ts`
+Run: `pnpm typecheck && pnpm vitest run server/turns/turn-context.test.ts server/branching.test.ts server/index.test.ts`
 Expected: PASS. The branching e2e pins that rewind behaviour is unchanged.
 
 - [ ] **Step 8: e2e verification of the fix itself**
@@ -375,7 +375,7 @@ Run: `pnpm test`
 Expected: green (59 test files + updater test).
 
 ```bash
-git add server/turn-context.ts server/turn-context.test.ts server/index.ts server/branching.test.ts server/testing/fake-acp-cli.ts
+git add server/turns/turn-context.ts server/turns/turn-context.test.ts server/index.ts server/branching.test.ts server/testing/fake-acp-cli.ts
 git commit -m "fix: rebuild context when a bot's engine switches mid-thread"
 ```
 

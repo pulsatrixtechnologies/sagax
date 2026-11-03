@@ -1,7 +1,7 @@
 // Settings > Computer > Computer care: the scheduled update of the bot's
 // computer in a maintenance window, and the disk saver (preview first,
 // nothing deleted without a click, the trash only with a confirmation).
-// Server side: server/computer-care.ts, server/routes/computer-care.ts.
+// Server side: server/computer/computer-care.ts, server/routes/computer-care.ts.
 import { useCallback, useEffect, useState } from "react";
 import { HardDrive, Loader2, RefreshCw, Trash2 } from "lucide-react";
 

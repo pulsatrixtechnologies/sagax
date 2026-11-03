@@ -4,8 +4,8 @@ import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createArtifactStore, type ArtifactStore } from "../artifacts.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import { createArtifactStore, type ArtifactStore } from "../artifacts/artifacts.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
 import type { Artifact } from "../../shared/artifacts.ts";
 import type { InternalRouteContext } from "./internal-route.ts";

@@ -1,7 +1,7 @@
 // Test hygiene for Local VMs: a test run never creates, starts or reuses a
 // container under the real name (`openmausbot-computer`) on the developer's
 // machine. Every run gets its own namespace (SAGAX_LOCAL_VM_TEST_NAMESPACE),
-// so server/container-computer.ts names and labels its containers
+// so server/computer/container-computer.ts names and labels its containers
 // `openmausbot-test-<namespace>-computer` / `com.openmausbot.test-run`, and
 // the run removes exactly those afterwards, never anything else.
 import { execFile } from "node:child_process";

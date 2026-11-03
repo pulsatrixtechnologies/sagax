@@ -13,7 +13,7 @@ parties hors tableau du script.
   `value`). `list` (avec `family`) donne les clés : rien n'est figé dans
   l'invite du bot.
 - Droits : la route de l'écran est rejouée avec la session de la personne
-  (`server/bot-act.ts`). Un membre ne peut pas faire par bot ce qu'il ne
+  (`server/bots/bot-act.ts`). Un membre ne peut pas faire par bot ce qu'il ne
   peut pas faire à la main : la route répond son refus, que le bot relaie.
 - Décision (`shared/settings-actions-policy.ts`), dans l'ordre :
   1. une classe que la personne protège par clé de sécurité : carte signée ;
@@ -57,7 +57,7 @@ parties hors tableau du script.
   permet Full, la personne possède le bot et a `bots.fullAccess`. Un niveau
   change même pendant que ce bot travaille (« mets-toi en Full ») ; le tour
   suivant part avec. Les cartes en attente se répondent avec
-  `sagax_approvals` (`server/primary-approvals.ts`), par n'importe quel
+  `sagax_approvals` (`server/approvals/primary-approvals.ts`), par n'importe quel
   bot que la personne possède, depuis son propre message (un « oui », y
   compris transcrit à la voix) : un « oui » qui ne nomme aucune carte
   répond à la plus récente que la personne voyait, quelle que soit la

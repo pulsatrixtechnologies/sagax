@@ -5,8 +5,8 @@
 // is word matching, not meaning. Only the head of each file is read.
 import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 
-import { readAtRestSync } from "../content-at-rest.ts";
-import { looksSealed } from "../content-file-crypto.ts";
+import { readAtRestSync } from "../encryption/content-at-rest.ts";
+import { looksSealed } from "../encryption/content-file-crypto.ts";
 
 /** How much of a topic file is read to find its frontmatter. */
 const HEAD_BYTES = 2_048;
@@ -93,7 +93,7 @@ export function readTopicHead(path: string): string {
     if (known && known.ino === stat.ino && known.size === stat.size && known.mtimeMs === stat.mtimeMs) return known.head;
     const buffer = Buffer.alloc(HEAD_BYTES);
     const read = readSync(fd, buffer, 0, HEAD_BYTES, 0);
-    // sealed at rest (server/content-at-rest.ts): a topic file is small, open it whole
+    // sealed at rest (server/encryption/content-at-rest.ts): a topic file is small, open it whole
     const head = looksSealed(buffer.subarray(0, read))
       ? readAtRestSync(path, fd).subarray(0, HEAD_BYTES).toString("utf8")
       : buffer.subarray(0, read).toString("utf8");

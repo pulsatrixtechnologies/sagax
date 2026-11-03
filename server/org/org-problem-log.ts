@@ -14,7 +14,7 @@ import { appendFile, mkdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 
 import { pruneMonthFiles } from "../decision-log.ts";
-import { monthKey } from "../usage-ledger.ts";
+import { monthKey } from "../usage/usage-ledger.ts";
 import type { ConsoleLocale } from "./org-admin-console.ts";
 
 export type ProblemKind = "failed" | "stalled" | "could-not-start" | "routine-failed" | "refused";

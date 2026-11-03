@@ -1,5 +1,5 @@
 // A bot-to-bot conversation named on both ends (WireBot.botConversations,
-// server/inter-bot-conversations.ts) is drawn as the same quiet centered line
+// server/peers/inter-bot-conversations.ts) is drawn as the same quiet centered line
 // the transcript uses for a bot-to-bot exchange (ConversationLink), at its
 // place in time, never stacked above the chat. Clicking it opens the same
 // exchange sheet a collapsed exchange opens (A ⇄ B, each bot's lines, Close

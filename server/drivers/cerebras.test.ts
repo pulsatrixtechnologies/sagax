@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ASK_USER_TOOL_DEFINITION } from "../../shared/ask-question.ts";
 import { recordEvents } from "../testing/events.ts";
-import { compactBudget, contextWindowFor, shouldCompact } from "../context-budget.ts";
+import { compactBudget, contextWindowFor, shouldCompact } from "../context/context-budget.ts";
 import { CerebrasDriver } from "./cerebras.ts";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });

@@ -44,7 +44,7 @@ it("does not run a delivery twice after a process dies between the queue and ing
     const crash = spawnSync(process.execPath, ["--input-type=module", "-e", `
       import { readFileSync } from 'node:fs';
       import { RoutineManager } from ${JSON.stringify(new URL("./routines.ts", import.meta.url).href)};
-      import { WebhookManager } from ${JSON.stringify(new URL("./webhooks.ts", import.meta.url).href)};
+      import { WebhookManager } from ${JSON.stringify(new URL("./triggers/webhooks.ts", import.meta.url).href)};
       const input = JSON.parse(readFileSync(0, 'utf8'));
       const routines = new RoutineManager({ botState: () => 'busy', createTask: () => null, startTurn: async () => {} });
       const hooks = new WebhookManager({ botState: () => 'busy', enqueue: event => {

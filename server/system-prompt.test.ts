@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { CW_FAMILIES, CW_REQUIRED_FIELDS, CW_VIEWS, cwOrList } from "../shared/cw-widgets/schema.ts";
 import { parseCwWidgetText } from "../shared/cw-widgets/validate.ts";
 import { MISUSE_POLICY_PROMPT } from "../shared/misuse-guardrails.ts";
-import { soulSystemPrompt } from "./bot-folder.ts";
+import { soulSystemPrompt } from "./bots/bot-folder.ts";
 import { BUILT_IN_BROWSER_SYSTEM_PROMPT } from "./browser/browser-engine.ts";
 import {
   longCommandsPrompt,
@@ -392,7 +392,7 @@ describe("cloudHomePrompt", () => {
     for (const tools of [true, false]) {
       const text = cloudHomePrompt(tools);
       expect(text).toMatch(/^ You run on the user's My Cloud, their always-on Sagax in the cloud, not on their own computer\./);
-      // the same words the Live call's voice is told (server/live-call.ts)
+      // the same words the Live call's voice is told (server/voice/live-call.ts)
       expect(text.startsWith(` You run on ${CLOUD_HOME_PLACE}.`)).toBe(true);
       expect(text).toContain("Offer what works here: the built-in browser and their cloud computer, a desktop in the cloud. Call it their cloud computer, as the app does.");
       expect(text).not.toMatch(/\bOMB\b|\bBoat\b|\bbox\b/);

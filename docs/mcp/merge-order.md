@@ -9,7 +9,7 @@ This branch is #508.
 
 The first check (2026-10-14) missed one conflict with #497 (native claim
 tools): both branches added `PerspicaxMcp.callTool` to
-`server/perspicax-mcp.ts`, with different signatures (`tool` here, `name` in
+`server/perspicax/perspicax-mcp.ts`, with different signatures (`tool` here, `name` in
 #497) and different answers (`{ status, body }` here, `PerspicaxToolAnswer` in
 #497), on top of the conflicts in `server/drivers/agents-catalog.ts` and
 `server/index.ts`. The branch of #497 (with its route moved to
@@ -24,7 +24,7 @@ and must merge after it.
 |---|---|---|---|
 | 497 native claim tools | open | contained in this branch | merge 497 first; this branch then merges on top of it |
 | 495 native flow compute tools | open | `server/index.ts` | clean |
-| 496 recognize memory v2 tools | open | `server/perspicax-mcp.test.ts` | clean |
+| 496 recognize memory v2 tools | open | `server/perspicax/perspicax-mcp.test.ts` | clean |
 | 517 bot owner permissions | open | `server/index.ts`, `server/tool-policy.generated.ts` | clean; the merged `server/index.ts` keeps the route ratchet at its numbers |
 | 518 menu simplification | open | none | conflicts with main itself (`ChatView.tsx`, locales), not with this branch |
 | 492 to 494, 498 to 507, 509 to 516 | open | none | clean |
@@ -41,7 +41,7 @@ and must merge after it.
    add rows to `server/tool-policy.generated.ts`), then
    `scripts/testing/index-route-ratchet.test.ts`,
    `scripts/tool-policy/tool-policy-coverage.test.ts`,
-   `server/mcp-permissions.test.ts` (it fails while a catalog tool has no
+   `server/mcp/mcp-permissions.test.ts` (it fails while a catalog tool has no
    permission) and `server/drivers/agents-catalog-wire.test.ts`. If a
    catalog golden moves, regenerate it with `UPDATE_AGENTS_CATALOG_GOLDENS=1`
    and set `BUDGET_BASELINE` by hand from the printed sizes.

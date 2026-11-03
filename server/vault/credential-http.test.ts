@@ -13,7 +13,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { vaultHandle } from "../../shared/credential-vault.ts";
 import { secretVariants, sendWithInjectedKey, type CredentialHttpOptions, type InjectedSecret } from "./credential-http.ts";
 import { CredentialVault, LOCAL_VAULT_PRINCIPAL } from "./credential-vault.ts";
-import type { VaultKeySource } from "../mcp-oauth.ts";
+import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
 import { createCredentialVaultInternalRoutes } from "../routes/credential-vault-internal.ts";
 import { PASS } from "../routes/table.ts";
 

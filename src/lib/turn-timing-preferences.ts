@@ -1,5 +1,5 @@
 // 2026-10-28: a developer setting. A conversation's two counters (wait
-// before send, first answer text, server/turn-trace.ts) are diagnostics,
+// before send, first answer text, server/turns/turn-trace.ts) are diagnostics,
 // never part of the conversation: off unless this device turns them on in
 // Settings > Appearance (Advanced mode).
 import { useSyncExternalStore } from "react";

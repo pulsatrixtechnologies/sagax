@@ -58,6 +58,7 @@ For Ubuntu installation and real desktop checks, see [`docs/linux-desktop.md`](d
 | `server/drivers/` | One file per provider (Claude, Codex, Grok, cloud computer). Adding a provider = one file + one registration line in `builtIn.ts`. |
 | `server/harness/` | Registry (configs → live instances, unknown → shadow) and the fan-in event bus. |
 | `server/index.ts` | The HTTP + SSE API the app talks to. |
+| `server/<domain>/` | Server code grouped by domain (`approvals/`, `bots/`, `computer/`, `mcp/`, `sandbox/`, `threads/`, `turns/`, `voice/`, ...), each test beside its file. Entry points the bundle or a spawn site names by path (`index.ts`, `openmausbot.ts`, the proxies, the `*.worker.ts` files, `sandboxd.ts`, `sagax-runner.ts`), the files that resolve a worker from `import.meta.url`, and the shared core (`contracts.ts`, `config.ts`, `store.ts`, ...) stay at the root. A new file goes in its domain's folder. |
 | `server/testing/` | Test fakes: an in-memory driver, plus scripted fake `claude` / `codex` CLIs. |
 | `src/` | The React chat app. No transports of its own — HTTP commands out, one SSE stream in. |
 | `electron/` | Desktop shell: dictation, screen capture, local computer-use daemon. macOS-specific code lives here, gated. |

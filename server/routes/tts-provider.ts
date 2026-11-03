@@ -9,7 +9,7 @@
 // admin scope (request-auth.ts does not list it for clients): the owner at
 // this computer, the owner's paired phone through the companion, an admin
 // session. Switching engines clears every voice id, as PUT /api/config does.
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const TTS_PROVIDERS = ["elevenlabs", "fish", "system", "chatterbox", "xai"] as const;

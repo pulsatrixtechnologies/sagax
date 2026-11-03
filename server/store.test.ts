@@ -8,8 +8,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { soulFile, soulHash } from "./bot-folder.ts";
-import { flushProfileHistory, readHistory, recordProfileChange } from "./profile-versions.ts";
+import { soulFile, soulHash } from "./bots/bot-folder.ts";
+import { flushProfileHistory, readHistory, recordProfileChange } from "./profiles/profile-versions.ts";
 import { DATA_DIR } from "./config.ts";
 import {
   beginMemoryTurn,
@@ -20,13 +20,13 @@ import {
   resetMemoryJournalState,
 } from "./memory/memory-journal.ts";
 import type { ModelSelection } from "./contracts.ts";
-import * as mdb from "./message-db.ts";
-import { peerAllowKey } from "./peer-approval-key.ts";
-import { canAccessTeam } from "./peer-roster.ts";
+import * as mdb from "./messages/message-db.ts";
+import { peerAllowKey } from "./peers/peer-approval-key.ts";
+import { canAccessTeam } from "./peers/peer-roster.ts";
 import { Store, toWireTask, type BotRecord } from "./store.ts";
 import type { TeamSetupRequest } from "../shared/team-setup.ts";
-import { SECTION_CONTEXTS_FILE, readSectionContext, writeSectionContext } from "./section-context.ts";
-import { TeamComputers } from "./team-computers.ts";
+import { SECTION_CONTEXTS_FILE, readSectionContext, writeSectionContext } from "./rooms/section-context.ts";
+import { TeamComputers } from "./computer/team-computers.ts";
 import { allowsTool } from "../shared/tool-scope.ts";
 
 const selection = (): ModelSelection => ({ instanceId: "claude", model: "claude-sonnet-5" });

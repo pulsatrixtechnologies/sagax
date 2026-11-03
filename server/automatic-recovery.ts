@@ -1,5 +1,5 @@
 import type { ProviderAdapter } from "./contracts.ts";
-import { supportsWorkspaceFiles } from "./workspace.ts";
+import { supportsWorkspaceFiles } from "./workspace/workspace.ts";
 
 type Engine = { driverKind: string; capabilities: ProviderAdapter["capabilities"] };
 

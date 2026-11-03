@@ -1,4 +1,4 @@
-// A proactive proposal card (2026-10-30, server/proactive-wake.ts): the bot
+// A proactive proposal card (2026-10-30, server/proactive/proactive-wake.ts): the bot
 // offers to handle an event; options[0] accepts, options[1] declines. The
 // answer goes to POST /api/bots/:id/proactive/:proposalId, never as a typed
 // message. iOS mirrors this in CompanionCore (ProactiveProposalRules).

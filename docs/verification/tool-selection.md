@@ -6,7 +6,7 @@ not read the user's Sagax data or connect a real mail account.
 ## Repeatable automated checks
 
 ```sh
-pnpm exec vitest run shared/tool-scope.test.ts server/mcp-gate.test.ts server/mcp-gate-config.test.ts server/mcp-remote-proxy.test.ts
+pnpm exec vitest run shared/tool-scope.test.ts server/mcp-gate.test.ts server/mcp/mcp-gate-config.test.ts server/mcp-remote-proxy.test.ts
 pnpm exec vitest run server/store.test.ts server/tool-scope.e2e.test.ts server/drivers/tool-scope-coverage.test.ts server/drivers/acp/tool-scope.test.ts
 pnpm exec vitest run server/drivers/pi.test.ts server/drivers/pi-mcp-extension.test.ts server/drivers/chat-mcp-tools.test.ts server/drivers/openai-chat.test.ts server/openai-tools.e2e.test.ts
 pnpm exec vitest run src/components/bot-settings/AccessSection.test.ts src/state/store.test.ts src/lib/create-configured-bot.test.ts src/lib/bot-creation-draft.test.ts

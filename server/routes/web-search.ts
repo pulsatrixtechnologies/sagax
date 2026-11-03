@@ -11,7 +11,7 @@
 // The key is never in an answer: only keyConfigured and its last four
 // characters. It is never logged.
 import { isWebSearchProvider, WEB_SEARCH_PROVIDER_INFO, type WebSearchProviderId } from "../../shared/web-search.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { normalizeBaseUrl, runWebSearch, WebSearchError, type WebSearchConfig, type WebSearchFetch } from "../web-search/providers.ts";
 import { readyConfig, WebSearchStoreError, type WebSearchScope, type WebSearchStore } from "../web-search/store.ts";
 import { PASS, type RouteHandler } from "./table.ts";

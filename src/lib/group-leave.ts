@@ -1,4 +1,4 @@
-// Leaving a group chat you were added to (#1480, server/group-leave.ts): on
+// Leaving a group chat you were added to (#1480, server/groups/group-leave.ts): on
 // an organization server, a person listed in a group in their own name may
 // leave it, owner included. The owner hands it to the person listed longest;
 // the last person archives it.

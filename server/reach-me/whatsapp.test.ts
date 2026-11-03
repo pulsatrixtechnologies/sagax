@@ -8,8 +8,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createWebhookIngressHandler } from "../webhook-ingress.ts";
-import type { WebhookManager } from "../webhooks.ts";
+import { createWebhookIngressHandler } from "../triggers/webhook-ingress.ts";
+import type { WebhookManager } from "../triggers/webhooks.ts";
 import type { ReachOutbound } from "./channel.ts";
 import { ReachMeSecrets } from "./secrets.ts";
 import { ReachMe, type ReachAuditRow, type ReachCard } from "./service.ts";

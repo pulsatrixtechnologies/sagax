@@ -1,11 +1,11 @@
 // The persona editor's Rules section as rule sets (server/routes/bot-rules.ts,
-// server/rule-sets.ts): RULES.md is the first set; every other set is
+// server/rules/rule-sets.ts): RULES.md is the first set; every other set is
 // rules/<id>.md. The sets that are on load in order right after the
 // Personality, each under a budget and all of them under a total.
 import { ApiError, api } from "@/state/store";
 import { effectiveRulesText } from "@/lib/workspace-files";
 
-/** Mirrors server/rule-sets.ts; the server's listing carries the live
+/** Mirrors server/rules/rule-sets.ts; the server's listing carries the live
  * values, these are the fallback before it answers. */
 export const RULE_SET_MAX_LINES = 100;
 export const RULE_SET_MAX_BYTES = 12_000;

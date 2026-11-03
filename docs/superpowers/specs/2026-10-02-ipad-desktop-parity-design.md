@@ -61,7 +61,7 @@ node ios/parity/desktop/capture-desktop.mjs --viewport 1376x1032,1032x1376,1210x
   `PARITY_OUT=ios/parity/desktop/out`.
 - **Renderer:** Vite's dev server (`pnpm dev`) with its `/api` proxy pointed at the
   fixture. The renderer reaches its server at its own origin's `/api`, as the packaged
-  app does. A loopback origin is the owner (`server/request-auth.ts`, `LoopbackTrust`
+  app does. A loopback origin is the owner (`server/auth/request-auth.ts`, `LoopbackTrust`
   `owner`), so no token is involved.
 - **Browser:** the installed Google Chrome, headless, driven over the DevTools protocol
   by `cdp.mjs` (Node's own `WebSocket` and `fetch`; the repository has no puppeteer or
@@ -384,7 +384,7 @@ the DOM dump) and the frames are compared by position. No floating mascots (see 
 
 The iPad reaches its server the way the phone does: through the companion sidecar on a
 personal computer (`companion/src/routes.ts` `ALLOWED`, default deny) or with a session
-on a server (`server/request-auth.ts`: `CLIENT_ALLOW` for a client session, anything
+on a server (`server/auth/request-auth.ts`: `CLIENT_ALLOW` for a client session, anything
 else needs `admin`). A phone paired with admin scope reaches the admin routes on a
 server; the sidecar has no admin notion (a companion request reaches the harness as the
 loopback owner, which narrows it further: bot and room `PATCH` to member fields).
@@ -475,8 +475,8 @@ Changed by this audit (`feat/ipad-phone-api`):
   changes approval mode or execution policy: the desktop remote client cannot either.
 - Tests: `companion/test/routes.test.ts` ("desktop remote-client parity"),
   `companion/test/proxy.test.ts` (the new routes reach a real harness),
-  `server/request-auth.test.ts` (scopes, `clientInstanceView`),
-  `server/claude-account-api.test.ts` (a client session's `/api/instances`).
+  `server/auth/request-auth.test.ts` (scopes, `clientInstanceView`),
+  `server/engines/claude-account-api.test.ts` (a client session's `/api/instances`).
 - `docs/ios-companion.md`: "Intentionally refused" rewritten (routines and connected
   apps cross; webhooks do not) and a "Same surface as the desktop remote client" table.
 

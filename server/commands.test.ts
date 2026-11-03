@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { runCommand, commandReceipt } from "./commands.ts";
 import { DATA_DIR } from "./config.ts";
-import { closeMessageDb, insertMessage, readThread } from "./message-db.ts";
+import { closeMessageDb, insertMessage, readThread } from "./messages/message-db.ts";
 import type { Message } from "./store.ts";
 
 const msg = (id: string, text: string): Message => ({ id, role: "bot", kind: "text", text, at: 1 });
@@ -103,7 +103,7 @@ describe("runCommand nesting", () => {
   });
 
   it("lets apply use the store's own transactional writes and keeps them atomic with the receipt", async () => {
-    const { appendMessage } = await import("./message-db.ts");
+    const { appendMessage } = await import("./messages/message-db.ts");
     // appendMessage opens its own transaction; inside a command it must join
     // the command's transaction instead of failing with "nested transaction".
     runCommand({ kind: "digest.append", key: "t9:turn-1" }, () => {

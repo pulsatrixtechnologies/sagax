@@ -9,7 +9,7 @@ import { readableError } from "@/lib/plain-error";
 
 export const RULES_PATH = "RULES.md";
 export const DOCS_DIR = "docs";
-/** Mirrors server/workspace-files.ts; the server's list carries the live
+/** Mirrors server/workspace/workspace-files.ts; the server's list carries the live
  * values, these are the fallback before it answers. */
 export const RULES_MAX_LINES = 100;
 export const RULES_MAX_BYTES = 12_000;
@@ -179,7 +179,7 @@ export function joinWorkspacePath(parent: string | null, name: string): string {
 }
 
 /** RULES.md as it loads: comments removed, blank runs folded, trimmed
- * (server/workspace-files.ts effectiveRulesText). */
+ * (server/workspace/workspace-files.ts effectiveRulesText). */
 export function effectiveRulesText(raw: string): string {
   return raw.replace(/<!--[\s\S]*?(?:-->|$)/g, "").replace(/\n{3,}/g, "\n\n").trim();
 }

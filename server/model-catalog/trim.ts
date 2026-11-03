@@ -17,7 +17,7 @@
 // same function. On disk each model also leaves out `id` (it is the key) and
 // `tool_call` (every kept model has it); packCatalog/unpackCatalog convert,
 // which keeps the shipped snapshot under its 150 KB gzipped budget.
-import { normalizeApiUrl } from "../cli-api-setup.ts";
+import { normalizeApiUrl } from "../cli/cli-api-setup.ts";
 
 export const MODEL_CATALOG_SCHEMA = 1;
 

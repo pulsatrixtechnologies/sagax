@@ -9,7 +9,7 @@
 //     the next start;
 //   - About me: a durable fact about the person, from their own words, is
 //     added to the shared About me and listed in Settings with Remove
-//     (server/profile-learned.ts);
+//     (server/profiles/profile-learned.ts);
 //   - tidy-up: nightly, and on demand, expired entries are archived, exact
 //     duplicates merged (MEMORY.md and topic files) and contradictions in
 //     MEMORY.md struck (server/memory/memory-tidy.ts).
@@ -35,7 +35,7 @@ import { applyMoves, MAX_MOVES, organizeCandidates, organizePrompt, parseMoves }
 import { dreamTouched, planDream, type DreamPlan } from "./memory-dream.ts";
 import { journalMemoryDelete, journalMemoryWrite, readMemoryJournal, recordMemoryChange } from "./memory-journal.ts";
 import { applyTidy, contradictionCandidates, contradictionPrompt, parseContradictions, planChanges, planTidy, type Contradiction } from "./memory-tidy.ts";
-import { appendMemoryArchive, ARCHIVE_TOPIC, ensureWorkspace, listMemoryTopics, memoryDate, memoryEntry, memoryTopicIndex, readMemoryText, updateMemory, workspaceDir, writeMemoryFile, writeMemoryTopic } from "../workspace.ts";
+import { appendMemoryArchive, ARCHIVE_TOPIC, ensureWorkspace, listMemoryTopics, memoryDate, memoryEntry, memoryTopicIndex, readMemoryText, updateMemory, workspaceDir, writeMemoryFile, writeMemoryTopic } from "../workspace/workspace.ts";
 
 export const CAPTURE_MAX_TURNS = 6;
 /** One capture call reads at most this much of one bot's waiting threads;
@@ -88,7 +88,7 @@ export interface UpkeepDeps {
   restoreTurn?: (botId: string, threadId: string, turnId: string) => CaptureTurn | null;
   /** Whether a thread may still be captured when its batch goes out: false
    * for a thread that became confidential while its turns waited
-   * (server/confidential-threads.ts). Absent: every thread. */
+   * (server/threads/confidential-threads.ts). Absent: every thread. */
   capturable?: (threadId: string) => boolean;
   quietMs: () => number;
   tidyHour: () => number;

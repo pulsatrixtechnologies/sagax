@@ -15,8 +15,8 @@
 // --check compares and writes nothing.
 import { pathToFileURL } from "node:url";
 
-import { copyWorkspace, workspaceManifest } from "../server/sandbox-workspace-copy.ts";
-import { sandboxKeyForPrincipal, sandboxNames } from "../server/user-sandbox-spec.ts";
+import { copyWorkspace, workspaceManifest } from "../server/sandbox/sandbox-workspace-copy.ts";
+import { sandboxKeyForPrincipal, sandboxNames } from "../server/sandbox/user-sandbox-spec.ts";
 
 const DIRECTIONS = ["docker-to-pvc", "pvc-to-docker"] as const;
 type Direction = (typeof DIRECTIONS)[number];

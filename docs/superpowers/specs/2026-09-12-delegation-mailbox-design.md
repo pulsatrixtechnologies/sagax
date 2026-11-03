@@ -91,7 +91,7 @@ Two changes to bot-to-bot handoffs:
 
 ### Part 2 — truthful peer status
 
-**One mapping** — new export `peerStatus(activity)` in `server/peer-roster.ts`:
+**One mapping** — new export `peerStatus(activity)` in `server/peers/peer-roster.ts`:
 
 | `activity` | `peerStatus` | Roster / `list_bots` wording |
 |---|---|---|
@@ -144,7 +144,7 @@ Tests are written first, in Vitest. The fake clock uses `vi.useFakeTimers()` / `
 - **an item saved without `queuedAt` loads with a fresh 24-hour window.**
 - **`expireStaleDelegations` expires due items across threads, skips a draining thread, and calls `onSettled` once per item.**
 
-**`server/peer-roster.test.ts`**
+**`server/peers/peer-roster.test.ts`**
 - `peerStatus` covers all five activities plus absent.
 - The roster line for a `waiting-on-you` bot reads "waiting on the user".
 
@@ -162,7 +162,7 @@ Tests are written first, in Vitest. The fake clock uses `vi.useFakeTimers()` / `
 ## Files
 
 - `server/delegations.ts`, `server/delegations.test.ts`
-- `server/peer-roster.ts`, `server/peer-roster.test.ts`
+- `server/peers/peer-roster.ts`, `server/peers/peer-roster.test.ts`
 - `server/drivers/agents-proxy.ts` and its test
 - `server/index.ts`:
   - `/api/internal/agents`

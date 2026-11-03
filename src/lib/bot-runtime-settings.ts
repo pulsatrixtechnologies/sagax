@@ -1,5 +1,5 @@
 // A bot's own parallel conversations and automatic recovery
-// (server/bot-runtime-settings.ts, 2026-10-15). A bot without a value of
+// (server/bots/bot-runtime-settings.ts, 2026-10-15). A bot without a value of
 // its own reads the server default (Settings no longer edits it). busySend
 // is still stored and exported for older builds; no client reads it since
 // 2026-10-18 (the bot routes busy sends itself, server/busy-routing.ts).

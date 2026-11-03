@@ -10,9 +10,9 @@ import { setTimeout as delay, setImmediate } from "node:timers/promises";
 const directory = mkdtempSync(join(tmpdir(), "omb-maintenance-probe-"));
 const previousDataDir = process.env.SAGAX_DATA_DIR;
 process.env.SAGAX_DATA_DIR = directory;
-const db = await import("../server/message-db.ts");
+const db = await import("../server/messages/message-db.ts");
 const { Store } = await import("../server/store.ts");
-const memory = await import("../server/workspace.ts");
+const memory = await import("../server/workspace/workspace.ts");
 const backups = await import("../server/workspace-backup.ts");
 const inline = process.argv.includes("--in-process");
 console.log(JSON.stringify({ node: process.version, platform: process.platform, arch: process.arch, inline,

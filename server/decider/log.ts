@@ -15,7 +15,7 @@ import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import { boundRetentionDays, pruneMonthFiles } from "../decision-log.ts";
-import { monthKey } from "../usage-ledger.ts";
+import { monthKey } from "../usage/usage-ledger.ts";
 import type { DeciderFailure, DeciderProvider, DeciderSeam } from "./types.ts";
 
 export const DECIDER_LOG_DIR = "decider-log";

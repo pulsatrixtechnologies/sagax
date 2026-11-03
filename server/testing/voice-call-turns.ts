@@ -3,7 +3,7 @@
 // same code the server uses (buildSystemPrompt + voiceCallSection).
 import type { SendTurnInput } from "../contracts.ts";
 import { buildSystemPrompt } from "../system-prompt.ts";
-import { voiceCallSection, type VoiceCallMeta } from "../voice-call-prompt.ts";
+import { voiceCallSection, type VoiceCallMeta } from "../voice/voice-call-prompt.ts";
 
 export const CALL_MARK = "You are on a live phone call with Ada.";
 export const ENDED_MARK = "The phone call with Ada has ended";

@@ -48,7 +48,7 @@ describe("WriteOnce", () => {
 
 describe("perspicaxWriteOnceTool", () => {
   it("guards writes only, never reads, polls or leases", async () => {
-    const { perspicaxWriteOnceTool } = await import("./perspicax-mcp.ts");
+    const { perspicaxWriteOnceTool } = await import("./perspicax/perspicax-mcp.ts");
     for (const name of ["cw_psa_write", "cw_psa_action", "cw_psa_log_time", "cw_psa_book_schedule_entry", "cw_psa_update_ticket", "twilio_lookups_Bucket_write", "memory_write", "sagax_send"]) {
       expect(perspicaxWriteOnceTool(name), name).toBe(true);
     }

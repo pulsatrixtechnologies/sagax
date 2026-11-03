@@ -999,7 +999,7 @@ describe("handedOutOutcome", () => {
 // safe-point cut to read their new words, a turn parked on a busy computer,
 // an engine change) ends not ok while its teammate still works: the
 // conversation waits and the teammate's reply resumes it. Only Stop
-// (stopAwaitingDirect, server/teammate-replies.ts) drops it.
+// (stopAwaitingDirect, server/team/teammate-replies.ts) drops it.
 describe("a teammate's reply comes back after a cut that is not a Stop", () => {
   it("the cut turn waits and the reply resumes the conversation", async () => {
     const w = world(hold);

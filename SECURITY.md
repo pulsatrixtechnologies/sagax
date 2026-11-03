@@ -51,7 +51,7 @@ release.
 - **Hosted or shared workspaces.** On a hosted or shared workspace (service
   loopback trust, see `docs/self-hosting.md`) a session-less loopback caller,
   which includes every bot's shell, may use only the routes in `SERVICE_ALLOW`
-  (`server/request-auth.ts`): health, who-am-I, edition, brand, and the bots'
+  (`server/auth/request-auth.ts`): health, who-am-I, edition, brand, and the bots'
   capability routes. The worker data plane (the bot list, messages,
   attachments, new threads, the guarded send, the request fence, a queued
   line, a card decline) answers only when the request also presents the

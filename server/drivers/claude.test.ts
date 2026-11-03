@@ -18,7 +18,7 @@ import { CALL_MARK, ENDED_MARK, INTERRUPTED_MARK, voiceCallTurn } from "../testi
 import { DATA_DIR, ensureDirs, instanceConfigs, NATIVE_DIR } from "../config.ts";
 import { TurnAuthenticationRefusedError, type ProviderInstance } from "../contracts.ts";
 import { recordEvents, type EventRecorder } from "../testing/events.ts";
-import { contextFullMessage, contextRenewedNotice } from "../context-renewal.ts";
+import { contextFullMessage, contextRenewedNotice } from "../context/context-renewal.ts";
 import {
   autoCompactWindow,
   brokerSocketCandidates,
@@ -49,7 +49,7 @@ import { AUTO_ALLOWLIST_COPY, claudeLaunchLevel } from "../testing/claude-level.
 import { removeTempDir } from "../testing/cleanup.ts";
 import { rebuiltSessionNotice } from "../resume-recovery.ts";
 import { BASH_MAX_TIMEOUT_MS } from "../system-prompt.ts";
-import { ephemeralWorkspaceTokenPath } from "../workspace-backup-policy.ts";
+import { ephemeralWorkspaceTokenPath } from "../backup/workspace-backup-policy.ts";
 import * as procs from "../procs.ts";
 import * as localInject from "./local-inject.ts";
 
@@ -1462,7 +1462,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
   });
 
   it("hands a hosted tenant's CLI the hosted model token but none of the operator's control-plane secrets", async () => {
-    // server/hosted-models.ts delivers the model token as the provider key.
+    // server/models/hosted-models.ts delivers the model token as the provider key.
     await create(undefined, { ANTHROPIC_API_KEY: "omb_workspace_fixture", ANTHROPIC_AUTH_TOKEN: "omb_workspace_fixture" });
     const dump = join(scratch, "dump-hosted.json");
     process.env.FAKE_CLAUDE_DUMP = dump;

@@ -1,5 +1,5 @@
 // A person's own voice keys on an organization server (#1098, 2026-10-28,
-// server/person-voice-keys.ts). Their own: no admin right, no right to edit
+// server/voice/person-voice-keys.ts). Their own: no admin right, no right to edit
 // the installation. The organization's shared keys stay engines.manage.
 //
 //   GET    /api/me/voice-keys              { elevenlabs, fish, xai, openai }: { configured, last4 }
@@ -9,8 +9,8 @@
 // A solo server answers 404: its one person keeps the installation's keys.
 // The key is never in an answer and never logged.
 import { isPersonalVoiceKeyProvider } from "../../shared/person-voice-keys.ts";
-import type { RequestAuth } from "../request-auth.ts";
-import { normalizeVoiceKey, PersonVoiceKeysError, type PersonVoiceKeysStore } from "../person-voice-keys.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { normalizeVoiceKey, PersonVoiceKeysError, type PersonVoiceKeysStore } from "../voice/person-voice-keys.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const PERSON_VOICE_KEYS_PATH = "/api/me/voice-keys";

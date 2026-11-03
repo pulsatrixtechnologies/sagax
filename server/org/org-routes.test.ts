@@ -9,7 +9,7 @@ import {
   inviteMailMessage, invitePreviewRoute, issueInviteRoute, joinInviteRoute, maskEmail, revokeInviteRoute, updateOrgHostRoute,
   type OrgRouteDeps, type OrgState, type PublicInviteRouteDeps,
 } from "./org-routes.ts";
-import { requiredScope } from "../request-auth.ts";
+import { requiredScope } from "../auth/request-auth.ts";
 import { dispatchRoutes } from "../routes/table.ts";
 
 const OWNER = "pr_00000000-0000-4000-8000-00000000000a";

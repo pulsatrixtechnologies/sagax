@@ -6,7 +6,7 @@ import { classifyFile, fileExtension, type ThreadFile } from "./chat-files";
 
 export type LibraryGlyphKind = "thumbnail" | "page" | "pdf" | "document" | "archive" | "video" | "audio" | "code" | "image" | "other";
 
-/** Pictures the server can draw as a thumbnail (see server/thumbnail.ts). */
+/** Pictures the server can draw as a thumbnail (see server/media/thumbnail.ts). */
 const THUMB_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg"]);
 const THUMB_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"]);
 

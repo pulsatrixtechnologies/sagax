@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
 import { createMessagesRoutes } from "./messages.ts";
 import { PASS } from "./table.ts";

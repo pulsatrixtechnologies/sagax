@@ -5,7 +5,7 @@
 // row (2026-10-15), so the card shows only while there is something to do
 // (Connect, or the link to the person's keys).
 // The payer order is the server's (src/lib/model-payers.ts,
-// server/engine-credentials.ts) and is not drawn as a list. The server's own
+// server/engines/engine-credentials.ts) and is not drawn as a list. The server's own
 // engine login is an admin setting in Settings and never signed in from here.
 import { t } from "@/lib/i18n";
 import type { MyEngine } from "@/lib/perspicax-org";

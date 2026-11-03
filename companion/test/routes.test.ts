@@ -62,7 +62,7 @@ describe("what the app may do", () => {
     ["POST", "/api/bots/bot_123/always-allow"],
     ["POST", "/api/bots/bot_123/messages/msg_2/edit"],
     ["GET", "/api/bots/bot_123/overview"],
-    // Read-only: what the bot did, with the outcome (server/activity.ts).
+    // Read-only: what the bot did, with the outcome (server/activity/activity.ts).
     ["GET", "/api/bots/bot_123/activity"],
     // The section's shared team memory: read it, add an entry, answer or
     // edit one, remove one. Content, not execution policy.

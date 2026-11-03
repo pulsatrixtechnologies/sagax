@@ -2,7 +2,7 @@
 // the ONLY component that holds the Docker socket. Its API is narrow: ensure,
 // stop, pause, resume, delete, exec, stats and status for sandboxes addressed by an opaque PERSON
 // key (never a bot), over signed requests only the Sagax server can make
-// (server/sandboxd-auth.ts). It cannot build an arbitrary container: every
+// (server/sandbox/sandboxd-auth.ts). It cannot build an arbitrary container: every
 // create body comes from sandboxContainerSpec() and must pass
 // assertSandboxIsolation().
 //
@@ -21,12 +21,12 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { Duplex } from "node:stream";
 import { pathToFileURL } from "node:url";
 
-import { ensureSandboxdKey, SANDBOXD_AUTH_HEADER, sandboxdKeySource, SandboxdVerifier } from "./sandboxd-auth.ts";
-import { SandboxError, SandboxService } from "./sandboxd-core.ts";
-import { ttyFrameDecoder } from "./sandbox-tty-frames.ts";
-import { dockerApi } from "./sandboxd-docker.ts";
+import { ensureSandboxdKey, SANDBOXD_AUTH_HEADER, sandboxdKeySource, SandboxdVerifier } from "./sandbox/sandboxd-auth.ts";
+import { SandboxError, SandboxService } from "./sandbox/sandboxd-core.ts";
+import { ttyFrameDecoder } from "./sandbox/sandbox-tty-frames.ts";
+import { dockerApi } from "./sandbox/sandboxd-docker.ts";
 import { sandboxBackendFromEnv } from "./sandboxd-k8s/sandboxd-k8s-spec.ts";
-import { egressHelperSpec, egressUninstallScript, sandboxdConfigFromEnv } from "./user-sandbox-spec.ts";
+import { egressHelperSpec, egressUninstallScript, sandboxdConfigFromEnv } from "./sandbox/user-sandbox-spec.ts";
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
@@ -105,7 +105,7 @@ export function createSandboxdHandler(service: SandboxService, verifier: Sandbox
 
 export const SANDBOXD_DESKTOP_UPGRADE = "sagax-rfb";
 const DESKTOP_PATH = /^\/v1\/sandboxes\/([a-f0-9]{32})\/desktop$/;
-/** A person's MCP server command (server/sandbox-stdio-mcp.ts). The command
+/** A person's MCP server command (server/sandbox/sandbox-stdio-mcp.ts). The command
  * and its environment ride the stream's first line, never the URL; the
  * signed URL names that line's SHA-256, so it is authenticated too. */
 export const SANDBOXD_STDIO_UPGRADE = "sagax-stdio";
@@ -113,7 +113,7 @@ const STDIO_PATH = /^\/v1\/sandboxes\/([a-f0-9]{32})\/stdio$/;
 const MAX_STDIO_SPEC_BYTES = 1_600_000;
 /** The in-chat terminal (server/terminal-resources/adapters/sandbox.ts): the
  * size rides the signed URL; keystrokes and resizes come framed
- * (server/sandbox-tty-frames.ts); the terminal's output goes back raw. */
+ * (server/sandbox/sandbox-tty-frames.ts); the terminal's output goes back raw. */
 export const SANDBOXD_TTY_UPGRADE = "sagax-tty";
 const TTY_PATH = /^\/v1\/sandboxes\/([a-f0-9]{32})\/tty$/;
 

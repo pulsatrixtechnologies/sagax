@@ -20,10 +20,12 @@ struct AutomationsWeekView: View {
     var botId: String?
     var loading = false
     let header: () -> AnyView
+    var trailing: () -> AnyView = { AnyView(EmptyView()) }
     let onCreate: (Date) -> Void
     let onAction: (AutomationsEventAction, RoutineCalendarItem) -> Void
 
     @State private var botQuery = ""
+    @Environment(\.automationsDesktop) private var desktop
 
     private static var hourHeight: CGFloat { 64 }
     private static var gutter: CGFloat { 48 }
@@ -40,6 +42,13 @@ struct AutomationsWeekView: View {
 
     private var rangeLabel: String {
         let end = RoutineCalendar.addDays(weekStart, 6)
+        if desktop {
+            // the desktop's `rangeLabel`: "November 2 - 8, 2026"
+            let sameMonth = Calendar.current.isDate(weekStart, equalTo: end, toGranularity: .month)
+            let start = weekStart.formatted(.dateTime.month(.wide).day())
+            let tail = sameMonth ? end.formatted(.dateTime.day()) : end.formatted(.dateTime.month(.wide).day())
+            return "\(start) - \(tail), \(end.formatted(.dateTime.year()))"
+        }
         let start = weekStart.formatted(.dateTime.month(.abbreviated).day())
         let sameMonth = Calendar.current.isDate(weekStart, equalTo: end, toGranularity: .month)
         let tail = sameMonth ? end.formatted(.dateTime.day().year()) : end.formatted(.dateTime.month(.abbreviated).day().year())
@@ -54,6 +63,7 @@ struct AutomationsWeekView: View {
                 AnyView(navigation)
                 Spacer(minLength: 0)
                 if loading { ProgressView().controlSize(.small) }
+                trailing()
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -61,7 +71,7 @@ struct AutomationsWeekView: View {
             HStack(spacing: 0) {
                 AnyView(grid)
                 Rectangle().fill(Theme.hairline).frame(width: 0.5)
-                AnyView(side)
+                AnyView(desktop ? AnyView(desktopSide) : AnyView(side))
                     .frame(width: 280)
             }
         }
@@ -104,7 +114,11 @@ struct AutomationsWeekView: View {
     private var grid: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                Color.clear.frame(width: Self.gutter, height: 1)
+                // the gutter's head names the time zone (the desktop's "GMT-5")
+                Text(verbatim: desktop ? Self.zoneLabel : "")
+                    .font(Theme.font(9.5))
+                    .foregroundStyle(Theme.textTertiary)
+                    .frame(width: Self.gutter, alignment: .center)
                 ForEach(days, id: \.self) { date in
                     AnyView(dayHeader(date))
                 }
@@ -128,9 +142,9 @@ struct AutomationsWeekView: View {
     private func dayHeader(_ date: Date) -> some View {
         let today = Calendar.current.isDateInToday(date)
         return VStack(spacing: 4) {
-            Text(verbatim: date.formatted(.dateTime.weekday(.abbreviated)).uppercased())
-                .font(Theme.font(10, .medium))
-                .tracking(1.4)
+            Text(verbatim: desktop ? date.formatted(.dateTime.weekday(.abbreviated)) : date.formatted(.dateTime.weekday(.abbreviated)).uppercased())
+                .font(Theme.font(desktop ? 11 : 10, .medium))
+                .tracking(desktop ? 0 : 1.4)
                 .foregroundStyle(today ? Theme.accent : Theme.textSecondary)
             Text(verbatim: date.formatted(.dateTime.day()))
                 .font(Theme.font(15, .medium))
@@ -243,6 +257,72 @@ struct AutomationsWeekView: View {
         }
     }
 
+    /// "Today at 7:02 AM", "Tomorrow at 7:02 AM", else the date and time.
+    static func whenText(_ date: Date) -> Text {
+        let time = date.formatted(date: .omitted, time: .shortened)
+        if Calendar.current.isDateInToday(date) { return Text("Today at \(time)") }
+        if Calendar.current.isDateInTomorrow(date) { return Text("Tomorrow at \(time)") }
+        return Text("\(date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())) at \(time)")
+    }
+
+    /// "GMT-5": the zone's offset as the desktop's calendar heads it.
+    static var zoneLabel: String {
+        let seconds = TimeZone.current.secondsFromGMT()
+        let hours = seconds / 3600, minutes = abs(seconds % 3600) / 60
+        return minutes == 0 ? "GMT\(hours >= 0 ? "+" : "")\(hours)" : String(format: "GMT%+d:%02d", hours, minutes)
+    }
+
+    // MARK: Side (the desktop's: the month, Upcoming, the drag hint)
+
+    private var upcoming: [RoutineCalendarItem] {
+        let now = Date()
+        let soon = (0..<14).flatMap { RoutineCalendar.day(RoutineCalendar.addDays(RoutineCalendar.startOfDay(now), $0), routines: routines, runs: runs, botId: botId) }
+        // one row per routine, its next run (the desktop's Upcoming)
+        var seen = Set<String>()
+        return Array(soon.filter { $0.date >= now && $0.run == nil }.sorted { $0.date < $1.date }.filter { item in
+            seen.insert(item.routine?.id ?? item.id).inserted
+        }.prefix(8))
+    }
+
+    private var desktopSide: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            DesktopMiniMonth(day: $day)
+            HStack(spacing: 6) {
+                Image(systemName: "calendar.badge.clock").font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
+                Text("Upcoming").font(Theme.font(12, .medium)).foregroundStyle(Theme.textPrimary)
+                Spacer()
+                Text(verbatim: "\(upcoming.count)").font(Theme.font(11)).foregroundStyle(Theme.textSecondary)
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(upcoming) { item in
+                        Button { onAction(.open, item) } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(verbatim: item.name).font(Theme.font(12.5, .medium)).foregroundStyle(Theme.textPrimary).lineLimit(1)
+                                HStack(spacing: 4) {
+                                    if let bot = item.botId.flatMap({ id in bots.first { $0.id == id } }) {
+                                        BotMascotView(bot: bot, size: 14).frame(width: 14, height: 14)
+                                        Text(verbatim: bot.name)
+                                    }
+                                    Text(verbatim: "· ") + Self.whenText(item.date)
+                                }
+                                .font(Theme.font(11)).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+            Text("Drag a bot from the left sidebar onto a time to schedule it.")
+                .font(Theme.font(11))
+                .foregroundStyle(Theme.textTertiary)
+        }
+        .padding(12)
+    }
+
     // MARK: Side
 
     private var side: some View {
@@ -294,5 +374,79 @@ struct AutomationsWeekView: View {
             }
             .padding(12)
         }
+    }
+}
+
+/// The desktop's mini month (RoutineCalendarPage.tsx `MiniMonth`): the
+/// month and year with ‹ ›, the weekday initials from Monday, the days in a
+/// seven-column grid, today in the accent circle, the shown week tinted;
+/// a day opens its week.
+struct DesktopMiniMonth: View {
+    @Environment(\.themePalette) var themePalette
+    @Binding var day: Date
+    @State private var month: Date = RoutineCalendar.startOfDay(Date())
+
+    private var calendar: Calendar {
+        var c = Calendar.current
+        c.firstWeekday = 2
+        return c
+    }
+
+    private var monthStart: Date { calendar.date(from: calendar.dateComponents([.year, .month], from: month)) ?? month }
+
+    private var cells: [Date] {
+        let first = monthStart
+        let lead = (calendar.component(.weekday, from: first) + 5) % 7
+        let start = RoutineCalendar.addDays(first, -lead)
+        return (0..<42).map { RoutineCalendar.addDays(start, $0) }
+    }
+
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack {
+                Text(verbatim: monthStart.formatted(.dateTime.month(.wide).year()))
+                    .font(Theme.font(12.5, .medium)).foregroundStyle(Theme.textPrimary)
+                Spacer()
+                Button { month = calendar.date(byAdding: .month, value: -1, to: monthStart) ?? month } label: {
+                    Image(systemName: "chevron.left").font(.system(size: 11, weight: .medium)).frame(width: 28, height: 28)
+                }
+                .accessibilityLabel(Text("Previous month"))
+                Button { month = calendar.date(byAdding: .month, value: 1, to: monthStart) ?? month } label: {
+                    Image(systemName: "chevron.right").font(.system(size: 11, weight: .medium)).frame(width: 28, height: 28)
+                }
+                .accessibilityLabel(Text("Next month"))
+            }
+            .foregroundStyle(Theme.textSecondary)
+            let symbols = calendar.veryShortStandaloneWeekdaySymbols
+            HStack(spacing: 0) {
+                ForEach(0..<7, id: \.self) { index in
+                    Text(verbatim: symbols[(index + 1) % 7])
+                        .font(Theme.font(10, .medium)).foregroundStyle(Theme.textTertiary)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            let week = AutomationsWeekView.weekStart(day, calendar: calendar)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 2) {
+                ForEach(cells, id: \.self) { date in
+                    let inMonth = calendar.isDate(date, equalTo: monthStart, toGranularity: .month)
+                    let today = calendar.isDateInToday(date)
+                    let shown = date >= week && date < RoutineCalendar.addDays(week, 7)
+                    Button { day = RoutineCalendar.startOfDay(date) } label: {
+                        Text(verbatim: date.formatted(.dateTime.day()))
+                            .font(Theme.font(11, today ? .semibold : .regular))
+                            .foregroundStyle(today ? Color.white : (inMonth ? Theme.textPrimary : Theme.textTertiary))
+                            .frame(width: 24, height: 24)
+                            .background(Circle().fill(today ? Theme.accent : Color.clear))
+                            .frame(maxWidth: .infinity, minHeight: 28)
+                            .background(shown && !today ? Theme.accent.opacity(0.08) : Color.clear)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .onAppear { month = day }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("automations-mini-month")
     }
 }

@@ -6,8 +6,8 @@ import { join } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
-import type { VaultKeySource } from "../mcp-oauth.ts";
-import { principalDir } from "../person-connections.ts";
+import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
+import { principalDir } from "../people/person-connections.ts";
 import { CLOUD_AGENT_KEY_PROVIDERS, type CloudAgentKeyProviderId, type CloudAgentProviderId } from "../../shared/cloud-agents.ts";
 
 const AAD = Buffer.from("sagax cloud-agent-credentials v1");

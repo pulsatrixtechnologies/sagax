@@ -36,8 +36,8 @@ import type { IncomingMessage } from "node:http";
 import type { Resvg as ResvgClass } from "@resvg/resvg-js";
 
 import { nativeRequire } from "../data/engine.ts";
-import { AVATAR_MAX_BYTES, avatarContentType, type AvatarImage, type OwnAvatarWrite } from "../perspicax-link.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import { AVATAR_MAX_BYTES, avatarContentType, type AvatarImage, type OwnAvatarWrite } from "../perspicax/perspicax-link.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export const ME_AVATAR_PATH = "/api/me/avatar";

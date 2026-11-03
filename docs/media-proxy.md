@@ -2,11 +2,11 @@
 
 The video widget plays some sources through the server:
 `GET /api/media/proxy/<token>` (`server/routes/media-widgets.ts`,
-`server/media-proxy.ts`). The token signs the upstream URL, its expiry and the
+`server/media/media-proxy.ts`). The token signs the upstream URL, its expiry and the
 thread; HLS playlists are rewritten so their segments, keys and variants go
 through the same route. The upstream URL comes from a bot, so the server only
 fetches public destinations unless the operator allows more
-(`server/media-proxy-guard.ts`).
+(`server/media/media-proxy-guard.ts`).
 
 ## Refused by default
 
@@ -68,5 +68,5 @@ SAGAX_MEDIA_PROXY_ALLOW_HOSTS=glitcho.lan,*.tail1234.ts.net
 The variable is read from the server's environment (Docker: add it to the
 service's `environment`). Changing it applies to the next proxied request.
 
-Tests: `server/media-proxy-guard.test.ts`, `server/media-proxy.test.ts`,
+Tests: `server/media/media-proxy-guard.test.ts`, `server/media/media-proxy.test.ts`,
 `server/routes/media-widgets.test.ts`.

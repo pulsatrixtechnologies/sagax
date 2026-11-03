@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { CloudAgentRecord } from "../../shared/cloud-agents.ts";
 import type { CloudAgentManager } from "../cloud-agents/manager.ts";
 import type { CloudAgentCredentialStore } from "../cloud-agents/credentials.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { createCloudAgentRoutes } from "./cloud-agents.ts";
 
 const rec = (id: string, principalId: string, threadId: string) => ({ id, principalId, threadId, botId: "b1" }) as CloudAgentRecord;

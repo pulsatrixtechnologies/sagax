@@ -35,7 +35,7 @@ ARG WITH_DESKTOP=1
 ARG WITH_APPS=1
 # gh, node and npm: the person's GitHub connection (Settings > Mes connexions
 # writes gh's hosts.yml and git's credentials into /workspace) and the MCP
-# servers a person runs here themselves (npx ...; server/sandbox-stdio-mcp.ts).
+# servers a person runs here themselves (npx ...; server/sandbox/sandbox-stdio-mcp.ts).
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \

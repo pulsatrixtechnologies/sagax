@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { OrgBotSecrets } from "./org-bot-secrets.ts";
-import { createPerspicaxOrgRoutes } from "../perspicax-org-routes.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import { createPerspicaxOrgRoutes } from "../perspicax/perspicax-org-routes.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import type { RouteContext } from "../routes/table.ts";
 
 const SECRET = "fake-route-secret-0001";

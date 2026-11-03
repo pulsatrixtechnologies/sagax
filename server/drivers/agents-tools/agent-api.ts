@@ -1,6 +1,6 @@
 // Agents tool family: Agent-to-agent API and run_with_engine.
 // Never import server/index.ts.
-import { agentToolAnnotations } from "../../agent-tool-policy.ts";
+import { agentToolAnnotations } from "../../tools/agent-tool-policy.ts";
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
 

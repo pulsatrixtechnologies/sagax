@@ -15,7 +15,7 @@ import { z } from "zod";
 
 import { parsePhoneToolArgs, phoneAnswerSchema, phoneDeviceSchema, PHONE_TOOL_CALL_WAIT_MS } from "../../shared/phone-tools.ts";
 import { PhoneToolUnavailable, type PhoneToolBroker } from "../phone/phone-tools.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { isCardSealPublicKey } from "../../shared/phone-card-seal.ts";
 import type { PhoneTransport } from "../../shared/phone-transport.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";

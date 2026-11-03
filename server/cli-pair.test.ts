@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runPair, type CliOptions } from "./cli.ts";
-import { SetupCancelled } from "./cli-prompts.ts";
+import { SetupCancelled } from "./cli/cli-prompts.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
 
 const mocks = vi.hoisted(() => ({
@@ -10,9 +10,9 @@ const mocks = vi.hoisted(() => ({
   createTunnelAccount: vi.fn(), describeTunnelAccount: vi.fn(), tailscaleStatus: vi.fn(),
   ui: { log: vi.fn(), choose: vi.fn(), ask: vi.fn(), secret: vi.fn(), confirm: vi.fn() },
 }));
-vi.mock("./cli-setup.ts", () => ({ readCliStartup: mocks.readCliStartup }));
-vi.mock("./cli-prompts.ts", async (original) => ({
-  ...await original<typeof import("./cli-prompts.ts")>(), defaultSetupIo: () => mocks.ui,
+vi.mock("./cli/cli-setup.ts", () => ({ readCliStartup: mocks.readCliStartup }));
+vi.mock("./cli/cli-prompts.ts", async (original) => ({
+  ...await original<typeof import("./cli/cli-prompts.ts")>(), defaultSetupIo: () => mocks.ui,
 }));
 vi.mock("./tailscale.ts", () => ({
   tailscaleStatus: mocks.tailscaleStatus,

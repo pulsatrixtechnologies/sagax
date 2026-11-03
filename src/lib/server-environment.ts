@@ -1,6 +1,6 @@
 // Settings > Organization > Your server environment: the signed-in person's
 // own isolated Linux environment on the server, shared by all their bots
-// (server/user-sandbox-routes.ts).
+// (server/sandbox/user-sandbox-routes.ts).
 import { api, ApiError } from "@/state/store";
 import { formatPanelBytes as formatBytes } from "../../shared/format-bytes";
 

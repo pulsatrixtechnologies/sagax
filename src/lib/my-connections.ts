@@ -123,7 +123,7 @@ export interface InstalledPlugin {
   enabled: boolean;
   removed: string[];
   declaredMcpServers: string[];
-  /** the fields the plugin declares and this bot's values (server/plugin-config.ts) */
+  /** the fields the plugin declares and this bot's values (server/plugins/plugin-config.ts) */
   config?: PluginConfigView;
 }
 

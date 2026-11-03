@@ -17,7 +17,7 @@ import { hostname } from "node:os";
 import { dirname, join } from "node:path";
 
 import { SERVER_FEATURE_NAMES, type ServerFeature } from "../shared/server-features.ts";
-import type { IdentityDescriptor } from "./oidc-login.ts";
+import type { IdentityDescriptor } from "./auth/oidc-login.ts";
 import { SERVER_ROOT } from "./proxy-paths.ts";
 
 export interface EnvironmentDescriptor {

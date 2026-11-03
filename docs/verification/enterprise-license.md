@@ -40,7 +40,7 @@ anyway unlocks nothing more.
 ## Driving it
 
 ```sh
-pnpm exec vitest run server/enterprise.test.ts server/brand.test.ts server/spend.test.ts
+pnpm exec vitest run server/enterprise.test.ts server/brand.test.ts server/usage/spend.test.ts
 pnpm exec vitest run server/license-expiry-api.test.ts
 ```
 
@@ -48,7 +48,7 @@ pnpm exec vitest run server/license-expiry-api.test.ts
 is absent, including a key that was set anyway, and loads temporary stand-in
 `register()` layers to prove the seam: grants, refusals, expiry, and a bridge
 that never runs on the open-source edition's features. It does not vendor the
-removed layer. `server/brand.test.ts` and `server/spend.test.ts` apply a
+removed layer. `server/brand.test.ts` and `server/usage/spend.test.ts` apply a
 `brand.json` and enforce a cap with the default gate, no layer and no key.
 `server/license-expiry-api.test.ts` boots the fixture with no layer, then with
 a stand-in layer whose key expires soon, is in its grace period, or is far

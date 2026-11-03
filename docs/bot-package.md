@@ -9,7 +9,7 @@ path:
   `POST bots/import` with the zip as the body (docs/org-admin-api.md).
 
 Code: `shared/bot-zip.ts` (manifest schema, limits, preview shape),
-`server/zip.ts` (writer and defensive reader), `server/bot-zip.ts` (what
+`server/zip.ts` (writer and defensive reader), `server/bots/bot-zip.ts` (what
 goes in, what comes out), `server/routes/bot-zip.ts` (HTTP),
 `src/lib/bot-zip.ts` and `src/components/BotZipImport.tsx` (app).
 
@@ -33,7 +33,7 @@ goes in, what comes out), `server/routes/bot-zip.ts` (HTTP),
 | `conversations/tasks.json`, `conversations/threads/<id>.json` | optional: every thread with its messages, branches and summaries |
 | `conversations/files/<id>/**`, `attachments/<file>` | optional: each thread's work folder and the messages' attachments |
 
-`BOT_FIELD_POLICY` in `server/bot-zip.ts` classifies every `BotRecord`
+`BOT_FIELD_POLICY` in `server/bots/bot-zip.ts` classifies every `BotRecord`
 field: kept, host setting, sharing, conversation, or dropped with its
 reason. A new field does not compile until someone decides.
 
@@ -134,7 +134,7 @@ pick.
 
 A bot's own plugins reach its turns: Claude loads each enabled plugin with
 `--plugin-dir` (skills, commands, agents); every other workspace engine
-gets their paths in the turn prompt (`server/plugin-turn.ts`).
+gets their paths in the turn prompt (`server/turns/plugin-turn.ts`).
 
 ## Capability store shape (lot 5)
 
@@ -142,7 +142,7 @@ On disk, bot capability **config** lives in one file per bot:
 
 `DATA_DIR/bot-capabilities/<botId>/capabilities.json`
 
-(`server/bot-capability-store.ts`). It holds plugin enable state, plugin
+(`server/bots/bot-capability-store.ts`). It holds plugin enable state, plugin
 config values, assigned library skills, and a `migrated` list. The zip
 still uses the portable `plugins/state.json` path so older packages import;
 export fills that entry from the bot store (or from the legacy

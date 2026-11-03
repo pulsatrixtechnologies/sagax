@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { NotesCallResult } from "../memory/perspicax-memory-notes.ts";
-import type { RequestAuth } from "../request-auth.ts";
-import type { SessionRecord } from "../sessions.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import type { SessionRecord } from "../auth/sessions.ts";
 import { PASS, type RouteContext } from "./table.ts";
 import { createMeMemoryNotesRoutes, ME_MEMORY_PREFIX, memoryPrincipal, upstreamOf } from "./me-memory-notes.ts";
 

@@ -1,5 +1,5 @@
 // The reader's view of a published page (2026-10-28): what the wrapper at
-// /pages/view/<token> tells its own script (server/published-pages-render.ts
+// /pages/view/<token> tells its own script (server/pages/published-pages-render.ts
 // writes it, src/page-reader/ reads it) and the words of its bar, in French
 // and English like the wrapper's other words.
 //

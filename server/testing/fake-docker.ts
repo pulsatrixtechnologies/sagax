@@ -2,7 +2,7 @@
 // create body so the tests can assert what would reach a real daemon.
 import { Duplex } from "node:stream";
 
-import type { ContainerSummary, DockerApi, ExecRequest, ExecResult, TtyExec, TtySize } from "../sandboxd-docker.ts";
+import type { ContainerSummary, DockerApi, ExecRequest, ExecResult, TtyExec, TtySize } from "../sandbox/sandboxd-docker.ts";
 
 export class FakeDocker implements DockerApi {
   containers = new Map<string, { running: boolean; paused?: boolean; labels: Record<string, string>; spec: Record<string, unknown>; startedAt: number }>();

@@ -35,7 +35,7 @@ const UPCOMING_TONES = {
 } as const;
 
 
-export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, error, onOpen, onToggle, grouped = false, toggle = true, variant = "list", emptyText, onRowMenu, onRowDragStart, onRowStep, onOpenRunning, label, renamingId, onRenameStart, onRenameSave, onRenameCancel }: {
+export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, error, onOpen, onToggle, grouped = false, toggle = true, variant = "list", emptyText, onRowMenu, onRowDragStart, onRowStep, onOpenRunning, label, renamingId, onRenameStart, onRenameSave, onRenameCancel, showBot = false }: {
   routines: Routine[];
   /** Slice 6: the signed-in person on an organization server. */
   viewerPrincipalId?: string | null;
@@ -77,6 +77,9 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
   onRenameStart?: (routine: Routine) => void;
   onRenameSave?: (routine: Routine, name: string) => void;
   onRenameCancel?: () => void;
+  /** The list variant with the bot before the schedule line (the Automations
+   * list grouped by folder across bots, 2026-11-03). Needs `bots`. */
+  showBot?: boolean;
 }) {
   const upcoming = variant === "upcoming";
   const sorted = upcoming
@@ -93,7 +96,7 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
     {sorted.length > 0 && (
       <div className={grouped ? GROUPED_CARD : "flex flex-col gap-0.5"}>
         {sorted.map((routine) => {
-          const bot = upcoming ? bots?.find((candidate) => candidate.id === routine.botId) : undefined;
+          const bot = upcoming || showBot ? bots?.find((candidate) => candidate.id === routine.botId) : undefined;
           const botName = bot?.name ?? routine.bot?.name;
           const when = upcoming && routine.nextRunAt != null ? routineNextRunPhrase(routine.nextRunAt) : routineWhenLabel(routine);
           // The full sentence, with its zone, in the tooltip; never the expression.
@@ -152,7 +155,7 @@ export function RoutineList({ routines, viewerPrincipalId, runs, bots, loading, 
                     {botName && <span aria-hidden="true" className="shrink-0">·</span>}
                     <span className="max-w-full shrink-0 truncate">{when}</span>
                   </span>
-                ) : <span data-routine-when={whenLine} title={whenTitle} className="block truncate text-[12px] leading-4 text-ink-secondary">{whenLine}{nextLine && <span data-routine-next> · {t("routines.list.next", { when: nextLine })}</span>}</span>}
+                ) : <span data-routine-when={whenLine} title={whenTitle} className="block truncate text-[12px] leading-4 text-ink-secondary">{showBot && botName && <span data-routine-bot className="inline-flex max-w-[40%] items-center gap-1 align-bottom">{bot && <BotAvatar bot={bot} size={14} animated={false} />}<span className="truncate">{botName}</span></span>}{showBot && botName && <span aria-hidden="true">{" · "}</span>}{whenLine}{nextLine && <span data-routine-next> · {t("routines.list.next", { when: nextLine })}</span>}</span>}
                 {runningRun && (
                   <span data-routine-running aria-label={`${t("routines.status.running")}: ${routine.name}`} className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] leading-4 text-ink-secondary">
                     <span aria-hidden="true" className="size-1.5 shrink-0 animate-pulse rounded-full bg-success motion-reduce:animate-none" />

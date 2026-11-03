@@ -2,7 +2,7 @@
 // Lot 5 migrates marketplaces/state.json into the sealed installation store
 // at boot and then ignores the legacy file. Suites that used to call
 // PluginMarketplaces.adopt after boot must seed before the server starts.
-import { PluginMarketplaces, type SharedMarketplaceRecord } from "../plugin-marketplaces.ts";
+import { PluginMarketplaces, type SharedMarketplaceRecord } from "../plugins/plugin-marketplaces.ts";
 
 /** Write a marketplace record into DATA_DIR/marketplaces/state.json before
  * the server boots so migration absorbs it. Returns the marketplaces handle

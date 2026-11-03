@@ -68,7 +68,7 @@ public extension CompanionClient {
         return try makeRequest("POST", "/api/groups/\(groupId)/leave")
     }
 
-    /// #1480: the signed-in person leaves the group (server/group-leave.ts).
+    /// #1480: the signed-in person leaves the group (server/groups/group-leave.ts).
     func leaveRoom(groupId: String) async throws {
         try await send(leaveRoomRequest(groupId: groupId))
     }

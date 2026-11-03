@@ -3,7 +3,7 @@
 // away, not the wire-level inspector next to it.
 //
 // Nothing here is captured for the panel's sake. The harness folds the
-// thread's runtime events and the decision log into rows (server/activity.ts);
+// thread's runtime events and the decision log into rows (server/activity/activity.ts);
 // this only asks for them, and asks again when a turn settles.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ListChecks, RefreshCw, X } from "lucide-react";

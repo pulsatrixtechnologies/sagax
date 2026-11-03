@@ -1,5 +1,5 @@
 // The desktop's side of the in-chat terminal (organization server; the
-// server side is server/desktop-terminal.ts). The person opened a terminal
+// server side is server/desktop/desktop-terminal.ts). The person opened a terminal
 // on this computer, or on its Local VM, from their own conversation; the
 // server sends a one-time ticket through the bridge, and this app connects
 // OUT with a WebSocket signed in as the person (their session cookie and the

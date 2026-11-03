@@ -11,7 +11,7 @@ import { z } from "zod";
 
 import { planShownPath, type ShownPathMode } from "../../shared/shown-path.ts";
 import type { TeachStep, TeachStepKind } from "../../shared/teach-recording.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 const BODY_MAX = 256 * 1024;

@@ -1,6 +1,6 @@
 // What of the bot's answer a call reads aloud. Pure.
 //
-// The bot is told it is on the phone (server/voice-call-prompt.ts), but a
+// The bot is told it is on the phone (server/voice/voice-call-prompt.ts), but a
 // model still slips in a bold word, a bullet, an emoji or a link. This is the
 // safety net on this side, before a sentence goes to text to speech (the
 // server's speakable text, server/tts/speech-text.ts, runs again on it).

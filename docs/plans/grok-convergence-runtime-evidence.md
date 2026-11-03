@@ -90,7 +90,7 @@ in file order (22 cases).
 - `pnpm exec vitest run server/runtime/`: 177 passed.
 - `pnpm exec vitest run server/runtime-coordinator.test.ts`: 62 passed
   (includes `enqueueGoalAssignment` and Continue: cases).
-- `pnpm exec vitest run server/group-goal-run.e2e.test.ts`: 12 passed
+- `pnpm exec vitest run server/groups/group-goal-run.e2e.test.ts`: 12 passed
   (busy worker wait, Stop of coordinator direct turn while a routine goal
   waits on its worker, hard turn limit, and the rest).
 - `pnpm exec vitest run server/runtime-delivery-convergence.e2e.test.ts`: 22 passed.

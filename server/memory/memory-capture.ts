@@ -297,7 +297,7 @@ export class CaptureBuffer {
   }
 
   /** Drop one thread's waiting turns without capturing them: it became
-   * confidential, or it was deleted (server/confidential-threads.ts). */
+   * confidential, or it was deleted (server/threads/confidential-threads.ts). */
   dropThread(threadId: string): void {
     const entry = this.pending.get(threadId);
     if (!entry) return;

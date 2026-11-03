@@ -9,7 +9,7 @@ import { basename, join } from "node:path";
 
 import type { ModelCatalog } from "../contracts.ts";
 import { qualifiedModelLabel } from "../contracts.ts";
-import { engineStartGate } from "../engine-start-gate.ts";
+import { engineStartGate } from "../engines/engine-start-gate.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
 import { codexHome } from "./codex-identity.ts";
 import { mergeLocalInject } from "./local-inject.ts";

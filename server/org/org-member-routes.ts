@@ -57,7 +57,7 @@ import { mask, redactSecretsInText } from "../../shared/redact.ts";
 import { skillRequestBehavior } from "../../shared/skill-request.ts";
 import { terminalRequestBehavior } from "../../shared/terminal-request.ts";
 import { parseMemoryPath } from "../memory/memory-store.ts";
-import type { ConsoleAssertion } from "../oidc-rp.ts";
+import type { ConsoleAssertion } from "../auth/oidc-rp.ts";
 import { AssertionReplayCache } from "./org-admin-routes.ts";
 import { compileRoutes, matchRoutes } from "./org-admin-console.ts";
 
@@ -65,7 +65,7 @@ export const ORG_MEMBER_PREFIX = "/api/org/member/";
 /** The `act.sub` values the member API accepts: never `perspicax-mail` nor
  * `perspicax-voice` (those actors are the inbound mail route's and the
  * inbound telephony route's alone, server/mail/bot-inbound-mail.ts and
- * server/bot-inbound-telephony.ts). */
+ * server/bots/bot-inbound-telephony.ts). */
 export const ORG_MEMBER_ASSERTION_ACTORS: readonly ConsoleAssertion["actor"][] = ["console", "perspicax-mcp"];
 /** The version `GET capabilities` reports. */
 export const ORG_MEMBER_API_VERSION = 1;
@@ -144,7 +144,7 @@ export interface OrgMemberRouteDeps {
   /** A principal id from a principal id or a Perspicax user id. */
   resolvePerson(ref: string): string | null;
   /** The words the bot is writing in this thread right now, or null
-   * (server/member-live-text.ts). */
+   * (server/people/member-live-text.ts). */
   liveText?(threadId: string): string | null;
   /** The link that opens the thread in Sagax, or null. */
   threadLink?(threadId: string, botId: string | null): string | null;
@@ -156,7 +156,7 @@ export interface OrgMemberRouteDeps {
   approvalAnswerer?(threadId: string, requestId: string): ApprovalAnswerer | null;
   /** The bot whose thread this is, or null (a room, or gone). */
   botOfThread?(threadId: string): string | null;
-  /** A confidential thread (server/confidential-threads.ts): an AI client
+  /** A confidential thread (server/threads/confidential-threads.ts): an AI client
    * never reads, streams, writes or answers a card in one; it reads as
    * missing. */
   confidential?(threadId: string): boolean;

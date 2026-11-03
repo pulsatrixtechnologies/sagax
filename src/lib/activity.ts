@@ -1,5 +1,5 @@
 // Settings → Activity: the shape GET /api/admin-activity answers with
-// (server/admin-activity.ts), and the pure pieces the screen renders from.
+// (server/activity/admin-activity.ts), and the pure pieces the screen renders from.
 import { t } from "./i18n";
 import { readableOr } from "../../shared/human-id";
 import { en, type LocaleKey } from "@/locales";
@@ -86,7 +86,7 @@ export function formatValue(value: unknown): string {
 }
 
 // The activity panel's shaping: rows come from the harness newest first
-// (server/activity.ts); the panel wants them under day headings with an
+// (server/activity/activity.ts); the panel wants them under day headings with an
 // outcome the eye can sort by before reading.
 import type { ActivityOutcome, ActivityRow } from "../../shared/activity";
 

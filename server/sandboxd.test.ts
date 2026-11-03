@@ -5,12 +5,12 @@ import { createServer, request, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { SANDBOXD_AUTH_HEADER, SandboxdVerifier, signSandboxdRequest } from "./sandboxd-auth.ts";
-import { SandboxService } from "./sandboxd-core.ts";
+import { SANDBOXD_AUTH_HEADER, SandboxdVerifier, signSandboxdRequest } from "./sandbox/sandboxd-auth.ts";
+import { SandboxService } from "./sandbox/sandboxd-core.ts";
 import { createSandboxdHandler, createSandboxdUpgradeHandler } from "./sandboxd.ts";
 import { FakeDocker } from "./testing/fake-docker.ts";
-import { sandboxdClient, SandboxdRequestError } from "./user-sandbox-client.ts";
-import { sandboxKeyForPrincipal, sandboxdConfigFromEnv } from "./user-sandbox-spec.ts";
+import { sandboxdClient, SandboxdRequestError } from "./sandbox/user-sandbox-client.ts";
+import { sandboxKeyForPrincipal, sandboxdConfigFromEnv } from "./sandbox/user-sandbox-spec.ts";
 
 const KEY = "a".repeat(64);
 const OTHER_KEY = "b".repeat(64);

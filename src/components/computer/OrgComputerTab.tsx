@@ -78,7 +78,7 @@ const announceServerEnvironment = () => { window.dispatchEvent(new Event(SERVER_
 
 /** Which computer this bot uses, from its Works on, and why (one sentence).
  * Auto starts on the person's computer when the Sagax app is connected
- * (server/auto-computer.ts autoStartTarget), else in the cloud. */
+ * (server/computer/auto-computer.ts autoStartTarget), else in the cloud. */
 export function activeComputer(bridge: DesktopBridgeStatus, place: EffectivePlace): { source: ComputerSource; reason: "cloud" | "computer" | "notConnected" | "none" } {
   if (place === "auto" && bridge.connected) return { source: "local", reason: "computer" };
   const computer = orgComputerFor(place);

@@ -119,7 +119,7 @@ public enum AttachmentPolicyError: Error, LocalizedError, Equatable, Sendable {
 public enum AttachmentPolicy {
     public static let maximumItems = 32
     public static let maximumTotalBytes = 200 * 1_024 * 1_024
-    /// Same as IMAGE_MAX_BYTES in server/attachments.ts (32 MiB since #899); the
+    /// Same as IMAGE_MAX_BYTES in server/attachments/attachments.ts (32 MiB since #899); the
     /// server shrinks a large picture before the model sees it. A unit test on
     /// the server side keeps the two numbers equal.
     public static let maximumImageBytes = 32 * 1_024 * 1_024

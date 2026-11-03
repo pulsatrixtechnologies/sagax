@@ -67,7 +67,7 @@ graceful-first stop when its instance is disposed. No deletion path calls
   a new turn. No interrupt or kill.
 - The queue drain (index.ts:5055-5075) subscribes to `turn.completed` and calls
   `startTurn`; it never touches the previous child.
-- `rg -n "kill|interrupt|stop\(" server/steer-queue.ts` matches nothing
+- `rg -n "kill|interrupt|stop\(" server/turns/steer-queue.ts` matches nothing
   (only comments/warns).
 - The room queue/steer endpoint (index.ts:13355-13437) rides the same
   contract: it lifts the channel queue atomically (holdChannelQueue),

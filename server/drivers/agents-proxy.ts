@@ -27,10 +27,10 @@ import { catalogBridgeDefinitions, catalogBridgeOn, resolveCatalogUse, routeBrid
 import { mergeByAction } from "./agents-merged.ts";
 import { readMergedCall } from "../../shared/merged-agent-tools.ts";
 import { BRIDGE_USE_TOOL } from "../../shared/searched-tool-call.ts";
-import { CALL_TOOL, DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, isDirectoryTool, type CatalogTool } from "../mcp-directory.ts";
+import { CALL_TOOL, DESCRIBE_TOOL, SEARCH_TOOL, ToolDirectory, isDirectoryTool, type CatalogTool } from "../mcp/mcp-directory.ts";
 import { callTool, capResult, toolCallContextFromEnv } from "./agents-call.ts";
 import { harnessClientFromEnv, type Json } from "./agents-client.ts";
-import { auditSampleFromEnv, deniedResourcesFromEnv, guardToolCall, learnCreatedBot, permissionModeFromEnv, principalFromEnv, scopeOwnersFromEnv } from "../mcp-permissions.ts";
+import { auditSampleFromEnv, deniedResourcesFromEnv, guardToolCall, learnCreatedBot, permissionModeFromEnv, principalFromEnv, scopeOwnersFromEnv } from "../mcp/mcp-permissions.ts";
 
 const PROFILE = catalogProfileFromEnv(process.env);
 const AVAILABLE_TOOLS = availableTools(PROFILE);

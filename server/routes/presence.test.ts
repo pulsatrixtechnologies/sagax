@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { publicPresence } from "../../shared/presence.ts";
 import { json, readBody } from "../harness/http.ts";
-import { PresenceTracker } from "../presence.ts";
-import type { RequestAuth } from "../request-auth.ts";
+import { PresenceTracker } from "../people/presence.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
 import { createPresenceRoutes, presenceFrameAllowed, type PresenceViewer } from "./presence.ts";
 import { dispatchRoutes } from "./table.ts";
 

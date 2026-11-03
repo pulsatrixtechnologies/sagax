@@ -9,7 +9,7 @@ import {
 import {
   contextFullMessage,
   renewalPrompt,
-} from "../../context-renewal.ts";
+} from "../../context/context-renewal.ts";
 import { killCliTree } from "../../procs.ts";
 import { classifyError, computeBackoff, interruptibleDelay, RETRY_MAX_ATTEMPTS } from "../retry.ts";
 import { turnCostFromRunningTotal } from "./cost.ts";

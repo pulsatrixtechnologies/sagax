@@ -1,6 +1,6 @@
 // The published-page tools of the agents catalog (shared/published-pages.ts),
 // spread into TOOL_DEFINITIONS in agents-catalog.ts. Definitions only;
-// agents-call-cards.ts carries a call out and server/chat-widgets.ts writes
+// agents-call-cards.ts carries a call out and server/widgets/chat-widgets.ts writes
 // the card. Every word here is sent to the model on every turn and pinned by
 // agents-catalog-wire.test.ts.
 export const PAGE_TOOL_DEFINITIONS = [

@@ -15,8 +15,8 @@ import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
-import { readAtRestTextSync, registerAtRestRoot } from "../content-at-rest.ts";
-import { WORKSPACE_OWNER } from "../content-keys.ts";
+import { readAtRestTextSync, registerAtRestRoot } from "../encryption/content-at-rest.ts";
+import { WORKSPACE_OWNER } from "../encryption/content-keys.ts";
 import { DATA_DIR } from "../config.ts";
 import { withoutExpired } from "./memory-entries.ts";
 import { hashMemoryText, memoryCapacity, type MemoryCapacity } from "./memory-store.ts";
@@ -31,7 +31,7 @@ import {
   memoryOverBudget,
   type MemoryUpdate,
   type MemoryUpdateOptions,
-} from "../workspace.ts";
+} from "../workspace/workspace.ts";
 
 /** How many of the newest entries ride back with a budget refusal: enough
  * to see what could be merged, few enough that the refusal itself does not
@@ -56,7 +56,7 @@ export type MemoryBudgetRefusal = {
 };
 
 /** A group memory write. The bot memory moves older entries to its archive
- * (server/workspace.ts updateMemory); a group's memory has no archive, so a
+ * (server/workspace/workspace.ts updateMemory); a group's memory has no archive, so a
  * write that would push it past what loads is refused instead. */
 export type GroupMemoryUpdateResult =
   | { ok: true; text: string; truncated: boolean; bytes: number; entry?: string }

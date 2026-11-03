@@ -24,7 +24,7 @@ export function emailLocalPart(value: string | undefined): string {
   return at > 0 ? trimmed.slice(0, at) : trimmed;
 }
 
-/** Mirrors personDisplayName in server/viewer-identity.ts: the Perspicax
+/** Mirrors personDisplayName in server/people/viewer-identity.ts: the Perspicax
  * display name, else the address's local part, else the login. A name equal
  * to the login (the directory's own fallback) is not a display name. */
 export function personDisplayName(person: { name?: string; email?: string; login?: string } | null | undefined): string {

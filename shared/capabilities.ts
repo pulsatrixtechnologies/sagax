@@ -5,7 +5,7 @@
 // bot's engine actually receives of it.
 //
 // The server resolves the list of one bot for one engine
-// (server/capabilities.ts, GET /api/bots/:id/capabilities); Capabilities >
+// (server/capabilities/capabilities.ts, GET /api/bots/:id/capabilities); Capabilities >
 // Installed, Bot > Capabilities, the iPhone and the Perspicax console read
 // that list. The field names below are the contract those screens read:
 // add fields freely, never rename one without saying so in the PR.
@@ -132,7 +132,7 @@ export interface BotCapabilities {
 
 export const CAPABILITIES_PATH = (botId: string) => `/api/bots/${encodeURIComponent(botId)}/capabilities`;
 
-/** Engines with no local folder of their own (server/workspace.ts
+/** Engines with no local folder of their own (server/workspace/workspace.ts
  * supportsWorkspaceFiles): API engines, whose turn is a chat request. They
  * have no native file tools. Their chat request always receives whole
  * instructions within each capability's visible prompt budget (say then
@@ -174,10 +174,10 @@ const GROK_KINDS = new Set(["grok", "grokAgent"]);
  *   Flow. Its skills are linked into its native skills folder.
  * - The other engines with files (Codex, Pi, Grok CLI, ...) get a plugin's
  *   skills, commands and agents named in the turn prompt with their path
- *   (server/plugin-turn.ts), and the bot's skills in the skills index.
+ *   (server/turns/plugin-turn.ts), and the bot's skills in the skills index.
  * - Engines without files (`grok`, `openai-compat`, `minimax`, `mistral`,
  *   `cerebras`, `groq`) get whole instruction files within a visible budget
- *   per plugin, skill or Flow capability (server/capability-prompt.ts),
+ *   per plugin, skill or Flow capability (server/capabilities/capability-prompt.ts),
  *   tools on or off; with skills_list and workspace_read allowed those
  *   tools reach the rest. Plugin hooks and LSP stay out of
  *   discovery on every non-Claude engine; MCP is proxied when customMcp is

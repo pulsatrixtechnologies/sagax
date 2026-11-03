@@ -1,7 +1,7 @@
 // Characterization of GET /api/cli-candidates and POST /api/cli-test.
 import { describe, expect, it, vi } from "vitest";
 
-import { HOSTED_PROVIDER_SETTINGS_ERROR } from "../hosted-models.ts";
+import { HOSTED_PROVIDER_SETTINGS_ERROR } from "../models/hosted-models.ts";
 import { createCliTestRoutes, type CliTestRouteDeps } from "./cli-test.ts";
 import { PASS } from "./table.ts";
 

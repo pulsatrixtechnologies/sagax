@@ -100,6 +100,6 @@ Adapt the interaction patterns to existing Sagax components. If copying
 source, retain its MIT copyright/license notice instead of changing its license.
 
 See [chat verification](../verification/chat-turns.md),
-`server/independent-threads-api.test.ts`, `server/bot-projects-api.test.ts`,
+`server/workspace/independent-threads-api.test.ts`, `server/bot-projects-api.test.ts`,
 and the store/resource tests for isolated fake-engine proofs. UI interaction
 must also be checked on an isolated renderer before release.

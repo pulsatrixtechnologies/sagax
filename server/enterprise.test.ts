@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createWorkspaceAccess, describeEdition, editionForMembers, editionStatus, enterpriseLayerDirs, entitled, hostedAccessEntitled, hostedWorkspaceConfiguration, hostedWorkspaceConfigured, licenseWarning, OPEN_SOURCE_FEATURES, perspicaxOrganisationLinked, sharedWorkspaceFullAccessConfigured, loadEnterpriseLayer, workspaceMembership } from "./enterprise.ts";
-import { SessionRegistry } from "./sessions.ts";
+import { SessionRegistry } from "./auth/sessions.ts";
 
 const dirs: string[] = [];
 

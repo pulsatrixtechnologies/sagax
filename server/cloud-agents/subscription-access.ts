@@ -19,7 +19,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { CLAUDE_KEYCHAIN_SERVICE, decodeKeychainSecret, readDarwinClaudeKeychain } from "../plan-usage.ts";
+import { CLAUDE_KEYCHAIN_SERVICE, decodeKeychainSecret, readDarwinClaudeKeychain } from "../usage/plan-usage.ts";
 import { killCliTree, spawnCli } from "../procs.ts";
 
 /** The engines a run may use, with the subscription each one needs. */

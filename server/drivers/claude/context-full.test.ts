@@ -19,7 +19,7 @@ describe("claudeContextFull", () => {
   });
 
   it("treats an api-error frame whose text looks context-full as full", () => {
-    // phrase that isContextFullText accepts (server/context-renewal.ts)
+    // phrase that isContextFullText accepts (server/context/context-renewal.ts)
     const text =
       "Autocompact is thrashing: the context refilled to the limit within 3 turns of the previous compact, 3 times in a row.";
     expect(claudeContextFull({ is_api_error_message: true }, text)).toBe(true);

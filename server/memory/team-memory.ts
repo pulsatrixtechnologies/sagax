@@ -15,7 +15,7 @@ import { z } from "zod";
 import { writeFileAtomic } from "../atomic.ts";
 import { newId } from "../contracts.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { sectionContextKey, sectionContextLabel } from "../section-context.ts";
+import { sectionContextKey, sectionContextLabel } from "../rooms/section-context.ts";
 
 export const TEAM_MEMORY_KINDS = ["person", "place", "decision", "term"] as const;
 export type TeamMemoryKind = (typeof TEAM_MEMORY_KINDS)[number];

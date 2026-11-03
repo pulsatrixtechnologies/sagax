@@ -11,9 +11,9 @@ orchestration, and always spawn workers with the best model per task."
   `store.projectBotForTask` puts the task's selection on the bot for a turn.
 - The selection is validated by `checkedModelSelection` (`server/index.ts`) for bot creation,
   `PATCH /api/bots/:id`, `PATCH .../tasks/:threadId` and the composer chip; team setup validates its
-  own copy (`server/team-setup-requests.ts`, zod `.strict()`); `create_bot` goes through
+  own copy (`server/team/team-setup-requests.ts`, zod `.strict()`); `create_bot` goes through
   `POST /api/internal/create-bot` (`defaultSelection()` when no model is given).
-- Who pays a turn: `resolveEngineAccess` (`server/engine-credentials.ts`): solo mode the server's
+- Who pays a turn: `resolveEngineAccess` (`server/engines/engine-credentials.ts`): solo mode the server's
   own sign-in; organization mode the person who speaks (own subscription, own key in Perspicax,
   organization key), a routine's owner for routines. `orgEngineInput` builds its facts.
 
@@ -61,7 +61,7 @@ class scores keyword hits; the role adds one point; fixed priority breaks ties.
 Class to tier: reasoning to `top`; coding, automation and general to `coding` (strong all-round);
 quick to `fast`; long-reading and large-context to `long`; vision to `vision`.
 
-Tier to model: `TIER_TABLE` in `server/model-auto.ts`, per engine family, lists id patterns, never
+Tier to model: `TIER_TABLE` in `server/models/model-auto.ts`, per engine family, lists id patterns, never
 ids (anthropic: top fable then opus (Fable 5.1 is Anthropic's strongest model), coding sonnet then opus, fast haiku; openai: top astra then
 sol, coding codex then sol then terra, fast luna, mini, spark; xai: top plain grok, fast `fast` or
 `mini`; google: top pro, fast flash-lite then flash; moonshot: top k3, coding for-coding, fast

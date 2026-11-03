@@ -149,7 +149,11 @@ it("continues a limited turn on an engine the person has, never another, and goe
     await settled();
     const afterReset = await messages();
     evidence.push({ afterReset });
-    expect(prompts(primaryRpc).length).toBe(promptsBefore + 1);
+    // The person's message on the primary engine, then the one continuation
+    // its reply asks for: the fixture's words come before a tool, an
+    // unfinished turn (server/unfinished-turn.ts), and since 0.8.33 the
+    // conversation reads busy until that continuation has run.
+    expect(prompts(primaryRpc).length).toBe(promptsBefore + 2);
     expect(jsonLines(claudePrompts)).toHaveLength(2);
     expect(afterReset.filter((message) => message.tool?.limitFailover)).toHaveLength(2);
     expect(afterReset.filter((message) => message.tool?.limitFailover?.kind === "back")[0].tool.limitFailover).toEqual({ kind: "back", engine: "Primary fixture" });

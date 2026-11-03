@@ -575,4 +575,41 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector("[data-memory-scope-chip]")).toBeNull();
     expect(host.querySelector('[data-memory-stat="active"]')?.textContent).toContain("5");
   });
+  // Follow-up 2026-11-03: Collections scopes the views to its notes, not to nothing.
+  it("the Collections scope narrows Map, Tags and Quality to the collections' notes, loaded once and kept", async () => {
+    await render();
+    await act(async () => { segment("Map").click(); });
+    await settle();
+    await act(async () => { (host.querySelector('[data-memory-nav="collections"]') as HTMLButtonElement).click(); });
+    await wait();
+    await settle();
+    // c1 holds Brief (me/n1): the union of the collections is that one note.
+    expect(host.querySelector('[data-testid="memory-brain"]')?.getAttribute("data-nodes")).toBe("1");
+    expect(host.querySelector("[data-memory-scope-chip]")?.textContent).toBe("Scope: Collections");
+    await act(async () => { segment("Tags").click(); });
+    await settle();
+    expect(host.querySelector("[data-memory-tags-top]")?.textContent).toContain("work");
+    await act(async () => { segment("Quality").click(); });
+    await settle();
+    expect(host.querySelector('[data-memory-stat="active"]')?.textContent).toContain("1");
+    expect(host.querySelector('[data-memory-stat="active"]')?.textContent).not.toContain("5");
+    const detailCalls = () => calls.filter((call) => call.path === "/api/me/memory/collections/c1" && call.method === "GET").length;
+    expect(detailCalls()).toBe(1);
+    // One collection opened on Notes: the scope is that collection, kept across tabs.
+    await act(async () => { segment("Notes").click(); });
+    await settle();
+    await act(async () => { (host.querySelector("[data-memory-collection-row]") as HTMLButtonElement).click(); });
+    await wait();
+    await settle();
+    expect(host.querySelector("[data-memory-scope-chip]")?.textContent).toBe("Scope: Collections / Onboarding book");
+    await act(async () => { segment("Map").click(); });
+    await settle();
+    expect(host.querySelector('[data-testid="memory-brain"]')?.getAttribute("data-nodes")).toBe("1");
+    expect(host.querySelector("[data-memory-scope-chip]")?.textContent).toBe("Scope: Collections / Onboarding book");
+    // Back on Notes, the collection is open again.
+    await act(async () => { segment("Notes").click(); });
+    await wait();
+    await settle();
+    expect(host.querySelector("[data-memory-collection-items]")).not.toBeNull();
+  });
 });

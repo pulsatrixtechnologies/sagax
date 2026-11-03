@@ -81,7 +81,7 @@ import {
 import { useCaptionChrome } from "../DesktopCapabilities";
 import { PAGE_HEADER_BUTTON, PAGE_MENU_ITEM, PAGE_POPOVER, PageHeader, PageSegment, PageTopStrip, useDismissMenus } from "../content-page";
 import { confirmAsync } from "../ConfirmProvider";
-import { addToCollection, fetchCollections, MemoryCollections, type CollectionSummary } from "./MemoryCollections";
+import { addToCollection, fetchCollectionItems, fetchCollections, MemoryCollections, type CollectionItem, type CollectionSummary } from "./MemoryCollections";
 import { MemoryMapView } from "./MemoryMapView";
 import { MemoryNoteView, type NoteSave } from "./MemoryNoteView";
 import { MemoryNotesList, type ListTemplate } from "./MemoryNotesList";
@@ -239,6 +239,10 @@ export function MemoryManagerPanel() {
   // The console's preview: a click on a row opens the note beside the list.
   const [preview, setPreview] = useState<{ entry: PageRow; detail: MemoryNoteDetail | null } | null>(null);
   const [collections, setCollections] = useState<CollectionSummary[]>([]);
+  // Each collection's notes, loaded once the Collections scope is picked and
+  // kept (a save or an add refreshes its entry); the one opened, if any.
+  const [collectionItems, setCollectionItems] = useState<Record<string, CollectionItem[]>>({});
+  const [openCollection, setOpenCollection] = useState<{ id: string; title: string } | null>(null);
   // The explorer opens as Automations' calendar rail does (RightRail.tsx):
   // open from 1280px, folded into its strip below, a press away either way.
   const [explorerOpen, setExplorerOpen] = useRightRailOpen();
@@ -472,12 +476,30 @@ export function MemoryManagerPanel() {
     if (place.kind === "review") return rows.filter((entry) => entry.row.status === "proposed");
     if (place.kind === "archived") return archivedRows;
     if (place.kind === "trash") return trashRows;
-    if (place.kind === "collections") return [];
+    if (place.kind === "collections") {
+      // The union of every collection's notes, or the opened collection's only.
+      const ids = openCollection ? [openCollection.id] : collections.map((entry) => entry.id);
+      const keys = new Set(ids.flatMap((id) => (collectionItems[id] ?? []).map((item) => `perspicax|${item.note_scope}/${item.note_id}`)));
+      return rows.filter((entry) => keys.has(entry.key));
+    }
     if (place.kind === "tier") return rows.filter((entry) => entry.tier === place.tier);
     if (place.kind !== "folder") return rows;
     const folder = place.folder;
     return rows.filter((entry) => entry.folderKey === folder || entry.folderKey.startsWith(`${folder}/`));
-  }, [place, rows, tierByKey, pins, archivedRows, trashRows]);
+  }, [place, rows, tierByKey, pins, archivedRows, trashRows, openCollection, collections, collectionItems]);
+
+  // The Collections scope: every collection's notes not loaded yet.
+  useEffect(() => {
+    if (place.kind !== "collections") return;
+    const missing = collections.filter((entry) => !(entry.id in collectionItems));
+    if (missing.length === 0) return;
+    let cancelled = false;
+    void Promise.all(missing.map(async (entry) => [entry.id, await fetchCollectionItems(entry.id).catch(() => [] as CollectionItem[])] as const)).then((loaded) => {
+      if (!cancelled) setCollectionItems((current) => ({ ...current, ...Object.fromEntries(loaded) }));
+    });
+    return () => { cancelled = true; };
+  }, [place.kind, collections, collectionItems]);
+  useEffect(() => { if (place.kind !== "collections") setOpenCollection(null); }, [place.kind]);
 
   /** A row of the rail: its scope, on the tab in view (every tab is scoped). */
   const goPlace = (next: Place, toNotes = false) => {
@@ -911,6 +933,8 @@ export function MemoryManagerPanel() {
     const notes = keys.map(lookup).filter((entry): entry is PageRow => Boolean(entry?.row.scope)).map((entry) => ({ scope: entry.row.scope!, id: entry.row.id }));
     try {
       await addToCollection(collection, notes);
+      // its cached notes are stale: the next Collections scope reloads them
+      setCollectionItems((current) => { const next = { ...current }; delete next[collection]; return next; });
       const title = collections.find((entry) => entry.id === collection)?.title ?? "";
       setNotice({ text: t("memoryManager.collections.added", { count: notes.length, title }) });
       void fetchCollections().then(setCollections).catch(() => undefined);
@@ -1187,6 +1211,7 @@ export function MemoryManagerPanel() {
   const writes = useMemo(() => writeSeries(scopeJournal, Date.now()), [scopeJournal]);
   // "Melonie / Logs": the folder under its bot or its tier, else the row's own name.
   const scopeLabel = (() => {
+    if (place.kind === "collections" && openCollection) return `${listTitle} / ${openCollection.title}`;
     if (place.kind !== "folder") return listTitle;
     const bot = botSources.find((source) => source.id === place.folder);
     if (bot) return bot.name;
@@ -1313,7 +1338,15 @@ export function MemoryManagerPanel() {
               <div ref={listScrollRef} onScroll={(event) => { listScrollTop.current = event.currentTarget.scrollTop; }} className={cn("min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5", (screen.kind !== "list" || preview) && "hidden")} data-memory-list-scroll="">
                 {place.kind === "collections" && (
                   <div data-memory-nav-view="collections">
-                    <MemoryCollections onOpenNote={(scope, id) => previewKey(`perspicax|${scope}/${id}`)} onChanged={() => void fetchCollections().then(setCollections).catch(() => undefined)} />
+                    <MemoryCollections
+                      openId={openCollection?.id}
+                      onOpenNote={(scope, id) => previewKey(`perspicax|${scope}/${id}`)}
+                      onChanged={() => void fetchCollections().then(setCollections).catch(() => undefined)}
+                      onSelect={(picked) => {
+                        setOpenCollection(picked ? { id: picked.id, title: picked.title } : null);
+                        if (picked) setCollectionItems((current) => ({ ...current, [picked.id]: picked.items }));
+                      }}
+                    />
                   </div>
                 )}
                 {place.kind !== "collections" && (

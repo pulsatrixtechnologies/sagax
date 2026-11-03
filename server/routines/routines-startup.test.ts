@@ -110,8 +110,8 @@ it("recovers queued/due work and resumes an interrupted routine once, without it
       PATH: dirname(process.execPath), FAKE_CLAUDE_MODE: "happy",
     });
     const log = openSync(logPath, "a", 0o600);
-    restarted = spawn(process.execPath, ["--experimental-strip-types", fileURLToPath(new URL("./index.ts", import.meta.url))], {
-      cwd: fileURLToPath(new URL("..", import.meta.url)), env, stdio: ["ignore", log, log],
+    restarted = spawn(process.execPath, ["--experimental-strip-types", fileURLToPath(new URL("../index.ts", import.meta.url))], {
+      cwd: fileURLToPath(new URL("../..", import.meta.url)), env, stdio: ["ignore", log, log],
     });
     closeSync(log);
     const deadline = Date.now() + 20_000;

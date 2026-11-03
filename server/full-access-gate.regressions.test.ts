@@ -22,9 +22,29 @@ import type { Message } from "./store.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
 import { ASK_CHOICE_TOOL } from "../shared/options-card.ts";
 import { isOutboundTool } from "../shared/outbound.ts";
+import { peerContactCardRequired } from "./full-access-gate.ts";
+import { cancelPeerApprovalsFor, requestPeerApproval, resolvePeerComms } from "./peer-approval.ts";
+import { closeMessageDb } from "./message-db.ts";
 import { reviewSafety } from "../shared/safety-review.ts";
 
 const SEND_TO_BOT = "agents__send_to_bot";
+// Sagax's own bot-to-bot tools: in-app peer contact between the person's own
+// bots, gated by approvePeerComms and the peer-approval card (c09f3dfa2).
+const PEER_TOOLS = ["send_to_bot", "post_to_room", "coordinate_bots", "ask_bot", "delegate_bot"]
+  .flatMap((tool) => [`agents__${tool}`, `mcp__agents__${tool}`]);
+// Real sends to a third party: mail, Teams, SMS, a channel post, a public post.
+// (A phone call is placed through place_phone_call, whose own card, AI
+// disclosure and do-not-call list are server/outbound-calls.test.ts.)
+const OUTBOUND_SENDS = [
+  "mcp__gmail__send_email",
+  "mcp__microsoft_outlook__send_mail",
+  "mcp__microsoft_teams__send_chat_message",
+  "mcp__pulsatrix__voice_sms",
+  "mcp__slack__post_message",
+  "mcp__x__create_post",
+  "mcp__linkedin__publish_post",
+];
+const MAIL = "mcp__gmail__send_email";
 const BOT = { id: "bot-scout", name: "Scout", color: "blue" as const };
 
 function fakeStore() {
@@ -59,10 +79,12 @@ describe("#1905: a harness approval card for send_to_bot under Full access", () 
     for (const dir of dirs.splice(0)) await removeTempDir(dir);
   });
 
-  const ask = (fullAccess: boolean | undefined, threadId = "t-1905") => safetyPermissionEffect({
-    text: `${SEND_TO_BOT} {"bot_id":"verifier","message":"Please verify the two pull requests."}`,
+  const ask = (fullAccess: boolean | undefined, threadId = "t-1905", tool = SEND_TO_BOT) => safetyPermissionEffect({
+    text: tool === SEND_TO_BOT
+      ? `${SEND_TO_BOT} {"bot_id":"verifier","message":"Please verify the two pull requests."}`
+      : `${tool} {"to":"client@example.test","subject":"Pull requests","body":"Please verify the two pull requests."}`,
     surface: "mcp",
-    tool: SEND_TO_BOT,
+    tool,
     known: true,
     triage: false,
     principalId: "pr_owner",
@@ -71,18 +93,59 @@ describe("#1905: a harness approval card for send_to_bot under Full access", () 
     ...(fullAccess === undefined ? {} : { fullAccess }),
   });
 
-  it("send_to_bot is a send by its name, which the safety review reads as outbound", () => {
-    expect(isOutboundTool(SEND_TO_BOT)).toBe(true);
-    expect(isOutboundTool(`mcp__${SEND_TO_BOT}`)).toBe(true);
+  // #1905 decision (c09f3dfa2): in-app peer contact between the person's own
+  // bots is not an outbound send to a third party; the peer-approval card
+  // gates it. Real sends stay outbound.
+  it("the peer tools are not outbound sends; mail, Teams, SMS and posts are", () => {
+    for (const tool of PEER_TOOLS) expect(isOutboundTool(tool), tool).toBe(false);
+    for (const tool of OUTBOUND_SENDS) expect(isOutboundTool(tool), tool).toBe(true);
+    // only Sagax's own agents server: the same name on another server is a send
+    expect(isOutboundTool("mcp__acme__send_to_bot")).toBe(true);
   });
 
-  it("below Full the review returns the safer path once, then holds a card (the live sequence)", () => {
-    const first = ask(false);
-    expect(first).toMatchObject({ kind: "stop" });
-    const second = ask(false);
-    expect(second).toMatchObject({ kind: "hold", classKey: "outbound:send" });
-    // and the hold keeps the card at Approve for me
-    expect(autoVerdict("auto", "other", { safetyHold: true, toolName: SEND_TO_BOT })).toEqual({ approve: null, source: "safety-hold" });
+  it("below Full a peer tool goes through the peer-approval card, never silently, and a real send is stopped then held", async () => {
+    // the safety review leaves the peer tool to the peer gate ...
+    expect(ask(false)).toBeNull();
+    expect(ask(false)).toBeNull();
+    // ... which asks below Full whenever the person asked to be asked
+    for (const level of ["ask", "auto", "custom"] as const) expect(peerContactCardRequired(true, level), level).toBe(true);
+    expect(peerContactCardRequired(true, "full")).toBe(false);
+    // and its card stands until the person answers: the contact does not go on its own
+    rmSync(DATA_DIR, { recursive: true, force: true });
+    const store = new Store(() => ({ instanceId: "claude", model: "fake-model" }));
+    const from = store.patchBot(store.createBot().id, { name: "Asker", approvePeerComms: true })!;
+    const target = store.patchBot(store.createBot().id, { name: "Verifier" })!;
+    try {
+      let settled = false;
+      const verdict = requestPeerApproval({ store, broadcast: () => {} }, from, target, "Please verify the two pull requests.", "delegate_bot");
+      void verdict.then(() => { settled = true; });
+      await Promise.resolve();
+      const card = store.messagesFor(from.threadId).find((m) => m.kind === "options" && m.card?.requestId && !m.card.answered);
+      expect(card, "the peer-approval card").toBeTruthy();
+      expect(settled).toBe(false);
+      expect(resolvePeerComms({ store, broadcast: () => {} }, card!.card!.requestId!, "deny")).toBe(true);
+      expect(await verdict).toBe("deny");
+    } finally {
+      cancelPeerApprovalsFor(from.id);
+      closeMessageDb();
+      rmSync(DATA_DIR, { recursive: true, force: true });
+    }
+    // a real send to a third party: the safer path once, then a held card
+    // (the live sequence) ...
+    expect(ask(false, "t-mail", MAIL)).toMatchObject({ kind: "stop" });
+    expect(ask(false, "t-mail", MAIL)).toMatchObject({ kind: "hold", classKey: "outbound:send" });
+    // ... and every other kind of send, once the class was stopped, is held,
+    // on its first attempt and the next: never let through
+    for (const tool of OUTBOUND_SENDS.filter((tool) => tool !== MAIL)) {
+      expect(ask(false, `t-${tool}`, tool), tool).toMatchObject({ kind: "hold", classKey: "outbound:send" });
+      expect(ask(false, `t-${tool}`, tool), tool).toMatchObject({ kind: "hold", classKey: "outbound:send" });
+    }
+    // the hold keeps the card at Approve for me and at Ask, and the outbound
+    // guard holds an unheld send below Full
+    expect(autoVerdict("auto", "other", { safetyHold: true, toolName: MAIL })).toEqual({ approve: null, source: "safety-hold" });
+    expect(autoVerdict("ask", "other", { safetyHold: true, toolName: MAIL }).approve).toBeNull();
+    for (const tool of OUTBOUND_SENDS) expect(autoVerdict("auto", tool, { outbound: true }).approve, tool).toBeNull();
+    expect(autoVerdict("auto", "mcp__slack__post_message", { outbound: true })).toEqual({ approve: null, source: "outbound-guard" });
   });
 
   it("at Full the review neither stops nor holds the send, on the first attempt or the next", () => {
@@ -113,8 +176,10 @@ describe("#1905: a harness approval card for send_to_bot under Full access", () 
 
   it("the turn's level reaches the review on its own when the server registered it", () => {
     setSafetyFullAccess((who) => who.threadId === "t-full" && who.botId === BOT.id);
-    expect(ask(undefined, "t-full")).toBeNull();
-    expect(ask(undefined, "t-ask")).toMatchObject({ kind: "stop" });
+    expect(ask(undefined, "t-full", MAIL)).toBeNull();
+    expect(ask(undefined, "t-ask", MAIL)).toMatchObject({ kind: "stop" });
+    // a peer tool is the peer gate's at either level
+    expect(ask(undefined, "t-ask")).toBeNull();
   });
 
   it("a Grok turn with the account's connectors runs in default mode even at Full, so every Sagax tool ask reaches this decision", () => {

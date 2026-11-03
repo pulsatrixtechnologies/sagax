@@ -1875,5 +1875,15 @@
   "routineEditor.formatAiHint": "Abre el chat de {bot} con una petición para ordenar esta instrucción. No se envía nada hasta que pulses Intro.",
   "routineEditor.formatAiPrompt": "Reformatea la instrucción de mi rutina «{name}» (id {id}) para que esté mejor estructurada y sea más fácil de leer: títulos, pasos numerados, frases cortas. Conserva exactamente cada regla, hecho, fecha y decisión, sin cambiar el sentido. Luego actualiza la rutina «{name}» (id {id}) con el resultado mediante tu herramienta de edición de rutinas (propose_routine_action, action update, changes.instructions) y muéstrame el antes y el después.",
   "routineEditor.copy": "Hacer una copia",
-  "routineEditor.hint.duplicate": "Una nueva rutina con estos ajustes."
+  "routineEditor.hint.duplicate": "Una nueva rutina con estos ajustes.",
+  "routines.group.label": "Agrupar por",
+  "routines.group.bot": "Bot",
+  "routines.group.folder": "Carpeta",
+  "routines.group.none": "Ninguno",
+  "routines.group.noFolder": "Sin carpeta",
+  "routines.group.unknownBot": "Otro bot",
+  "routines.group.running": "{count} en curso",
+  "routines.group.failing": "{count} con fallos",
+  "routines.group.botMenu": "Más para {name}",
+  "routines.group.newFor": "Nueva rutina para {name}"
 }

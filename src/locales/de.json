@@ -1893,5 +1893,15 @@
   "routineEditor.formatAiHint": "Öffnet den Chat von {bot} mit einer Bitte, diese Anweisung zu ordnen. Nichts wird gesendet, bevor Sie Enter drücken.",
   "routineEditor.formatAiPrompt": "Bitte formatiere die Anweisung meiner Routine „{name}“ (ID {id}) neu, damit sie besser gegliedert und leichter lesbar ist: Überschriften, nummerierte Schritte, kurze Sätze. Behalte jede Regel, jede Tatsache, jedes Datum und jede Entscheidung genau bei und ändere keine Bedeutung. Aktualisiere dann die Routine „{name}“ (ID {id}) mit dem Ergebnis über dein Werkzeug zum Bearbeiten von Routinen (propose_routine_action, action update, changes.instructions) und zeige mir vorher und nachher.",
   "routineEditor.copy": "Kopie erstellen",
-  "routineEditor.hint.duplicate": "Eine neue Routine mit diesen Einstellungen."
+  "routineEditor.hint.duplicate": "Eine neue Routine mit diesen Einstellungen.",
+  "routines.group.label": "Gruppieren nach",
+  "routines.group.bot": "Bot",
+  "routines.group.folder": "Ordner",
+  "routines.group.none": "Keine",
+  "routines.group.noFolder": "Kein Ordner",
+  "routines.group.unknownBot": "Anderer Bot",
+  "routines.group.running": "{count} laufen",
+  "routines.group.failing": "{count} fehlerhaft",
+  "routines.group.botMenu": "Mehr für {name}",
+  "routines.group.newFor": "Neue Routine für {name}"
 }

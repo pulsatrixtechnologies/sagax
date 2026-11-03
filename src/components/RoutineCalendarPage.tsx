@@ -58,6 +58,8 @@ import { useBotEditor } from "./bot-settings/BotEditorContext";
 import { pathForFile } from "@/components/ComposerAttachments";
 import { CalendarSidebar } from "@/components/routines/CalendarSidebar";
 import { RoutineList } from "@/components/routines/RoutineList";
+import { RoutineGroupedList } from "@/components/routines/RoutineGroupedList";
+import { routineGroupBy, saveRoutineGroupBy, type RoutineGroupBy } from "@/lib/routine-grouping";
 import { RoutineMenuPortal, routineRowActions, RoutineRowMenuItems, RoutineTitle } from "@/components/routines/RoutineRowMenu";
 import { PAGE_COLUMN, PAGE_FIELD_LABEL, PAGE_FILTER_RESET, PAGE_HEADER_BUTTON, PAGE_INDICATOR, PAGE_MENU_COUNT, PAGE_POPOVER, PAGE_SCROLL, PageFilters, PageHeader, PageHeading, PageMenu, PageMenuItem, PageMenuSeparator, PageSegment, PageTopStrip, useDismissMenus } from "@/components/content-page";
 import { RoutineLogs } from "@/components/routines/RoutineLogs";
@@ -2804,6 +2806,11 @@ export const RoutinesPage = memo(function RoutinesPage({ onBack: _onBack, onOpen
   // Run now or Stop, Pause or Resume, Rename in place, Open, Duplicate, Delete.
   const [rowMenu, setRowMenu] = useState<{ routine: Routine; x: number; y: number; trigger: HTMLElement } | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  // 2026-11-03 (JC): the List view grouped by bot, by folder, or flat.
+  const viewerId = state.config?.viewer?.principalId ?? null;
+  const [groupBy, setGroupByState] = useState<RoutineGroupBy>(() => routineGroupBy(viewerId));
+  const setGroupBy = (next: RoutineGroupBy) => { setGroupByState(next); saveRoutineGroupBy(viewerId, next); };
+  const createInGroup = (botId: string, folder?: string) => { setSelected(null); setPausedOpen(false); setQuick(null); setEditor({ kind: "routine", at: nextHour(), durationMinutes: 30, botIds: [botId], ...(folder ? { folder } : {}) }); };
   const closeRowMenu = (focus = true) => {
     const trigger = rowMenu?.trigger;
     setRowMenu(null);
@@ -2999,6 +3006,19 @@ export const RoutinesPage = memo(function RoutinesPage({ onBack: _onBack, onOpen
             options={[{ value: "all", label: t("usage.allBots") }, ...botChoices.map((bot) => ({ value: bot.id, label: bot.name }))]}
           />
         </div>
+        {section === "calendar" && scheduleView === "list" && <div className="block" data-routine-group-by="">
+          <span className={FIELD_LABEL}>{t("routines.group.label")}</span>
+          <PillSelect
+            ariaLabel={t("routines.group.label")}
+            value={groupBy}
+            onChange={(next) => setGroupBy(next as RoutineGroupBy)}
+            options={[
+              { value: "bot", label: t("routines.group.bot") },
+              { value: "folder", label: t("routines.group.folder") },
+              { value: "none", label: t("routines.group.none") },
+            ]}
+          />
+        </div>}
         {calendarGrid && <div className="block">
           <span className={FIELD_LABEL}>{t("routineCalendar.scheduleRange")}</span>
           <PillSelect
@@ -3119,9 +3139,13 @@ export const RoutinesPage = memo(function RoutinesPage({ onBack: _onBack, onOpen
         <div className={PAGE_SCROLL}><div className={PAGE_COLUMN}>
           <PageHeading title={t("routines.title")} subtitle={t("routineCalendar.allSchedules")} />
           <LimitWarnings botFilter={botFilter} />
-          <RoutineList routines={filteredRoutines} viewerPrincipalId={state.config?.viewer?.principalId ?? null} runs={scopedRuns} bots={state.bots} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpen={openRoutine} onLogs={openLogs}
+          {groupBy === "none" ? <RoutineList routines={filteredRoutines} viewerPrincipalId={state.config?.viewer?.principalId ?? null} runs={scopedRuns} bots={state.bots} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpen={openRoutine} onLogs={openLogs}
             onRowMenu={(routine, at, trigger) => setRowMenu({ routine, x: at.x, y: at.y, trigger })}
             renamingId={renamingId} onRenameStart={(routine) => setRenamingId(routine.id)} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)} />
+            : <RoutineGroupedList key={groupBy} groupBy={groupBy} routines={filteredRoutines} viewerPrincipalId={viewerId} runs={scopedRuns} bots={state.bots} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpen={openRoutine}
+              onCreate={createInGroup} onDuplicate={duplicateRoutine}
+              onRowMenu={(routine, at, trigger) => setRowMenu({ routine, x: at.x, y: at.y, trigger })}
+              renamingId={renamingId} onRenameStart={(routine) => setRenamingId(routine.id)} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)} />}
           {rowMenu && <RoutineMenuPortal x={rowMenu.x} y={rowMenu.y} kind="row" label={rowMenu.routine.name} onClose={closeRowMenu}>
             <RoutineRowMenuItems routine={rowMenu.routine} actions={routineRowActions({
               routine: rowMenu.routine, bot: state.bots.find((bot) => bot.id === rowMenu.routine.botId), state: { config: state.config, routineRuns: state.routineRuns }, dispatch, close: closeRowMenu,

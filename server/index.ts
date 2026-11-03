@@ -197,10 +197,16 @@ import {
   proactivePrompt,
   textNamesBot,
   PeerNoticeHops,
+  peerNoticeDropped,
   peerNoticeEvent,
+  peerWakeDigest,
+  ProactivePendingFile,
+  wakeAlwaysReports,
   proactiveWakePrompt,
   runFailureWakesBot,
   type ProactiveEvent,
+  type ProactiveOfferVerdict,
+  type PeerNoticeFacts,
   type ProactiveSource,
   type ProactiveWakeBatch
 } from "./proactive-wake.ts";
@@ -24061,7 +24067,10 @@ const proactiveEngine = new ProactiveEngine({
     return bot ? approvalModeFor(bot) : undefined;
   }
 });
+/** 2026-11-02: gathered events survive a restart (ids only). */
+const proactivePending = new ProactivePendingFile(join(DATA_DIR, "proactive-pending.json"));
 const proactiveWaker = new ProactiveWaker({
+  pendingChanged: (botId, events) => proactivePending.set(botId, events),
   bot: (botId) => {
     const bot = store.bot(botId);
     // a hidden or temporary bot has no conversation to act in
@@ -24069,6 +24078,10 @@ const proactiveWaker = new ProactiveWaker({
   },
   log: (botId, line) => proactiveEventsLine(botId, line),
   wake: (batch) => startProactiveWake(batch, false, batch.runAs),
+  // 2026-11-02: a teammate's notice no wake will run for is still shown
+  dropped: (botId, events) => {
+    for (const event of events) if (event.peer) surfacePeerNotice(botId, event.peer);
+  },
   // Cheap expired marker: do not start another wake that would fail the same way.
   engineExpired: (botId) => {
     if (!engineLogins) return false;
@@ -24644,35 +24657,99 @@ function offerPeerNotice(child: HandoffView, parent: HandoffView | undefined): v
   if (!receiver || child.groupId) return;
   const sender = parent ? store.bot(parent.botId) : undefined;
   if (sender?.id === receiver.id) return;
-  offerProactive(peerNoticeEvent({
+  const event = peerNoticeEvent({
     receiverId: receiver.id, noticeId: child.id, threadId: child.threadId,
     title: store.taskByThread(receiver.id, child.threadId)?.title ?? "Teammate message",
     status: child.status, text: redactSecretsInText(child.text), result: redactSecretsInText(child.result ?? ""),
     ...(sender ? { senderId: sender.id, senderName: sender.name } : {}),
     hops: peerNoticeHops.get(child.threadId) ?? 1,
-  }));
+  });
+  // 2026-11-02 (second pass): a notice no wake runs for (proactive off, the
+  // hop limit, an expired sign-in) used to end there, unseen. The person
+  // now reads it in the receiver's own conversation.
+  const verdict = offerProactive(event);
+  if (verdict && peerNoticeDropped(verdict) && event.peer) surfacePeerNotice(receiver.id, event.peer);
+}
+
+/** 2026-11-02 (peer inbox, second pass): a teammate's notice the receiver
+ * will not be woken for, shown to its person: one line in the receiver's
+ * own conversation, from the sender, linking the notice's thread (where the
+ * receiver's turn and any question are), and the conversation turns unread. */
+function surfacePeerNotice(receiverId: string, peer: PeerNoticeFacts): void {
+  try {
+    const receiver = store.bot(receiverId);
+    if (!receiver || receiver.hidden) return;
+    const own = botMainThread(receiver.id) ?? receiver.threadId;
+    if (!own || own === peer.threadId || !store.taskByThread(receiver.id, own) || store.isConfidentialThread(own)) return;
+    const task = store.taskByThread(receiver.id, peer.threadId);
+    if (!task) return;
+    // once per notice thread, a replay never adds another
+    if (store.messagesFor(own).some((message) => message.threadRef?.threadId === peer.threadId && message.tool?.name.startsWith("Message from ") === true)) return;
+    const sender = peer.senderId ? store.bot(peer.senderId) : undefined;
+    const from = sender?.name ?? peer.senderName ?? "A teammate";
+    const status = peer.status === "completed" ? "" : ` (${peer.status})`;
+    store.appendMessage(own, {
+      role: "bot", kind: "activity",
+      ...(sender ? { from: { botId: sender.id, name: sender.name, color: sender.color } } : {}),
+      tool: { name: `Message from ${from}: #${task.title}${status}`, ok: peer.status === "completed" || peer.status === "needs_input" },
+      threadRef: { botId: receiver.id, threadId: peer.threadId, title: task.title }
+    });
+    store.patchTask(receiver.id, own, { unread: true });
+    notify(deliverableNotification("delegation-settled", receiver, own, `Message from ${from}: ${task.title}`, { avatarUrl: receiver.avatarUrl }));
+  } catch (error) {
+    console.warn(`[proactive] peer notice could not be shown: ${error instanceof Error ? error.name : "error"}`);
+  }
+}
+
+/** 2026-11-02: the events gathered before a restart are offered again,
+ * rebuilt from where their words live: a teammate's notice from the job
+ * runtime (a settled one: its wake, or its line when no wake can run), a
+ * room post from the room. One already gone is left out. */
+function replayPendingProactive(): void {
+  for (const row of proactivePending.take()) {
+    try {
+      if (row.ref.kind === "peer") {
+        const child = coordinator.node(row.ref.noticeId);
+        if (!child || child.botId !== row.botId || !child.oneWay || !["completed", "failed", "cancelled", "expired"].includes(child.status)) continue;
+        offerPeerNotice(child, child.parentId ? coordinator.node(child.parentId) : undefined);
+      } else {
+        const ref = row.ref;
+        const room = store.group(ref.groupId);
+        const poster = store.bot(ref.posterId);
+        if (!room || !poster || room.threadId !== ref.threadId) continue;
+        const posted = store.messagesFor(room.threadId).find((message) => message.id === ref.messageId);
+        if (!posted || typeof posted.text !== "string" || !posted.text.trim()) continue;
+        offerRoomPostToBots(room, poster, posted.text, posted.id, ref.hops, row.botId);
+      }
+    } catch (error) {
+      console.warn(`[proactive] a pending event could not be replayed: ${error instanceof Error ? error.name : "error"}`);
+    }
+  }
 }
 
 /** One event for one bot; never throws into the path that saw it. */
-function offerProactive(event: ProactiveEvent): void {
+function offerProactive(event: ProactiveEvent): ProactiveOfferVerdict | undefined {
   try {
-    proactiveWaker.offer(event);
+    return proactiveWaker.offer(event);
   } catch (error) {
     console.warn(`[proactive] offer failed: ${error instanceof Error ? error.name : "error"}`);
+    return undefined;
   }
 }
 
 /** A bot's post in a room, offered to the room's other bots: it concerns
  * one of them when it names it (@name or the name). */
-function offerRoomPostToBots(room: GroupRecord, poster: BotRecord, text: string, messageId: string, hops: number): void {
+function offerRoomPostToBots(room: GroupRecord, poster: BotRecord, text: string, messageId: string, hops: number, onlyBotId?: string): void {
   for (const memberId of room.memberIds) {
-    if (memberId === poster.id) continue;
+    if (memberId === poster.id || (onlyBotId !== undefined && memberId !== onlyBotId)) continue;
     const member = store.bot(memberId);
     if (!member) continue;
     // a direct conversation of two bots: every post is for the other one
     const mentionsBot = room.dm === true || textNamesBot(text, member.name);
     offerProactive({
       botId: member.id, source: "bot", key: `room-post:${messageId}`, fromBotId: poster.id, hops, mentionsBot,
+      ...(room.dm === true ? { dm: true } : {}),
+      replay: { kind: "room", groupId: room.id, threadId: room.threadId, messageId, posterId: poster.id, hops },
       label: `Post by ${poster.name} in ${room.name}`,
       detail: `Room: ${room.name} (id ${room.id})\nFrom: ${poster.name}\n\n${text}`
     });
@@ -24709,6 +24786,8 @@ function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?:
   // else the bot owner. Never an arbitrary member's credentials.
   const person = runAs || effectiveBotOwner(bot) || undefined;
   const sources = [...new Set(batch.events.map((event) => event.source))];
+  const peerDigest = peerWakeDigest(batch.events, batch.more);
+  const alwaysReport = wakeAlwaysReports(batch.events);
   routines.enqueueProactive({
     botId: batch.botId,
     name: `Proactive: ${sources.map((source) => PROACTIVE_RUN_NAMES[source]).join(", ")}`,
@@ -24718,7 +24797,9 @@ function startProactiveWake(batch: ProactiveWakeBatch, accepted = false, runAs?:
       hops: batch.hops,
       sources,
       ...(batch.confined ? { confined: true as const } : {}),
-      ...(accepted ? { accepted: true as const } : {})
+      ...(accepted ? { accepted: true as const } : {}),
+      ...(peerDigest ? { peerDigest } : {}),
+      ...(alwaysReport ? { alwaysReport: true as const } : {})
     },
     ...(person ? { runAs: person } : {})
   });
@@ -24766,6 +24847,12 @@ markRoutineResultsThreads();
 // bot routine reports into the one conversation. Cleared at each start (a
 // file an older version wrote), except a Cloud guest's results thread.
 routines.clearChosenResultsThreads(() => false);
+// 2026-11-02: what the proactive waker had gathered before this start (a
+// roll) wakes its bots now, once the job runtime has reconciled.
+{
+  const replay = setTimeout(replayPendingProactive, Number(process.env.SAGAX_PROACTIVE_REPLAY_MS) >= 0 && process.env.SAGAX_PROACTIVE_REPLAY_MS ? Number(process.env.SAGAX_PROACTIVE_REPLAY_MS) : 5_000);
+  (replay as { unref?: () => void }).unref?.();
+}
 orgLibrary = new OrgLibrary({
   dataDir: DATA_DIR,
   store,
@@ -43953,7 +44040,22 @@ async function runPreAuth(req: IncomingMessage, res: ServerResponse, url: URL, p
 }
 
 /** #1388 wave 4 step 2: resolveRequestAuth, session/idp gates, visibility and request scopes. */
-async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL, path: string, method: string, state: { m?: RegExpMatchArray | null; releaseWorkspaceRequest?: () => void }): Promise<RequestAuth | null> {
+/** The request-scoped stores authenticate sets. enterWith after an await
+ * inside authenticate does not reach its caller's frame, so handleRequest
+ * enters them again from here before any route runs (enterRequestScopes). */
+type RequestScopes = {
+  viewer: string | null;
+  delegated: boolean;
+  continuation: ReturnType<typeof takeOwnerContinuation>;
+  actConfirmed: ReturnType<typeof takeActConfirmation> | null;
+};
+function enterRequestScopes(scopes: RequestScopes): void {
+  threadViewerScope.enterWith(scopes.viewer);
+  delegatedRequestScope.enterWith(scopes.delegated);
+  continuationThreadScope.enterWith(scopes.continuation);
+  actConfirmedScope.enterWith(scopes.actConfirmed);
+}
+async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL, path: string, method: string, state: { m?: RegExpMatchArray | null; releaseWorkspaceRequest?: () => void; scopes?: RequestScopes }): Promise<RequestAuth | null> {
   const gate = resolveRequestAuth(req, {
     sessions,
     cookieName: SESSION_COOKIE,
@@ -44152,7 +44254,9 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
   // without the request read who is asking from here. Set for every
   // request, so a kept-alive connection never inherits one.
   const scopedViewerId = serviceThreadViewer(serviceViewerClosed(auth, path, privateThreads()), viewerId);
-  threadViewerScope.enterWith(scopedViewerId ?? null);
+  const scopes: RequestScopes = { viewer: scopedViewerId ?? null, delegated: false, continuation: null, actConfirmed: null };
+  state.scopes = scopes;
+  threadViewerScope.enterWith(scopes.viewer);
   // On someone's behalf (act, an AI client): a confidential thread is not
   // there. Named in the path or query: 404; in an answer: cut out, and an
   // answer that still names one is withheld.
@@ -44165,14 +44269,17 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
   const continuation = takeOwnerContinuation(typeof continuationHeader === "string" ? continuationHeader : undefined, method, path);
   const delegated = !continuation && ((auth.kind === "session" && auth.session.ephemeral === true)
     || secureTokenMatch(typeof onBehalfHeader === "string" ? onBehalfHeader : undefined, ON_BEHALF_SECRET));
+  scopes.delegated = delegated;
+  scopes.continuation = continuation;
   delegatedRequestScope.enterWith(delegated);
   continuationThreadScope.enterWith(continuation);
   const confirmedHeader = req.headers[ACT_CONFIRMED_HEADER];
   // only this server's own replay carries it: a bot act copy of the
   // person's session, or the operator through the desktop owner header
-  actConfirmedScope.enterWith((auth.kind === "session" && isBotActSession(auth.session)) || (auth.kind === "loopback" && auth.trust !== "service")
+  scopes.actConfirmed = (auth.kind === "session" && isBotActSession(auth.session)) || (auth.kind === "loopback" && auth.trust !== "service")
     ? takeActConfirmation(typeof confirmedHeader === "string" ? confirmedHeader : undefined, method, path)
-    : null);
+    : null;
+  actConfirmedScope.enterWith(scopes.actConfirmed);
   if (delegated) {
     const confidentialIds = confidentialThreadIds();
     if (confidentialIds.size) {
@@ -47038,12 +47145,14 @@ const handleRequest = async (req: IncomingMessage, res: ServerResponse) => {
   if (!parsed) return;
   const { url, path, method } = parsed;
   /** Shared scratch for named handleRequest steps (#1388 wave 4 step 2). */
-  const state: { m: RegExpMatchArray | null; releaseWorkspaceRequest?: () => void } = { m: null };
+  const state: { m: RegExpMatchArray | null; releaseWorkspaceRequest?: () => void; scopes?: RequestScopes } = { m: null };
   try {
     if (await originGates(req, res, url, path, method)) return;
     if (await runPreAuth(req, res, url, path, method)) return;
     const auth = await authenticate(req, res, url, path, method, state);
     if (!auth) return;
+    // Set for every request, so a kept-alive connection never inherits one.
+    enterRequestScopes(state.scopes ?? { viewer: null, delegated: false, continuation: null, actConfirmed: null });
     if (await runRoutes(req, res, url, path, method, auth)) return;
     if (await runInternal(req, res, url, path, method, auth)) return;
     if (await fallback(req, res, url, path, method, auth, state)) return;

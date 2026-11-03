@@ -256,3 +256,28 @@ describe("an MCP call names its server and tool", () => {
     expect(stepDuration(4_000)).toBe("4 s");
   });
 });
+
+// 2026-11-03: Grok's gateway names a connector's tool with `_5f` escapes and
+// the server's number; a card read "Could not use User Outlook Get 5fmail
+// 5fmessage" and its Tool row a bare "12".
+describe("a gateway tool name reads as its connector and tool", () => {
+  const titles = ["user-Outlook-get_5fmail_5fmessage___12", "cursor__user-Outlook-get_5fmail_5fmessage___12", "mcp__cursor__user-Outlook-get_5fmail_5fmessage___12"];
+
+  it("decodes the escape and never shows a bare number as the tool", () => {
+    for (const name of titles) {
+      const label = readStep({ name, ok: false }).label;
+      expect(label).not.toMatch(/5f|User Outlook|12/);
+      expect(label).toContain("Outlook");
+      expect(stepToolName({ name })).toMatch(/^Get mail message · Outlook/);
+    }
+    expect(readStep({ name: "user-Outlook-list_5fmail_5fmessages___12", ok: true }).label).not.toMatch(/5f|User Outlook/);
+    expect(stepToolName({ name: "user-Outlook-list_5fmail_5fmessages___12" })).toMatch(/^List mail messages · Outlook/);
+  });
+
+  it("never names a tool by a number alone", () => {
+    expect(stepToolName({ name: "osprey___12" })).toBe("Osprey");
+    expect(stepToolName({ name: "mcp__wren__lookup___7" })).toBe("Lookup");
+    // an ordinary name keeps its digits and its underscores' words
+    expect(stepToolName({ name: "mcp__wren__step_12" })).toBe("Step 12");
+  });
+});

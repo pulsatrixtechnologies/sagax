@@ -4938,6 +4938,40 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     expect(runOf(h).problems).toBe("Ledger's work was not finished: acknowledged without doing the work");
   });
 
+  // production 2026-11-03 04:15 UTC (Monday billing pass): the bot read the
+  // Flow skill (a JSON read_file result naming previous_unclosed), handed the
+  // bank overage to a teammate and ended NOTHING_TO_REPORT; the run ended
+  // "Blocked" with the reason "{". It completes quietly and links the teammate.
+  it("a delegated run is not blocked by a document naming a refusal code, and links the teammate thread", async () => {
+    const h = harness(start);
+    h.options.handedOutOutcome = () => ({ root: { status: "completed", detail: "", result: "" }, pending: false, failed: [],
+      handed: [{ botId: "nova", threadId: "teammate-thread", name: "Nova", status: "completed" }] });
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const skill = JSON.stringify({ path: "skills/running-px-flow/SKILL.md", content: `${"Flow. ".repeat(300)}\nrun init reports it as \`previous_unclosed\`` }, null, 2);
+    tool(h, "thread-1", "t1", "read_file", true, skill);
+    tool(h, "thread-1", "t2", "Sent work to a teammate", true, "{\n  \"ok\": true\n}");
+    say(h, "thread-1", "Sent the Northwind overage to Nova.\nNOTHING_TO_REPORT");
+    done(h, "thread-1");
+    const run = runOf(h);
+    expect(run.status).toBe("completed");
+    expect(run.error).toBeUndefined();
+    expect(run.handedTo).toEqual([{ botId: "nova", threadId: "teammate-thread", name: "Nova", status: "completed" }]);
+  });
+
+  it("a real Flow refusal blocks the run with a plain reason, never the output's first line", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    tool(h, "thread-1", "t1", "px_flow.py run init", false, "{\n  \"ok\": false,\n  \"error\": \"run_exists\",\n  \"message\": \"one run per lease\"\n}");
+    say(h, "thread-1", "Flow refused.");
+    done(h, "thread-1");
+    const run = runOf(h);
+    expect(run.status).toBe("blocked");
+    expect(run.error).toMatch(/already holds a run/);
+    expect(run.error).not.toBe("{");
+  });
+
   // production 2026-11-03 00:10 UTC: Robin's account quoted its last message as JSON,
   // and the person read literal \n, ** and an open quote where the cut fell.
   it("a teammate's quoted last message is kept as plain text, cut with an ellipsis", async () => {

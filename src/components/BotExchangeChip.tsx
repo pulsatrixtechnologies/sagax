@@ -90,9 +90,10 @@ export function TranscriptDate({ at }: { at: number }) {
 /** `loadError`: the thread's lines could not be read; `onRetry` reads them
  * again. With no line to show, the sheet says so rather than staying blank
  * (#1502). Routine runs reuse this sheet with an optional quiet meta line
- * under the header and an opaque footer band of actions (Continue, Stop, …).
- * Close is one centered "Close Chat" pill at the bottom, in place of the
- * composer, as in Grok Bot; Escape closes too. */
+ * under the header and its actions (Continue, Stop, …) in the footer row.
+ * Close is one "Close Chat" pill at the bottom, in place of the composer, as
+ * in Grok Bot: alone and centered, or last in the routine run's action row.
+ * Escape closes too. */
 export function ExchangeSheet({
   run,
   bots,
@@ -114,7 +115,8 @@ export function ExchangeSheet({
   onRetry?: () => void;
   /** Quiet status line under the header pill (routine runs). */
   meta?: ReactNode;
-  /** Opaque footer band of actions (routine runs: Continue, Stop, …). */
+  /** Actions placed in the footer row before Close Chat (routine runs:
+   * Continue, Stop, …); its children are the row's items. */
   footer?: ReactNode;
   closeLabel?: string;
   testId?: string;
@@ -125,6 +127,8 @@ export function ExchangeSheet({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+      // An open menu off the footer (the routine run's ⋯) takes Escape first.
+      if (document.querySelector("[data-anchored-popover]")) return;
       event.preventDefault();
       event.stopPropagation();
       onClose();
@@ -250,19 +254,22 @@ export function ExchangeSheet({
       </div>
       </div>
       {/* In place of the composer (Grok Bot): one centered "Close Chat" pill
-          is the close. A routine run stacks its action row above it in the
-          same opaque band. */}
+          is the close. A routine run puts its actions in the same row, before
+          it (one row, 2026-11-02); narrow widths wrap it in order, centered. */}
       <div
         data-exchange-footer={footer ? "" : undefined}
-        className={cn("flex shrink-0 flex-col items-center gap-3 bg-app px-4", footer ? "border-t border-hairline/40 py-3" : "pb-4 pt-2")}
+        className={cn(
+          "flex shrink-0 flex-wrap items-center justify-center gap-2 bg-app px-4",
+          footer ? "border-t border-hairline/40 py-3" : "pb-4 pt-2",
+        )}
         onClick={(event) => event.stopPropagation()}
       >
-        {footer && <div className="w-full">{footer}</div>}
+        {footer}
         <button
           type="button"
           data-testid="bot-exchange-close"
           onClick={onClose}
-          className={cn(PILL, "px-4 font-medium")}
+          className={cn(PILL, !footer && "px-4 font-medium")}
         >
           {closeText}
         </button>

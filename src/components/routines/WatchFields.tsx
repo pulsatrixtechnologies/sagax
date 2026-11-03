@@ -15,6 +15,7 @@ import { cn } from "@/lib/cn";
 import type { RoutineWatchCondition, RoutineWatchOp, RoutineWatchPrecheck, RoutineWatchSourceType } from "../../../shared/routine-watch";
 import { ROUTINE_WATCH_LIMITS, ROUTINE_WATCH_OPS } from "../../../shared/routine-watch";
 import { readableError } from "@/lib/plain-error";
+import { SwitchRow } from "@/components/SettingsPrimitives";
 
 export type WatchConditionChoice = "none" | "json_path" | "contains" | "exit_code";
 
@@ -164,14 +165,9 @@ export function WatchFields({ draft, onChange, botId, routineId, runOn }: {
     }
   };
   return (
-    <div className="rounded-xl border border-hairline/40 bg-inset/40 px-3 py-2.5" data-testid="routine-watch">
-      <label className="flex items-start gap-2 text-[12.5px] text-ink">
-        <input type="checkbox" checked={draft.on} onChange={(event) => set({ on: event.target.checked })} className="mt-0.5" />
-        <span>
-          <span className="block font-medium">{t("routineWatch.title")}</span>
-          <span className="mt-0.5 block text-[11px] leading-relaxed text-ink-secondary">{t("routineWatch.help", { minutes: ROUTINE_WATCH_LIMITS.minIntervalMinutes })}</span>
-        </span>
-      </label>
+    <div data-testid="routine-watch">
+      {/* 2026-11-02: one row, the explanation behind "?" (Edit routine's Advanced). */}
+      <SwitchRow label={t("routineWatch.title")} help={t("routineWatch.help", { minutes: ROUTINE_WATCH_LIMITS.minIntervalMinutes })} checked={draft.on} onChange={(on) => set({ on })} />
       {draft.on && <div className="mt-3 space-y-3 border-t border-hairline/35 pt-3">
         <div role="radiogroup" aria-label={t("routineWatch.sourceLabel")} className="grid gap-2 sm:grid-cols-3">
           {(["files", "command", "tool"] as const).map((type) => (

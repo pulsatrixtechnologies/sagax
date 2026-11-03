@@ -45,6 +45,16 @@ export interface MemoryNoteRow {
   scope?: string;
   /** Team memory: "proposed" waits for a review. */
   status?: string;
+  /** When the note was first written (Perspicax `created`, a bot's journal). */
+  createdAt?: number;
+  /** Who wrote it last, as a name (never an identifier). */
+  author?: string;
+  /** How many readable notes it links to or is linked from (Perspicax). */
+  links?: number;
+  /** Manual rank inside its folder (Perspicax). */
+  rank?: number | null;
+  /** An archived Perspicax note (the Archived list). */
+  archived?: boolean;
 }
 
 export interface MemoryFolderRow {
@@ -63,6 +73,12 @@ export interface MemoryTierRow {
   mayWrite: boolean;
   mayManage: boolean;
   folders: MemoryFolderRow[];
+  /** Its archived notes. */
+  archived?: number;
+  /** Proposals waiting for a review in this tier. */
+  pending?: number;
+  /** How an edit lands: "direct" or "review". */
+  editMode?: string;
 }
 
 export interface MemoryBrowse {
@@ -73,6 +89,8 @@ export interface MemoryBrowse {
   mayManage?: boolean;
   /** Perspicax only: the tiers this browse read, each with its folders. */
   tiers?: MemoryTierRow[];
+  /** Team memory: each note's whole text, by note id (the listing carries it). */
+  bodies?: Record<string, string>;
 }
 
 export interface MemoryNoteDetail {
@@ -88,6 +106,27 @@ export interface MemoryNoteDetail {
   mayEdit: boolean;
   /** Whole-file JSON or markdown with ```json blocks for the folding tree. */
   bodyKind: "markdown" | "json";
+  /** Perspicax properties, when the server sends them. */
+  author?: string;
+  createdAt?: number;
+  updatedAt?: number;
+  provenance?: Array<{ kind: string; reference: string }>;
+  /** Where the note came from (Perspicax `source`: humain, bot, import…). */
+  origin?: string;
+  versions?: number | null;
+  editMode?: string;
+  sealed?: boolean;
+  linksOut?: MemoryNoteLink[];
+  backlinks?: MemoryNoteLink[];
+}
+
+/** A link between two notes (Perspicax `links_out` and `backlinks`). */
+export interface MemoryNoteLink {
+  scope?: string;
+  id: string;
+  title: string;
+  /** The citing line around the link (backlinks only). */
+  context?: string | null;
 }
 
 export function fetchMemoryManagerSources(): Promise<MemoryManagerSourcesResponse> {
@@ -199,6 +238,7 @@ export interface TeamEntry {
   detail: string;
   status: string;
   updatedAt: number;
+  source?: { botName?: string; at?: number };
 }
 
 export async function browseTeamSource(section: string): Promise<MemoryBrowse> {
@@ -210,6 +250,8 @@ export async function browseTeamSource(section: string): Promise<MemoryBrowse> {
     kind: entry.kind,
     excerpt: entry.detail.slice(0, 160),
     updatedAt: entry.updatedAt,
+    createdAt: entry.source?.at,
+    author: entry.source?.botName || undefined,
     status: entry.status,
   }));
   const counts = new Map<string, number>();
@@ -218,6 +260,7 @@ export async function browseTeamSource(section: string): Promise<MemoryBrowse> {
     folders: [...counts.entries()].map(([id, count]) => ({ id, name: id, count })),
     notes,
     mayWrite: true,
+    bodies: Object.fromEntries(result.entries.map((entry) => [entry.id, entry.detail])),
   };
 }
 
@@ -233,6 +276,9 @@ export async function openTeamNote(section: string, id: string): Promise<MemoryN
     folder: entry.kind,
     mayEdit: true,
     bodyKind: "markdown",
+    author: entry.source?.botName || undefined,
+    createdAt: entry.source?.at,
+    updatedAt: entry.updatedAt,
   };
 }
 
@@ -245,7 +291,14 @@ export async function browsePerspicax(folder?: string, scope?: string): Promise<
       may_write: boolean;
       may_manage?: boolean;
       trashed?: number;
-      topics: Array<{ topic: string; count: number; entries: Array<{ id: string; title: string; topic: string; tags: string[]; updated?: string; excerpt?: string }> }>;
+      archived?: number;
+      edit_mode?: string;
+      pending?: unknown[];
+      topics: Array<{
+        topic: string;
+        count: number;
+        entries: Array<{ id: string; title: string; topic: string; tags: string[]; updated?: string; created?: string; excerpt?: string; author_name?: string | null; links?: number; rank?: number | null }>;
+      }>;
     }>;
   }>("/tree");
   const notes: MemoryNoteRow[] = [];
@@ -269,6 +322,9 @@ export async function browsePerspicax(folder?: string, scope?: string): Promise<
       mayWrite: tier.may_write,
       mayManage: Boolean(tier.may_manage),
       folders: tierFolders,
+      archived: tier.archived ?? 0,
+      pending: Array.isArray(tier.pending) ? tier.pending.length : 0,
+      editMode: tier.edit_mode,
     });
     for (const topic of tier.topics) {
       folders.push({ id: `${tier.scope}/${topic.topic}`, name: topic.topic, count: topic.count });
@@ -282,6 +338,10 @@ export async function browsePerspicax(folder?: string, scope?: string): Promise<
           scope: tier.scope,
           excerpt: entry.excerpt,
           updatedAt: entry.updated ? Date.parse(entry.updated) : undefined,
+          createdAt: entry.created ? Date.parse(entry.created) : undefined,
+          author: entry.author_name || undefined,
+          links: entry.links,
+          rank: entry.rank,
         });
       }
     }
@@ -300,6 +360,15 @@ export async function openPerspicaxNote(scope: string, id: string): Promise<Memo
     version?: number;
     may_edit?: boolean;
     sealed?: boolean;
+    author_name?: string | null;
+    created?: string;
+    updated?: string;
+    provenance?: Array<{ kind: string; reference: string }>;
+    source?: string;
+    versions?: number | null;
+    edit_mode?: string;
+    links_out?: Array<{ scope: string; id: string; title: string; context?: string | null }>;
+    backlinks?: Array<{ scope: string; id: string; title: string; context?: string | null }>;
   }>(`/entry?scope=${encodeURIComponent(scope)}&id=${encodeURIComponent(id)}`);
   return {
     id: note.id,
@@ -311,6 +380,16 @@ export async function openPerspicaxNote(scope: string, id: string): Promise<Memo
     version: note.version,
     mayEdit: note.may_edit !== false && !note.sealed,
     bodyKind: detectBodyKind(note.body),
+    author: note.author_name || undefined,
+    createdAt: note.created ? Date.parse(note.created) : undefined,
+    updatedAt: note.updated ? Date.parse(note.updated) : undefined,
+    provenance: note.provenance,
+    origin: note.source,
+    versions: note.versions,
+    editMode: note.edit_mode,
+    sealed: note.sealed,
+    linksOut: note.links_out?.map((link) => ({ scope: link.scope, id: link.id, title: link.title })),
+    backlinks: note.backlinks?.map((link) => ({ scope: link.scope, id: link.id, title: link.title, context: link.context })),
   };
 }
 
@@ -321,4 +400,39 @@ export function filterNotes(notes: MemoryNoteRow[], query: string): MemoryNoteRo
     const hay = [note.title, note.excerpt, note.folder, ...(note.tags ?? [])].filter(Boolean).join("\n").toLowerCase();
     return hay.includes(q);
   });
+}
+
+/** An archived Perspicax note (`GET /archived`). */
+export interface ArchivedNoteRow {
+  scope: string;
+  id: string;
+  title: string;
+  topic: string;
+  tags: string[];
+  archived_at?: string;
+  author_name?: string | null;
+  may_restore?: boolean;
+}
+
+export async function fetchPerspicaxArchived(): Promise<MemoryNoteRow[]> {
+  const result = await pxMemory<{ notes?: ArchivedNoteRow[] }>("/archived");
+  return (result.notes ?? []).map((note) => ({
+    id: note.id,
+    title: note.title,
+    folder: note.topic,
+    tags: note.tags ?? [],
+    scope: note.scope,
+    author: note.author_name || undefined,
+    updatedAt: note.archived_at ? Date.parse(note.archived_at) : undefined,
+    archived: true,
+  }));
+}
+
+/** The tag vocabulary of the organization (`GET /tags`): its namespaces and their values. */
+export interface MemoryVocabulary {
+  namespaces: Array<{ id: string; label_fr?: string; label_en?: string; controlled?: boolean; required?: boolean; tags: Array<{ tag: string; label?: string }> }>;
+}
+
+export function fetchPerspicaxVocabulary(): Promise<MemoryVocabulary> {
+  return pxMemory<MemoryVocabulary>("/tags");
 }

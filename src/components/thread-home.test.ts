@@ -35,7 +35,8 @@ describe("thread home while threads are hidden", () => {
     expect(threadsOffReturnTarget(bot("older", [older, main]))).toBe("main");
     // a topic written in a moment ago stays as it is
     const recent = { ...main, updatedAt: Date.now() };
-    expect(openBotConversationActions(bot("older", [older, recent]), false).at(-1)).toEqual({ type: "freshTopic", botId: "vega", threadId: null });
+    // (an asked-for New chat over it stays, 2026-11-02)
+    expect(openBotConversationActions(bot("older", [older, recent]), false).at(-1)).toEqual({ type: "freshTopic", botId: "vega", threadId: null, keepAsked: true });
   });
 
   // 2026-10-28: the newest topic is the conversation on every device, empty

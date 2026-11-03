@@ -1,12 +1,13 @@
-// Browse Bots (src/components/bot-catalog/, Connect apps' Bots tab since
-// 2026-10-29) is the one place for templates. New bot's "Browse templates",
+// Browse Bots (src/components/bot-catalog/, its own centred window again
+// since 619b200c8; Connect apps' Bots tab embeds the same pane) is the one
+// place for templates. New bot's "Browse templates",
 // the bot wizard and an install link open that tab on its Templates
 // section. Pure, for tests.
 import { openBotCatalog, type Action } from "@/state/store";
 
 /** Where a person asked for templates. */
 export type TemplatesEntry =
-  /** Connect apps: Browse Bots' Templates (Connect apps reopens on its Bots tab). */
+  /** Connect apps: Browse Bots' Templates (it closes Connect apps). */
   | "connectApps"
   /** New bot: "Browse templates" beside Starting role (it closes New bot). */
   | "newBot"
@@ -16,7 +17,7 @@ export type TemplatesEntry =
   | "installLink";
 
 /** The actions to dispatch, in order: close what the entry sits in, then
- * open Connect apps' Bots tab on Templates (with the link to preview, if any). */
+ * open the Browse Bots window on Templates (with the link to preview, if any). */
 export function templatesEntryActions(entry: TemplatesEntry, installUrl?: string): Action[] {
   const open = openBotCatalog({ section: "templates", ...(entry === "installLink" && installUrl ? { installUrl } : {}) });
   if (entry === "connectApps") return [{ type: "togglePlugins", open: false }, open];

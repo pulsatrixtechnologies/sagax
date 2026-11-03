@@ -53,7 +53,7 @@ export function activityJobStage(
   waitingFor?: TaskWaitingKind,
 ): TaskJobStage | undefined {
   if (waitingFor) return undefined;
-  if (status === "failed") return "held";
+  if (status === "failed" || status === "blocked") return "held";
   if (status === "queued") return "queued";
   if (status === "running") return "working";
   if (status === "waiting") return "inactive";

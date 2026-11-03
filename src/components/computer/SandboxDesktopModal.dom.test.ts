@@ -57,18 +57,13 @@ describe("SandboxDesktopModal calm window", () => {
     expect(takeover.textContent).toContain("You have control");
   });
 
-  it("shows no Play / Pause / Stop, only one full screen button with a tooltip", () => {
+  it("shows no Play / Pause / Stop and no full screen button", () => {
     mount();
     expect(document.querySelector("[data-takeover-power]")).toBeNull();
     expect(document.querySelector("[data-takeover-more]")).toBeNull();
     expect(document.querySelector("[role=menu]")).toBeNull();
-    const full = document.querySelector<HTMLButtonElement>("[data-takeover-fullscreen]")!;
-    expect(full.getAttribute("aria-label")).toBe("Full screen");
-    expect(full.getAttribute("title")).toBe("Full screen");
-    const request = vi.fn(() => Promise.resolve());
-    (document.querySelector("[role=dialog]") as HTMLElement).requestFullscreen = request;
-    act(() => full.click());
-    expect(request).toHaveBeenCalledTimes(1);
+    // 2026-11-03 (JC): the full screen button did not work in the app; removed.
+    expect(document.querySelector("[data-takeover-fullscreen]")).toBeNull();
   });
 
   it("closes with the one collapse button (no red close dot) and with Escape", () => {
@@ -87,7 +82,7 @@ describe("SandboxDesktopModal calm window", () => {
     mount({ kind: "browser" });
     expect(document.querySelector("[data-takeover-segments]")).toBeNull();
     expect(document.querySelector("[data-takeover-control]")).toBeNull();
-    expect(document.querySelector("[data-takeover-fullscreen]")).not.toBeNull();
+    expect(document.querySelector("[data-takeover-fullscreen]")).toBeNull();
     expect(document.querySelector("[data-takeover-close]")).not.toBeNull();
   });
 });

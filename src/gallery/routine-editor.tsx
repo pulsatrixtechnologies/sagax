@@ -2,7 +2,8 @@
  * the editor on a clock routine or a webhook routine, the routine page's
  * Configuration with its webhook, and Edit bot's webhook list. Mocked API;
  * no server. Not shipped in the app.
- * ?lang=<code>&skin=<id>&view=editor|page|bot&trigger=clock|webhook */
+ * ?lang=<code>&skin=<id>&view=editor|panel-editor|page|bot&trigger=clock|webhook
+ * panel-editor: "Edit routine" in the side panel (400 px), as JC sees it. */
 import { StrictMode, useEffect, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { RoutineEditor } from "../components/RoutineCalendarPage";
@@ -73,7 +74,9 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <StoreProvider>
       <Seed>
-        {view === "panel"
+        {view === "panel-editor"
+          ? <aside data-gallery-card style={{ width: 400 }} className="relative h-[880px] overflow-hidden border border-hairline/40 bg-panel text-ink"><RoutineEditor routine={routine} bots={[bot]} lockedBotId={bot.id} presentation="panel" onClose={() => {}} /></aside>
+          : view === "panel"
           ? <aside data-gallery-card style={{ width: 400 }} className="relative h-[820px] border border-hairline/40 bg-panel text-ink"><RoutinesSection bot={bot} routines={[routine]} runs={runs} grouped /></aside>
           : view === "page"
           ? <div style={{ maxWidth: 720, padding: 16 }} data-gallery-card className="bg-canvas"><RoutineConfiguration routine={routine} bots={[bot]} /></div>

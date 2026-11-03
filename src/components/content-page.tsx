@@ -77,7 +77,7 @@ export function PageTopStrip() {
  * The page's header row. `name` sets the data attributes the page's tests and
  * tours find it by (`data-<name>-header`, `-primary`, `-actions`, `-section`).
  */
-export function PageHeader({ name, icon: Icon, title, section, primary, actions, below, topbar = false, inset = false, primaryStyle, actionsStyle, titleProps, ...rest }: {
+export function PageHeader({ name, icon: Icon, title, section, primary, actions, below, topbar = false, inset = false, large = false, primaryStyle, actionsStyle, titleProps, ...rest }: {
   name: string;
   icon: LucideIcon;
   title: string;
@@ -93,6 +93,8 @@ export function PageHeader({ name, icon: Icon, title, section, primary, actions,
   topbar?: boolean;
   /** A standalone window on macOS: clear the traffic lights. */
   inset?: boolean;
+  /** The Perspicax console's page title (Memory, 2026-11-02): 30px, no icon. */
+  large?: boolean;
   primaryStyle?: CSSProperties;
   actionsStyle?: CSSProperties;
   titleProps?: HTMLAttributes<HTMLDivElement> & DataAttributes;
@@ -106,9 +108,9 @@ export function PageHeader({ name, icon: Icon, title, section, primary, actions,
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <div {...titleProps} data-page-title="" className="flex min-w-0 shrink-0 items-center gap-2">
-          <Icon size={18} className="shrink-0 text-ink-secondary" aria-hidden="true" />
-          <h1 className="text-[16px] font-medium leading-6 text-ink">{title}</h1>
-          {section && <span {...{ [`data-${name}-section`]: "" }} className="flex min-w-0 items-center gap-1 text-[16px] text-ink-secondary"><ChevronRight size={14} aria-hidden="true" /><span className="truncate">{section}</span></span>}
+          {!large && <Icon size={18} className="shrink-0 text-ink-secondary" aria-hidden="true" />}
+          <h1 className={large ? "text-[30px] font-semibold leading-9 tracking-[-0.01em] text-ink" : "text-[16px] font-medium leading-6 text-ink"}>{title}</h1>
+          {section && <span {...{ [`data-${name}-section`]: "" }} className={cn("flex min-w-0 items-center gap-1 text-ink-secondary", large ? "text-[20px]" : "text-[16px]")}><ChevronRight size={14} aria-hidden="true" /><span className="truncate">{section}</span></span>}
         </div>
         {primary && <div {...{ [`data-${name}-primary`]: "" }} className="flex min-w-0 items-center gap-2 @max-[44rem]/page-header:order-last @max-[44rem]/page-header:basis-full" style={primaryStyle}>{primary}</div>}
         <div {...{ [`data-${name}-actions`]: "" }} className="ml-auto flex shrink-0 items-center gap-1.5" style={actionsStyle}>{actions}</div>

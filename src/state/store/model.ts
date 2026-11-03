@@ -43,7 +43,7 @@ import { type NotificationTarget } from "@/lib/notify";
 import { singleStreamTurnField } from "@/lib/thread-preferences";
 import { isEarlierSegment, isStreamSegment, opensBesideConversation, streamHomeThread, streamUnreadReadWith } from "@/lib/single-stream";
 import { openSideThread } from "@/lib/side-thread";
-import { freshTopicLanding, onScreenBot } from "@/lib/fresh-topic";
+import { freshTopicLanding, noteNewChatTopic, onScreenBot } from "@/lib/fresh-topic";
 import { type BotRole } from "@/lib/bot-roles";
 import type { OnboardingStatus } from "@/lib/onboarding";
 import { type ThreadPage } from "@/lib/thread-page-cache";
@@ -1294,7 +1294,7 @@ export interface AppState {
   routinesLoadState: "loading" | "ready" | "error";
   /** 2026-10-28: each bot's routine folders in order (shared/routine-folders.ts). */
   routineFolders: Record<string, string[]>;
-  routinesFocus: { section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; runId?: string; nonce: number };
+  routinesFocus: { section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; runId?: string; /** Opens this routine's editor in the side panel. */ editRoutineId?: string; nonce: number };
   /** The Code section (src/components/code/CodePage.tsx): the run it opens,
    * or the list when none. */
   codeFocus: { runId?: string; nonce: number };
@@ -1571,7 +1571,7 @@ export type Action =
   | { type: "sidebarHidden"; keys: ReadonlySet<string> }
   | { type: "sections"; sections: string[] }
   | { type: "sectionDeleted"; section: string; sections: string[] }
-  | { type: "showRoutines"; section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; runId?: string }
+  | { type: "showRoutines"; section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; runId?: string; editRoutineId?: string }
   | { type: "showTeamMap" }
   /** The Code section: the list, or one run when `runId` is set. */
   | { type: "showCode"; runId?: string }
@@ -1801,7 +1801,9 @@ export type Action =
   | { type: "toggleActivity"; open?: boolean }
   | { type: "focusMessage"; threadId: string; messageId: string; matchText?: string; segment?: true }
   /** Draw a fresh topic over `threadId` (null: show that topic again). */
-  | { type: "freshTopic"; botId: string; threadId: string | null; auto?: boolean }
+  /** `keepAsked` on a clear: a New chat the person asked for stays (only a
+   * draft coming back put there goes). */
+  | { type: "freshTopic"; botId: string; threadId: string | null; auto?: boolean; keepAsked?: boolean }
   | { type: "focusMessageConsumed"; nonce: number }
   | { type: "unreadDividerDone"; threadId: string }
   | { type: "toggleAppSettings"; open?: boolean; section?: AppSettingsSection; subPage?: string; phonePairing?: boolean }
@@ -2080,8 +2082,11 @@ export function openBot(
   // Coming back to the single stream after a while lands on a fresh topic
   // (src/lib/fresh-topic.ts). A notification or a link passes landing false.
   if (!threadsShown && options.landing !== false) landOnBot(dispatch, bot, opened);
-  // a notification or a link: what it names is shown, never a draft over it
-  else dispatch({ type: "freshTopic", botId: bot.id, threadId: null });
+  // A notification, a link or a message naming a thread clears the draft
+  // where it opens that thread (openBotThread, focusMessage). Opening the
+  // bot itself keeps a New chat the person asked for (2026-11-02): it is
+  // their current conversation until they send, Back or open the old one.
+  else dispatch({ type: "freshTopic", botId: bot.id, threadId: null, keepAsked: true });
 }
 
 /** Coming back to `bot` at `threadId`: a fresh topic drawn over it when the
@@ -2096,9 +2101,10 @@ export function landOnBot(
   if (!options.force && onScreenBot() === bot.id) return;
   const decision = freshTopicLanding(bot, threadId, { now: options.now ?? Date.now(), ...(options.force ? { force: true } : {}) });
   if (decision.fresh) dispatch({ type: "freshTopic", botId: bot.id, threadId, auto: true });
-  // Opening the bot by hand shows the topic it opens to; the window coming
-  // back (force) keeps a New topic the person started.
-  else if (!options.force) dispatch({ type: "freshTopic", botId: bot.id, threadId: null });
+  // Opening the bot by hand shows the topic it opens to, except a New chat
+  // the person started: that one stays (2026-11-02); the window coming back
+  // (force) keeps it too.
+  else if (!options.force) dispatch({ type: "freshTopic", botId: bot.id, threadId: null, keepAsked: true });
 }
 
 /** "New topic" (the chat header, the bot row menu): the bot's conversation
@@ -2113,9 +2119,14 @@ export function startNewTopic(
   openBot(dispatch, bot, false, { landing: false });
   const task = bot.tasks?.find((candidate) => candidate.threadId === opened);
   const empty = !task || typeof task.updatedAt !== "number" || typeof task.createdAt !== "number" || task.updatedAt <= task.createdAt;
+  const segment = Boolean(task && typeof task.createdAt === "number" && isStreamSegment({ ...task, createdAt: task.createdAt }));
   // only over a topic of the stream: a confidential or routine thread never
-  if (!empty && task && typeof task.createdAt === "number" && isStreamSegment({ ...task, createdAt: task.createdAt })) {
+  if (!empty && segment) {
     dispatch({ type: "freshTopic", botId: bot.id, threadId: opened });
+  } else if (empty && segment) {
+    // An empty newest topic is reused, never a second one: it opens on its
+    // own, without the earlier topics drawn above it (src/lib/fresh-topic.ts).
+    noteNewChatTopic(opened);
   }
 }
 

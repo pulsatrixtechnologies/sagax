@@ -19,7 +19,8 @@ import { t } from "@/lib/i18n";
 import { api, type Bot, type Group } from "@/state/store";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import { loadBotActivityDetail, type BotActivityDetail, type BotActivityStatus } from "@/lib/bot-activity";
-import { routineAutoPausedText, routineDateTime, routineQueuePosition, routineRunError, routineRunLabel, routineRunProblems, routineRunTone } from "@/lib/routine-display";
+import { routineAutoPausedText, routineDateTime, routineQueuePosition, routineResultText, routineRunBlockedLine, routineRunError, routineRunLabel, routineRunProblems, routineRunTone } from "@/lib/routine-display";
+import { RunResultDetails, TeammateThreadLinks } from "../RoutineRunCard";
 import { formatUsd } from "@/lib/usage";
 import { ChatMarkdown } from "../ChatMarkdown";
 import { waitingSources } from "../bot-settings/ActivityDetailModal";
@@ -45,6 +46,8 @@ export function runActivityStatus(run: Pick<RoutineRun, "status">): BotActivityS
     case "waiting": return "waiting";
     case "failed": case "missed": return "failed";
     case "cancelled": return "stopped";
+    // 2026-11-03 (owner report: "Blocked" beside a green check).
+    case "blocked": return "blocked";
     default: return "finished";
   }
 }
@@ -144,7 +147,11 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
   const view = views.includes(chosen) ? chosen : views[0];
   const quiet = run.status === "completed" && run.quiet;
   const reported = Boolean(run.output?.trim()) && !run.redacted;
-  const errorText = routineRunError(run.error);
+  // 2026-11-03: a blocked run says why in one plain line (its row's line);
+  // any other error in plain words, never a lone "{".
+  const blocked = run.status === "blocked";
+  const errorText = blocked ? routineRunBlockedLine(run) : run.error ? routineResultText(routineRunError(run.error)).text || routineRunError(run.error) : undefined;
+  const readable = reported ? routineResultText(run.output) : null;
   const canReply = Boolean(onReply && live && threadId && editable && !run.redacted);
 
   // What waits on the person: the thread's own cards when they could be
@@ -180,7 +187,7 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
         className="px-0 pb-0 pr-0 pt-0 [&_h2]:sr-only"
       />
       <div data-run-meta className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px] text-ink-secondary">
-        {(run.quiet || run.goalStatus || run.retried || run.status === "missed" || problems) && <><span data-run-state-label className={cn("font-medium", routineRunTone(run))}>{routineRunLabel(run)}</span><span aria-hidden="true">·</span></>}
+        {(run.quiet || run.goalStatus || run.retried || run.status === "missed" || run.status === "blocked" || problems) && <><span data-run-state-label className={cn("font-medium", routineRunTone(run))}>{routineRunLabel(run)}</span><span aria-hidden="true">·</span></>}
         <time dateTime={new Date(run.scheduledFor).toISOString()}>{routineDateTime(run.scheduledFor)}</time>
         <span aria-hidden="true">·</span>
         <span>{t(`routines.trigger.${run.triggerSource ?? (run.manual ? "manual" : "schedule")}`)}</span>
@@ -196,7 +203,8 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
       {waitingItems.length > 0 && <div data-run-waiting><WaitingOnYou items={waitingItems} threadId={threadId ?? ""} botFor={(id) => bots.find((candidate) => candidate.id === id)} onCancel={() => onStop?.()} onOpenThread={onOpenThread} /></div>}
       {run.status === "queued" && (run.attention || queuePlace) && <div data-run-deferred className="rounded-xl border border-accent/30 bg-accent/10 px-3.5 py-2.5 text-[12.5px] text-accent-text"><span className="font-medium">{t("routineRun.deferred")}</span>{run.attention && <> · {run.attention}</>}{queuePlace && <> · <span data-run-queue-position>{queuePlace}</span></>}</div>}
       {problems && <div data-run-problems role="status" className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-warning"><CircleAlert size={15} className="mt-0.5 shrink-0" aria-hidden="true" /><span className="min-w-0 whitespace-pre-wrap"><span className="font-medium">{t("routines.status.completedWithProblems")}</span>{"\n"}{problems}</span></div>}
-      {run.status !== "waiting" && errorText && <div data-run-error role="alert" className="flex items-start gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-danger"><CircleAlert size={15} className="mt-0.5 shrink-0" aria-hidden="true" /><span className="min-w-0 whitespace-pre-wrap">{errorText}</span></div>}
+      {run.status !== "waiting" && errorText && <div data-run-error={blocked ? "blocked" : "failed"} role="alert" className={cn("flex items-start gap-2 rounded-xl border px-3.5 py-2.5 text-[12.5px] leading-relaxed", blocked ? "border-warning/30 bg-warning/10 text-warning" : "border-danger/30 bg-danger/10 text-danger")}><CircleAlert size={15} className="mt-0.5 shrink-0" aria-hidden="true" /><span className="min-w-0 whitespace-pre-wrap">{errorText}</span></div>}
+      {run.handedTo && run.handedTo.length > 0 && !run.redacted && <TeammateThreadLinks handedTo={run.handedTo} onOpenThread={onOpenThread} />}
       {run.autoPaused && <div data-run-auto-paused className="flex flex-wrap items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-2.5 text-[12.5px] text-warning"><span className="font-medium">{routineAutoPausedText(run.autoPaused.failures)}</span>{onResume && <button type="button" data-routine-resume onClick={onResume} disabled={working} className="inline-flex items-center gap-1 rounded-md bg-warning/15 px-2 py-0.5 font-medium hover:bg-warning/25 disabled:opacity-50"><CirclePlay size={11} aria-hidden="true" />{t("routines.autoPause.resume")}</button>}</div>}
       {detail?.note && run.status !== "waiting" && !errorText && <p className="rounded-lg bg-warning/10 px-3 py-2 text-[12.5px] text-ink">{detail.note}</p>}
       {error && <div role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-[11.5px] text-danger">{error}</div>}
@@ -209,7 +217,7 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
   const result = showResult && (
     <section data-run-result aria-label={t("routineRun.result")} className="rounded-xl border border-hairline/40 bg-card px-4 py-3">
       {run.redacted ? <p className="text-[12.5px] text-ink-secondary">{t("routines.scope.redacted")}</p>
-        : reported ? <div className="chat-markdown max-w-[72ch] text-[13.5px] leading-relaxed text-ink"><ChatMarkdown text={run.output!} inert /></div>
+        : reported ? <div className="chat-markdown max-w-[72ch] text-[13.5px] leading-relaxed text-ink"><ChatMarkdown text={readable?.structured ? readable.text : run.output!} inert />{readable?.details && <RunResultDetails details={readable.details} />}</div>
         : quiet ? <p className="text-[12.5px] text-ink-secondary">{t("routineRun.quiet")}</p>
         : run.status === "running" || run.status === "queued" ? <p className="flex items-center gap-2 text-[12.5px] text-ink-secondary"><Loader2 size={13} className="animate-spin text-accent motion-reduce:animate-none" aria-hidden="true" />{t(run.status === "running" ? "routineRun.resultPending" : "routineRun.resultQueued")}</p>
         : <p className="text-[12.5px] text-ink-secondary">{t("routines.noOutput")}</p>}

@@ -1,21 +1,32 @@
-// Tools > Memory: main-column page (Automations / Team map family, 2026-11-02).
-// The header row and the body column are Automations' own pieces
-// (content-page.tsx: PageHeader, PageHeading, PAGE_SCROLL, PAGE_COLUMN); the
-// right column, where Automations puts its calendar rail (CalendarSidebar:
-// 280px, border on its left), is the Perspicax console's notes explorer
-// (MemorySidebar.tsx): search, the views with their counts, then the tiers
-// and their folders.
+// Tools > Memory: a full page of the main column (Automations / Team map
+// family), shaped like the Perspicax console's Memory (1.9.20, JC
+// 2026-11-02: "la page des mémoires devrait être presque identique"). The
+// header row is Automations' (content-page.tsx) with the views under the
+// title: Notes | Map | Tags | Quality, "+ New note" and the ⋯ menu on the
+// right. Notes puts the console's explorer on the LEFT (MemorySidebar.tsx)
+// and the list beside it (MemoryNotesList.tsx); a note opens as a page
+// (MemoryNoteView.tsx). Every source shows: each bot's memory (a folder of
+// My memory with its Topics and Logs), the team sections (General and its
+// built-in groups as folders) and, on a Perspicax organization server, the
+// Perspicax tiers. Every number is one Sagax reads; nothing is made up.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Archive,
+  BookOpen,
   Brain,
   Check,
+  CircleCheck,
   Clock3,
-  Inbox,
-  List,
+  FileText,
+  Gauge,
   Loader2,
   Network,
   NotebookText,
+  PanelLeftOpen,
+  Pin,
   Plus,
+  RefreshCw,
+  Tag,
   Trash2,
   Users,
   X,
@@ -25,7 +36,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { isMacPlatform } from "@/lib/keyboard-shortcuts";
 import { readableError } from "@/lib/plain-error";
-import { buildMemoryMapGraph } from "@/lib/memory-map";
+import { fetchMemoryDoc, fetchMemoryJournal, type MemoryJournalRow } from "@/lib/memory";
 import { api, ApiError, useStore } from "@/state/store";
 import {
   browseBotSource,
@@ -34,72 +45,108 @@ import {
   deleteBotNotes,
   detectBodyKind,
   fetchMemoryManagerSources,
-  filterNotes,
+  fetchPerspicaxArchived,
+  fetchPerspicaxVocabulary,
   openBotNote,
   openPerspicaxNote,
   openTeamNote,
   pxMemory,
   saveBotNote,
-  splitJsonFences,
   undoBotDeletes,
   type MemoryBrowse,
   type MemoryManagerSource,
   type MemoryNoteDetail,
   type MemoryNoteRow,
   type MemoryTierRow,
+  type MemoryVocabulary,
 } from "@/lib/memory-manager";
+import {
+  activeSeries,
+  backlinksTo,
+  excerptFromBody,
+  journalFacts,
+  linksOut,
+  qualityStats,
+  RECENT_MS,
+  rowKey,
+  tagStats,
+  tierColor,
+  writeSeries,
+  type JournalFacts,
+  type PageLink,
+  type PageRow,
+  type PageTier,
+} from "@/lib/memory-page";
 import { useCaptionChrome } from "../DesktopCapabilities";
-import { PAGE_COLUMN, PAGE_HEADER_BUTTON, PAGE_SCROLL, PageHeader, PageHeading, PageSegment, PageTopStrip } from "../content-page";
+import { PAGE_HEADER_BUTTON, PAGE_MENU_ITEM, PAGE_POPOVER, PageHeader, PageSegment, PageTopStrip, useDismissMenus } from "../content-page";
 import { confirmAsync } from "../ConfirmProvider";
-import { MarkdownEditor } from "../markdown/MarkdownEditor";
-import { DANGER_PILL, PILL, PRIMARY_PILL } from "../SettingsPrimitives";
-import { MemoryJsonTree } from "./MemoryJsonTree";
-import { MemoryMapCanvas } from "./MemoryMapCanvas";
+import { addToCollection, fetchCollections, MemoryCollections, type CollectionSummary } from "./MemoryCollections";
+import { MemoryMapView } from "./MemoryMapView";
+import { MemoryNoteView, type NoteSave } from "./MemoryNoteView";
+import { MemoryNotesList, type ListTemplate } from "./MemoryNotesList";
+import { MemoryQualityView } from "./MemoryQualityView";
 import { MemorySidebar, type MemoryRowAction, type MemorySidebarFolder, type MemorySidebarNav, type MemorySidebarTier } from "./MemorySidebar";
+import { MemoryTagsView } from "./MemoryTagsView";
+import { FIELD, PRIMARY_BUTTON, Swatch } from "./memory-ui";
 
-/** The views of the right column: every note, the team notes, the recent
- * ones, the proposals waiting for a review, and one tier's notes. */
-type NavView = "all" | "teams" | "recent" | "review" | "mine";
+type View = "notes" | "map" | "tags" | "quality";
 
-type Page =
-  | { kind: "nav"; nav: NavView }
-  | { kind: "browse"; source: MemoryManagerSource; folder?: string }
-  | { kind: "note"; source: MemoryManagerSource; noteId: string; scope?: string; path?: string }
-  | { kind: "trash"; source: MemoryManagerSource }
-  | { kind: "create"; source: MemoryManagerSource; folder?: string; newFolder?: boolean }
-  | { kind: "move"; source: MemoryManagerSource; noteIds: string[] };
+type Place =
+  | { kind: "all" | "teams" | "pinned" | "recent" | "review" | "archived" | "trash" | "collections" }
+  | { kind: "tier"; tier: string }
+  | { kind: "folder"; tier: string; folder: string };
 
-type ViewMode = "list" | "map";
+type Screen =
+  | { kind: "list" }
+  | { kind: "note"; key: string; edit?: boolean }
+  | { kind: "create" }
+  | { kind: "move"; keys: string[] };
 
 interface Notice {
   text: string;
   undo?: () => Promise<void>;
 }
 
-/** A note of the aggregated views, with the source it opens in. */
-interface SourcedRow {
+interface TrashRow {
+  id: string;
+  title: string;
+  scope: string;
+  topic?: string;
+  tags?: string[];
+  may_manage?: boolean;
+  deleted_at?: string;
+  author_name?: string | null;
+}
+
+/** A place a new note can go: a bot, a team section, a Perspicax tier. */
+interface Target {
+  id: string;
+  label: string;
   source: MemoryManagerSource;
-  row: MemoryNoteRow;
+  /** Team sections: their built-in groups; Perspicax tiers: their folders. */
+  folders: string[];
+  freeFolder: boolean;
 }
 
-const RECENT_MS = 7 * 86_400_000;
-const ROW = "group flex items-start gap-2 rounded-lg px-2 py-2 hover:bg-hover";
-
-function ReadBody({ body, bodyKind }: { body: string; bodyKind: "markdown" | "json" }) {
-  if (bodyKind === "json") return <MemoryJsonTree source={body} />;
-  return (
-    <div className="space-y-3" data-memory-read-body="">
-      {splitJsonFences(body).map((part, index) => (
-        part.kind === "json"
-          ? <MemoryJsonTree key={index} source={part.value} />
-          : <pre key={index} className="whitespace-pre-wrap break-words font-sans text-[13px] leading-relaxed text-ink">{part.value}</pre>
-      ))}
-    </div>
-  );
-}
+const TEAM_KINDS = ["person", "place", "decision", "term"];
+const PINS = "sagax.memory.pins";
+const BODY_PREFETCH = 400;
 
 function slugify(value: string, fallback: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || fallback;
+}
+
+function readPins(): string[] {
+  try {
+    const value: unknown = JSON.parse(window.localStorage.getItem(PINS) ?? "[]");
+    return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePins(pins: string[]): void {
+  try { window.localStorage.setItem(PINS, JSON.stringify(pins)); } catch { /* a private window: the pins last for this page */ }
 }
 
 /** A Perspicax tier opened on its own: the personal tier is the source itself. */
@@ -108,48 +155,71 @@ function tierSource(px: MemoryManagerSource, tier: MemoryTierRow): MemoryManager
   return { ...px, id: `perspicax:${tier.scope}`, name: tier.name, detail: undefined, scope: tier.scope, mayWrite: tier.mayWrite, mayManage: tier.mayManage };
 }
 
-/** Full-page Memory manager (main column). */
+/** Run `work` over `items`, `limit` at a time. */
+async function pooled<T>(items: T[], limit: number, work: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const item = items[next++]!;
+      await work(item);
+    }
+  }));
+}
+
+/** Full-page Memory (main column). */
 export function MemoryManagerPanel() {
   const { dispatch } = useStore();
   const { dragProps, noDragStyle, controlsShiftStyle } = useCaptionChrome();
   const close = useCallback(() => dispatch({ type: "toggleMemoryManager", open: false }), [dispatch]);
-  const [page, setPage] = useState<Page>({ kind: "nav", nav: "all" });
-  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const mac = useMemo(() => isMacPlatform(), []);
+
+  const [view, setView] = useState<View>("notes");
+  const [place, setPlace] = useState<Place>({ kind: "all" });
+  const [screen, setScreen] = useState<Screen>({ kind: "list" });
   const [sources, setSources] = useState<MemoryManagerSource[] | null>(null);
   const [overviews, setOverviews] = useState<Record<string, MemoryBrowse>>({});
   const [overviewsReady, setOverviewsReady] = useState(false);
+  const [journals, setJournals] = useState<Record<string, MemoryJournalRow[]>>({});
+  const [bodies, setBodies] = useState<Record<string, string>>({});
+  const [archivedRaw, setArchivedRaw] = useState<MemoryNoteRow[]>([]);
+  const [vocabulary, setVocabulary] = useState<MemoryVocabulary | null>(null);
+  const [trashRaw, setTrashRaw] = useState<TrashRow[]>([]);
   const [pxReason, setPxReason] = useState<string | undefined>();
-  const [browse, setBrowse] = useState<MemoryBrowse | null>(null);
   const [note, setNote] = useState<MemoryNoteDetail | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [draftTitle, setDraftTitle] = useState("");
-  const [draftTags, setDraftTags] = useState("");
-  const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [noteEntry, setNoteEntry] = useState<PageRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [pins, setPins] = useState<string[]>(() => (typeof window === "undefined" ? [] : readPins()));
+  const [createTarget, setCreateTarget] = useState("");
+  const [createFolder, setCreateFolder] = useState("");
   const [createTitle, setCreateTitle] = useState("");
-  const [createFolder, setCreateFolder] = useState("notes");
+  const [createBody, setCreateBody] = useState("");
+  const [newFolder, setNewFolder] = useState(false);
   const [moveTopic, setMoveTopic] = useState("notes");
   const [moveScope, setMoveScope] = useState("me");
-  const [trashRows, setTrashRows] = useState<Array<{ id: string; title: string; scope: string; may_manage?: boolean }>>([]);
-  const [mapBodies, setMapBodies] = useState<Record<string, string>>({});
   const [renaming, setRenaming] = useState<string | null>(null);
-  const searchRef = useRef<HTMLInputElement | null>(null);
-  const mac = useMemo(() => isMacPlatform(), []);
-  // The right column opens as Automations' calendar rail does: open from
-  // 1280px, folded into its 40px strip below, a press away either way.
-  const [explorerOpen, setExplorerOpen] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(min-width: 1280px)").matches);
-  const focusSearch = useRef(false);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [switcherQuery, setSwitcherQuery] = useState("");
+  const [listQuery, setListQuery] = useState<string | undefined>();
+  const [mapFocus, setMapFocus] = useState<string | null>(null);
+  // The console's preview: a click on a row opens the note beside the list.
+  const [preview, setPreview] = useState<{ entry: PageRow; detail: MemoryNoteDetail | null } | null>(null);
+  const [collections, setCollections] = useState<CollectionSummary[]>([]);
+  const [explorerOpen, setExplorerOpen] = useState(() => typeof window === "undefined" || typeof window.matchMedia !== "function" || window.matchMedia("(min-width: 1024px)").matches);
+  const switcherRef = useRef<HTMLInputElement | null>(null);
+  const menuRef = useRef<HTMLDetailsElement | null>(null);
+  useDismissMenus([menuRef]);
+  const bodiesRequested = useRef(new Set<string>());
+  // The bodies load across renders (each batch changes the rows): only an unmounted page drops them.
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
-  // Every source's notes and folders, for the counts of the right column and
-  // the aggregated views (no note bodies: those load when a note opens).
+  // ---- loading -------------------------------------------------------------------------
+
   const loadOverviews = useCallback(async (list: MemoryManagerSource[]) => {
     // A bot whose memory routes refuse this person (404 "no such bot", 403)
-    // is not theirs to open: its row would only show that error, so it
-    // leaves the column. The server already leaves such bots out.
+    // is not theirs to open: it leaves the page. The server already leaves such bots out.
     const refused = new Set<string>();
     const entries = await Promise.all(list.map(async (source) => {
       try {
@@ -157,7 +227,6 @@ export function MemoryManagerPanel() {
         if (source.kind === "team") return [source.id, await browseTeamSource(source.section ?? "")] as const;
         if (source.kind === "perspicax") return [source.id, await browsePerspicax()] as const;
       } catch (cause) {
-        /* one source that does not answer keeps the others */
         if (source.kind === "bot" && cause instanceof ApiError && (cause.status === 404 || cause.status === 403)) refused.add(source.id);
       }
       return null;
@@ -167,6 +236,19 @@ export function MemoryManagerPanel() {
     if (refused.size) setSources((current) => current?.filter((source) => !refused.has(source.id)) ?? current);
     setOverviews(next);
     setOverviewsReady(true);
+    // The bots' journals: who wrote each file last, when it was created, its versions.
+    const botIds = list.filter((source) => source.kind === "bot" && source.botId && !refused.has(source.id)).map((source) => source.botId!);
+    const journalEntries = await Promise.all(botIds.map(async (botId) => {
+      try { return [botId, (await fetchMemoryJournal(botId, 200)) ?? []] as const; } catch { return [botId, []] as const; }
+    }));
+    setJournals(Object.fromEntries(journalEntries));
+    const px = list.find((source) => source.kind === "perspicax");
+    if (px && next[px.id]) {
+      void fetchPerspicaxArchived().then(setArchivedRaw).catch(() => setArchivedRaw([]));
+      void fetchPerspicaxVocabulary().then(setVocabulary).catch(() => setVocabulary(null));
+      void pxMemory<{ notes?: TrashRow[] }>("/trash").then((result) => setTrashRaw(result.notes ?? [])).catch(() => setTrashRaw([]));
+      void fetchCollections().then(setCollections).catch(() => setCollections([]));
+    }
   }, []);
 
   const loadSources = useCallback(async () => {
@@ -184,406 +266,518 @@ export function MemoryManagerPanel() {
 
   useEffect(() => { void loadSources(); }, [loadSources]);
 
-  useEffect(() => {
-    if (!explorerOpen || !focusSearch.current) return;
-    focusSearch.current = false;
-    searchRef.current?.focus();
-  }, [explorerOpen]);
-
-  const refreshOverviews = useCallback(() => {
+  const refresh = useCallback(() => {
+    bodiesRequested.current.clear();
     if (sources) void loadOverviews(sources);
   }, [sources, loadOverviews]);
 
-  // Cmd+O (Ctrl+O elsewhere): the search field, as in the Perspicax console.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.shiftKey || event.altKey || !(mac ? event.metaKey : event.ctrlKey) || event.key.toLowerCase() !== "o") return;
-      event.preventDefault();
-      if (!searchRef.current) {
-        // folded: open the column, then focus its field once it is drawn
-        focusSearch.current = true;
-        setExplorerOpen(true);
-        return;
-      }
-      searchRef.current.focus();
-      searchRef.current.select();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [mac]);
+  // ---- tiers and rows ------------------------------------------------------------------
 
-  const loadBrowse = useCallback(async (source: MemoryManagerSource, folder?: string) => {
-    setBusy(true);
-    setError(null);
-    setBrowse(null);
-    setSelected(new Set());
-    try {
-      let next: MemoryBrowse;
-      if (source.kind === "bot" && source.botId) next = await browseBotSource(source.botId);
-      else if (source.kind === "team") next = await browseTeamSource(source.section ?? "");
-      else if (source.kind === "perspicax") next = await browsePerspicax(folder, source.scope);
-      else next = { folders: [], notes: [], mayWrite: false };
-      setBrowse(next);
-      // Prefetch note bodies for [[links]] on the map (dense fixtures included).
-      const bodies: Record<string, string> = {};
-      for (const row of next.notes.slice(0, 64)) {
-        try {
-          let detail: MemoryNoteDetail | null = null;
-          if (source.kind === "bot" && source.botId && row.path) detail = await openBotNote(source.botId, row.path);
-          else if (source.kind === "team") detail = await openTeamNote(source.section ?? "", row.id);
-          else if (source.kind === "perspicax" && row.scope) detail = await openPerspicaxNote(row.scope, row.id);
-          if (detail) bodies[row.id] = detail.body;
-        } catch {
-          /* skip one note */
-        }
-      }
-      setMapBodies(bodies);
-    } catch (cause) {
-      setError(readableError(cause));
-      setBrowse({ folders: [], notes: [], mayWrite: false });
-      setMapBodies({});
-    } finally {
-      setBusy(false);
-    }
-  }, []);
-
-  const openBrowse = (source: MemoryManagerSource, folder?: string) => {
-    setPage({ kind: "browse", source, folder });
-    setNote(null);
-    setEditing(false);
-    void loadBrowse(source, folder);
-  };
-
-  const openNav = (nav: NavView) => {
-    setPage({ kind: "nav", nav });
-    setNote(null);
-    setEditing(false);
-    setBrowse(null);
-    setSelected(new Set());
-  };
-
-  const openNote = async (source: MemoryManagerSource, row: MemoryNoteRow) => {
-    setBusy(true);
-    setError(null);
-    setNote(null);
-    setEditing(false);
-    setViewMode("list");
-    try {
-      let detail: MemoryNoteDetail | null = null;
-      if (source.kind === "bot" && source.botId && row.path) detail = await openBotNote(source.botId, row.path);
-      else if (source.kind === "team") detail = await openTeamNote(source.section ?? "", row.id);
-      else if (source.kind === "perspicax" && row.scope) detail = await openPerspicaxNote(row.scope, row.id);
-      if (!detail) throw new Error(t("memoryManager.noteMissing"));
-      setNote(detail);
-      setDraft(detail.body);
-      setDraftTitle(detail.title);
-      setDraftTags(detail.tags.join(", "));
-      setPage({ kind: "note", source, noteId: row.id, scope: row.scope, path: row.path });
-    } catch (cause) {
-      setError(readableError(cause));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const openNoteById = (noteId: string) => {
-    const source = "source" in page ? page.source : null;
-    const row = browse?.notes.find((entry) => entry.id === noteId);
-    if (!source || !row) return;
-    void openNote(source, row);
-  };
-
-  // The Perspicax source and its tiers (personal, teams, organization).
   const pxSource = useMemo(() => sources?.find((source) => source.kind === "perspicax") ?? null, [sources]);
   const pxTiers = useMemo(() => (pxSource ? overviews[pxSource.id]?.tiers ?? [] : []), [pxSource, overviews]);
-  const tierKind = useMemo(() => new Map(pxTiers.map((tier) => [tier.scope, tier.kind])), [pxTiers]);
+  const botSources = useMemo(() => (sources ?? []).filter((source) => source.kind === "bot" && overviews[source.id]), [sources, overviews]);
+  const teamSources = useMemo(() => (sources ?? []).filter((source) => source.kind === "team" && overviews[source.id]), [sources, overviews]);
+  const meTier = pxTiers.find((tier) => tier.kind === "me");
 
-  const allRows = useMemo<SourcedRow[]>(() => {
-    const rows: SourcedRow[] = [];
-    for (const source of sources ?? []) {
-      const overview = overviews[source.id];
-      if (!overview) continue;
-      for (const row of overview.notes) {
-        if (source.kind === "perspicax") {
-          const tier = pxTiers.find((entry) => entry.scope === row.scope);
-          rows.push({ source: tier && pxSource ? tierSource(pxSource, tier) : source, row });
-        } else rows.push({ source, row });
+  const tiers = useMemo<PageTier[]>(() => {
+    const out: PageTier[] = [];
+    if (botSources.length > 0 || meTier) out.push({ key: "mine", name: t("memoryManager.tierMine"), kind: "mine", color: tierColor("mine") });
+    let team = 0;
+    for (const source of teamSources) out.push({ key: source.id, name: source.name, kind: "team", color: tierColor("team", team++) });
+    for (const tier of pxTiers) {
+      if (tier.kind === "me") continue;
+      const kind = tier.kind === "org" ? "org" : "team";
+      out.push({ key: `perspicax:${tier.scope}`, name: tier.kind === "org" ? t("memoryManager.tierOrg") : tier.name, kind, color: tierColor(kind, kind === "team" ? team++ : 0) });
+    }
+    return out;
+  }, [botSources.length, meTier, teamSources, pxTiers]);
+  const tierByKey = useMemo(() => new Map(tiers.map((tier) => [tier.key, tier])), [tiers]);
+  const pxTierKey = useCallback((scope: string | undefined) => {
+    const tier = pxTiers.find((entry) => entry.scope === scope);
+    return !tier || tier.kind === "me" ? "mine" : `perspicax:${tier.scope}`;
+  }, [pxTiers]);
+
+  const factsByBot = useMemo(() => {
+    const out: Record<string, Map<string, JournalFacts>> = {};
+    for (const [botId, rows] of Object.entries(journals)) out[botId] = journalFacts(rows);
+    return out;
+  }, [journals]);
+
+  const actorName = useCallback((actor: MemoryJournalRow["actor"] | undefined, botName: string) => {
+    if (!actor) return undefined;
+    if (actor === "person") return t("memoryManager.authorYou");
+    if (actor === "import") return t("memoryManager.authorImport");
+    return botName;
+  }, []);
+
+  const rows = useMemo<PageRow[]>(() => {
+    const out: PageRow[] = [];
+    for (const source of botSources) {
+      const facts = factsByBot[source.botId ?? ""];
+      for (const row of overviews[source.id]!.notes) {
+        const key = rowKey(source, row);
+        const fact = row.path ? facts?.get(row.path) : undefined;
+        const body = bodies[key];
+        const sub = row.folder === "logs" ? t("memoryManager.folderLogs") : row.folder ? t("memoryManager.folderTopics") : "";
+        out.push({
+          key,
+          source,
+          tier: "mine",
+          folderKey: row.folder ? `${source.id}/${row.folder}` : source.id,
+          folderPath: sub ? `${source.name} / ${sub}` : source.name,
+          row: {
+            ...row,
+            updatedAt: row.updatedAt ?? fact?.lastAt,
+            createdAt: fact?.createdAt,
+            author: actorName(fact?.lastActor, source.name),
+            excerpt: body != null ? excerptFromBody(body) || undefined : row.excerpt,
+          },
+        });
       }
     }
-    return rows;
-  }, [sources, overviews, pxTiers, pxSource]);
+    for (const source of teamSources) {
+      for (const row of overviews[source.id]!.notes) {
+        out.push({ key: rowKey(source, row), source, tier: source.id, folderKey: `${source.id}/${row.folder || "term"}`, folderPath: row.folder || "term", row });
+      }
+    }
+    if (pxSource && overviews[pxSource.id]) {
+      for (const row of overviews[pxSource.id]!.notes) {
+        const tier = pxTiers.find((entry) => entry.scope === row.scope);
+        const source = tier ? tierSource(pxSource, tier) : pxSource;
+        out.push({ key: rowKey(pxSource, { id: `${row.scope}/${row.id}` }), source, tier: pxTierKey(row.scope), folderKey: `px:${row.scope}/${row.folder}`, folderPath: row.folder ?? "", row });
+      }
+    }
+    return out;
+  }, [botSources, teamSources, pxSource, pxTiers, overviews, factsByBot, bodies, actorName, pxTierKey]);
+  const rowByKey = useMemo(() => new Map(rows.map((entry) => [entry.key, entry])), [rows]);
 
-  const isTeamRow = useCallback((entry: SourcedRow) => entry.source.kind === "team" || (entry.source.kind === "perspicax" && tierKind.get(entry.row.scope ?? "") === "team"), [tierKind]);
-  const isMineRow = useCallback((entry: SourcedRow) => entry.source.kind === "bot" || (entry.source.kind === "perspicax" && tierKind.get(entry.row.scope ?? "") === "me"), [tierKind]);
-  const navRows = useMemo(() => {
-    const recentCutoff = Date.now() - RECENT_MS;
-    return {
-    all: allRows,
-    teams: allRows.filter(isTeamRow),
-    recent: allRows.filter((entry) => (entry.row.updatedAt ?? 0) >= recentCutoff).sort((a, b) => (b.row.updatedAt ?? 0) - (a.row.updatedAt ?? 0)),
-    review: allRows.filter((entry) => entry.row.status === "proposed"),
-    mine: allRows.filter(isMineRow),
-    };
-  }, [allRows, isTeamRow, isMineRow]);
-
-  const pxTrashCount = pxSource ? overviews[pxSource.id]?.trashCount ?? 0 : 0;
-
-  const browseNotes = useMemo(() => {
-    const notes = browse?.notes ?? [];
-    // Bot and team folders are a grouping of the one listing (Perspicax filters on the server).
-    if (page.kind === "browse" && page.folder && page.source.kind !== "perspicax") return notes.filter((row) => row.folder === page.folder);
-    return notes;
-  }, [browse, page]);
-  const visibleNotes = useMemo(() => filterNotes(browseNotes, query), [browseNotes, query]);
-  const visibleNavRows = useMemo(() => {
-    if (page.kind !== "nav") return [];
-    const rows = navRows[page.nav];
-    const keep = new Set(filterNotes(rows.map((entry) => entry.row), query));
-    return rows.filter((entry) => keep.has(entry.row));
-  }, [page, navRows, query]);
-
-  const mapGraph = useMemo(() => {
-    if (!("source" in page) || !browse) return null;
-    return buildMemoryMapGraph({ source: page.source, browse, bodies: mapBodies });
-  }, [page, browse, mapBodies]);
-
-  const toggleSelect = (id: string) => {
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+  const pxRows = useCallback((list: MemoryNoteRow[], archived: boolean): PageRow[] => {
+    if (!pxSource) return [];
+    return list.map((row) => {
+      const tier = pxTiers.find((entry) => entry.scope === row.scope);
+      return {
+        key: `${archived ? "archived" : "trash"}|${row.scope}/${row.id}`,
+        source: tier ? tierSource(pxSource, tier) : pxSource,
+        tier: pxTierKey(row.scope),
+        folderKey: `px:${row.scope}/${row.folder}`,
+        folderPath: row.folder ?? "",
+        row,
+      };
     });
+  }, [pxSource, pxTiers, pxTierKey]);
+  const archivedRows = useMemo(() => pxRows(archivedRaw, true), [pxRows, archivedRaw]);
+  const trashRows = useMemo(() => pxRows(trashRaw.map((row) => ({
+    id: row.id,
+    title: row.title,
+    scope: row.scope,
+    folder: row.topic,
+    tags: row.tags ?? [],
+    author: row.author_name || undefined,
+    updatedAt: row.deleted_at ? Date.parse(row.deleted_at) : undefined,
+    archived: true,
+    status: row.may_manage === false ? "locked" : undefined,
+  })), false), [pxRows, trashRaw]);
+
+  // Bodies, in the background: excerpts of the bots' notes, [[links]] for the map and the backlinks.
+  useEffect(() => {
+    if (!overviewsReady) return;
+    const fromTeams: Record<string, string> = {};
+    for (const source of teamSources) {
+      const teamBodies = overviews[source.id]?.bodies ?? {};
+      for (const row of overviews[source.id]!.notes) if (teamBodies[row.id] != null) fromTeams[rowKey(source, row)] = teamBodies[row.id]!;
+    }
+    // Only a team text that changed is set again: an unchanged one would loop rows → bodies → rows.
+    if (Object.entries(fromTeams).some(([key, text]) => bodies[key] !== text)) setBodies((current) => ({ ...current, ...fromTeams }));
+    const wanted = rows.filter((entry) => entry.source.kind !== "team" && !bodiesRequested.current.has(entry.key)).slice(0, BODY_PREFETCH);
+    if (!wanted.length) return;
+    for (const entry of wanted) bodiesRequested.current.add(entry.key);
+    let batch: Record<string, string> = {};
+    const flush = () => {
+      if (!mounted.current || !Object.keys(batch).length) return;
+      const ready = batch;
+      batch = {};
+      setBodies((current) => ({ ...current, ...ready }));
+    };
+    void pooled(wanted, 6, async (entry) => {
+      try {
+        if (entry.source.kind === "bot" && entry.source.botId && entry.row.path) batch[entry.key] = (await fetchMemoryDoc(entry.source.botId, entry.row.path)).text;
+        else if (entry.source.kind === "perspicax" && entry.row.scope) batch[entry.key] = (await openPerspicaxNote(entry.row.scope, entry.row.id)).body;
+      } catch {
+        /* one note that does not answer keeps the others */
+      }
+      if (Object.keys(batch).length >= 24) flush();
+    }).then(flush);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `bodies` is read to skip a set, not a trigger
+  }, [overviewsReady, rows, teamSources, overviews]);
+
+  // ---- places --------------------------------------------------------------------------
+
+  const counts = useMemo(() => {
+    const cutoff = Date.now() - RECENT_MS;
+    return {
+      all: rows.length,
+      teams: rows.filter((entry) => tierByKey.get(entry.tier)?.kind === "team").length,
+      pinned: rows.filter((entry) => pins.includes(entry.key)).length,
+      recent: rows.filter((entry) => (entry.row.updatedAt ?? 0) >= cutoff).length,
+      review: rows.filter((entry) => entry.row.status === "proposed").length + pxTiers.reduce((sum, tier) => sum + (tier.pending ?? 0), 0),
+    };
+  }, [rows, tierByKey, pins, pxTiers]);
+
+  const placeRows = useMemo<PageRow[]>(() => {
+    if (place.kind === "all") return rows;
+    if (place.kind === "teams") return rows.filter((entry) => tierByKey.get(entry.tier)?.kind === "team");
+    if (place.kind === "pinned") return rows.filter((entry) => pins.includes(entry.key));
+    if (place.kind === "recent") {
+      const cutoff = Date.now() - RECENT_MS;
+      return rows.filter((entry) => (entry.row.updatedAt ?? 0) >= cutoff);
+    }
+    if (place.kind === "review") return rows.filter((entry) => entry.row.status === "proposed");
+    if (place.kind === "archived") return archivedRows;
+    if (place.kind === "trash") return trashRows;
+    if (place.kind === "collections") return [];
+    if (place.kind === "tier") return rows.filter((entry) => entry.tier === place.tier);
+    if (place.kind !== "folder") return rows;
+    const folder = place.folder;
+    return rows.filter((entry) => entry.folderKey === folder || entry.folderKey.startsWith(`${folder}/`));
+  }, [place, rows, tierByKey, pins, archivedRows, trashRows]);
+
+  const goPlace = (next: Place) => {
+    setPreview(null);
+    setPlace(next);
+    setScreen({ kind: "list" });
+    setView("notes");
+    setNote(null);
+    setListQuery(undefined);
   };
 
-  const parseTags = (value: string) => value.split(",").map((tag) => tag.trim()).filter(Boolean);
+  // ---- notes ---------------------------------------------------------------------------
 
-  // Typing in "Open a note" from a note or a form goes back to a list to pick from.
-  const onQuery = (next: string) => {
-    setQuery(next);
-    if (next.trim() && page.kind !== "browse" && page.kind !== "nav") openNav("all");
+  const loadDetail = async (entry: PageRow): Promise<MemoryNoteDetail> => {
+    let detail: MemoryNoteDetail | null = null;
+    if (entry.source.kind === "bot" && entry.source.botId && entry.row.path) detail = await openBotNote(entry.source.botId, entry.row.path);
+    else if (entry.source.kind === "team") detail = await openTeamNote(entry.source.section ?? "", entry.row.id);
+    else if (entry.source.kind === "perspicax" && entry.row.scope) detail = await openPerspicaxNote(entry.row.scope, entry.row.id);
+    if (!detail) throw new Error(t("memoryManager.noteMissing"));
+    return entry.source.kind === "bot" ? { ...detail, title: entry.row.title } : detail;
   };
 
-  const saveNote = async () => {
-    if (!note || page.kind !== "note") return;
+  /** A click: the note in the preview panel beside the list or the map. */
+  const openPreview = async (entry: PageRow) => {
+    setPreview({ entry, detail: null });
+    try {
+      const detail = await loadDetail(entry);
+      setPreview((current) => (current?.entry.key === entry.key ? { entry, detail } : current));
+      setBodies((current) => ({ ...current, [entry.key]: detail.body }));
+    } catch (cause) {
+      setError(readableError(cause));
+      setPreview(null);
+    }
+  };
+  const previewKey = (key: string) => {
+    const entry = rowByKey.get(key);
+    if (entry) void openPreview(entry);
+  };
+  useEffect(() => {
+    if (!preview) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setPreview(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [preview]);
+
+  /** A double click (or Edit): the note's own page. */
+  const openNote = async (entry: PageRow, edit = false) => {
     setBusy(true);
     setError(null);
-    const nextTitle = draftTitle.trim() || note.title;
-    const nextTags = parseTags(draftTags);
+    setNote(null);
+    setPreview(null);
+    setNoteEntry(entry);
+    setView("notes");
+    setScreen({ kind: "note", key: entry.key, edit });
     try {
-      if (page.source.kind === "bot" && page.source.botId && note.path) {
+      const detail = await loadDetail(entry);
+      setNote(detail);
+      setBodies((current) => ({ ...current, [entry.key]: detail.body }));
+    } catch (cause) {
+      setError(readableError(cause));
+      setScreen({ kind: "list" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openKey = (key: string, edit = false) => {
+    const entry = rowByKey.get(key);
+    if (entry) void openNote(entry, edit);
+  };
+
+  const togglePin = (key: string) => setPins((current) => {
+    const next = current.includes(key) ? current.filter((entry) => entry !== key) : [key, ...current];
+    writePins(next);
+    return next;
+  });
+
+  const saveNote = async (next: NoteSave): Promise<boolean> => {
+    const entry = noteEntry;
+    if (!note || !entry) return false;
+    setBusy(true);
+    setError(null);
+    try {
+      const source = entry.source;
+      if (source.kind === "bot" && source.botId && note.path) {
         let path = note.path;
         const base = path.split("/").pop()?.replace(/\.md$/i, "") || "";
-        if (nextTitle !== note.title && path !== "MEMORY.md") {
-          const slug = slugify(nextTitle, base);
+        if (next.title !== note.title && path !== "MEMORY.md") {
           const folder = path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "memory/";
-          const nextPath = `${folder}${slug}.md`;
+          const nextPath = `${folder}${slugify(next.title, base)}.md`;
           if (nextPath !== path) {
-            await saveBotNote(page.source.botId, nextPath, draft, undefined);
-            await deleteBotNotes(page.source.botId, [path]);
+            await saveBotNote(source.botId, nextPath, next.body, undefined);
+            await deleteBotNotes(source.botId, [path]);
             path = nextPath;
           }
         }
-        const result = await saveBotNote(page.source.botId, path, draft, path === note.path ? note.hash : undefined);
+        const result = await saveBotNote(source.botId, path, next.body, path === note.path ? note.hash : undefined);
         if (!result.ok) {
           setError(t("memoryManager.conflict"));
           setNote({ ...note, body: result.current, hash: result.currentHash, bodyKind: detectBodyKind(result.current) });
-          setDraft(result.current);
-          return;
+          return false;
         }
-        setNote({
-          ...note,
-          id: path,
-          path,
-          title: nextTitle,
-          body: result.doc.text,
-          hash: result.doc.hash,
-          bodyKind: detectBodyKind(result.doc.text),
-        });
-        setDraft(result.doc.text);
-        setPage({ kind: "note", source: page.source, noteId: path, path });
-      } else if (page.source.kind === "team") {
-        await api(`/api/team-memory/${note.id}?section=${encodeURIComponent(page.source.section ?? "")}`, {
+        const row = { ...entry.row, id: path, path, title: path === "MEMORY.md" ? "MEMORY.md" : next.title };
+        setNote({ ...note, id: path, path, title: row.title, body: result.doc.text, hash: result.doc.hash, bodyKind: detectBodyKind(result.doc.text) });
+        const moved = { ...entry, key: rowKey(source, row), row };
+        setNoteEntry(moved);
+        setScreen({ kind: "note", key: moved.key });
+      } else if (source.kind === "team") {
+        await api(`/api/team-memory/${note.id}?section=${encodeURIComponent(source.section ?? "")}`, {
           method: "PATCH",
-          body: JSON.stringify({ name: nextTitle, detail: draft }),
+          body: JSON.stringify({ name: next.title, detail: next.body }),
         });
-        setNote({ ...note, title: nextTitle, body: draft });
-      } else if (page.source.kind === "perspicax" && note.scope) {
+        setNote({ ...note, title: next.title, body: next.body, bodyKind: detectBodyKind(next.body) });
+      } else if (source.kind === "perspicax" && note.scope) {
         const saved = await pxMemory<{ body: string; title?: string; tags?: string[]; version?: number }>("/entry", {
           method: "PUT",
-          body: JSON.stringify({
-            scope: note.scope,
-            id: note.id,
-            title: nextTitle,
-            body: draft,
-            tags: nextTags,
-            base_version: note.version,
-          }),
+          body: JSON.stringify({ scope: note.scope, id: note.id, title: next.title, body: next.body, tags: next.tags, base_version: note.version }),
         });
         setNote({
           ...note,
-          title: saved.title ?? nextTitle,
-          body: saved.body ?? draft,
-          tags: saved.tags ?? nextTags,
+          title: saved.title ?? next.title,
+          body: saved.body ?? next.body,
+          tags: saved.tags ?? next.tags,
           version: saved.version ?? note.version,
-          bodyKind: detectBodyKind(saved.body ?? draft),
+          bodyKind: detectBodyKind(saved.body ?? next.body),
         });
-        setDraft(saved.body ?? draft);
-        setDraftTitle(saved.title ?? nextTitle);
-        setDraftTags((saved.tags ?? nextTags).join(", "));
       }
-      setEditing(false);
       setNotice({ text: t("memoryManager.saved") });
-      refreshOverviews();
+      refresh();
+      return true;
     } catch (cause) {
       setError(readableError(cause));
+      return false;
     } finally {
       setBusy(false);
     }
   };
 
-  const runMove = async () => {
-    if (page.kind !== "move" || page.source.kind !== "perspicax") return;
-    const topic = moveTopic.trim();
-    if (!topic) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const items = page.noteIds.map((id) => {
-        const row = browse?.notes.find((noteRow) => noteRow.id === id);
-        return { scope: row?.scope || moveScope, id };
-      });
-      await pxMemory("/bulk", {
-        method: "POST",
-        body: JSON.stringify({ action: "move", items, topic, to: moveScope }),
-      });
-      setSelected(new Set());
-      setNotice({ text: t("memoryManager.moved", { count: items.length }) });
-      openBrowse(page.source);
-      refreshOverviews();
-    } catch (cause) {
-      setError(readableError(cause));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const lookup = (key: string) => rowByKey.get(key) ?? (noteEntry?.key === key ? noteEntry : undefined) ?? archivedRows.find((entry) => entry.key === key) ?? trashRows.find((entry) => entry.key === key);
 
-  const deleteSelected = async () => {
-    if (page.kind !== "browse" || !browse) return;
-    const ids = [...selected];
-    if (!ids.length) return;
+  /** Deletes the rows (any source, several at once), with one Undo for all. */
+  const deleteKeys = async (keys: string[]) => {
+    const entries = keys.map(lookup).filter((entry): entry is PageRow => Boolean(entry));
+    if (!entries.length) return;
     const ok = await confirmAsync({
       title: t("memoryManager.delete"),
-      body: t("memoryManager.deleteConfirm", { count: ids.length }),
+      body: t("memoryManager.deleteConfirm", { count: entries.length }),
       confirmLabel: t("memoryManager.delete"),
       tone: "danger",
     });
     if (!ok) return;
     setBusy(true);
     setError(null);
+    const undos: Array<() => Promise<void>> = [];
+    let done = 0;
     try {
-      if (page.source.kind === "bot" && page.source.botId) {
-        const paths = visibleNotes.filter((row) => ids.includes(row.id)).map((row) => row.path!).filter(Boolean);
-        const { undoIds } = await deleteBotNotes(page.source.botId, paths);
-        const botId = page.source.botId;
-        setNotice({
-          text: t("memoryManager.deleted", { count: paths.length }),
-          undo: async () => { await undoBotDeletes(botId, undoIds); await loadBrowse(page.source); refreshOverviews(); },
-        });
-      } else if (page.source.kind === "team") {
-        const removed: Array<{ id: string; kind: string; name: string; detail: string }> = [];
-        for (const id of ids) {
-          const row = browse.notes.find((noteRow) => noteRow.id === id);
-          if (!row) continue;
-          const detail = await openTeamNote(page.source.section ?? "", id);
-          await api(`/api/team-memory/${id}?section=${encodeURIComponent(page.source.section ?? "")}`, { method: "DELETE" });
-          if (detail) removed.push({ id, kind: row.folder || "term", name: detail.title, detail: detail.body });
+      const byBot = new Map<string, PageRow[]>();
+      const byTeam = new Map<string, PageRow[]>();
+      const px: PageRow[] = [];
+      for (const entry of entries) {
+        if (entry.source.kind === "bot" && entry.source.botId) byBot.set(entry.source.botId, [...(byBot.get(entry.source.botId) ?? []), entry]);
+        else if (entry.source.kind === "team") byTeam.set(entry.source.section ?? "", [...(byTeam.get(entry.source.section ?? "") ?? []), entry]);
+        else if (entry.source.kind === "perspicax") px.push(entry);
+      }
+      for (const [botId, list] of byBot) {
+        const paths = list.map((entry) => entry.row.path).filter((path): path is string => Boolean(path));
+        const { undoIds } = await deleteBotNotes(botId, paths);
+        done += paths.length;
+        undos.push(() => undoBotDeletes(botId, undoIds));
+      }
+      for (const [section, list] of byTeam) {
+        const removed: Array<{ kind: string; name: string; detail: string }> = [];
+        for (const entry of list) {
+          const detail = await openTeamNote(section, entry.row.id);
+          await api(`/api/team-memory/${entry.row.id}?section=${encodeURIComponent(section)}`, { method: "DELETE" });
+          if (detail) removed.push({ kind: entry.row.folder || "term", name: detail.title, detail: detail.body });
+          done += 1;
         }
-        const section = page.source.section ?? "";
-        setNotice({
-          text: t("memoryManager.deleted", { count: removed.length }),
-          undo: async () => {
-            for (const entry of removed) {
-              await api(`/api/team-memory?section=${encodeURIComponent(section)}`, {
-                method: "POST",
-                body: JSON.stringify({ kind: entry.kind, name: entry.name, detail: entry.detail }),
-              });
-            }
-            await loadBrowse(page.source);
-            refreshOverviews();
-          },
-        });
-      } else if (page.source.kind === "perspicax") {
-        const items = visibleNotes.filter((row) => ids.includes(row.id)).map((row) => ({ scope: row.scope!, id: row.id }));
-        const report = await pxMemory<{ done: number; batch?: string }>("/bulk", {
-          method: "POST",
-          body: JSON.stringify({ action: "delete", items }),
-        });
-        const batch = report.batch;
-        setNotice({
-          text: t("memoryManager.deleted", { count: report.done }),
-          undo: batch
-            ? async () => { await pxMemory("/trash/undo", { method: "POST", body: JSON.stringify({ batch }) }); await loadBrowse(page.source); refreshOverviews(); }
-            : undefined,
+        undos.push(async () => {
+          for (const entry of removed) {
+            await api(`/api/team-memory?section=${encodeURIComponent(section)}`, { method: "POST", body: JSON.stringify(entry) });
+          }
         });
       }
-      setSelected(new Set());
-      await loadBrowse(page.source, page.folder);
-      refreshOverviews();
+      if (px.length) {
+        const report = await pxMemory<{ done: number; batch?: string }>("/bulk", {
+          method: "POST",
+          body: JSON.stringify({ action: "delete", items: px.map((entry) => ({ scope: entry.row.scope, id: entry.row.id })) }),
+        });
+        done += report.done;
+        const batch = report.batch;
+        if (batch) undos.push(async () => { await pxMemory("/trash/undo", { method: "POST", body: JSON.stringify({ batch }) }); });
+      }
+      setNotice({
+        text: t("memoryManager.deleted", { count: done }),
+        undo: undos.length ? async () => { for (const undo of undos) await undo(); refresh(); } : undefined,
+      });
+      if (screen.kind === "note") { setScreen({ kind: "list" }); setNote(null); }
+      setPins((current) => {
+        const next = current.filter((key) => !keys.includes(key));
+        writePins(next);
+        return next;
+      });
+      refresh();
     } catch (cause) {
       setError(readableError(cause));
+      refresh();
     } finally {
       setBusy(false);
     }
   };
 
-  const openTrash = async (source: MemoryManagerSource) => {
-    setPage({ kind: "trash", source });
-    setViewMode("list");
+  const restoreKeys = async (keys: string[]) => {
+    const items = keys.map(lookup).filter((entry): entry is PageRow => Boolean(entry)).map((entry) => ({ scope: entry.row.scope, id: entry.row.id }));
+    if (!items.length) return;
     setBusy(true);
     try {
-      const list = await pxMemory<{ notes: Array<{ id: string; title: string; scope: string; may_manage?: boolean }> }>("/trash");
-      setTrashRows(list.notes ?? []);
+      await pxMemory("/bulk", { method: "POST", body: JSON.stringify({ action: "restore", items }) });
+      setNotice({ text: t("memoryManager.restored", { count: items.length }) });
+      refresh();
     } catch (cause) {
       setError(readableError(cause));
-      setTrashRows([]);
     } finally {
       setBusy(false);
     }
   };
 
-  const startCreate = (source: MemoryManagerSource, folder?: string, newFolder?: boolean) => {
-    setCreateTitle("");
-    setCreateFolder(newFolder ? "" : folder || "notes");
-    setPage({ kind: "create", source, folder, newFolder });
-    setViewMode("list");
+  const emptyTrash = async () => {
+    const ok = await confirmAsync({ title: t("memoryManager.emptyTrash"), body: t("memoryManager.emptyTrashConfirm", { count: trashRows.length }), confirmLabel: t("memoryManager.emptyTrash"), tone: "danger" });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await pxMemory("/trash/empty", { method: "POST", body: JSON.stringify({}) });
+      refresh();
+    } catch (cause) {
+      setError(readableError(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ---- create and move -----------------------------------------------------------------
+
+  const targets = useMemo<Target[]>(() => {
+    const out: Target[] = [];
+    if (pxSource && meTier?.mayWrite) out.push({ id: `px:${meTier.scope}`, label: t("memoryManager.tierMine"), source: pxSource, folders: meTier.folders.map((folder) => folder.name), freeFolder: true });
+    for (const source of botSources) if (source.mayWrite) out.push({ id: source.id, label: `${t("memoryManager.tierMine")} / ${source.name}`, source, folders: [], freeFolder: false });
+    for (const source of teamSources) if (source.mayWrite) out.push({ id: source.id, label: source.name, source, folders: TEAM_KINDS, freeFolder: false });
+    if (pxSource) {
+      for (const tier of pxTiers) {
+        if (tier.kind === "me" || !tier.mayWrite) continue;
+        out.push({ id: `px:${tier.scope}`, label: tier.kind === "org" ? t("memoryManager.tierOrg") : tier.name, source: tierSource(pxSource, tier), folders: tier.folders.map((folder) => folder.name), freeFolder: true });
+      }
+    }
+    return out;
+  }, [pxSource, meTier, botSources, teamSources, pxTiers]);
+
+  /** Where "New note" lands from the place shown. */
+  const defaultTarget = (): { target?: Target; folder?: string } => {
+    if (place.kind === "folder") {
+      const entry = rows.find((row) => row.folderKey === place.folder || row.folderKey.startsWith(`${place.folder}/`));
+      if (place.folder.startsWith("px:")) {
+        const [scope, folder] = place.folder.slice(3).split("/");
+        return { target: targets.find((target) => target.id === `px:${scope}`), folder };
+      }
+      const source = entry?.source ?? sources?.find((candidate) => place.folder === candidate.id || place.folder.startsWith(`${candidate.id}/`));
+      const target = targets.find((candidate) => candidate.id === source?.id);
+      return { target, folder: source?.kind === "team" ? place.folder.slice(source.id.length + 1) : undefined };
+    }
+    if (place.kind === "tier") {
+      if (place.tier === "mine") return { target: targets.find((target) => target.id.startsWith("px:") && target.source.id === pxSource?.id) ?? targets.find((target) => target.source.kind === "bot") };
+      if (place.tier.startsWith("perspicax:")) return { target: targets.find((target) => target.id === `px:${place.tier.slice(10)}`) };
+      return { target: targets.find((target) => target.id === place.tier) };
+    }
+    return { target: targets[0] };
+  };
+
+  const startCreate = (target?: Target, folder?: string, options: { newFolder?: boolean; title?: string; body?: string } = {}) => {
+    const chosen = target ?? defaultTarget().target ?? targets[0];
+    if (!chosen) return;
+    setCreateTarget(chosen.id);
+    setCreateFolder(options.newFolder ? "" : folder ?? (chosen.source.kind === "team" ? "term" : chosen.freeFolder ? "notes" : ""));
+    setCreateTitle(options.title ?? "");
+    setCreateBody(options.body ?? "");
+    setNewFolder(Boolean(options.newFolder));
+    setView("notes");
+    setScreen({ kind: "create" });
   };
 
   const createNote = async () => {
-    if (page.kind !== "create" || !createTitle.trim()) return;
+    const target = targets.find((entry) => entry.id === createTarget);
+    const title = createTitle.trim();
+    if (!target || !title) return;
     setBusy(true);
     setError(null);
     try {
-      if (page.source.kind === "bot" && page.source.botId) {
-        const path = `memory/${slugify(createTitle, "note")}.md`;
-        await saveBotNote(page.source.botId, path, `# ${createTitle.trim()}\n\n`, undefined);
-        openBrowse(page.source);
-      } else if (page.source.kind === "team") {
-        await api(`/api/team-memory?section=${encodeURIComponent(page.source.section ?? "")}`, {
-          method: "POST",
-          body: JSON.stringify({ kind: page.folder || "term", name: createTitle.trim(), detail: "" }),
-        });
-        openBrowse(page.source, page.folder);
-      } else if (page.source.kind === "perspicax") {
+      const source = target.source;
+      if (source.kind === "bot" && source.botId) {
+        const path = `memory/${slugify(title, "note")}.md`;
+        await saveBotNote(source.botId, path, createBody || `# ${title}\n\n`, undefined);
+        goPlace({ kind: "folder", tier: "mine", folder: `${source.id}/topics` });
+      } else if (source.kind === "team") {
+        const kind = createFolder || "term";
+        await api(`/api/team-memory?section=${encodeURIComponent(source.section ?? "")}`, { method: "POST", body: JSON.stringify({ kind, name: title, detail: createBody }) });
+        goPlace({ kind: "folder", tier: source.id, folder: `${source.id}/${kind}` });
+      } else if (source.kind === "perspicax") {
+        const scope = target.id.slice(3);
         const topic = createFolder.trim() || "notes";
-        await pxMemory("/entry", {
-          method: "POST",
-          body: JSON.stringify({ scope: page.source.scope || "me", topic, title: createTitle.trim(), body: "" }),
-        });
-        openBrowse(page.source, page.folder || page.newFolder ? topic : undefined);
+        await pxMemory("/entry", { method: "POST", body: JSON.stringify({ scope, topic, title, body: createBody }) });
+        goPlace({ kind: "folder", tier: pxTierKey(scope), folder: `px:${scope}/${topic}` });
       }
-      setCreateTitle("");
-      refreshOverviews();
+      setNotice({ text: t("memoryManager.createdNote", { title }) });
+      refresh();
+    } catch (cause) {
+      setError(readableError(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startMove = (keys: string[]) => {
+    const first = lookup(keys[0] ?? "");
+    setMoveTopic(first?.row.folder || "notes");
+    setMoveScope(first?.row.scope || "me");
+    setScreen({ kind: "move", keys });
+  };
+
+  const runMove = async () => {
+    if (screen.kind !== "move") return;
+    const topic = moveTopic.trim();
+    if (!topic) return;
+    const items = screen.keys.map(lookup).filter((entry): entry is PageRow => Boolean(entry)).map((entry) => ({ scope: entry.row.scope || moveScope, id: entry.row.id }));
+    setBusy(true);
+    setError(null);
+    try {
+      await pxMemory("/bulk", { method: "POST", body: JSON.stringify({ action: "move", items, topic, to: moveScope }) });
+      setNotice({ text: t("memoryManager.moved", { count: items.length }) });
+      setScreen({ kind: "list" });
+      refresh();
     } catch (cause) {
       setError(readableError(cause));
     } finally {
@@ -592,16 +786,16 @@ export function MemoryManagerPanel() {
   };
 
   // A Perspicax folder renamed: its notes move to the new folder name.
-  const renamePxFolder = async (source: MemoryManagerSource, scope: string, from: string, to: string) => {
-    const items = allRows.filter((entry) => entry.row.scope === scope && entry.row.folder === from).map((entry) => ({ scope, id: entry.row.id }));
+  const renamePxFolder = async (scope: string, from: string, to: string) => {
+    const items = rows.filter((entry) => entry.source.kind === "perspicax" && entry.row.scope === scope && entry.row.folder === from).map((entry) => ({ scope, id: entry.row.id }));
     if (!items.length) return;
     setBusy(true);
     setError(null);
     try {
       await pxMemory("/bulk", { method: "POST", body: JSON.stringify({ action: "move", items, topic: to, to: scope }) });
       setNotice({ text: t("memoryManager.folderRenamed", { from, to }) });
-      refreshOverviews();
-      if ("source" in page && page.source.id === source.id) openBrowse(source, page.kind === "browse" && page.folder === from ? to : undefined);
+      if (place.kind === "folder" && place.folder === `px:${scope}/${from}`) setPlace({ ...place, folder: `px:${scope}/${to}` });
+      refresh();
     } catch (cause) {
       setError(readableError(cause));
     } finally {
@@ -610,8 +804,8 @@ export function MemoryManagerPanel() {
   };
 
   // A Perspicax folder deleted: its notes go to the trash, with Undo.
-  const deletePxFolder = async (source: MemoryManagerSource, scope: string, folder: string) => {
-    const items = allRows.filter((entry) => entry.row.scope === scope && entry.row.folder === folder).map((entry) => ({ scope, id: entry.row.id }));
+  const deletePxFolder = async (scope: string, folder: string) => {
+    const items = rows.filter((entry) => entry.source.kind === "perspicax" && entry.row.scope === scope && entry.row.folder === folder).map((entry) => ({ scope, id: entry.row.id }));
     const ok = await confirmAsync({
       title: t("memoryManager.deleteFolder"),
       body: t("memoryManager.deleteFolderConfirm", { folder, count: items.length }),
@@ -626,10 +820,10 @@ export function MemoryManagerPanel() {
       const batch = report.batch;
       setNotice({
         text: t("memoryManager.deleted", { count: report.done }),
-        undo: batch ? async () => { await pxMemory("/trash/undo", { method: "POST", body: JSON.stringify({ batch }) }); refreshOverviews(); } : undefined,
+        undo: batch ? async () => { await pxMemory("/trash/undo", { method: "POST", body: JSON.stringify({ batch }) }); refresh(); } : undefined,
       });
-      refreshOverviews();
-      if (page.kind === "browse" && page.source.id === source.id) openBrowse(source);
+      if (place.kind === "folder" && place.folder === `px:${scope}/${folder}`) setPlace({ kind: "all" });
+      refresh();
     } catch (cause) {
       setError(readableError(cause));
     } finally {
@@ -637,210 +831,296 @@ export function MemoryManagerPanel() {
     }
   };
 
-  const activeSource = "source" in page ? page.source : null;
-  const showMap = viewMode === "map" && Boolean(activeSource && browse && mapGraph);
-  const browsing = (source: MemoryManagerSource, folder?: string) =>
-    page.kind === "browse" && page.source.id === source.id && (page.folder ?? "") === (folder ?? "");
+  // A Perspicax folder's manual order (the console's drag in Manual order).
+  const reorder = async (ids: string[]) => {
+    if (place.kind !== "folder" || !place.folder.startsWith("px:")) return;
+    const cut = place.folder.indexOf("/");
+    const scope = place.folder.slice(3, cut);
+    const topic = place.folder.slice(cut + 1);
+    setBusy(true);
+    try {
+      await pxMemory("/order", { method: "PUT", body: JSON.stringify({ scope, kind: "note", topic, ids }) });
+      setNotice({ text: t("memoryManager.orderSaved") });
+      refresh();
+    } catch (cause) {
+      setError(readableError(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
 
-  // ---- the right column ---------------------------------------------------
+  const collect = async (keys: string[], collection: string) => {
+    const notes = keys.map(lookup).filter((entry): entry is PageRow => Boolean(entry?.row.scope)).map((entry) => ({ scope: entry.row.scope!, id: entry.row.id }));
+    try {
+      await addToCollection(collection, notes);
+      const title = collections.find((entry) => entry.id === collection)?.title ?? "";
+      setNotice({ text: t("memoryManager.collections.added", { count: notes.length, title }) });
+      void fetchCollections().then(setCollections).catch(() => undefined);
+    } catch (cause) {
+      setError(readableError(cause));
+    }
+  };
 
-  const nav: MemorySidebarNav[] = [
-    { id: "all", label: t("memoryManager.nav.all"), icon: NotebookText, count: navRows.all.length, current: page.kind === "nav" && page.nav === "all", onOpen: () => openNav("all") },
+  // ---- keyboard: Cmd+O (Ctrl+O elsewhere) opens a note, as in the console --------------
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.shiftKey || event.altKey || !(mac ? event.metaKey : event.ctrlKey) || event.key.toLowerCase() !== "o") return;
+      event.preventDefault();
+      setView("notes");
+      setExplorerOpen(true);
+      setSwitcherOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mac]);
+  useEffect(() => {
+    if (switcherOpen) requestAnimationFrame(() => switcherRef.current?.focus());
+    else setSwitcherQuery("");
+  }, [switcherOpen]);
+
+  // ---- the explorer --------------------------------------------------------------------
+
+  const current = (next: Place) => screen.kind !== "note" && JSON.stringify(next) === JSON.stringify(place);
+  const lists: MemorySidebarNav[] = [
+    { id: "all", label: t("memoryManager.nav.all"), icon: NotebookText, count: counts.all, current: current({ kind: "all" }), onOpen: () => goPlace({ kind: "all" }) },
   ];
-  if (navRows.teams.length > 0 || (sources ?? []).some((source) => source.kind === "team")) {
-    nav.push({ id: "teams", label: t("memoryManager.nav.teams"), icon: Users, count: navRows.teams.length, current: page.kind === "nav" && page.nav === "teams", onOpen: () => openNav("teams") });
-  }
-  if (navRows.recent.length > 0) {
-    nav.push({ id: "recent", label: t("memoryManager.nav.recent"), icon: Clock3, count: navRows.recent.length, current: page.kind === "nav" && page.nav === "recent", onOpen: () => openNav("recent") });
-  }
-  if (navRows.review.length > 0) {
-    nav.push({ id: "review", label: t("memoryManager.nav.review"), icon: Inbox, count: navRows.review.length, current: page.kind === "nav" && page.nav === "review", onOpen: () => openNav("review") });
-  }
-  if (pxSource) {
-    nav.push({ id: "trash", label: t("memoryManager.nav.trash"), icon: Trash2, count: pxTrashCount, current: page.kind === "trash", onOpen: () => void openTrash(pxSource) });
-  }
+  if (counts.teams > 0 || tiers.some((tier) => tier.kind === "team")) lists.push({ id: "teams", label: t("memoryManager.nav.teams"), icon: Users, count: counts.teams, current: current({ kind: "teams" }), onOpen: () => goPlace({ kind: "teams" }) });
+  lists.push(
+    { id: "pinned", label: t("memoryManager.nav.pinned"), icon: Pin, count: counts.pinned, current: current({ kind: "pinned" }), onOpen: () => goPlace({ kind: "pinned" }) },
+    { id: "recent", label: t("memoryManager.nav.recent"), icon: Clock3, count: counts.recent, current: current({ kind: "recent" }), onOpen: () => goPlace({ kind: "recent" }) },
+    { id: "review", label: t("memoryManager.nav.review"), icon: CircleCheck, count: counts.review, dot: counts.review > 0, current: current({ kind: "review" }), onOpen: () => goPlace({ kind: "review" }) },
+  );
+  const tidy: MemorySidebarNav[] = pxSource ? [
+    { id: "collections", label: t("memoryManager.collections.title"), icon: BookOpen, count: collections.length, current: current({ kind: "collections" }), onOpen: () => goPlace({ kind: "collections" }) },
+    { id: "archived", label: t("memoryManager.nav.archived"), icon: Archive, count: archivedRows.length, current: current({ kind: "archived" }), onOpen: () => goPlace({ kind: "archived" }) },
+    { id: "trash", label: t("memoryManager.nav.trash"), icon: Trash2, count: trashRows.length, current: current({ kind: "trash" }), onOpen: () => goPlace({ kind: "trash" }) },
+  ] : [];
 
-  const pxFolderRows = (tier: MemoryTierRow): MemorySidebarFolder[] => {
+  const folderCount = (key: string) => rows.filter((entry) => entry.folderKey === key || entry.folderKey.startsWith(`${key}/`)).length;
+  const folderPlace = (tier: string, folder: string): Place => ({ kind: "folder", tier, folder });
+
+  const pxFolders = (tier: MemoryTierRow, tierKey: string): MemorySidebarFolder[] => {
     if (!pxSource) return [];
-    const source = tierSource(pxSource, tier);
+    const target = targets.find((entry) => entry.id === `px:${tier.scope}`);
     return tier.folders.map((folder) => {
+      const key = `px:${tier.scope}/${folder.name}`;
       const actions: MemoryRowAction[] = tier.mayWrite ? [
-        { kind: "new", label: t("memoryManager.newIn", { folder: folder.name }), onClick: () => startCreate(source, folder.name) },
-        { kind: "rename", label: t("memoryManager.renameFolder", { folder: folder.name }), onClick: () => setRenaming(folder.id) },
-        { kind: "delete", label: t("memoryManager.deleteFolderNamed", { folder: folder.name }), onClick: () => void deletePxFolder(source, tier.scope, folder.name) },
+        { kind: "new", label: t("memoryManager.newIn", { folder: folder.name }), onClick: () => startCreate(target, folder.name) },
+        { kind: "rename", label: t("memoryManager.renameFolder", { folder: folder.name }), onClick: () => setRenaming(key) },
+        { kind: "delete", label: t("memoryManager.deleteFolderNamed", { folder: folder.name }), onClick: () => void deletePxFolder(tier.scope, folder.name) },
       ] : [];
       return {
-        key: folder.id,
+        key,
         name: folder.name,
         icon: "folder",
         count: folder.count,
-        current: browsing(source, folder.name),
-        onOpen: () => openBrowse(source, folder.name),
+        current: current(folderPlace(tierKey, key)),
+        onOpen: () => goPlace(folderPlace(tierKey, key)),
         actions,
-        onRename: (next) => void renamePxFolder(source, tier.scope, folder.name, next),
+        onRename: (next) => void renamePxFolder(tier.scope, folder.name, next),
         data: { "data-memory-folder": folder.id },
       };
     });
   };
 
-  const sourceFolders = (source: MemoryManagerSource): MemorySidebarFolder[] => (overviews[source.id]?.folders ?? []).map((folder) => ({
-    key: `${source.id}/${folder.id}`,
-    name: source.kind === "bot" ? (folder.id === "logs" ? t("memoryManager.folderLogs") : t("memoryManager.folderTopics")) : folder.name,
-    icon: "folder",
-    count: folder.count,
-    current: browsing(source, folder.id),
-    onOpen: () => openBrowse(source, folder.id),
-    actions: source.kind === "team" && source.mayWrite
-      ? [{ kind: "new", label: t("memoryManager.newIn", { folder: folder.name }), onClick: () => startCreate(source, folder.id) }]
-      : [],
-    data: { "data-memory-folder": `${source.id}/${folder.id}` },
-  }));
-
-  const tiers: MemorySidebarTier[] = [];
-  const botSources = (sources ?? []).filter((source) => source.kind === "bot");
-  const meTier = pxTiers.find((tier) => tier.kind === "me");
-  if (botSources.length > 0 || meTier) {
-    const botRows: MemorySidebarFolder[] = botSources.map((source) => ({
-      key: source.id,
-      name: source.name,
-      title: source.detail,
-      icon: "bot",
-      count: overviews[source.id]?.notes.length,
-      current: browsing(source),
-      onOpen: () => openBrowse(source),
-      actions: source.mayWrite ? [{ kind: "new", label: t("memoryManager.newIn", { folder: source.name }), onClick: () => startCreate(source) }] : [],
-      children: sourceFolders(source),
-      data: { "data-memory-source": source.id },
-    }));
-    const meActions: MemoryRowAction[] = meTier?.mayWrite && pxSource ? [
-      { kind: "new", label: t("memoryManager.newNote"), onClick: () => startCreate(pxSource) },
-      { kind: "newFolder", label: t("memoryManager.newFolder"), onClick: () => startCreate(pxSource, undefined, true) },
-    ] : [];
-    tiers.push({
-      key: "mine",
-      name: t("memoryManager.tierMine"),
-      title: t("memoryManager.tierMineHint"),
-      dot: "success",
-      count: navRows.mine.length,
-      current: page.kind === "nav" && page.nav === "mine",
-      onOpen: () => openNav("mine"),
-      actions: meActions,
-      folders: [...(meTier ? pxFolderRows(meTier) : []), ...botRows],
-      data: { "data-memory-tier": "mine" },
-    });
-  }
-  for (const source of (sources ?? []).filter((entry) => entry.kind === "team")) {
-    tiers.push({
-      key: source.id,
-      name: source.name,
-      title: source.detail,
-      dot: "accent",
-      count: overviews[source.id]?.notes.length ?? 0,
-      current: browsing(source),
-      onOpen: () => openBrowse(source),
-      actions: source.mayWrite ? [{ kind: "new", label: t("memoryManager.newIn", { folder: source.name }), onClick: () => startCreate(source) }] : [],
-      folders: sourceFolders(source),
-      data: { "data-memory-source": source.id, "data-memory-tier": source.id },
-    });
-  }
-  if (pxSource) {
-    for (const tier of pxTiers.filter((entry) => entry.kind !== "me")) {
-      const source = tierSource(pxSource, tier);
-      tiers.push({
+  const explorerTiers: MemorySidebarTier[] = tiers.map((tier) => {
+    const tierPlace: Place = { kind: "tier", tier: tier.key };
+    const base = { key: tier.key, name: tier.name, color: tier.color, count: rows.filter((entry) => entry.tier === tier.key).length, current: current(tierPlace), onOpen: () => goPlace(tierPlace), data: { "data-memory-tier": tier.key } };
+    if (tier.key === "mine") {
+      const botFolders: MemorySidebarFolder[] = botSources.map((source) => ({
         key: source.id,
-        name: tier.name,
-        dot: tier.kind === "team" ? "accent" : "muted",
-        count: tier.count,
-        current: browsing(source),
-        onOpen: () => openBrowse(source),
-        actions: tier.mayWrite ? [
-          { kind: "new", label: t("memoryManager.newIn", { folder: tier.name }), onClick: () => startCreate(source) },
-          { kind: "newFolder", label: t("memoryManager.newFolder"), onClick: () => startCreate(source, undefined, true) },
+        name: source.name,
+        title: source.detail,
+        icon: "bot",
+        count: folderCount(source.id),
+        current: current(folderPlace("mine", source.id)),
+        onOpen: () => goPlace(folderPlace("mine", source.id)),
+        actions: source.mayWrite ? [{ kind: "new", label: t("memoryManager.newIn", { folder: source.name }), onClick: () => startCreate(targets.find((target) => target.id === source.id)) }] : [],
+        children: (overviews[source.id]?.folders ?? []).map((folder) => {
+          const key = `${source.id}/${folder.id}`;
+          return {
+            key,
+            name: folder.id === "logs" ? t("memoryManager.folderLogs") : t("memoryManager.folderTopics"),
+            icon: "folder" as const,
+            count: folder.count,
+            current: current(folderPlace("mine", key)),
+            onOpen: () => goPlace(folderPlace("mine", key)),
+            actions: [],
+            data: { "data-memory-folder": key },
+          };
+        }),
+        data: { "data-memory-source": source.id },
+      }));
+      const meTarget = meTier ? targets.find((target) => target.id === `px:${meTier.scope}`) : undefined;
+      return {
+        ...base,
+        title: t("memoryManager.tierMineHint"),
+        actions: meTarget ? [
+          { kind: "new", label: t("memoryManager.newNote"), onClick: () => startCreate(meTarget) },
+          { kind: "newFolder", label: t("memoryManager.newFolder"), onClick: () => startCreate(meTarget, undefined, { newFolder: true }) },
         ] : [],
-        folders: pxFolderRows(tier),
-        data: { "data-memory-source": source.id, "data-memory-tier": source.id },
-      });
+        folders: [...(meTier ? pxFolders(meTier, "mine") : []), ...botFolders],
+      };
     }
-  }
+    const team = teamSources.find((source) => source.id === tier.key);
+    if (team) {
+      const target = targets.find((entry) => entry.id === team.id);
+      return {
+        ...base,
+        title: team.detail,
+        actions: target ? [{ kind: "new", label: t("memoryManager.newIn", { folder: team.name }), onClick: () => startCreate(target) }] : [],
+        folders: (overviews[team.id]?.folders ?? []).map((folder) => {
+          const key = `${team.id}/${folder.id}`;
+          return {
+            key,
+            name: folder.name,
+            icon: "folder" as const,
+            count: folder.count,
+            current: current(folderPlace(team.id, key)),
+            onOpen: () => goPlace(folderPlace(team.id, key)),
+            actions: target ? [{ kind: "new" as const, label: t("memoryManager.newIn", { folder: folder.name }), onClick: () => startCreate(target, folder.id) }] : [],
+            data: { "data-memory-folder": key },
+          };
+        }),
+        data: { ...base.data, "data-memory-source": team.id },
+      };
+    }
+    const pxTier = pxTiers.find((entry) => `perspicax:${entry.scope}` === tier.key)!;
+    const target = targets.find((entry) => entry.id === `px:${pxTier.scope}`);
+    return {
+      ...base,
+      actions: target ? [
+        { kind: "new", label: t("memoryManager.newIn", { folder: tier.name }), onClick: () => startCreate(target) },
+        { kind: "newFolder", label: t("memoryManager.newFolder"), onClick: () => startCreate(target, undefined, { newFolder: true }) },
+      ] : [],
+      folders: pxFolders(pxTier, tier.key),
+      data: { ...base.data, "data-memory-source": tier.key },
+    };
+  });
 
-  const sidebarLoading = sources === null ? (
+  const switcherHits = useMemo(() => {
+    const words = switcherQuery.trim().toLowerCase();
+    const list = words ? rows.filter((entry) => entry.row.title.toLowerCase().includes(words) || entry.folderPath.toLowerCase().includes(words)) : rows.filter((entry) => pins.includes(entry.key)).concat(rows).slice(0, 8);
+    return [...new Map(list.map((entry) => [entry.key, entry])).values()].slice(0, 8);
+  }, [switcherQuery, rows, pins]);
+
+  const switcher = switcherOpen ? (
+    <div className="absolute left-2 top-full z-40 mt-1.5 w-[360px] max-w-[calc(100vw-32px)] rounded-xl border-[0.5px] border-border bg-elevated p-1.5 popover-surface" data-memory-switcher="">
+      <input
+        ref={switcherRef}
+        type="search"
+        value={switcherQuery}
+        onChange={(event) => setSwitcherQuery(event.target.value)}
+        onBlur={() => setTimeout(() => setSwitcherOpen(false), 150)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") { event.preventDefault(); setSwitcherOpen(false); }
+          if (event.key === "Enter" && switcherHits[0]) { event.preventDefault(); setSwitcherOpen(false); void openNote(switcherHits[0]); }
+        }}
+        placeholder={t("memoryManager.switcherPlaceholder")}
+        aria-label={t("memoryManager.openNote")}
+        className={cn(FIELD, "mb-1")}
+        data-memory-switcher-input=""
+      />
+      {switcherHits.map((entry) => (
+        <button key={entry.key} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setSwitcherOpen(false); void openNote(entry); }} className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-hover" data-memory-switcher-hit="">
+          <FileText size={14} className="shrink-0 text-ink-secondary" aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{entry.row.title}</span>
+          <span className="inline-flex shrink-0 items-center gap-1 text-[11.5px] text-ink-tertiary"><Swatch color={tierByKey.get(entry.tier)?.color ?? ""} />{entry.folderPath}</span>
+        </button>
+      ))}
+      {switcherHits.length === 0 && <p className="px-2 py-2 text-[12.5px] text-ink-secondary">{t("memoryManager.listNone")}</p>}
+    </div>
+  ) : null;
+
+  const explorerLoading = sources === null || (sources.length > 0 && !overviewsReady) ? (
     <div className="flex min-h-[80px] items-center justify-center text-ink-secondary">
       <Loader2 size={18} className="animate-spin" aria-label={t("memoryManager.loading")} />
     </div>
   ) : null;
-  const sidebarFooter = (
+  const explorerFooter = (
     <>
-      {sources && sources.length === 0 && (
-        <p className="px-3 py-6 text-center text-[12.5px] text-ink-secondary">{t("memoryManager.emptySources")}</p>
-      )}
-      {pxReason === "link" && <p className="mt-3 px-3 text-[12px] text-ink-secondary">{t("memoryManager.pxLinkHint")}</p>}
-      {pxReason === "sign_in" && <p className="mt-3 px-3 text-[12px] text-ink-secondary">{t("memoryManager.pxSignInHint")}</p>}
+      {sources && sources.length === 0 && <p className="px-3 py-6 text-center text-[12.5px] text-ink-secondary">{t("memoryManager.emptySources")}</p>}
+      {pxReason === "link" && <p className="mt-3 px-2 text-[12px] text-ink-secondary">{t("memoryManager.pxLinkHint")}</p>}
+      {pxReason === "sign_in" && <p className="mt-3 px-2 text-[12px] text-ink-secondary">{t("memoryManager.pxSignInHint")}</p>}
     </>
   );
 
-  // ---- the body column ------------------------------------------------------
+  // ---- the list's title and line --------------------------------------------------------
 
-  const navTitle: Record<NavView, string> = {
-    all: t("memoryManager.nav.all"),
-    teams: t("memoryManager.nav.teams"),
-    recent: t("memoryManager.nav.recent"),
-    review: t("memoryManager.nav.review"),
-    mine: t("memoryManager.tierMine"),
-  };
-  const navSubtitle: Record<NavView, string> = {
-    all: t("memoryManager.pageSubtitle"),
-    teams: t("memoryManager.nav.teamsHint"),
-    recent: t("memoryManager.nav.recentHint"),
-    review: t("memoryManager.nav.reviewHint"),
-    mine: t("memoryManager.tierMineHint"),
-  };
-  const folderLabel = (source: MemoryManagerSource, folder?: string) => {
-    if (!folder) return undefined;
-    if (source.kind === "bot") return folder === "logs" ? t("memoryManager.folderLogs") : t("memoryManager.folderTopics");
-    return folder;
-  };
-  const section = page.kind === "nav"
-    ? (page.nav === "all" ? null : navTitle[page.nav])
-    : page.kind === "trash"
-      ? t("memoryManager.nav.trash")
-      : activeSource
-        ? [activeSource.name, page.kind === "browse" ? folderLabel(activeSource, page.folder) : undefined].filter(Boolean).join(" / ")
-        : null;
-
-  const heading = (() => {
-    if (page.kind === "nav") return { title: navTitle[page.nav], subtitle: navSubtitle[page.nav] };
-    if (page.kind === "browse") {
-      const folder = folderLabel(page.source, page.folder);
-      return { title: folder ?? page.source.name, subtitle: folder ? page.source.name : page.source.detail ?? t("memoryManager.pageSubtitle") };
+  const placeText = (): [string, string] => {
+    switch (place.kind) {
+      case "all": return [t("memoryManager.nav.all"), t("memoryManager.nav.allHint")];
+      case "teams": return [t("memoryManager.nav.teams"), t("memoryManager.nav.teamsHint")];
+      case "pinned": return [t("memoryManager.nav.pinned"), t("memoryManager.nav.pinnedHint")];
+      case "recent": return [t("memoryManager.nav.recent"), t("memoryManager.nav.recentHint")];
+      case "review": return [t("memoryManager.nav.review"), t("memoryManager.nav.reviewHint")];
+      case "archived": return [t("memoryManager.nav.archived"), t("memoryManager.nav.archivedHint")];
+      case "trash": return [t("memoryManager.nav.trash"), t("memoryManager.trashHint")];
+      case "collections": return [t("memoryManager.collections.title"), t("memoryManager.collections.hint")];
+      case "tier": {
+        const tier = tierByKey.get(place.tier);
+        return [tier?.name ?? "", place.tier === "mine" ? t("memoryManager.tierMineHint") : t("memoryManager.tierHint", { tier: tier?.name ?? "" })];
+      }
+      case "folder": {
+        const tier = tierByKey.get(place.tier);
+        const entry = rows.find((row) => row.folderKey === place.folder || row.folderKey.startsWith(`${place.folder}/`));
+        const name = place.folder.startsWith("px:") ? place.folder.slice(place.folder.indexOf("/") + 1)
+          : botSources.find((source) => source.id === place.folder)?.name
+            ?? (entry && place.folder !== entry.folderKey ? entry.source.name : entry?.folderPath)
+            ?? place.folder.slice(place.folder.lastIndexOf("/") + 1);
+        return [name, t("memoryManager.folderHint", { tier: tier?.name ?? "" })];
+      }
     }
-    if (page.kind === "trash") return { title: t("memoryManager.nav.trash"), subtitle: t("memoryManager.trashHint") };
-    if (page.kind === "create") return { title: page.newFolder ? t("memoryManager.newFolder") : t("memoryManager.newNote"), subtitle: [page.source.name, folderLabel(page.source, page.folder)].filter(Boolean).join(" / ") };
-    if (page.kind === "move") return { title: t("memoryManager.moveConfirm"), subtitle: t("memoryManager.moveHint", { count: page.noteIds.length }) };
-    return null;
-  })();
+  };
+  const [listTitle, listLine] = placeText();
+  const templates: ListTemplate[] = rows.filter((entry) => entry.source.kind === "perspicax" && entry.row.folder === "templates").map((entry) => ({ key: entry.key, title: entry.row.title }));
+  const fromTemplate = async (template: ListTemplate) => {
+    const entry = rowByKey.get(template.key);
+    if (!entry?.row.scope) return;
+    try {
+      const detail = await openPerspicaxNote(entry.row.scope, entry.row.id);
+      const { target, folder } = defaultTarget();
+      startCreate(target, folder, { title: detail.title, body: detail.body });
+    } catch (cause) {
+      setError(readableError(cause));
+    }
+  };
+  const canNewHere = place.kind === "all" || place.kind === "tier" || place.kind === "folder" ? Boolean(defaultTarget().target) : false;
 
-  const noteRow = (key: string, source: MemoryManagerSource, row: MemoryNoteRow, options: { select?: boolean; showSource?: boolean }) => (
-    <div key={key} className={ROW} data-memory-note-row={row.id}>
-      {options.select && (
-        <input
-          type="checkbox"
-          checked={selected.has(row.id)}
-          onChange={() => toggleSelect(row.id)}
-          className="mt-1"
-          aria-label={t("memoryManager.selectNote", { title: row.title })}
-        />
-      )}
-      <button type="button" className="min-w-0 flex-1 text-left" onClick={() => void openNote(source, row)}>
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-[13px] font-medium text-ink">{row.title}</span>
-          {row.status === "proposed" && <span className="shrink-0 rounded-full bg-raised px-1.5 text-[11px] text-ink-secondary">{t("memoryManager.proposed")}</span>}
-        </span>
-        <span className="mt-0.5 block truncate text-[12px] text-ink-secondary">
-          {[options.showSource ? source.name : undefined, folderLabel(source, row.folder), row.excerpt].filter(Boolean).join(" · ")}
-        </span>
-      </button>
-    </div>
-  );
+  const noteTier = noteEntry ? tierByKey.get(noteEntry.tier) : undefined;
+  const linksFor = useCallback((note: MemoryNoteDetail | null, noteEntry: PageRow | null): { out: PageLink[]; back: PageLink[] } => {
+    if (!note || !noteEntry) return { out: [], back: [] };
+    if (noteEntry.source.kind === "perspicax" && (note.linksOut || note.backlinks)) {
+      const toKey = (link: { scope?: string; id: string }) => `perspicax|${link.scope}/${link.id}`;
+      return {
+        out: (note.linksOut ?? []).map((link) => ({ key: toKey(link), title: link.title })),
+        back: (note.backlinks ?? []).map((link) => ({ key: toKey(link), title: link.title, context: link.context ?? undefined })),
+      };
+    }
+    return { out: linksOut(note.body, rows, noteEntry.key), back: backlinksTo(note.title, rows, bodies, noteEntry.key) };
+  }, [rows, bodies]);
+  const noteLinks = useMemo(() => linksFor(note, noteEntry), [linksFor, note, noteEntry]);
+  const previewLinks = useMemo(() => linksFor(preview?.detail ?? null, preview?.entry ?? null), [linksFor, preview]);
+
+  // ---- tags and quality ------------------------------------------------------------------
+
+  const stats = useMemo(() => tagStats(rows, vocabulary), [rows, vocabulary]);
+  const allJournal = useMemo(() => Object.values(journals).flat(), [journals]);
+  const quality = useMemo(() => qualityStats(rows, pxSource ? pxTiers.reduce((sum, tier) => sum + (tier.archived ?? 0), 0) : null, counts.review, Date.now(), stats), [rows, pxSource, pxTiers, counts.review, stats]);
+  const active = useMemo(() => activeSeries(rows, tiers.map((tier) => tier.key), Date.now()), [rows, tiers]);
+  const writes = useMemo(() => writeSeries(allJournal, Date.now()), [allJournal]);
+
+  // ---- render ----------------------------------------------------------------------------
+
+  const viewOptions = [
+    { value: "notes" as const, label: t("memoryManager.viewNotes"), icon: FileText },
+    { value: "map" as const, label: t("memoryManager.viewMap"), icon: Network },
+    { value: "tags" as const, label: t("memoryManager.viewTags"), icon: Tag },
+    { value: "quality" as const, label: t("memoryManager.viewQuality"), icon: Gauge },
+  ];
+  const loading = sources === null || (sources.length > 0 && !overviewsReady);
+  const createTargetRow = targets.find((entry) => entry.id === createTarget);
 
   return (
     <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-app text-ink" data-memory-manager-page="" data-memory-manager-panel="">
@@ -849,49 +1129,52 @@ export function MemoryManagerPanel() {
         name="memory"
         icon={Brain}
         title={t("memoryManager.title")}
-        section={section}
+        large
         {...dragProps}
         topbar
         style={dragProps.style}
-        primaryStyle={noDragStyle}
         actionsStyle={{ ...noDragStyle, ...controlsShiftStyle }}
-        primary={
-          <PageSegment
-            label={t("memoryManager.viewLabel")}
-            value={viewMode}
-            onChange={(next) => setViewMode(next)}
-            options={[
-              { value: "list", label: t("memoryManager.viewList"), icon: List },
-              { value: "map", label: t("memoryManager.viewMap"), icon: Network },
-            ]}
-          />
-        }
         actions={<>
-          {activeSource?.mayWrite && viewMode === "list" && (
-            <button
-              type="button"
-              data-memory-create=""
-              aria-label={t("memoryManager.newNote")}
-              title={t("memoryManager.newNote")}
-              className={cn(PAGE_HEADER_BUTTON, "h-9 w-auto gap-1.5 border-transparent bg-accent px-3 text-[12px] font-medium text-white hover:bg-accent/90")}
-              onClick={() => { if (activeSource) startCreate(activeSource, page.kind === "browse" ? page.folder : undefined); }}
-            >
-              <Plus size={15} aria-hidden="true" /><span className="@max-[30rem]/page-header:sr-only">{t("memoryManager.new")}</span>
+          {targets.length > 0 && (
+            <button type="button" data-memory-create="" className={cn(PRIMARY_BUTTON, "h-9 px-3.5")} onClick={() => startCreate()} title={t("memoryManager.newNote")}>
+              <Plus size={15} aria-hidden="true" /><span className="@max-[30rem]/page-header:sr-only">{t("memoryManager.newNote")}</span>
             </button>
           )}
+          <details ref={menuRef} className="relative" data-memory-menu="">
+            <summary aria-label={t("memoryManager.more")} title={t("memoryManager.more")} className={PAGE_HEADER_BUTTON}>
+              <span aria-hidden="true" className="text-[16px] leading-none">⋯</span>
+            </summary>
+            <div role="menu" className={cn(PAGE_POPOVER, "w-[240px] gap-0.5 p-1.5")}>
+              <button type="button" role="menuitem" className={PAGE_MENU_ITEM} onClick={() => { menuRef.current?.removeAttribute("open"); refresh(); }} data-memory-refresh="">
+                <RefreshCw size={16} />{t("memoryManager.refresh")}
+              </button>
+              <button type="button" role="menuitem" className={PAGE_MENU_ITEM} onClick={() => { menuRef.current?.removeAttribute("open"); goPlace({ kind: "review" }); }}>
+                <CircleCheck size={16} />{t("memoryManager.proposals")}
+                {counts.review > 0 && <span className="ml-auto rounded-full bg-raised px-1.5 text-[11px] text-ink-secondary">{counts.review}</span>}
+              </button>
+              {pxSource && (
+                <button type="button" role="menuitem" className={PAGE_MENU_ITEM} onClick={() => { menuRef.current?.removeAttribute("open"); goPlace({ kind: "trash" }); }}>
+                  <Trash2 size={16} />{t("memoryManager.nav.trash")}
+                </button>
+              )}
+            </div>
+          </details>
           <button type="button" aria-label={t("memoryManager.close")} title={t("memoryManager.close")} className={PAGE_HEADER_BUTTON} onClick={close}>
             <X size={16} />
           </button>
         </>}
-        below={(error || notice) && (
-          <div className="mt-2 space-y-2" style={noDragStyle}>
+        below={(
+          <div className="mt-3 space-y-2" style={noDragStyle}>
+            <div className="flex" data-memory-views="">
+              <PageSegment label={t("memoryManager.viewLabel")} value={view} onChange={(next) => { setView(next); if (next !== "map") setMapFocus(null); }} options={viewOptions} />
+            </div>
             {error && <p role="alert" className="rounded-xl bg-danger/10 px-3 py-2 text-[12.5px] text-danger">{error}</p>}
             {notice && (
               <div className="flex items-center gap-2 rounded-xl bg-raised px-3 py-2 text-[12.5px] text-ink" data-memory-notice="">
                 <Check size={14} className="shrink-0 text-success" aria-hidden="true" />
                 <span className="min-w-0 flex-1">{notice.text}</span>
                 {notice.undo && (
-                  <button type="button" className="text-accent hover:underline" onClick={() => void notice.undo?.().then(() => setNotice(null))}>
+                  <button type="button" className="text-accent-text hover:underline" onClick={() => void notice.undo?.().then(() => setNotice(null))}>
                     {t("common.undo")}
                   </button>
                 )}
@@ -906,261 +1189,219 @@ export function MemoryManagerPanel() {
 
       <div data-memory-row="" className="relative flex min-h-0 min-w-0 flex-1">
         <div className="content-card-body flex min-h-0 min-w-0 flex-1">
+          {view === "notes" && (explorerOpen ? (
+            <MemorySidebar
+              shortcut={mac ? "⌘O" : "Ctrl+O"}
+              onOpenSwitcher={() => setSwitcherOpen((open) => !open)}
+              switcher={switcher}
+              lists={lists}
+              tiers={explorerTiers}
+              tidy={tidy}
+              renaming={renaming}
+              onRenameDone={() => setRenaming(null)}
+              loading={explorerLoading}
+              footer={explorerFooter}
+              onCollapse={() => setExplorerOpen(false)}
+            />
+          ) : (
+            <button type="button" onClick={() => setExplorerOpen(true)} aria-label={t("memoryManager.explorerShow")} title={t("memoryManager.explorerShow")} className="flex w-10 shrink-0 flex-col items-center gap-2 border-r border-hairline/50 bg-panel px-1 py-4 text-ink-secondary hover:bg-raised hover:text-ink" data-memory-explorer-show="">
+              <PanelLeftOpen size={16} aria-hidden="true" />
+            </button>
+          ))}
+
           <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {showMap && mapGraph ? (
-              <MemoryMapCanvas
-                graph={mapGraph}
-                selectedNoteId={page.kind === "note" ? page.noteId : null}
-                onOpenNote={openNoteById}
-              />
-            ) : (
-              <div className={PAGE_SCROLL}>
-                <div className={PAGE_COLUMN}>
-                  {heading && <PageHeading title={heading.title} subtitle={heading.subtitle} />}
-
-                  {viewMode === "map" && !activeSource && (
-                    <p className="py-10 text-center text-[13px] text-ink-secondary">{t("memoryManager.pickSource")}</p>
-                  )}
-
-                  {page.kind === "nav" && viewMode === "list" && (
-                    <div className="-mx-2" data-memory-nav-view={page.nav}>
-                      {sources === null || (sources.length > 0 && !overviewsReady) ? (
-                        <div className="flex min-h-[160px] items-center justify-center text-ink-secondary">
-                          <Loader2 size={18} className="animate-spin" aria-label={t("memoryManager.loading")} />
-                        </div>
-                      ) : (
-                        <>
-                          {visibleNavRows.map((entry) => noteRow(`${entry.source.id}:${entry.row.id}`, entry.source, entry.row, { showSource: true }))}
-                          {visibleNavRows.length === 0 && (
-                            <p className="px-2 py-8 text-center text-[12.5px] text-ink-secondary">{query.trim() ? t("memoryManager.noMatch", { query: query.trim() }) : t("memoryManager.emptyView")}</p>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {selected.size > 0 && page.kind === "browse" && (
-                    <div className="flex items-center gap-2 rounded-xl bg-raised/40 px-3 py-2" data-memory-bulk="">
-                      <span className="text-[12px] text-ink-secondary">{t("memoryManager.selected", { count: selected.size })}</span>
-                      {page.source.kind === "perspicax" && (
-                        <button
-                          type="button"
-                          className={PILL}
-                          onClick={() => {
-                            setMoveTopic(page.folder || "notes");
-                            setMoveScope(page.source.scope || "me");
-                            setPage({ kind: "move", source: page.source, noteIds: [...selected] });
-                          }}
-                        >
-                          {t("memoryManager.move")}
+            {view === "map" && <MemoryMapView rows={rows} tiers={tiers} bodies={bodies} review={counts.review} focusKey={mapFocus} onOpen={previewKey} onNew={targets.length ? () => startCreate() : undefined} />}
+            {view === "tags" && (
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <MemoryTagsView stats={stats} vocabulary={vocabulary} onTag={(tag) => { goPlace({ kind: "all" }); setListQuery(`tag:${/\s/.test(tag) ? `"${tag}"` : tag}`); }} />
+              </div>
+            )}
+            {view === "quality" && (
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <MemoryQualityView
+                  stats={quality}
+                  tiers={tiers}
+                  active={active}
+                  writes={writes}
+                  journal={allJournal}
+                  botName={(botId) => botSources.find((source) => source.botId === botId)?.name ?? ""}
+                  onOpenPath={(botId, path) => openKey(`bot:${botId}|${path}`)}
+                />
+              </div>
+            )}
+            {view === "notes" && (
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+                {screen.kind === "list" && place.kind === "collections" && (
+                  <div data-memory-nav-view="collections">
+                    <MemoryCollections onOpenNote={(scope, id) => previewKey(`perspicax|${scope}/${id}`)} onChanged={() => void fetchCollections().then(setCollections).catch(() => undefined)} />
+                  </div>
+                )}
+                {screen.kind === "list" && place.kind !== "collections" && (
+                  <div data-memory-nav-view={place.kind} data-memory-browse={place.kind === "folder" || place.kind === "tier" ? "" : undefined}>
+                    <MemoryNotesList
+                      key={JSON.stringify(place)}
+                      title={listTitle}
+                      line={listLine}
+                      rows={placeRows}
+                      archived={place.kind === "archived" || place.kind === "trash" ? [] : archivedRows.filter((entry) => place.kind === "all" || placeRows.some((row) => row.tier === entry.tier))}
+                      tiers={tiers}
+                      bodies={bodies}
+                      fixedView={place.kind === "archived" || place.kind === "trash"}
+                      canSelect={(entry) => (place.kind === "trash" ? entry.row.status !== "locked" : place.kind === "archived" ? true : entry.source.mayWrite)}
+                      emptyText={loading ? t("memoryManager.loading") : place.kind === "trash" ? t("memoryManager.trashEmpty") : place.kind === "pinned" ? t("memoryManager.pinnedEmpty") : t("memoryManager.emptyView")}
+                      onOpen={(entry) => { if (!entry.row.archived) void openPreview(entry); }}
+                      onEdit={(entry) => void openNote(entry, true)}
+                      onNewHere={canNewHere ? () => { const { target, folder } = defaultTarget(); startCreate(target, folder); } : undefined}
+                      templates={templates}
+                      onFromTemplate={canNewHere ? (template) => void fromTemplate(template) : undefined}
+                      onDelete={place.kind === "archived" || place.kind === "trash" ? undefined : (keys) => void deleteKeys(keys)}
+                      onMove={place.kind === "archived" || place.kind === "trash" ? undefined : startMove}
+                      onRestore={place.kind === "archived" || place.kind === "trash" ? (keys) => void restoreKeys(keys) : undefined}
+                      headExtra={place.kind === "trash" && trashRows.some((entry) => entry.row.status !== "locked") ? (
+                        <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-full border border-hairline/60 px-2.5 text-[12.5px] text-ink hover:bg-hover" onClick={() => void emptyTrash()} data-memory-trash-empty="">
+                          <Trash2 size={14} aria-hidden="true" />{t("memoryManager.emptyTrash")}
                         </button>
-                      )}
-                      <button type="button" className={cn(DANGER_PILL, "ml-auto")} onClick={() => void deleteSelected()} disabled={busy}>
-                        <Trash2 size={13} aria-hidden="true" /> {t("memoryManager.delete")}
-                      </button>
-                    </div>
-                  )}
+                      ) : undefined}
+                      busy={busy}
+                      loading={loading}
+                      initialQuery={listQuery}
+                      onReorder={place.kind === "folder" && place.folder.startsWith("px:") ? reorder : undefined}
+                      collections={collections.filter((entry) => entry.may_edit)}
+                      onAddToCollection={(keys, collection) => void collect(keys, collection)}
+                    />
+                    {place.kind === "trash" && <div data-memory-trash="" />}
+                  </div>
+                )}
 
-                  {busy && !browse && page.kind === "browse" && (
-                    <div className="flex min-h-[160px] items-center justify-center text-ink-secondary">
-                      <Loader2 size={18} className="animate-spin" />
-                    </div>
-                  )}
-                  {page.kind === "browse" && browse && (
-                    <div className="-mx-2" data-memory-browse="">
-                      {visibleNotes.map((row) => noteRow(row.id, page.source, row, { select: browse.mayWrite }))}
-                      {visibleNotes.length === 0 && (
-                        <p className="px-2 py-8 text-center text-[12.5px] text-ink-secondary">{query.trim() ? t("memoryManager.noMatch", { query: query.trim() }) : t("memoryManager.emptyNotes")}</p>
-                      )}
-                    </div>
-                  )}
+                {screen.kind === "note" && !note && busy && (
+                  <div className="flex min-h-[160px] items-center justify-center text-ink-secondary"><Loader2 size={18} className="animate-spin" aria-label={t("memoryManager.loading")} /></div>
+                )}
+                {screen.kind === "note" && note && noteEntry && (
+                  <MemoryNoteView
+                    key={`${noteEntry.key}:${screen.edit ? "edit" : "read"}`}
+                    entry={noteEntry}
+                    detail={note}
+                    tier={noteTier}
+                    facts={noteEntry.source.kind === "bot" && noteEntry.row.path ? factsByBot[noteEntry.source.botId ?? ""]?.get(noteEntry.row.path) : undefined}
+                    linksOut={noteLinks.out}
+                    backlinks={noteLinks.back}
+                    pinned={pins.includes(noteEntry.key)}
+                    startEditing={screen.edit}
+                    busy={busy}
+                    onBack={() => { setScreen({ kind: "list" }); setNote(null); }}
+                    onPin={() => togglePin(noteEntry.key)}
+                    onSave={saveNote}
+                    onDelete={note.mayEdit ? () => void deleteKeys([noteEntry.key]) : undefined}
+                    onMove={noteEntry.source.kind === "perspicax" && note.mayEdit ? () => startMove([noteEntry.key]) : undefined}
+                    onNeighbourhood={() => { setMapFocus(noteEntry.key); setView("map"); }}
+                    onOpenLink={(key) => openKey(key)}
+                    linkColor={(key) => tierByKey.get(rowByKey.get(key)?.tier ?? "")?.color}
+                  />
+                )}
 
-                  {page.kind === "note" && busy && !note && (
-                    <div className="flex min-h-[160px] items-center justify-center text-ink-secondary">
-                      <Loader2 size={18} className="animate-spin" />
-                    </div>
-                  )}
-                  {page.kind === "note" && note && (
-                    <div className="space-y-4" data-memory-note="">
-                      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
-                        <div className="min-w-0 flex-1">
-                          {editing ? (
-                            <input
-                              value={draftTitle}
-                              onChange={(event) => setDraftTitle(event.target.value)}
-                              className="w-full rounded-md border border-border bg-ink/[0.03] px-2 py-1 text-[16px] font-semibold text-ink outline-none focus:border-border-strong"
-                              aria-label={t("memoryManager.titleField")}
-                              data-memory-rename=""
-                            />
-                          ) : (
-                            <h2 className="truncate text-[16px] font-semibold text-ink">{note.title}</h2>
-                          )}
-                          <p className="mt-1 truncate text-[12px] text-ink-secondary">{[page.source.name, folderLabel(page.source, note.folder)].filter(Boolean).join(" · ")}</p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          {note.mayEdit && !editing && (
-                            <>
-                              {page.source.kind === "perspicax" && (
-                                <button
-                                  type="button"
-                                  className={PILL}
-                                  onClick={() => {
-                                    setMoveTopic(note.folder || "notes");
-                                    setMoveScope(note.scope || "me");
-                                    setPage({ kind: "move", source: page.source, noteIds: [note.id] });
-                                  }}
-                                >
-                                  {t("memoryManager.move")}
-                                </button>
-                              )}
-                              <button type="button" className={PILL} onClick={() => { setDraftTitle(note.title); setDraftTags(note.tags.join(", ")); setEditing(true); }}>{t("memoryManager.edit")}</button>
-                            </>
-                          )}
-                          {editing && (
-                            <>
-                              <button type="button" className={PILL} onClick={() => { setEditing(false); setDraft(note.body); setDraftTitle(note.title); setDraftTags(note.tags.join(", ")); }}>{t("common.cancel")}</button>
-                              <button type="button" className={PRIMARY_PILL} disabled={busy} onClick={() => void saveNote()}>{t("common.save")}</button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      {(editing || note.tags.length > 0) && (
-                        <div>
-                          {editing && page.source.kind === "perspicax" ? (
-                            <label className="block">
-                              <span className="mb-1 block text-[11px] font-medium text-ink-secondary">{t("memoryManager.tags")}</span>
-                              <input
-                                value={draftTags}
-                                onChange={(event) => setDraftTags(event.target.value)}
-                                placeholder={t("memoryManager.tagsHint")}
-                                className="w-full rounded-md border border-border bg-ink/[0.03] px-2 py-1 text-[12.5px] text-ink outline-none focus:border-border-strong"
-                                data-memory-tags=""
-                              />
-                            </label>
-                          ) : (
-                            <div className="flex flex-wrap gap-1">
-                              {note.tags.map((tag) => (
-                                <span key={tag} className="rounded-md bg-raised px-1.5 py-0.5 text-[11px] text-ink-secondary">{tag}</span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      <div>
-                        {editing
-                          ? <MarkdownEditor value={draft} onChange={setDraft} minHeight={280} showCount={false} dataField="memory-manager-note" ariaLabel={t("memoryManager.editorLabel")} />
-                          : <ReadBody body={note.body} bodyKind={note.bodyKind} />}
-                      </div>
-                    </div>
-                  )}
-
-                  {page.kind === "create" && (
-                    <div className="flex flex-col gap-3" data-memory-create-form="">
-                      {page.source.kind === "perspicax" && (
-                        <label className="block">
-                          <span className="mb-1.5 block text-[12px] font-medium text-ink-secondary">{t("memoryManager.folder")}</span>
-                          <input
-                            value={createFolder}
-                            onChange={(event) => setCreateFolder(event.target.value)}
-                            className="w-full max-w-md rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-border-strong"
-                            data-memory-create-folder=""
-                            {...(page.newFolder ? { "data-initial-focus": "" } : {})}
-                          />
-                        </label>
-                      )}
+                {screen.kind === "create" && (
+                  <div className="mx-auto flex w-full max-w-[640px] flex-col gap-3 rounded-xl border border-hairline/50 bg-panel p-5" data-memory-create-form="">
+                    <h2 className="text-[20px] font-semibold text-ink">{newFolder ? t("memoryManager.newFolder") : t("memoryManager.newNote")}</h2>
+                    <label className="block">
+                      <span className="mb-1.5 block text-[12px] font-medium text-ink-secondary">{t("memoryManager.where")}</span>
+                      <select value={createTarget} onChange={(event) => { const next = targets.find((entry) => entry.id === event.target.value); setCreateTarget(event.target.value); setCreateFolder(next?.source.kind === "team" ? "term" : next?.freeFolder ? "notes" : ""); }} className={FIELD} data-memory-create-where="">
+                        {targets.map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}
+                      </select>
+                    </label>
+                    {createTargetRow && createTargetRow.source.kind === "team" && (
                       <label className="block">
-                        <span className="mb-1.5 block text-[12px] font-medium text-ink-secondary">{t("memoryManager.titleField")}</span>
-                        <input
-                          value={createTitle}
-                          onChange={(event) => setCreateTitle(event.target.value)}
-                          className="w-full max-w-md rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-border-strong"
-                          {...(page.newFolder ? {} : { "data-initial-focus": "" })}
-                        />
+                        <span className="mb-1.5 block text-[12px] font-medium text-ink-secondary">{t("memoryManager.folder")}</span>
+                        <select value={createFolder} onChange={(event) => setCreateFolder(event.target.value)} className={FIELD}>
+                          {TEAM_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}
+                        </select>
                       </label>
-                      <button type="button" className={cn(PRIMARY_PILL, "self-start")} disabled={busy || !createTitle.trim() || (page.newFolder && !createFolder.trim())} onClick={() => void createNote()}>
+                    )}
+                    {createTargetRow?.freeFolder && (
+                      <label className="block">
+                        <span className="mb-1.5 block text-[12px] font-medium text-ink-secondary">{t("memoryManager.folder")}</span>
+                        <input value={createFolder} onChange={(event) => setCreateFolder(event.target.value)} list="memory-create-folders" className={FIELD} data-memory-create-folder="" {...(newFolder ? { "data-initial-focus": "", autoFocus: true } : {})} />
+                        <datalist id="memory-create-folders">{createTargetRow.folders.map((folder) => <option key={folder} value={folder} />)}</datalist>
+                      </label>
+                    )}
+                    <label className="block">
+                      <span className="mb-1.5 block text-[12px] font-medium text-ink-secondary">{t("memoryManager.titleField")}</span>
+                      <input value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void createNote(); }} className={FIELD} data-memory-create-title="" {...(newFolder ? {} : { "data-initial-focus": "", autoFocus: true })} />
+                    </label>
+                    <div className="flex items-center justify-end gap-2">
+                      <button type="button" className="inline-flex h-8 items-center rounded-full px-3 text-[12.5px] text-ink hover:bg-hover" onClick={() => setScreen({ kind: "list" })}>{t("common.cancel")}</button>
+                      <button type="button" className={PRIMARY_BUTTON} disabled={busy || !createTitle.trim() || (newFolder && !createFolder.trim())} onClick={() => void createNote()} data-memory-create-submit="">
                         {t("memoryManager.create")}
                       </button>
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {page.kind === "move" && (
-                    <div className="flex flex-col gap-3" data-memory-move="">
-                      <label className="block max-w-md">
-                        <span className="mb-1.5 block text-[12px] font-medium text-ink-secondary">{t("memoryManager.folder")}</span>
-                        <input
-                          value={moveTopic}
-                          onChange={(event) => setMoveTopic(event.target.value)}
-                          className="w-full rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-border-strong"
-                          data-memory-move-folder=""
-                        />
-                      </label>
-                      <label className="block max-w-md">
-                        <span className="mb-1.5 block text-[12px] font-medium text-ink-secondary">{t("memoryManager.tier")}</span>
-                        <select
-                          value={moveScope}
-                          onChange={(event) => setMoveScope(event.target.value)}
-                          className="w-full rounded-lg border border-border bg-ink/[0.03] px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-border-strong"
-                          data-memory-move-tier=""
-                        >
-                          <option value="me">{t("memoryManager.tierMe")}</option>
-                          <option value="org">{t("memoryManager.tierOrg")}</option>
-                        </select>
-                      </label>
-                      <button type="button" className={cn(PRIMARY_PILL, "self-start")} disabled={busy || !moveTopic.trim()} onClick={() => void runMove()}>
-                        {t("memoryManager.moveConfirm")}
-                      </button>
+                {screen.kind === "move" && (
+                  <div className="mx-auto flex w-full max-w-[640px] flex-col gap-3 rounded-xl border border-hairline/50 bg-panel p-5" data-memory-move="">
+                    <h2 className="text-[20px] font-semibold text-ink">{t("memoryManager.moveConfirm")}</h2>
+                    <p className="text-[13px] text-ink-secondary">{t("memoryManager.moveHint", { count: screen.keys.length })}</p>
+                    <label className="block">
+                      <span className="mb-1.5 block text-[12px] font-medium text-ink-secondary">{t("memoryManager.tier")}</span>
+                      <select value={moveScope} onChange={(event) => setMoveScope(event.target.value)} className={FIELD} data-memory-move-tier="">
+                        {pxTiers.filter((tier) => tier.mayWrite).map((tier) => (
+                          <option key={tier.scope} value={tier.scope}>{tier.kind === "me" ? t("memoryManager.tierMine") : tier.kind === "org" ? t("memoryManager.tierOrg") : tier.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-[12px] font-medium text-ink-secondary">{t("memoryManager.folder")}</span>
+                      <input value={moveTopic} onChange={(event) => setMoveTopic(event.target.value)} list="memory-move-folders" className={FIELD} data-memory-move-folder="" />
+                      <datalist id="memory-move-folders">{(pxTiers.find((tier) => tier.scope === moveScope)?.folders ?? []).map((folder) => <option key={folder.id} value={folder.name} />)}</datalist>
+                    </label>
+                    <div className="flex items-center justify-end gap-2">
+                      <button type="button" className="inline-flex h-8 items-center rounded-full px-3 text-[12.5px] text-ink hover:bg-hover" onClick={() => setScreen({ kind: "list" })}>{t("common.cancel")}</button>
+                      <button type="button" className={PRIMARY_BUTTON} disabled={busy || !moveTopic.trim()} onClick={() => void runMove()} data-memory-move-submit="">{t("memoryManager.moveConfirm")}</button>
                     </div>
-                  )}
-
-                  {page.kind === "trash" && (
-                    <div className="-mx-2" data-memory-trash="">
-                      {trashRows.map((row) => (
-                        <div key={`${row.scope}:${row.id}`} className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-hover">
-                          <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{row.title}</span>
-                          {row.may_manage !== false && (
-                            <button
-                              type="button"
-                              className={PILL}
-                              onClick={() => void pxMemory("/bulk", {
-                                method: "POST",
-                                body: JSON.stringify({ action: "restore", items: [{ scope: row.scope, id: row.id }] }),
-                              }).then(() => { refreshOverviews(); return openTrash(page.source); })}
-                            >
-                              {t("memoryManager.restore")}
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                      {trashRows.length === 0 && (
-                        <p className="px-2 py-8 text-center text-[12.5px] text-ink-secondary">{t("memoryManager.trashEmpty")}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             )}
           </section>
-
-          {/* Automations' calendar rail: on the right of the body, 280px, after the content. */}
-          {explorerOpen ? <MemorySidebar
-            query={query}
-            onQuery={onQuery}
-            searchRef={searchRef}
-            shortcut={mac ? "⌘O" : "Ctrl+O"}
-            nav={nav}
-            tiers={tiers}
-            renaming={renaming}
-            onRenameDone={() => setRenaming(null)}
-            loading={sidebarLoading}
-            footer={sidebarFooter}
-            onCollapse={() => setExplorerOpen(false)}
-          /> : (
-            <button type="button" onClick={() => setExplorerOpen(true)} aria-label={t("memoryManager.explorerShow")} title={t("memoryManager.explorerShow")} className="flex w-10 shrink-0 flex-col items-center gap-2 border-l border-hairline/40 bg-panel px-1 py-4 text-[11px] text-ink-secondary hover:bg-raised hover:text-ink" data-memory-explorer-show="">
-              <Brain size={16} aria-hidden="true" />
-              <span className="[writing-mode:vertical-rl]">{t("memoryManager.sidebarLabel")}</span>
-            </button>
-          )}
         </div>
+        {preview && (view === "notes" || view === "map") && (
+          <>
+            <button type="button" aria-label={t("common.close")} className="absolute inset-0 z-30 cursor-default bg-ink/10" onClick={() => setPreview(null)} data-memory-preview-scrim="" />
+            <aside role="complementary" aria-label={preview.entry.row.title} className="absolute inset-y-0 right-0 z-40 flex w-[min(920px,calc(100%-40px))] flex-col border-l border-hairline/60 bg-app shadow-xl" data-memory-preview-panel="">
+              <div className="flex shrink-0 items-center justify-end px-4 pt-3">
+                <button type="button" aria-label={t("common.close")} title={t("common.close")} className="grid size-8 place-items-center rounded-full text-ink-secondary hover:bg-hover hover:text-ink" onClick={() => setPreview(null)} data-memory-preview-close="">
+                  <X size={16} aria-hidden="true" />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
+                {preview.detail ? (
+                  <MemoryNoteView
+                    key={`preview:${preview.entry.key}`}
+                    variant="panel"
+                    entry={preview.entry}
+                    detail={preview.detail}
+                    tier={tierByKey.get(preview.entry.tier)}
+                    facts={preview.entry.source.kind === "bot" && preview.entry.row.path ? factsByBot[preview.entry.source.botId ?? ""]?.get(preview.entry.row.path) : undefined}
+                    linksOut={previewLinks.out}
+                    backlinks={previewLinks.back}
+                    pinned={pins.includes(preview.entry.key)}
+                    busy={busy}
+                    onBack={() => setPreview(null)}
+                    onPin={() => togglePin(preview.entry.key)}
+                    onSave={async () => false}
+                    onEditPage={() => void openNote(preview.entry, true)}
+                    onDelete={preview.detail.mayEdit ? () => { const key = preview.entry.key; setPreview(null); void deleteKeys([key]); } : undefined}
+                    onMove={preview.entry.source.kind === "perspicax" && preview.detail.mayEdit ? () => { const key = preview.entry.key; setPreview(null); startMove([key]); } : undefined}
+                    onNeighbourhood={() => { setMapFocus(preview.entry.key); setPreview(null); setView("map"); }}
+                    onOpenLink={previewKey}
+                    linkColor={(key) => tierByKey.get(rowByKey.get(key)?.tier ?? "")?.color}
+                  />
+                ) : (
+                  <div className="flex min-h-[160px] items-center justify-center text-ink-secondary"><Loader2 size={18} className="animate-spin" aria-label={t("memoryManager.loading")} /></div>
+                )}
+              </div>
+            </aside>
+          </>
+        )}
       </div>
     </main>
   );

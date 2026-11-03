@@ -9,11 +9,20 @@ vi.mock("../DesktopCapabilities", () => ({
   useMacInsetChrome: () => ({ macInset: false, browser: false }),
 }));
 
+const confirmAsync = vi.fn(async () => true);
 vi.mock("../ConfirmProvider", () => ({
-  confirmAsync: vi.fn(async () => true),
+  confirmAsync: (...args: unknown[]) => confirmAsync(...(args as [])),
   useConfirm: () => vi.fn(async () => true),
   discardConfirmRequest: (body?: string) => ({ title: "Discard", body }),
 }));
+
+// The markdown renderer is the chat's: a plain stand-in keeps this suite on the page.
+vi.mock("../ChatMarkdown", () => ({
+  ChatMarkdown: ({ text }: { text: string }) => createElement("div", { "data-chat-markdown": "" }, text),
+}));
+
+const calls: Array<{ path: string; method: string; body?: string }> = [];
+const now = Date.now();
 
 vi.mock("@/state/store", async () => {
   const actual = await vi.importActual<typeof import("@/state/store")>("@/state/store");
@@ -24,7 +33,8 @@ vi.mock("@/state/store", async () => {
       dispatch: vi.fn(),
     }),
     useStoreOptional: () => null,
-    api: vi.fn(async (path: string) => {
+    api: vi.fn(async (path: string, init?: RequestInit) => {
+      calls.push({ path, method: init?.method ?? "GET", body: typeof init?.body === "string" ? init.body : undefined });
       // `wide`: every kind of row (a team section, a team tier, a proposal).
       const wide = (globalThis as { __memoryWide?: boolean }).__memoryWide === true;
       if (path === "/api/memory-manager/sources") {
@@ -41,7 +51,14 @@ vi.mock("@/state/store", async () => {
       }
       if (path.startsWith("/api/bots/northwind/")) throw new actual.ApiError("no such bot", 404);
       if (path.startsWith("/api/team-memory")) {
-        return { entries: [{ id: "tm1", kind: "term", name: "OMB", detail: "Open MAUS Bot", status: "proposed", updatedAt: Date.now() }] };
+        if (init?.method && init.method !== "GET") return {};
+        return { entries: [{ id: "tm1", kind: "term", name: "OMB", detail: "Open MAUS Bot", status: "proposed", updatedAt: now, source: { botId: "atlas", botName: "Atlas", threadId: "t", at: now - 1000 } }] };
+      }
+      if (path.startsWith("/api/bots/atlas/memory/journal")) {
+        return { entries: [
+          { id: "j1", at: now - 40 * 86_400_000, botId: "atlas", path: "memory/dining.md", actor: "bot", via: "turn", kind: "created", beforeHash: null, afterHash: "a", diff: "", added: 3, removed: 0, canRevert: true },
+          { id: "j2", at: now - 3_600_000, botId: "atlas", path: "memory/dining.md", actor: "person", via: "panel", kind: "edited", beforeHash: "a", afterHash: "b", diff: "", added: 1, removed: 0, canRevert: true },
+        ] };
       }
       if (path.startsWith("/api/bots/atlas/memory") && !path.includes("/file")) {
         return {
@@ -49,33 +66,51 @@ vi.mock("@/state/store", async () => {
           workspacePath: "/tmp",
           index: { lines: 0, bytes: 0, maxLines: 200, maxBytes: 24000, loadedLines: 0, loadedBytes: 0, truncated: false, hash: "h" },
           topics: [
-            { path: "memory/dining.md", name: "dining.md", bytes: 12, modifiedAt: 1 },
-            { path: "memory/travel.md", name: "travel.md", bytes: 8, modifiedAt: 2 },
+            { path: "memory/dining.md", name: "Dining.md", bytes: 12, modifiedAt: now - 3_600_000 },
+            { path: "memory/travel.md", name: "Travel.md", bytes: 8, modifiedAt: now - 7_200_000 },
           ],
           logs: [],
         };
       }
       if (path.includes("/memory/file")) {
+        if (path.includes("travel")) return { path: "memory/travel.md", text: "# Travel\n\nTrains with [[Dining]].\n", hash: "t", exists: true };
+        if (path.includes("MEMORY")) return { path: "MEMORY.md", text: "# MEMORY\n\nIndex.\n", hash: "m", exists: true };
         return { path: "memory/dining.md", text: "# Dining\n\nSee [[Travel]].\n\n```json\n{\"likes\":\"pasta\"}\n```\n", hash: "abc", exists: true };
       }
       if (path.startsWith("/api/me/memory/tree")) {
         return {
           tiers: [{
             scope: "me", kind: "me", name: "Personal", may_write: true, may_manage: true, trashed: 0,
-            topics: [{ topic: "notes", count: 1, entries: [{ id: "n1", title: "Brief", topic: "notes", tags: ["work"], excerpt: "Keep" }] }],
+            topics: [{ topic: "notes", count: 2, entries: [
+              { id: "n1", title: "Brief", topic: "notes", tags: ["work", "area:plan"], excerpt: "Keep", author_name: "Dana Reyes", created: new Date(now - 5 * 86_400_000).toISOString(), updated: new Date(now - 7_200_000).toISOString(), rank: 1 },
+              { id: "n3", title: "Agenda", topic: "notes", tags: [], excerpt: "Monday", author_name: "Dana Reyes", updated: new Date(now - 9 * 86_400_000).toISOString(), rank: 0 },
+            ] }],
           }, ...(wide ? [{
             scope: "team:ops", kind: "team", name: "Ops", may_write: true, may_manage: false, trashed: 0,
-            topics: [{ topic: "runbooks", count: 1, entries: [{ id: "n2", title: "Runbook", topic: "runbooks", tags: [], excerpt: "Steps" }] }],
+            topics: [{ topic: "runbooks", count: 1, entries: [{ id: "n2", title: "Runbook", topic: "runbooks", tags: [], excerpt: "{\"steps\":3,\"owner\":\"ops\"}" }] }],
           }] : [])],
         };
       }
+      if (path.startsWith("/api/me/memory/tags")) return { namespaces: [{ id: "area", label_en: "Area", controlled: true, required: false, tags: [{ tag: "area:network" }] }] };
+      if (path.startsWith("/api/me/memory/archived")) return { notes: [] };
       if (path.startsWith("/api/me/memory/trash")) return { notes: [], days: 30 };
       if (path.startsWith("/api/me/memory/entry")) {
-        return { id: "n1", scope: "me", topic: "notes", title: "Brief", body: "# Brief\n", tags: ["work"], may_edit: true, version: 1 };
+        return {
+          id: "n1", scope: "me", topic: "notes", title: "Brief", body: "# Brief\n", tags: ["work"], may_edit: true, version: 1,
+          author_name: "Dana Reyes", created: new Date(now - 5 * 86_400_000).toISOString(), updated: new Date(now - 7_200_000).toISOString(),
+          source: "humain", provenance: [{ kind: "console", reference: "" }], versions: 3, edit_mode: "direct",
+          links_out: [], backlinks: [{ scope: "me", id: "n9", title: "Plan", context: "See the Brief first." }],
+        };
       }
-      if (path.startsWith("/api/me/memory/bulk")) {
-        return { action: "move", done: 1, review: 0, refused: 0, items: [] };
+      if (path === "/api/me/memory/collections") {
+        if (init?.method === "POST") return { id: "c2", scope: "me", title: "New", description: "", item_count: 0, may_edit: true, items: [] };
+        return { collections: [{ id: "c1", scope: "me", title: "Onboarding book", description: "Read in order", author_name: "Dana Reyes", item_count: 1, may_edit: true }] };
       }
+      if (path.startsWith("/api/me/memory/collections/")) {
+        return { id: "c1", scope: "me", title: "Onboarding book", description: "Read in order", item_count: 1, may_edit: true, items: [{ note_scope: "me", note_id: "n1", rank: 0, title: "Brief", topic: "notes", readable: true }] };
+      }
+      if (path.startsWith("/api/me/memory/order")) return {};
+      if (path.startsWith("/api/me/memory/bulk")) return { action: "delete", done: 1, review: 0, refused: 0, items: [], batch: "b1" };
       return {};
     }),
   };
@@ -89,20 +124,24 @@ vi.mock("../panel-slot", () => ({
 import { setLocale } from "@/lib/i18n";
 import { MemoryManagerPanel } from "./MemoryManagerPanel";
 
+const settle = async () => { await act(async () => { for (let i = 0; i < 10; i += 1) await Promise.resolve(); }); };
+const wait = async (ms = 20) => { await act(async () => { await new Promise((done) => setTimeout(done, ms)); }); };
+
 describe("MemoryManagerPanel page", () => {
   let host: HTMLDivElement;
   let root: Root;
-
-  // The window width the explorer reads (it opens from 1280px, as Automations' rail).
   let viewport = 1440;
 
   beforeEach(() => {
     viewport = 1440;
+    calls.length = 0;
+    confirmAsync.mockClear();
     vi.spyOn(window, "matchMedia").mockImplementation((query: string) => {
       const min = /min-width:\s*(\d+)px/.exec(query);
       return { matches: min ? viewport >= Number(min[1]) : false, media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false } as MediaQueryList;
     });
     setLocale("en");
+    window.localStorage.clear();
     host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
@@ -115,169 +154,270 @@ describe("MemoryManagerPanel page", () => {
     vi.restoreAllMocks();
   });
 
-  it("puts the explorer on the right of the body, as Automations' rail", async () => {
-    await act(async () => {
-      root.render(createElement(MemoryManagerPanel));
-    });
-    await act(async () => { await Promise.resolve(); });
-    const body = host.querySelector("[data-memory-row] .content-card-body")!;
-    const children = Array.from(body.children);
-    expect(children[0]!.tagName).toBe("SECTION");
-    expect(children[children.length - 1]!.hasAttribute("data-memory-sources")).toBe(true);
-    expect(host.querySelector("[data-memory-sources]")!.className).toContain("border-l");
-    expect(host.querySelector("[data-memory-sources]")!.className).toContain("w-[280px]");
-  });
+  const render = async () => {
+    await act(async () => { root.render(createElement(MemoryManagerPanel)); });
+    await settle();
+    await wait();
+    await settle();
+  };
+  const segment = (label: string) => Array.from(host.querySelectorAll<HTMLButtonElement>("[data-memory-views] button")).find((button) => button.textContent?.includes(label))!;
 
-  it("folds the explorer into its strip under 1280px, and Cmd+O opens it", async () => {
-    viewport = 1024;
-    await act(async () => {
-      root.render(createElement(MemoryManagerPanel));
-    });
-    await act(async () => { await Promise.resolve(); });
-    expect(host.querySelector("[data-memory-sources]")).toBeNull();
-    const strip = host.querySelector("[data-memory-explorer-show]") as HTMLButtonElement;
-    expect(strip.getAttribute("aria-label")).toBe("Show memory sources");
-    await act(async () => { strip.click(); });
-    expect(host.querySelector("[data-memory-sources]")).not.toBeNull();
-    const hide = host.querySelector("[data-memory-explorer-hide]") as HTMLButtonElement;
-    expect(hide.getAttribute("aria-label")).toBe("Hide memory sources");
-    await act(async () => { hide.click(); });
-    expect(host.querySelector("[data-memory-sources]")).toBeNull();
-    await act(async () => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "o", metaKey: true, ctrlKey: true }));
-    });
-    await act(async () => { await Promise.resolve(); });
-    expect(host.querySelector("[data-memory-sources]")).not.toBeNull();
-    expect(document.activeElement).toBe(host.querySelector("[data-memory-search]"));
-  });
-
-  it("opens as a main page with sources list", async () => {
-    await act(async () => {
-      root.render(createElement(MemoryManagerPanel));
-    });
-    await act(async () => { await Promise.resolve(); });
+  it("is a full page with the console's views under the title and the explorer on the LEFT", async () => {
+    await render();
     expect(host.querySelector("[data-memory-manager-page]")).not.toBeNull();
     expect(host.querySelector('[role="dialog"]')).toBeNull();
-    expect(host.querySelector("[data-memory-sources]")).not.toBeNull();
-    expect(host.textContent).toContain("Memory");
-    expect(host.textContent).toContain("Atlas");
+    expect(host.querySelector("[data-memory-header] h1")?.textContent).toBe("Memory");
+    // The console's large title, no icon before it.
+    expect(host.querySelector("[data-memory-header] h1")?.className).toContain("text-[30px]");
+    expect(host.querySelector("[data-memory-header] [data-page-title] svg")).toBeNull();
+    expect(Array.from(host.querySelectorAll("[data-memory-views] button")).map((button) => button.textContent)).toEqual(["Notes", "Map", "Tags", "Quality"]);
+    expect(host.querySelector("[data-memory-create]")?.textContent).toContain("New note");
+    const body = host.querySelector("[data-memory-row] .content-card-body")!;
+    expect(body.children[0]!.hasAttribute("data-memory-sources")).toBe(true);
+    expect(body.children[1]!.tagName).toBe("SECTION");
+    expect(host.querySelector("[data-memory-sources]")!.className).toContain("border-r");
+    expect(host.querySelector("[data-memory-sources]")!.className).toContain("w-[236px]");
   });
 
-  it("lays out the left column like the Perspicax explorer, with real counts only", async () => {
-    await act(async () => {
-      root.render(createElement(MemoryManagerPanel));
-    });
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
-    // The Automations header row: icon and title, no subtitle stacked in the header.
-    expect(host.querySelector("[data-memory-header] h1")?.textContent).toBe("Memory");
-    expect(host.querySelector("[data-memory-search]")?.getAttribute("placeholder")).toBe("Open a note");
-    const navIds = Array.from(host.querySelectorAll("[data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"));
-    // No team source, no proposal, no pin: only the views with data show.
-    expect(navIds).toEqual(["all", "trash"]);
-    expect(host.querySelector('[data-memory-nav="all"]')?.textContent).toContain("4");
-    expect(host.textContent).toContain("Tiers");
+  it("Notes: lists, tiers and tidy up like the Perspicax explorer, with real counts only", async () => {
+    await render();
+    const lists = Array.from(host.querySelectorAll("[data-memory-nav-list] [data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"));
+    expect(lists).toEqual(["all", "pinned", "recent", "review"]);
+    expect(host.querySelector('[data-memory-nav="all"]')?.textContent).toContain("5");
+    expect(Array.from(host.querySelectorAll("[data-memory-tidy-list] [data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"))).toEqual(["collections", "archived", "trash"]);
     const mine = host.querySelector('[data-memory-tier="mine"]') as HTMLElement;
     expect(mine.textContent).toContain("My memory");
-    expect(mine.textContent).toContain("4");
-    // The bot is a folder of My memory, not a "Bot memory" card.
+    expect(mine.textContent).toContain("5");
+    // The bot is a folder of My memory.
     expect(host.querySelector('[data-memory-source="bot:atlas"]')?.textContent).toContain("Atlas");
     expect(host.querySelector('[data-memory-source="bot:atlas"]')?.textContent).not.toContain("Bot memory");
-    // A Perspicax folder offers its real actions.
     const folder = host.querySelector('[data-memory-folder="me/notes"]')!.closest("div")!;
-    const actions = Array.from(folder.querySelectorAll("[data-memory-row-action]")).map((node) => node.getAttribute("data-memory-row-action"));
-    expect(actions).toEqual(["new", "rename", "delete"]);
-    // All notes lists every source's notes in the body column.
-    expect(host.querySelectorAll('[data-memory-nav-view="all"] [data-memory-note-row]').length).toBe(4);
-    // No identifier is shown.
+    expect(Array.from(folder.querySelectorAll("[data-memory-row-action]")).map((node) => node.getAttribute("data-memory-row-action"))).toEqual(["new", "rename", "delete"]);
+    // The list card, its toolbar and its rows.
+    expect(host.querySelector("[data-memory-list-title]")?.textContent).toBe("All notes");
+    expect(host.querySelector("[data-memory-list-count]")?.textContent).toBe("5 of 5");
+    expect(host.querySelectorAll('[data-memory-nav-view="all"] [data-memory-note-row]').length).toBe(5);
+    const brief = host.querySelector('[data-memory-row-key="perspicax|me/n1"]')!;
+    expect(brief.textContent).toContain("Dana Reyes");
+    expect(brief.textContent).toContain("work");
+    // A bot note: its author from the journal, its excerpt from its body.
+    const dining = host.querySelector('[data-memory-row-key="bot:atlas|memory/dining.md"]')!;
+    expect(dining.textContent).toContain("You");
+    expect(dining.textContent).toContain("Atlas / Topics");
     expect(host.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/);
   });
 
-  it("filters the notes from the Open a note field", async () => {
-    await act(async () => {
-      root.render(createElement(MemoryManagerPanel));
-    });
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
+  it("Notes: the search keeps the notes that match, operators included", async () => {
+    await render();
     const input = host.querySelector("[data-memory-search]") as HTMLInputElement;
-    await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-      setter.call(input, "brief");
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    const rows = host.querySelectorAll('[data-memory-nav-view="all"] [data-memory-note-row]');
-    expect(rows.length).toBe(1);
-    expect(rows[0]!.textContent).toContain("Brief");
+    const type = async (value: string) => {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    };
+    await type("brief");
+    expect(host.querySelectorAll("[data-memory-note-row]").length).toBe(1);
+    await type("tag:work");
+    expect(host.querySelectorAll("[data-memory-note-row]").length).toBe(1);
+    await type("folder:topics");
+    expect(host.querySelectorAll("[data-memory-note-row]").length).toBe(2);
   });
 
-  it("lists notes then opens a note from the list", async () => {
-    await act(async () => {
-      root.render(createElement(MemoryManagerPanel));
-    });
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-    const source = host.querySelector('[data-memory-source="bot:atlas"]') as HTMLButtonElement;
-    expect(source).not.toBeNull();
-    await act(async () => { source.click(); });
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-    expect(host.querySelector("[data-memory-browse]")).not.toBeNull();
-    const row = host.querySelector('[data-memory-browse] [data-memory-note-row]') as HTMLElement;
-    expect(row).not.toBeNull();
-    const open = row.querySelector("button") as HTMLButtonElement;
+  it("Notes: a bot folder lists its notes and deletes several at once", async () => {
+    await render();
+    await act(async () => { (host.querySelector('[data-memory-source="bot:atlas"]') as HTMLButtonElement).click(); });
+    await settle();
+    expect(host.querySelector("[data-memory-list-title]")?.textContent).toBe("Atlas");
+    expect(host.querySelectorAll("[data-memory-note-row]").length).toBe(3);
+    await act(async () => { (host.querySelector("[data-memory-select-all]") as HTMLInputElement).click(); });
+    expect(host.querySelector("[data-memory-bulk]")?.textContent).toContain("3 selected");
+    await act(async () => { (host.querySelector("[data-memory-bulk-delete]") as HTMLButtonElement).click(); });
+    await settle();
+    expect(confirmAsync).toHaveBeenCalled();
+    expect(calls.filter((call) => call.method === "DELETE" && call.path.includes("/api/bots/atlas/memory/file")).length).toBe(3);
+  });
+
+  it("Preview: a click opens the console's preview beside the list, with its properties and backlinks", async () => {
+    await render();
+    await act(async () => { (host.querySelector('[data-memory-row-key="perspicax|me/n1"] [data-memory-row-open]') as HTMLButtonElement).click(); });
+    await wait();
+    await settle();
+    expect(host.querySelector("[data-memory-note]")).toBeNull();
+    const panel = host.querySelector("[data-memory-preview-panel]")!;
+    expect(panel).not.toBeNull();
+    expect(host.querySelector("[data-memory-list]")).not.toBeNull();
+    expect(panel.querySelector("[data-memory-note-back]")).toBeNull();
+    expect(panel.querySelector("[data-memory-note-line]")?.textContent).toContain("My memory / notes");
+    expect(panel.querySelector("[data-memory-note-line]")?.textContent).toContain("by Dana Reyes");
+    const props = panel.querySelector("[data-memory-note-props]")!.textContent!;
+    for (const label of ["Tier", "Author", "Created", "Changed", "Provenance", "Source", "Versions"]) expect(props).toContain(label);
+    expect(props).toContain("3 versions");
+    expect(panel.querySelector("[data-memory-note-backlinks]")?.textContent).toContain("Plan");
+    expect(panel.querySelector("[data-memory-note-toolbar]")?.textContent).toContain("Neighbourhood");
+    // Edit in the preview opens the note's page, in edit mode.
+    await act(async () => { (panel.querySelector("[data-memory-note-edit]") as HTMLButtonElement).click(); });
+    await wait();
+    await settle();
+    expect(host.querySelector("[data-memory-preview-panel]")).toBeNull();
+    expect(host.querySelector("[data-memory-note]")).not.toBeNull();
+    expect(host.querySelector("[data-memory-rename]")).not.toBeNull();
+    expect(host.querySelector("[data-memory-tags]")).not.toBeNull();
+    await act(async () => { (host.querySelector("[data-memory-note-back]") as HTMLButtonElement).click(); });
+    expect(host.querySelector("[data-memory-list]")).not.toBeNull();
+  });
+
+  it("Preview: Escape and the scrim close it; a double click opens the note's page", async () => {
+    await render();
+    const open = host.querySelector('[data-memory-row-key="perspicax|me/n1"] [data-memory-row-open]') as HTMLButtonElement;
     await act(async () => { open.click(); });
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await wait();
+    expect(host.querySelector("[data-memory-preview-panel]")).not.toBeNull();
+    await act(async () => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); });
+    expect(host.querySelector("[data-memory-preview-panel]")).toBeNull();
+    await act(async () => { open.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); });
+    await wait();
+    await settle();
+    expect(host.querySelector("[data-memory-preview-panel]")).toBeNull();
     expect(host.querySelector("[data-memory-note]")).not.toBeNull();
-    expect(host.querySelector("[data-memory-read-body], [data-memory-json-tree]")).not.toBeNull();
   });
 
-  it("map view shows nodes and a note click opens the note", async () => {
-    await act(async () => {
-      root.render(createElement(MemoryManagerPanel));
-    });
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-    const source = host.querySelector('[data-memory-source="bot:atlas"]') as HTMLButtonElement;
-    await act(async () => { source.click(); });
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
-    const mapToggle = Array.from(host.querySelectorAll("button")).find((button) => button.textContent?.includes("Map"));
-    expect(mapToggle).toBeTruthy();
-    await act(async () => { mapToggle!.click(); });
-    await act(async () => { await Promise.resolve(); });
-    expect(host.querySelector("[data-memory-map]")).not.toBeNull();
-    const noteNode = host.querySelector('[data-memory-map-node="note"]') as HTMLButtonElement;
-    expect(noteNode).not.toBeNull();
-    await act(async () => { noteNode.click(); });
-    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
-    expect(host.querySelector("[data-memory-note]")).not.toBeNull();
+  it("Note page: a bot note folds its JSON block and counts its versions from the journal", async () => {
+    await render();
+    await act(async () => { (host.querySelector('[data-memory-row-key="bot:atlas|memory/dining.md"] [data-memory-row-open]') as HTMLButtonElement).dispatchEvent(new MouseEvent("dblclick", { bubbles: true })); });
+    await wait();
+    await settle();
+    await act(async () => { (Array.from(host.querySelectorAll("button")).find((button) => button.textContent === "Cancel") as HTMLButtonElement | undefined)?.click(); });
+    expect(host.querySelector("[data-memory-read-body]")).not.toBeNull();
+    expect(host.querySelector("[data-memory-json-tree]")).not.toBeNull();
+    expect(host.querySelector("[data-memory-note-props]")?.textContent).toContain("2 versions");
+    // Travel links to [[Dining]]: a backlink.
+    expect(host.querySelector("[data-memory-note-backlinks]")?.textContent).toContain("Travel");
+  });
+
+  it("Map: the console's radial brain by default, the column map one press away, a note previews from it", async () => {
+    await render();
+    await act(async () => { segment("Map").click(); });
+    await settle();
+    expect(host.querySelector("[data-memory-sources]")).toBeNull();
+    expect(host.querySelector('[data-memory-map-layout="brain"] [data-testid="memory-brain"] canvas')).not.toBeNull();
+    expect(host.querySelector('[data-testid="memory-brain"]')?.getAttribute("data-nodes")).toBe("5");
+    expect(host.querySelector("[data-memory-map-search]")?.getAttribute("placeholder")).toBe("Find on the map");
+    expect(host.querySelector('[data-memory-map-tier="mine"]')?.textContent).toContain("5");
+    expect(host.querySelector("[data-memory-map-count]")?.textContent).toMatch(/^5 notes, \d+ links/);
+    expect(host.querySelector("[data-memory-map-timeline]")?.textContent).toContain("Today · 5 notes");
+    const columns = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-memory-map-layout-switch] button")).find((button) => button.textContent === "Columns")!;
+    await act(async () => { columns.click(); });
+    const note = host.querySelector('[data-memory-map-node="note"]') as HTMLButtonElement;
+    await act(async () => { note.click(); });
+    await wait();
+    await settle();
+    expect(host.querySelector("[data-memory-preview-panel]")).not.toBeNull();
+  });
+
+  it("Collections: the list, one collection, its notes in order", async () => {
+    await render();
+    await act(async () => { (host.querySelector('[data-memory-nav="collections"]') as HTMLButtonElement).click(); });
+    await settle();
+    expect(host.querySelector("[data-memory-collection-row]")?.textContent).toContain("Onboarding book");
+    await act(async () => { (host.querySelector("[data-memory-collection-row]") as HTMLButtonElement).click(); });
+    await settle();
+    expect(host.querySelector("[data-memory-collection-items]")?.textContent).toContain("Brief");
+    expect(calls.some((call) => call.path === "/api/me/memory/collections/c1")).toBe(true);
+  });
+
+  it("Manual order: a Perspicax folder's notes follow their rank, and a drop saves the new order", async () => {
+    await render();
+    await act(async () => { (host.querySelector('[data-memory-folder="me/notes"]') as HTMLButtonElement).click(); });
+    await settle();
+    const manual = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-memory-list-sort] button")).find((button) => button.textContent === "Manual")!;
+    await act(async () => { manual.click(); });
+    expect(host.querySelector("[data-memory-reorder-hint]")).not.toBeNull();
+    const rows = () => Array.from(host.querySelectorAll<HTMLElement>("[data-memory-note-row]"));
+    expect(rows().map((row) => row.getAttribute("data-memory-note-row"))).toEqual(["n3", "n1"]);
+    const [first, second] = rows();
+    const drag = (type: string, target: HTMLElement) => {
+      const event = new Event(type, { bubbles: true, cancelable: true }) as Event & { dataTransfer: unknown };
+      event.dataTransfer = { setData() {}, effectAllowed: "", dropEffect: "" };
+      target.dispatchEvent(event);
+    };
+    await act(async () => { drag("dragstart", second!); });
+    await act(async () => { drag("dragover", first!); drag("drop", first!); });
+    await settle();
+    const order = calls.find((call) => call.path === "/api/me/memory/order");
+    expect(order?.method).toBe("PUT");
+    expect(JSON.parse(order!.body!)).toEqual({ scope: "me", kind: "note", topic: "notes", ids: ["n1", "n3"] });
+  });
+
+  it("Tags: the tiles from the vocabulary and the notes, the most used and the free tags", async () => {
+    await render();
+    await act(async () => { segment("Tags").click(); });
+    await settle();
+    const tiles = Array.from(host.querySelectorAll("[data-memory-stat]")).map((node) => node.getAttribute("data-memory-stat"));
+    expect(tiles).toEqual(["namespaces", "values", "free", "orphans"]);
+    expect(host.querySelector('[data-memory-stat="free"]')?.textContent).toContain("1");
+    expect(host.querySelector('[data-memory-stat="orphans"]')?.textContent).toContain("1");
+    expect(host.querySelector("[data-memory-tags-orphans]")?.textContent).toContain("area:plan");
+    expect(host.querySelector("[data-memory-tags-top]")?.textContent).toContain("work");
+    await act(async () => { (host.querySelector('[data-memory-tags-free-chip="work"]') as HTMLButtonElement).click(); });
+    await settle();
+    expect((host.querySelector("[data-memory-search]") as HTMLInputElement).value).toBe("tag:work");
+    expect(host.querySelectorAll("[data-memory-note-row]").length).toBe(1);
+  });
+
+  it("Quality: Health counts what Sagax holds, Journal lists the bots' changes", async () => {
+    await render();
+    await act(async () => { segment("Quality").click(); });
+    await settle();
+    expect(Array.from(host.querySelectorAll("[data-memory-stat]")).map((node) => node.getAttribute("data-memory-stat"))).toEqual(["active", "review", "aging", "duplicates", "orphans"]);
+    expect(host.querySelector('[data-memory-stat="active"]')?.textContent).toContain("5");
+    expect(host.querySelector("[data-memory-quality-area]")).not.toBeNull();
+    expect(host.querySelector("[data-memory-quality-bars]")).not.toBeNull();
+    const journal = Array.from(host.querySelectorAll<HTMLButtonElement>("[data-memory-quality-tabs] button")).find((button) => button.textContent === "Journal")!;
+    await act(async () => { journal.click(); });
+    expect(host.querySelectorAll("[data-memory-journal-row]").length).toBe(2);
+  });
+
+  it("folds the explorer under 1024px, and Cmd+O opens it with the quick switcher", async () => {
+    viewport = 900;
+    await render();
+    expect(host.querySelector("[data-memory-sources]")).toBeNull();
+    await act(async () => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "o", metaKey: true, ctrlKey: true })); });
+    await wait(30);
+    expect(host.querySelector("[data-memory-sources]")).not.toBeNull();
+    expect(host.querySelector("[data-memory-switcher]")).not.toBeNull();
+    expect(host.querySelectorAll("[data-memory-switcher-hit]").length).toBeGreaterThan(0);
   });
 
   // 2026-11-02: selecting a bot the memory routes refuse showed a red
-  // "no such bot" under the header. Such a bot leaves the column, and no
-  // row of the column (views, tiers, bots, folders) ends on an error.
-  it("never shows an error for any row of the column", async () => {
+  // "no such bot" under the header. Such a bot leaves the page, and no
+  // row of the explorer ends on an error.
+  it("never shows an error for any row of the explorer", async () => {
     (globalThis as { __memoryWide?: boolean }).__memoryWide = true;
-    await act(async () => {
-      root.render(createElement(MemoryManagerPanel));
-    });
-    const settle = async () => { await act(async () => { for (let i = 0; i < 6; i += 1) await Promise.resolve(); }); };
-    await settle();
+    await render();
     expect(host.querySelector('[data-memory-source="bot:northwind"]')).toBeNull();
     expect(host.textContent).not.toContain("Northwind");
-    const navIds = Array.from(host.querySelectorAll("[data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"));
-    expect(navIds).toEqual(["all", "teams", "recent", "review", "trash"]);
+    expect(Array.from(host.querySelectorAll("[data-memory-nav]")).map((node) => node.getAttribute("data-memory-nav"))).toEqual(["all", "teams", "pinned", "recent", "review", "collections", "archived", "trash"]);
+    // A JSON excerpt reads in words.
+    expect(host.querySelector('[data-memory-row-key="perspicax|team:ops/n2"]')?.textContent).toContain("JSON · 2 keys: steps, owner");
     const rows = [
-      ...navIds.map((id) => `[data-memory-nav="${id}"]`),
+      '[data-memory-nav="all"]', '[data-memory-nav="teams"]', '[data-memory-nav="review"]', '[data-memory-nav="trash"]',
       '[data-memory-tier="mine"]',
       '[data-memory-source="bot:atlas"]',
-      '[data-memory-folder="bot:atlas/topics"]',
       '[data-memory-folder="me/notes"]',
       '[data-memory-tier="team:general"]',
+      '[data-memory-folder="team:general/term"]',
       '[data-memory-tier="perspicax:team:ops"]',
     ];
     for (const selector of rows) {
-      const row = host.querySelector(selector) as HTMLElement | null;
+      const row = host.querySelector(selector) as HTMLButtonElement | null;
       expect(row, selector).not.toBeNull();
-      const target = (row!.matches("button") ? row : row!.querySelector("button")) as HTMLButtonElement;
-      await act(async () => { target.click(); });
+      await act(async () => { row!.click(); });
       await settle();
       expect(host.querySelector('[role="alert"]'), selector).toBeNull();
       expect(host.textContent, selector).not.toContain("no such bot");
     }
+    await act(async () => { (host.querySelector('[data-memory-nav="review"]') as HTMLButtonElement).click(); });
+    expect(host.querySelectorAll("[data-memory-note-row]").length).toBe(1);
   });
 });

@@ -26,4 +26,6 @@ export interface RoutineRunCardData {
   problems?: string;
   /** 2026-11-01: why a queued or waiting run has not gone on yet. */
   attention?: string;
+  /** 2026-11-03: the teammates the run handed work to, linked from the card. */
+  handedTo?: Array<{ botId: string; threadId: string; name?: string; status: string }>;
 }

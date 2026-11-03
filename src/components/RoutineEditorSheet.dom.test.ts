@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
-// "Edit routine" (2026-11-01 Grok-simple): titled for a routine, the name up
-// top with a one-line summary, What / When / Where results go in that order,
-// More options folded (remembered per person), Save and Cancel always there,
-// unsaved changes said and confirmed before closing. Advanced schedule,
-// timing, overlap and auto-pause live under More and still save. A webhook
-// routine picks "When a webhook arrives" and manages its webhook in When.
+// "Edit routine" (2026-11-02, JC: Cursor-simple): the simple view is the name,
+// the prompt (toolbar only while editing), one "When to run" row whose picker
+// opens on click, the trigger details when needed, Save and Cancel. Every
+// other setting is under Advanced, folded by default (remembered per person)
+// with a summary of what differs from the defaults. One field per time: the
+// first time only in When to run, the extra ones only in Advanced.
 import { act, createElement, type ReactNode } from "react";
 import { ConfirmProvider } from "@/components/ConfirmProvider";
 import { flushSync } from "react-dom";
@@ -75,37 +75,109 @@ afterEach(() => {
 });
 
 describe("Edit routine", () => {
-  it("reads as a routine: title, name, summary, then What, When, Where it runs, More options", () => {
+  it("shows only the essentials: name, prompt, one When to run row; Advanced folded with its summary", () => {
     mount(routine({ type: "cron", expression: "30 8,12,16 * * 1-5", timeZone: "America/Toronto" }));
     expect(host.querySelector("[data-editor-title]")?.textContent).toBe("Edit routine");
     expect(host.querySelector<HTMLInputElement>("[data-routine-editor-name]")?.value).toBe("Weekly digest");
-    expect(host.querySelector("[data-routine-editor-summary]")?.textContent).toBe("Weekdays, at 8:30 AM, 12:30 PM and 4:30 PM (Toronto time) · Results in the conversation");
+    expect(host.querySelector("[data-routine-editor-summary]")).toBeNull();
     const sections = [...host.querySelectorAll("[data-routine-editor-section]")].map((section) => section.getAttribute("data-routine-editor-section"));
-    expect(sections).toEqual(["what", "when", "where"]);
-    expect(host.querySelector("[data-human-schedule=essentials]")).not.toBeNull();
-    expect(host.querySelector("[data-schedule-more-times]")?.textContent).toMatch(/\+2 more/);
+    expect(sections).toEqual(["what", "when"]);
+    const when = host.querySelector("[data-routine-editor-section=when]")!;
+    expect(when.querySelector("h3")?.textContent).toBe("When to run");
+    expect(when.querySelector("[data-routine-when-sentence]")?.textContent).toBe("Weekdays, at 8:30 AM, 12:30 PM and 4:30 PM (Toronto time)");
+    // The picker stays closed on an existing routine until the row is clicked.
+    const row = when.querySelector<HTMLButtonElement>("[data-routine-when-row]")!;
+    expect(row.getAttribute("aria-expanded")).toBe("false");
+    expect(when.querySelector("[data-human-schedule]")).toBeNull();
+    flushSync(() => row.click());
+    expect(when.querySelector("[data-human-schedule=essentials]")).not.toBeNull();
+    expect(when.querySelector("[data-schedule-more-times]")?.textContent).toBe("+2 more in Advanced");
+    // Nothing but the essentials outside Advanced.
     const more = host.querySelector<HTMLDetailsElement>("[data-routine-editor-more]")!;
     expect(more.open).toBe(false);
+    expect(more.querySelector("[data-routine-advanced-summary]")?.textContent).toBe("· Results posted · Extra times: 2");
+    for (const selector of ["[data-run-as-field]", "[data-routine-post-results]", "[data-routine-attachments]", "[data-schedule-zone]", "[data-schedule-add-time]", "[data-routine-timing]", "[data-routine-auto-pause]", "[data-routine-only-present]", "[data-routine-mail-alias]", "[data-testid=routine-watch]"]) {
+      for (const found of host.querySelectorAll(selector)) expect(more.contains(found)).toBe(true);
+    }
     expect(more.textContent).toContain("If the previous run is still working");
     expect(more.textContent).toContain("Only when I'm here");
-    expect(host.querySelector("[data-routine-editor-section=where] [data-routine-post-results]")).not.toBeNull();
-    expect(host.querySelector("[data-markdown-editor]")?.querySelector("[data-md-full]")).not.toBeNull();
-    expect(host.querySelector("[data-markdown-editor]")?.getAttribute("data-md-compact")).toBe("");
-    // Compact: count stays hidden until the person focuses the editor.
+    expect(more.querySelector("[data-routine-post-results]")?.textContent).toContain("Off keeps each run in the background.");
+    expect(more.textContent).toContain("Passed to each local run.");
+    // The long explanation is behind a "?" button, not a paragraph under the toggle.
+    const postRow = more.querySelector("[data-routine-post-results]")!;
+    expect([...postRow.querySelectorAll("button")].some((button) => /Post results in the conversation/.test(button.getAttribute("aria-label") ?? ""))).toBe(true);
+    expect([...postRow.querySelectorAll("span.block")].map((span) => span.textContent)).toEqual(["Off keeps each run in the background."]);
+    // The prompt reads as text: no toolbar until the person edits it.
+    const editor = host.querySelector<HTMLElement>("[data-markdown-editor]")!;
+    expect(editor.getAttribute("data-md-compact")).toBe("");
+    expect(editor.querySelector("[data-md-toolbar]")).toBeNull();
     expect(host.querySelector("[data-markdown-count]")).toBeNull();
-    // Section labels stay in sentence case (never all-caps).
-    for (const section of host.querySelectorAll("[data-routine-editor-section]")) {
-      const label = section.querySelector("h3")?.textContent ?? "";
-      expect(label).toBeTruthy();
-      expect(label).toBe(label[0]!.toUpperCase() + label.slice(1));
-      expect(label).not.toBe(label.toUpperCase());
-    }
-    expect(host.textContent).toContain("Passed to each local run.");
+    flushSync(() => editor.dispatchEvent(new FocusEvent("focusin", { bubbles: true })));
+    expect(editor.querySelector("[data-md-toolbar] [data-md-full]")).not.toBeNull();
     expect(host.textContent).not.toMatch(/cron/i);
     expect(host.querySelector("[data-editor-dirty]")).toBeNull();
   });
 
-  it("keeps More options collapsed by default and remembers the person's choice", () => {
+  it("says Default settings when nothing differs, and names each non-default", () => {
+    mount({ ...routine({ type: "cron", expression: "0 9 * * *", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }), postResults: false });
+    expect(host.querySelector("[data-routine-advanced-summary]")?.textContent).toBe("· Default settings");
+  });
+
+  it("has one field per time: the first time only in When to run, the extra ones only in Advanced", () => {
+    mount(routine({ type: "cron", expression: "30 8,12,16 * * 1-5", timeZone: "America/Toronto" }));
+    flushSync(() => host.querySelector<HTMLButtonElement>("[data-routine-when-row]")!.click());
+    const more = host.querySelector<HTMLDetailsElement>("[data-routine-editor-more]")!;
+    flushSync(() => {
+      more.open = true;
+      more.dispatchEvent(new Event("toggle", { bubbles: true }));
+    });
+    const labels = [...host.querySelectorAll<HTMLInputElement>("input[data-schedule-time]")].map((input) => input.getAttribute("aria-label"));
+    expect(labels).toEqual(["Time 1", "Time 2", "Time 3"]);
+    expect(host.querySelector("[data-routine-editor-section=when] input[aria-label='Time 1']")).not.toBeNull();
+    expect(more.querySelector("input[aria-label='Time 1']")).toBeNull();
+    expect(more.querySelector("[data-schedule-extra-times]")?.textContent).toContain("Also at");
+  });
+
+  it("saves every field as it was (round trip) and the changes made in both views", async () => {
+    const attachment = { id: "a1", kind: "file" as const, name: "brief.md", path: "/tmp/brief.md", size: 12 };
+    const onClose = vi.fn();
+    mount({
+      ...routine({ type: "cron", expression: "30 8,12 * * 1-5", timeZone: "America/Toronto", timing: "flexible", windowEarlyMinutes: 10, windowLateMinutes: 5 } as Routine["schedule"]),
+      timeoutMinutes: 45, overlap: "queue", autoPauseAfter: 3, continuity: true, onlyWhenPresent: true, postResults: false, mailAlias: "reports", attachments: [attachment],
+    } as Routine, onClose);
+    const summary = host.querySelector("[data-routine-advanced-summary]")?.textContent ?? "";
+    for (const part of ["Attachments: 1", "Extra times: 1", "Flexible timing", "Stops if still running after 45 min", "Queue one run", "Remember the last run", "Only when I'm here", "Mail tag +reports"]) expect(summary).toContain(part);
+    const save = [...host.querySelectorAll("button")].find((button) => button.textContent === "Save")!;
+    flushSync(() => save.click());
+    await vi.waitFor(() => expect(fixture.lastUpsert).not.toBeNull());
+    expect(fixture.lastUpsert).toMatchObject({
+      name: "Weekly digest", prompt: "Summarise the week", botId: bot.id, runOn: "maus",
+      schedule: { type: "cron", expression: "30 8,12 * * 1-5", timeZone: "America/Toronto", timing: "flexible", windowEarlyMinutes: 10, windowLateMinutes: 5 },
+      timeoutMinutes: 45, overlap: "queue", autoPauseAfter: 3, continuity: true, onlyWhenPresent: true, postResults: false, mailAlias: "reports", attachments: [attachment],
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    // Changed: the first time in When to run, an extra time and a switch in Advanced.
+    fixture.lastUpsert = null;
+    flushSync(() => root.unmount());
+    root = createRoot(host);
+    mount(routine({ type: "cron", expression: "30 8,12 * * 1-5", timeZone: "America/Toronto" }));
+    flushSync(() => host.querySelector<HTMLButtonElement>("[data-routine-when-row]")!.click());
+    const setValue = (input: HTMLInputElement, value: string) => flushSync(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    setValue(host.querySelector<HTMLInputElement>("input[aria-label='Time 1']")!, "07:15");
+    setValue(host.querySelector<HTMLInputElement>("input[aria-label='Time 2']")!, "13:15");
+    const present = host.querySelector("[data-routine-only-present] [role=switch]") as HTMLButtonElement;
+    flushSync(() => present.click());
+    expect(host.querySelector("[data-routine-advanced-summary]")?.textContent).toContain("Only when I'm here");
+    flushSync(() => [...host.querySelectorAll("button")].find((button) => button.textContent === "Save")!.click());
+    await vi.waitFor(() => expect(fixture.lastUpsert).not.toBeNull());
+    expect(fixture.lastUpsert).toMatchObject({ schedule: { expression: "15 7,13 * * 1-5", timeZone: "America/Toronto" }, onlyWhenPresent: true });
+  });
+
+  it("keeps Advanced collapsed by default and remembers the person's choice", () => {
     mount(routine({ type: "cron", expression: "0 9 * * *", timeZone: "UTC" }));
     const more = host.querySelector<HTMLDetailsElement>("[data-routine-editor-more]")!;
     expect(more.open).toBe(false);
@@ -124,7 +196,7 @@ describe("Edit routine", () => {
     expect(host.querySelector<HTMLDetailsElement>("[data-routine-editor-more]")!.open).toBe(true);
   });
 
-  it("puts timezone, extra times, timing and overlap under More, and saves them", async () => {
+  it("puts timezone, extra times, timing and overlap under Advanced, and saves them", async () => {
     const onClose = vi.fn();
     mount(routine({ type: "cron", expression: "30 8 * * 1-5", timeZone: "America/Toronto" }), onClose);
     const more = host.querySelector<HTMLDetailsElement>("[data-routine-editor-more]")!;
@@ -227,12 +299,15 @@ describe("Edit routine", () => {
   it("manages a webhook routine's webhook in When", () => {
     fixture.webhooks = [{ id: "w1", endpointId: "wh_abc", routineId: "r1", name: "Weekly digest", prompt: "", botId: bot.id, runOn: "maus", enabled: true, createdAt: 1, updatedAt: 1, deliveryCount: 2, tokenLast4: "k3Yz" }];
     mount(routine({ type: "webhook" }));
-    expect(host.querySelector("[data-schedule-frequency]")?.getAttribute("data-schedule-frequency")).toBe("webhook");
     const when = host.querySelector("[data-routine-editor-section=when]")!;
+    // The trigger details show without opening the picker.
+    expect(when.querySelector("[data-schedule-frequency]")).toBeNull();
     expect(when.querySelector("[data-webhook-url]")?.textContent).toBe("https://hooks.example.test/hooks/wh_abc");
     expect(when.textContent).toContain("whsec_••••k3Yz");
     expect(when.textContent).toContain("Copy a curl example");
-    expect(host.querySelector("[data-routine-editor-summary]")?.textContent).toContain("When a webhook fires");
+    expect(when.querySelector("[data-routine-when-sentence]")?.textContent).toBe("When a webhook fires");
+    flushSync(() => when.querySelector<HTMLButtonElement>("[data-routine-when-row]")!.click());
+    expect(when.querySelector("[data-schedule-frequency]")?.getAttribute("data-schedule-frequency")).toBe("webhook");
   });
 
   it("opens read-only for a routine the person cannot change: fields off, no Save, its owner named", () => {

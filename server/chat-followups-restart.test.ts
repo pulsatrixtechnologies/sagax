@@ -91,6 +91,8 @@ it("survives a real server crash: queued sends keep receipts, cancellation and u
       'process.env.FAKE_CLAUDE_MODE = existsSync(join(home, "restarted")) ? "happy" : "slow";',
       'process.env.FAKE_CLAUDE_SLOW_FINISH_GATE = join(home, thread + ".gate");',
       'process.env.FAKE_CLAUDE_PROMPTS = join(home, thread + ".prompts");',
+      // 062d7c42e: count deliveries, without a tool-only ending's continuation.
+      'process.env.FAKE_CLAUDE_TOOL_CALLS = "[]";',
       // Crash the server, not unrelated processes: a fixture provider exits
       // when its parent's pipe closes, even if its fake finish gate is shut.
       'process.stdin.on("end", () => process.exit(0));',

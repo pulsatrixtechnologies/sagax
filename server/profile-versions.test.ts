@@ -4,7 +4,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
-import { botFolder } from "./bot-folder.ts";
+import { botFolder } from "./bots/bot-folder.ts";
 import { profileRevision, profileSnapshot } from "./profile-revision.ts";
 import {
   flushAllProfileHistory,

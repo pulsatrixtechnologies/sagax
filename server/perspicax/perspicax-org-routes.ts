@@ -55,7 +55,7 @@ export interface OrgSettings {
    * (server/routes/credential-vault.ts): on by default, an admin turns it
    * off. */
   allowVaultExport?: boolean;
-  /** Where bots' Claude Code plugins may come from (server/bot-plugins.ts):
+  /** Where bots' Claude Code plugins may come from (server/bots/bot-plugins.ts):
    * any marketplace by default, or the admin's list. */
   pluginMarketplaces?: { mode: "any" } | { mode: "list"; allow: string[] };
   /** lot 4: "perspicax" when Perspicax owns the rule (written there). */

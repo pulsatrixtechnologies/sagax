@@ -4,7 +4,7 @@
 // (#1098; the server keeps the owner in the audience), and not in the
 // desktop app, where nobody else signs in. Saving is the change: the server narrows
 // every member's lists, conversations, files and live updates at once
-// (server/bot-visibility.ts). No confirmation step: it is a setting.
+// (server/bots/bot-visibility.ts). No confirmation step: it is a setting.
 import { useEffect, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
 import { DescribedRow, GROUP_CARD, PILL, PillSelect, PRIMARY_PILL } from "../SettingsPrimitives";
@@ -38,7 +38,7 @@ export function audienceKey(visibility: BotVisibility | undefined): string {
 
 /** Rooms visible to fewer people than this bot: another bot in them has a
  * different audience, or the room kept a narrower one from before (a room's
- * floor never widens on its own; see server/bot-visibility.ts). */
+ * floor never widens on its own; see server/bots/bot-visibility.ts). */
 export function mixedRooms(
   bot: Pick<Bot, "id" | "visibility">,
   groups: ReadonlyArray<{ id: string; name: string; memberIds: string[]; dm?: boolean; audienceFloor?: BotVisibility }>,

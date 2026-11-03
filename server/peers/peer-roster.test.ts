@@ -618,7 +618,7 @@ describe("live peer roster for coordination briefs", () => {
   });
 });
 
-describe("an ordinary bot offered create_bot (2026-10-17, server/bot-creation.ts)", () => {
+describe("an ordinary bot offered create_bot (2026-10-17, server/bots/bot-creation.ts)", () => {
   it("is told it may create one bot for its person, and nothing else changes", () => {
     for (const bounded of [false, true]) {
       const plain = peerRosterSystemPrompt([], bounded);

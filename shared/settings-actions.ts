@@ -4,7 +4,7 @@
 // One entry per setting of the app: where it is on screen, the route the
 // screen calls and how its value is read back. A change is the same route
 // the screen calls, replayed with the person's own session by the act engine
-// (server/bot-act.ts), so the person's rights and every route check apply
+// (server/bots/bot-act.ts), so the person's rights and every route check apply
 // as they do by hand. shared/settings-actions-policy.ts decides whether it
 // runs now or waits on a card; server/settings-actions.ts ties both.
 //

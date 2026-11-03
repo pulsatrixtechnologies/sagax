@@ -1162,7 +1162,7 @@ export function parseAttachmentRange(header: string | undefined, size: number): 
 /** Compatibility name for the original voice-note tests and callers. */
 export const parseAudioRange = parseAttachmentRange;
 
-/** A file a bot package brings back (server/bot-zip.ts): stored under a new
+/** A file a bot package brings back (server/bots/bot-zip.ts): stored under a new
  * UUID name with the extension its mime maps to, never the archive's own
  * name, within the same per-kind size caps as an upload. */
 export function saveImportedAttachment(bytes: Buffer, mime: string): SavedAttachment {

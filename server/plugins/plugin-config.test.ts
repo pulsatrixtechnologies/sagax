@@ -1,5 +1,5 @@
 // A plugin's configuration values (server/plugins/plugin-config.ts) through a bot's
-// plugins (server/bot-plugins.ts): declared fields, typed values, secrets
+// plugins (server/bots/bot-plugins.ts): declared fields, typed values, secrets
 // refused, ${user_config.KEY} written into skills from the kept original,
 // again after an update, and gone with the plugin.
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { BotPluginError, type GitRunner } from "../bot-plugins.ts";
+import { BotPluginError, type GitRunner } from "../bots/bot-plugins.ts";
 import { checkPluginConfig, pluginConfigFields, substituteConfig } from "./plugin-config.ts";
 import { botPluginsWithMarketplaces } from "../testing/plugin-stores.ts";
 

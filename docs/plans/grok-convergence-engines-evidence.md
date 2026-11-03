@@ -95,7 +95,7 @@ not run in this worker (root owns the integration gate).
 ```
 pnpm exec vitest run shared/capabilities.test.ts server/capabilities/capabilities.test.ts \
   server/plugins/plugin-metadata-cache.test.ts server/turns/plugin-turn.test.ts \
-  server/bot-plugins.test.ts server/plugins/installation-plugins.test.ts \
+  server/bots/bot-plugins.test.ts server/plugins/installation-plugins.test.ts \
   server/skills/skill-discovery.test.ts server/skills/skill-discovery.e2e.test.ts \
   server/turns/turn-connectors.test.ts server/workspace/workspace-files.test.ts \
   server/plugin-api-delivery.e2e.test.ts server/plugin-engine-continuity.e2e.test.ts

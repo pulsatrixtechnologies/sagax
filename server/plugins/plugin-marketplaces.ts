@@ -13,7 +13,7 @@
 //     MCP servers of this installation, with the marketplace as their source;
 //   - its skills become skills of the library, switched off until read.
 // Agents, commands and hooks are not installed here: the same plugin
-// installed "For this bot" (server/bot-plugins.ts) loads whole, from this
+// installed "For this bot" (server/bots/bot-plugins.ts) loads whole, from this
 // same list. There is one marketplace list for both scopes.
 //
 // Files: DATA_DIR/marketplaces/{state.json, repos/<name>/, plugins/<name>/<plugin>/}.
@@ -27,7 +27,7 @@
 // everyone.
 // A marketplace a bot still has plugins from is not removed (`inUse`).
 // Added or fetched again from a bot ("For this bot"), the clone uses the
-// environment the bot's store worked out (server/bot-plugins.ts: that bot's
+// environment the bot's store worked out (server/bots/bot-plugins.ts: that bot's
 // token for the marketplace first, then the person's GitHub connection,
 // then the organization's tokens); the token itself stays per bot
 // (server/plugins/marketplace-tokens.ts), never here.
@@ -51,7 +51,7 @@ import {
   type GitSource,
   type MarketplacePolicy,
   type MarketplacePluginEntry,
-} from "../bot-plugins.ts";
+} from "../bots/bot-plugins.ts";
 import type { StoredMcpServer } from "../mcp/mcp-registry.ts";
 import { parseSkillMd } from "../../shared/skill-md.ts";
 
@@ -352,7 +352,7 @@ export interface PluginMarketplacesOptions {
   policy: () => MarketplacePolicy | undefined;
   /** reads a manifest address (https only) */
   fetchText?: (url: string) => Promise<string>;
-  /** the bots with plugins installed from a marketplace (server/bot-plugins.ts) */
+  /** the bots with plugins installed from a marketplace (server/bots/bot-plugins.ts) */
   inUse?: (name: string) => string[];
   now?: () => number;
   /** Lot 5: when the installation store has absorbed marketplaces-state,
@@ -474,7 +474,7 @@ export class PluginMarketplaces {
    * folder, so its inode and time name the content. */
   private readonly revisions = new Map<string, string | undefined>();
   /** What this marketplace offers now for one plugin (`pluginRevision`),
-   * for a bot's install of it (server/bot-plugins.ts). */
+   * for a bot's install of it (server/bots/bot-plugins.ts). */
   revisionOf(name: string, entry: MarketplacePluginEntry): string | undefined {
     return this.offeredRevision(name, entry, this.read().marketplaces[name]?.manifestUrl);
   }

@@ -58,7 +58,7 @@ parties hors tableau du script.
   \`value\`). \`list\` (avec \`family\`) donne les clés : rien n'est figé dans
   l'invite du bot.
 - Droits : la route de l'écran est rejouée avec la session de la personne
-  (\`server/bot-act.ts\`). Un membre ne peut pas faire par bot ce qu'il ne
+  (\`server/bots/bot-act.ts\`). Un membre ne peut pas faire par bot ce qu'il ne
   peut pas faire à la main : la route répond son refus, que le bot relaie.
 - Décision (\`shared/settings-actions-policy.ts\`), dans l'ordre :
   1. une classe que la personne protège par clé de sécurité : carte signée ;

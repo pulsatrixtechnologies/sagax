@@ -6,7 +6,7 @@ import { json, readBody } from "../harness/http.ts";
 import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
 import { ToolGrantStore } from "../tool-grants.ts";
 import { TOOL_POLICY_ROWS } from "../tool-policy.generated.ts";
-import type { BotRuntimeSettings } from "../bot-runtime-settings.ts";
+import type { BotRuntimeSettings } from "../bots/bot-runtime-settings.ts";
 import { createBotRuntimeSettingsRoutes } from "./bot-runtime-settings.ts";
 import { dispatchRoutes } from "./table.ts";
 

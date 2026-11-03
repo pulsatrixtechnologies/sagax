@@ -14,7 +14,7 @@
 // value, arguments, a device code or a filesystem path.
 import { z } from "zod";
 
-import type { InstalledBotPlugin } from "../bot-plugins.ts";
+import type { InstalledBotPlugin } from "../bots/bot-plugins.ts";
 import type { GithubStatus } from "../github/github-connect.ts";
 import type { PersonalMcpServer } from "../person-connections.ts";
 import { isPrincipalId } from "../auth/principals.ts";

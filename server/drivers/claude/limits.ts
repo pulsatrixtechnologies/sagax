@@ -1,5 +1,5 @@
 /** Claude context-full, usage-limit and API-error helpers (issue #1383). */
-import { hostTimeZone } from "../../bot-settings.ts";
+import { hostTimeZone } from "../../bots/bot-settings.ts";
 import { isContextFullText } from "../../context/context-renewal.ts";
 import { USAGE_LIMIT } from "../retry.ts";
 import { engineFailureMessage, type EngineFailureKind } from "../engine-errors.ts";

@@ -82,7 +82,7 @@ stay outside the member's bot fields: no key opens them.
 
 | Key | Label | Today's gate | Default | adminOnly |
 |---|---|---|---|---|
-| `sharing.grants` | Share their bots with people and teams | `server/bot-grants.ts:140`, `server/auth/direct-grants.ts:95` (owner rule; `sagax_bots: use` refuses) | yes | no |
+| `sharing.grants` | Share their bots with people and teams | `server/bots/bot-grants.ts:140`, `server/auth/direct-grants.ts:95` (owner rule; `sagax_bots: use` refuses) | yes | no |
 | `sharing.visibility` | Choose who sees their bots (visibility, sidebar section) | `server/index.ts:30193` (create), `:30644` (PATCH `visibility`, `section`) | no | no |
 
 ### engines (1)

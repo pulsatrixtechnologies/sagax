@@ -195,7 +195,7 @@ export const TRIGGER_SOURCES: Record<TriggerSourceType, TriggerSourceDefinition>
   },
   // 2026-10-26 (Perspicax Voice, phase 2): a text or a call on the owner's
   // phone line, answered by Perspicax (IVR, PIN) and relayed to this server
-  // (server/bot-inbound-telephony.ts). It only wakes a routine; the caller's
+  // (server/bots/bot-inbound-telephony.ts). It only wakes a routine; the caller's
   // words are data, never instructions.
   telephony: {
     type: "telephony",

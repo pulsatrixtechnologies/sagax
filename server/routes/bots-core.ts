@@ -12,10 +12,10 @@ import type { ApprovalViewer } from "../approvals/approval-audience.ts";
 import type { LookRefusal } from "../achievements-mastery.ts";
 import { atLeast, type Level } from "../auth/authz.ts";
 import { generateAvatarImage, avatarGenerationRequestSchema } from "../avatar-image.ts";
-import { validateBotCwd, validateBotCwdFor, type RemoteCwdDeps } from "../bot-cwd.ts";
-import { soulFile, readSoulDrift, writeSoulMirror } from "../bot-folder.ts";
-import { parseBotProfilePatch } from "../bot-profile.ts";
-import { memberBot, memberGroup, parseVisibility } from "../bot-visibility.ts";
+import { validateBotCwd, validateBotCwdFor, type RemoteCwdDeps } from "../bots/bot-cwd.ts";
+import { soulFile, readSoulDrift, writeSoulMirror } from "../bots/bot-folder.ts";
+import { parseBotProfilePatch } from "../bots/bot-profile.ts";
+import { memberBot, memberGroup, parseVisibility } from "../bots/bot-visibility.ts";
 import { cloudThreadRefusal } from "../cloud-thread-refusal.ts";
 import {
   confidentialPatch,
@@ -33,7 +33,7 @@ import {
   newBotDefaultsSchema,
   resolveBotCreationDefaults,
   type NewBotDefaults,
-} from "../new-bot-defaults.ts";
+} from "../bots/new-bot-defaults.ts";
 import { newConversationFullAllowed } from "../org/org-full-access.ts";
 import { orgXaiRefusal } from "../org/org-xai-media.ts";
 import { peopleDmForViewer } from "../people-dms.ts";

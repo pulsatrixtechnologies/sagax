@@ -953,7 +953,7 @@ peux l'entendre, dialoguer avec lui et me revenir avec un résumé. »
 - **Règles** : le pilote d'organisation, la liste « Ne pas appeler » et les
   règles Refuser et Demander d'abord s'appliquent comme pour le mode message.
 - Code : `shared/outbound-call.ts`, `server/outbound/outbound-calls.ts`,
-  `server/outbound/outbound-wiring.ts`, `server/bot-inbound-telephony.ts`. Tests :
+  `server/outbound/outbound-wiring.ts`, `server/bots/bot-inbound-telephony.ts`. Tests :
   `server/outbound-conversation.test.ts` (cycle complet, faux Twilio et fausse
   voix temps réel).
 

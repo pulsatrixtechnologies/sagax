@@ -552,7 +552,7 @@ const SAVED_SINCE_SLACK_MS = 2_000;
 
 /**
  * Open one file a turn saved outside every root, for a bot to deliver by copy
- * (server/bot-attachment.ts). This grants no folder and is never used for a
+ * (server/bots/bot-attachment.ts). This grants no folder and is never used for a
  * message link: only an absolute path to a regular file last written at or
  * after `since`, outside hidden folders and outside `refuse`. The open itself
  * is openMessageFile with the file's own folder as the root, so the realpath,

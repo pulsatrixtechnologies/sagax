@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { BotPluginError, BotPlugins, type GitRunner } from "../bot-plugins.ts";
+import { BotPluginError, BotPlugins, type GitRunner } from "../bots/bot-plugins.ts";
 import { json, readBody } from "../harness/http.ts";
 import { PluginMarketplaces } from "../plugins/plugin-marketplaces.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";

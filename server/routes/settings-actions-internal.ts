@@ -1,7 +1,7 @@
 // POST /api/internal/settings: sagax_settings (server/settings-actions.ts).
 // Every setting of the app, read or changed for the person speaking to the
 // bot, through the act engine. Behind the agents capability (internal-route.ts).
-import type { BotActResult } from "../bot-act.ts";
+import type { BotActResult } from "../bots/bot-act.ts";
 import type { InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 

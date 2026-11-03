@@ -1,5 +1,5 @@
 // A bot's Claude Code plugins (Capabilities, scope "For this bot",
-// server/bot-plugins.ts). The marketplaces are the installation's one list.
+// server/bots/bot-plugins.ts). The marketplaces are the installation's one list.
 //
 //   GET    /api/bots/:id/plugins
 //          { marketplaces: [MarketplaceListing], plugins: [InstalledBotPlugin], policy, engine }
@@ -22,7 +22,7 @@
 // not_found_or_no_access, forbidden) and `fix`, never a token. Member scope (request-auth.ts CLIENT_ALLOW).
 // A person without the Sagax permission `apps.ownIntegrations` reads the
 // listing with `canChange: false`, and every change answers that 403.
-import type { BotPluginError, BotPlugins, MarketplacePolicy } from "../bot-plugins.ts";
+import type { BotPluginError, BotPlugins, MarketplacePolicy } from "../bots/bot-plugins.ts";
 import type { MarketplaceViewer, MarketplaceVisibility } from "../plugins/plugin-marketplaces.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";

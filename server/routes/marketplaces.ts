@@ -46,7 +46,7 @@ export interface MarketplaceRouteDeps {
     Promise<{ status: number; body: Record<string, unknown> }>;
   /** One admin activity row for a plugin updated (written on success). */
   audit: (auth: RequestAuth, row: { action: string; target: { kind: string; id: string; name: string }; before?: Record<string, unknown>; after?: Record<string, unknown> }) => void;
-  /** The installation's pick per marketplace (server/bot-plugins.ts). */
+  /** The installation's pick per marketplace (server/bots/bot-plugins.ts). */
   workspace?: {
     addWorkspaceMarketplace(input: { source: string; ref?: string; credential?: string; visibility?: MarketplaceVisibility }, actor: string | undefined): Promise<MarketplaceView>;
     refreshWorkspaceMarketplace(name: string, actor: string | undefined): Promise<unknown>;

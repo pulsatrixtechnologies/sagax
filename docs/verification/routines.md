@@ -24,7 +24,7 @@ This guard only applies to agent creation proposals; intentional duplicates
 in the manual editor remain possible. Existing routines are never removed.
 
 ```sh
-pnpm exec vitest run shared/routine-schedule.test.ts server/routines/routine-cron.e2e.test.ts server/routines/routine-requests.test.ts server/routines/routines.test.ts server/routines/routines-startup.test.ts src/components/routines/schedule-editor.test.ts src/lib/routine-calendar.test.ts src/lib/schedule-label.test.ts server/bot-package.test.ts server/package-export.test.ts
+pnpm exec vitest run shared/routine-schedule.test.ts server/routines/routine-cron.e2e.test.ts server/routines/routine-requests.test.ts server/routines/routines.test.ts server/routines/routines-startup.test.ts src/components/routines/schedule-editor.test.ts src/lib/routine-calendar.test.ts src/lib/schedule-label.test.ts server/bots/bot-package.test.ts server/package-export.test.ts
 SAGAX_UI_E2E=1 pnpm exec vitest run scripts/testing/cron-routines-ui.e2e.test.ts
 ```
 

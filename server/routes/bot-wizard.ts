@@ -41,7 +41,7 @@ import {
   writeSoulPrompt,
   type WizardDraft,
 } from "../../shared/bot-wizard.ts";
-import type { BotWizardStore } from "../bot-wizard-store.ts";
+import type { BotWizardStore } from "../bots/bot-wizard-store.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

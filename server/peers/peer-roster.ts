@@ -5,7 +5,7 @@
 // that drift.
 
 import type { BotActivity } from "../../shared/wire.ts";
-import { sameAudience } from "../bot-visibility.ts";
+import { sameAudience } from "../bots/bot-visibility.ts";
 
 export interface RosterMember {
   id: string;
@@ -26,7 +26,7 @@ export interface RosterMember {
   /** What the harness last saw the bot doing. `busy` alone cannot tell a
    * bot mid-task from one parked on the user's approval card. */
   activity?: BotActivity;
-  /** Who may see the bot on a shared workspace (server/bot-visibility.ts). */
+  /** Who may see the bot on a shared workspace (server/bots/bot-visibility.ts). */
   visibility?: unknown;
   /** A temporary agent (create_agent); archived, it is gone for every bot. */
   temporary?: { archived?: unknown };
@@ -425,7 +425,7 @@ const ROSTER_CLOSE = "[/TEAM ROSTER]";
  * bot never had was any way to learn WHO its teammates are. Discovery was
  * the missing half, not permission — hence a roster and no new powers. */
 export function peerRosterSystemPrompt(team: readonly RosterMember[], boundedCoordination = false, createsBots = false, sameOwner?: (member: RosterMember) => boolean): string {
-  // 2026-10-17 (server/bot-creation.ts): a bot offered create_bot is told it
+  // 2026-10-17 (server/bots/bot-creation.ts): a bot offered create_bot is told it
   // may create one for its person; everything else about peers stays.
   return [
     boundedCoordination

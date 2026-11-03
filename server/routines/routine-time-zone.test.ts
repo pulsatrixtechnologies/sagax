@@ -1,12 +1,12 @@
 // Routines read daily times, interval windows and weekdays in the zone a
-// person chose (Settings > Bot > Time Zone, server/bot-settings.ts), else in
+// person chose (Settings > Bot > Time Zone, server/bots/bot-settings.ts), else in
 // the host's, as before. Cron keeps the zone saved with it.
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { defaultOrgTimeZone } from "../bot-settings.ts";
+import { defaultOrgTimeZone } from "../bots/bot-settings.ts";
 import { nextOccurrence, RoutineManager, setRoutineTimeZone } from "./routines.ts";
 
 const dirs: string[] = [];

@@ -686,7 +686,7 @@ export interface Bot {
   allowedRecipients?: string[];
   outbound?: { policy: "ask" | "allow"; dailyCap: number };
   fallback?: Array<{ instanceId: string; model: string }>;
-  /** Per bot since 2026-10-15 (server/bot-runtime-settings.ts), edited in
+  /** Per bot since 2026-10-15 (server/bots/bot-runtime-settings.ts), edited in
    * the bot editor. Absent: the server default (or, for busySend, the
    * person's own earlier default). */
   maxConcurrentThreads?: number;

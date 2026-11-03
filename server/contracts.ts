@@ -363,7 +363,7 @@ export interface SendTurnInput {
    * (harness-connectors.ts grokCloudConnectorsForTurn). Absent or false:
    * off, whatever the organization turn (review of #943). */
   grokCloudConnectors?: boolean;
-  /** Claude Code plugins installed on the bot (server/bot-plugins.ts): one
+  /** Claude Code plugins installed on the bot (server/bots/bot-plugins.ts): one
    * folder each, already stripped of hooks, MCP and LSP servers. The Claude
    * driver loads each with --plugin-dir. Other drivers do not get these
    * folders; their turns read the same enabled skills and commands from the
@@ -393,7 +393,7 @@ export interface HarnessCommandScope {
   /** The turn keeps the claude.ai connectors of the account it runs on
    * (server/harness-connectors.ts), so their MCP prompts are listed. */
   claudeAiConnectors?: boolean;
-  /** The bot's Claude Code plugins (server/bot-plugins.ts). Claude lists
+  /** The bot's Claude Code plugins (server/bots/bot-plugins.ts). Claude lists
    * their commands and skills from these folders. Other engines read the
    * same enabled skills and commands from the turn prompt. */
   pluginDirs?: string[];

@@ -33,7 +33,7 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 
 import { writeFileAtomic } from "../atomic.ts";
-import { copySanitizedPlugin, readPluginContents, type PluginContents } from "../bot-plugins.ts";
+import { copySanitizedPlugin, readPluginContents, type PluginContents } from "../bots/bot-plugins.ts";
 import type { McpServerSpec } from "../contracts.ts";
 import { installationCapabilityBridge } from "../capabilities/installation-capability-bridge.ts";
 import { applyPluginConfig, readPluginConfigFields } from "../plugins/plugin-config.ts";

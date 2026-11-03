@@ -1,5 +1,5 @@
 // Private GitHub plugins and skills (server/github/github-access.ts,
-// server/bot-plugins.ts, server/plugins/marketplace-tokens.ts): a fake GitHub
+// server/bots/bot-plugins.ts, server/plugins/marketplace-tokens.ts): a fake GitHub
 // answers 404 without a token and 200 with the right one; every refusal
 // names its real cause; the token rides a header, never the argv or a file;
 // a bot's own plugin skills, commands and agents reach its turns.
@@ -12,7 +12,7 @@ import { randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { githubAccessFailure, githubSkillFetch, probeGithubRepo, type GithubCredential } from "./github-access.ts";
-import { BotPluginError, BotPlugins, type GitRunner } from "../bot-plugins.ts";
+import { BotPluginError, BotPlugins, type GitRunner } from "../bots/bot-plugins.ts";
 import { botPluginsWithMarketplaces } from "../testing/plugin-stores.ts";
 import { WORKSPACE_TOKEN_KEY } from "../plugins/marketplace-tokens.ts";
 import { GithubCredentials } from "./github-credentials.ts";

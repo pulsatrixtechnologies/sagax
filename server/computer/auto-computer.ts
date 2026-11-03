@@ -131,7 +131,7 @@ export function selectAutoComputer(
 ): AutoComputerSelection {
   if (!state.auto) {
     // Asking for the place it is fixed to is not a refusal: the bot already
-    // works there (a cloud-only bot asking for the cloud, server/cloud-only-bots.ts).
+    // works there (a cloud-only bot asking for the cloud, server/bots/cloud-only-bots.ts).
     if (state.fixed === "cloud" && parseAutoComputerTarget(request.target) === "cloud") {
       return { ok: true, text: "You already work on the cloud (their server environment); this bot's Workspace is fixed there. Use the sagax-environment tools.", target: "cloud", from: "cloud", changed: false };
     }

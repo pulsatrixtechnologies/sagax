@@ -1,6 +1,6 @@
 // The bot creation wizard (2026-10-26): six steps over a real bot that
 // stays a draft until the person finishes. The same draft, kept on the
-// server (server/bot-wizard-store.ts, routes server/routes/bot-wizard.ts),
+// server (server/bots/bot-wizard-store.ts, routes server/routes/bot-wizard.ts),
 // is read by the desktop app and iOS, in either mode:
 //
 // - guided: a conversation with the person's Primary Bot, which asks the

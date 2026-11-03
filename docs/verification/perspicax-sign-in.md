@@ -286,7 +286,7 @@ backstop when the back-channel push cannot arrive, and the engines in
 ### Automated (fake provider)
 
 ```sh
-pnpm exec vitest run server/auth/authz.test.ts server/bot-grants.test.ts server/engines/engine-credentials.test.ts \
+pnpm exec vitest run server/auth/authz.test.ts server/bots/bot-grants.test.ts server/engines/engine-credentials.test.ts \
   server/rooms/section-channels.test.ts server/engines/principal-engine-logins.test.ts server/org/org-teams.test.ts \
   server/auth/principals.test.ts server/perspicax/perspicax-link.test.ts server/auth/oidc-rp.test.ts server/auth/idp-session.test.ts \
   server/engines/engine-access.test.ts server/auth/direct-grants.test.ts server/rooms/channel-visibility.test.ts \
@@ -309,7 +309,7 @@ disabled person).
   use), a manage holder (up to edit), the manager anchor (add up to the
   anchor, lower and remove always, never outside their teams), section
   default levels capped at run, rooms with `team:` entries, section roles.
-- `server/bot-grants.test.ts`: GET, PUT and DELETE `/api/bots/:id/grants`
+- `server/bots/bot-grants.test.ts`: GET, PUT and DELETE `/api/bots/:id/grants`
   with every answer code, and the new `CLIENT_ALLOW` rows.
 - `server/engines/engine-credentials.test.ts` (revised 2026-10-01, the person who
   speaks pays): the whole decision table (speaker owner or someone shared
@@ -391,7 +391,7 @@ lists `engines`.
 ### Automated (fake provider)
 
 ```sh
-pnpm exec vitest run server/perspicax/perspicax-mcp.test.ts server/perspicax-mcp-bridge.test.ts server/bot-perspicax.test.ts \
+pnpm exec vitest run server/perspicax/perspicax-mcp.test.ts server/perspicax-mcp-bridge.test.ts server/bots/bot-perspicax.test.ts \
   server/perspicax/perspicax-link.test.ts server/auth/idp-session.test.ts server/auth/oidc-rp.test.ts server/auth/request-auth.test.ts \
   server/org/org-mcp.e2e.test.ts server/org/org-sharing.e2e.test.ts server/oidc-session.e2e.test.ts \
   src/components/bot-settings/PerspicaxSection.test.ts
@@ -414,7 +414,7 @@ and writes what it saw to `FAKE_CLAUDE_MCP_DUMP`.
 - `server/perspicax-mcp-bridge.test.ts`: the stdio bridge the harness holds;
   the engine sees only a turn capability, which answers 401 once the turn
   ends.
-- `server/bot-perspicax.test.ts`: `GET` and `PUT /api/bots/:id/perspicax`
+- `server/bots/bot-perspicax.test.ts`: `GET` and `PUT /api/bots/:id/perspicax`
   (`available`, `profile_not_held`, `needs_edit`, `unknown_profile`).
 - `server/org/org-mcp.e2e.test.ts` (real server): the editor offers alice's
   profiles, scenario E (bob's turn reaches Perspicax as bob, client
@@ -577,7 +577,7 @@ root, path, bytes) to the admin activity log. `/api/health` adds
 
 ```sh
 pnpm exec vitest run server/auth/oidc-rp.test.ts server/org/org-admin-routes.test.ts server/org/org-admin-files.test.ts server/usage/usage-ledger.test.ts \
-  server/admin-activity.test.ts server/bot-grants.test.ts server/rooms/section-channels.test.ts \
+  server/admin-activity.test.ts server/bots/bot-grants.test.ts server/rooms/section-channels.test.ts \
   src/lib/open-thread-hash.test.ts server/org/org-admin.e2e.test.ts \
   server/org/org-routines.e2e.test.ts server/org/org-mcp.e2e.test.ts server/org/org-sharing.e2e.test.ts \
   server/oidc-session.e2e.test.ts server/peers/peer-approval.e2e.test.ts
@@ -604,7 +604,7 @@ header bent at a time).
 - `server/admin-activity.test.ts` ("organization audit page"): the org
   categories newest first, stable `<month>-<line>` ids, the `before` cursor,
   the time range, no secret value.
-- `server/bot-grants.test.ts` and `server/rooms/section-channels.test.ts`: one
+- `server/bots/bot-grants.test.ts` and `server/rooms/section-channels.test.ts`: one
   audit row per saved change (`grant.set`, `grant.remove`,
   `section.create` ... `section.bot.remove`), none for a refusal.
 - `server/org/org-admin.e2e.test.ts` (real server): every refusal of the gate

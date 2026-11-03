@@ -16,7 +16,7 @@ import { createBotPluginRoutes } from "./routes/bot-plugins.ts";
 import { createPersonConnectionRoutes } from "./routes/person-connections.ts";
 import { dispatchRoutes, type RouteHandler } from "./routes/table.ts";
 import { callUserSandboxTool } from "./sandbox/user-sandbox-tools.ts";
-import type { BotPlugins } from "./bot-plugins.ts";
+import type { BotPlugins } from "./bots/bot-plugins.ts";
 
 const servers: Server[] = [];
 afterEach(async () => { await Promise.all(servers.splice(0).map((server) => new Promise((done) => server.close(done)))); });

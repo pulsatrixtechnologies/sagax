@@ -3,7 +3,7 @@
 // encrypted capabilities.enc. Plugin source files contain no login token.
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import type { BotPluginsOptions } from "../bot-plugins.ts";
+import type { BotPluginsOptions } from "../bots/bot-plugins.ts";
 import { principalDir, type PersonCapabilities } from "../person-connections.ts";
 
 export function personalPluginStorage(dataDir: string, capabilities: PersonCapabilities): NonNullable<BotPluginsOptions["storage"]> {

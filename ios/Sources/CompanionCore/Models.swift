@@ -1286,7 +1286,7 @@ public struct Room: Codable, Hashable, Identifiable, Sendable {
     /// Organization server: a direct conversation between two people.
     public var peopleDm: Bool? = nil
     /// The narrowest audience the room ever had (a served workspace): it
-    /// never widens on its own (server/bot-visibility.ts).
+    /// never widens on its own (server/bots/bot-visibility.ts).
     public var audienceFloor: BotVisibility? = nil
     /// The room's shared memory; absent means on.
     public var memoryEnabled: Bool? = nil

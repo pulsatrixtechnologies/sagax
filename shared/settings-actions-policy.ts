@@ -6,7 +6,7 @@
 // speaking to it, whether it runs now or waits for that person's card. It
 // performs nothing: server/settings-actions.ts builds the change from the
 // registry (shared/settings-actions.ts) and hands it to the act engine
-// (server/bot-act.ts), which replays the same route the screen calls with
+// (server/bots/bot-act.ts), which replays the same route the screen calls with
 // the person's own session. The person's rights are the route's: a bot never
 // does what its person could not do by hand.
 //

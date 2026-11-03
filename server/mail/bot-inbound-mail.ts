@@ -178,7 +178,7 @@ export function botmailTaggedPrompt(
  * A webhook run whose trigger is gone is
  * confined too: what woke it can no longer be told. Every relayed source is
  * confined the same way: bot email and, since 2026-10-26, bot phone
- * (server/bot-inbound-telephony.ts). */
+ * (server/bots/bot-inbound-telephony.ts). */
 export function botmailRunConfined(
   run: { triggerSource?: string; webhookId?: string } | null | undefined,
   triggerOf: (webhookId: string) => { source?: Pick<TriggerSourceConfig, "type" | "allowFullTools"> } | null | undefined,

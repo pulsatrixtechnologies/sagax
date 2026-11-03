@@ -1214,7 +1214,7 @@ export const BOTMAIL_RUN_RULES = [
 
 /** Bot phone (Perspicax Voice, 2026-10-26): what the bot is told before the
  * caller's words. The directives are Perspicax's, for the line, given as
- * they are (closed values checked by server/bot-inbound-telephony.ts); Sagax
+ * they are (closed values checked by server/bots/bot-inbound-telephony.ts); Sagax
  * adds no rule of its own about them. No marker word the fence defangs. */
 export const TELEPHONY_RUN_RULES = [
   "[BOT PHONE RULES]",

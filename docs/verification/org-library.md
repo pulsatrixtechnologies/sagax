@@ -136,7 +136,7 @@ This ran on macOS (arm64) against disposable fixtures only. These passed:
 - the four commands above, including the headless-renderer run with
   `SAGAX_UI_E2E=1`;
 - `server/package-import.test.ts`, `server/package-export.test.ts`,
-  `shared/package-format.test.ts`, `server/bot-package.test.ts`,
+  `shared/package-format.test.ts`, `server/bots/bot-package.test.ts`,
   `server/skills/skills.test.ts`, `server/routines/routines.test.ts`, `server/store.test.ts`,
   `server/team-share.e2e.test.ts`, `src/components/ShareTeamDialog.test.ts`
   and `src/lib/team-import.test.ts`.

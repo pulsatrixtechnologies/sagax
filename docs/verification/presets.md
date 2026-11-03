@@ -102,9 +102,9 @@ renderer smoke job next to the Share team recipe.
 On macOS (arm64) against disposable fixtures only: `pnpm typecheck`,
 `pnpm lint`, `pnpm i18n:check`, every command above (including the
 headless-renderer run with `SAGAX_UI_E2E=1`), `server/team-share.e2e.test.ts`,
-`server/team-package-skills.e2e.test.ts`, `server/bot-package.test.ts`,
+`server/bots/team-package-skills.e2e.test.ts`, `server/bots/bot-package.test.ts`,
 `server/index.test.ts`, `server/auth/request-auth.test.ts`,
-`server/new-bot-defaults.test.ts`, `server/new-bot-defaults.e2e.test.ts`,
+`server/bots/new-bot-defaults.test.ts`, `server/bots/new-bot-defaults.e2e.test.ts`,
 `server/bot-setup.e2e.test.ts`, `src/state/bot-creation.test.ts`,
 `server/org/org-library.test.ts`, `server/org/org-library.e2e.test.ts`,
 `src/lib/org-library.test.ts` and the Share team, organization library and

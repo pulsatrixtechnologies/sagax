@@ -5,7 +5,7 @@ import { expect, it } from "vitest";
 import { launchVerificationServer } from "../scripts/control-omb.ts";
 import { removeTempDir } from "./testing/cleanup.ts";
 
-// 2026-10-17 (server/bot-creation.ts): any bot of the person creates bots,
+// 2026-10-17 (server/bots/bot-creation.ts): any bot of the person creates bots,
 // with the Primary Bot's safety and a depth limit.
 it("a bot that is not the Primary Bot creates a bot for its person, and a bot-made bot or a confidential thread cannot", async () => {
   const temp = mkdtempSync(join(tmpdir(), "omb-any-bot-creates-"));

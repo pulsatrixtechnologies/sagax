@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { DATA_DIR } from "../config.ts";
 import { Store } from "../store.ts";
 import { botPluginsWithMarketplaces } from "../testing/plugin-stores.ts";
-import type { BotZipHost } from "../bot-zip.ts";
+import type { BotZipHost } from "../bots/bot-zip.ts";
 import { json, readBody } from "../harness/http.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { createBotZipRoutes, type BotZipAuditRow, type BotZipRouteDeps } from "./bot-zip.ts";

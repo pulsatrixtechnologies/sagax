@@ -8,7 +8,7 @@ import { relative, sep } from "node:path";
 import { z } from "zod";
 import { commentsForModel, parseThreadText } from "../../shared/page-threads.ts";
 import type { MausColor } from "../../shared/wire.ts";
-import { sameAudience } from "../bot-visibility.ts";
+import { sameAudience } from "../bots/bot-visibility.ts";
 import { deliverableNotification } from "../notify.ts";
 import { pageOwnerFor } from "../published-pages.ts";
 import { redactSecretsInText } from "../redact.ts";

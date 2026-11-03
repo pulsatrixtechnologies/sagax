@@ -13,7 +13,7 @@ import { writeFileAtomic } from "./atomic.ts";
 import { applyStoredEngineEnv } from "./engines/engine-api-keys.ts";
 import { migrateConfigPlaintextKeys, readOnboardingEngineKey } from "./engines/onboarding-engine-key.ts";
 import { withoutComputerEngine } from "./computer/computer-engine-removal.ts";
-import { newBotDefaultsSchema, type NewBotDefaults } from "./new-bot-defaults.ts";
+import { newBotDefaultsSchema, type NewBotDefaults } from "./bots/new-bot-defaults.ts";
 import { loopDetectorConfigSchema, type LoopDetectorConfig } from "./safety/loop-detector.ts";
 import { loopGuardConfigSchema, type LoopGuardConfig } from "./host/loop-guard.ts";
 import { EFFORT_LEVELS, type LiveSettings } from "../shared/wire.ts";
@@ -493,7 +493,7 @@ const appConfigSchema = z.object({
      * set members' saved Auto and Auto-accept edits levels back to Ask
      * (server/approvals/member-auto-approval.ts). */
     memberAutoResetAt: z.number().finite().nonnegative().optional(),
-    /** Where bots' Claude Code plugins may come from (server/bot-plugins.ts).
+    /** Where bots' Claude Code plugins may come from (server/bots/bot-plugins.ts).
      * Absent means any marketplace; an admin may keep a list. */
     pluginMarketplaces: z.union([
       z.object({ mode: z.literal("any") }).strict(),

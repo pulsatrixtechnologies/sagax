@@ -1278,7 +1278,7 @@ export function intervalHasRestrictions(
 
 // ── the zone routines read wall clocks in ──────────────────────────────
 // Daily times, interval windows and weekdays are wall-clock rules. They are
-// read in the zone the person chose (server/bot-settings.ts) when there is
+// read in the zone the person chose (server/bots/bot-settings.ts) when there is
 // one, else in the host's, as they always were. Cron schedules carry their
 // own zone and never use this.
 let routineZoneResolver: () => string | undefined = () => undefined;

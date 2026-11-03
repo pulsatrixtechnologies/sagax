@@ -1853,7 +1853,7 @@ export function removeManifestEntry(botId: string, name: string, expectSha256: s
 }
 
 /** A bot's skills manifest as stored (enablement, provenance, hashes), for
- * the bot package (server/bot-zip.ts). The SKILL.md files themselves live
+ * the bot package (server/bots/bot-zip.ts). The SKILL.md files themselves live
  * in the workspace and travel with it. */
 export function skillManifestForExport(botId: string): Record<string, unknown> {
   return structuredClone(readManifest(botId)) as Record<string, unknown>;

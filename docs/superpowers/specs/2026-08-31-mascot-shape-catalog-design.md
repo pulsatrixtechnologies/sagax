@@ -175,9 +175,9 @@ The field follows `avatarCrop`'s existing path end to end:
 - `shared/mascot-shapes.ts` — zod enum plus a `botMascotShape()` safe-parse
   helper defaulting to `cursor`, mirroring `shared/bot-avatar.ts`.
 - `server/store.ts` — `BotRecord.mascotShape?: MascotShapeId | null`.
-- `server/bot-profile.ts` — added to the patch allow-list, with a readable
+- `server/bots/bot-profile.ts` — added to the patch allow-list, with a readable
   error message in the same style as the `avatarCrop` one.
-- `server/team/team-manifest.ts`, `server/bot-package.ts`, `server/package-export.ts`
+- `server/team/team-manifest.ts`, `server/bots/bot-package.ts`, `server/package-export.ts`
   — carried inside `appearance`, beside `color` and `mascotExpression`.
 - `server/index.ts` — added to the profile broadcast key list (~line 4048).
 - iOS `Sources/CompanionCore/Models.swift` — `Bot.mascotShape: String?` and the
@@ -200,7 +200,7 @@ default body, and an older server drops it on write — neither is a corrupt sta
 - **Schema test**: an unknown shape id resolves to `cursor`, mirroring
   `server/bot-avatar.test.ts`.
 - **Patch test**: an invalid shape returns the readable error, mirroring
-  `server/bot-profile.test.ts`.
+  `server/bots/bot-profile.test.ts`.
 - **iOS parse test**: every generated path parses to a closed, non-empty `Path`
   whose bounds fall inside the face box.
 - **Manual**: all ten shapes rendered on desktop and phone side by side, across a

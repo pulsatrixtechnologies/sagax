@@ -13,7 +13,7 @@ prompt or dialog: visibility is access control and the log is a record.
   `"everyone"` (default), `"admins"`, or `{ "people": [emails or @domains] }`
   (admins always included). Members' PATCHes may not set it (the client
   body filter in `server/auth/request-auth.ts`). The rules live in
-  `server/bot-visibility.ts`; `server/index.ts` applies them:
+  `server/bots/bot-visibility.ts`; `server/index.ts` applies them:
   - one gate for every path naming a bot, thread, room, routine, run or
     attachment (`pathSubject` / `subjectVisible`): a hidden one answers 404
     exactly like an unknown id;
@@ -47,13 +47,13 @@ prompt or dialog: visibility is access control and the log is a record.
 ## Driving it
 
 ```sh
-pnpm exec vitest run server/bot-visibility.test.ts server/bot-visibility.e2e.test.ts \
+pnpm exec vitest run server/bots/bot-visibility.test.ts server/bots/bot-visibility.e2e.test.ts \
   server/admin-activity.test.ts server/admin-activity.e2e.test.ts server/peers/peer-roster.test.ts \
   server/cli.test.ts src/components/ActivitySection.test.ts \
   src/components/bot-settings/VisibilitySection.test.ts
 ```
 
-- `server/bot-visibility.e2e.test.ts` boots a server with an admin (Boss) and
+- `server/bots/bot-visibility.e2e.test.ts` boots a server with an admin (Boss) and
   two members (Ada, Bob) on the sign-in list and the fake ACP engine. Boss
   restricts "Payroll" to Ada and "Board" to admins, puts Payroll in a room
   with an everyone-visible bot, gives it a routine, a webhook, an image in
@@ -126,9 +126,9 @@ A review of #1717 reproduced eight problems; each is now covered.
 - **Room recall.** A bot everyone sees repeated, in a member's 1:1, what a
   restricted bot said in a room they shared (the recent-work brief and
   `session_search`). Rooms whose bots have a narrower audience than the
-  recalling bot are now left out (`roomFeeds` in `server/bot-visibility.ts`),
+  recalling bot are now left out (`roomFeeds` in `server/bots/bot-visibility.ts`),
   and creating a room or adding a member with a different audience is
-  refused. `server/bot-visibility.e2e.test.ts` ("keeps a room fewer people
+  refused. `server/bots/bot-visibility.e2e.test.ts` ("keeps a room fewer people
   can see out of a visible bot's recall…") checks Bob's real reply and the
   real `/api/internal/session-search`.
 - **Restricted at creation.** `POST /api/bots` and `POST /api/teams/import`

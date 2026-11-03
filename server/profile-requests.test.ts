@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { botFolder } from "./bot-folder.ts";
+import { botFolder } from "./bots/bot-folder.ts";
 import { profileRevision } from "./profile-revision.ts";
 import { flushProfileHistory, readHistory } from "./profile-versions.ts";
 import {

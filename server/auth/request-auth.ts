@@ -873,7 +873,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // personal computer, its owner's only, server/owner-identity.ts)
   { methods: ["GET"], path: /^\/api\/people\/[\w-]{1,80}\/avatar$/ },
   // Organization server, slice 4: a bot's grants (user or team, with a
-  // level). server/bot-grants.ts decides who may read and change them (the
+  // level). server/bots/bot-grants.ts decides who may read and change them (the
   // owner, manage holders, organization admins, team managers).
   { methods: ["GET", "PUT"], path: /^\/api\/bots\/[\w-]+\/grants$/, feature: "orgDirectory" },
   { methods: ["DELETE"], path: /^\/api\/bots\/[\w-]+\/grants\/(?:(?:user%3A|user:)pr_[0-9a-f-]{36}|(?:team%3A|team:)[0-9A-Za-z]{1,64})$/i, feature: "orgDirectory" },
@@ -948,7 +948,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["GET", "POST", "PUT", "PATCH", "DELETE"], path: /^\/api\/me\/skills-library(?:\/[a-z0-9-]+)?$/, feature: "orgDirectory" },
   { methods: ["POST"], path: /^\/api\/me\/skills-library\/[a-z0-9-]+\/review$/, feature: "orgDirectory" },
   { methods: ["GET"], path: /^\/api\/me\/skills-library\/[a-z0-9-]+\/files$/, feature: "orgDirectory" },
-  // Slice 5: the Perspicax MCP profiles a bot mounts. server/bot-perspicax.ts
+  // Slice 5: the Perspicax MCP profiles a bot mounts. server/bots/bot-perspicax.ts
   // decides (use reads, edit changes, adding needs holding the profile).
   { methods: ["GET", "PUT"], path: /^\/api\/bots\/[\w-]+\/perspicax$/, feature: "orgDirectory" },
   // The bots whose sharing the caller administers (never their messages).

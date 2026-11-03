@@ -5,7 +5,7 @@
 //
 // 2026-10-26 (#1107): a member reads and undoes the history of their own
 // bots. request-auth.ts lets a session through; the owner rule is here.
-import { parseBotProfilePatch } from "../bot-profile.ts";
+import { parseBotProfilePatch } from "../bots/bot-profile.ts";
 import { profileRevision, profileSnapshot } from "../profile-revision.ts";
 import { flushProfileHistory, readHistory, recordProfileChange } from "../profile-versions.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";

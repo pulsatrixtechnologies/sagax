@@ -1,6 +1,6 @@
 import { parseJson, type JsonValue } from "../schema.ts";
 import { isBlockedUrl } from "../../electron/upstream-hosts.mjs";
-import { isBotPackage, parseBotPackage, parsePackageDocument, type PackageDocument, type ParsedBotPackage } from "../bot-package.ts";
+import { isBotPackage, parseBotPackage, parsePackageDocument, type PackageDocument, type ParsedBotPackage } from "../bots/bot-package.ts";
 import { parseTeamManifest, type ParsedTeamManifest } from "./team-manifest.ts";
 import { grokMarketplaceSlugFrom, grokMarketplaceUrl, grokShareIdFrom, grokShareUrl, type GrokTemplateCard } from "../../shared/grok-import.ts";
 

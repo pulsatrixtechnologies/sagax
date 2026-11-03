@@ -2,20 +2,20 @@
 // Import is additive-only. Scout creates nothing. Export builds a shareable
 // package, backup or legacy manifest from the caller's team.
 import { MAX_TEAM_BACKUP_BYTES } from "../../shared/team-backup.ts";
-import { validateBotCwd } from "../bot-cwd.ts";
+import { validateBotCwd } from "../bots/bot-cwd.ts";
 import {
   fetchBotDirectory,
   matchDirectoryBots,
   type MatchedDirectoryBot,
-} from "../bot-directory.ts";
+} from "../bots/bot-directory.ts";
 import {
   isBotPackage,
   packageSummary,
   parsePackageDocument,
   renderBotPackageMarkdown,
   type PackageDocument,
-} from "../bot-package.ts";
-import { parseVisibility, type BotVisibility } from "../bot-visibility.ts";
+} from "../bots/bot-package.ts";
+import { parseVisibility, type BotVisibility } from "../bots/bot-visibility.ts";
 import {
   createBotPackageExport,
   createLibraryPackageExport,

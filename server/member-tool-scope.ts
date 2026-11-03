@@ -123,7 +123,7 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   // every setting as the member (server/settings-actions.ts): the member's
   // own rights decide on the route the screen calls, a card otherwise
   sagax_settings: "own-setup",
-  // #1269: act runs as the signed-in person (server/bot-act.ts). #1098
+  // #1269: act runs as the signed-in person (server/bots/bot-act.ts). #1098
   // (2026-10-28): a read or a write that stays in the member's own
   // environment is their own card (ownAct); a call on someone else's bot or
   // on a route that reaches past that environment (shared/grant-reach.ts
@@ -302,7 +302,7 @@ function ownBotIdsOnly(input: unknown, ownsBot: (id: string) => boolean): boolea
 
 /** #1098 (2026-10-28): `act` (read or write) that stays in the member's own
  * environment, so its engine card is the member's own, never an admin's.
- * act runs as the signed-in person (server/bot-act.ts): the route refuses
+ * act runs as the signed-in person (server/bots/bot-act.ts): the route refuses
  * what that person may not do, and a write still waits for their own Allow
  * (botActRequest) unless their level runs it. What stays an admin card:
  *   - a route whose area reaches past the person's environment

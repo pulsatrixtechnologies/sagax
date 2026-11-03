@@ -33,7 +33,7 @@ import { z } from "zod";
 
 import { writeFileAtomic } from "./atomic.ts";
 import { DATA_DIR } from "./config.ts";
-import type { NewBotDefaults } from "./new-bot-defaults.ts";
+import type { NewBotDefaults } from "./bots/new-bot-defaults.ts";
 import type { ExportablePackageSkill, TeamExportSkip } from "./package-export.ts";
 import type { OrgImportContext } from "./package-import.ts";
 import { pair } from "./package-parts.ts";

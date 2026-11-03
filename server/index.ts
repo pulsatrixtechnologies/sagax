@@ -224,7 +224,7 @@ import {
   type BotActResult,
   type BotActService,
   type PerformActor
-} from "./bot-act.ts";
+} from "./bots/bot-act.ts";
 import { askedBotChange, askedChange, createSettingsActions } from "./settings-actions.ts";
 import {
   cwActionCard,
@@ -299,7 +299,7 @@ import {
   type DecisionActor
 } from "./decision-log.ts";
 import { appendStep, stepFromToolEvent } from "./step-journal.ts";
-import { validateBotCwd, validateBotCwdFor } from "./bot-cwd.ts";
+import { validateBotCwd, validateBotCwdFor } from "./bots/bot-cwd.ts";
 import {
   ATTACHMENTS_DIR,
   attachmentExists,
@@ -335,7 +335,7 @@ import {
   avatarImageStatus,
   snapshotAvatarGenerationState
 } from "./avatar-image.ts";
-import { parseBotProfilePatch } from "./bot-profile.ts";
+import { parseBotProfilePatch } from "./bots/bot-profile.ts";
 import { groupTurnCwd } from "./rooms/room-cwd.ts";
 import {
   insideFolderRoots,
@@ -584,7 +584,7 @@ import { mediaProxyPolicyFromEnv } from "./media-proxy-guard.ts";
 import { createWebSearchRoutes } from "./routes/web-search.ts";
 import { createWebBotAuthRoutes } from "./routes/web-bot-auth.ts";
 import { createBotTailscaleRoutes, botTailscaleScopeFor } from "./routes/bot-tailscale.ts";
-import { BotTailscaleService } from "./bot-tailscale.ts";
+import { BotTailscaleService } from "./bots/bot-tailscale.ts";
 import { applySignedBrowserHeaders } from "./auth/web-bot-auth-apply.ts";
 import {
   browserOwner,
@@ -955,7 +955,7 @@ import {
   engineProblem,
   namesEngine,
   noEngineError
-} from "./bot-engine.ts";
+} from "./bots/bot-engine.ts";
 import { sameModelSelection } from "../shared/thread-model.ts";
 import { allowedFallbackSelection, engineAllowed } from "../shared/org-allowed-engines.ts";
 import { offeredEngines, orgEngineMoveLine } from "../shared/offered-engines.ts";
@@ -1142,8 +1142,8 @@ import {
   skillCommandInline,
   undoSkillWrite
 } from "./skills/skills.ts";
-import { newBotDefaultsSchema } from "./new-bot-defaults.ts";
-import { greetingLanguage } from "./new-bot-greeting.ts";
+import { newBotDefaultsSchema } from "./bots/new-bot-defaults.ts";
+import { greetingLanguage } from "./bots/new-bot-greeting.ts";
 import {
   SoloGoals,
   soloGoalContinuePrompt,
@@ -1161,7 +1161,7 @@ import { expandSetupTurnText, setupModeActive, setupSystemPrompt } from "./setup
 import type { SkillRequestCardData } from "../shared/skill-request.ts";
 import {
   checkSoulDrift
-} from "./bot-folder.ts";
+} from "./bots/bot-folder.ts";
 import {
   aiClientPrompt,
   buildSystemPrompt,
@@ -1281,7 +1281,7 @@ import {
 import { RoutineRequestService } from "./routines/routine-requests.ts";
 import { directApply, UNDO_STALE, type DirectApply } from "./direct-apply.ts";
 import { createAgentCard } from "./chat-widgets.ts";
-import { buildBotOverview, type BotOverview } from "./bot-overview.ts";
+import { buildBotOverview, type BotOverview } from "./bots/bot-overview.ts";
 import { ProfileRequestService } from "./profile-requests.ts";
 import { ModelRequestService } from "./models/model-requests.ts";
 import { RuleRequestService } from "./rule-requests.ts";
@@ -1289,7 +1289,7 @@ import { TeamSetupError, TeamSetupRequestService, teamSetupDirectApply } from ".
 import type { TeamSetupRequest } from "../shared/team-setup.ts";
 import { profileRevision, profileSnapshot } from "./profile-revision.ts";
 import { flushAllProfileHistory, flushProfileHistory, readHistory, recordProfileChange } from "./profile-versions.ts";
-import { BOT_PACKAGE_MAX_SKILLS, isBotPackage, packageSummary, parsePackageDocument, type PackageDocument } from "./bot-package.ts";
+import { BOT_PACKAGE_MAX_SKILLS, isBotPackage, packageSummary, parsePackageDocument, type PackageDocument } from "./bots/bot-package.ts";
 import { TeamMemory } from "./memory/team-memory.ts";
 import { teamMemoryReviewRefusal } from "./memory/team-memory-review.ts";
 import { teamMemoryCardSettled, teamMemoryLateAnswer } from "./memory/team-memory-cards.ts";
@@ -1756,8 +1756,8 @@ import {
   SectionChannels,
   sectionShareGrants
 } from "./rooms/section-channels.ts";
-import { createBotGrantRoutes, visibleGrants, wireGrants } from "./bot-grants.ts";
-import { createBotPerspicaxRoutes } from "./bot-perspicax.ts";
+import { createBotGrantRoutes, visibleGrants, wireGrants } from "./bots/bot-grants.ts";
+import { createBotPerspicaxRoutes } from "./bots/bot-perspicax.ts";
 import { OrgFlowPlugins, guarded as orgFlowGuarded } from "./org/org-flow-plugins.ts";
 import { applyIdentityMigration, principalIdFor, rewritePeopleForAttach } from "./identity-migration.ts";
 import { ThreadStarters } from "./threads/thread-starters.ts";
@@ -1797,7 +1797,7 @@ import {
   type StreamSeen,
   type ThreadOwner,
   type Viewer
-} from "./bot-visibility.ts";
+} from "./bots/bot-visibility.ts";
 import { serviceThreadViewer, serviceViewerClosed } from "./service-viewer.ts";
 import { browserNavigationRefusal } from "./browser/browser-navigation.ts";
 import { describeBrand, loadBrand } from "./brand.ts";
@@ -1818,7 +1818,7 @@ import {
   canPlaceBot,
   ownerUserIdForPlacement
 } from "./rooms/channel-membership.ts";
-import { effectiveBotOwner as resolveBotOwner, recordedBotOwner } from "./bot-owner.ts";
+import { effectiveBotOwner as resolveBotOwner, recordedBotOwner } from "./bots/bot-owner.ts";
 import { cloudGuestSendRefusal, cloudThreadRefusal } from "./cloud-thread-refusal.ts";
 import { legacyPersonKey, personKey, speakerFor } from "./request-speaker.ts";
 import {
@@ -1945,7 +1945,7 @@ import {
   createBotInboundMailRoute,
   senderDomain
 } from "./mail/bot-inbound-mail.ts";
-import { TELEPHONY_ASSERTION_ACTORS, createBotInboundTelephonyRoute } from "./bot-inbound-telephony.ts";
+import { TELEPHONY_ASSERTION_ACTORS, createBotInboundTelephonyRoute } from "./bots/bot-inbound-telephony.ts";
 import { SmsConversation } from "./sms-conversation.ts";
 import { BotMailAddresses } from "./mail/bot-mail-addresses.ts";
 import { createBotPresetRoutes } from "./routes/bot-presets.ts";
@@ -1961,7 +1961,7 @@ import {
   stageBotZipUpload,
   writeBotZip,
   type BotZipHost
-} from "./bot-zip.ts";
+} from "./bots/bot-zip.ts";
 import { MEMORY_INDEX, memoryOverview, readMemoryDoc } from "./memory/memory-store.ts";
 import { isExpired as memoryEntryExpired, parseMemoryEntries } from "./memory/memory-entries.ts";
 import { createBotLibraryRoutes } from "./routes/bot-library.ts";
@@ -2039,7 +2039,7 @@ import {
   readPluginContents,
   type MarketplacePolicy,
   type PluginContents
-} from "./bot-plugins.ts";
+} from "./bots/bot-plugins.ts";
 import { pluginMetadataCacheRoot } from "./plugins/plugin-metadata-cache.ts";
 import { pluginTurnInventory } from "./turns/plugin-turn.ts";
 import { orderedSkillDiscovery, skillDiscoveryAvailable, type DiscoveredSkill } from "./skills/skill-discovery.ts";
@@ -2095,7 +2095,7 @@ import { OrgCapabilities, ORG_CAPABILITY_KEY_PREFIX, type OrgCapabilityMount } f
 import { createOrgCapabilityRoutes, ORG_CAPABILITIES_CALL, OrgSettingOwnedElsewhere } from "./routes/org-capabilities.ts";
 import { OrgGithubTokens } from "./org/org-github-tokens.ts";
 import { GithubCredentials, LOCAL_OWNER, ORG_OWNER } from "./github/github-credentials.ts";
-import { BotCapabilityStore } from "./bot-capability-store.ts";
+import { BotCapabilityStore } from "./bots/bot-capability-store.ts";
 import { InstallationCapabilityStore } from "./capabilities/installation-capability-store.ts";
 import { installationCapabilityBridge, makeInstallationCapabilityBridge, setInstallationCapabilityBridge } from "./capabilities/installation-capability-bridge.ts";
 import { discoverBotPluginIds, discoverPersonIds, migrateCapabilitiesStores } from "./capabilities/capabilities-store-migration.ts";
@@ -2133,7 +2133,7 @@ import {
   createBotSettingsStore,
   defaultOrgTimeZone,
   hostTimeZone
-} from "./bot-settings.ts";
+} from "./bots/bot-settings.ts";
 import { turnClockEnabled, turnTimeZone, withTurnClock } from "./turns/turn-clock.ts";
 import { createComputerInputRoutes, createVmScreenshotRoute, type ComputerShell } from "./routes/computer-input.ts";
 import { createComputerTeachRoutes } from "./routes/computer-teach.ts";
@@ -2144,7 +2144,7 @@ import { replaceDashes, voiceDashesEnabled, VOICE_DASHES_PREFERENCE } from "../s
 import { PERSPICAX_CONVENTIONS_PROMPT } from "./perspicax/perspicax-conventions.ts";
 import { createUserPreferenceStore, preferencesFrameAllowed, type PersonPreferences } from "./user-preferences.ts";
 import { createViewerBotOverrideRoutes } from "./routes/viewer-bot-overrides.ts";
-import { createViewerBotOverrideStore } from "./viewer-bot-overrides.ts";
+import { createViewerBotOverrideStore } from "./bots/viewer-bot-overrides.ts";
 import {
   applyViewerModelOverride,
   crossOwnerSettingsRefusal,
@@ -2186,7 +2186,7 @@ import {
   planRuntimeSettingsMigration,
   RUNTIME_SETTINGS_MIGRATION_MARKER,
   withoutRemovedBackup
-} from "./bot-runtime-settings.ts";
+} from "./bots/bot-runtime-settings.ts";
 import { setSharedHost } from "./host-kind.ts";
 import { createBotWorkspaceRoutes } from "./routes/bot-workspace.ts";
 import { createBotRulesRoutes } from "./routes/bot-rules.ts";
@@ -2270,7 +2270,7 @@ import { createPreferenceStore } from "./preference-import.ts";
 import { createPreferenceImportRoutes } from "./routes/preference-import.ts";
 import { createArtifactInternalRoutes, createArtifactRoutes } from "./routes/artifacts.ts";
 import { createBotTaskInternalRoutes, createBotTaskRoutes } from "./routes/bot-task-list.ts";
-import { createBotTaskStore } from "./bot-task-list.ts";
+import { createBotTaskStore } from "./bots/bot-task-list.ts";
 import { botTasksFrameAllowed, sameBotTaskOwner } from "../shared/bot-task-list.ts";
 import { createArtifactRefresher } from "./artifact-refresh.ts";
 import { createArtifactSourceRunner, toolResultValue, type ToolAnswer } from "./artifact-sources.ts";
@@ -2299,7 +2299,7 @@ import {
 } from "./routes/published-pages.ts";
 import { createTeamBotFromThreadRoutes } from "./routes/team-bot-from-thread.ts";
 import { createBotWizardRoutes } from "./routes/bot-wizard.ts";
-import { createBotWizardStore } from "./bot-wizard-store.ts";
+import { createBotWizardStore } from "./bots/bot-wizard-store.ts";
 import {
   awaySkipsDetail,
   LocalAwayTracker,
@@ -2401,7 +2401,7 @@ import {
   botCreationRefusal,
   recentBotCreations,
   type BotCreationRefusal
-} from "./bot-creation.ts";
+} from "./bots/bot-creation.ts";
 import {
   agentPromptWithFiles,
   createAgentApi,
@@ -2574,7 +2574,7 @@ import { isDesktopInjectModel, isLocalModelId, setDesktopInjectModels } from "./
 import { isPiLocalModel, piLocalKeyRefusalLifted } from "./models/pi-local-model.ts";
 import { defaultTurnPayerMode, effectiveTurnPayerMode, type TurnPayerMode } from "../shared/turn-payer.ts";
 import { handleDesktopBridgeMcp } from "./desktop/desktop-bridge-tools.ts";
-import { cloudOnlyBot } from "./cloud-only-bots.ts";
+import { cloudOnlyBot } from "./bots/cloud-only-bots.ts";
 import { TypingPrewakeThrottle } from "./sandbox/sandbox-typing-prewake.ts";
 import {
   AUTO_COMPUTER_MCP_NAME,
@@ -2846,7 +2846,7 @@ setDesktopInjectModels(() => desktopLocalModels.modelsFor(null));
 const desktopTunnels = new DesktopTunnels(liveSessionPerson);
 const bridgeAudit = createBridgeAudit(join(DATA_DIR, "desktop-bridge-audit.jsonl"));
 const userPreferenceStore = createUserPreferenceStore(DATA_DIR);
-// The bot creation wizard's drafts (server/bot-wizard-store.ts).
+// The bot creation wizard's drafts (server/bots/bot-wizard-store.ts).
 const botWizardStore = createBotWizardStore(DATA_DIR);
 const viewerBotOverrideStore = createViewerBotOverrideStore(DATA_DIR);
 // Each person's achievements (server/achievements.ts). On first use a
@@ -4016,7 +4016,7 @@ function viewerMayAnswerOnThread(threadId: string, viewerId: string | undefined)
   return !room || groupPostAllowed(room, viewerId);
 }
 
-/** Settings > Bot > Auto-review (server/bot-settings.ts): when the caller
+/** Settings > Bot > Auto-review (server/bots/bot-settings.ts): when the caller
  * (their own setting on an organization server, the server's elsewhere) has
  * it on, a conversation they just opened starts in the reviewed level. */
 function applyAutoReviewDefault(auth: RequestAuth, botId: string, threadId: string): void {
@@ -4215,7 +4215,7 @@ async function answeringCardAs(auth: RequestAuth, threadId: string, requestId: s
   }
 }
 
-// ── bot visibility (server/bot-visibility.ts) ──────────────────────────
+// ── bot visibility (server/bots/bot-visibility.ts) ──────────────────────────
 /** Who is looking. The owner and admin sessions see every bot; any other
  * session is a member, known by the email it signed in with. Service
  * loopback on an organization server sees nothing, except the turn-scoped
@@ -5548,7 +5548,7 @@ function agentsIntegration(
       // retries are shown only to a Chief of Staff, whom their routes require.
       SAGAX_CHIEF_OF_STAFF: store.bot(botId)?.chiefOfStaff === true ? "1" : "0",
       // 2026-10-17: create_bot for any other bot of the person that may
-      // create one (server/bot-creation.ts); the route re-checks the turn.
+      // create one (server/bots/bot-creation.ts); the route re-checks the turn.
       SAGAX_CREATE_BOTS: (() => {
         const bot = store.bot(botId);
         return bot && botCreationOffered(bot, ownerBotsReadOnly(bot)) ? "1" : "0";
@@ -7747,7 +7747,7 @@ async function moveOffComputerEngine(): Promise<void> {
     saveConfig({ automaticRecovery: { enabled: false } });
     cfg.automaticRecovery = { enabled: false };
   }
-  // Each bot's own backup (server/bot-runtime-settings.ts) on a removed engine.
+  // Each bot's own backup (server/bots/bot-runtime-settings.ts) on a removed engine.
   for (const candidate of store.bots) {
     const cleared = withoutRemovedBackup(candidate.automaticRecovery, (id) => removed.has(id));
     if (cleared !== candidate.automaticRecovery) store.patchBot(candidate.id, { automaticRecovery: cleared });
@@ -9328,7 +9328,7 @@ function githubAccountToken(principalId: string | null | undefined): string | un
   if (IDENTITY.kind === "perspicax") return usablePersonGithub(principalId)?.token;
   return githubCredentialsFor(localPrincipalId())[0]?.token;
 }
-/** The marketplaces' side of the list for server/bot-plugins.ts: each
+/** The marketplaces' side of the list for server/bots/bot-plugins.ts: each
  * marketplace's pick of a credential, and what read it last. */
 const marketplaceCredentials = {
   get: (scope: string, source: string) => { migrateGithubCredentials(); return githubCredentials.get(scope, source); },
@@ -9418,7 +9418,7 @@ if (skillsLibraryEnabled(cfg) && installationCapabilityBridge()) {
 }
 // The installation's one marketplace list (server/plugins/plugin-marketplaces.ts):
 // Capabilities installs a plugin from it for everyone (MCP servers and
-// skills) or for one bot (the whole plugin, server/bot-plugins.ts). Added
+// skills) or for one bot (the whole plugin, server/bots/bot-plugins.ts). Added
 // for everyone, it reads with the installation's token for it (an admin's,
 // Capabilities > Everyone), then the person's GitHub connection, then the
 // organization's GitHub tokens; added or fetched again from a bot, with that
@@ -10036,7 +10036,7 @@ ROUTES.push(createPersonConnectionRoutes({
     }
   }
 }));
-// ── a bot's Claude Code plugins (server/bot-plugins.ts) ─────────────────
+// ── a bot's Claude Code plugins (server/bots/bot-plugins.ts) ─────────────────
 function botLoadsPlugins(bot: { modelSelection: { instanceId: string } }): boolean {
   const kind = registry.get(bot.modelSelection.instanceId)?.driverKind;
   // Claude gets --plugin-dir. Other file engines get an index, and chat
@@ -17971,7 +17971,7 @@ function turnSurfacePlan(bot: BotRecord, runOn?: RoutineRunOn, threadId?: string
   const instance = registry.get(bot.modelSelection.instanceId);
   const remote = remoteComputerForTurn({
     organization: IDENTITY.kind === "perspicax",
-    // A cloud-only bot (server/cloud-only-bots.ts) always runs as a cloud run.
+    // A cloud-only bot (server/bots/cloud-only-bots.ts) always runs as a cloud run.
     runOnCloud: runOn === "cloud" || cloudOnlyBot(bot.id),
     hasTeamComputer: Boolean(inheritedTeamComputer(bot))
   });
@@ -23980,7 +23980,7 @@ const commsBus: CommsBus = {
 };
 loadDelegationReceipts();
 
-// Settings > Bot (server/bot-settings.ts): the zone routines read wall
+// Settings > Bot (server/bots/bot-settings.ts): the zone routines read wall
 // clocks in, the server's by default and, on an organization server, each
 // routine's person's own when they chose one.
 // An organization server with no zone chosen (person or server) used the
@@ -25508,7 +25508,7 @@ const ruleRequests = new RuleRequestService({
 const teamSetupTeams = () => [...new Set(["", ...readSections(), ...store.bots.map((bot) => sectionKey(bot.section)), ...store.groups.map((group) => sectionKey(group.section))])];
 const teamSetupRequests = new TeamSetupRequestService({
   store, teams: teamSetupTeams, canAccessTeam, covers: primaryCovers, sameOwner: primaryBotSameOwner, canPersist: proposalPersistence, maxBots: MAX_WORKSPACE_BOTS,
-  // create_bot from a bot that is not a Primary Bot (server/bot-creation.ts)
+  // create_bot from a bot that is not a Primary Bot (server/bots/bot-creation.ts)
   mayCreateBots: (bot) => botCreationOffered(bot, ownerBotsReadOnly(bot)),
   autoApply: (botId, threadId, request) => teamSetupDirectSource(botId, threadId, request) !== null,
   validateChange: (before, fields) => assertTeamComputerChangeIdle(before, { ...before, ...fields }),
@@ -31584,7 +31584,7 @@ const inboundMail = createBotInboundMailRoute({
 });
 // 2026-10-26 (Perspicax Voice, phase 2): a text or a call on the owner's
 // phone line wakes the chosen bot's Bot phone triggers
-// (server/bot-inbound-telephony.ts), wired before the session gate with the
+// (server/bots/bot-inbound-telephony.ts), wired before the session gate with the
 // member API and bot email. Same owner rule as bot email.
 /** The bot's words after a line of the person's, as one text: its own text
  * replies only (no tool row, no other bot's line). */
@@ -32164,7 +32164,7 @@ ROUTES.push(createComputerInputRoutes<BotRecord>({
     }
   }
 }));
-// Settings > Bot: auto-review default and time zone (server/bot-settings.ts).
+// Settings > Bot: auto-review default and time zone (server/bots/bot-settings.ts).
 ROUTES.push(createBotSettingsRoutes({
   store: botSettings,
   organization: () => IDENTITY.kind === "perspicax",
@@ -35622,11 +35622,11 @@ function ownWorkOrigin(bot: BotRecord, threadId: string, tool: string | undefine
   return lineageEnvironmentCall(tool, args, ownEnvironmentSensitiveRead) ? ownerLineageFor(bot, threadId) : "other";
 }
 /** The profile block: a bot offered create_bot (not the Primary Bot) is
- * told it may create one for its person (server/bot-creation.ts). */
+ * told it may create one for its person (server/bots/bot-creation.ts). */
 function botProfilePrompt(bot: BotRecord): string {
   return botCreationOffered(bot, ownerBotsReadOnly(bot)) ? PROFILE_CREATOR_PROMPT : PROFILE_PROMPT;
 }
-/** 2026-10-17 (server/bot-creation.ts): whether this turn of a bot that is
+/** 2026-10-17 (server/bots/bot-creation.ts): whether this turn of a bot that is
  * not a Primary Bot is its owner's own request, for create_bot: the same
  * judgment as the owner's own environment (ownEnvironmentTurnOrigin). Never
  * another bot's hop, a routine, a webhook or trigger, an email, any
@@ -35661,7 +35661,7 @@ function botCreationTurnOrigin(bot: BotRecord, threadId: string): "owner" | "oth
   });
 }
 /** Why a bot that is not a Primary Bot may not create a bot in this turn,
- * or null (server/bot-creation.ts). Checked before and again after the
+ * or null (server/bots/bot-creation.ts). Checked before and again after the
  * model lookup awaits. */
 function nonPrimaryCreationRefusal(bot: BotRecord, threadId: string, body: Record<string, unknown>): BotCreationRefusal | null {
   const owner = effectiveBotOwner(bot);
@@ -36601,7 +36601,7 @@ function hideEarlierAgentThreads(): void {
  * planHiddenBotThreads). Counts only in the log. */
 /** Once (marker `bot-runtime-settings.v1` 2026-10-15): the global
  * parallel conversations and automatic recovery values become each existing
- * bot's own (server/bot-runtime-settings.ts). A bot with a value keeps it.
+ * bot's own (server/bots/bot-runtime-settings.ts). A bot with a value keeps it.
  * Counts only in the log. */
 function migrateBotRuntimeSettings(): void {
   const marker = join(DATA_DIR, RUNTIME_SETTINGS_MIGRATION_MARKER);
@@ -37459,7 +37459,7 @@ if (IDENTITY.kind === "perspicax") {
       actor: orgAuditActor(auth)
     })
   }));
-  // Slice 5: the Perspicax MCP profiles a bot mounts (server/bot-perspicax.ts);
+  // Slice 5: the Perspicax MCP profiles a bot mounts (server/bots/bot-perspicax.ts);
   // only once the server is linked to Perspicax.
   ROUTES.push(createBotPerspicaxRoutes({
     linked: () => perspicaxDirectory !== null,
@@ -38672,7 +38672,7 @@ if (IDENTITY.kind === "perspicax") {
     // 2026-10-18: people may export their credential vault in clear
     // (Settings > Credentials). Allowed by default.
     saveAllowVaultExport: (allowed, auth) => saveOrgAllowVaultExport(allowed, orgAuditActor(auth)),
-    // Where bots' plugins may come from (server/bot-plugins.ts): any
+    // Where bots' plugins may come from (server/bots/bot-plugins.ts): any
     // marketplace, or the admin's list of owner/repo, owner/* or URLs.
     savePluginMarketplaces: (raw, auth) => saveOrgPluginMarketplaces(raw, orgAuditActor(auth)),
     saveGithubClientId: (clientId, auth) => {
@@ -40218,7 +40218,7 @@ const orgBotsDeps: BotsDeps = {
     const exported = singleBotPackage(bot, true);
     return { document: exported.document, filename: exported.filename, redacted: exported.redacted, skipped: exported.skipped };
   },
-  // The canonical bot zip (server/bot-zip.ts), for "Copy to another server".
+  // The canonical bot zip (server/bots/bot-zip.ts), for "Copy to another server".
   exportZip: (botId, options) => {
     const plan = planBotZip(botZipHost, botId, options);
     return { filename: plan.filename, bytes: plan.bytes, write: (sink) => writeBotZip(plan, sink) };
@@ -40359,7 +40359,7 @@ ROUTES.push(createBotCatalogRoutes({
   }
 }));
 
-/** A bot as one zip (server/bot-zip.ts, server/routes/bot-zip.ts): the
+/** A bot as one zip (server/bots/bot-zip.ts, server/routes/bot-zip.ts): the
  * persona editor's Export and Import, New bot, Browse Bots > Templates and
  * the admin console all read and write this one format. */
 function mcpServerSummary(name: string): { transport?: string; url?: string; command?: string; valueNames: string[] } | undefined {
@@ -44324,7 +44324,7 @@ async function authenticate(req: IncomingMessage, res: ServerResponse, url: URL,
       return null;
     }
   }
-  // A bot's grants are judged by server/bot-grants.ts (slice 4): an admin
+  // A bot's grants are judged by server/bots/bot-grants.ts (slice 4): an admin
   // or a team manager administers them without seeing the bot.
   const grantRoute = IDENTITY.kind === "perspicax" && /^\/api\/bots\/[\w-]+\/grants(?:\/[^/]+)?$/.test(path);
   // Private threads (server/threads/thread-privacy.ts): the helpers routes call
@@ -44541,7 +44541,7 @@ async function runInternal(req: IncomingMessage, res: ServerResponse, url: URL, 
       roomCoordination: z.boolean().default(false),
       deliversSavedFiles: z.boolean().default(false),
       // the person whose request this turn is, as a real turn records it
-      // (bot creation judges it, server/bot-creation.ts)
+      // (bot creation judges it, server/bots/bot-creation.ts)
       speakerPrincipalId: z.string().regex(/^[\w:.@-]{1,200}$/).optional()
     }).strict().safeParse(await readBody(req));
     if (!parsed.success || !store.bot(parsed.data.botId)) {

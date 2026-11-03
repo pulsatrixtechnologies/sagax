@@ -1,4 +1,4 @@
-// A bot as one zip (server/bot-zip.ts, docs/bot-package.md).
+// A bot as one zip (server/bots/bot-zip.ts, docs/bot-package.md).
 //
 //   GET    /api/bots/:id/export.zip?conversations=1&sharing=1
 //          The whole bot, streamed. The owner, a person who manages the bot
@@ -36,7 +36,7 @@ import {
   stageBotZipUpload,
   writeBotZip,
   type BotZipHost,
-} from "../bot-zip.ts";
+} from "../bots/bot-zip.ts";
 import { GROK_EXPORT_PROMPT, GrokImportError, grokExportToPackage, parseGrokExport } from "../../shared/grok-import.ts";
 import { xaiMarketplaceToPackage, type XaiMarketplaceBot } from "../../shared/xai-marketplace.ts";
 import { XaiMarketplaceError } from "../plugins/xai-marketplace.ts";

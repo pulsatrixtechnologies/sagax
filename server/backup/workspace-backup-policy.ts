@@ -612,7 +612,7 @@ export function withoutRegistrySecrets(path: string, text: string): string | nul
   return removed ? kept.join("\n") : null;
 }
 
-/** A file a bot export (server/bot-zip.ts) leaves out because it is a
+/** A file a bot export (server/bots/bot-zip.ts) leaves out because it is a
  * sign-in or a key whatever folder it sits in: the sign-in files
  * (credentialFileName), an engine's (`.credentials.json`, `auth.json`,
  * `.env` but not its templates), a sealed store (`.enc`), a certificate or

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { NewBotDefaults } from "./new-bot-defaults.ts";
+import type { NewBotDefaults } from "./bots/new-bot-defaults.ts";
 import type { BotRecord } from "./store.ts";
 
 const FIXTURES = join(import.meta.dirname, "..", "shared", "package-fixtures");

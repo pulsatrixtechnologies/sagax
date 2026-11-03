@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { writeFileAtomic } from "../atomic.ts";
 
 import { capabilityPluginStateSchema, capabilityPluginValuesSchema } from "./capability-plugin-state.ts";
-import { BotCapabilityStore, emptyBotCapabilityDocument } from "../bot-capability-store.ts";
+import { BotCapabilityStore, emptyBotCapabilityDocument } from "../bots/bot-capability-store.ts";
 import { InstallationCapabilityStore, emptyInstallationCapabilityDocument } from "./installation-capability-store.ts";
 import { principalDir } from "../person-connections.ts";
 import { isSkillLibraryEntry } from "../skills/skill-library.ts";

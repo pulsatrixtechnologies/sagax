@@ -569,7 +569,7 @@ export function parseGrantClaim(value: unknown): ConsoleGrant | null {
  * 2026-10-21) is accepted by `POST /api/org/inbound-mail` alone
  * (server/mail/bot-inbound-mail.ts); `perspicax-voice` (Perspicax Voice,
  * 2026-10-26) by `POST /api/org/telephony/inbound` alone
- * (server/bot-inbound-telephony.ts). */
+ * (server/bots/bot-inbound-telephony.ts). */
 export const CONSOLE_ASSERTION_ACTORS = ["console", "perspicax-mcp", "perspicax-mail", "perspicax-voice"] as const;
 export type ConsoleAssertionActor = typeof CONSOLE_ASSERTION_ACTORS[number];
 

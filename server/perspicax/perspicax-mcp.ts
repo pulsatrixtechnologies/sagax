@@ -1,7 +1,7 @@
 // Perspicax MCP for the person who speaks (slice 5, spec section 4).
 //
 // A bot on an organization server lists Perspicax profiles
-// (server/bot-perspicax.ts). When a turn starts, the harness takes the
+// (server/bots/bot-perspicax.ts). When a turn starts, the harness takes the
 // speaker's current sign-in access token (server/auth/idp-session.ts, memory
 // only) and exchanges it at Perspicax (RFC 8693, server/perspicax/perspicax-link.ts)
 // for one short MCP token per profile. Those tokens stay here: the engine

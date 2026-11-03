@@ -5,7 +5,7 @@
 //
 // Turning it on does not run anything on the Sagax server. The dispatcher
 // (server/lifecycle-hooks.ts) sends the commands to the bot's computer.
-import type { BotPlugins } from "../bot-plugins.ts";
+import type { BotPlugins } from "../bots/bot-plugins.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

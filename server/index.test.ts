@@ -2652,7 +2652,7 @@ describe("harness HTTP API", () => {
       })).body.group;
       // 2026-10-17: any bot of the person may create a bot, but only from
       // its owner's own request; a turn nobody wrote (this test capability)
-      // is refused (server/bot-creation.ts).
+      // is refused (server/bots/bot-creation.ts).
       const nonChief = await createOperator(outsiderChannel.threadId, "Non-Chief Operator", outsider.id);
       expect(nonChief).toMatchObject({ status: 403, body: { code: "not_owner_turn" } });
       const denied = await createOperator(outsiderChannel.threadId, "Forbidden Operator");

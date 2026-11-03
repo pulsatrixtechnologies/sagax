@@ -185,7 +185,7 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   p("computers:use", "admin", "shared_computer"),
   p("vm:exec", "admin", "vm_exec"),
   // #1269: act runs as the signed-in person with their own rights
-  // (server/bot-act.ts); a routine or a webhook never calls it (service below)
+  // (server/bots/bot-act.ts); a routine or a webhook never calls it (service below)
   p("actions:invoke", "own", "act"),
   // Claims (Sagax #497, Perspicax #327): the native claim tools.
   p("claims:acquire", "claim", "claim"),

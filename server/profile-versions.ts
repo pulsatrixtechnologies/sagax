@@ -10,7 +10,7 @@ import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readSync } from 
 import { join } from "node:path";
 
 import { PROFILE_REQUEST_FIELDS, type ProfileRequestChanges } from "../shared/profile-request.ts";
-import { botFolder } from "./bot-folder.ts";
+import { botFolder } from "./bots/bot-folder.ts";
 import { redactSecrets } from "./redact.ts";
 
 export type HistoryActor = "user" | "bot" | "file" | "import" | "system";

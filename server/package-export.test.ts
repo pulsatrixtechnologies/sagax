@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createBotPackageExport, createTeamPackageExport, shareableAddress, TEAM_TOO_LARGE_MESSAGE, TeamExportError } from "./package-export.ts";
-import { parseBotPackage, renderBotPackageMarkdown } from "./bot-package.ts";
+import { parseBotPackage, renderBotPackageMarkdown } from "./bots/bot-package.ts";
 import type { Routine } from "./routines/routines.ts";
 import type { BotRecord, GroupRecord } from "./store.ts";
 import { includedSkills, requestedSkills, startingTicks } from "../src/lib/team-share-skills.ts";

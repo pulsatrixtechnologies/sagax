@@ -255,7 +255,7 @@ export class GithubCredentials {
     return this.read().choices.find((choice) => choice.scope === scope && choice.source === source)?.credential;
   }
 
-  /** The picked credential's token (server/bot-plugins.ts). */
+  /** The picked credential's token (server/bots/bot-plugins.ts). */
   get(scope: string, source: string): string | undefined {
     const id = this.chosen(scope, source);
     return id ? this.tokenFor(id) : undefined;

@@ -681,7 +681,7 @@ deprecation window: `shared/capability-stores.ts`
 2027-11-01). Design and file map: `docs/migration/capabilities-stores.md`.
 
 - Bot: `bot-capabilities/<botId>/capabilities.json`
-  (`server/bot-capability-store.ts`). Absorbs
+  (`server/bots/bot-capability-store.ts`). Absorbs
   `bot-plugins/<bot>/state.json` and `plugins/config.json`. Plugin source
   trees stay under `bot-plugins/<bot>/plugins/`.
 - Person: `principals/<pid>/capabilities.enc` (lot 2). Legacy
@@ -1652,7 +1652,7 @@ in-scope work; a Peer contact section states the effective flag
 (`peerReviewRequired`: `approvePeerComms` and not Full). `VERIFY_FIRST_PROMPT`
 and the `ask_choice` tool description match. Fleet merge/release/deploy GO
 in chat is unchanged. Tests: `server/approvals/approval-level-prompt.test.ts`,
-`server/system-prompt.test.ts`, `server/bot-overview.test.ts`.
+`server/system-prompt.test.ts`, `server/bots/bot-overview.test.ts`.
 
 ## Work style: one section every turn reads (2026-10-29)
 
@@ -2376,7 +2376,7 @@ permission `settings:change`, member scope `own-setup`, deferred on Claude):
   setting to the app: add its entry, run `pnpm gen:settings-doc` (writes
   `docs/settings-actions.md`, the inventory; the test fails when stale)
   and `pnpm gen:self-knowledge`.
-- Rights: the route is replayed by the act engine (`server/bot-act.ts`
+- Rights: the route is replayed by the act engine (`server/bots/bot-act.ts`
   `handlePlanned`) with the person's own session; a route they cannot call
   is refused before any card ("needs rights they do not have"), and the
   route's own checks answer the rest. Turns with no person (routine,
@@ -2512,7 +2512,7 @@ Settings > Security (`MyApprovalRules`, also `rules.owner` and
   asked each time; the rule never answers it (step-up wins). Saving the
   rule itself is always-grant.
 - Families: engine cards (all engines, the broker decides), act and
-  sagax_settings cards (`server/bot-act.ts`: setting + target, exact value
+  sagax_settings cards (`server/bots/bot-act.ts`: setting + target, exact value
   digest when more than a simple change; #1098: a change to rules,
   permissions, tools, MCP or secrets keeps its card at every level and offers
   Always allow too, always bound to its exact value), the ConnectWise widget
@@ -2794,7 +2794,7 @@ Decision: a guided wizard beside New bot's quick dialog (kept), same look as
 the guided first run (#1035). Desktop `src/components/bot-wizard/`, iOS
 `ios/App/BotWizard/`, one server draft for both:
 
-- Draft: `server/bot-wizard-store.ts` (`bot-wizard-drafts.json`, 0600, one
+- Draft: `server/bots/bot-wizard-store.ts` (`bot-wizard-drafts.json`, 0600, one
   per bot), routes `server/routes/bot-wizard.ts` (`/api/bot-wizard`, kits,
   start/resume, patch, `soul` "Write it for me" by the bot's one-shot with
   the answers as fallback, `finish`). Pure model `shared/bot-wizard.ts`
@@ -3371,7 +3371,7 @@ notifications), Sentry, PagerDuty, Linear. Rules, covered by
   first: metadata, link-local and reserved addresses always refused,
   loopback and private ranges only on a personal server, https only for
   calendars, connections pinned to the checked address.
-- Bot export (`server/bot-zip.ts`): a typed trigger keeps its provider,
+- Bot export (`server/bots/bot-zip.ts`): a typed trigger keeps its provider,
   events, filters, rate limit, tenant, Graph connector name and resource,
   and poller server settings. Never a signing secret, bearer hash, pending
   token, subscription, cursor, poller credential, poller user name or
@@ -3524,11 +3524,11 @@ Phase 2 of Perspicax Voice (contract `perspicax-voice/1`, Perspicax side in
 its own PR). A text or a call on a person's phone line is answered by
 Perspicax (Twilio webhooks, IVR, PIN, choice of bot) and relayed here. It
 only wakes a routine, like bot email. Covered by
-`server/bot-inbound-telephony.test.ts`, `server/auth/oidc-rp.test.ts` and
+`server/bots/bot-inbound-telephony.test.ts`, `server/auth/oidc-rp.test.ts` and
 `src/components/TriggersPanel.test.ts`:
 
 - Delivery: `POST /api/org/telephony/inbound`
-  (`server/bot-inbound-telephony.ts`), answered before the session gate,
+  (`server/bots/bot-inbound-telephony.ts`), answered before the session gate,
   next to bot email. Same credential rule as bot email with actor
   `perspicax-voice` (accepted HERE ONLY: admin, member and mail routes
   refuse it) and a required `body_sha256`. Order: 401 `unauthorized`, 400
@@ -3811,7 +3811,7 @@ remembered, exported, logged or shared beyond its owner
   `server/engines/engine-transcripts.test.ts`,
   `server/runtime/store.test.ts`, `server/workspace-backup.test.ts`,
   `server/messages/message-db.test.ts`,
-  `server/bot-zip.test.ts`, `src/components/ConfidentialBanner.test.ts`,
+  `server/bots/bot-zip.test.ts`, `src/components/ConfidentialBanner.test.ts`,
   `src/components/ChatView.confidential.test.ts`,
   `ios/Tests/CompanionCoreTests/ConfidentialThreadTests.swift`.
 
@@ -3887,7 +3887,7 @@ decrypted archive, the staging and the restored folder).
   preview and Settings > Backups after the restore (`GET
   /api/workspace-backup/status` `lastRestoreReconnect`) show it
   (`WorkspaceBackupReconnectList`, keys `backup.reconnect.*`).
-- A bot export (`server/bot-zip.ts` walkFiles) leaves out the same sign-in
+- A bot export (`server/bots/bot-zip.ts` walkFiles) leaves out the same sign-in
   files, `.enc`, `.pem`, `.p12`, `.pfx`, a `.key` that is not a Keynote zip,
   `.env` (not its templates), `.ssh/`, `.aws/`, `.docker/` and an `.npmrc`
   with a token (`exportedSecretFile`).
@@ -4395,11 +4395,11 @@ Parallel conversations, Automatic recovery and Tool access are each bot's
 own, in the bot editor (Permissions page: `BotToolAccess`,
 `BotParallelSettings`; Model page: `BotRecoverySettings`), no longer cards of
 Settings > General > Advanced. Keep these rules, covered by
-`server/bot-runtime-settings.test.ts`, `server/routes/bot-runtime-settings.test.ts`
-and `server/bot-runtime-settings.e2e.test.ts`:
+`server/bots/bot-runtime-settings.test.ts`, `server/routes/bot-runtime-settings.test.ts`
+and `server/bots/bot-runtime-settings.e2e.test.ts`:
 
 - Bot fields `maxConcurrentThreads`, `maxParallelPerPerson`, `busySend`,
-  `automaticRecovery` (`server/bot-runtime-settings.ts`). The runtime reads
+  `automaticRecovery` (`server/bots/bot-runtime-settings.ts`). The runtime reads
   the bot's value everywhere (thread capacity, parallel admission, recovery
   backups, `start_thread` limits); a bot without one reads the global value
   of config.json (`threads.*`, `automaticRecovery`), kept as the server
@@ -5707,7 +5707,7 @@ no body and no query. An external runtime does not get `act`. A `bot-act`
 frame reaches only that person's streams. iOS and Android ignore the kind.
 The desktop dispatches it through the same path as the button.
 
-Tests: `shared/bot-act.test.ts`, `server/bot-act.test.ts`.
+Tests: `shared/bot-act.test.ts`, `server/bots/bot-act.test.ts`.
 
 ## More engines on an organization server (2026-10-02)
 
@@ -6833,7 +6833,7 @@ Connected apps, shared one token by all and ran commands on the host;
 had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.test.ts`
 (OC-1 to OC-9), `server/person-connections.test.ts`,
 `server/org/org-person-connections.test.ts`,
-`server/github/github-connect.test.ts`, `server/bot-plugins.test.ts`,
+`server/github/github-connect.test.ts`, `server/bots/bot-plugins.test.ts`,
 `server/turns/plugin-turn.test.ts`, `server/bot-plugin-act.test.ts`,
 `server/sandbox/sandbox-stdio-mcp.test.ts`, `server/sandboxd.test.ts` or
 `src/components/settings/MyConnectionsSettings.test.ts`:
@@ -6879,7 +6879,7 @@ had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.tes
   /api/org/settings` no longer takes `githubTokens` and `GET /api/org` no
   longer lists them. `server/org/org-github-tokens.ts` stays as the reader the
   migration uses.
-- Plugins (`server/bot-plugins.ts`, `/api/bots/:id/plugins/*`): per bot, the
+- Plugins (`server/bots/bot-plugins.ts`, `/api/bots/:id/plugins/*`): per bot, the
   owner or a person with manage changes them, use reads. One marketplace
   list (`server/plugins/plugin-marketplaces.ts`, 2026-10-09) serves both install
   scopes of Connect apps: everyone (a plugin's MCP servers and skills,
@@ -6892,7 +6892,7 @@ had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.tes
   (the workspace route answers 409 `in_use` while a bot does). Each bot's
   older marketplaces moved into the list at boot (`migrateBotMarketplaces`,
   a clashing name gets a suffix, installs kept; tests
-  `server/bot-plugins.test.ts`, `server/routes/bot-plugins.test.ts`). A
+  `server/bots/bot-plugins.test.ts`, `server/routes/bot-plugins.test.ts`). A
   marketplace known only by its marketplace.json address cannot install on
   a bot (422 `manifest_only`). Added or fetched again through a bot, a
   private marketplace reads with the credential that bot picks for it (the
@@ -7081,7 +7081,7 @@ connectors and My MCP servers only.
   marketplace keeps the same effective credential; idempotent; the old files
   are removed after the new one is written. Tests:
   `server/github/github-credentials.test.ts`, `server/routes/github-credentials.test.ts`,
-  `server/bot-plugins.test.ts`, `server/github/github-mcp-token.test.ts`,
+  `server/bots/bot-plugins.test.ts`, `server/github/github-mcp-token.test.ts`,
   `src/components/plugins/GithubAccountSection.test.ts`,
   `src/components/PluginsPanel.gestures.test.ts`,
   `src/components/plugins/ConnectAppsView.test.ts`. Captures:
@@ -8599,7 +8599,7 @@ name `chiefOfStaff` (`shared/wire.ts`); everything a person reads says
 
 Decision: "allow non primary bot to create other bots". Every bot of a person may
 call `create_bot` (`POST /api/internal/create-bot`), not only the Primary
-Bot (rules in `server/bot-creation.ts`). Keep:
+Bot (rules in `server/bots/bot-creation.ts`). Keep:
 
 - The Primary Bot's path is unchanged. Any other bot takes the same path:
   the new bot belongs to the creator's owner (never to a bot or another
@@ -8629,7 +8629,7 @@ Bot (rules in `server/bot-creation.ts`). Keep:
   (`PROFILE_CREATOR_PROMPT`, `peerRosterSystemPrompt(..., createsBots)`)
   tell it so. Team setup, deletion, rooms and retries stay the Primary
   Bot's. `create_agent` (agent API) stays the Primary Bot's.
-- Tests: `server/bot-creation.test.ts`,
+- Tests: `server/bots/bot-creation.test.ts`,
   `server/drivers/agents-catalog-create-bots.test.ts`,
   `server/team/team-setup-requests.test.ts`, `server/create-bot-any-bot.e2e.test.ts`,
   `server/org/org-member-access.e2e.test.ts` (MA-4b).
@@ -9877,7 +9877,7 @@ The bot adds, advances (doing to waiting) and marks done (`task_list`,
 person reopens a done task (`POST /api/bots/:id/task-list/:tid/reopen`).
 Not an organization setting: another person's list is 404, and there is no
 admin route. The panel section is `BotTaskSection`, above the code journal.
-Covered by `shared/bot-task-list.test.ts` and `server/bot-task-list.test.ts`.
+Covered by `shared/bot-task-list.test.ts` and `server/bots/bot-task-list.test.ts`.
 
 ## Artifacts: saved widgets that refresh without a turn (2026-10-16)
 

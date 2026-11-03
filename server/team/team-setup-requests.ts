@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { soulDiffLines } from "../../shared/line-diff.ts";
 import { newId, type ModelSelection } from "../contracts.ts";
-import { fitsOnOneLine, parseBotProfilePatch } from "../bot-profile.ts";
+import { fitsOnOneLine, parseBotProfilePatch } from "../bots/bot-profile.ts";
 import { profileSnapshot } from "../profile-revision.ts";
-import { validateBotCwd } from "../bot-cwd.ts";
+import { validateBotCwd } from "../bots/bot-cwd.ts";
 import { harnessCapabilityLines, type DriverCapabilities } from "../capabilities/harness-capabilities.ts";
 import { redactSecretsInText } from "../redact.ts";
 import type { BotRecord, OptionCardData } from "../store.ts";
@@ -148,7 +148,7 @@ interface Options {
   driverCapabilities?(instanceId: string): DriverCapabilities | undefined;
   validateChange?(before: BotRecord, fields: TeamSetupFields): void;
   maxBots: number;
-  /** 2026-10-17 (server/bot-creation.ts): a bot that is not a Primary Bot
+  /** 2026-10-17 (server/bots/bot-creation.ts): a bot that is not a Primary Bot
    * may still ask for exactly one new bot in its own team (create_bot);
    * the route already applied the creator rules. Absent: Primary Bots only. */
   mayCreateBots?(bot: BotRecord): boolean;

@@ -185,7 +185,7 @@ const definitions = [
   },
   {
     // 2026-10-28 (#1098): where their own bot works is theirs. The server
-    // still checks the path (server/bot-cwd.ts), and a person sheet with
+    // still checks the path (server/bots/bot-cwd.ts), and a person sheet with
     // `sagax_bots: use` still takes it away (server/org/org-permissions.ts).
     key: "folders.botWorkingFolder", group: "folders", memberDefault: true, adminOnly: false, memberAlways: true,
     label: { en: "Set the working folder of their bots", fr: "Choisir le dossier de travail de leurs bots" },

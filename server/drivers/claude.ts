@@ -402,7 +402,7 @@ export const CLAUDE_FLAG_FLOORS = {
   // A guest's turn on a Cloud home (GUEST_CLAUDE_TOOLS): 2.1.248 takes
   // --restricted, 2.1.257 honours blockReadsOutsideWorkingDirectories.
   "--restricted": [2, 1, 257],
-  // A bot's Claude Code plugins (server/bot-plugins.ts).
+  // A bot's Claude Code plugins (server/bots/bot-plugins.ts).
   "--plugin-dir": [2, 0, 0],
   // A one-shot helper with no built-in tool (oneShotIsolationArgs). Placed
   // conservatively: an older CLI keeps the plain one-shot it always had.

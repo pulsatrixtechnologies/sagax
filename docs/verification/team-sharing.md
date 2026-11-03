@@ -50,7 +50,7 @@ The printed JSON line names the fixture's data directory and server log.
 ## Format, export and import units
 
 ```sh
-pnpm exec vitest run shared/package-format.test.ts server/package-export.test.ts server/package-import.test.ts server/bot-package.test.ts
+pnpm exec vitest run shared/package-format.test.ts server/package-export.test.ts server/package-import.test.ts server/bots/bot-package.test.ts
 ```
 
 - `shared/package-format.test.ts` parses every file in

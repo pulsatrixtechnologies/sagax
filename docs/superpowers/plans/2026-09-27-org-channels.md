@@ -6,7 +6,7 @@
 
 **Architecture:** On étend le `Group` actuel. `memberIds` reste les bots. `humanIds` ajoute les gens. L'annuaire réutilise `config.signIn` (admins, members) plus un enregistrement d'organisation et des invitations. L'hôte de la flotte garde les transcripts. À la tranche 3, une machine personnelle s'enregistre comme worker et reçoit le tour. La colonne Discord n'apparaît que lorsqu'une organisation existe. Sans organisation, la barre latérale actuelle reste, pour les bots d'avant.
 
-**Tech Stack:** TypeScript strict, Vitest, serveur `server/*.ts`, React dans `src/components`, schémas Zod déjà utilisés par `server/config.ts` et `server/bot-visibility.ts`.
+**Tech Stack:** TypeScript strict, Vitest, serveur `server/*.ts`, React dans `src/components`, schémas Zod déjà utilisés par `server/config.ts` et `server/bots/bot-visibility.ts`.
 
 **Spec:** `docs/superpowers/specs/2026-09-27-org-channels-design.md`. Le plan s'appuie sur la spec. L'exécutant lit les deux.
 
@@ -450,7 +450,7 @@ Expected: FAIL
 
 - [ ] **Step 3: Write minimal implementation**
 
-Fonctions pures, sans store. Le filtre de `GET /api/groups` pour une session member applique `canSeeChannel`. Le filtre de la zone Direct applique `canSeeDirectBot`. Une session locale sans `userId` (l'opérateur sur la machine avant les membres) continue de tout voir, comme `SEES_EVERYTHING` dans `server/bot-visibility.ts`.
+Fonctions pures, sans store. Le filtre de `GET /api/groups` pour une session member applique `canSeeChannel`. Le filtre de la zone Direct applique `canSeeDirectBot`. Une session locale sans `userId` (l'opérateur sur la machine avant les membres) continue de tout voir, comme `SEES_EVERYTHING` dans `server/bots/bot-visibility.ts`.
 
 - [ ] **Step 4: Run test to verify it passes**
 

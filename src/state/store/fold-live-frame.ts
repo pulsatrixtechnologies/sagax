@@ -280,7 +280,7 @@ export function foldLiveFrame(frame: ServerFrame, ctx: FoldLiveFrameCtx): void {
           window.dispatchEvent(new CustomEvent(ARTIFACTS_EVENT, { detail: { botId: frame.botId, artifactId: frame.artifactId, deleted: frame.deleted === true } }));
           break;
         case "bot.tasks":
-          // Ids only (server/bot-task-list.ts): the bot's Tasks section reads its list again.
+          // Ids only (server/bots/bot-task-list.ts): the bot's Tasks section reads its list again.
           window.dispatchEvent(new CustomEvent(BOT_TASKS_EVENT, { detail: { botId: frame.botId } }));
           break;
         case "live.call": {

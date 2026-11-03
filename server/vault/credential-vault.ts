@@ -464,7 +464,7 @@ export class CredentialVault {
   private file(principalId: string): string {
     if (principalId === LOCAL_VAULT_PRINCIPAL) return join(this.dataDir, FILE);
     const botId = botIdFromVaultPrincipal(principalId);
-    // Same layout as server/bot-folder.ts, under this vault's dataDir so
+    // Same layout as server/bots/bot-folder.ts, under this vault's dataDir so
     // tests and a real server stay isolated.
     if (botId) return join(this.dataDir, "bots", botId, FILE);
     return join(principalDir(this.dataDir, principalId), FILE);

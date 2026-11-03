@@ -9,15 +9,15 @@ import { z } from "zod";
 
 import { writeFileAtomic, writeFileAtomicIfChanged } from "./atomic.ts";
 import { PROACTIVE_MODE_DEFAULT, normalizeProactiveMode } from "../shared/proactive-mode.ts";
-import { commitBotChange, keptRevocation, saveBotsFor } from "./bots-save.ts";
+import { commitBotChange, keptRevocation, saveBotsFor } from "./bots/bots-save.ts";
 import { applyHumanIds } from "./rooms/channel-membership.ts";
 import { parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts";
 import { ensureSections, readSections, changeEmptySection } from "./rooms/section-context.ts";
 import type { TeamComputers } from "./computer/team-computers.ts";
-import { removeBotFolder, soulFile, soulHash, writeSoulMirror } from "./bot-folder.ts";
+import { removeBotFolder, soulFile, soulHash, writeSoulMirror } from "./bots/bot-folder.ts";
 import { cleanTemporaryAgent, type TemporaryAgent } from "./temporary-agents.ts";
-import { createdByBotMark, type BotCreatedBy } from "./bot-creation.ts";
-import type { BotProfilePatch } from "./bot-profile.ts";
+import { createdByBotMark, type BotCreatedBy } from "./bots/bot-creation.ts";
+import type { BotProfilePatch } from "./bots/bot-profile.ts";
 import { peerAllowKey, type PeerAction } from "./peers/peer-approval-key.ts";
 import { DATA_DIR, EVENTS_DIR, NATIVE_DIR, loadBrowserProfileIdAliases } from "./config.ts";
 import * as mdb from "./messages/message-db.ts";
@@ -57,9 +57,9 @@ import type {
 import type { WireBotGrant } from "../shared/wire.ts";
 import { sameModelSelection } from "../shared/thread-model.ts";
 import { nextOpenThread } from "../shared/wire.ts";
-import { namesEngine } from "./bot-engine.ts";
+import { namesEngine } from "./bots/bot-engine.ts";
 import { introTaskCard } from "./intro-tour.ts";
-import { newBotGreeting } from "./new-bot-greeting.ts";
+import { newBotGreeting } from "./bots/new-bot-greeting.ts";
 // Re-exported under their historical names so server-side importers keep working.
 export type {
   BotActivity, GroupDefaultResponder, OptionCardData,
@@ -496,7 +496,7 @@ export interface BotRecord extends Omit<WireBot, "avatarUrl" | "tasks"> {
   /** Perspicax #321: made by create_agent (server/temporary-agents.ts).
    * Never on the wire: the Sagax app does not list such a bot. */
   temporary?: TemporaryAgent;
-  /** 2026-10-17: made by a bot (create_bot, team setup), server/bot-creation.ts.
+  /** 2026-10-17: made by a bot (create_bot, team setup), server/bots/bot-creation.ts.
    * Never on the wire, never set by a PATCH: it caps how deep bots make bots. */
   createdByBot?: BotCreatedBy;
 }
@@ -763,7 +763,7 @@ export class Store {
      * organization's policy decides (2026-10-11, orgNewBotApprovalMode). */
     newBotApprovalMode: () => "ask" | "auto" = () => "auto",
     /** The language a new bot's greeting uses for the person who will own
-     * it (#1075, server/new-bot-greeting.ts). English when not given. */
+     * it (#1075, server/bots/new-bot-greeting.ts). English when not given. */
     greetingLanguage: (ownerUserId: string | undefined) => "fr" | "en" = () => "en",
   ) {
     this.defaultSelection = defaultSelection;
@@ -2350,7 +2350,7 @@ export class Store {
           ...(chief.visibility && chief.visibility !== "everyone" ? { visibility: structuredClone(chief.visibility) } : {}),
           // ...and belongs to the Primary Bot's own person.
           ...(chief.ownerUserId ? { ownerUserId: chief.ownerUserId } : {}),
-          // ...and remembers a bot made it (server/bot-creation.ts depth).
+          // ...and remembers a bot made it (server/bots/bot-creation.ts depth).
           createdByBot: createdByBotMark(chief, createdAt),
           tasks: [{ threadId: operation.threadId, title: UNTITLED_THREAD, createdAt, updatedAt: createdAt, resumeCursors: {},
             unread: false, activity: "idle", busy: false }],

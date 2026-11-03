@@ -81,7 +81,7 @@ Leaf modules (never import `index.ts`):
 | Module | Exports | Used by (examples) |
 |---|---|---|
 | `server/request-speaker.ts` | `speakerFor`, `personKey`, `legacyPersonKey` | B1, B3, P4, messaging |
-| `server/bot-owner.ts` | `recordedBotOwner`, `effectiveBotOwner(bot, localOperatorId)` | I2, I3, I5, I6, B1, B2, P2, P4 |
+| `server/bots/bot-owner.ts` | `recordedBotOwner`, `effectiveBotOwner(bot, localOperatorId)` | I2, I3, I5, I6, B1, B2, P2, P4 |
 | `server/cloud-thread-refusal.ts` | `cloudThreadRefusal`, `cloudGuestSendRefusal` (always null) | B1, B3, P4 |
 | `server/auth/request-auth.ts` | `sessionPrincipal` (added) | B1 and many wiring sites |
 

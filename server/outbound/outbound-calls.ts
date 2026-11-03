@@ -21,7 +21,7 @@
 // never another member's key), says the fixed AI disclosure first and
 // hands the call to the realtime voice, which talks with the callee. When
 // the call ends Perspicax posts `call_result` to the telephony route
-// (server/bot-inbound-telephony.ts): `applyResult` checks it is this
+// (server/bots/bot-inbound-telephony.ts): `applyResult` checks it is this
 // person's call, the card becomes the result card (status, duration,
 // points, commitments, transcript) and the bot gets the result in a new
 // turn. The transcript lives on the conversation's message only (sealed

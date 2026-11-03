@@ -691,7 +691,7 @@ engine's own reviewer level (`auto`, for Codex, Claude, Cursor, Grok and Qwen)
 or, without a reviewer, Ask (Full and Auto tighten to Ask; Ask and Edits
 stay). It never changes an existing conversation, never leaves Custom, and
 never turns Auto on for a bot that works on this computer. Off: a new
-conversation takes its bot's level, as before (`server/bot-settings.ts`).
+conversation takes its bot's level, as before (`server/bots/bot-settings.ts`).
 
 **Time zone.** Routines read daily times, interval windows and weekdays in
 the configured zone (the person's own on an organization server, else the

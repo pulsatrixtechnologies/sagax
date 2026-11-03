@@ -5,7 +5,7 @@
 // Answers only behind the per-turn capability the internal block of
 // server/index.ts checks first. Capability gate and refusal checks stay there.
 import { ATTACHMENTS_DIR, deleteAttachment } from "../attachments.ts";
-import { attachForTurn, saveBotAttachment } from "../bot-attachment.ts";
+import { attachForTurn, saveBotAttachment } from "../bots/bot-attachment.ts";
 import { VM_WORKSPACE_GUEST } from "../computer/container-computer.ts";
 import type { DirectApply } from "../direct-apply.ts";
 import type { BotActivity } from "../../shared/wire.ts";

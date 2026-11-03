@@ -503,7 +503,7 @@ export interface WireBot {
   outbound?: { policy: "ask" | "allow"; dailyCap: number };
   /** Ordered backups used only by opt-in, pre-prompt startup recovery. */
   fallback?: Array<{ instanceId: string; model: string }>;
-  /** Per bot since 2026-10-15 (server/bot-runtime-settings.ts): its
+  /** Per bot since 2026-10-15 (server/bots/bot-runtime-settings.ts): its
    * conversations that may work at once (1..10). Absent: the server default. */
   maxConcurrentThreads?: number;
   /** Parallel tasks one person may have running on this bot (1..10 on an
@@ -571,7 +571,7 @@ export interface WireBot {
 }
 
 /** Who may see a bot: every signed-in person, admins only, or the listed
- * addresses (and `@domain` entries) plus admins. See server/bot-visibility.ts. */
+ * addresses (and `@domain` entries) plus admins. See server/bots/bot-visibility.ts. */
 export type BotVisibility = "everyone" | "admins" | { people: string[] };
 
 /** The person a user message is from, as the server resolved it from their
@@ -1421,7 +1421,7 @@ export interface WireGroup {
   setupCompletedAt?: number | null;
   setupSkippedAt?: number | null;
   /** The narrowest audience this room has ever had (see
-   * server/bot-visibility.ts): a bot leaving never widens who may see the
+   * server/bots/bot-visibility.ts): a bot leaving never widens who may see the
    * transcript. Sent to admins only. */
   audienceFloor?: BotVisibility;
   /** True while any member (or hand-off) is mid-turn. Computed at
@@ -1517,7 +1517,7 @@ export type ServerFrame =
   | { kind: "cloud.agent"; botId: string; item: CloudAgentWireItem }
   /** A bot's artifacts changed (server/artifacts.ts): ids only, fetch again. */
   | ArtifactsFrame
-  /** A bot's task list changed (server/bot-task-list.ts): ids only, fetch again. */
+  /** A bot's task list changed (server/bots/bot-task-list.ts): ids only, fetch again. */
   | BotTasksFrame
   | { kind: "webhook"; webhook: WebhookTrigger }
   | { kind: "webhook.attempt"; attempt: WebhookAttempt }

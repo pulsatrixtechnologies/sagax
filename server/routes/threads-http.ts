@@ -7,7 +7,7 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { deliveredCopy } from "../bot-attachment.ts";
+import { deliveredCopy } from "../bots/bot-attachment.ts";
 import type { ApprovalViewer } from "../approvals/approval-audience.ts";
 import {
   listMessageFolder,

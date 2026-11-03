@@ -10,8 +10,8 @@ import { z } from "zod";
 
 import { admit } from "../admission.ts";
 import type { ApprovalViewer } from "../approvals/approval-audience.ts";
-import { memberGroup } from "../bot-visibility.ts";
-import { validateBotCwd } from "../bot-cwd.ts";
+import { memberGroup } from "../bots/bot-visibility.ts";
+import { validateBotCwd } from "../bots/bot-cwd.ts";
 import {
   cancelChannelMessage,
   headChannelGroup,

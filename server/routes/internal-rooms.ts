@@ -9,10 +9,10 @@
 import { z } from "zod";
 import { signTurnHandle } from "../agent-api.ts";
 import { parseAutoComputerTarget } from "../computer/auto-computer.ts";
-import { createdByBotMark, type BotCreationRefusal } from "../bot-creation.ts";
-import { validateBotCwd } from "../bot-cwd.ts";
-import { recordedBotOwner } from "../bot-owner.ts";
-import { botMaxConcurrentThreads, botMaxParallelPerPerson, type GlobalRuntimeSettings } from "../bot-runtime-settings.ts";
+import { createdByBotMark, type BotCreationRefusal } from "../bots/bot-creation.ts";
+import { validateBotCwd } from "../bots/bot-cwd.ts";
+import { recordedBotOwner } from "../bots/bot-owner.ts";
+import { botMaxConcurrentThreads, botMaxParallelPerPerson, type GlobalRuntimeSettings } from "../bots/bot-runtime-settings.ts";
 import { CONFIDENTIAL_PEER_REFUSED } from "../threads/confidential-threads.ts";
 import type { HandoffView } from "../coordinator.ts";
 import { newId } from "../contracts.ts";
@@ -903,7 +903,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
         return json(res, 403, { error: "source conversation does not belong to sender" });
       }
       // 2026-10-17: any bot of the person, not only the Primary Bot
-      // (server/bot-creation.ts). The Primary Bot's path is unchanged; any
+      // (server/bots/bot-creation.ts). The Primary Bot's path is unchanged; any
       // other bot also needs the owner's own turn, a depth and a rate.
       const primaryCreator = chief.chiefOfStaff === true;
       const creatorRefusal = () => primaryCreator ? null : nonPrimaryCreationRefusal(chief, fromThreadId, body);
@@ -992,7 +992,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
             ...(cwd !== undefined ? { cwd } : {}),
             // exactly the Primary Bot's audience: a restricted Primary Bot never makes a bot everyone sees
             ...(chief.visibility ? { visibility: chief.visibility } : {}),
-            // a bot made it: it cannot make more (server/bot-creation.ts)
+            // a bot made it: it cannot make more (server/bots/bot-creation.ts)
             createdByBot: createdByBotMark(chief, Date.now()),
           },
           { seedMessages: false },

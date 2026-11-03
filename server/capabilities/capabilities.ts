@@ -13,7 +13,7 @@
 import { basename } from "node:path";
 import type { McpServerSpec } from "../contracts.ts";
 import type { GithubConnection, PersonalMcpServer } from "../person-connections.ts";
-import type { PluginContents } from "../bot-plugins.ts";
+import type { PluginContents } from "../bots/bot-plugins.ts";
 import { engineServerMcp, perspicaxServerName, withoutHostCommands, personalMcpPrecheck, serverMcpAsPerson, turnPluginPromptDirs } from "../turns/turn-mounts.ts";
 import { pluginMcpPrecheck, selectPluginScopes } from "./capability-plugin-mounts.ts";
 import {

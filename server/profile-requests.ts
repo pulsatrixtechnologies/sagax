@@ -8,8 +8,8 @@
 import { soulDiffLines } from "../shared/line-diff.ts";
 import { BOT_PROFILE_LIMITS } from "../shared/bot-profile.ts";
 import { PROFILE_REQUEST_FIELDS, type ProfileRequestCardData, type ProfileRequestChanges } from "../shared/profile-request.ts";
-import { parseBotProfilePatch, type BotProfilePatchInput } from "./bot-profile.ts";
-import { validateBotCwd } from "./bot-cwd.ts";
+import { parseBotProfilePatch, type BotProfilePatchInput } from "./bots/bot-profile.ts";
+import { validateBotCwd } from "./bots/bot-cwd.ts";
 import { newId } from "./contracts.ts";
 import { UNDO_STALE, type DirectApply, type DirectApplyCheck } from "./direct-apply.ts";
 import { profileRevision, profileSnapshot } from "./profile-revision.ts";

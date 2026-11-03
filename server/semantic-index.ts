@@ -31,7 +31,7 @@ import type { LiveKey } from "./encryption/content-keys.ts";
 import { withoutExpired } from "./memory/memory-entries.ts";
 import { withoutWiderAudience } from "./memory/memory-audience.ts";
 import { topicBody } from "./memory/memory-topics.ts";
-import { contentEncryptionOn, contentKeyById, contentKeyForBot, contentKeyForThread, messageThreadIds, onMessageChange, readMessageText, textMessagesAfter, type IndexableMessage } from "./message-db.ts";
+import { contentEncryptionOn, contentKeyById, contentKeyForBot, contentKeyForThread, messageThreadIds, onMessageChange, readMessageText, textMessagesAfter, type IndexableMessage } from "./messages/message-db.ts";
 import {
   contentWords, EMBEDDING_MIN_SCORE, embedTexts, fingerprint, HASHED_MIN_SCORE, hashedVector, quantize, quantizedCosine,
   type EmbeddingEndpoint, type QuantizedVector,

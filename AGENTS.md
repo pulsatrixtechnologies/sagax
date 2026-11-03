@@ -3810,7 +3810,7 @@ remembered, exported, logged or shared beyond its owner
   `server/threads/confidential-threads.e2e.test.ts` (CT-1 to CT-17),
   `server/engines/engine-transcripts.test.ts`,
   `server/runtime/store.test.ts`, `server/workspace-backup.test.ts`,
-  `server/message-db.test.ts`,
+  `server/messages/message-db.test.ts`,
   `server/bot-zip.test.ts`, `src/components/ConfidentialBanner.test.ts`,
   `src/components/ChatView.confidential.test.ts`,
   `ios/Tests/CompanionCoreTests/ConfidentialThreadTests.swift`.
@@ -5299,13 +5299,13 @@ only; the iOS app (native) has none. Keep these rules, covered by
 ## Seen by: read receipts (2026-10-08)
 
 Who has seen a message, people and bots (2026-10-08). Keep these rules,
-covered by `server/read-receipts.test.ts`, `server/read-receipts.e2e.test.ts`,
+covered by `server/messages/read-receipts.test.ts`, `server/messages/read-receipts.e2e.test.ts`,
 `src/lib/read-receipts.test.ts`, `src/components/SeenBy.test.ts` and
 `src/components/GroupView.seenBy.test.ts`:
 
-- Model (`server/read-receipts.ts`): one position per participant per thread,
+- Model (`server/messages/read-receipts.ts`): one position per participant per thread,
   `readUpTo[participantId] = { messageId, at }`, in the `thread_reads` table
-  of `messages.db` (`server/message-db.ts`); a thread without rows has no
+  of `messages.db` (`server/messages/message-db.ts`); a thread without rows has no
   receipts (no migration) and its rows go with the thread. A person is their
   principal id (lowercase), a bot is `bot:<botId>`. `Store.markRead` only
   moves a position forward, onto a message of that thread, and emits the
@@ -10083,7 +10083,7 @@ desktop, 0600 file on a server) or Azure Key Vault
 (`SAGAX_CONTENT_KEY_PROVIDER=azure-keyvault`). On by default;
 `SAGAX_CONTENT_ENCRYPTION=off` opens everything back to plain in the
 background. Rows of both kinds read everywhere; never read `messages.text`
-or `json` raw for content in new code: go through `server/message-db.ts`
+or `json` raw for content in new code: go through `server/messages/message-db.ts`
 (a sealed row's `json` is only a projection). Search and recall use a blind
 index (keyed Bloom filters, keyed words in a contentless FTS5 table). A
 person's erasure (`eraseContentOwner`) and a confidential thread's deletion

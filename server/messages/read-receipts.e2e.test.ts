@@ -1,5 +1,5 @@
 // Read receipts on an organization server, through the real server and the
-// fake provider (server/read-receipts.ts):
+// fake provider (server/messages/read-receipts.ts):
 //
 //   RR-1  a room with two people and a bot: the bot's position moves when its
 //         turn's prompt carries the message, a person's when their app says
@@ -17,12 +17,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
-import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "./testing/fake-oidc-provider.ts";
-import { freePortBlock } from "./testing/ports.ts";
+import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
+import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
+import { freePortBlock } from "../testing/ports.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
-const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
+const FAKE_CLAUDE = join(SERVER_DIR, "..", "testing", "fake-claude-cli.ts");
 const posixOnly = describe.skipIf(process.platform === "win32");
 const ORG_KEY = "sk-ant-test-org-key";
 const ALICE: FakeOidcUser = { sub: "01J9PTALICE0000000000000A", email: "alice@example.test", name: "Alice", preferred_username: "alice", role: "admin" };
@@ -94,8 +94,8 @@ async function openStream(auth: Auth): Promise<{ text: () => string; close: () =
 
 
 async function start() {
-  child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
-    cwd: join(SERVER_DIR, ".."),
+  child = spawn(process.execPath, [join(SERVER_DIR, "..", "index.ts")], {
+    cwd: join(SERVER_DIR, "..", ".."),
     env: {
       ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
       HOME: home, USERPROFILE: home, SAGAX_LOCAL_VM_TEST_NAMESPACE: process.env.SAGAX_LOCAL_VM_TEST_NAMESPACE ?? "", SAGAX_PORT: String(PORT), SAGAX_WEBHOOK_PORT: String(PORT + 1),

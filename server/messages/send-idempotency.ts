@@ -1,4 +1,4 @@
-import type { Message } from "./store.ts";
+import type { Message } from "../store.ts";
 import { z } from "zod";
 
 const sendIdSchema = z.string().regex(/^[A-Za-z0-9_-]{16,80}$/).optional();

@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { DATA_DIR } from "./config.ts";
-import { closeMessageDb } from "./message-db.ts";
+import { closeMessageDb } from "./messages/message-db.ts";
 import {
   ensureWorkspace,
   listMemoryLogs,

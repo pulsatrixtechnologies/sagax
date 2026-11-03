@@ -47,10 +47,10 @@ process.env.SAGAX_DATA_DIR = directory;
 process.env.SAGAX_MCP_OAUTH_KEY = "ab".repeat(32); // synthetic vault key, this process only
 const load = <T>(path: string) => import(pathToFileURL(join(repo, path)).href) as Promise<T>;
 type Any = Record<string, (...args: never[]) => unknown> & Record<string, unknown>;
-const db = await load<Any>("server/message-db.ts");
+const db = await load<Any>("server/messages/message-db.ts");
 const workspace = await load<Any>("server/workspace.ts");
 const attachments = await load<Any>("server/attachments.ts");
-const messageFile = await load<Any>("server/message-file.ts");
+const messageFile = await load<Any>("server/messages/message-file.ts");
 const native = await load<Any>("server/drivers/native.ts");
 const threadEvents = await load<Any>("server/threads/thread-events.ts");
 const config = await load<Any>("server/config.ts");

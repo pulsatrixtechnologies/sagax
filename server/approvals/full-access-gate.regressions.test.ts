@@ -24,7 +24,7 @@ import { ASK_CHOICE_TOOL } from "../../shared/options-card.ts";
 import { isOutboundTool } from "../../shared/outbound.ts";
 import { peerContactCardRequired } from "./full-access-gate.ts";
 import { cancelPeerApprovalsFor, requestPeerApproval, resolvePeerComms } from "../peer-approval.ts";
-import { closeMessageDb } from "../message-db.ts";
+import { closeMessageDb } from "../messages/message-db.ts";
 import { reviewSafety } from "../../shared/safety-review.ts";
 
 const SEND_TO_BOT = "agents__send_to_bot";

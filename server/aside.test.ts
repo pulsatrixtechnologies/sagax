@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import { asideEnvelope, legacyPendingAsides, recordInjectedAside } from "./aside.ts";
-import { chatFollowups, saveChatFollowup } from "./message-db.ts";
+import { chatFollowups, saveChatFollowup } from "./messages/message-db.ts";
 import type { Message } from "./store.ts";
 
 describe("aside", () => {

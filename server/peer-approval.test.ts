@@ -16,7 +16,7 @@ import {
   resolvePeerComms,
   type ApprovalBus,
 } from "./peer-approval.ts";
-import { closeMessageDb } from "./message-db.ts";
+import { closeMessageDb } from "./messages/message-db.ts";
 import type { Notification } from "./notify.ts";
 import { Store, type BotRecord } from "./store.ts";
 

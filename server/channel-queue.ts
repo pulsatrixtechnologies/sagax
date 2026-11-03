@@ -7,7 +7,7 @@
 // never saw.
 
 import { newId } from "./contracts.ts";
-import { chatFollowups, saveChatFollowup, settleChatFollowups } from "./message-db.ts";
+import { chatFollowups, saveChatFollowup, settleChatFollowups } from "./messages/message-db.ts";
 import { drainCoalesceHead, DRAIN_COALESCE_MAX_ITEMS, WAITING_LINES_COALESCE_WINDOW_MS } from "./admission.ts";
 import type { ResolvedSender } from "../shared/wire.ts";
 import type { UsageTrigger } from "./usage-ledger.ts";

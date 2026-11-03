@@ -2,7 +2,7 @@
 // read or wrote for a while gives its parsed transcript back to the heap.
 // SQLite (messages.db) stays the source of truth; the next read reloads it.
 import type { WireMessage as Message } from "../../shared/wire.ts";
-import type { ThreadRows } from "../message-db.ts";
+import type { ThreadRows } from "../messages/message-db.ts";
 
 /** Messages form a tree (forks appear when a message is edited); the
  * visible conversation is the path from the root to activeLeafId. */

@@ -14,16 +14,16 @@ import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, re
 import { join } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 
-import { DATA_DIR } from "./config.ts";
-import { ContentSealError, fieldAad, messageAad, openField, openText, seal, sealField, sealedFieldKeyId } from "./encryption/content-crypto.ts";
-import { provideContentKeys, type ExportedContentKey } from "./content-export.ts";
-import { ContentKeyring, ContentKeyUnavailable, ensureContentKeySchema, localKekProvider, WORKSPACE_OWNER, type KekProvider, type LiveKey } from "./encryption/content-keys.ts";
-import { resolveVaultKey } from "./mcp/mcp-oauth.ts";
-import { blindSnippet, indexColumns, indexSourcesOf, recallHolds, recallMatch, recallTermsFor, skeletonOf, type RecallTerm } from "./encryption/message-sealing.ts";
-import { peerProvenanceAuthor, WEBHOOK_AUTHOR, type WorkOrigin } from "./peer-provenance.ts";
-import type { ResolvedSender, SteerQueueReason, WireMessage as Message } from "../shared/wire.ts";
-import type { UsageTrigger } from "./usage-ledger.ts";
-import { MessageSearchWorker } from "./message-search-worker.ts";
+import { DATA_DIR } from "../config.ts";
+import { ContentSealError, fieldAad, messageAad, openField, openText, seal, sealField, sealedFieldKeyId } from "../encryption/content-crypto.ts";
+import { provideContentKeys, type ExportedContentKey } from "../content-export.ts";
+import { ContentKeyring, ContentKeyUnavailable, ensureContentKeySchema, localKekProvider, WORKSPACE_OWNER, type KekProvider, type LiveKey } from "../encryption/content-keys.ts";
+import { resolveVaultKey } from "../mcp/mcp-oauth.ts";
+import { blindSnippet, indexColumns, indexSourcesOf, recallHolds, recallMatch, recallTermsFor, skeletonOf, type RecallTerm } from "../encryption/message-sealing.ts";
+import { peerProvenanceAuthor, WEBHOOK_AUTHOR, type WorkOrigin } from "../peer-provenance.ts";
+import type { ResolvedSender, SteerQueueReason, WireMessage as Message } from "../../shared/wire.ts";
+import type { UsageTrigger } from "../usage-ledger.ts";
+import { MessageSearchWorker } from "../message-search-worker.ts";
 import { searchMessagesInDatabase, type SealedKeyMaterial, type SearchHit } from "./message-search-query.ts";
 export type { SearchHit } from "./message-search-query.ts";
 
@@ -1454,7 +1454,7 @@ export function deleteThread(threadId: string, beforeCommit?: () => void): void 
   tellMessageListeners(threadId, null);
 }
 
-/** Read positions of one thread (server/read-receipts.ts): participant id
+/** Read positions of one thread (server/messages/read-receipts.ts): participant id
  * to the newest message they have seen. A thread with no rows has none. */
 export function readThreadReads(threadId: string): Record<string, { messageId: string; at: number }> {
   const rows = db()

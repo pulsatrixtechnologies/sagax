@@ -61,7 +61,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
   return async function dispatchStartTurn(state: TurnState): Promise<void> {
     // Before sendTurn: an adapter may emit the whole turn before it resolves.
     if (!state.warmOnly) handoffs.dispatching(state.threadId, state.dispatchClaimId, state.dispatchContext.handoff);
-    // Read receipts (server/read-receipts.ts): the person's words this turn
+    // Read receipts (server/messages/read-receipts.ts): the person's words this turn
     // carries are what the bot has now seen. A card continuation carries
     // none of its own: it sees the conversation it resumes.
     if (!state.warmOnly) {

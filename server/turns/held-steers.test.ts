@@ -14,7 +14,7 @@ import {
   setAtRestGrace,
 } from "../encryption/content-at-rest.ts";
 import { WORKSPACE_OWNER } from "../encryption/content-keys.ts";
-import { closeMessageDb, closeMessageSearch, configureContentEncryption } from "../message-db.ts";
+import { closeMessageDb, closeMessageSearch, configureContentEncryption } from "../messages/message-db.ts";
 import {
   clearHeldSteers,
   clearHeldSteersForThread,

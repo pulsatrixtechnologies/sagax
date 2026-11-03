@@ -110,7 +110,7 @@ describe("durable bounded attachment uploads", () => {
   it("opens a sealed committed file before crash recovery finalizers read it", async () => {
     process.env.SAGAX_MCP_OAUTH_KEY = "cd".repeat(32);
     const atRest = await import("./encryption/content-at-rest.ts");
-    const messageDb = await import("./message-db.ts");
+    const messageDb = await import("./messages/message-db.ts");
     atRest.resetAtRestState();
     atRest.setAtRestGrace(0);
     messageDb.configureContentEncryption({ mode: "on", autoMigrate: false });

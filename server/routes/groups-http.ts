@@ -34,7 +34,7 @@ import {
 import { deleteGroupMemory } from "../memory/group-memory.ts";
 import type { HarnessCommandCatalog, HarnessCommandSource } from "../harness-commands.ts";
 import { typedCommandForTurn, unavailableCommandError } from "../harness-commands.ts";
-import { cancelledChatFollowup } from "../message-db.ts";
+import { cancelledChatFollowup } from "../messages/message-db.ts";
 import { misuseRefusal } from "../misuse-guardrails.ts";
 import {
   peopleDmForViewer,
@@ -42,7 +42,7 @@ import {
   peopleDmThreadUnreadPatch,
   peopleDmUnreadPatch,
 } from "../people-dms.ts";
-import { promptWithReply } from "../replies.ts";
+import { promptWithReply } from "../messages/replies.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { clientGroupPatchViolation, requestSource } from "../request-auth.ts";
 import type { TurnSpeaker } from "../engines/engine-access.ts";
@@ -54,7 +54,7 @@ import {
   acceptedSendMatch,
   parseSendId,
   sendFingerprint,
-} from "../send-idempotency.ts";
+} from "../messages/send-idempotency.ts";
 import type { BotRecord, GroupRecord, Message } from "../store.ts";
 import { sectionKey } from "../store.ts";
 import { parseThreadOrganization } from "../threads/thread-folders.ts";

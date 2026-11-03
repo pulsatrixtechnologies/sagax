@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { DATA_DIR } from "./config.ts";
-import { closeMessageDb, recallMemory } from "./message-db.ts";
+import { closeMessageDb, recallMemory } from "./messages/message-db.ts";
 
 import {
   appendMemoryLog,

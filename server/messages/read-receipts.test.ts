@@ -1,11 +1,11 @@
-// Read receipts (server/read-receipts.ts): positions only move forward, are
+// Read receipts (server/messages/read-receipts.ts): positions only move forward, are
 // kept per thread beside the transcript, go with their thread, follow the
 // symmetric privacy rule in conversations between people, and only a room's
 // members leave one.
 import { mkdirSync, rmSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { DATA_DIR } from "./config.ts";
+import { DATA_DIR } from "../config.ts";
 import { closeMessageDb, deleteThread, readThreadReads, writeThreadRead } from "./message-db.ts";
 import {
   advancesPosition,
@@ -17,8 +17,8 @@ import {
   roomReceiptMember,
   sendsReadReceipts,
 } from "./read-receipts.ts";
-import { Store, type StoreChange } from "./store.ts";
-import type { ModelSelection } from "./contracts.ts";
+import { Store, type StoreChange } from "../store.ts";
+import type { ModelSelection } from "../contracts.ts";
 
 const selection = (): ModelSelection => ({ instanceId: "claude", model: "claude-sonnet-5" });
 const ALICE = "pr_00000000-0000-4000-8000-00000000000a";

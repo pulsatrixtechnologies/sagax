@@ -11,7 +11,7 @@
 // The durable aside queue this replaced is gone; rows an older release left
 // pending are handed to the runtime once at boot (legacyPendingAsides).
 
-import { chatFollowups, settleChatFollowups } from "./message-db.ts";
+import { chatFollowups, settleChatFollowups } from "./messages/message-db.ts";
 import { escapeNotes } from "./peer-provenance.ts";
 import { peerName } from "./peer-roster.ts";
 import type { Message } from "./store.ts";

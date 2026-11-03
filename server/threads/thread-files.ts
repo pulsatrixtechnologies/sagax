@@ -12,7 +12,7 @@
 import { createHash } from "node:crypto";
 
 import type { Message } from "../store.ts";
-import { isLocalFileHref, messageAttachmentTags, renderedMarkdownTargets } from "../message-file.ts";
+import { isLocalFileHref, messageAttachmentTags, renderedMarkdownTargets } from "../messages/message-file.ts";
 
 export type ThreadFileSource = "upload" | "attachment" | "link" | "written";
 

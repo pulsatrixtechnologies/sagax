@@ -1,5 +1,5 @@
-import type { WidgetAction } from "../shared/widget.ts";
-import type { Message } from "./store.ts";
+import type { WidgetAction } from "../../shared/widget.ts";
+import type { Message } from "../store.ts";
 
 const MAX_REPLY_EXCERPT = 900;
 

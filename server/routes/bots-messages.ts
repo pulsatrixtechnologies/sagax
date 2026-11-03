@@ -12,7 +12,7 @@ import type { BusySendRequest } from "../../shared/parallel-tasks.ts";
 import type { ResolvedSender } from "../../shared/wire.ts";
 import type { SteerOutcome } from "../contracts.ts";
 import type { TurnSpeaker } from "../engines/engine-access.ts";
-import type { ReplyTarget } from "../replies.ts";
+import type { ReplyTarget } from "../messages/replies.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import type { Message } from "../store.ts";
 import type { UsageTrigger } from "../usage-ledger.ts";
@@ -58,11 +58,11 @@ import {
 import { recordHeldSteer } from "../turns/held-steers.ts";
 import { introAdvance } from "../intro-tour.ts";
 import { spokenLineFields } from "../voice/live-call-record.ts";
-import { cancelledChatFollowup } from "../message-db.ts";
+import { cancelledChatFollowup } from "../messages/message-db.ts";
 import { misuseRefusal } from "../misuse-guardrails.ts";
 import { ORG_FULL_ACCESS_DISABLED } from "../org/org-full-access.ts";
 import { resolvePeerComms } from "../peer-approval.ts";
-import { promptWithReply } from "../replies.ts";
+import { promptWithReply } from "../messages/replies.ts";
 import {
   personKey,
   speakerFor,
@@ -73,7 +73,7 @@ import {
   acceptedSendMatch,
   parseSendId,
   sendFingerprint,
-} from "../send-idempotency.ts";
+} from "../messages/send-idempotency.ts";
 import {
   soloGoalCommand,
   soloGoalLine,
@@ -313,7 +313,7 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
       // An in-app destination (open_page, open_routine, open_run) was opened
       // on the device: record the press as the person's message, marked done,
       // and run no turn. The model reads it on its next turn as already done
-      // (server/replies.ts transcriptText); it is never asked to do it.
+      // (server/messages/replies.ts transcriptText); it is never asked to do it.
       if (press?.ok && press.device) {
         const earlier = sendId ? store.messagesFor(threadId).find((m: Message) => m.role === "user" && m.sendId === sendId) : undefined;
         if (earlier) return json(res, 200, { ok: true, threadId, message: earlier, device: true });
@@ -336,7 +336,7 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
       const text = press ? press.text : postedText;
       const target = resolveReplyTarget(threadId, press ? press.messageId : body.replyToId);
       // Only here is a reply known to be a press: a copy of the widget row
-      // says so to whatever composes the prompt (server/replies.ts). A typed
+      // says so to whatever composes the prompt (server/messages/replies.ts). A typed
       // reply to the same row carries no such mark, whatever its words.
       const replyTo: ReplyTarget | undefined = press && target ? { ...target, widgetPress: { label: press.label, action: press.action } } : target;
       const pressKey = press?.settles ? `${threadId}:${press.messageId}` : undefined;
@@ -344,7 +344,7 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
         return json(res, 409, { error: "That answer is already on its way." });
       }
       // A Data context is put in front of the words the model gets, and a
-      // press is read by its first line (server/replies.ts): it carries none.
+      // press is read by its first line (server/messages/replies.ts): it carries none.
       const dataContext = press ? undefined : ownPageContext(parseDataContext(body.dataContext), bot.id, auth);
       // the coding view is on for the device that sent this (server/dev-pods-prompt.ts)
       devPodsThreads.note(threadId, parseDevPods(body.devPods));

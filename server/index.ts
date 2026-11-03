@@ -319,7 +319,7 @@ import {
   messageFileRoots,
   statMessageFile,
   type OpenedMessageFile
-} from "./message-file.ts";
+} from "./messages/message-file.ts";
 import { createThreadFilePins } from "./threads/thread-file-pins.ts";
 import {
   activePath,
@@ -835,7 +835,7 @@ import { BUILT_IN_DRIVERS } from "./drivers/builtIn.ts";
 import { orgWithholdHostTools } from "./org/org-engine-admission.ts";
 import { openCodeProviderKeysAllowed, setOpenCodeProviderKeyPolicy } from "./drivers/acp/opencode-go.ts";
 import { getOrCreateChannel, mirrorActivity, mirrorReply, type CommsBus } from "./comms-visibility.ts";
-import { openApprovalCardMessages, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./message-db.ts";
+import { openApprovalCardMessages, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
 import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
 import { contentEncryptionFromEnv } from "./encryption/content-encryption-env.ts";
 import { briefCrossingLabel, claimRecallCrossings } from "./recall-disclosure.ts";
@@ -862,7 +862,7 @@ import { limitKindOf } from "./limit-reset-time.ts";
 /** A session_read answer competes with the transcript for the context
  * window; a computer-use turn's output can run to hundreds of KB. */
 import { legacyPendingAsides } from "./aside.ts";
-import { promptWithReply, transcriptText } from "./replies.ts";
+import { promptWithReply, transcriptText } from "./messages/replies.ts";
 import { type DataContext } from "./data-context.ts";
 import { DevPodsThreads, devPodsPrompt } from "./dev-pods-prompt.ts";
 import { promptWithDataContext, setPageContextSource } from "../shared/data-context.ts";
@@ -919,7 +919,7 @@ import {
   parseSendId,
   sendFingerprint,
   SendSequencer
-} from "./send-idempotency.ts";
+} from "./messages/send-idempotency.ts";
 import { EventBus, withoutPrivateFields } from "./harness/bus.ts";
 import { ProviderRegistry } from "./harness/registry.ts";
 import { ManagedDesktopProviders } from "./computer/managed-desktop.ts";
@@ -985,7 +985,7 @@ import {
   readVisibleTo,
   readsVisibleTo,
   sendsReadReceipts
-} from "./read-receipts.ts";
+} from "./messages/read-receipts.ts";
 import {
   CONSENT_RULE,
   escapeNotes,
@@ -15582,7 +15582,7 @@ function sseFrameFor(
     if (!record || !cloudAgentRecordVisible(record, client.viewerId || undefined)) return null;
   }
   // A read position in a conversation between two people follows both
-  // people's "Send read receipts" choice (server/read-receipts.ts).
+  // people's "Send read receipts" choice (server/messages/read-receipts.ts).
   if (payload?.kind === "thread.read" && !threadReadFrameAllowed(payload, client.viewerId)) return null;
   // A Data sheet reaches the person whose scope it is (data/scope.ts).
   // This is before the admin short-circuit: an admin does not see it.
@@ -26146,7 +26146,7 @@ function roomContextRows(messages: readonly Message[]): Message[] {
 
 /** The newest room line a member's turn reads word for word: a digest or a
  * teammate's report is a summary, which is not seeing the line
- * (server/read-receipts.ts). */
+ * (server/messages/read-receipts.ts). */
 function roomConsumedMessageId(threadId: string): string | null {
   return roomContextRows(store.messagesFor(threadId)).filter((m) => m.kind === "text" && !m.roomRequest).at(-1)?.id ?? null;
 }

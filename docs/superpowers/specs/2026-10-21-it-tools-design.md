@@ -41,7 +41,7 @@ Rendering surfaces:
   - Android: no widget renderer, so it shows the `text` fallback.
 
   A button press comes back as an ordinary user message that replies to the widget row
-  (`server/chat-widgets.ts` `prepareWidgetPress`, `server/replies.ts` `promptWithReply`). Widgets are refused in
+  (`server/chat-widgets.ts` `prepareWidgetPress`, `server/messages/replies.ts` `promptWithReply`). Widgets are refused in
   rooms (`ROOM_REFUSAL` in `server/chat-widgets.ts`).
 - **Tool-result widgets (PSA precedent).** `shared/cw-widgets/tool-call.ts` (`cwWidgetFromToolCall`,
   `isCwViewTool`, `shownCwWidget`) maps a tool call's result to a typed widget. `server/cw-widget-actions.ts`

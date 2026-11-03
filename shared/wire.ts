@@ -1475,7 +1475,7 @@ export interface BotAssignedSkillsWire {
 }
 
 /** One participant's read position on a thread: the newest message they
- * have seen, and when (server/read-receipts.ts). */
+ * have seen, and when (server/messages/read-receipts.ts). */
 export interface ThreadReadPosition {
   messageId: string;
   at: number;
@@ -1494,7 +1494,7 @@ export type ServerFrame =
   | { kind: "message"; threadId: string; message: WireMessage }
   | { kind: "message.patch"; threadId: string; message: WireMessage }
   | { kind: "thread"; threadId: string; activeLeafId: string }
-  /** A read position moved (server/read-receipts.ts): `participantId` is a
+  /** A read position moved (server/messages/read-receipts.ts): `participantId` is a
    * person's principal id or `bot:<botId>`. `reset` alone (no participant)
    * means someone's read receipt choice changed: fetch the positions again. */
   | { kind: "thread.read"; threadId: string; participantId?: string; read?: ThreadReadPosition; reset?: true }

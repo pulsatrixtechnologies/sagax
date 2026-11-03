@@ -2,7 +2,7 @@
 //
 // Each thread keeps one read position per participant, `readUpTo[id] =
 // { messageId, at }`, in its own small table beside the transcript
-// (server/message-db.ts `thread_reads`; a thread without rows has no
+// (server/messages/message-db.ts `thread_reads`; a thread without rows has no
 // receipts, so nothing to migrate). A position only moves forward.
 //
 // - A person's position moves when their app shows the message on screen

@@ -395,3 +395,12 @@ server/skills.test.ts
 server/skills.ts
 server/approval-mode.test.ts
 server/harness-capabilities.ts
+server/message-db.test.ts
+server/message-db.ts
+server/message-file.test.ts
+server/message-file.ts
+server/message-search-query.ts
+server/replies.test.ts
+server/replies.ts
+server/send-idempotency.test.ts
+server/send-idempotency.ts

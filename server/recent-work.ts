@@ -8,7 +8,7 @@
 // few lines, the newest thing the bot said in each of its other
 // conversations — and to leave one line per finished turn in its daily log,
 // so session_search can bring back the detail on demand.
-import { latestSaidByBot, type ThreadLatest } from "./message-db.ts";
+import { latestSaidByBot, type ThreadLatest } from "./messages/message-db.ts";
 import type { BotRecord, GroupRecord, TaskRecord } from "./store.ts";
 
 /** How far back the brief looks: two days covers "since yesterday's standup". */

@@ -56,7 +56,7 @@ async function installation(options: { refuse?: (name: string) => string | undef
 }
 
 afterEach(async () => {
-  const { closeMessageDb } = await import("./message-db.ts");
+  const { closeMessageDb } = await import("./messages/message-db.ts");
   closeMessageDb();
   vi.unstubAllEnvs();
   rmSync(home, { recursive: true, force: true });

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import * as journal from "./message-db.ts";
+import * as journal from "./messages/message-db.ts";
 import { cancelChannelMessage, drainChannelMessages, queuedChannelMessage, queueChannelMessage, restoreChannelMessages } from "./channel-queue.ts";
 import { cancelSteeredMessage, drainSteeredMessages, queuedSteerSnapshot, queueSteeredMessage, restoreSteeredMessages, type SteerStore } from "./turns/steer-queue.ts";
 import type { BotRecord, Message } from "./store.ts";

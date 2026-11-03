@@ -661,7 +661,7 @@ sur l'app au prochain audit.
   (`deviceAction`), sans lancer de tour : le modèle le lit au tour suivant comme déjà
   fait et n'essaie jamais d'ouvrir une page qu'il ne peut pas atteindre.
 - Code : `shared/widget.ts` (`widgetAppAction`), `src/components/widget/widget-device.ts`,
-  `server/routes/bots-messages.ts`, `server/replies.ts` (`transcriptText`).
+  `server/routes/bots-messages.ts`, `server/messages/replies.ts` (`transcriptText`).
 
 **Fin de tour.**
 - Un tour pour la personne se termine toujours par une réponse. Un tour qui finit sur

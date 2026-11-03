@@ -1,7 +1,7 @@
 // Content encryption at rest for what lives outside messages.db: bot memory
 // files, attachments (and the copies made from them) and the event logs
 // (docs/content-encryption.md, "Files and logs"). Same keys as the
-// transcripts (server/message-db.ts keyring, content_keys): no second key
+// transcripts (server/messages/message-db.ts keyring, content_keys): no second key
 // store.
 //
 // Files are sealed IN PLACE (server/encryption/content-file-crypto.ts): same path, a
@@ -76,7 +76,7 @@ import {
   type FileKey,
   type SealedHeader,
 } from "./content-file-crypto.ts";
-import { contentAutoMigrate, contentEncryptionOn, contentKeyById, contentKeyForBot, contentKeyForOwner, contentKeyForThread, contentOwnerOfThread, onContentAtRest } from "../message-db.ts";
+import { contentAutoMigrate, contentEncryptionOn, contentKeyById, contentKeyForBot, contentKeyForOwner, contentKeyForThread, contentOwnerOfThread, onContentAtRest } from "../messages/message-db.ts";
 
 export type ContentScope = { thread: string } | { bot: string } | { owner: string };
 

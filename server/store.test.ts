@@ -20,7 +20,7 @@ import {
   resetMemoryJournalState,
 } from "./memory/memory-journal.ts";
 import type { ModelSelection } from "./contracts.ts";
-import * as mdb from "./message-db.ts";
+import * as mdb from "./messages/message-db.ts";
 import { peerAllowKey } from "./peer-approval-key.ts";
 import { canAccessTeam } from "./peer-roster.ts";
 import { Store, toWireTask, type BotRecord } from "./store.ts";

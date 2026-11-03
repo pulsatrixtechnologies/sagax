@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { parentPort, workerData } from "node:worker_threads";
-import { openKeysFrom, searchMessagesInDatabase, type SealedKeyMaterial } from "./message-search-query.ts";
+import { openKeysFrom, searchMessagesInDatabase, type SealedKeyMaterial } from "./messages/message-search-query.ts";
 
 // Each request reads the latest committed WAL state. Closing after the scan
 // avoids keeping an old database inode open across a workspace restore.

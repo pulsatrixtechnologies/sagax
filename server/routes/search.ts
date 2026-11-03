@@ -6,7 +6,7 @@
 // await, authorization and visibility are checked again against current state.
 import type { IncomingMessage } from "node:http";
 
-import type { SearchHit } from "../message-search-query.ts";
+import type { SearchHit } from "../messages/message-search-query.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

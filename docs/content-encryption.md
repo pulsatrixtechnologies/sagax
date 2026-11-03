@@ -12,8 +12,8 @@ Code: `server/encryption/content-crypto.ts` (sealing, blind tokens),
 `server/encryption/content-keys.ts` (keys and their wrapping),
 `server/encryption/content-key-azure.ts` (Azure Key Vault),
 `server/encryption/content-encryption-env.ts` (settings), `server/encryption/message-sealing.ts`
-(row shape, recall terms, snippets), `server/message-db.ts` (reads, writes,
-migration, erasure), `server/message-search-query.ts` and the search worker,
+(row shape, recall terms, snippets), `server/messages/message-db.ts` (reads, writes,
+migration, erasure), `server/messages/message-search-query.ts` and the search worker,
 `server/content-export.ts` (backups), `server/encryption/content-file-crypto.ts` and
 `server/encryption/content-at-rest.ts` (files and logs). Tests:
 `server/content-encryption.test.ts`, `server/encryption/content-at-rest.test.ts`.

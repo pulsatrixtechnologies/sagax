@@ -10,7 +10,7 @@ import { VM_WORKSPACE_GUEST } from "../computer/container-computer.ts";
 import type { DirectApply } from "../direct-apply.ts";
 import type { BotActivity } from "../../shared/wire.ts";
 import type { RosterMember } from "../peer-roster.ts";
-import { recallMessages, recentMessages, readMessageText } from "../message-db.ts";
+import { recallMessages, recentMessages, readMessageText } from "../messages/message-db.ts";
 import type { MemoryDestination } from "../memory/memory-audience.ts";
 import { webhookPostText } from "../peer-provenance.ts";
 import { peerStatus, peerStatusWords, reachablePeers } from "../peer-roster.ts";

@@ -74,7 +74,7 @@ function snapshot(): string {
  * `from`, a snapshot, to start again from what it holds). */
 async function installation(from?: string) {
   if (from) {
-    (await import("../message-db.ts")).closeMessageDb();
+    (await import("../messages/message-db.ts")).closeMessageDb();
     home = from;
   } else {
     home = mkdtempSync(join(tmpdir(), "omb-org-library-"));
@@ -136,7 +136,7 @@ async function installation(from?: string) {
 }
 
 afterEach(async () => {
-  const { closeMessageDb } = await import("../message-db.ts");
+  const { closeMessageDb } = await import("../messages/message-db.ts");
   closeMessageDb();
   vi.unstubAllEnvs();
   vi.useRealTimers();

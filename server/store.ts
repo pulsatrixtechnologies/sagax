@@ -20,7 +20,7 @@ import { createdByBotMark, type BotCreatedBy } from "./bot-creation.ts";
 import type { BotProfilePatch } from "./bot-profile.ts";
 import { peerAllowKey, type PeerAction } from "./peer-approval-key.ts";
 import { DATA_DIR, EVENTS_DIR, NATIVE_DIR, loadBrowserProfileIdAliases } from "./config.ts";
-import * as mdb from "./message-db.ts";
+import * as mdb from "./messages/message-db.ts";
 import { ThreadCache, type ThreadState } from "./threads/thread-cache.ts";
 import { forgetBotMemoryJournal, journalFile } from "./memory/memory-journal.ts";
 import { forgetLogMemory } from "./encryption/content-at-rest.ts";
@@ -46,7 +46,7 @@ import { isMentionBoundary, isMentionNameContinuation } from "../shared/mention-
 import type { HandedState } from "./delta-context.ts";
 import type { AgentPart, PartPair, RoomPart } from "./package-parts.ts";
 import type { BotHost } from "./turns/turn-route.ts";
-import { advancesPosition, type ReadMap, type ReadPosition } from "./read-receipts.ts";
+import { advancesPosition, type ReadMap, type ReadPosition } from "./messages/read-receipts.ts";
 import { applyReaction, normalizeReactions, type ReactionActor, type ReactionMode } from "../shared/reactions.ts";
 import { migratePeopleDmToThreads, PEOPLE_DM_GENERAL_TITLE } from "./people-dms.ts";
 import type {
@@ -400,7 +400,7 @@ export type StoreChange =
   | { type: "message"; threadId: string; message: Message }
   | { type: "message.patch"; threadId: string; message: Message }
   | { type: "thread"; threadId: string; activeLeafId: string }
-  /** A participant's read position moved (server/read-receipts.ts). */
+  /** A participant's read position moved (server/messages/read-receipts.ts). */
   | { type: "thread.read"; threadId: string; participantId: string; read: ReadPosition }
   | { type: "thread.deleted"; threadId: string }
   | { type: "bot"; botId: string }
@@ -1858,7 +1858,7 @@ export class Store {
     return group;
   }
 
-  /** Every participant's read position on this thread (server/read-receipts.ts). */
+  /** Every participant's read position on this thread (server/messages/read-receipts.ts). */
   threadReads(threadId: string): ReadMap {
     return mdb.readThreadReads(threadId);
   }

@@ -136,7 +136,7 @@ which never leaves the browser.
 SQLite does not move onto the phone. It is an implementation detail behind the
 harness API:
 
-- `server/message-db.ts` and `server/store.ts` persist and page transcripts.
+- `server/messages/message-db.ts` and `server/store.ts` persist and page transcripts.
 - The phone asks for `GET /api/bots?messages=50` and
   `GET /api/threads/:threadId/messages?before=…&limit=50`.
 - SQLite ordering and cursors are therefore tested at the server boundary,

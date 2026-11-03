@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { commandReceipt, runCommand } from "./commands.ts";
-import { DATA_DIR } from "./config.ts";
+import { commandReceipt, runCommand } from "../commands.ts";
+import { DATA_DIR } from "../config.ts";
 import { closeMessageDb,
   deleteThread,
   indexMemoryFile,
@@ -25,9 +25,9 @@ import { closeMessageDb,
   searchMessages,
   setActiveLeaf,
   updateMessage, describeMissingFts5 } from "./message-db.ts";
-import { withPeerProvenance } from "./peer-provenance.ts";
-import { Store, type Message } from "./store.ts";
-import type { ModelSelection } from "./contracts.ts";
+import { withPeerProvenance } from "../peer-provenance.ts";
+import { Store, type Message } from "../store.ts";
+import type { ModelSelection } from "../contracts.ts";
 
 const selection = (): ModelSelection => ({ instanceId: "claude", model: "claude-sonnet-5" });
 const legacy = (threadId: string) => join(DATA_DIR, `messages-${threadId}.json`);

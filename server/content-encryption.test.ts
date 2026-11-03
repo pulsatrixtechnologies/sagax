@@ -18,7 +18,7 @@ import {
   contentKeyChanged, deleteThread, eraseContentOwner, flushContentIndex, insertMessage, latestSaidByBot, openApprovalCardMessages,
   readCommandReceipt, readMessageText, readThread, readThreadTail, recallMessages, recentMessages, runContentMigration, saveChatFollowup,
   searchMessages, searchMessagesAsync, setMigrationFaultForTests, threadsReferencing, unlockContentKeys, updateMessage, withCommandReceipt, type ContentOwnerResolver,
-} from "./message-db.ts";
+} from "./messages/message-db.ts";
 import type { Message } from "./store.ts";
 
 const msg = (id: string, text: string, extra: Partial<Message> = {}): Message => ({ id, role: "user", kind: "text", text, at: 1_000, ...extra });

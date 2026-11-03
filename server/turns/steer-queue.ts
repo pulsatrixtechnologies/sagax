@@ -18,7 +18,7 @@
 // the feature.
 
 import { newId } from "../contracts.ts";
-import { chatFollowups, saveChatFollowup, settleChatFollowups } from "../message-db.ts";
+import { chatFollowups, saveChatFollowup, settleChatFollowups } from "../messages/message-db.ts";
 import { drainCoalesceHead, WAITING_LINES_COALESCE_WINDOW_MS } from "../admission.ts";
 import { SAFE_POINT_NOTE } from "../safe-point-preempt.ts";
 import { spokenLineFields } from "../voice/live-call-record.ts";

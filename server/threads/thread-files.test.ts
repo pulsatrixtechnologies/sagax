@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { Message } from "../store.ts";
-import { statMessageFile, messageAttachmentTags } from "../message-file.ts";
+import { statMessageFile, messageAttachmentTags } from "../messages/message-file.ts";
 import {
   acpWrittenFiles,
   activePath,

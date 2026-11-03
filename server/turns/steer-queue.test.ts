@@ -17,7 +17,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { saveChatFollowup } from "../message-db.ts";
+import { saveChatFollowup } from "../messages/message-db.ts";
 import {
   cancelSteeredMessage,
   drainSteeredMessages,

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { acceptedSendMatch, parseSendId, sendFingerprint, SendSequencer } from "./send-idempotency.ts";
-import type { Message } from "./store.ts";
+import type { Message } from "../store.ts";
 
 function userMessage(overrides: Partial<Message> = {}): Message {
   return {

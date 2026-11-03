@@ -784,7 +784,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // the route refuses a client session anywhere else.
   { methods: ["DELETE"], path: /^\/api\/groups\/[\w-]+$/ },
   { methods: ["POST"], path: /^\/api\/threads\/[\w-]+\/messages\/[\w-]+\/reactions$/ },
-  // read receipts: the positions a person may see, and their own (server/read-receipts.ts)
+  // read receipts: the positions a person may see, and their own (server/messages/read-receipts.ts)
   { methods: ["GET", "POST"], path: /^\/api\/threads\/[\w-]+\/read$/ },
   // attachments
   { methods: ["POST"], path: /^\/api\/attachments$/ },

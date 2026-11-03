@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { parseWidgetInput, resolveWidgetAction, widgetActions, widgetAppAction } from "../shared/widget.ts";
 import { createAgentCard, prepareWidgetPress, type AgentCardStore } from "./chat-widgets.ts";
-import { transcriptText } from "./replies.ts";
+import { transcriptText } from "./messages/replies.ts";
 import type { Message } from "./store.ts";
 
 const THREAD = "thread-scout";

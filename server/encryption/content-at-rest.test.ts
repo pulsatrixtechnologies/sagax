@@ -42,7 +42,7 @@ import { CHUNK_BYTES, FileSealer, openBuffer, parseBlockLine, parseHeader, plain
 import { azureKeyVaultProvider } from "./content-key-azure.ts";
 import { ContentKeyUnavailable, WORKSPACE_OWNER } from "./content-keys.ts";
 import { appendNative } from "../drivers/native.ts";
-import { chatFollowups, closeMessageDb, closeMessageSearch, configureContentEncryption, contentKeyForOwner, contentOwnerChanged, eraseContentOwner, insertMessage, readThread, runContentMigration, saveChatFollowup, unlockContentKeys } from "../message-db.ts";
+import { chatFollowups, closeMessageDb, closeMessageSearch, configureContentEncryption, contentKeyForOwner, contentOwnerChanged, eraseContentOwner, insertMessage, readThread, runContentMigration, saveChatFollowup, unlockContentKeys } from "../messages/message-db.ts";
 import { appendDecision, flushDecisionLog, readDecisions } from "../decision-log.ts";
 import { journalFile, readMemoryJournal, recordMemoryChange, flushMemoryJournal, resetMemoryJournalState } from "../memory/memory-journal.ts";
 import { readMemoryDoc } from "../memory/memory-store.ts";
@@ -271,7 +271,7 @@ describe("event logs", () => {
   it("has every line on disk, sealed, when its append returns: a hard kill right after loses none", () => {
     // a separate process appends one line and is killed at once: no flush, no timer, no exit handler
     const script = [
-      `const db = await import(${JSON.stringify(new URL("../message-db.ts", import.meta.url).href)});`,
+      `const db = await import(${JSON.stringify(new URL("../messages/message-db.ts", import.meta.url).href)});`,
       `db.configureContentEncryption({ mode: "on", autoMigrate: false });`,
       `const native = await import(${JSON.stringify(new URL("../drivers/native.ts", import.meta.url).href)});`,
       `native.appendNative("killed", { dir: "out", source: "test", msg: { text: "written before the kill" } });`,

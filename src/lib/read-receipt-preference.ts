@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-// Settings > Privacy > "Send read receipts" (server/read-receipts.ts). On by
+// Settings > Privacy > "Send read receipts" (server/messages/read-receipts.ts). On by
 // default. Off hides this person's read position in conversations between
 // people, and hides the other person's from them (like iMessage). Rooms and
 // bots always show. One of USER_PREFERENCE_KEYS: on an organization server

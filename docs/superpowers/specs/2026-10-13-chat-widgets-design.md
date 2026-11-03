@@ -175,7 +175,7 @@ Three races are closed on the server:
 
 Because it is a reply, the model reads the press on every path that already
 carries replies (start, steer, and the queue, which stores the composed prompt).
-`promptWithReply` (`server/replies.ts`) has two widget forms. A press:
+`promptWithReply` (`server/messages/replies.ts`) has two widget forms. A press:
 
 ```
 The current message is the person's answer to a widget you showed with show_widget.
@@ -270,7 +270,7 @@ URL cannot make a device call out on its own. On phones the type is named
 ## Testing
 
 - `shared/widget.test.ts`: normalisation of every node type, each limit, the password refusal, fallback text, action resolution (scope, required, options, dates, settled, unknown ref).
-- `server/chat-widgets.test.ts`, `server/replies.test.ts`, `server/routes/bot-messages` tests: create, update, room refusal, redaction, press delivery, settle, idempotent retry.
+- `server/chat-widgets.test.ts`, `server/messages/replies.test.ts`, `server/routes/bot-messages` tests: create, update, room refusal, redaction, press delivery, settle, idempotent retry.
 - Catalog goldens regenerated; ratchet numbers lowered where code moved out.
 - Desktop component tests (happy-dom) for the renderer, form state and the settled line.
 - Shared fixtures `widget-messages.json` feed the iOS and Android decoding tests.

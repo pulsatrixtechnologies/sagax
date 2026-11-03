@@ -4,7 +4,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, expect, it, vi } from "vitest";
 
-import type { SearchHit } from "../message-search-query.ts";
+import type { SearchHit } from "../messages/message-search-query.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { createSearchRoutes, type SearchRouteDeps } from "./search.ts";
 import { PASS, type RouteContext } from "./table.ts";

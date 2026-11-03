@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { WIDGET_SAMPLES } from "../shared/widget-samples.ts";
-import { parseWidgetInput, widgetActions, widgetToText, type WidgetAction, type WidgetRoot } from "../shared/widget.ts";
+import { WIDGET_SAMPLES } from "../../shared/widget-samples.ts";
+import { parseWidgetInput, widgetActions, widgetToText, type WidgetAction, type WidgetRoot } from "../../shared/widget.ts";
 import { promptWithReply, replyExcerpt, transcriptText, type ReplyTarget } from "./replies.ts";
-import type { Message } from "./store.ts";
+import type { Message } from "../store.ts";
 
 const message = (patch: Partial<Message> = {}): Message => ({
   id: "m1",

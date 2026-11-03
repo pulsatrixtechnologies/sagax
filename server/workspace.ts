@@ -17,7 +17,7 @@ import { describeHandle, holdPlain, isAtRestRefusal, noteAtRestWrite, plainSizeF
 import { alwaysCore, isExpired, isMemoryDate, parseMemoryEntries, untilMark, withoutExpired, type MemoryEntryLine } from "./memory/memory-entries.ts";
 import { readersToken, withoutWiderAudience, type MemoryDestination, type MemoryReaders } from "./memory/memory-audience.ts";
 import { parseTopicHeader, readTopicHead, renderTopicIndex } from "./memory/memory-topics.ts";
-import { indexMemoryFile, indexedMemoryFiles, recallMemory, removeMemoryFile, type MemoryHit, type SearchMode } from "./message-db.ts";
+import { indexMemoryFile, indexedMemoryFiles, recallMemory, removeMemoryFile, type MemoryHit, type SearchMode } from "./messages/message-db.ts";
 import { redactSecretsInText } from "./redact.ts";
 
 import { DATA_DIR } from "./config.ts";
@@ -211,7 +211,7 @@ export function workspaceLocationsPrompt(botId: string, cwd: string | undefined,
     " To see a picture, read the image file; never start a web server or a browser only to view one." +
     // Chat links and inline images open only inside the conversation's
     // folders; attach_file copies one file the turn saved elsewhere
-    // (server/message-file.ts), and the reply's image of it shows that copy.
+    // (server/messages/message-file.ts), and the reply's image of it shows that copy.
     " Chat links and inline images open only files in currentWorkingFolder and sharedBotFolder" +
     (opts.attachFile
       ? "; when you save a file or picture for the person elsewhere, also attach it with attach_file in the same turn (for many files, the few that matter most, such as a preview)."

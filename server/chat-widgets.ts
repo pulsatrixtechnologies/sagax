@@ -233,7 +233,7 @@ export type WidgetPress =
       /** The person's message: the label, then one line per filled field. */
       text: string;
       /** The control that was pressed and the action the bot attached to it:
-       * what the model is told was pressed (server/replies.ts ReplyTarget). */
+       * what the model is told was pressed (server/messages/replies.ts ReplyTarget). */
       label: string;
       action: WidgetAction;
       /** This press folds the widget (confirm, cancel, submit) and has not yet. */

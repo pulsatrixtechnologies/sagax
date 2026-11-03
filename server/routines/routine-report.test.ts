@@ -56,10 +56,30 @@ describe("routineReportOutcome", () => {
 describe("flowRunBlockedReason", () => {
   it("names Flow refusals that must end a Sagax routine run as blocked", () => {
     expect(flowRunBlockedReason("Blocking run: previous has not been closed: one routine run at a time"))
-      .toMatch(/has not been closed/i);
-    expect(flowRunBlockedReason("unknown routine: hourly-qc1-tunnel-watch")).toMatch(/unknown routine/i);
-    expect(flowRunBlockedReason("run_exists: lease still held")).toMatch(/run_exists/i);
-    expect(flowRunBlockedReason("previous_unclosed")).toMatch(/previous_unclosed/i);
+      .toMatch(/earlier run of this Flow routine is still open/i);
+    expect(flowRunBlockedReason("unknown routine: hourly-qc1-tunnel-watch")).toMatch(/does not know the routine "hourly-qc1-tunnel-watch"/);
+    expect(flowRunBlockedReason("run_exists: lease still held")).toMatch(/already holds a run/i);
+    expect(flowRunBlockedReason("previous_unclosed")).toMatch(/never closed/i);
+  });
+
+  // 2026-11-03 production (Monday billing pass): a JSON refusal reads in
+  // plain words, never as its first line "{".
+  it("reads a JSON refusal, split across lines, in plain words", () => {
+    const refusal = `<<<UNTRUSTED source="tool">>>\n{\n  "ok": false,\n  "error": "run_exists",\n  "message": "PX_FLOW_RUN_DIR already holds a run"\n}`;
+    const reason = flowRunBlockedReason(refusal)!;
+    expect(reason).toMatch(/already holds a run/i);
+    expect(reason).not.toBe("{");
+    expect(flowRunBlockedReason(JSON.stringify({ ok: false, error: "a run of routine x (r1) started at t, last event none, has not been closed: one routine run at a time" })))
+      .toMatch(/still open/i);
+  });
+
+  it("never blocks on a document or a successful result that only names a refusal code", () => {
+    // read_file of SKILL.md, the false positive that blocked the run
+    const skill = JSON.stringify({ path: "/workspace/skills/running-px-flow/SKILL.md", content: `${"Flow runs. ".repeat(200)}\n\`run init\` reports an earlier run as \`previous_unclosed\` (an anomaly)` }, null, 2);
+    expect(flowRunBlockedReason(skill)).toBeUndefined();
+    expect(flowRunBlockedReason(`# Running\n${"Prose. ".repeat(200)}\nrun init reports previous_unclosed`)).toBeUndefined();
+    // run init succeeded and noted an earlier unclosed run: not a refusal
+    expect(flowRunBlockedReason(JSON.stringify({ run_id: "r2", routine: "x", previous_unclosed: { run_id: "r1" } }))).toBeUndefined();
   });
 
   it("ignores ordinary tool output so a healthy Flow run stays completed", () => {

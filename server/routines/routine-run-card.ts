@@ -39,5 +39,6 @@ export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullRepor
   if (run.autoPaused) card.autoPausedAfter = run.autoPaused.failures;
   if (run.status === "completed" && run.problems) card.problems = readableRoutineProblems(redactSecretsInText(run.problems)).slice(0, 1_000);
   if (run.status === "queued" && run.attention) card.attention = redactSecretsInText(run.attention).slice(0, 500);
+  if (run.handedTo?.length) card.handedTo = run.handedTo.map((entry) => ({ botId: entry.botId, threadId: entry.threadId, status: entry.status, ...(entry.name ? { name: redactSecretsInText(entry.name) } : {}) }));
   return card;
 }

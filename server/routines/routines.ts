@@ -10,6 +10,7 @@ import type { RuntimeEvent } from "../contracts.ts";
 import { writeFileAtomic } from "../atomic.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { flowRunBlockedReason, routineReportOutcome, type RoutineReportOutcome } from "./routine-report.ts";
+import { meaningfulLine } from "../../shared/routine-result.ts";
 import { stopCause } from "../drivers/engine-errors.ts";
 import {
   evaluateRoutinePrecheck,
@@ -39,7 +40,7 @@ import {
   storedTiming,
   type RoutineWindowTiming,
 } from "../../shared/routine-timing.ts";
-import { isRoutineProblemRun, isTriggerSchedule, scheduleHasKnownEnd, type RoutineAccess, type RoutineRetryCause } from "../../shared/routines.ts";
+import { isRoutineProblemRun, isTriggerSchedule, scheduleHasKnownEnd, type RoutineAccess, type RoutineRetryCause, type RoutineRunHandoff } from "../../shared/routines.ts";
 import type { LimitResetSchedule, LimitResetScheduleInput } from "../../shared/limit-reset.ts";
 import { cleanRoutineAutoPauseAfter, routineAutoPauseDue, type RoutineAutoPause } from "../../shared/routine-auto-pause.ts";
 import { zonedParts, zonedTimeToUtc } from "../../shared/zoned-time.ts";
@@ -390,6 +391,8 @@ export interface RoutineRun {
    * engine error, a teammate whose work failed). The reason, for the person:
    * shown as "Completed with problems", never a plain success. */
   problems?: string;
+  /** 2026-11-03: the teammates this run handed work to and their threads. */
+  handedTo?: RoutineRunHandoff[];
   /** 2026-11-01: a person started this run (Run now, run_routine from
    * their conversation): its card shows in the conversation from the start,
    * queued and running included, so they see what started. */
@@ -466,6 +469,8 @@ export interface RoutineHandedOutOutcome {
   root: { status: string; outcome?: string; detail: string; result: string };
   /** Teammates whose work did not complete, by name when known. */
   failed: Array<{ name: string; outcome: string; detail: string }>;
+  /** 2026-11-03: every teammate the work went to, linked from the run. */
+  handed?: RoutineRunHandoff[];
   pending: boolean;
 }
 
@@ -3572,7 +3577,8 @@ export class RoutineManager {
       if (event.ok) trouble.unresolved.delete(key);
       else {
         const seen = trouble.unresolved.get(key);
-        trouble.unresolved.set(key, { title: seen?.title ?? title, count: (seen?.count ?? 0) + 1, output: output.split("\n")[0]!.slice(0, 160) });
+        // The first line with words: a JSON result's first line is a lone "{" (2026-11-03).
+        trouble.unresolved.set(key, { title: seen?.title ?? title, count: (seen?.count ?? 0) + 1, output: meaningfulLine(output).slice(0, 160) });
       }
       return null;
     } else if (event.type === "turn.started") {
@@ -3730,6 +3736,10 @@ export class RoutineManager {
     const flowBlocked = trouble?.flowBlocked ?? flowRunBlockedReason(run.output) ?? flowRunBlockedReason(
       [...(trouble?.unresolved.values() ?? [])].map((failure) => failure.output).join("\n"),
     );
+    const handed = run.threadId && run.startedAt !== undefined ? this.options.handedOutOutcome?.(run.threadId, run.startedAt) : null;
+    // 2026-11-03: the run links the threads its teammates' work runs in.
+    if (handed?.handed?.length) run.handedTo = handed.handed.map((entry) => ({ ...entry }));
+    else delete run.handedTo;
     if (flowBlocked) {
       this.blockRun(run, flowBlocked);
       queueMicrotask(() => this.tickInBackground());
@@ -3737,7 +3747,6 @@ export class RoutineManager {
     }
     const problems: string[] = [];
     if (outcome.declared?.status === "partial") problems.push(outcome.declared.reason);
-    const handed = run.threadId && run.startedAt !== undefined ? this.options.handedOutOutcome?.(run.threadId, run.startedAt) : null;
     for (const teammate of handed?.failed ?? []) {
       problems.push(`${teammate.name}'s work ${teammate.outcome === "incomplete" ? "was not finished" : teammate.outcome === "expired" ? "expired before it ran" : teammate.outcome === "stopped" ? "was stopped" : "failed"}${teammate.detail ? `: ${teammate.detail}` : ""}`);
     }

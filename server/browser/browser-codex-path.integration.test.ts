@@ -11,7 +11,7 @@ import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { freePortBlock } from "../testing/ports.ts";
 import { openSse, type SseRecorder } from "../testing/sse.ts";
 
-const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
+const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const FINDER_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
 
 // This regression concerns Unix shebang lookup and macOS Finder's PATH;

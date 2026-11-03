@@ -2680,5 +2680,13 @@
   "routines.group.running": "{count} em execução",
   "routines.group.failing": "{count} com falha",
   "routines.group.botMenu": "Mais para {name}",
-  "routines.group.newFor": "Nova rotina para {name}"
+  "routines.group.newFor": "Nova rotina para {name}",
+  "botPanel.library.kind.artifact": "Artefato",
+  "botPanel.library.pageTitle": "Página: {state}",
+  "botPanel.library.pageState.draft": "rascunho",
+  "botPanel.library.pageState.private": "publicada para mim",
+  "botPanel.library.pageState.org": "publicada para minha organização",
+  "botPanel.library.pageState.link": "publicada para qualquer pessoa com o link",
+  "botPanel.library.pageState.revoked": "revogada",
+  "botPanel.library.pageState.expired": "expirada"
 }

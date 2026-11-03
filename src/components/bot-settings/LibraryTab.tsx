@@ -20,7 +20,7 @@ import { groupLibraryItems, libraryItems, OLDER_PREVIEW, type LibraryItem } from
 import { AttachmentPreviewDialog, canonicalDownloadFilename } from "../AttachmentPreview";
 import type { ArtifactSummary } from "../../../shared/artifacts";
 import { ConfirmDialog } from "../ConfirmDialog";
-import { FileGlyph, PageRowGlyph } from "./LibraryGlyph";
+import { ArtifactRowGlyph, FileGlyph, PageRowGlyph } from "./LibraryGlyph";
 import { PageSharePopover } from "../PageShare";
 import { usePagesPolicy } from "../page-controls";
 import { openPage } from "@/lib/open-page";
@@ -344,7 +344,7 @@ function ArtifactLibraryRow({ artifact, actions, now, openMenus }: { artifact: A
   return (
     <LibraryRow
       attr={{ "data-artifact-row": artifact.id }}
-      icon={<PageRowGlyph />}
+      icon={<ArtifactRowGlyph />}
       name={artifact.title}
       trail={status.tone === "muted" ? null : (
         <span data-artifact-status={artifact.refresh.state} title={status.detail ? `${status.text} ${status.detail}` : status.text} className={cn("size-1.5 shrink-0 rounded-full", status.tone === "danger" ? "bg-danger" : "bg-warning")} />
@@ -397,7 +397,7 @@ function PageLibraryRow({ page, linkOff, openMenus, onChange, onPin, onDelete }:
   return (
     <LibraryRow
       attr={{ "data-library-page": page.id }}
-      icon={<PageRowGlyph />}
+      icon={<PageRowGlyph page={page} />}
       name={page.title || t("pages.untitled")}
       trail={sharing ? (
         <span className="relative">

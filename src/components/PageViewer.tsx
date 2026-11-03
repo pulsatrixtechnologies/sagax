@@ -27,7 +27,7 @@
 // frame, and its fields are plain text (parseAnnotationMessage). Nothing
 // reaches a bot until the person presses Send.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { BarChart3, Check, Ellipsis, Highlighter, History, Loader2, MessageSquare, Pencil, Play, Save, Send, Share, Trash2, X, XCircle } from "lucide-react";
+import { Check, Ellipsis, Globe, Highlighter, History, Loader2, MessageSquare, Pencil, Play, Save, Send, Share, Trash2, X, XCircle } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -123,14 +123,16 @@ const PILL = "inline-flex h-9 items-center gap-1.5 rounded-full border border-ha
 
 const errorText = pageErrorText;
 
-/** The page's icon: a small coloured chart, the same on the card, the
- * panel's title pill, the Library and a message about the page. */
+/** The page's icon: a globe (a page is shared by a link) on the accent tint,
+ * the same on the card, the panel's title pill, the Library and a message
+ * about the page. Theme tokens only, so it follows light and dark (#1922);
+ * an artifact wears an app window instead. */
 export function PageGlyph({ size = 20, className }: { size?: number; className?: string }) {
   return (
     <span aria-hidden="true" data-page-glyph
-      className={cn("inline-flex shrink-0 items-center justify-center rounded-[6px] bg-gradient-to-br from-sky-500 to-indigo-500 text-white", className)}
+      className={cn("inline-flex shrink-0 items-center justify-center rounded-[6px] bg-accent/15 text-accent-text", className)}
       style={{ width: size, height: size }}>
-      <BarChart3 size={Math.round(size * 0.62)} strokeWidth={2.4} />
+      <Globe size={Math.round(size * 0.68)} strokeWidth={2.2} />
     </span>
   );
 }

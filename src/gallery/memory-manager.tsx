@@ -1,7 +1,7 @@
-/** Headless gallery for Tools > Memory page (2026-11-02). Synthetic data only.
- * ?skin=<id>&lang=<code>&view=sources|browse|note|map|trash|folder|hover&dense=1
- * sources: All notes; browse/note/map: Atlas's memory; folder: a Perspicax
- * folder; hover: waits on the folder row (the capture hovers it); trash: Trash.
+/** Headless gallery for Tools > Memory (2026-11-02, the Perspicax console's shape). Synthetic data only.
+ * ?skin=<id>&lang=<code>&view=notes|map|tags|quality|note|folder|trash&width=&height=
+ * notes: All notes; folder: a Perspicax folder; note: a bot's note opened;
+ * map, tags, quality: those views; trash: the Perspicax trash.
  */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -13,179 +13,168 @@ import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
 import { BotEditorStore, initialState } from "../state/store";
 import "../styles.css";
 
-Object.assign(globalThis, { __APP_VERSION__: "0.8.24", __BASE_VERSION__: "0.26.0" });
+Object.assign(globalThis, { __APP_VERSION__: "0.8.34", __BASE_VERSION__: "0.26.0" });
 
 const params = new URLSearchParams(location.search);
 const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
 await loadLocale(params.get("lang") ?? "en");
-const view = params.get("view") ?? "sources";
-const dense = params.get("dense") === "1";
-const width = Number(params.get("width") ?? 1280);
-const height = Number(params.get("height") ?? 800);
+const view = params.get("view") ?? "notes";
+const width = Number(params.get("width") ?? 1440);
+const height = Number(params.get("height") ?? 900);
 
-const DENSE_FOLDERS = ["alpha", "beta", "gamma", "delta"] as const;
-const denseTopics = Array.from({ length: 40 }, (_, index) => {
-  const folder = DENSE_FOLDERS[index % DENSE_FOLDERS.length]!;
-  const n = index + 1;
+const H = 3600_000;
+const D = 24 * H;
+const now = Date.now();
+const iso = (ms: number) => new Date(now - ms).toISOString();
+
+// Atlas and Nova: two bots, their topics, a log, the bodies with [[links]].
+const BOT_FILES: Record<string, Record<string, { text: string; age: number }>> = {
+  atlas: {
+    "MEMORY.md": { text: "# MEMORY\n\n- [[Dining]] preferences\n- [[Travel]] plans\n- [[Procedures]] for the lab\n", age: 2 * H },
+    "memory/dining.md": { text: "# Dining\n\nPrefers short tables near a window. See [[Travel]] for trips.\n\n```json\n{\n  \"likes\": [\"pasta\", \"bread\"],\n  \"avoids\": {\"olives\": true}\n}\n```\n", age: 9 * H },
+    "memory/travel.md": { text: "# Travel\n\nTrains over planes when under five hours. Booked with [[Dining]] in mind.\n", age: 2 * D },
+    "memory/procedures.md": { text: "# Procedures\n\nBack up the lab NAS every Friday, then check the [[Weekly briefing]].\n", age: 5 * D },
+    "memory/contacts.md": { text: "{\n  \"front desk\": \"ext 100\",\n  \"lab\": \"ext 214\",\n  \"after hours\": \"ext 999\"\n}\n", age: 12 * D },
+    "memory/logs/run-1.md": { text: "# Run 1\n\nTidied three topics.\n", age: 1 * D },
+  },
+  nova: {
+    "MEMORY.md": { text: "# MEMORY\n\nIndex for Nova: [[Release checklist]].\n", age: 3 * H },
+    "memory/release-checklist.md": { text: "# Release checklist\n\n- [ ] Notes written\n- [x] Tests green\n\nLinked from the [[Weekly briefing]].\n", age: 20 * H },
+    "memory/style.md": { text: "# Style\n\nShort sentences, plain words, no jargon.\n", age: 40 * D },
+  },
+};
+
+function overview(botId: string) {
+  const files = BOT_FILES[botId] ?? {};
+  const entry = (path: string) => ({ path, name: path.split("/").pop()!, bytes: files[path]!.text.length, modifiedAt: now - files[path]!.age });
   return {
-    path: `memory/${folder}/note-${n}.md`,
-    name: `Note ${n}.md`,
-    bytes: 40 + n,
-    modifiedAt: Date.now() - n * 3600_000,
+    botId,
+    workspacePath: `/tmp/${botId}`,
+    index: { lines: 4, bytes: 80, maxLines: 200, maxBytes: 24000, loadedLines: 4, loadedBytes: 80, truncated: false, hash: "idx" },
+    topics: Object.keys(files).filter((path) => path.startsWith("memory/") && !path.includes("/logs/")).map(entry),
+    logs: Object.keys(files).filter((path) => path.includes("/logs/")).map(entry),
   };
-});
+}
 
-function denseNoteBody(path: string): string {
-  const match = /note-(\d+)\.md$/.exec(path);
-  const n = match ? Number(match[1]) : 1;
-  const next = (n % 40) + 1;
-  const jump = ((n + 6) % 40) + 1;
-  return `# Note ${n}\n\nSee [[Note ${next}]] and [[Note ${jump}]].\n`;
+function journal(botId: string) {
+  const files = BOT_FILES[botId] ?? {};
+  const rows: unknown[] = [];
+  let n = 0;
+  for (const [path, file] of Object.entries(files)) {
+    const created = file.age + 20 * D + (n % 5) * 7 * D;
+    rows.push({ id: `${botId}-${n++}`, at: now - created, botId, path, actor: "bot", via: "turn", kind: "created", beforeHash: null, afterHash: "a", diff: "", added: 6, removed: 0, canRevert: true });
+    rows.push({ id: `${botId}-${n++}`, at: now - file.age, botId, path, actor: n % 3 === 0 ? "person" : "bot", via: "turn", threadTitle: "Planning", kind: "edited", beforeHash: "a", afterHash: "b", diff: "", added: 2, removed: 1, canRevert: true });
+  }
+  return { entries: rows };
+}
+
+const PX = {
+  own: "user:demo",
+  tiers: [
+    {
+      scope: "me", kind: "me", name: "Personal", may_write: true, may_manage: true, trashed: 1, archived: 1, edit_mode: "direct",
+      topics: [
+        { topic: "notes", count: 2, entries: [
+          { id: "n1", title: "Weekly briefing", topic: "notes", tags: ["work", "area:planning"], updated: iso(4 * H), created: iso(60 * D), excerpt: "Keep every claim with its source.", author_name: "Dana Reyes", links: 2 },
+          { id: "n2", title: "Reading list", topic: "notes", tags: ["reading"], updated: iso(3 * D), created: iso(30 * D), excerpt: "Three books on systems thinking.", author_name: "Dana Reyes", links: 0 },
+        ] },
+        { topic: "templates", count: 1, entries: [
+          { id: "t1", title: "Meeting notes", topic: "templates", tags: [], updated: iso(20 * D), created: iso(90 * D), excerpt: "Attendees, decisions, actions.", author_name: "Dana Reyes" },
+        ] },
+      ],
+    },
+    {
+      scope: "org", kind: "org", name: "Organization", may_write: true, may_manage: false, trashed: 0, archived: 0, edit_mode: "review",
+      topics: [
+        { topic: "network", count: 3, entries: [
+          { id: "o1", title: "Core switch layout", topic: "network", tags: ["tech:switch", "area:network"], updated: iso(9 * H), created: iso(120 * D), excerpt: "VLAN 10 users, VLAN 20 servers.", author_name: "Sam Okafor", links: 3 },
+          { id: "o2", title: "Firewall rules", topic: "network", tags: ["tech:firewall", "area:network"], updated: iso(2 * D), created: iso(100 * D), excerpt: "Default deny inbound.", author_name: "Sam Okafor", links: 1 },
+          { id: "o3", title: "DNS zones", topic: "network", tags: ["tech:dns"], updated: iso(200 * D), created: iso(210 * D), excerpt: "{\"zone\":\"corp.example.test\",\"ttl\":300,\"records\":12}", author_name: "Lee Park" },
+        ] },
+        { topic: "backup", count: 1, entries: [
+          { id: "o4", title: "Backup policy", topic: "backup", tags: ["tech:backup", "area:backup"], updated: iso(6 * D), created: iso(80 * D), excerpt: "Nightly incremental, weekly full.", author_name: "Lee Park", links: 2 },
+        ] },
+      ],
+    },
+    {
+      scope: "team:ops", kind: "team", name: "Ops", may_write: true, may_manage: true, trashed: 0, archived: 0, edit_mode: "direct", pending: [{}],
+      topics: [
+        { topic: "runbooks", count: 1, entries: [
+          { id: "p1", title: "Restore drill", topic: "runbooks", tags: ["area:backup"], updated: iso(1 * D), created: iso(45 * D), excerpt: "Restore one VM each month.", author_name: "Sam Okafor", links: 1 },
+        ] },
+      ],
+    },
+  ],
+};
+
+function pxEntry(scope: string, id: string) {
+  for (const tier of PX.tiers) {
+    if (tier.scope !== scope) continue;
+    for (const topic of tier.topics) {
+      const entry = topic.entries.find((row) => row.id === id);
+      if (!entry) continue;
+      const body = entry.excerpt.startsWith("{") ? entry.excerpt : `# ${entry.title}\n\n${entry.excerpt}\n\nSee [[Backup policy]] and [[Weekly briefing]].\n`;
+      return {
+        id, scope, topic: entry.topic, title: entry.title, body, tags: entry.tags, may_edit: tier.may_write, version: 3,
+        author_name: entry.author_name, created: entry.created, updated: entry.updated, source: "humain",
+        provenance: [{ kind: "console", reference: "" }], versions: tier.kind === "me" ? null : 4, edit_mode: tier.edit_mode,
+        links_out: [{ scope: "org", id: "o4", title: "Backup policy" }],
+        backlinks: [{ scope: "team:ops", id: "p1", title: "Restore drill", context: "Before a drill, read the Backup policy." }],
+      };
+    }
+  }
+  return { id, scope, topic: "notes", title: id, body: "", tags: [], may_edit: false };
 }
 
 const originalFetch = window.fetch.bind(window);
 window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
   const json = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }));
+  const query = new URL(url, location.href).searchParams;
   if (url.includes("/api/memory-manager/sources")) {
     return json({
       sources: [
         { id: "bot:atlas", kind: "bot", name: "Atlas", detail: "Bot memory", mayWrite: true, botId: "atlas" },
-        { id: "team:general", kind: "team", name: "General", detail: "2 team notes", mayWrite: true, section: "" },
+        { id: "bot:nova", kind: "bot", name: "Nova", detail: "Bot memory", mayWrite: true, botId: "nova" },
+        { id: "team:general", kind: "team", name: "General", detail: "Team notes", mayWrite: true, section: "" },
         { id: "perspicax", kind: "perspicax", name: "Perspicax", detail: "Personal, team and organization notes", mayWrite: true, mayManage: true, scope: "me" },
       ],
       perspicax: { available: true },
     });
   }
-  if (url.includes("/api/bots/atlas/memory/file")) {
-    if (dense) {
-      const pathMatch = /path=([^&]+)/.exec(url);
-      const path = pathMatch ? decodeURIComponent(pathMatch[1]) : "memory/alpha/note-1.md";
-      return json({
-        path,
-        text: path === "MEMORY.md" ? "# MEMORY\n\nIndex for Atlas.\n" : denseNoteBody(path),
-        hash: `h-${path}`,
-        exists: true,
-      });
-    }
-    const travel = url.includes("travel");
-    return json({
-      path: travel ? "memory/travel.md" : "memory/dining.md",
-      text: travel
-        ? "# Travel\n\nTrips with [[Dining]].\n"
-        : "# Dining\n\nPrefers short tables. See [[Travel]].\n\n```json\n{\n  \"likes\": [\"pasta\", \"bread\"],\n  \"avoids\": {\"olives\": true}\n}\n```\n",
-      hash: travel ? "trv" : "abc123",
-      exists: true,
-    });
+  const bot = /\/api\/bots\/([^/]+)\/memory/.exec(url)?.[1];
+  if (bot && url.includes("/memory/journal")) return json(journal(bot));
+  if (bot && url.includes("/memory/file")) {
+    const path = query.get("path") ?? "MEMORY.md";
+    return json({ path, text: BOT_FILES[bot]?.[path]?.text ?? "", hash: `h-${path}`, exists: true });
   }
-  if (url.includes("/api/bots/atlas/memory")) {
-    if (dense) {
-      return json({
-        botId: "atlas",
-        workspacePath: "/tmp/atlas",
-        index: { lines: 40, bytes: 800, maxLines: 200, maxBytes: 24000, loadedLines: 40, loadedBytes: 800, truncated: false, hash: "idx-dense" },
-        topics: denseTopics,
-        logs: [
-          { path: "memory/logs/run-1.md", name: "run-1.md", bytes: 20, modifiedAt: Date.now() - 1000 },
-          { path: "memory/logs/run-2.md", name: "run-2.md", bytes: 20, modifiedAt: Date.now() - 2000 },
-        ],
-      });
-    }
-    return json({
-      botId: "atlas",
-      workspacePath: "/tmp/atlas",
-      index: { lines: 4, bytes: 80, maxLines: 200, maxBytes: 24000, loadedLines: 4, loadedBytes: 80, truncated: false, hash: "idx" },
-      topics: [
-        { path: "memory/dining.md", name: "dining.md", bytes: 120, modifiedAt: Date.now() - 3600_000 },
-        { path: "memory/travel.md", name: "travel.md", bytes: 40, modifiedAt: Date.now() - 86400_000 },
-      ],
-      logs: [],
-    });
-  }
+  if (bot) return json(overview(bot));
   if (url.includes("/api/team-memory")) {
     return json({
       section: "",
       label: "General",
       entries: [
-        { id: "tm1", kind: "term", name: "OMB", detail: "Open MAUS Bot", aliases: [], status: "accepted", source: { botId: "atlas", botName: "Atlas", threadId: "t", at: 1 }, updatedAt: 1 },
-        { id: "tm2", kind: "place", name: "Lab", detail: "The shared lab", aliases: [], status: "accepted", source: { botId: "atlas", botName: "Atlas", threadId: "t", at: 1 }, updatedAt: 2 },
+        { id: "tm1", kind: "term", name: "OMB", detail: "Open MAUS Bot, the old name of the app.", aliases: [], status: "accepted", source: { botId: "atlas", botName: "Atlas", threadId: "t", at: now - 50 * D }, updatedAt: now - 10 * D },
+        { id: "tm2", kind: "place", name: "Lab", detail: "The shared lab on the second floor.", aliases: [], status: "accepted", source: { botId: "nova", botName: "Nova", threadId: "t", at: now - 70 * D }, updatedAt: now - 30 * D },
+        { id: "tm3", kind: "decision", name: "Friday backups", detail: "Back up every Friday at 18:00.", aliases: [], status: "proposed", source: { botId: "atlas", botName: "Atlas", threadId: "t", at: now - 2 * D }, updatedAt: now - 2 * D },
+        { id: "tm4", kind: "person", name: "Front desk", detail: "Answers ext 100 on weekdays.", aliases: [], status: "accepted", source: { botId: "nova", botName: "Nova", threadId: "t", at: now - 15 * D }, updatedAt: now - 15 * D },
       ],
     });
   }
-  if (url.includes("/api/me/memory/tree")) {
-    if (dense) {
-      const topics = DENSE_FOLDERS.map((topic, topicIndex) => {
-        const entries = Array.from({ length: 10 }, (_, entryIndex) => {
-          const n = topicIndex * 10 + entryIndex + 1;
-          return {
-            id: `n${n}`,
-            title: `Note ${n}`,
-            topic,
-            tags: n % 3 === 0 ? ["shared", topic] : [topic],
-            updated: new Date(Date.now() - n * 3600_000).toISOString(),
-            excerpt: `Excerpt ${n}`,
-          };
-        });
-        return { topic, count: entries.length, entries };
-      });
-      return json({
-        own: "user:demo",
-        tiers: [{
-          scope: "me",
-          kind: "me",
-          name: "Personal",
-          may_write: true,
-          may_manage: true,
-          trashed: 0,
-          topics,
-        }],
-      });
-    }
-    return json({
-      own: "user:demo",
-      tiers: [{
-        scope: "me",
-        kind: "me",
-        name: "Personal",
-        may_write: true,
-        may_manage: true,
-        trashed: 1,
-        topics: [{
-          topic: "notes",
-          count: 1,
-          entries: [{ id: "n1", title: "Weekly briefing", topic: "notes", tags: ["work"], updated: new Date().toISOString(), excerpt: "Keep sources" }],
-        }],
-      }],
-    });
+  if (url.includes("/api/me/memory/tree")) return json(PX);
+  if (url.includes("/api/me/memory/tags")) {
+    return json({ namespaces: [
+      { id: "tech", label_en: "Technology", controlled: true, required: false, tags: [{ tag: "tech:switch" }, { tag: "tech:firewall" }, { tag: "tech:dns" }] },
+      { id: "area", label_en: "Area", controlled: false, required: true, tags: [{ tag: "area:network" }, { tag: "area:backup" }] },
+    ] });
   }
-  if (url.includes("/api/me/memory/entry")) {
-    if (dense) {
-      const idMatch = /[?&]id=([^&]+)/.exec(url);
-      const id = idMatch ? decodeURIComponent(idMatch[1]) : "n1";
-      const n = Number((/^n(\d+)$/.exec(id) ?? [])[1] ?? 1);
-      const topic = DENSE_FOLDERS[(n - 1) % DENSE_FOLDERS.length]!;
-      const next = (n % 40) + 1;
-      const jump = ((n + 6) % 40) + 1;
-      return json({
-        id,
-        scope: "me",
-        topic,
-        title: `Note ${n}`,
-        body: `# Note ${n}\n\nSee [[Note ${next}]] and [[Note ${jump}]].\n`,
-        tags: n % 3 === 0 ? ["shared", topic] : [topic],
-        may_edit: true,
-        version: 1,
-      });
-    }
-    return json({
-      id: "n1", scope: "me", topic: "notes", title: "Weekly briefing",
-      body: "# Weekly briefing\n\nKeep every claim with its source.\n",
-      tags: ["work"], may_edit: true, version: 1,
-    });
+  if (url.includes("/api/me/memory/archived")) {
+    return json({ notes: [{ scope: "me", id: "a1", title: "Old onboarding", topic: "notes", tags: ["work"], archived_at: iso(40 * D), author_name: "Dana Reyes", may_restore: true }] });
   }
+  if (url.includes("/api/me/memory/entry")) return json(pxEntry(query.get("scope") ?? "me", query.get("id") ?? "n1"));
   if (url.includes("/api/me/memory/trash")) {
-    return json({ notes: [{ id: "old", title: "Old draft", scope: "me", may_manage: true }], days: 30 });
+    return json({ notes: [{ id: "old", title: "Old draft", scope: "me", topic: "notes", tags: [], may_manage: true, deleted_at: iso(2 * D), author_name: "Dana Reyes" }], days: 30 });
   }
   return originalFetch(input, init);
 }) as typeof fetch;
@@ -206,9 +195,8 @@ const store = {
 };
 
 function Shell() {
-  const [ready, setReady] = useState(view === "sources");
+  const [ready, setReady] = useState(false);
   useEffect(() => {
-    if (view === "sources") return;
     let cancelled = false;
     const waitFor = async (selector: string, ms = 8_000) => {
       const start = Date.now();
@@ -218,52 +206,24 @@ function Shell() {
       }
       return false;
     };
+    const click = (selector: string) => document.querySelector<HTMLElement>(selector)?.click();
+    const segment = (label: RegExp) => [...document.querySelectorAll<HTMLButtonElement>("[data-memory-views] button")].find((button) => label.test(button.getAttribute("title") ?? button.textContent ?? ""))?.click();
     void (async () => {
-      await new Promise((done) => setTimeout(done, 200));
-      if (cancelled) return;
       await waitFor("[data-memory-tiers]");
-      if (view === "trash") {
-        document.querySelector<HTMLButtonElement>('[data-memory-nav="trash"]')?.click();
-        await waitFor("[data-memory-trash]");
-        if (!cancelled) setReady(true);
-        return;
-      }
-      if (view === "folder" || view === "hover") {
-        const folder = dense ? "me/alpha" : "me/notes";
-        await waitFor(`[data-memory-folder="${folder}"]`);
-        const row = document.querySelector<HTMLButtonElement>(`[data-memory-folder="${folder}"]`);
-        if (view === "folder") {
-          row?.click();
-          await waitFor("[data-memory-browse]");
-        }
-        if (!cancelled) setReady(true);
-        return;
-      }
-      const sourceKey = dense ? "me/alpha" : "bot:atlas";
-      document.querySelector<HTMLButtonElement>(dense ? `[data-memory-folder="${sourceKey}"]` : `[data-memory-source="${sourceKey}"]`)?.click();
-      if (view === "browse" || view === "map") {
-        await waitFor("[data-memory-browse], [data-memory-map]");
-        if (view === "map") {
-          const mapToggle = [...document.querySelectorAll("button")].find((button) => /Map|Carte/i.test(button.textContent || "") && button.getAttribute("aria-pressed") !== null);
-          mapToggle?.click();
-          await waitFor("[data-memory-map]");
-          if (dense) {
-            await waitFor('[data-memory-map-node="note"]');
-            // Dense maps prefetch many bodies; give the graph a beat to settle.
-            await new Promise((done) => setTimeout(done, 400));
-          }
-        }
-        if (!cancelled) setReady(true);
-        return;
-      }
+      await waitFor('[data-memory-note-row="o1"]');
+      // let the bodies arrive (excerpts, links)
+      await new Promise((done) => setTimeout(done, 700));
+      if (view === "map") { segment(/Map|Carte/); await waitFor("[data-memory-map]"); await new Promise((done) => setTimeout(done, 300)); }
+      if (view === "tags") { segment(/Tags|Étiquettes/); await waitFor("[data-memory-tags-view]"); }
+      if (view === "quality") { segment(/Quality|Qualité/); await waitFor("[data-memory-quality-view]"); }
+      if (view === "trash") { click('[data-memory-nav="trash"]'); await waitFor("[data-memory-trash]"); }
+      if (view === "folder") { click('[data-memory-folder="org/network"]'); await new Promise((done) => setTimeout(done, 200)); }
       if (view === "note") {
-        await waitFor('[data-memory-browse] [data-memory-note-row="memory/dining.md"]');
-        if (cancelled) return;
-        document.querySelector<HTMLButtonElement>('[data-memory-browse] [data-memory-note-row="memory/dining.md"] button')?.click();
-        await waitFor("[data-memory-read-body], [data-memory-json-tree]");
-        if (!cancelled) setReady(true);
-        return;
+        click('[data-memory-row-key="perspicax|org/o1"] [data-memory-row-open]');
+        await waitFor("[data-memory-note]");
+        await new Promise((done) => setTimeout(done, 300));
       }
+      if (!cancelled) setReady(true);
     })();
     return () => { cancelled = true; };
   }, []);

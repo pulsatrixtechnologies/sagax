@@ -1,6 +1,6 @@
 // Memory map canvas: same zoom/pan language as Team map (team-canvas helpers).
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Brain, FileText, Folder, Minus, Plus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Brain, FileText, Folder, Maximize2, Minus, Plus } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -35,17 +35,39 @@ export function MemoryMapCanvas({
   graph,
   selectedNoteId,
   onOpenNote,
+  dimmedNoteIds,
+  hiddenNoteIds,
+  focusNoteId,
+  overlay,
+  noteColor,
 }: {
   graph: MemoryMapGraph;
   selectedNoteId?: string | null;
   onOpenNote: (noteId: string) => void;
+  /** Notes the search or the tag filter leaves out: drawn faint. */
+  dimmedNoteIds?: Set<string> | null;
+  /** Notes the timeline has not reached yet: not drawn. */
+  hiddenNoteIds?: Set<string> | null;
+  /** A note to centre on (Neighbourhood). */
+  focusNoteId?: string | null;
+  /** Controls drawn at the top right of the canvas (the tag filter). */
+  overlay?: ReactNode;
+  /** A note's tier swatch. */
+  noteColor?: (noteId: string) => string | undefined;
 }) {
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const viewportRef = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<View>({ x: 40, y: 40, scale: 1 });
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const panRef = useRef<{ id: number; start: Point; view: View; moved: boolean } | null>(null);
-  const nodeById = useMemo(() => new Map(graph.nodes.map((node) => [node.id, node])), [graph.nodes]);
+  const nodes = useMemo(() => (hiddenNoteIds?.size ? graph.nodes.filter((node) => !(node.noteId && hiddenNoteIds.has(node.noteId))) : graph.nodes), [graph.nodes, hiddenNoteIds]);
+  const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const noteCount = useMemo(() => graph.nodes.filter((node) => node.kind === "note").length, [graph.nodes]);
+  const bounds = useMemo(() => {
+    let minX = Infinity; let minY = Infinity; let maxX = -Infinity; let maxY = -Infinity;
+    for (const node of graph.nodes) { minX = Math.min(minX, node.x); minY = Math.min(minY, node.y); maxX = Math.max(maxX, node.x + NODE_W); maxY = Math.max(maxY, node.y + NODE_H); }
+    return graph.nodes.length ? { minX, minY, maxX, maxY } : null;
+  }, [graph.nodes]);
   const linkedIds = useMemo(() => {
     if (!hoveredId) return null;
     const ids = new Set<string>([hoveredId]);
@@ -85,6 +107,27 @@ export function MemoryMapCanvas({
   }, [graph.nodes]);
 
   useEffect(() => { fit(); }, [fit]);
+
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const measure = () => setSize({ width: el.clientWidth, height: el.clientHeight });
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el || !focusNoteId) return;
+    const node = graph.nodes.find((entry) => entry.noteId === focusNoteId);
+    if (!node) return;
+    const scale = 1;
+    setView({ x: el.clientWidth / 2 - (node.x + NODE_W / 2) * scale, y: el.clientHeight / 2 - (node.y + NODE_H / 2) * scale, scale });
+    setHoveredId(node.id);
+  }, [focusNoteId, graph.nodes]);
 
   useEffect(() => {
     const el = viewportRef.current;
@@ -171,6 +214,7 @@ export function MemoryMapCanvas({
               aria-hidden="true"
             >
               {graph.edges.map((edge) => {
+                if (!nodeById.has(edge.from) || !nodeById.has(edge.to)) return null;
                 const from = nodeById.get(edge.from);
                 const to = nodeById.get(edge.to);
                 if (!from || !to) return null;
@@ -191,7 +235,9 @@ export function MemoryMapCanvas({
                 );
               })}
             </svg>
-            {graph.nodes.map((node) => {
+            {nodes.map((node) => {
+              const faint = Boolean(node.kind === "note" && node.noteId && dimmedNoteIds && !dimmedNoteIds.has(node.noteId));
+              const swatch = node.noteId ? noteColor?.(node.noteId) : undefined;
               const selected = node.kind === "note" && node.noteId === selectedNoteId;
               const linked = linkedIds ? linkedIds.has(node.id) : true;
               return (
@@ -212,7 +258,7 @@ export function MemoryMapCanvas({
                   style={{ left: node.x, top: node.y, width: NODE_W, height: NODE_H }}
                   className={cn(
                     "absolute flex items-center gap-2 rounded-xl border px-3 text-left shadow-sm transition",
-                    !linked && "opacity-40",
+                    (!linked || faint) && "opacity-40",
                     node.kind === "note"
                       ? selected
                         ? "border-accent/60 bg-card ring-1 ring-accent/20"
@@ -220,7 +266,7 @@ export function MemoryMapCanvas({
                       : "cursor-default border-hairline/40 bg-raised/80",
                   )}
                 >
-                  {nodeIcon(node.kind)}
+                  {swatch ? <span className="size-2 shrink-0 rounded-full" style={{ background: swatch }} aria-hidden="true" /> : nodeIcon(node.kind)}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[12.5px] font-medium text-ink">{node.label}</span>
                     {node.detail && <span className="block truncate text-[10.5px] text-ink-secondary">{node.detail}</span>}
@@ -231,7 +277,11 @@ export function MemoryMapCanvas({
           </div>
         )}
       </div>
-      <div className="pointer-events-none absolute inset-x-5 bottom-5 flex items-end justify-end gap-3">
+      {overlay && <div className="absolute right-4 top-4 z-10 flex items-center gap-2">{overlay}</div>}
+      <div className="pointer-events-none absolute inset-x-5 bottom-5 flex items-end justify-between gap-3">
+        {bounds && size.width > 0 ? (
+          <MiniMap nodes={nodes} bounds={bounds} view={view} size={size} onJump={(x, y) => setView((current) => ({ ...current, x: size.width / 2 - x * current.scale, y: size.height / 2 - y * current.scale }))} />
+        ) : <span />}
         <div className="pointer-events-auto flex shrink-0 items-center gap-0.5 rounded-xl border border-hairline/60 bg-panel p-1 shadow-sm">
           <button
             type="button"
@@ -253,6 +303,16 @@ export function MemoryMapCanvas({
           <button
             type="button"
             className="flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-secondary hover:bg-control hover:text-ink"
+            aria-label={t("memoryManager.mapFit")}
+            title={t("memoryManager.mapFit")}
+            onClick={fit}
+            data-memory-map-fit=""
+          >
+            <Maximize2 size={14} />
+          </button>
+          <button
+            type="button"
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-secondary hover:bg-control hover:text-ink"
             aria-label={t("memoryManager.mapZoomIn")}
             onClick={() => zoomBy(1.2)}
           >
@@ -261,5 +321,51 @@ export function MemoryMapCanvas({
         </div>
       </div>
     </div>
+  );
+}
+
+const MINI_W = 168;
+const MINI_H = 104;
+
+/** The console's minimap: every card in small, the viewport as a frame; a press jumps there. */
+function MiniMap({ nodes, bounds, view, size, onJump }: {
+  nodes: MemoryMapNode[];
+  bounds: { minX: number; minY: number; maxX: number; maxY: number };
+  view: View;
+  size: { width: number; height: number };
+  onJump: (x: number, y: number) => void;
+}) {
+  const pad = 40;
+  const minX = bounds.minX - pad;
+  const minY = bounds.minY - pad;
+  const width = Math.max(1, bounds.maxX - bounds.minX + pad * 2);
+  const height = Math.max(1, bounds.maxY - bounds.minY + pad * 2);
+  // The box keeps the map's proportions inside 168 x 104.
+  const fit = Math.min(MINI_W / width, MINI_H / height);
+  const boxW = Math.max(48, width * fit);
+  const boxH = Math.max(32, height * fit);
+  return (
+    <svg
+      width={boxW}
+      height={boxH}
+      viewBox={`${minX} ${minY} ${width} ${height}`}
+      preserveAspectRatio="xMidYMid meet"
+      className="pointer-events-auto shrink-0 cursor-pointer overflow-hidden rounded-xl border border-hairline/60 bg-panel shadow-sm"
+      role="img"
+      aria-label={t("memoryManager.mapMinimap")}
+      data-memory-map-minimap=""
+      onClick={(event) => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        const scale = Math.min(rect.width / width, rect.height / height);
+        const offsetX = (rect.width - width * scale) / 2;
+        const offsetY = (rect.height - height * scale) / 2;
+        onJump((event.clientX - rect.left - offsetX) / scale + minX, (event.clientY - rect.top - offsetY) / scale + minY);
+      }}
+    >
+      {nodes.map((node) => (
+        <rect key={node.id} x={node.x} y={node.y} width={NODE_W} height={NODE_H} rx={8} className={node.kind === "note" ? "fill-ink-tertiary/50" : "fill-ink-secondary"} />
+      ))}
+      <rect x={-view.x / view.scale} y={-view.y / view.scale} width={size.width / view.scale} height={size.height / view.scale} className="fill-accent/10 stroke-accent" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+    </svg>
   );
 }

@@ -2082,8 +2082,8 @@ import {
   lifecycleEvent,
   type HookRun,
   type HookTarget
-} from "./lifecycle-hooks.ts";
-import { spawnPcHook } from "./lifecycle-hook-exec.ts";
+} from "./hooks/lifecycle-hooks.ts";
+import { spawnPcHook } from "./hooks/lifecycle-hook-exec.ts";
 import {
   GithubConnect,
   githubGitEnvironment,

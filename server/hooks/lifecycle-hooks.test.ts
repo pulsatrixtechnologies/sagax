@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { copySanitizedPlugin } from "./bots/bot-plugins.ts";
+import { copySanitizedPlugin } from "../bots/bot-plugins.ts";
 import {
   capturePluginHooks,
   chooseHookTarget,

@@ -6606,7 +6606,7 @@ Plugin lifecycle hooks are stripped from the folder Claude loads with
 and run only when the owner turns them on, on the bot's computer (sandbox,
 the person's PC, or the solo machine). They never run in the Sagax server
 process and never on an organization server's own host
-(`server/lifecycle-hooks.ts`).
+(`server/hooks/lifecycle-hooks.ts`).
 
 ## Desktop bridge (organization mode)
 

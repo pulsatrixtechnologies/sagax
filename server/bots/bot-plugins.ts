@@ -33,7 +33,7 @@
 //     MCP and LSP server declarations are removed from the folder Claude loads
 //     with --plugin-dir (they would run on the Sagax host). Hook commands
 //     are kept beside that folder and run only on the bot's computer when
-//     the owner turns lifecycle hooks on (server/lifecycle-hooks.ts). The
+//     the owner turns lifecycle hooks on (server/hooks/lifecycle-hooks.ts). The
 //     plugin's skills, commands, agents and output styles stay. The MCP
 //     servers it declared mount separately in the person's environment.
 import { execFile } from "node:child_process";
@@ -48,7 +48,7 @@ import { readPluginMcpServers } from "../plugins/plugin-mcp.ts";
 import { SANDBOX_PLUGINS_DIR } from "../sandbox/sandbox-plugins.ts";
 import { capabilityPluginRecordSchema as pluginRecord, capabilityPluginStateSchema as stateSchema } from "../capabilities/capability-plugin-state.ts";
 import type { CapabilityPluginValues } from "../capabilities/capability-plugin-state.ts";
-import { capturePluginHooks, type LifecycleHook } from "../lifecycle-hooks.ts";
+import { capturePluginHooks, type LifecycleHook } from "../hooks/lifecycle-hooks.ts";
 import { pluginUpdateAvailable, type MarketplaceViewer, type MarketplaceVisibility, type PluginMarketplaces } from "../plugins/plugin-marketplaces.ts";
 import { probeGithubRepo, type GithubCredential, type GithubProbe } from "../github/github-access.ts";
 import { githubGitEnvironment } from "../github/github-connect.ts";

@@ -10,7 +10,7 @@ import { READ_ONLY_AGENT_TOOL_NAMES } from "./tools/agent-tool-policy.ts";
 import { reviewCustomRules } from "./rules/custom-rules-review.ts";
 import { availableTools, catalogProfileFromEnv } from "./drivers/agents-catalog.ts";
 import { catalogBridgeOn, findCatalogTools, routeBridgeCall } from "./drivers/catalog-bridge.ts";
-import { hookRuns } from "./lifecycle-hooks.ts";
+import { hookRuns } from "./hooks/lifecycle-hooks.ts";
 import { guardToolCall } from "./mcp/mcp-permissions.ts";
 import { memberOwnScopeTool } from "./people/member-tool-scope.ts";
 import { misuseToolFrameText } from "./safety/misuse-guardrails.ts";

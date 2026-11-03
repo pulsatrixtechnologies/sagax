@@ -3,12 +3,14 @@
 // logs it, the MCP list shows it apart with a free name, and the rename route
 // moves it to that name, saved off. Real server, isolated home.
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, it } from "vitest";
 import { verificationServerEnvironment } from "../scripts/control-omb.ts";
+import { InstallationCapabilityStore } from "./capabilities/installation-capability-store.ts";
+import { resolveVaultKey } from "./mcp/mcp-oauth.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { freePortBlock } from "./testing/ports.ts";
 
@@ -76,7 +78,17 @@ it("logs, lists apart and renames a saved server whose name is reserved", async 
   expect(renamed.body.reserved).toBeUndefined();
   expect(renamed.body.servers).toEqual(expect.arrayContaining([expect.objectContaining({ name: "server", command: "legacy-mcp", enabled: false })]));
 
-  const disk = JSON.parse(readFileSync(join(home, "config.json"), "utf8"));
+  // 9ede65b25 / f1db2ed59: installation MCP moves into the sealed store;
+  // the verified migration clears only the legacy config field.
+  const legacy = JSON.parse(readFileSync(join(home, "config.json"), "utf8"));
+  expect(legacy.mcpServers).toEqual({});
+  // Read only this fixture's existing vault key, without operator env.
+  expect(existsSync(join(home, "mcp-oauth.key"))).toBe(true);
+  const installation = new InstallationCapabilityStore(home, () => resolveVaultKey(home, {}));
+  expect(installation.present()).toBe(true);
+  const disk = installation.read();
+  expect(disk.migrated).toContain("config-mcp-servers");
   expect(Object.keys(disk.mcpServers)).toEqual(["notes", "server"]);
+  expect(disk.mcpServers.notes).toEqual({ command: "notes-mcp", enabled: false });
   expect(disk.mcpServers.server).toMatchObject({ command: "legacy-mcp", args: ["--serve"], enabled: false });
 }, 60_000);

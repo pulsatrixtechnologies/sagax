@@ -14,7 +14,7 @@ import {
   type MediaProxyResolver,
 } from "./media-proxy-guard.ts";
 import { initMediaProxy, mintMediaProxyToken, needsMediaProxy, rewriteHlsPlaylist, streamProxiedMedia } from "./media-proxy.ts";
-import { handleMediaProxy } from "./routes/media-widgets.ts";
+import { handleMediaProxy } from "../routes/media-widgets.ts";
 
 const NONE = parseMediaProxyAllowList("");
 

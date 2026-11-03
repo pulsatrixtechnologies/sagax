@@ -7,7 +7,7 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import type { RouteContext } from "./table.ts";
 
 const fetchYoutubeTranscript = vi.fn();
-vi.mock("../youtube-transcript.ts", () => ({ fetchYoutubeTranscript: (id: string) => fetchYoutubeTranscript(id) }));
+vi.mock("../media/youtube-transcript.ts", () => ({ fetchYoutubeTranscript: (id: string) => fetchYoutubeTranscript(id) }));
 
 const { createMediaWidgetRoutes } = await import("./media-widgets.ts");
 

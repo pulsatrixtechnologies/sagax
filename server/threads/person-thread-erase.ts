@@ -21,7 +21,7 @@ import { existsSync, lstatSync, realpathSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 
 import { modelImageCopyPath } from "../models/model-image.ts";
-import { officeKind, officeMediaFolder } from "../office-media.ts";
+import { officeKind, officeMediaFolder } from "../media/office-media.ts";
 
 const ID = /^[A-Za-z0-9_-]{1,128}$/;
 /** The attachment store's own names (an opaque id and an extension). */
@@ -115,7 +115,7 @@ export function erasePersonThreadFiles(plan: PersonThreadErasurePlan, attachment
   for (const dir of plan.toolResults) remove(dir, "a thread's tool results", true);
   for (const name of plan.attachments) {
     remove(join(attachmentsDir, name), "a stored file", false);
-    // the pictures read out of an Office document (server/office-media.ts)
+    // the pictures read out of an Office document (server/media/office-media.ts)
     if (officeKind(name) && existsSync(officeMediaFolder(attachmentsDir, name))) remove(officeMediaFolder(attachmentsDir, name), "a stored file's pictures", true);
     // the copy of a picture scaled for the model (server/models/model-image.ts)
     const modelCopy = modelImageCopyPath(attachmentsDir, join(attachmentsDir, name));

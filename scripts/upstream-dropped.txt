@@ -602,3 +602,7 @@ server/sse-fanout.test.ts
 server/sse-fanout.ts
 server/calendar-calls.test.ts
 server/calendar-calls.ts
+server/avatar-image.test.ts
+server/avatar-image.ts
+server/generated-image.test.ts
+server/generated-image.ts

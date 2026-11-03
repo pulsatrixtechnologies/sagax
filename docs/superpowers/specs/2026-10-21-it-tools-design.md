@@ -91,7 +91,7 @@ Tool declaration and gating:
 
 Network-safety helpers already in the tree:
 
-- `server/media-proxy-guard.ts`: `blockedAddressReason(address)` returns typed reasons (loopback, private,
+- `server/media/media-proxy-guard.ts`: `blockedAddressReason(address)` returns typed reasons (loopback, private,
   link-local, metadata, cgnat, ula, ipv4-mapped, ...). `checkMediaDestination` resolves every address and
   connects to the checked one.
 - `server/custom-domain.ts`: `isPublicDomainAddress` (BlockList that includes 169.254/16, 100.64/10 and the

@@ -21,7 +21,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 
-import { checkMediaDestination, MediaProxyBlockedError } from "../media-proxy-guard.ts";
+import { checkMediaDestination, MediaProxyBlockedError } from "../media/media-proxy-guard.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import {
   cardLanguage,

@@ -130,7 +130,7 @@ public enum LibraryGlyph: String, Equatable, Sendable {
 }
 
 public extension ThreadFileRules {
-    /// Pictures the server can draw as a thumbnail (`server/thumbnail.ts`).
+    /// Pictures the server can draw as a thumbnail (`server/media/thumbnail.ts`).
     static func hasThumbnail(_ file: ThreadFile) -> Bool {
         guard file.available, kind(of: file) == .image else { return false }
         let mime = file.mime?.split(separator: ";").first.map { $0.trimmingCharacters(in: .whitespaces).lowercased() }

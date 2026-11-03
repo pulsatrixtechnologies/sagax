@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { validateShapeAvatarDef } from "../shared/shape-avatar-def.ts";
+import { validateShapeAvatarDef } from "../../shared/shape-avatar-def.ts";
 import {
   describeShapeAvatarDef,
   generateShapeAvatarDef,

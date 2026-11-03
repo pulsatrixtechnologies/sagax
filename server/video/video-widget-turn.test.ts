@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { initMediaProxy } from "../media-proxy.ts";
+import { initMediaProxy } from "../media/media-proxy.ts";
 import { videoMessagesFromTool } from "./video-widget-turn.ts";
 
 describe("videoMessagesFromTool", () => {

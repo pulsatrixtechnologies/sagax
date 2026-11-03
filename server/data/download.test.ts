@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { MediaProxyResolver, ResolvedAddress } from "../media-proxy-guard.ts";
+import type { MediaProxyResolver, ResolvedAddress } from "../media/media-proxy-guard.ts";
 import { DATA_DOWNLOAD_MAX_REDIRECTS, downloadGuarded, pinnedLookup, type DownloadResponse, type DownloadTransport } from "./download.ts";
 import { DataFailure } from "./types.ts";
 

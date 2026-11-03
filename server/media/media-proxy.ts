@@ -7,8 +7,8 @@ import type { LookupAddress } from "node:dns";
 import type { LookupFunction } from "node:net";
 import { URL } from "node:url";
 
-import type { SagaxVideoEmit, WireVideoWidget } from "../shared/video-widget.ts";
-import { normalizeVideoFormat, videoFormatFromUrl } from "../shared/video-widget.ts";
+import type { SagaxVideoEmit, WireVideoWidget } from "../../shared/video-widget.ts";
+import { normalizeVideoFormat, videoFormatFromUrl } from "../../shared/video-widget.ts";
 import {
   checkMediaDestination,
   isNonPublicLiteralHost,

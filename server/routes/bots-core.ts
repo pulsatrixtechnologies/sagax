@@ -11,7 +11,7 @@ import { z } from "zod";
 import type { ApprovalViewer } from "../approvals/approval-audience.ts";
 import type { LookRefusal } from "../achievements-mastery.ts";
 import { atLeast, type Level } from "../auth/authz.ts";
-import { generateAvatarImage, avatarGenerationRequestSchema } from "../avatar-image.ts";
+import { generateAvatarImage, avatarGenerationRequestSchema } from "../media/avatar-image.ts";
 import { validateBotCwd, validateBotCwdFor, type RemoteCwdDeps } from "../bots/bot-cwd.ts";
 import { soulFile, readSoulDrift, writeSoulMirror } from "../bots/bot-folder.ts";
 import { parseBotProfilePatch } from "../bots/bot-profile.ts";

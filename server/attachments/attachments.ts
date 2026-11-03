@@ -24,7 +24,7 @@ import { atRestChunks, atRestInfoSync, holdPlain, isAtRestTemp, noteAtRestWrite,
 import { WORKSPACE_OWNER } from "../encryption/content-keys.ts";
 import { UploadContentError, assertContentMatches, checkUploadedFile } from "./upload-content-check.ts";
 import { isSharedHost } from "../host-kind.ts";
-import { privateMediaIdentity } from "../media-proxy.ts";
+import { privateMediaIdentity } from "../media/media-proxy.ts";
 
 export const ATTACHMENTS_DIR = join(DATA_DIR, "attachments");
 

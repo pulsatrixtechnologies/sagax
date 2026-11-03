@@ -36,7 +36,7 @@ import {
   writtenFilesForMessage,
   type ThreadFileRef,
 } from "../threads/thread-files.ts";
-import { THUMB_MAX_SOURCE_BYTES, thumbnailFor, thumbnailable } from "../thumbnail.ts";
+import { THUMB_MAX_SOURCE_BYTES, thumbnailFor, thumbnailable } from "../media/thumbnail.ts";
 import { screenVisibleToPrincipal } from "../sandbox/user-sandbox-routing.ts";
 import {
   normalizeReactions,

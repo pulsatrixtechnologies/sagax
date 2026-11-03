@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { createXaiVideoProvider, generatedMp4Chunks, openGeneratedVideo, videoGenerationSchema } from "./video-provider.ts";
-import { mediaProxyPolicyFromEnv } from "../media-proxy-guard.ts";
+import { mediaProxyPolicyFromEnv } from "../media/media-proxy-guard.ts";
 
 const servers: Server[] = [];
 afterEach(async () => { for (const server of servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); } });

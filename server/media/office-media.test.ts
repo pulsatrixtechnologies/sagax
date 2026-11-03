@@ -5,8 +5,8 @@ import zlib from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { OFFICE_IMAGE_MAX_COUNT, officeKind, officeMediaFolder, officeNote, readOfficeMedia } from "./office-media.ts";
-import { erasePersonThreadFiles } from "./threads/person-thread-erase.ts";
-import { attachedFilesInText } from "./attachments/attachment-staging.ts";
+import { erasePersonThreadFiles } from "../threads/person-thread-erase.ts";
+import { attachedFilesInText } from "../attachments/attachment-staging.ts";
 
 /** A zip of the given members, each deflated (or stored when asked). */
 function zip(members: Record<string, Buffer | string>, stored = false): Buffer {

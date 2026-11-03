@@ -207,7 +207,7 @@ export function workspaceLocationsPrompt(botId: string, cwd: string | undefined,
     " Put new output where the person asked, else in currentWorkingFolder; when you say where a file is, give its full absolute path (never a relative one) so another thread or room can use it." +
     " Never move old files, edit another active thread's work, or read another bot's private folders without authorization; these paths grant no extra access." +
     // 2026-10-19: a bot started a local web server "only to display the
-    // images" of a document, minutes lost (server/office-media.ts).
+    // images" of a document, minutes lost (server/media/office-media.ts).
     " To see a picture, read the image file; never start a web server or a browser only to view one." +
     // Chat links and inline images open only inside the conversation's
     // folders; attach_file copies one file the turn saved elsewhere

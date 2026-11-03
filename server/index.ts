@@ -334,7 +334,7 @@ import {
   generateAvatarImage,
   avatarImageStatus,
   snapshotAvatarGenerationState
-} from "./avatar-image.ts";
+} from "./media/avatar-image.ts";
 import { parseBotProfilePatch } from "./bots/bot-profile.ts";
 import { groupTurnCwd } from "./rooms/room-cwd.ts";
 import {
@@ -580,7 +580,7 @@ import { videoCredential } from "./video/video-credentials.ts";
 import { videoSourceMessage } from "./video/video-source.ts";
 import { videoStatusRow } from "./video/video-status.ts";
 import { createXaiVideoProvider, generatedMp4Chunks, openGeneratedVideo } from "./video/video-provider.ts";
-import { mediaProxyPolicyFromEnv } from "./media-proxy-guard.ts";
+import { mediaProxyPolicyFromEnv } from "./media/media-proxy-guard.ts";
 import { createWebSearchRoutes } from "./routes/web-search.ts";
 import { createWebBotAuthRoutes } from "./routes/web-bot-auth.ts";
 import { createBotTailscaleRoutes, botTailscaleScopeFor } from "./routes/bot-tailscale.ts";
@@ -607,7 +607,7 @@ import { UsageMeter, usageMeterScope } from "./usage/usage-meter.ts";
 import { createWebSearchStore, webSearchScope } from "./web-search/store.ts";
 import { engineHasNativeWebSearch } from "./web-search/native.ts";
 import { isIP } from "node:net";
-import { blockedAddressReason, defaultMediaProxyResolver } from "./media-proxy-guard.ts";
+import { blockedAddressReason, defaultMediaProxyResolver } from "./media/media-proxy-guard.ts";
 import { createSettingsActionsInternalRoutes } from "./routes/settings-actions-internal.ts";
 import { createPrimaryApprovalsInternalRoutes } from "./routes/primary-approvals-internal.ts";
 import {
@@ -787,7 +787,7 @@ import type {
   AutoModelEntry,
   AutoExclusionReason
 } from "../shared/auto-model.ts";
-import { decodeGeneratedImage } from "./generated-image.ts";
+import { decodeGeneratedImage } from "./media/generated-image.ts";
 import {
   addDisabledMcpServer,
   MAX_MCP_SERVERS,
@@ -2310,7 +2310,7 @@ import { createPersonLabelRoutes } from "./routes/person-labels.ts";
 import { createMeAvatarRoutes } from "./routes/me-avatar.ts";
 import { createShapeAvatarGenerateInternalRoutes, createShapeAvatarGenerateRoutes } from "./routes/shape-avatar-generate.ts";
 import { createMediaWidgetRoutes, handleMediaProxy } from "./routes/media-widgets.ts";
-import { initMediaProxy } from "./media-proxy.ts";
+import { initMediaProxy } from "./media/media-proxy.ts";
 import { videoMessagesFromTool } from "./video/video-widget-turn.ts";
 import { askedForView } from "../shared/requested-views.ts";
 import { isCwViewTool } from "../shared/cw-widgets/tool-call.ts";
@@ -2599,7 +2599,7 @@ import {
 } from "./desktop/desktop-bridge-routes.ts";
 import { DesktopTunnels, startEgressProxy, type EgressProxy } from "./desktop/desktop-egress.ts";
 import { attachedFilesInText, attachmentChunks, attachmentIsTheirs, stageTurnAttachments, stagedName, SANDBOX_ATTACHMENTS_DIR, type StagingTarget, type TurnAttachedFile } from "./attachments/attachment-staging.ts";
-import { OFFICE_IMAGE_MAX_COUNT, OFFICE_IMAGES_MAX_TOTAL_BYTES, officeKind, officeMediaFolder, officeNote, readOfficeMedia } from "./office-media.ts";
+import { OFFICE_IMAGE_MAX_COUNT, OFFICE_IMAGES_MAX_TOTAL_BYTES, officeKind, officeMediaFolder, officeNote, readOfficeMedia } from "./media/office-media.ts";
 import { archiveInlineTexts, archiveNote, extractedFolderName, localExtractedPath, recoverArchiveUpload, sandboxArchiveArgv, storedArchiveManifest } from "./attachments/attachment-archives.ts";
 import { BOT_WORKPLACE_PREFERENCE, DESKTOP_BRIDGE_MCP_NAME, parseBotWorkplace, type BotWorkplace } from "../shared/bot-workplace.ts";
 import { accessCardAudience, accessCardForViewer, engineNameForViewer, keyEngineProvider, orgKeyEngineName, signInExpiredCard, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberOwnedBot, resolveTurnSpeaker, routineAccessNotifications, routineLineage, speakerPrincipal, type EngineAccessRefusal, type MemberHostToolPlace, type TurnSpeaker } from "./engines/engine-access.ts";
@@ -6983,7 +6983,7 @@ function workplaceTurnText(text: string, decision: WorkplaceDecision): { text: s
 
 /** Office documents (.docx, .pptx, .xlsx) attached to this message: the
  * document's text after its tag, and its pictures as image inputs of the
- * turn when the engine takes images (server/office-media.ts). On an
+ * turn when the engine takes images (server/media/office-media.ts). On an
  * organization server only the speaker's own uploads are read. */
 function officeTurnText(text: string, principal: WorkplaceDecision["principal"], nativeImages: boolean, already: readonly TurnImageInput[] = []): { text: string; images: TurnImageInput[] } {
   const files = attachedFilesInText(text, ATTACHMENTS_DIR).filter((file) => officeKind(file.file)

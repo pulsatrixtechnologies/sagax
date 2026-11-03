@@ -30,7 +30,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, resolve, sep } from "node:path";
 
 import { DATA_TOOL_NAMES as DATA_SURFACE_TOOL_NAMES } from "../shared/data-surface.ts";
-import { blockedAddressReason } from "./media-proxy-guard.ts";
+import { blockedAddressReason } from "./media/media-proxy-guard.ts";
 import { memberOwnScopeTool } from "./people/member-tool-scope.ts";
 
 /** The built-in Data server's name (reserved: mcp-registry.ts). */

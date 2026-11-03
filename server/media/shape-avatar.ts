@@ -21,9 +21,9 @@ export {
   type GenerateShapeAvatarArgs,
   type GenerateShapeAvatarResult,
   type ShapeTextEngine,
-} from "../shared/shape-avatar-generate.ts";
+} from "../../shared/shape-avatar-generate.ts";
 
-import { SHAPE_AVATAR_DIRECTION_MAX } from "../shared/shape-avatar-generate.ts";
+import { SHAPE_AVATAR_DIRECTION_MAX } from "../../shared/shape-avatar-generate.ts";
 
 export const GENERATE_SHAPE_AVATAR_TOOL = {
   name: "generate_shape_avatar",

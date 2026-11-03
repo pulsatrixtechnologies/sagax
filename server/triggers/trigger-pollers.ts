@@ -11,7 +11,7 @@
 //   and never reaches a status, a log, an event, a prompt or an export: a
 //   failure is a fixed code, never the server's own text.
 // - The destination is resolved and checked before the socket opens
-//   (server/media-proxy-guard.ts ranges): cloud metadata, link-local and
+//   (server/media/media-proxy-guard.ts ranges): cloud metadata, link-local and
 //   reserved addresses are always refused; loopback and private ranges only
 //   on a personal server (`allowPrivate`).
 // - IMAP is read only (EXAMINE, BODY.PEEK): nothing is marked read. The
@@ -35,7 +35,7 @@ import {
   type TriggerAutomationStatus,
 } from "../../shared/trigger-sources.ts";
 import { instancesBetween, parseIcs } from "../calendar/ics.ts";
-import { blockedAddressReason } from "../media-proxy-guard.ts";
+import { blockedAddressReason } from "../media/media-proxy-guard.ts";
 import type { PollerCredential } from "./trigger-poller-credentials.ts";
 import { openTriggerSeenStore, type TriggerSeenStore } from "./trigger-seen-store.ts";
 import type { AutomationPatch, AutomationTarget, WebhookReceiveResult } from "./webhooks.ts";

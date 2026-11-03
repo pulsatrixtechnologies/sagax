@@ -22,8 +22,8 @@ import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { basename, extname, join, posix } from "node:path";
 import zlib from "node:zlib";
 
-import { atRestSizeSync, readAtRestSync } from "./encryption/content-at-rest.ts";
-import type { TurnImageInput } from "./contracts.ts";
+import { atRestSizeSync, readAtRestSync } from "../encryption/content-at-rest.ts";
+import type { TurnImageInput } from "../contracts.ts";
 
 export const OFFICE_DOCUMENT_MAX_BYTES = 50 * 1024 * 1024;
 export const OFFICE_IMAGE_MAX_COUNT = 8;

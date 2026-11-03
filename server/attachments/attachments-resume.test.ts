@@ -13,7 +13,7 @@ beforeEach(async () => {
   rmSync(join(root, "data"), { recursive: true, force: true });
   vi.resetModules();
   attachments = await import("./attachments.ts");
-  (await import("../media-proxy.ts")).initMediaProxy(join(root, "data"));
+  (await import("../media/media-proxy.ts")).initMediaProxy(join(root, "data"));
 });
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
@@ -47,7 +47,7 @@ describe("durable bounded attachment uploads", () => {
     appendFileSync(join(attachments.ATTACHMENTS_DIR, partial), "unacknowledged");
     vi.resetModules();
     attachments = await import("./attachments.ts");
-    (await import("../media-proxy.ts")).initMediaProxy(join(root, "data"));
+    (await import("../media/media-proxy.ts")).initMediaProxy(join(root, "data"));
     await expect(attachments.resumableAttachmentUpload({ ...base, phase: "status" })).resolves.toMatchObject({ offset: 3 });
     expect(readFileSync(join(attachments.ATTACHMENTS_DIR, partial), "utf8")).toBe("abc");
     await attachments.resumableAttachmentUpload({ ...base, phase: "chunk", offset: 3, chunks: bytes("def") });

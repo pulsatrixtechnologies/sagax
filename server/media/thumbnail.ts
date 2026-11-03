@@ -9,9 +9,9 @@
 // empty). A picture that cannot be drawn gives null: the row keeps its icon.
 import type { renderAsync as RenderAsync } from "@resvg/resvg-js";
 
-import { nativeRequire } from "./data/engine.ts";
-import { boundedSize, rasterSize } from "./models/model-image.ts";
-import { scaleWebpOffThread } from "./webp-scale-worker.ts";
+import { nativeRequire } from "../data/engine.ts";
+import { boundedSize, rasterSize } from "../models/model-image.ts";
+import { scaleWebpOffThread } from "../webp-scale-worker.ts";
 
 /** Side of the square, in px: 4x the 24 px icon it replaces, for dense screens. */
 export const THUMB_EDGE = 96;

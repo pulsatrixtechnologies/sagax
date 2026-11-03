@@ -6755,7 +6755,7 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
   elements the opaque preview URL, so neither path builds a whole-file Blob.
   PDF and old-server compatibility previews keep their separate 25 MB shared
   and 90 MB solo memory limits, with Save a copy always visible. Provider
-  media through `server/media-proxy.ts` forwards Range and seek headers up to
+  media through `server/media/media-proxy.ts` forwards Range and seek headers up to
   1 GB per response, applies downstream backpressure, stops upstream on
   client close, and times out missing upstream headers. Range responses
   carry `Cache-Control: no-transform` (the companion sidecar keeps it), so
@@ -6763,7 +6763,7 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
   Content-Length and Content-Range describe stored bytes; Caddy already skips
   206. Tests:
   `server/threads/thread-files.e2e.test.ts`, `server/attachments/attachments-resume-org.e2e.test.ts`,
-  `server/media-proxy.test.ts`, `src/components/AttachmentGallery.test.ts`,
+  `server/media/media-proxy.test.ts`, `src/components/AttachmentGallery.test.ts`,
   `src/components/bot-settings/FilesSection.media.dom.test.ts`,
   `server/turns/turn-images.test.ts`, `src/lib/attachment-uploads.test.ts`,
   `companion/test/proxy-response.test.ts`.
@@ -8866,7 +8866,7 @@ apps, so those paths stay ours on every later merge. To repeat:
 ## Media proxy destinations (2026-10-14)
 
 `GET /api/media/proxy/<token>` fetches a URL a bot gave, so it only reaches
-public destinations (`server/media-proxy-guard.ts`, `docs/media-proxy.md`).
+public destinations (`server/media/media-proxy-guard.ts`, `docs/media-proxy.md`).
 Keep these rules:
 
 - Loopback, unspecified, link-local, cloud metadata (169.254.169.254,
@@ -8884,7 +8884,7 @@ Keep these rules:
 - A refusal answers a generic 403 and logs reason and host only
   (`logMediaProxyRefusal`), never the token, path or query.
 - Tests that proxy a local upstream allow `127.0.0.1` explicitly (policy
-  option or `vi.stubEnv`). Tests: `server/media-proxy-guard.test.ts`.
+  option or `vi.stubEnv`). Tests: `server/media/media-proxy-guard.test.ts`.
 
 ## Release notes in the app
 

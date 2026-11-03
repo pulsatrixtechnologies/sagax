@@ -4,7 +4,7 @@
 // description), and one collection: its notes in order, moved up or down,
 // removed, saved; the collection deleted. Through /api/me/memory/collections
 // (Perspicax `/memory/read/collections`), as the signed-in person.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowLeft, ArrowUp, BookOpen, Plus, Trash2, X } from "lucide-react";
 
 import { t } from "@/lib/i18n";
@@ -41,6 +41,11 @@ export function fetchCollections(): Promise<CollectionSummary[]> {
   return pxMemory<{ collections?: CollectionSummary[] }>("/collections").then((result) => result.collections ?? []);
 }
 
+/** One collection's notes, in order (the Collections scope of Map, Tags and Quality). */
+export function fetchCollectionItems(id: string): Promise<CollectionItem[]> {
+  return pxMemory<CollectionDetail>(`/collections/${encodeURIComponent(id)}`).then((detail) => [...(detail.items ?? [])].sort((a, b) => a.rank - b.rank));
+}
+
 /** Adds notes at the end of a collection (the server replaces the whole ordered list). */
 export async function addToCollection(id: string, notes: Array<{ scope: string; id: string }>): Promise<void> {
   const detail = await pxMemory<CollectionDetail>(`/collections/${encodeURIComponent(id)}`);
@@ -49,10 +54,14 @@ export async function addToCollection(id: string, notes: Array<{ scope: string; 
   await pxMemory(`/collections/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ items }) });
 }
 
-export function MemoryCollections({ onOpenNote, onChanged }: {
+export function MemoryCollections({ onOpenNote, onChanged, onSelect, openId }: {
   /** A collection's note pressed: the note, by its tier and id. */
   onOpenNote: (scope: string, id: string) => void;
   onChanged?: () => void;
+  /** The collection opened (its fresh items), or none: the page narrows its scope to it. */
+  onSelect?: (collection: { id: string; title: string; items: CollectionItem[] } | null) => void;
+  /** The collection the page had open (back from another tab): it opens again. */
+  openId?: string;
 }) {
   const [list, setList] = useState<CollectionSummary[] | null>(null);
   const [open, setOpen] = useState<CollectionDetail | null>(null);
@@ -78,8 +87,10 @@ export function MemoryCollections({ onOpenNote, onChanged }: {
     setBusy(true);
     try {
       const detail = await pxMemory<CollectionDetail>(`/collections/${encodeURIComponent(id)}`);
+      const sorted = [...detail.items].sort((a, b) => a.rank - b.rank);
       setOpen(detail);
-      setItems([...detail.items].sort((a, b) => a.rank - b.rank));
+      setItems(sorted);
+      onSelect?.({ id: detail.id, title: detail.title, items: sorted });
       setError(null);
     } catch (cause) {
       setError(readableError(cause));
@@ -87,6 +98,12 @@ export function MemoryCollections({ onOpenNote, onChanged }: {
       setBusy(false);
     }
   };
+
+  // Mount only: a collection opened before the tab changed opens again.
+  const reopen = useRef(openId);
+  useEffect(() => {
+    if (reopen.current) void openOne(reopen.current);
+  }, []);
 
   const create = async () => {
     if (!title.trim()) return;
@@ -128,6 +145,7 @@ export function MemoryCollections({ onOpenNote, onChanged }: {
     try {
       await pxMemory(`/collections/${encodeURIComponent(open.id)}`, { method: "DELETE" });
       setOpen(null);
+      onSelect?.(null);
       await load();
       onChanged?.();
     } catch (cause) {
@@ -150,7 +168,7 @@ export function MemoryCollections({ onOpenNote, onChanged }: {
     <section className="flex min-w-0 flex-col rounded-xl border border-hairline/50 bg-panel px-5 pb-6 pt-4" data-memory-collections="">
       {open ? (
         <>
-          <button type="button" className="mb-2 inline-flex items-center gap-1.5 self-start text-[13px] text-ink-secondary hover:text-ink" onClick={() => setOpen(null)} data-memory-collection-back="">
+          <button type="button" className="mb-2 inline-flex items-center gap-1.5 self-start text-[13px] text-ink-secondary hover:text-ink" onClick={() => { setOpen(null); onSelect?.(null); }} data-memory-collection-back="">
             <ArrowLeft size={14} aria-hidden="true" />{t("memoryManager.collections.title")}
           </button>
           <header className="mb-3 flex flex-wrap items-start justify-between gap-3">

@@ -9,7 +9,7 @@
 // when you are aiming at nothing in particular is startling.
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronRight, Pencil } from "lucide-react";
+import { Check, ChevronRight, Pencil, Star } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { bindHoverIntent, createHoverIntent } from "./sidebar-hover-intent";
 import { useMenuMotion } from "./MenuMotion";
@@ -68,6 +68,9 @@ export interface SidebarSubmenuEntry {
   trailing?: React.ReactNode;
   /** a line of information, not an action */
   info?: boolean;
+  /** an info line's star (Usage ›: the plan the Usage row shows). Shown on
+   * hover or focus, and always while it is on. */
+  favorite?: { on: boolean; label: string; onToggle: () => void };
   /** a check mark: the current choice (the organization in use) */
   checked?: boolean;
   /** the page this row opens is the one on screen */
@@ -348,12 +351,33 @@ export function SidebarPopoverMenu({
                     <div key={entry.key}>
                       {entry.separatorBefore && <div className="mx-2 my-1 h-[0.5px] bg-border" />}
                       {entry.info ? (
-                        <div data-submenu-info="" className="flex items-center gap-3 px-2 py-1.5">
+                        <div data-submenu-info="" className={cn("group/info flex items-center gap-3 px-2 py-1.5", entry.favorite && "gap-2")}>
                           <span className="flex min-w-0 flex-1 flex-col">
                             <span className="truncate text-ink">{entry.label}</span>
                             {entry.subtitle && <span className="truncate text-[12px] text-ink-secondary">{entry.subtitle}</span>}
                           </span>
                           {entry.value && <span className="shrink-0 tabular-nums text-ink-secondary">{entry.value}</span>}
+                          {entry.favorite && (
+                            <button
+                              type="button"
+                              data-usage-favorite={entry.favorite.on ? "on" : "off"}
+                              aria-pressed={entry.favorite.on}
+                              aria-label={entry.favorite.label}
+                              title={entry.favorite.label}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                entry.favorite?.onToggle();
+                              }}
+                              className={cn(
+                                "flex size-5 shrink-0 items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-focus",
+                                entry.favorite.on
+                                  ? "text-accent"
+                                  : "text-ink-tertiary opacity-0 hover:text-ink group-hover/info:opacity-100 focus-visible:opacity-100 touch:opacity-100",
+                              )}
+                            >
+                              <Star size={13} aria-hidden="true" fill={entry.favorite.on ? "currentColor" : "none"} />
+                            </button>
+                          )}
                         </div>
                       ) : entry.rename?.edit ? (
                         <form

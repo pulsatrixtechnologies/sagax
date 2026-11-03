@@ -103,9 +103,15 @@ export const USER_PREFERENCE_KEYS = [
   "sagax.routineEditorMore.v1",
   // the models starred in the composer's model menu (src/lib/model-favorites.ts)
   "sagax.modelFavorites.v1",
+  // the subscription starred in Usage ›, whose percent the account menu's
+  // Usage row shows (src/lib/usage-favorite.ts)
+  "sagax.usageFavorite.v1",
   // the first-run step "connect your own engine" on an organization server
   // was seen (an ISO date; src/lib/org-engine-readiness.ts)
   "sagax.orgEngineSetupSeen.v1",
+  // Tools > Memory > Map > Graph: its settings panel, per person
+  // (src/lib/memory-graph-settings.ts)
+  "sagax.memoryGraph.v1",
 ] as const;
 
 export type UserPreferenceKey = (typeof USER_PREFERENCE_KEYS)[number];

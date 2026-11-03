@@ -4,7 +4,10 @@
 // zoom and fit, and the timeline under the map that replays the notes by
 // the day they were written. The map itself is the console's radial brain
 // (BrainMap.tsx, lib/memory-brain.ts); Sagax's column map (Team map cards)
-// stays one press away for a reader who prefers it.
+// stays one press away for a reader who prefers it. Graph (the default since
+// 2026-11-03, JC) is Obsidian's graph view: MemoryGraph.tsx,
+// lib/memory-graph.ts. `scope` is the rail's selection: the map shows the
+// notes it keeps, in all three layouts.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Network, Pause, Play, Search } from "lucide-react";
 
@@ -12,16 +15,18 @@ import { cn } from "@/lib/cn";
 import { activeLocale, t } from "@/lib/i18n";
 import { buildBrain, neighborhoodBrain, noteKey, pageGraph, pageTree, spotlight, timelineOf, veilOf, type BrainNode } from "@/lib/memory-brain";
 import { buildMemoryPageGraph } from "@/lib/memory-map";
+import type { GraphNote } from "@/lib/memory-graph";
 import type { PageRow, PageTier } from "@/lib/memory-page";
 import { BrainEmpty, BrainMap } from "./BrainMap";
+import { MemoryGraph } from "./MemoryGraph";
 import { MemoryMapCanvas } from "./MemoryMapCanvas";
 import { excerptLabel, FIELD, MiniSegment, relLabel, Swatch } from "./memory-ui";
 
-type Layout = "brain" | "columns";
+type Layout = "graph" | "brain" | "columns";
 
 const STEPS = 60;
 
-export function MemoryMapView({ rows, tiers, bodies, review, focusKey, onOpen, onNew }: {
+export function MemoryMapView({ rows: allRows, tiers, bodies, review, focusKey, onOpen, onOpenNote, onNew, scope }: {
   rows: PageRow[];
   tiers: PageTier[];
   bodies: Record<string, string>;
@@ -30,10 +35,15 @@ export function MemoryMapView({ rows, tiers, bodies, review, focusKey, onOpen, o
   focusKey?: string | null;
   /** A note chosen on the map: its preview. */
   onOpen: (key: string) => void;
+  /** A note double-clicked on the graph: its page (else the preview). */
+  onOpenNote?: (key: string) => void;
   /** The empty map's invitation. */
   onNew?: () => void;
+  /** The rail's selection: only the notes it keeps are on the map. */
+  scope?: ((row: PageRow) => boolean) | null;
 }) {
-  const [layout, setLayout] = useState<Layout>("brain");
+  const rows = useMemo(() => (scope ? allRows.filter(scope) : allRows), [allRows, scope]);
+  const [layout, setLayout] = useState<Layout>("graph");
   const [depth, setDepth] = useState(1);
   const [focus, setFocus] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -100,6 +110,27 @@ export function MemoryMapView({ rows, tiers, bodies, review, focusKey, onOpen, o
     return new Set(shown.filter((entry) => (!words || entry.row.title.toLowerCase().includes(words)) && (!tag || (entry.row.tags ?? []).includes(tag))).map((entry) => entry.key));
   }, [shown, search, tag]);
 
+  const graphNotes = useMemo<GraphNote[]>(() => {
+    const names = new Map(tiers.map((tier) => [tier.key, tier.name]));
+    return shown.map((entry) => ({
+      key: entry.key,
+      title: entry.row.title,
+      tier: entry.tier,
+      tierName: names.get(entry.tier) ?? "",
+      folderPath: entry.folderPath,
+      tags: entry.row.tags ?? [],
+      body: bodies[entry.key],
+      path: entry.row.path,
+      createdAt: entry.row.createdAt ?? entry.row.updatedAt,
+    }));
+  }, [shown, tiers, bodies]);
+  const tagSelect = tags.length > 0 ? (
+    <select value={tag} onChange={(event) => setTag(event.target.value)} aria-label={t("memoryManager.map.tags")} className={cn(FIELD, "h-8 w-auto bg-panel py-0 text-[12.5px]")} data-memory-map-tag="">
+      <option value="">{t("memoryManager.map.allTags")}</option>
+      {tags.map((value) => <option key={value} value={value}>{value}</option>)}
+    </select>
+  ) : undefined;
+
   const brainAt = step >= STEPS ? null : stops[Math.min(stops.length - 1, Math.round((step / STEPS) * (stops.length - 1)))] ?? null;
   const veil = useMemo(() => veilOf(brain, { at: brainAt, tags: tag ? [tag] : [] }), [brain, brainAt, tag]);
   const hits = useMemo(() => spotlight(brain, search), [brain, search]);
@@ -144,6 +175,7 @@ export function MemoryMapView({ rows, tiers, bodies, review, focusKey, onOpen, o
           value={layout}
           onChange={setLayout}
           options={[
+            { value: "graph", label: t("memoryManager.map.layoutGraph") },
             { value: "brain", label: t("memoryManager.map.layoutBrain") },
             { value: "columns", label: t("memoryManager.map.layoutColumns") },
           ]}
@@ -173,7 +205,24 @@ export function MemoryMapView({ rows, tiers, bodies, review, focusKey, onOpen, o
         </div>
       )}
       <div className="relative flex min-h-[420px] flex-1 overflow-hidden rounded-xl" data-memory-map-layout={layout}>
-        {layout === "brain" ? (
+        {layout === "graph" ? (
+          shown.length === 0 ? (
+            <BrainEmpty invite={t("memoryManager.map.first")} onInvite={onNew} testId="memory-map-empty" />
+          ) : (
+            <MemoryGraph
+              notes={graphNotes}
+              tierColor={colorOf}
+              matches={dimmed}
+              hidden={hidden}
+              focusKey={focusKey}
+              depth={focusKey ? depth : 0}
+              onPreview={onOpen}
+              onOpen={onOpenNote ?? onOpen}
+              onAnimate={() => { setStep(0); setPlaying(true); }}
+              overlay={tagSelect}
+            />
+          )
+        ) : layout === "brain" ? (
           brain.notes === 0 ? (
             <BrainEmpty invite={t("memoryManager.map.first")} onInvite={onNew} testId="memory-map-empty" />
           ) : (

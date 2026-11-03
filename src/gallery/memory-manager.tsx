@@ -3,7 +3,8 @@
  * notes: All notes; preview: a row clicked (the preview panel); note: a row
  * double-clicked (the note's page); folder: a Perspicax folder in Manual order;
  * map: the radial brain; columns: the column map;
- * map, tags, quality: those views; trash: the Perspicax trash.
+ * map, tags, quality: those views; trash: the Perspicax trash;
+ * scope-map, scope-tags, scope-quality: the bot Atlas picked in the rail, then that view.
  * links: a folder no bot is linked to (perf-test-061, a temporary agent's), its
  * "Not linked" hint; linked-menu / unlinked-menu: their ⋯ menus; delete: the
  * confirmation of Delete folder…; import / import-bot: the import window with
@@ -27,6 +28,8 @@ const skinParam = params.get("skin") as SkinId | null;
 applySkin(skinParam && (SKIN_IDS as readonly string[]).includes(skinParam) ? skinParam : readSkin());
 await loadLocale(params.get("lang") ?? "en");
 const view = params.get("view") ?? "notes";
+// The page keeps its tab and scope across reloads: the gallery starts clean.
+try { window.localStorage.removeItem("sagax.memory.scope"); } catch { /* no storage */ }
 const width = Number(params.get("width") ?? 1440);
 const height = Number(params.get("height") ?? 900);
 
@@ -299,6 +302,12 @@ function Shell() {
       await waitFor('[data-memory-note-row="o1"]');
       // let the bodies arrive (excerpts, links)
       await new Promise((done) => setTimeout(done, 700));
+      if (view.startsWith("scope-")) {
+        click('[data-memory-source="bot:atlas"]');
+        await new Promise((done) => setTimeout(done, 200));
+        segment(view === "scope-map" ? /Map|Carte/ : view === "scope-tags" ? /Tags|Étiquettes/ : /Quality|Qualité/);
+        await new Promise((done) => setTimeout(done, 900));
+      }
       if (view === "map" || view === "columns") {
         segment(/Map|Carte/);
         await waitFor("[data-memory-map]");

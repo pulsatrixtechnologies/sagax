@@ -196,7 +196,7 @@ createRoot(document.getElementById("root")!).render(
       <BotEditorStore value={value}>
         {frame(<>
           <RoutinesPage fill onBack={() => {}} onOpenRoom={() => {}} />
-          {view === "routine" && <EventDetails item={{ kind: "routine", id: "r1", at: routines[0]!.nextRunAt!, durationMinutes: 30, routine: routines[0]!, run: null }} bots={bots} onClose={() => {}} onEdit={() => {}} onDuplicate={() => {}} onCallChanged={() => {}} onOpenRoom={() => {}} />}
+          {view === "routine" && <EventDetails item={{ kind: "routine", id: "r1", at: routines[0]!.nextRunAt!, durationMinutes: 30, routine: routines[0]!, run: null }} bots={bots} onClose={() => {}} onEdit={() => {}} onCallChanged={() => {}} onOpenRoom={() => {}} />}
         </>)}
       </BotEditorStore>
     )}

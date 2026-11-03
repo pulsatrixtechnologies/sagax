@@ -154,14 +154,23 @@ describe("a routine's page", () => {
     expect(markup).not.toContain("Write the morning briefing.");
   });
 
-  it("keeps no second copy of the configuration: its summary opens the editor (2026-10-29)", () => {
-    const markup = renderToStaticMarkup(createElement(RoutineDetail, { routine, runs, bots: [bot], now: NOW, onOpenRun: () => {}, onConfigure: () => {} }));
+  it("keeps no second copy of the configuration: rows Trigger, Active, Next run; no chip, no badge, no link (2026-11-03)", () => {
+    const markup = renderToStaticMarkup(createElement(RoutineDetail, { routine, runs, bots: [bot], now: NOW, onOpenRun: () => {}, onToggle: () => {}, onPatch: async () => {}, onClearRuns: () => {} }));
     expect(markup).not.toContain("data-routine-config-prompt");
     expect(markup).not.toContain('role="tab"');
     expect(markup).toContain("data-routine-summary");
-    expect(markup).toContain("See and edit the configuration");
+    expect(markup).not.toContain("See and edit the configuration");
+    expect(markup).not.toContain("data-routine-state");
+    expect(markup).toContain("data-routine-trigger-row");
+    expect(markup).toMatch(/<button[^>]*data-routine-trigger[^>]*aria-haspopup="dialog"/);
+    expect(markup).toMatch(/data-routine-active[\s\S]*role="switch"/);
+    expect(markup).toContain("Next run");
+    // Clear run logs at the right of "Runs (n)".
+    expect(markup).toContain("data-routine-clear-runs");
+    expect(markup).toContain('aria-label="Clear run logs"');
     const plain = renderToStaticMarkup(createElement(RoutineDetail, { routine, runs, bots: [bot], now: NOW, onOpenRun: () => {} }));
-    expect(plain).not.toContain("See and edit the configuration");
+    expect(plain).not.toContain("data-routine-clear-runs");
+    expect(plain).not.toMatch(/<button[^>]*data-routine-trigger/);
   });
 });
 

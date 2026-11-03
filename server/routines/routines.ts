@@ -381,7 +381,7 @@ export interface RoutineRun {
   memoryHint?: RoutineMemoryHint;
   /** 2026-10-26: this failure paused its routine (failed runs in a row). */
   autoPaused?: { failures: number };
-  /** 2026-10-30: a proactive wake (server/proactive-wake.ts), not a routine:
+  /** 2026-10-30: a proactive wake (server/proactive/proactive-wake.ts), not a routine:
    * the mode it was started in, the hops of the chain that led to it,
    * confined when an email woke it, accepted when a legacy proposal was
    * answered yes, dryRuns the write plans recorded before ordinary approval. */
@@ -504,10 +504,10 @@ export interface RoutineRunProactive {
   dryRuns?: ProactiveDryRunEntry[];
   /** 2026-11-02 (peer inbox, second pass): a wake on teammates' messages
    * (source peer) is never quiet; this is its report when the bot gave
-   * none (who wrote, about what: server/proactive-wake.ts peerWakeDigest). */
+   * none (who wrote, about what: server/proactive/proactive-wake.ts peerWakeDigest). */
   peerDigest?: string;
   /** 2026-11-02: never quiet (a teammate's message or a post in a two-bot
-   * DM: server/proactive-wake.ts wakeAlwaysReports). */
+   * DM: server/proactive/proactive-wake.ts wakeAlwaysReports). */
   alwaysReport?: true;
 }
 
@@ -2594,7 +2594,7 @@ export class RoutineManager {
     return cloneRun(run);
   }
 
-  /** 2026-10-30: a proactive wake (server/proactive-wake.ts) in its own
+  /** 2026-10-30: a proactive wake (server/proactive/proactive-wake.ts) in its own
    * lane: one active wake per bot, never blocking the person's routines.
    * Its own hidden task; reports into the bot's one conversation only when
    * it has something for the person. `runAs` is the person whose identity

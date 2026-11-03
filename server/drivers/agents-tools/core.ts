@@ -5,7 +5,7 @@
 import { BOT_REACTIONS } from "../../../shared/reactions.ts";
 import { CREDENTIAL_TARGETS, isCredentialTargetId } from "../../../shared/credential-request.ts";
 import { peerName } from "../../peers/peer-roster.ts";
-import { PRIORITY_DOWNGRADED_NOTE, parseWakePriority } from "../../priority-wake.ts";
+import { PRIORITY_DOWNGRADED_NOTE, parseWakePriority } from "../../proactive/priority-wake.ts";
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
 import {

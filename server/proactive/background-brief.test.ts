@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { memoryReadersOf } from "./memory/memory-audience.ts";
-import { memoryMayShow } from "./memory/memory-audience.ts";
+import { memoryReadersOf } from "../memory/memory-audience.ts";
+import { memoryMayShow } from "../memory/memory-audience.ts";
 import { BriefStore, briefReadTools, briefTimeCame, briefToolAllowed, cleanBriefSettings, datedBriefPiece, keptMemoryLine, localDay, readConnectedBrief, runBriefPass } from "./background-brief.ts";
 import { briefMessageText, briefNoticeLines, runScheduledBriefs, type BriefDelivery } from "./background-brief-schedule.ts";
 

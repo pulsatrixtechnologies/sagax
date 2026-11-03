@@ -6,7 +6,7 @@
 // today). The day is taken BEFORE the reads, so a slow pass or a restart
 // never sends the same brief twice. The pass itself is the click's: reads
 // only, every number cited with its dated piece, a rejection never proposed
-// again (server/background-brief.ts).
+// again (server/proactive/background-brief.ts).
 //
 // What it found is delivered twice, the way the person chose:
 //   - in the bot's conversation with them, as one bot message;

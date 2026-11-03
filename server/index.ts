@@ -191,7 +191,7 @@ import {
 } from "../shared/approval-mode.ts";
 import { isProactiveMode, normalizeProactiveMode, proactiveModeFor } from "../shared/proactive-mode.ts";
 import { createProactiveProposalRoutes } from "./routes/proactive-proposals.ts";
-import { ProactiveEngine, proactiveDryRunSummary } from "./proactive.ts";
+import { ProactiveEngine, proactiveDryRunSummary } from "./proactive/proactive.ts";
 import {
   ProactiveProposals,
   ProactiveWaker,
@@ -210,7 +210,7 @@ import {
   type PeerNoticeFacts,
   type ProactiveSource,
   type ProactiveWakeBatch
-} from "./proactive-wake.ts";
+} from "./proactive/proactive-wake.ts";
 import {
   actorForTurn,
   botActFrameAllowed,
@@ -430,10 +430,10 @@ import { prepareSemanticRecall, setSemanticIndex } from "./semantic-recall.ts";
 import { prepareEveryClaudeRetirement, retireEveryClaudeBot } from "./engines/retire-every-claude.ts";
 import { LocalSemanticIndex, semanticIndexFile } from "./semantic-index.ts";
 import { withoutWiderAudience, type MemoryDestination } from "./memory/memory-audience.ts";
-import { BriefStore, type BriefAppCall } from "./background-brief.ts";
-import { listBriefApps, readBriefTool } from "./background-brief-apps.ts";
+import { BriefStore, type BriefAppCall } from "./proactive/background-brief.ts";
+import { listBriefApps, readBriefTool } from "./proactive/background-brief-apps.ts";
 import { createBackgroundBriefRoutes } from "./routes/background-brief.ts";
-import { briefMessageText, briefNoticeLines, startBriefTimer } from "./background-brief-schedule.ts";
+import { briefMessageText, briefNoticeLines, startBriefTimer } from "./proactive/background-brief-schedule.ts";
 import { createMemoryUpkeep, upkeepEnabled } from "./memory/memory-upkeep.ts";
 import { CompanyMemoryCache, companyTextForBots } from "./memory/memory-company.ts";
 import { COMPANY_TOPIC } from "./memory/memory-dream.ts";
@@ -2415,7 +2415,7 @@ import {
   type Refusal,
   type TurnState
 } from "./agent-api.ts";
-import { type PriorityDelivery } from "./priority-wake.ts";
+import { type PriorityDelivery } from "./proactive/priority-wake.ts";
 import { parseHideList, planHiddenAgentThreads, planHiddenBotThreads } from "./threads/agent-threads.ts";
 import { MemberLiveText } from "./member-live-text.ts";
 import { computersRoutes, type ComputersDeps } from "./org/org-admin-computers.ts";

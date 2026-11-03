@@ -729,7 +729,7 @@ A bot's proactive mode is a single per-bot on/off switch (`proactiveMode`,
 Edit bot > Permissions > Proactive, `sagax_settings` `bot.proactiveMode`,
 default `proactive`). Legacy `propose` / `read-auto` / `follow-rules` all
 read as `proactive`. When on, the bot wakes on the events Sagax already
-receives (`server/proactive-wake.ts`, `ProactiveWaker`): a bot email no
+receives (`server/proactive/proactive-wake.ts`, `ProactiveWaker`): a bot email no
 routine took, a one-bot calendar entry coming due, a failed routine or
 webhook run, another bot's post that names the bot, and a webhook that
 posts to the chat. Off: no wakes. On: a background run
@@ -742,7 +742,7 @@ Leftover proposal cards from older modes are still answerable
 Guards: `proactiveRelevance`, fast model when there is one, never on its
 own wake, `PROACTIVE_MAX_HOPS` (3), wake budget, one Events line per wake.
 iOS sets the mode in Permissions (`ProactiveMode`: `off` | `proactive`).
-Tests: `server/proactive-wake.test.ts`, `server/proactive-wake.e2e.test.ts`,
+Tests: `server/proactive/proactive-wake.test.ts`, `server/proactive/proactive-wake.e2e.test.ts`,
 `shared/proactive-mode.test.ts`, `ProactiveModeTests.swift`.
 
 ## A reply shows as it is written (2026-10-29)
@@ -3684,7 +3684,7 @@ for themself, for every bot they can see: no admin, no owner check.
   `composeReachText` adds no "reply" line), one send per notice id, held
   until the next range outside the hours.
 - Background brief on a timer (2026-10-29,
-  `server/background-brief-schedule.ts`): every minute the server runs a
+  `server/proactive/background-brief-schedule.ts`): every minute the server runs a
   bot's read-only pass once a day at the person's time (`at`, `timeZone`
   in `background-brief.json`, catch-up window 3 h, the day taken before
   the reads). On by default for a Primary Bot; the person turns it off or

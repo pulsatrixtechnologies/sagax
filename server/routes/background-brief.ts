@@ -1,9 +1,9 @@
-// The person's background brief (server/background-brief.ts).
+// The person's background brief (server/proactive/background-brief.ts).
 //
 //   GET  /api/bots/:id/background-brief
 //   PUT  /api/bots/:id/background-brief   { enabled?, everyHours?, subjects?, at?, timeZone? }
 //        `at` (HH:MM) in `timeZone` is when the brief runs on its own each
-//        day (server/background-brief-schedule.ts). On by default for a
+//        day (server/proactive/background-brief-schedule.ts). On by default for a
 //        Primary Bot; `enabled: false` turns it off.
 //   POST /api/bots/:id/background-brief/pass { costUsd? }
 //        Reads the apps already connected. No app: an empty queue.
@@ -22,7 +22,7 @@ import {
   type BriefAppCall,
   type BriefSettings,
   type BriefStore,
-} from "../background-brief.ts";
+} from "../proactive/background-brief.ts";
 
 export interface BackgroundBriefRouteDeps {
   store: BriefStore;

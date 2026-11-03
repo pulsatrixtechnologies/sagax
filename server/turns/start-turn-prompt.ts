@@ -183,7 +183,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
         canContact: Boolean(state.coordinationPrompt),
         asksBeforeContact: peerReviewRequired(state.liveBot ?? state.bot, state.threadId)
       }) },
-      // 2026-10-30: the bot knows it is proactive, and how (server/proactive-wake.ts)
+      // 2026-10-30: the bot knows it is proactive, and how (server/proactive/proactive-wake.ts)
       { id: "proactive", label: "Proactive", text: proactivePrompt(proactiveModeFor(state.liveBot ?? state.bot)) },
       // what this turn reaches, in one line: "what connectors do you have" needs no tool call (server/turns/turn-reach.ts)
       { id: "reach", label: "Reach", text: turnReachPrompt(state.liveBot ?? state.bot, state.instance, state.speaker, state.threadId, state.integrations, Boolean(state.mountedComputer)) },

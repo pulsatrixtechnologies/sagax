@@ -258,7 +258,7 @@ add({
   approvalTo: (v) => String(v),
 });
 // 2026-10-30: how the bot acts on emails, calendar entries, failed runs,
-// bots' posts and webhooks on its own (server/proactive-wake.ts). Absent
+// bots' posts and webhooks on its own (server/proactive/proactive-wake.ts). Absent
 // reads as proactive; off stays off.
 botField("bot.proactiveMode", "proactiveMode", "enum:off|proactive",
   "Proactive on/off (off = no wakes; proactive = wakes on email, calendar, failed run, bot mention or webhook and acts at its approval level and rules, with a dry run recorded before writes; absent = proactive)",

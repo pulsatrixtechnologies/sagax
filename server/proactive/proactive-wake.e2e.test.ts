@@ -1,5 +1,5 @@
 // Proactive wakes through the real server and the fake engine
-// (server/proactive-wake.ts): a webhook post wakes the bot it was posted to
+// (server/proactive/proactive-wake.ts): a webhook post wakes the bot it was posted to
 // when proactive is on. The wake runs at the bot's approval level, reports
 // into its one conversation, and records dry runs before writes. Off does
 // nothing. One line in the conversation's Events tab per wake.
@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
 
 const REPORT = "The deploy finished; I checked the release notes and nothing needs you.";
 

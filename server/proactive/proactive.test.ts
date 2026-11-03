@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { PROACTIVE_MODES } from "../shared/proactive-mode.ts";
+import { PROACTIVE_MODES } from "../../shared/proactive-mode.ts";
 import {
   classifyProactiveActionKind,
   decideProactiveStep,

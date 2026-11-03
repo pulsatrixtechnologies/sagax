@@ -713,7 +713,7 @@ besoin d'elle.
   désactivé : rien ne se réveille.
 - **Les rangées « Aller à la conversation ».** Les pointeurs vers les fils d'avis se
   regroupent visuellement ailleurs (travail séparé) ; ils ne remplacent pas le réveil.
-- Code : `server/proactive-wake.ts` (`peerNoticeEvent`, `PeerNoticeHops`,
+- Code : `server/proactive/proactive-wake.ts` (`peerNoticeEvent`, `PeerNoticeHops`,
   `PEER_WAKE_RULES`), `server/index.ts` (`offerPeerNotice`, rapport d'un avis à sens unique,
   `postInputRequest`).
 

@@ -17,15 +17,15 @@
 // The loop is bounded by ProactiveBudget: a minimum interval between cycles and
 // a cap on initiations per rolling window, per bot, so a bot cannot run away.
 
-import { isOutboundTool } from "../shared/outbound.ts";
+import { isOutboundTool } from "../../shared/outbound.ts";
 import {
   proactiveGate,
   proactiveMayObserve,
   proactiveModeFor,
   type ProactiveActionKind,
   type ProactiveDisposition,
-} from "../shared/proactive-mode.ts";
-import { isReadOnlyCommand } from "../shared/read-only-command.ts";
+} from "../../shared/proactive-mode.ts";
+import { isReadOnlyCommand } from "../../shared/read-only-command.ts";
 
 /** Tools that only ever read, beyond what the read-verb heuristic catches. */
 const READ_TOOLS = new Set([

@@ -1,4 +1,4 @@
-// Proactive wakes (server/proactive-wake.ts) with fake events and a fake
+// Proactive wakes (server/proactive/proactive-wake.ts) with fake events and a fake
 // engine (the deps record what would have started): off vs proactive, a bot
 // never wakes on its own work or past the hop limit, a burst of events makes
 // one wake, and an event that cannot concern the bot calls no model at all.
@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import type { ProactiveMode } from "../shared/proactive-mode.ts";
-import { ROUTINE_RESTARTED } from "./routines/routines.ts";
+import type { ProactiveMode } from "../../shared/proactive-mode.ts";
+import { ROUTINE_RESTARTED } from "../routines/routines.ts";
 import {
   PEER_WAKE_RULES,
   PeerNoticeHops,
@@ -305,9 +305,9 @@ describe("which failed runs wake the bot (2026-11-01)", () => {
   });
 
   it("never wakes for a known engine auth-expired or Claude credits reconnect condition", async () => {
-    const { CLAUDE_NEEDS_RECONNECTING, claudeSignInExpired } = await import("./drivers/claude-errors.ts");
-    const { codexSignInExpired } = await import("./drivers/codex-errors.ts");
-    const { engineNeedsReconnecting } = await import("./engines/engine-reconnect-ahead.ts");
+    const { CLAUDE_NEEDS_RECONNECTING, claudeSignInExpired } = await import("../drivers/claude-errors.ts");
+    const { codexSignInExpired } = await import("../drivers/codex-errors.ts");
+    const { engineNeedsReconnecting } = await import("../engines/engine-reconnect-ahead.ts");
     const expired = claudeSignInExpired("OAuth session expired and could not be refreshed");
     const credits = "Claude refused this turn because this model runs on extra usage for your account, and those credits are used up.";
     expect(runFailureWakesBot({ status: "failed", error: expired })).toBe(false);

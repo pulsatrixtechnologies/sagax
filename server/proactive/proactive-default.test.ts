@@ -5,10 +5,10 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { DATA_DIR } from "./config.ts";
-import type { ModelSelection } from "./contracts.ts";
-import { Store } from "./store.ts";
-import { PROACTIVE_MODE_DEFAULT, proactiveModeFor } from "../shared/proactive-mode.ts";
+import { DATA_DIR } from "../config.ts";
+import type { ModelSelection } from "../contracts.ts";
+import { Store } from "../store.ts";
+import { PROACTIVE_MODE_DEFAULT, proactiveModeFor } from "../../shared/proactive-mode.ts";
 
 const selection = (): ModelSelection => ({ instanceId: "claude", model: "claude-sonnet-5" });
 const BOTS = () => join(DATA_DIR, "bots.json");

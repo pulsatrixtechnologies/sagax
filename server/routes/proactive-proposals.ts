@@ -1,5 +1,5 @@
 // The person's answer to a proactive proposal card (2026-10-30,
-// server/proactive-wake.ts).
+// server/proactive/proactive-wake.ts).
 //
 //   POST /api/bots/:id/proactive/:proposalId   { accept: boolean }
 //

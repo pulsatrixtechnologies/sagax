@@ -190,6 +190,12 @@ and the options (`queue`, `supersede`, `await_turn`).
   secret (the agent, the conversation, the caller's own key); its layout is
   not an interface and may change. Every value a caller needs is a result
   field: `agent_id`, `thread_id`, `expires_at`, `expires_at_iso`, `ttl_ms`.
+- **Perspicax MCP descriptions**: the copies of `send_prompt` and
+  `await_turn` in Perspicax's `crates/connector/src/mcp/sagax_tools.rs`
+  must also describe the lifetime fields added in Sagax #1896: `ttl_ms`
+  (the full 7-day lifetime, 604800000 ms) and `expires_at_iso` (the same
+  expiry as `expires_at`, in ISO 8601). Keep `thread_id` for reads after
+  the handle expires. This follow-up belongs in the Perspicax repo.
 - **Decision: signed claims, no server-side lookup** (#1896, 2026-11-03).
   The handle stays a self-contained HMAC-signed claims token rather than a
   random id looked up in a server table. Why: the claims (agent,

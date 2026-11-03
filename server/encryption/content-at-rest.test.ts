@@ -11,8 +11,8 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { readAttachment, saveFile, saveImage, setAttachmentStillShown } from "./attachments.ts";
-import { DATA_DIR, EVENTS_DIR, NATIVE_DIR } from "./config.ts";
+import { readAttachment, saveFile, saveImage, setAttachmentStillShown } from "../attachments.ts";
+import { DATA_DIR, EVENTS_DIR, NATIVE_DIR } from "../config.ts";
 import {
   ContentErased,
   ContentExportLocked,
@@ -37,18 +37,18 @@ import {
   useExportedContentKeys,
 } from "./content-at-rest.ts";
 import { ContentSealError } from "./content-crypto.ts";
-import { contentKeysForExport } from "./content-export.ts";
+import { contentKeysForExport } from "../content-export.ts";
 import { CHUNK_BYTES, FileSealer, openBuffer, parseBlockLine, parseHeader, plainSizeOf, sealBuffer, type FileKey } from "./content-file-crypto.ts";
 import { azureKeyVaultProvider } from "./content-key-azure.ts";
 import { ContentKeyUnavailable, WORKSPACE_OWNER } from "./content-keys.ts";
-import { appendNative } from "./drivers/native.ts";
-import { chatFollowups, closeMessageDb, closeMessageSearch, configureContentEncryption, contentKeyForOwner, contentOwnerChanged, eraseContentOwner, insertMessage, readThread, runContentMigration, saveChatFollowup, unlockContentKeys } from "./message-db.ts";
-import { appendDecision, flushDecisionLog, readDecisions } from "./decision-log.ts";
-import { journalFile, readMemoryJournal, recordMemoryChange, flushMemoryJournal, resetMemoryJournalState } from "./memory/memory-journal.ts";
-import { readMemoryDoc } from "./memory/memory-store.ts";
-import { readRecentLines } from "./threads/thread-events.ts";
-import { createWorkspaceBackup, stageWorkspaceBackup } from "./workspace-backup.ts";
-import { holdBotMemoryPlain, readMemoryFile, searchMemoryFiles, workspaceDir, writeMemoryFile, writeMemoryTopic } from "./workspace.ts";
+import { appendNative } from "../drivers/native.ts";
+import { chatFollowups, closeMessageDb, closeMessageSearch, configureContentEncryption, contentKeyForOwner, contentOwnerChanged, eraseContentOwner, insertMessage, readThread, runContentMigration, saveChatFollowup, unlockContentKeys } from "../message-db.ts";
+import { appendDecision, flushDecisionLog, readDecisions } from "../decision-log.ts";
+import { journalFile, readMemoryJournal, recordMemoryChange, flushMemoryJournal, resetMemoryJournalState } from "../memory/memory-journal.ts";
+import { readMemoryDoc } from "../memory/memory-store.ts";
+import { readRecentLines } from "../threads/thread-events.ts";
+import { createWorkspaceBackup, stageWorkspaceBackup } from "../workspace-backup.ts";
+import { holdBotMemoryPlain, readMemoryFile, searchMemoryFiles, workspaceDir, writeMemoryFile, writeMemoryTopic } from "../workspace.ts";
 import { open as openHandle } from "node:fs/promises";
 import { createSecretKey, randomBytes } from "node:crypto";
 
@@ -271,9 +271,9 @@ describe("event logs", () => {
   it("has every line on disk, sealed, when its append returns: a hard kill right after loses none", () => {
     // a separate process appends one line and is killed at once: no flush, no timer, no exit handler
     const script = [
-      `const db = await import(${JSON.stringify(new URL("./message-db.ts", import.meta.url).href)});`,
+      `const db = await import(${JSON.stringify(new URL("../message-db.ts", import.meta.url).href)});`,
       `db.configureContentEncryption({ mode: "on", autoMigrate: false });`,
-      `const native = await import(${JSON.stringify(new URL("./drivers/native.ts", import.meta.url).href)});`,
+      `const native = await import(${JSON.stringify(new URL("../drivers/native.ts", import.meta.url).href)});`,
       `native.appendNative("killed", { dir: "out", source: "test", msg: { text: "written before the kill" } });`,
       `process.kill(process.pid, "SIGKILL");`,
     ].join("\n");
@@ -324,7 +324,7 @@ describe("event logs", () => {
     const plain = Array.from({ length: 50 }, (_, i) => JSON.stringify({ type: "content.delta", createdAt: `2026-10-27T00:00:${String(i).padStart(2, "0")}Z`, text: `harbor line ${i}` }));
     writeFileSync(file, `${plain.join("\n")}\n`);
     // the bus registers events/ when it loads
-    await import("./harness/bus.ts");
+    await import("../harness/bus.ts");
     await migrateAll();
     const sealed = readFileSync(file, "utf8");
     expect(sealed).not.toContain("harbor");
@@ -481,7 +481,7 @@ describe("Key Vault (fake client) that stops answering", () => {
 
 describe("a thread that changes hands", () => {
   it("is re-sealed whole under its new owner at once: the old owner's erasure right after takes nothing of it", async () => {
-    await import("./harness/bus.ts");
+    await import("../harness/bus.ts");
     threadOwners = { t1: { owner: "person-a", confidential: true } };
     botOwners = { b1: "person-a" };
     insertMessage("t1", { id: "m1", role: "user", kind: "text", text: "the orchid contract", at: 1 });

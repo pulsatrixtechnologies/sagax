@@ -55,7 +55,7 @@ const native = await load<Any>("server/drivers/native.ts");
 const threadEvents = await load<Any>("server/threads/thread-events.ts");
 const config = await load<Any>("server/config.ts");
 let atRest: Any | null = null;
-try { atRest = await load<Any>("server/content-at-rest.ts"); } catch { atRest = null; }
+try { atRest = await load<Any>("server/encryption/content-at-rest.ts"); } catch { atRest = null; }
 
 const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]!;
 const round = (value: number, digits = 2) => +value.toFixed(digits);

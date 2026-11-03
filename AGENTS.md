@@ -10093,8 +10093,8 @@ turn it on (`server/testing/setup.ts`); its own:
 `server/content-encryption.test.ts`. Benchmark:
 `scripts/bench-content-encryption.ts`. See `docs/content-encryption.md`.
 
-Files and logs (2026-10-27, same keys, `server/content-at-rest.ts`,
-`server/content-file-crypto.ts`): bot memory files (`workspaces/<bot>/`
+Files and logs (2026-10-27, same keys, `server/encryption/content-at-rest.ts`,
+`server/encryption/content-file-crypto.ts`): bot memory files (`workspaces/<bot>/`
 MEMORY.md, memory/, docs/), the `memory_files` index (blind index like
 the transcripts), group memory, everything under `attachments/` (uploads,
 generated files, scaled pictures, Office pictures, archive manifests and
@@ -10114,7 +10114,7 @@ place off the turn's path, from the composer's warm request (`holdPlain`,
 or bot that changes hands goes through `contentOwnerChanged`, which
 re-seals everything of it at once. A locked key throws
 `ContentKeyUnavailable`; a memory read never answers empty on it
-(`isAtRestRefusal`). Tests: `server/content-at-rest.test.ts`. Benchmark:
+(`isAtRestRefusal`). Tests: `server/encryption/content-at-rest.test.ts`. Benchmark:
 `scripts/bench-content-at-rest.ts [--before <checkout of main>]`.
 
 ## Sagax in the car: Siri, CallKit, CarPlay (2026-10-30)

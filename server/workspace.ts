@@ -13,7 +13,7 @@ import { lstat as lstatAsync, open as openAsync } from "node:fs/promises";
 import { join } from "node:path";
 
 import { writeFileAtomic } from "./atomic.ts";
-import { describeHandle, holdPlain, isAtRestRefusal, noteAtRestWrite, plainSizeFor, readAllFromHandle, readAtRest, readAtRestTextSync, registerAtRestRoot } from "./content-at-rest.ts";
+import { describeHandle, holdPlain, isAtRestRefusal, noteAtRestWrite, plainSizeFor, readAllFromHandle, readAtRest, readAtRestTextSync, registerAtRestRoot } from "./encryption/content-at-rest.ts";
 import { alwaysCore, isExpired, isMemoryDate, parseMemoryEntries, untilMark, withoutExpired, type MemoryEntryLine } from "./memory/memory-entries.ts";
 import { readersToken, withoutWiderAudience, type MemoryDestination, type MemoryReaders } from "./memory/memory-audience.ts";
 import { parseTopicHeader, readTopicHead, renderTopicIndex } from "./memory/memory-topics.ts";
@@ -27,7 +27,7 @@ export const WORKSPACES_DIR = join(DATA_DIR, "workspaces");
 export const TASK_WORKSPACES_DIR = join(DATA_DIR, "task-workspaces");
 
 // A bot's memory files (MEMORY.md, memory/, docs/) are sealed at rest under
-// its owner's key (docs/content-encryption.md, server/content-at-rest.ts):
+// its owner's key (docs/content-encryption.md, server/encryption/content-at-rest.ts):
 // every read here opens them, and an engine gets them plain for its turn
 // (holdBotMemoryPlain). Their context is the bot: a file moved to another
 // bot's folder does not open.

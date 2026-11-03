@@ -17,7 +17,7 @@ import { basename } from "node:path";
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 
-import { readAtRestSync } from "../content-at-rest.ts";
+import { readAtRestSync } from "../encryption/content-at-rest.ts";
 import { MEMORY_MAX_BYTES, MEMORY_MAX_LINES, workspaceDir } from "../workspace.ts";
 import {
   FORGOTTEN_AFTER_MS,

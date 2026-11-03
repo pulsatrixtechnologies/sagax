@@ -34,7 +34,7 @@ import {
   writeMemoryDoc,
 } from "./memory-store.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { appendLog, LogReader, registerSealedLog, sealLogLine } from "../content-at-rest.ts";
+import { appendLog, LogReader, registerSealedLog, sealLogLine } from "../encryption/content-at-rest.ts";
 
 /** "upkeep" is the harness itself: background capture and the tidy-up
  * (server/memory/memory-upkeep.ts) for a bot with Memory upkeep switched on. */
@@ -282,7 +282,7 @@ export function readMemoryJournal(botId: string, limit = 50): MemoryJournalEntry
   const lines = text.split("\n");
   const maxRows = Math.min(MAX_ROWS, Math.max(1, limit));
   // when the window starts mid-file its first line is a fragment: skip it
-  // rows sealed at rest open here (server/content-at-rest.ts): a locked key
+  // rows sealed at rest open here (server/encryption/content-at-rest.ts): a locked key
   // fails the read rather than show a shorter history; a torn final line from
   // a crash mid-append is skipped, not fatal
   const reader = new LogReader(journalFile(botId));

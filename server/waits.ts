@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { WAIT_HOURS, type WaitKind } from "../shared/waits.ts";
 import { writeFileAtomic } from "./atomic.ts";
-import { noteAtRestWrite, readAtRestTextSync } from "./content-at-rest.ts";
+import { noteAtRestWrite, readAtRestTextSync } from "./encryption/content-at-rest.ts";
 import { DATA_DIR } from "./config.ts";
 import {
   expandHome,

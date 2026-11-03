@@ -14,7 +14,7 @@
 import { basename, join } from "node:path";
 
 import { EVENTS_DIR } from "../config.ts";
-import { appendLog, logAppended, registerSealedLog, sealLogLines } from "../content-at-rest.ts";
+import { appendLog, logAppended, registerSealedLog, sealLogLines } from "../encryption/content-at-rest.ts";
 import { threadLogsForgotten } from "../threads/forgotten-threads.ts";
 import { redactSecrets } from "../redact.ts";
 import { capThreadLog, currentThreadLogCap } from "../threads/thread-log-rotation.ts";
@@ -330,13 +330,13 @@ export class EventBus {
     const plain = items.map((item) => item.line);
     const records = items.map((item) => item.event as unknown as Record<string, unknown>);
     if (warning) { plain.unshift(JSON.stringify(warning)); records.unshift(warning as unknown as Record<string, unknown>); }
-    // sealed at rest under the thread's key (server/content-at-rest.ts): the
+    // sealed at rest under the thread's key (server/encryption/content-at-rest.ts): the
     // batch is one block, on disk when the append returns, as before
     const lines = sealLogLines(file, records, plain);
     try {
       const data = lines.join("\n") + "\n";
       await this.appendLog(file, data, { mode: 0o600 });
-      // a view of this log reads what was just written from memory (server/content-at-rest.ts)
+      // a view of this log reads what was just written from memory (server/encryption/content-at-rest.ts)
       logAppended(file, plain, data);
       if (warning) this.pendingLogWarnings.delete(threadId);
       // Best-effort size cap (#1280): an open thread's canonical log

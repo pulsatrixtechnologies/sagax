@@ -11,7 +11,7 @@ import type { Readable } from "node:stream";
 
 import { fromMarkdown } from "mdast-util-from-markdown";
 
-import { atRestStream, describeHandle, plainSizeFor, readAllFromHandle } from "./content-at-rest.ts";
+import { atRestStream, describeHandle, plainSizeFor, readAllFromHandle } from "./encryption/content-at-rest.ts";
 import { windowsPathDestinations } from "../shared/markdown-windows-paths.ts";
 import { isSharedHost } from "./host-kind.ts";
 

@@ -25,7 +25,7 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 
-import { readAtRestSync } from "../content-at-rest.ts";
+import { readAtRestSync } from "../encryption/content-at-rest.ts";
 import { PROVIDER_CREDENTIAL_ENV, stripWorkspaceCredentialEnv } from "../config.ts";
 import { applyEngineCommandVariables } from "../vault/credential-command-env.ts";
 import { openStartupModelCatalog, writeStartupModelCache } from "../models/startup-model-catalog.ts";

@@ -22,7 +22,7 @@ import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { basename, extname, join, posix } from "node:path";
 import zlib from "node:zlib";
 
-import { atRestSizeSync, readAtRestSync } from "./content-at-rest.ts";
+import { atRestSizeSync, readAtRestSync } from "./encryption/content-at-rest.ts";
 import type { TurnImageInput } from "./contracts.ts";
 
 export const OFFICE_DOCUMENT_MAX_BYTES = 50 * 1024 * 1024;
@@ -223,7 +223,7 @@ export function readOfficeMedia(serverPath: string, attachmentsDir: string): Off
   let buffer: Buffer;
   try {
     if (atRestSizeSync(serverPath) > OFFICE_DOCUMENT_MAX_BYTES) return null;
-    // sealed at rest or plain (server/content-at-rest.ts)
+    // sealed at rest or plain (server/encryption/content-at-rest.ts)
     buffer = readAtRestSync(serverPath);
   } catch {
     return null;

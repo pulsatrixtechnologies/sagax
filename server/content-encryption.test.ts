@@ -8,10 +8,10 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DATA_DIR } from "./config.ts";
-import { azureKeyVaultProvider, parseKeyUrl } from "./content-key-azure.ts";
-import { WORKSPACE_OWNER, type KekProvider } from "./content-keys.ts";
+import { azureKeyVaultProvider, parseKeyUrl } from "./encryption/content-key-azure.ts";
+import { WORKSPACE_OWNER, type KekProvider } from "./encryption/content-keys.ts";
 import { contentKeysForExport, unsealDatabaseCopy } from "./content-export.ts";
-import { contentEncryptionFromEnv } from "./content-encryption-env.ts";
+import { contentEncryptionFromEnv } from "./encryption/content-encryption-env.ts";
 import {
   vacuumAfterSealing,
   chatFollowups, closeMessageDb, closeMessageSearch, configureContentEncryption, contentEncryptionModeFromEnv, contentEncryptionStatus,

@@ -15,7 +15,7 @@
 // Pure: the server passes what the person may read (their bots, their
 // confidential threads) and how to name things; this never reads a file.
 import type { AdminActionRow } from "./admin-activity.ts";
-import { hashJournalLink, JOURNAL_GENESIS, type JournalSealFields } from "./journal-seal.ts";
+import { hashJournalLink, JOURNAL_GENESIS, type JournalSealFields } from "./encryption/journal-seal.ts";
 import type { ActivityRow } from "./activity.ts";
 import type { DecisionActor, DecisionCall, DecisionKind, DecisionRow } from "./decision-log.ts";
 import type { CustomRuleBehavior, CustomRuleDecision, RiskClass } from "../shared/custom-rules.ts";

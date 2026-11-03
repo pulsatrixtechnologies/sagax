@@ -12,8 +12,8 @@ import {
   resetAtRestState,
   runAtRestMigration,
   setAtRestGrace,
-} from "../content-at-rest.ts";
-import { WORKSPACE_OWNER } from "../content-keys.ts";
+} from "../encryption/content-at-rest.ts";
+import { WORKSPACE_OWNER } from "../encryption/content-keys.ts";
 import { closeMessageDb, closeMessageSearch, configureContentEncryption } from "../message-db.ts";
 import {
   clearHeldSteers,

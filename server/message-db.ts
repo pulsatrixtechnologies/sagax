@@ -15,11 +15,11 @@ import { join } from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 
 import { DATA_DIR } from "./config.ts";
-import { ContentSealError, fieldAad, messageAad, openField, openText, seal, sealField, sealedFieldKeyId } from "./content-crypto.ts";
+import { ContentSealError, fieldAad, messageAad, openField, openText, seal, sealField, sealedFieldKeyId } from "./encryption/content-crypto.ts";
 import { provideContentKeys, type ExportedContentKey } from "./content-export.ts";
-import { ContentKeyring, ContentKeyUnavailable, ensureContentKeySchema, localKekProvider, WORKSPACE_OWNER, type KekProvider, type LiveKey } from "./content-keys.ts";
+import { ContentKeyring, ContentKeyUnavailable, ensureContentKeySchema, localKekProvider, WORKSPACE_OWNER, type KekProvider, type LiveKey } from "./encryption/content-keys.ts";
 import { resolveVaultKey } from "./mcp/mcp-oauth.ts";
-import { blindSnippet, indexColumns, indexSourcesOf, recallHolds, recallMatch, recallTermsFor, skeletonOf, type RecallTerm } from "./message-sealing.ts";
+import { blindSnippet, indexColumns, indexSourcesOf, recallHolds, recallMatch, recallTermsFor, skeletonOf, type RecallTerm } from "./encryption/message-sealing.ts";
 import { peerProvenanceAuthor, WEBHOOK_AUTHOR, type WorkOrigin } from "./peer-provenance.ts";
 import type { ResolvedSender, SteerQueueReason, WireMessage as Message } from "../shared/wire.ts";
 import type { UsageTrigger } from "./usage-ledger.ts";
@@ -330,7 +330,7 @@ export interface ContentEncryptionOptions {
   /** providers that only unwrap keys an earlier configuration wrapped */
   others?: KekProvider[];
   resolveOwner?: ContentOwnerResolver;
-  /** Whose key a bot's memory takes (server/content-at-rest.ts): its owner
+  /** Whose key a bot's memory takes (server/encryption/content-at-rest.ts): its owner
    * on an organization server, else the workspace. */
   resolveBotOwner?: (botId: string) => string | null;
   /** background migration on timers (tests drive it by hand) */
@@ -346,7 +346,7 @@ let configured: ContentEncryptionOptions | null = null;
 let ring: ContentKeyring | null = null;
 let ownerOf: ContentOwnerResolver = () => ({ owner: WORKSPACE_OWNER, confidential: false });
 let botOwnerOf: (botId: string) => string | null = () => WORKSPACE_OWNER;
-/** Files and logs sealed outside this database (server/content-at-rest.ts):
+/** Files and logs sealed outside this database (server/encryption/content-at-rest.ts):
  * told when the settings or a key change, and before an owner's keys go. */
 interface AtRestListener {
   changed(): void;
@@ -402,7 +402,7 @@ function notifyAtRest(): void {
   }
 }
 
-/** server/content-at-rest.ts registers itself here. */
+/** server/encryption/content-at-rest.ts registers itself here. */
 export function onContentAtRest(listener: AtRestListener): () => void {
   atRestListeners.add(listener);
   return () => atRestListeners.delete(listener);
@@ -700,7 +700,7 @@ export function contentKeyChanged(threadId: string): void {
 /** A thread changed hands (its owner, its bot's owner) or turned
  * confidential: everything of it is re-sealed under its new key NOW, in
  * this call, before anything can be erased: its rows, its queued
- * follow-ups, and (server/content-at-rest.ts) its event logs, decision rows,
+ * follow-ups, and (server/encryption/content-at-rest.ts) its event logs, decision rows,
  * attachments and its bots' memory (`botIds`: bots that changed owner). A
  * confidential thread's old key, under its old owner, is destroyed once
  * nothing is sealed under it any more. A key not available right now (Key

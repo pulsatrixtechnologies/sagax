@@ -34,7 +34,7 @@ import { closeSync, type Dirent, lstatSync, openSync, readdirSync, readFileSync,
 import { join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { isProjectedRecord, LogReader } from "../content-at-rest.ts";
+import { isProjectedRecord, LogReader } from "../encryption/content-at-rest.ts";
 import { writeFileAtomic } from "../atomic.ts";
 
 type Env = Record<string, string | undefined>;
@@ -122,7 +122,7 @@ export function eventLogSessionIds(path: string): string[] {
     text = readFileSync(path, "utf8");
   } catch { return []; }
   // sealed at rest: a block's clear types say which records to open
-  // (server/content-at-rest.ts); a torn line, or a key not open on this
+  // (server/encryption/content-at-rest.ts); a torn line, or a key not open on this
   // launch, is skipped
   const lines = text.split("\n");
   const reader = new LogReader(path, (projection) => projection.type !== "session.started");

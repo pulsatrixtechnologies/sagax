@@ -23,7 +23,7 @@ import { dirname, extname, posix, resolve, win32 } from "node:path";
 
 import { fromMarkdown } from "mdast-util-from-markdown";
 
-import { atRestChunks, atRestSizeSync, readAtRestSync } from "./content-at-rest.ts";
+import { atRestChunks, atRestSizeSync, readAtRestSync } from "./encryption/content-at-rest.ts";
 import { maxBytesForAttachment } from "./attachments.ts";
 
 const OWNED_FILE_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.[a-z0-9]{1,8}$/;
@@ -100,7 +100,7 @@ export function attachedFilesInText(text: string, attachmentsDir: string): TurnA
     try {
       const entry = lstatSync(resolve(attachmentsDir, file));
       if (!entry.isFile() || entry.isSymbolicLink()) continue;
-      // its plaintext size: a stored file may be sealed at rest (server/content-at-rest.ts)
+      // its plaintext size: a stored file may be sealed at rest (server/encryption/content-at-rest.ts)
       const bytes = atRestSizeSync(resolve(attachmentsDir, file));
       if (bytes > maxBytesForAttachment(file)) continue;
       if (dirname(realpathSync(resolve(attachmentsDir, file))) !== canonicalRoot) continue;

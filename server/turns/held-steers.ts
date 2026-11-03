@@ -12,7 +12,7 @@ import { join } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
 import { DATA_DIR } from "../config.ts";
-import { noteAtRestWrite, readAtRestTextSync, registerAtRestRoot, type ContentScope } from "../content-at-rest.ts";
+import { noteAtRestWrite, readAtRestTextSync, registerAtRestRoot, type ContentScope } from "../encryption/content-at-rest.ts";
 
 export interface HeldSteer {
   botId: string;

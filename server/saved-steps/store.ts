@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 import { z } from "zod";
 import { writeFileAtomic } from "../atomic.ts";
 import { DATA_DIR } from "../config.ts";
-import { noteAtRestWrite, readAtRestTextSync, registerAtRestRoot, type ContentScope } from "../content-at-rest.ts";
+import { noteAtRestWrite, readAtRestTextSync, registerAtRestRoot, type ContentScope } from "../encryption/content-at-rest.ts";
 import { exactRequest, requestKey } from "./key.ts";
 import { ELEMENT_TOOLS, KEPT_ARGS, KEY_TOOLS, flipsToggle, holdsPersonWords, recipeFitsRequest, unsafeStep, windowScoped, type Recipe } from "./rules.ts";
 

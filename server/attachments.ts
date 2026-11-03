@@ -20,8 +20,8 @@ import {
 import { link, open, unlink } from "node:fs/promises";
 import { basename, dirname, join, extname, resolve, sep } from "node:path";
 import { DATA_DIR } from "./config.ts";
-import { atRestChunks, atRestInfoSync, holdPlain, isAtRestTemp, noteAtRestWrite, readAtRestSync, registerAtRestRoot, releasePlain, type ContentScope } from "./content-at-rest.ts";
-import { WORKSPACE_OWNER } from "./content-keys.ts";
+import { atRestChunks, atRestInfoSync, holdPlain, isAtRestTemp, noteAtRestWrite, readAtRestSync, registerAtRestRoot, releasePlain, type ContentScope } from "./encryption/content-at-rest.ts";
+import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
 import { UploadContentError, assertContentMatches, checkUploadedFile } from "./upload-content-check.ts";
 import { isSharedHost } from "./host-kind.ts";
 import { privateMediaIdentity } from "./media-proxy.ts";
@@ -31,7 +31,7 @@ export const ATTACHMENTS_DIR = join(DATA_DIR, "attachments");
 // Every stored file here (uploads, generated files, the copies made from
 // them: scaled pictures, an Office document's pictures, an archive's
 // manifest and unpacked folder) is sealed at rest (docs/content-encryption.md,
-// server/content-at-rest.ts) under its uploader's key when known, else the
+// server/encryption/content-at-rest.ts) under its uploader's key when known, else the
 // workspace's. A file is bound to its path: one moved elsewhere does not
 // open. Server reads go through readAtRestSync / atRestStream; an engine
 // that reads a path gets it plain for its turn (holdPlain).

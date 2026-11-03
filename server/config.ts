@@ -1696,7 +1696,7 @@ export const WORKSPACE_CREDENTIAL_ENV = [
   // The key of the encrypted MCP sign-in vault (server/mcp/mcp-oauth.ts).
   "SAGAX_MCP_OAUTH_KEY",
   // The client secret that signs in to Azure Key Vault for content
-  // encryption (server/content-key-azure.ts).
+  // encryption (server/encryption/content-key-azure.ts).
   "SAGAX_CONTENT_KEY_AZURE_CLIENT_SECRET",
   // Cloud Pro's included Boat, voice and decision relay tokens
   // (included-services.ts), used only in-process by the Boat, voice and

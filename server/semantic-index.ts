@@ -26,8 +26,8 @@ import { chmodSync, closeSync, existsSync, mkdirSync, openSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { fieldAad, open as openSealed, seal } from "./content-crypto.ts";
-import type { LiveKey } from "./content-keys.ts";
+import { fieldAad, open as openSealed, seal } from "./encryption/content-crypto.ts";
+import type { LiveKey } from "./encryption/content-keys.ts";
 import { withoutExpired } from "./memory/memory-entries.ts";
 import { withoutWiderAudience } from "./memory/memory-audience.ts";
 import { topicBody } from "./memory/memory-topics.ts";

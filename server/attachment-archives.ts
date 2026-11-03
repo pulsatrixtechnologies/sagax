@@ -27,7 +27,7 @@ import {
   type ArchiveManifest,
 } from "../electron/archive-extract.mjs";
 import { formatArchiveBytes as formatBytes } from "../shared/format-bytes.ts";
-import { readAtRestTextSync } from "./content-at-rest.ts";
+import { readAtRestTextSync } from "./encryption/content-at-rest.ts";
 import { ATTACHMENTS_DIR } from "./attachments.ts";
 import { INLINE_FILE_MAX_BYTES, INLINE_TOTAL_MAX_BYTES } from "./attachment-staging.ts";
 

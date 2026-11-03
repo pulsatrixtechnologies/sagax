@@ -14,7 +14,7 @@ import { isMainThread, Worker } from "node:worker_threads";
 import * as tar from "tar";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { writeFileAtomic } from "./atomic.ts";
-import { exportPlainCopy, isAtRestTemp, pauseAtRestMigration, useExportedContentKeys } from "./content-at-rest.ts";
+import { exportPlainCopy, isAtRestTemp, pauseAtRestMigration, useExportedContentKeys } from "./encryption/content-at-rest.ts";
 import { contentKeysForExport, unsealDatabaseCopy, type ExportedContentKey } from "./content-export.ts";
 import { mergePrincipalFiles } from "./principals.ts";
 import { removeThreadTrees } from "./runtime/store.ts";
@@ -681,7 +681,7 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
       // sealed transcripts leave in the clear, inside the password-encrypted archive
       if (name === "messages.db") {
         const keys = options.contentKeys ?? contentKeysForExport();
-        // the files and logs sealed at rest too (server/content-at-rest.ts), with
+        // the files and logs sealed at rest too (server/encryption/content-at-rest.ts), with
         // the same keys: a worker opens with them, never with the live keyring
         if (!isMainThread) useExportedContentKeys(keys, storedContentKeyIds(join(snapshot, snapshotName)));
         unsealDatabaseCopy(join(snapshot, snapshotName), keys);
@@ -694,7 +694,7 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
         if (!prefix && excluded(name)) { reconnect.path(name); continue; }
         const path = prefix ? `${prefix}/${name}` : name;
         // an at-rest replacement in progress, or the sealed originals kept while
-        // a turn reads files plain (server/content-at-rest.ts): never content
+        // a turn reads files plain (server/encryption/content-at-rest.ts): never content
         if (isAtRestTemp(name) || (!prefix && name === ".at-rest-originals")) continue;
         if (excludedWorkspaceAuthPath(path)) { reconnect.path(path); continue; }
         if (ephemeralWorkspaceTokenPath(path) || redownloadedOrgLibraryPath(path) || restoredLibraryIndexPath(path) || liveDataEnginePath(path) || confidentialDataScopePath(path)) continue;

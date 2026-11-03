@@ -15,7 +15,7 @@
 import { lstatSync, readdirSync, realpathSync, statSync, type Stats } from "node:fs";
 import { dirname, join, sep } from "node:path";
 
-import { readAtRestSync } from "./content-at-rest.ts";
+import { readAtRestSync } from "./encryption/content-at-rest.ts";
 import { READABLE_HIDDEN_SEGMENTS } from "../shared/readable-hidden.ts";
 
 import { RULE_SETS_DIR, RULES_FILE, RULES_MAX_BYTES, RULES_MAX_LINES, effectiveRulesText, listRuleSets } from "./rule-sets.ts";

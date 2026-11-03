@@ -5,7 +5,7 @@
 //   SAGAX_CONTENT_KEY_AZURE_*     see content-key-azure.ts
 import { azureKeyVaultProvider } from "./content-key-azure.ts";
 import type { KekProvider } from "./content-keys.ts";
-import { contentEncryptionModeFromEnv, type ContentEncryptionMode } from "./message-db.ts";
+import { contentEncryptionModeFromEnv, type ContentEncryptionMode } from "../message-db.ts";
 
 export interface ContentEncryptionEnv {
   mode: ContentEncryptionMode;

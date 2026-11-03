@@ -836,8 +836,8 @@ import { orgWithholdHostTools } from "./org/org-engine-admission.ts";
 import { openCodeProviderKeysAllowed, setOpenCodeProviderKeyPolicy } from "./drivers/acp/opencode-go.ts";
 import { getOrCreateChannel, mirrorActivity, mirrorReply, type CommsBus } from "./comms-visibility.ts";
 import { openApprovalCardMessages, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./message-db.ts";
-import { WORKSPACE_OWNER } from "./content-keys.ts";
-import { contentEncryptionFromEnv } from "./content-encryption-env.ts";
+import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
+import { contentEncryptionFromEnv } from "./encryption/content-encryption-env.ts";
 import { briefCrossingLabel, claimRecallCrossings } from "./recall-disclosure.ts";
 import {
   LOCAL_RECENT_WORK_LINES,
@@ -1103,7 +1103,7 @@ import {
   workspaceDir
 } from "./workspace.ts";
 import { holdBotMemoryPlain, listMemoryTopics, memoryDate, onMemoryTopicWritten, readMemoryFile, readMemoryTopic, readMemoryTopicAsync, writeMemoryFile, writeMemoryTopic } from "./workspace.ts";
-import { holdPlain, noteAtRestWrite, readAtRestSync, registerAtRestRoot, releasePlain, setAtRestHolderCheck, setAtRestThreadFiles, waitPlain } from "./content-at-rest.ts";
+import { holdPlain, noteAtRestWrite, readAtRestSync, registerAtRestRoot, releasePlain, setAtRestHolderCheck, setAtRestThreadFiles, waitPlain } from "./encryption/content-at-rest.ts";
 import {
   beginMemoryTurn,
   endMemoryTurn,
@@ -6902,7 +6902,7 @@ function storedFamily(name: string): string[] {
   return out;
 }
 
-/** Content encryption at rest (server/content-at-rest.ts): the stored
+/** Content encryption at rest (server/encryption/content-at-rest.ts): the stored
  * files this turn's engine may open by path go plain in place, off the
  * turn's path: pictures always (a driver may hand the engine the path), in
  * solo the attachment tags of this turn and those of the thread's earlier
@@ -8232,7 +8232,7 @@ const presetStore = createPresetStore();
 // transcript (Key Vault is asynchronous); the migration seals or opens
 // rows in the background.
 configureContentEncryption({ ...contentEncryptionFromEnv(process.env), resolveOwner: contentOwnerOf, resolveBotOwner: contentBotOwnerOf });
-// files a turn holds plain (server/content-at-rest.ts) go back once it no longer runs
+// files a turn holds plain (server/encryption/content-at-rest.ts) go back once it no longer runs
 setAtRestHolderCheck((holder) => !holder.startsWith("turn:") || runningTurnEngines.has(holder.slice(5)));
 // an erased person's upload another conversation still shows stays readable
 setAttachmentStillShown((path) => threadsReferencing(basename(path)).length > 0);
@@ -8270,7 +8270,7 @@ function turnHolder(threadId: string): string {
   return `turn:${threadId}`;
 }
 /** Whose key a bot's memory takes at rest: its owner on an organization
- * server, else the workspace (server/content-at-rest.ts). */
+ * server, else the workspace (server/encryption/content-at-rest.ts). */
 function contentBotOwnerOf(botId: string): string {
   const bot = store.bot(botId);
   return (bot && IDENTITY.kind === "perspicax" ? recordedBotOwner(bot) : undefined) ?? WORKSPACE_OWNER;
@@ -32313,7 +32313,7 @@ function threadWarmRequest(auth: RequestAuth, botId: string, body: Record<string
   // bot's first command does not wait for the cluster or a node
   // (server/sandbox/sandbox-typing-prewake.ts). Opening the conversation never does.
   if (body.typing === true) prewakeComputerWhileTyping(bot.id, actorPrincipalId(auth));
-  // files sealed at rest start opening for the coming turn (server/content-at-rest.ts)
+  // files sealed at rest start opening for the coming turn (server/encryption/content-at-rest.ts)
   openForComingTurn(bot.id, threadId);
   return { status: 200, body: { warm: prewarmThread(bot.id, threadId, actorPrincipalId(auth) || "local", { speaker: speakerFor(auth) }) } };
 }
@@ -41516,7 +41516,7 @@ function agentApiStageFiles(caller: AgentCaller, target: BotRecord, files: FileI
     } else if (from && caller.sourceThreadId) {
       const found = agentApiSourceFile(from, caller.sourceThreadId, file.path);
       if ("code" in found) return found;
-      // a memory file sealed at rest travels as its plaintext (server/content-at-rest.ts)
+      // a memory file sealed at rest travels as its plaintext (server/encryption/content-at-rest.ts)
       sources.push({ name, read: () => readAtRestSync(found.path) });
     } else {
       return agentRefuse(400, "bad_request", `${file.path}: send the file's bytes (content_base64).`);

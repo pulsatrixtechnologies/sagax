@@ -1,4 +1,4 @@
-import { atRestSizeSync, readAtRestSync } from "../content-at-rest.ts";
+import { atRestSizeSync, readAtRestSync } from "../encryption/content-at-rest.ts";
 import type { SendTurnInput } from "../contracts.ts";
 
 export interface ChatImagePart { type: "image_url"; image_url: { url: string } }

@@ -25,7 +25,7 @@ import { dirname } from "node:path";
 
 import type { renderAsync as RenderAsync } from "@resvg/resvg-js";
 
-import { atRestSizeSync, readAtRest } from "../content-at-rest.ts";
+import { atRestSizeSync, readAtRest } from "../encryption/content-at-rest.ts";
 import { ATTACHMENTS_DIR, modelImageCopyPath } from "../attachments.ts";
 import type { TurnImageInput } from "../contracts.ts";
 import { nativeRequire } from "../data/engine.ts";
@@ -219,7 +219,7 @@ async function fitOne(image: TurnImageInput, attachmentsDir: string, render: Sca
     if (existsSync(copy) && statSync(copy).mtimeMs >= statSync(image.path).mtimeMs) {
       return { path: copy, mime: "image/png", bytes: atRestSizeSync(copy) };
     }
-    // sealed at rest or plain (server/content-at-rest.ts)
+    // sealed at rest or plain (server/encryption/content-at-rest.ts)
     const bytes = await readAtRest(image.path);
     const fitted = await fitImageForModel(bytes, image.mime, render);
     if (!fitted || !fitted.resized) return image;

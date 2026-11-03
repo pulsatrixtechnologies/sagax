@@ -4,7 +4,7 @@
 // transcripts (server/message-db.ts keyring, content_keys): no second key
 // store.
 //
-// Files are sealed IN PLACE (server/content-file-crypto.ts): same path, a
+// Files are sealed IN PLACE (server/encryption/content-file-crypto.ts): same path, a
 // sealed header instead of the plain bytes. Every reader in the server opens
 // both kinds (readAtRestSync, atRestStream, atRestSizeSync). An engine, a
 // separate process reading the path itself, gets the plain file while it
@@ -52,9 +52,9 @@ import { appendFile, chmod, link, lstat, open as openHandle, rename, unlink, uti
 import { basename, dirname, join, relative, sep } from "node:path";
 import { Readable } from "node:stream";
 
-import { DATA_DIR } from "./config.ts";
+import { DATA_DIR } from "../config.ts";
 import { ContentSealError } from "./content-crypto.ts";
-import type { ExportedContentKey } from "./content-export.ts";
+import type { ExportedContentKey } from "../content-export.ts";
 import { ContentKeyUnavailable, WORKSPACE_OWNER, type LiveKey } from "./content-keys.ts";
 import {
   CHUNK_OVERHEAD,
@@ -76,7 +76,7 @@ import {
   type FileKey,
   type SealedHeader,
 } from "./content-file-crypto.ts";
-import { contentAutoMigrate, contentEncryptionOn, contentKeyById, contentKeyForBot, contentKeyForOwner, contentKeyForThread, contentOwnerOfThread, onContentAtRest } from "./message-db.ts";
+import { contentAutoMigrate, contentEncryptionOn, contentKeyById, contentKeyForBot, contentKeyForOwner, contentKeyForThread, contentOwnerOfThread, onContentAtRest } from "../message-db.ts";
 
 export type ContentScope = { thread: string } | { bot: string } | { owner: string };
 
@@ -836,7 +836,7 @@ function scopeFor(path: string, fallback: ContentScope): ContentScope {
 }
 
 // ---------------------------------------------------------------------------
-// Log lines (format in server/content-file-crypto.ts: one physical line per
+// Log lines (format in server/encryption/content-file-crypto.ts: one physical line per
 // record, records sealed together in blocks)
 
 interface SealedLogSpec {

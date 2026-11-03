@@ -104,7 +104,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
   // path-free prompt and bounded inputs instead of needing a Read tool;
   // path-reading drivers retain the attachment tag as their compatibility route.
   state.resolvedImages = extractTurnImages(state.text);
-  // Files sealed at rest go plain in place for the engine (server/content-at-rest.ts):
+  // Files sealed at rest go plain in place for the engine (server/encryption/content-at-rest.ts):
   // this message's attachments before anything reads them; the bot's memory
   // files in parallel with the rest of the setup, awaited before the engine
   // starts (below).

@@ -8,15 +8,15 @@ recall keep working through a blind index: keyed tokens, never text. The
 bots' memory, the attachments and the event logs are sealed with the same
 keys ("Files and logs" below).
 
-Code: `server/content-crypto.ts` (sealing, blind tokens),
-`server/content-keys.ts` (keys and their wrapping),
-`server/content-key-azure.ts` (Azure Key Vault),
-`server/content-encryption-env.ts` (settings), `server/message-sealing.ts`
+Code: `server/encryption/content-crypto.ts` (sealing, blind tokens),
+`server/encryption/content-keys.ts` (keys and their wrapping),
+`server/encryption/content-key-azure.ts` (Azure Key Vault),
+`server/encryption/content-encryption-env.ts` (settings), `server/encryption/message-sealing.ts`
 (row shape, recall terms, snippets), `server/message-db.ts` (reads, writes,
 migration, erasure), `server/message-search-query.ts` and the search worker,
-`server/content-export.ts` (backups), `server/content-file-crypto.ts` and
-`server/content-at-rest.ts` (files and logs). Tests:
-`server/content-encryption.test.ts`, `server/content-at-rest.test.ts`.
+`server/content-export.ts` (backups), `server/encryption/content-file-crypto.ts` and
+`server/encryption/content-at-rest.ts` (files and logs). Tests:
+`server/content-encryption.test.ts`, `server/encryption/content-at-rest.test.ts`.
 Benchmarks: `node --experimental-strip-types scripts/bench-content-encryption.ts`
 (transcripts) and `scripts/bench-content-at-rest.ts` (files and logs).
 
@@ -244,7 +244,7 @@ same setting (`SAGAX_CONTENT_ENCRYPTION`).
 | video jobs | `video-jobs/<jobId>.json` | the job's thread | video generation resume and status |
 | held steers | `held-steers/<threadId>.json` | the thread's key | restart recovery of messages accepted into a running turn |
 
-**File format** (`server/content-file-crypto.ts`): a header (`SGXF`, version,
+**File format** (`server/encryption/content-file-crypto.ts`): a header (`SGXF`, version,
 chunk size, key id, context) then AES-256-GCM chunks of 64 KiB, each with its
 own nonce and tag. The additional data of a chunk is the key, its owner, the
 file's context (an attachment's stored path, `memory/<bot>`), the chunk's

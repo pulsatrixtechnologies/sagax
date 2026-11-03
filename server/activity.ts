@@ -135,7 +135,7 @@ function foldDecisions(rows: DecisionRow[]): ActivityRow[] {
 
 export function readToolRuns(eventsDir: string, threadId: string): ActivityRow[] {
   // only a tool's start and end are opened when the log is sealed at rest;
-  // every other line counts by its clear type (server/content-at-rest.ts)
+  // every other line counts by its clear type (server/encryption/content-at-rest.ts)
   const { lines } = readRecentLines(join(eventsDir, `${threadId}.ndjson`), EVENTS_PER_THREAD, isRuntimeEvent,
     (projection) => projection.itemType !== "tool" || (projection.type !== "item.started" && projection.type !== "item.completed"));
   const runs = new Map<string, ActivityRow>();

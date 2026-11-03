@@ -31,8 +31,8 @@ import {
   validateAttachmentUploadId,
   type SavedAttachment,
 } from "../attachments.ts";
-import { atRestStream, describeHandle } from "../content-at-rest.ts";
-import { ContentKeyUnavailable } from "../content-keys.ts";
+import { atRestStream, describeHandle } from "../encryption/content-at-rest.ts";
+import { ContentKeyUnavailable } from "../encryption/content-keys.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

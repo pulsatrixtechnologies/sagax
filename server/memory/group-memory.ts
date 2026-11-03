@@ -15,8 +15,8 @@ import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
-import { readAtRestTextSync, registerAtRestRoot } from "../content-at-rest.ts";
-import { WORKSPACE_OWNER } from "../content-keys.ts";
+import { readAtRestTextSync, registerAtRestRoot } from "../encryption/content-at-rest.ts";
+import { WORKSPACE_OWNER } from "../encryption/content-keys.ts";
 import { DATA_DIR } from "../config.ts";
 import { withoutExpired } from "./memory-entries.ts";
 import { hashMemoryText, memoryCapacity, type MemoryCapacity } from "./memory-store.ts";

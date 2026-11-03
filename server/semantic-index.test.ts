@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { DATA_DIR } from "./config.ts";
-import { WORKSPACE_OWNER } from "./content-keys.ts";
+import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
 import { closeMessageDb, configureContentEncryption, deleteThread, eraseContentOwner, insertMessage, updateMessage, type ContentOwnerResolver } from "./message-db.ts";
 import { buildRecall } from "./recall.ts";
 import { cosine, embeddingsAddress, HASHED_MIN_SCORE, hashedVector } from "./semantic-encoder.ts";

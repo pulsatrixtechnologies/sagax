@@ -20,8 +20,8 @@ import { mkdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 
 import { DATA_DIR } from "./config.ts";
-import { appendLog, LogReader, registerSealedLog, sealLogLine } from "./content-at-rest.ts";
-import { WORKSPACE_OWNER } from "./content-keys.ts";
+import { appendLog, LogReader, registerSealedLog, sealLogLine } from "./encryption/content-at-rest.ts";
+import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
 import { actorLabel, boundRetentionDays, pruneMonthFiles, type DecisionActor, type DecisionRow } from "./decision-log.ts";
 import { redactSecrets } from "./redact.ts";
 import { csvCell, monthKey } from "./usage-ledger.ts";
@@ -347,7 +347,7 @@ function readRows(path: string): AdminActionRow[] {
   }
   const rows: AdminActionRow[] = [];
   const lines = text.split("\n");
-  // rows sealed at rest open here (server/content-at-rest.ts); a torn line is skipped
+  // rows sealed at rest open here (server/encryption/content-at-rest.ts); a torn line is skipped
   const reader = new LogReader(path);
   for (let index = 0; index < lines.length; index++) {
     if (!lines[index]) continue;

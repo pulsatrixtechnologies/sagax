@@ -5,7 +5,7 @@
 // own SQL filters on (who wrote it, whether it is a person's send, an open
 // approval card, a working goal, the stored file names it points at).
 // Everything else, the text and the full message included, is in `sealed`.
-import type { WireMessage as Message } from "../shared/wire.ts";
+import type { WireMessage as Message } from "../../shared/wire.ts";
 import { BlindTokenizer, PREFIX_LETTERS, bloomOf, foldWord, gramCodesOf, wordsOf } from "./content-crypto.ts";
 
 /** Stored file names (an opaque id and an extension) a message points at,

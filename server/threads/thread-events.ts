@@ -13,7 +13,7 @@
 // thousands of native lines and the panel wants the recent ones first.
 import { closeSync, fstatSync, openSync, readSync, type Stats } from "node:fs";
 import { join } from "node:path";
-import { isProjectedRecord, LogReader, logTail, rememberTail } from "../content-at-rest.ts";
+import { isProjectedRecord, LogReader, logTail, rememberTail } from "../encryption/content-at-rest.ts";
 import type { RuntimeEvent } from "../contracts.ts";
 import type { InspectorEntry, InspectorPage, NativeRecord } from "../../shared/inspector.ts";
 
@@ -89,7 +89,7 @@ function parseRecent<T>(reader: LogReader, text: string, includeFirst: boolean, 
   const lines = text.split("\n");
   if (!includeFirst) lines.shift();
   const out: T[] = [];
-  // a log sealed at rest opens here, a block at a time (server/content-at-rest.ts);
+  // a log sealed at rest opens here, a block at a time (server/encryption/content-at-rest.ts);
   // a locked key throws ContentKeyUnavailable rather than show a shorter log
   // newest first, and no further than `limit` valid entries: an older line
   // is never parsed (nor opened, when sealed) for nothing
@@ -121,7 +121,7 @@ export function readRecentLines<T>(file: string, limit: number, valid: RecordGua
     const total = countLines(fd, file, stat);
     // A sealed log a view read a moment ago, unchanged but for this
     // process's own appends: its newest lines are in memory, opened
-    // (server/content-at-rest.ts), and need no disk read nor opening.
+    // (server/encryption/content-at-rest.ts), and need no disk read nor opening.
     const tail = logTail(file, stat);
     if (tail && (tail.fromStart || tail.lines.length >= limit)) {
       // newest first, as parseRecent does, straight from the kept lines

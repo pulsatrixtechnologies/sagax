@@ -1,4 +1,5 @@
 import { CalendarClock, ChevronRight } from "lucide-react";
+import { memo } from "react";
 import { t } from "@/lib/i18n";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import type { Bot } from "@/state/store";
@@ -13,6 +14,9 @@ export interface CalendarSidebarProps {
   /** The upcoming routines, already narrowed by the page's filters (scope,
    * status, bot) and in run order (`upcomingRoutines`). */
   routines: Routine[];
+  /** The runs the rows read their state from (Running, Waiting, Queued):
+   * the page passes the in-flight ones only, so a finished run's frame does
+   * not render the panel (2026-11-02). */
   runs: RoutineRun[];
   bots: Bot[];
   viewerPrincipalId?: string | null;
@@ -32,7 +36,7 @@ export interface CalendarSidebarProps {
 /** The calendar's right panel (2026-10-18): the month, then what runs
  * next. Bots are scheduled by dragging them from the left sidebar, which
  * already lists them, so this panel no longer repeats them. */
-export function CalendarSidebar({ anchor, onSelectDate, routines, runs, bots, viewerPrincipalId, loading, error, onOpenRoutine, onCollapse, filteredOut = false }: CalendarSidebarProps) {
+export const CalendarSidebar = memo(function CalendarSidebar({ anchor, onSelectDate, routines, runs, bots, viewerPrincipalId, loading, error, onOpenRoutine, onCollapse, filteredOut = false }: CalendarSidebarProps) {
   return (
     <aside
       aria-label={t("routines.upcoming.sidebar")}
@@ -80,4 +84,4 @@ export function CalendarSidebar({ anchor, onSelectDate, routines, runs, bots, vi
       </section>
     </aside>
   );
-}
+});

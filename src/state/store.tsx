@@ -12,7 +12,8 @@ import { selectionListed } from "@/lib/selection-fallback";
 import { hiddenKeySet, readSidebarHidden, useSidebarHidden } from "@/lib/sidebar-hidden";
 import { readLastBotSection, rememberBotSection } from "@/lib/last-bot-section";
 import { useShowThreads } from "@/lib/thread-preferences";
-import { noteBackAtBot, noteLeftBot, setOnScreenBot } from "@/lib/fresh-topic";
+import { noteBackAtBot, noteLeftBot, readNewChats, setOnScreenBot, writeNewChats } from "@/lib/fresh-topic";
+import { isEarlierSegment } from "@/lib/single-stream";
 import { t, activeLocale } from "@/lib/i18n";
 import { stepUpApprovals } from "@/lib/step-up-client";
 import { createBotPatchQueue } from "./bot-patch-queue";
@@ -127,6 +128,9 @@ interface StreamState {
   reasoning: Record<string, string>;
 }
 const EMPTY_STREAM: StreamState = { streaming: {}, reasoning: {} };
+/** How long a newer topic must hold before the chat on screen follows it
+ * (the follow effect in StoreProvider). */
+export const FOLLOW_SETTLE_MS = 600;
 const StreamContext = createContext<StreamState>(EMPTY_STREAM);
 
 type PendingDelta = { text: string; reasoning: string };
@@ -212,7 +216,12 @@ const StoreContext = createContext<{
  * "overview"/false and the reducer never touches localStorage. */
 function restoreBotSettingsSection(state: AppState): AppState {
   const section = readLastBotSection();
-  const withHidden = { ...state, sidebarHiddenKeys: hiddenKeySet(readSidebarHidden()) };
+  // An asked-for New chat outlives a reload (src/lib/fresh-topic.ts).
+  const newChats = readNewChats();
+  const freshTopic = Object.keys(newChats).length > 0
+    ? { ...state.freshTopic, ...Object.fromEntries(Object.entries(newChats).map(([botId, threadId]) => [botId, { threadId, auto: false }])) }
+    : state.freshTopic;
+  const withHidden = { ...state, freshTopic, sidebarHiddenKeys: hiddenKeySet(readSidebarHidden()) };
   return section ? { ...withHidden, botSettingsSection: section, botSettingsSectionStored: true } : withHidden;
 }
 
@@ -362,23 +371,74 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // that thread theirs and leave their own conversation behind. Once, at the
   // first snapshot. With threads shown the bot stays where it was.
   const launched = useRef(false);
+  // A follow waits until the newer topic has held for FOLLOW_SETTLE_MS
+  // (2026-11-03): a thread that is the newest plain one for a frame or two
+  // (a routine run's task before its tag, a frame racing a switch) made the
+  // chat switch to it and back, a flicker on every run.
+  const follow = useRef<{ key: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const cancelFollow = () => {
+    if (follow.current) clearTimeout(follow.current.timer);
+    follow.current = null;
+  };
+  useEffect(() => cancelFollow, []);
   useEffect(() => {
     if (!state.hydrated) return;
     const bot = state.bots.find((candidate) => candidate.id === state.selectedId);
     const first = !launched.current;
     launched.current = true;
-    if (!bot || state.activeView !== "chat") return;
+    if (!bot || state.activeView !== "chat") {
+      cancelFollow();
+      return;
+    }
     // With one conversation the thread on screen is always the conversation
     // (shared/single-stream.ts): at launch, after a reconnect that adopted
     // the server's selection, and when another device or a routine started
     // a newer topic, the window follows it (the reference design: one
     // transcript per bot, on every device). Never while a switch is under
     // way. With threads shown the bot stays where it was, once checked.
-    if ((first || !showThreads) && !bot.switchingTo && botOpensTo(bot, showThreads) !== bot.threadId) openBot(dispatch, bot, showThreads, first ? {} : { landing: false });
-    // Launching the app is a return too: after the threshold (since the
-    // conversation went quiet, or since the app closed) a fresh topic.
-    else if (first && !showThreads) landOnBot(dispatch, bot, bot.threadId, { force: true });
+    const target = botOpensTo(bot, showThreads);
+    if (first) {
+      cancelFollow();
+      if (!bot.switchingTo && target !== bot.threadId) openBot(dispatch, bot, showThreads);
+      // Launching the app is a return too: after the threshold (since the
+      // conversation went quiet, or since the app closed) a fresh topic.
+      else if (!showThreads) landOnBot(dispatch, bot, bot.threadId, { force: true });
+      return;
+    }
+    if (showThreads || bot.switchingTo || target === bot.threadId) {
+      cancelFollow();
+      return;
+    }
+    const key = `${bot.id}\u0000${bot.threadId}\u0000${target}`;
+    if (follow.current?.key === key) return;
+    cancelFollow();
+    follow.current = {
+      key,
+      timer: setTimeout(() => {
+        follow.current = null;
+        const now = stateRef.current;
+        const live = now.bots.find((candidate) => candidate.id === bot.id);
+        if (!live || now.selectedId !== bot.id || now.activeView !== "chat" || live.switchingTo || showThreadsRef.current) return;
+        if (botOpensTo(live, false) === target && target !== live.threadId) openBot(dispatch, live, false, { landing: false });
+      }, FOLLOW_SETTLE_MS),
+    };
   }, [state.hydrated, state.bots, state.selectedId, state.activeView, showThreads, dispatch]);
+
+  // An asked-for New chat is kept on this device (src/lib/fresh-topic.ts)
+  // while it still covers the bot's conversation: a newer topic made
+  // elsewhere, or a bot gone, lets it go.
+  useEffect(() => {
+    if (!state.hydrated) return;
+    const kept: Record<string, string> = {};
+    for (const [botId, draft] of Object.entries(state.freshTopic)) {
+      if (draft.auto) continue;
+      const bot = state.bots.find((candidate) => candidate.id === botId);
+      if (!bot || !bot.tasks?.some((task) => task.threadId === draft.threadId)) continue;
+      if (isEarlierSegment(bot.tasks, draft.threadId, bot.threadId)) continue;
+      kept[botId] = draft.threadId;
+    }
+    writeNewChats(kept);
+  }, [state.hydrated, state.freshTopic, state.bots]);
 
   // Fresh topic on return (src/lib/fresh-topic.ts): which bot is on screen,
   // when the person left it (another bot or view, the window hidden, the app

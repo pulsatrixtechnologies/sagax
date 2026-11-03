@@ -230,10 +230,16 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
       const current = state.freshTopic[action.botId];
       if (!action.threadId) {
         if (!current) return state;
+        // Opening the bot, coming back to it: a New chat the person asked
+        // for stays until they send, Back or open the topic it covers.
+        if (action.keepAsked && !current.auto) return state;
         const { [action.botId]: _gone, ...rest } = state.freshTopic;
         return { ...state, freshTopic: rest };
       }
       if (current?.threadId === action.threadId && current.auto === Boolean(action.auto)) return state;
+      // Coming back after a while never turns an asked-for New chat into an
+      // invisible one over the same topic: it stays drawn empty.
+      if (action.auto && current && !current.auto && current.threadId === action.threadId) return state;
       return { ...state, freshTopic: { ...state.freshTopic, [action.botId]: { threadId: action.threadId, auto: Boolean(action.auto) } } };
     }
     case "focusMessage":

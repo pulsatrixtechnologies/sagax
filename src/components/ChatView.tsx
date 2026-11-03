@@ -4,6 +4,7 @@ import { downloadBotZip, showBotZipExport } from "@/lib/bot-zip";
 import { ThreadLinkContext } from "@/components/ThreadLinkMenu";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { isStreamSegment, segmentsAbove, segmentsToReach } from "@/lib/single-stream";
+import { startedByNewChat } from "@/lib/fresh-topic";
 import { useSegmentTranscript } from "@/lib/use-segment-transcript";
 import { useFocusMessage } from "@/lib/focus-message";
 import { citationAttachment } from "@/lib/citations";
@@ -1018,12 +1019,16 @@ const ActivityChip = memo(function ActivityChip({ message, place = "auto" }: { m
 export function RoutineRunRow({ message, onResume }: { message: Message; botId: string; onResume?: () => void }) {
   "use memo";
   const dispatch = useStoreDispatch();
+  const getState = useStoreGetter();
+  const showThreads = useShowThreads();
   const run = message.routineRun;
   return (
     <RoutineRunCard
       message={message}
       onResume={onResume}
       onOpen={run?.runId ? () => openRoutineRun(dispatch, { runId: run.runId, routineId: run.routineId }) : undefined}
+      // 2026-11-03: a run that handed work to a teammate links that thread.
+      onOpenThread={(botId, threadId) => { openThread(dispatch, { botId, threadId }, getState(), showThreads); }}
     />
   );
 }
@@ -2235,7 +2240,10 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
     composerDockRef.current?.querySelector("textarea")?.focus();
   }, [bot.id, bot.threadId]);
   const streamEngine = state.instances.find((i) => i.instanceId === bot.modelSelection.instanceId);
-  const streamReadBack = streamHasEarlier && !olderPending && hiddenCount === 0 && !bot.hasMore;
+  // A topic started from New chat opens on its own (src/lib/fresh-topic.ts):
+  // reading it back to its first line does not draw the earlier topics above
+  // it; a link, a search hit or the activity pill still reaches them.
+  const streamReadBack = streamHasEarlier && !olderPending && hiddenCount === 0 && !bot.hasMore && !startedByNewChat(bot.threadId);
   // One timeline for the live topic: earlier topics above once read back.
   // An asked-for New topic clears that view (empty greeting); scrolling up
   // does not reveal the covered topic until Back (or the topics list).
@@ -2829,6 +2837,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           onRunAgain={routine ? () => dispatch({ type: "runRoutine", routineId: routine.id, onStarted: (started) => dispatch({ type: "openRoutineRunSheet", runId: started.id, routineId: routine.id, botId: started.botId }) }) : undefined}
           onStop={["queued", "running", "waiting"].includes(run.status) ? () => dispatch({ type: "cancelRoutineRun", runId: run.id }) : undefined}
           onLogs={() => dispatch({ type: "showRoutines", section: "logs", routineId: routine?.id ?? run.routineId, botId: run.botId })}
+          onOpenConfiguration={routine ? () => dispatch({ type: "showRoutines", editRoutineId: routine.id }) : undefined}
         />
       );
     })()}

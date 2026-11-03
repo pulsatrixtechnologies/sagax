@@ -33,9 +33,10 @@ const bot: Bot = {
     { threadId: "unread", title: "Finished reply", createdAt: 6, unread: true, openedBy: { botId: "atlas", name: "Atlas", at: 6 } },
   ],
 };
-// Opening a bot by hand or by name shows what it opens to: no fresh topic
-// drawn over it (#763, src/lib/fresh-topic.ts).
-const cleared = { type: "freshTopic", botId: "atlas", threadId: null };
+// Opening a bot by hand or by name shows what it opens to: no automatic
+// fresh topic drawn over it (#763, src/lib/fresh-topic.ts); a New chat the
+// person asked for stays (2026-11-02).
+const cleared = { type: "freshTopic", botId: "atlas", threadId: null, keepAsked: true };
 const densities: SidebarDensity[] = ["comfortable", "compact", "icons"];
 const rowProps = (density: SidebarDensity) => ({ bot, density, onMenu: vi.fn() });
 

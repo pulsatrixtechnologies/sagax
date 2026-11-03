@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { setLocale } from "./i18n";
-import { routineAutoPauseChoices, routineAutoPausedText, routineAutoPauseOption, routineRunError, routineRunProblems, routineRunsOn, routineWeekRunsText, scheduleRepeatsEventDate } from "./routine-display";
+import { routineAutoPauseChoices, routineAutoPausedText, routineAutoPauseOption, routineResultText, routineRunError, routineRunPreview, routineRunProblems, routineRunsOn, routineRunSummary, routineWeekRunsText, scheduleRepeatsEventDate } from "./routine-display";
 
 describe("a routine's details (#1516)", () => {
   it("says one run in the singular", () => {
@@ -104,5 +104,37 @@ describe("a run's problems as stored before 2026-11-03 (production, a catch-up r
     const problems = "Robin's work failed: The turn did not complete (tool_error).\nIts last message, quoted: \"FAIL\\n\\nThe two-message archive plan is **not";
     expect(routineRunProblems({ status: "completed", problems })).toBe("Robin's work failed: The turn did not complete (tool_error).\nIts last message:\nFAIL\n\nThe two-message archive plan is not…");
     expect(routineRunProblems({ status: "failed", problems })).toBe("");
+  });
+});
+
+// 2026-11-03 (owner report: "the only result is a {").
+describe("a run's result in plain words", () => {
+  it("reads a JSON final answer into sentences, never a lone brace", () => {
+    const text = '{"run_status": "blocked", "reason": "waiting for Nova", "done": ["Sheet 100203 audited"], "todo": "Approve sheet 100203"}';
+    const result = routineResultText(text);
+    expect(result.text).toBe("Blocked: waiting for Nova\nDone: Sheet 100203 audited\nFor you: Approve sheet 100203");
+    expect(result.details).toContain('"reason": "waiting for Nova"');
+  });
+
+  it("reads JSON split across lines, after prose and an engine wrapper", () => {
+    const text = '<<<UNTRUSTED source="tool">>>\nshadow saved\n{\n  "summary": "Bank watch updated",\n  "blocked": ["Northwind"]\n}';
+    expect(routineResultText(text).text).toBe("shadow saved\nBank watch updated\nBlocked: Northwind");
+    expect(routineRunPreview({ status: "completed", output: text })).toBe("shadow saved");
+    expect(routineRunPreview({ status: "completed", output: "{\n  \"summary\": \"Bank watch updated\"\n}" })).toBe("Bank watch updated");
+  });
+
+  it("an unknown or cut structure is a short excerpt with a details control, never a lone brace", () => {
+    const known = routineResultText('{\n  "routine": "monday-support-bank-threshold-watch",\n  "count": 3\n}');
+    expect(known.text).toBe("routine: monday-support-bank-threshold-watch · count: 3");
+    expect(known.details).toContain('"count": 3');
+    expect(routineResultText("{").text).toBe("The bot ended with structured data instead of a summary.");
+    expect(routineRunPreview({ status: "failed", error: "{" })).not.toBe("{");
+    expect(routineResultText('{\n  "routine": "watch",').text).toBe("routine: watch");
+  });
+
+  it("keeps prose as written and reads a RUN_STATUS line", () => {
+    expect(routineResultText("Billed 3 clients.").text).toBe("Billed 3 clients.");
+    expect(routineResultText("RUN_STATUS: partial: CW refused one write\nBilled 2 of 3.").text).toBe("Partly done: CW refused one write\nBilled 2 of 3.");
+    expect(routineRunSummary({ status: "blocked", handedTo: [{ botId: "m", threadId: "t", name: "Nova", status: "queued" }] }).text).toBe("Blocked: waiting for Nova");
   });
 });

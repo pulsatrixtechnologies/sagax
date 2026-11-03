@@ -142,6 +142,7 @@ function RunShell() {
               onClose={() => {}}
               onRunAgain={() => {}}
               onLogs={() => {}}
+              onOpenConfiguration={() => {}}
             />
           )}
         </ExchangeColumnProvider>

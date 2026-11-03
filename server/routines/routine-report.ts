@@ -18,6 +18,7 @@
  * does not ring the person for nothing. */
 
 import type { RoutineGoalStatus, RoutineRunStatus } from "../../shared/routines.ts";
+import { findStructure, meaningfulLine } from "../../shared/routine-result.ts";
 
 export const ROUTINE_QUIET_MARKER = "NOTHING_TO_REPORT";
 /** 2026-11-01: the bot's own word that the run failed or did only part of
@@ -26,7 +27,7 @@ export const ROUTINE_STATUS_MARKER = "RUN_STATUS:";
 
 /** What the bot reads in its system prompt on every routine run. */
 export const ROUTINE_REPORT_CONTRACT =
-  ` This run works in the background: the person does not see this conversation, only your final message, and only when it needs them. Do the routine's work, then end with a short report of what you found or did that the person should know. Never restate or quote the routine's instructions. If nothing needs the person (nothing found, nothing changed, nothing to decide, or the instructions say to stay silent in this case), end your final message with the line ${ROUTINE_QUIET_MARKER} on its own: nothing is posted to their chat and the run stays in the routine logs. If a step failed or part of the work could not be done, never report it as done: begin your final message with the line ${ROUTINE_STATUS_MARKER} failed: <why> when the work could not be done, or ${ROUTINE_STATUS_MARKER} partial: <what did not work> when only part of it was.`;
+  ` This run works in the background: the person does not see this conversation, only your final message, and only when it needs them. Do the routine's work, then end with a short report of what you found or did that the person should know. Never restate or quote the routine's instructions. If nothing needs the person (nothing found, nothing changed, nothing to decide, or the instructions say to stay silent in this case), end your final message with the line ${ROUTINE_QUIET_MARKER} on its own: nothing is posted to their chat and the run stays in the routine logs. If a step failed or part of the work could not be done, never report it as done: begin your final message with the line ${ROUTINE_STATUS_MARKER} failed: <why> when the work could not be done, or ${ROUTINE_STATUS_MARKER} partial: <what did not work> when only part of it was. Whatever the outcome, end with one plain-language summary line a person can read alone: what was done, what is blocked and why, and what they must do. Never end with JSON, a code block or a raw tool result as your last words; put any structured data before that line. If you handed work to a teammate, name the teammate and what they are doing.`;
 
 /** The marker on a line of its own, in the shapes models write it in. */
 const MARKER_LINE = /^[\s`*_[(<"']*nothing[\s_-]to[\s_-]report[\s`*_\])>"'.!]*$/i;
@@ -62,13 +63,39 @@ export interface RoutineReportOutcome {
 
 /** Flow engine refusals that must end a Sagax routine run as blocked, not completed. */
 const FLOW_RUN_BLOCKED = /has not been closed:\s*one routine run|unknown routine|run_exists|previous_unclosed/i;
+/** A refusal is short: the first thing a refused `run init` prints. A longer
+ * output that merely mentions one (a skill or script the bot read, 2026-11-03
+ * production: SKILL.md names `previous_unclosed`) is not one. */
+const FLOW_REFUSAL_MAX = 800;
 
-/** A Flow tool result that means this run did not start or could not continue. */
+/** The refusal in plain words for the person (never a bare "{"). */
+function plainFlowRefusal(said: string): string {
+  const unknown = /unknown routine\s*[:'"]?\s*['"]?([\w.-]+)/i.exec(said);
+  if (/has not been closed/i.test(said)) return "An earlier run of this Flow routine is still open (one run at a time). Wait for it to finish, or close it, then run again.";
+  if (/previous_unclosed/i.test(said)) return "An earlier run of this Flow routine was never closed. Close it, then run again.";
+  if (/run_exists/i.test(said)) return "This run's Flow folder already holds a run (one run per lease). Run again once it is cleared.";
+  if (unknown) return `Flow does not know the routine "${unknown[1]}". Check the routine's name.`;
+  return said.slice(0, 500);
+}
+
+/** A Flow tool result that means this run did not start or could not continue.
+ * 2026-11-03 (owner report: a run "Blocked" with the reason "{"): a JSON
+ * result is a refusal only when it says so ({"ok": false, "error": ...}),
+ * never because a key or a quoted document names a refusal code; plain text
+ * only when it is short and the refusal is its first line. The reason is the
+ * refusal in plain words, never the output's first line. */
 export function flowRunBlockedReason(output: string | undefined): string | undefined {
   const text = (output ?? "").trim();
   if (!text || !FLOW_RUN_BLOCKED.test(text)) return undefined;
-  const line = text.split(/\r?\n/).map((entry) => entry.trim()).find(Boolean) ?? text;
-  return line.slice(0, 500);
+  const found = findStructure(text);
+  if (found) {
+    if (Array.isArray(found.value) || found.value.ok !== false) return undefined;
+    const said = [found.value.error, found.value.message].filter((part): part is string => typeof part === "string").join(": ");
+    return FLOW_RUN_BLOCKED.test(said) ? plainFlowRefusal(said) : undefined;
+  }
+  if (text.length > FLOW_REFUSAL_MAX) return undefined;
+  const line = meaningfulLine(text);
+  return FLOW_RUN_BLOCKED.test(line) ? plainFlowRefusal(line) : undefined;
 }
 
 /** The status line on a line of its own, in the shapes models write it in. */

@@ -3574,13 +3574,19 @@ export class Store {
    * model unless the caller hands it another one: a thread opened from
    * another of this bot's threads keeps the model a person picked there. */
   createTask(botId: string, title?: string, activate = true, projectId?: string, openedBy?: TaskOpenedBy, approvalMode?: "ask" | "full",
-    ownerPrincipalId?: string, modelSelection?: ModelSelection, hidden = false, cwd?: string, confidential = false, approvalOwn?: ApprovalException): TaskRecord | null {
+    ownerPrincipalId?: string, modelSelection?: ModelSelection, hidden = false, cwd?: string, confidential = false, approvalOwn?: ApprovalException,
+    routineRunId?: string): TaskRecord | null {
     const bot = this.bot(botId);
     if (!bot) return null;
     if (projectId !== undefined && !this.project(botId, projectId)) return null;
     // An AI client's hidden conversation (#291) is never selected.
     if (hidden) activate = false;
     const task = this.buildTask(bot, title, projectId, openedBy, approvalMode, ownerPrincipalId, modelSelection, hidden, cwd, confidential, approvalOwn);
+    // A routine run's task is tagged in the frame that announces it: untagged
+    // for one frame, it is the newest plain thread, which the one
+    // conversation rule takes for the person's conversation (the chat
+    // followed it and came back, 2026-11-03).
+    if (routineRunId) task.routineRunId = routineRunId;
     this.commitBotChange(bot, "the new thread", () => {
       bot.tasks = [task, ...(bot.tasks ?? [])];
       if (activate) this.mirrorActiveTask(bot, task);

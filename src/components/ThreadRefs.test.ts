@@ -166,7 +166,7 @@ describe("openChatLink", () => {
     expect(openChatLink(dispatch, "sagax://bot/scout", await state(), true)).toBe(true);
     expect(actions(dispatch)).toEqual([
       { type: "select", id: "scout" },
-      { type: "freshTopic", botId: "scout", threadId: null },
+      { type: "freshTopic", botId: "scout", threadId: null, keepAsked: true },
       { type: "revealThread", threadId: "scout-main" },
     ]);
   });
@@ -188,7 +188,7 @@ describe("openChatLink", () => {
     expect(openChatLink(dispatch, "sagax://thread/qa-245?bot=ada", await state(), true)).toBe(false);
     expect(actions(dispatch)).toEqual([
       { type: "select", id: "ada" },
-      { type: "freshTopic", botId: "ada", threadId: null },
+      { type: "freshTopic", botId: "ada", threadId: null, keepAsked: true },
       { type: "notice", notice: { kind: "thread-gone", botName: "Ada" } },
     ]);
   });
@@ -244,7 +244,7 @@ describe("openChatLink", () => {
     expect(actions(dispatch)).toEqual([
       { type: "switchTask", botId: "scout", threadId: "scout-main" },
       { type: "freshTopic", botId: "scout", threadId: null },
-      { type: "freshTopic", botId: "scout", threadId: null },
+      { type: "freshTopic", botId: "scout", threadId: null, keepAsked: true },
       { type: "revealThread", threadId: "scout-main" },
     ]);
     // A dead thread link shows that bot the same way.
@@ -253,7 +253,7 @@ describe("openChatLink", () => {
     expect(actions(dead)).toEqual([
       { type: "switchTask", botId: "scout", threadId: "scout-main" },
       { type: "freshTopic", botId: "scout", threadId: null },
-      { type: "freshTopic", botId: "scout", threadId: null },
+      { type: "freshTopic", botId: "scout", threadId: null, keepAsked: true },
       { type: "notice", notice: { kind: "thread-gone", botName: "Scout" } },
     ]);
     // With threads shown, the thread it is on, as before.
@@ -261,7 +261,7 @@ describe("openChatLink", () => {
     expect(openChatLink(shown, "sagax://bot/scout", left, true)).toBe(true);
     expect(actions(shown)).toEqual([
       { type: "select", id: "scout" },
-      { type: "freshTopic", botId: "scout", threadId: null },
+      { type: "freshTopic", botId: "scout", threadId: null, keepAsked: true },
       { type: "revealThread", threadId: "qa-245" },
     ]);
   });

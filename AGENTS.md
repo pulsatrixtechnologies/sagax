@@ -7873,8 +7873,21 @@ and `ios/App/Session+FreshTopic.swift`; shared cases in
   `FreshTopicHeader`); scrolling up does not reveal the covered topic in
   the same view. An automatic fresh topic shows nothing. ⌘F still searches
   the covered topic and the earlier ones.
+- New chat sticks (JC 2026-11-02, desktop): an asked-for New topic
+  (`auto: false`) is the bot's current conversation until the person sends,
+  Back, or opens the covered topic by name. Opening the bot itself (rows,
+  palette, links to the bot, team map, launch, the follow effect) clears
+  only an automatic draft (`keepAsked`), a return after a while never turns
+  it into an automatic one, and it is kept on this device
+  (`sagax.newChat.v1`) through a reload while it still covers the newest
+  segment. Repeated clicks reuse the one draft; an empty newest topic is
+  reused as it is. The topic its first message creates, or that empty one,
+  opens on its own (`sagax.newChatTopics.v1`, `startedByNewChat`): reading
+  it back does not draw the earlier topics above it; a link, a search hit
+  or the activity pill still does.
 - Tests: `shared/fresh-topic.test.ts`, `src/lib/fresh-topic.test.ts`,
   `src/components/ChatView.stream.test.ts`, `src/components/thread-home.test.ts`,
+  `src/state/store/new-chat.test.ts`, `src/components/ChatView.new-chat.dom.test.ts`,
   `server/fresh-topic.e2e.test.ts`, `ios/Tests/CompanionCoreTests/FreshTopicTests.swift`.
 
 ## Person panel and hidden sidebar entries

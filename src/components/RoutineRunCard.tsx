@@ -1,7 +1,7 @@
 import { ArrowRight, Loader2, Play } from "lucide-react";
 
 import { cn } from "@/lib/cn";
-import { routineAutoPausedText, routineDateTime, routineRunError, routineRunProblems } from "@/lib/routine-display";
+import { routineAutoPausedText, routineDateTime, routineResultText, routineRunBlockedLine, routineRunError, routineRunProblems } from "@/lib/routine-display";
 import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -16,7 +16,7 @@ const COPY = {
   waiting: { label: "routines.status.waiting", tone: "text-warning" },
   completed: { label: "routines.status.completed", tone: "text-ink-secondary" },
   failed: { label: "routines.status.failed", tone: "text-danger" },
-  blocked: { label: "routines.status.blocked", tone: "text-danger" },
+  blocked: { label: "routines.status.blocked", tone: "text-warning" },
   cancelled: { label: "routines.status.cancelled", tone: "text-ink-secondary" },
   missed: { label: "routines.status.missed", tone: "text-danger" },
   nothing_to_report: { label: "routines.status.nothing_to_report", tone: "text-ink-secondary" },
@@ -47,6 +47,43 @@ function compactDetail(value: string | undefined): string {
   return clean.length > DETAIL_LIMIT ? `${clean.slice(0, DETAIL_LIMIT - 1).trimEnd()}…` : clean;
 }
 
+/** The whole of a structured result, folded (2026-11-03). */
+export function RunResultDetails({ details }: { details: string }) {
+  return (
+    <details data-run-result-details className="mt-1.5 text-[12px] text-ink-secondary">
+      <summary className="cursor-pointer select-none font-medium text-accent hover:text-ink">{t("routineResult.showDetails")}</summary>
+      <pre className="mt-1.5 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-inset px-3 py-2 font-mono text-[11.5px] leading-relaxed text-ink">{details}</pre>
+    </details>
+  );
+}
+
+/** The teammates a run handed work to, each linked to the thread where
+ * that work's outcome is (2026-11-03: "Sent work to a teammate"). */
+export function TeammateThreadLinks({ handedTo, onOpenThread }: {
+  handedTo: ReadonlyArray<{ botId: string; threadId: string; name?: string; status: string }>;
+  onOpenThread?: (botId: string, threadId: string) => void;
+}) {
+  return (
+    <ul data-run-handed-to className="mt-1 flex flex-col gap-0.5 px-1 text-[12px] text-ink-secondary">
+      {handedTo.map((entry) => {
+        const name = entry.name || t("routineRun.aTeammate");
+        return (
+          <li key={entry.threadId} className="flex flex-wrap items-center gap-x-1.5">
+            <span>{t("routineRun.handedTo", { name })}</span>
+            {onOpenThread && <>
+              <span aria-hidden="true">·</span>
+              <button type="button" data-run-teammate-thread={entry.threadId} onClick={() => onOpenThread(entry.botId, entry.threadId)} className="inline-flex items-center gap-0.5 rounded font-medium text-accent transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+                {t("routineRun.openTeammateThread", { name })}
+                <ArrowRight aria-hidden="true" size={12} />
+              </button>
+            </>}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /** A lifecycle receipt can outlive its isolated execution task. Only offer
  * navigation while the task is still present in the owning bot's task list. */
 export function hasRoutineExecutionTask(
@@ -67,6 +104,7 @@ export function RoutineRunCard({
   message,
   onOpen,
   onResume,
+  onOpenThread,
 }: {
   message: Message;
   /** Opens the run's detail (2026-10-29: never a conversation beside the
@@ -75,6 +113,9 @@ export function RoutineRunCard({
   /** 2026-10-26: the failure paused its routine (N in a row): turn it back
    * on in one click, the failure count from zero. Absent: no button. */
   onResume?: () => void;
+  /** 2026-11-03: opens the thread a teammate works in (the run handed work
+   * to it). Absent: the teammate is named without a link. */
+  onOpenThread?: (botId: string, threadId: string) => void;
 }) {
   const run = message.routineRun;
   // Newer computers can send this message kind to an older or partially
@@ -101,12 +142,20 @@ export function RoutineRunCard({
   const statusLabel = t(copy.label);
   const reported = run.status === "completed" && (!run.goalStatus || run.goalStatus === "completed");
   // A report is the bot's words, whole; an error stays one short line.
-  const report = reported ? run.summary?.trim() : undefined;
+  // 2026-11-03 (owner report: the bubble was a lone "{"): a structured
+  // report reads as plain sentences, its whole under "Show details"; a
+  // blocked run says why in one line (the run list's own line).
+  const readable = reported && run.summary?.trim() ? routineResultText(run.summary) : null;
+  const report = readable ? (readable.structured ? readable.text : run.summary!.trim()) : undefined;
+  const details = readable?.details;
   const detail = report ? "" : compactDetail(
-    run.status === "failed" || run.status === "missed"
-      ? (routineRunError(run.error) ?? run.summary)
-      : (run.summary ?? run.attention ?? routineRunError(run.error)),
+    run.status === "blocked"
+      ? routineRunBlockedLine(run)
+      : routineResultText(run.status === "failed" || run.status === "missed"
+        ? (routineRunError(run.error) ?? run.summary)
+        : (run.summary ?? run.attention ?? routineRunError(run.error))).text,
   );
+  const handedTo = run.handedTo ?? [];
   const review = run.goalStatus === "needs-input";
   const actionLabel = review ? t("routines.post.review") : t("routines.post.openRun");
   const at = run.scheduledFor ?? message.at;
@@ -120,7 +169,9 @@ export function RoutineRunCard({
       {/* the bot's own bubble, as its other messages beside it */}
       {(report || detail) && <div className="w-fit max-w-[min(42rem,88%)] rounded-2xl bg-card px-4 py-2.5 text-[14px] leading-relaxed text-ink">
         {report ? <ChatMarkdown text={report} inert /> : <p className="whitespace-pre-wrap">{detail}</p>}
+        {details && <RunResultDetails details={details} />}
       </div>}
+      {handedTo.length > 0 && <TeammateThreadLinks handedTo={handedTo} onOpenThread={onOpenThread} />}
       {withProblems && <p data-routine-problems className="mt-1 max-w-[min(42rem,88%)] whitespace-pre-wrap px-1 text-[12px] leading-relaxed text-warning">{problems}</p>}
       <div className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-1 text-[11.5px] text-ink-secondary", (report || detail || withProblems) && "mt-1")}>
         <span className="truncate">{t("routines.post.routine", { name: run.routineName })}</span>

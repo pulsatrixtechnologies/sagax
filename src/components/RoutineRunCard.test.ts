@@ -190,4 +190,24 @@ describe("RoutineRunCard", () => {
     const html = renderToStaticMarkup(createElement(RoutineRunCard, { message: message("queued", { deferredAt: 1, attention: "Waits for the previous run of this routine to finish" }) }));
     expect(html).toContain("Waits for the previous run of this routine to finish");
   });
+
+  // 2026-11-03 production: the bubble and the card were a lone "{".
+  it("a blocked run's bubble says why in one line, the same as the run list, and links the teammate thread", () => {
+    const html = renderToStaticMarkup(createElement(RoutineRunCard, {
+      message: message("blocked", { error: "{", handedTo: [{ botId: "nova", threadId: "teammate-thread", name: "Nova", status: "running" }] }),
+      onOpen: () => {}, onOpenThread: () => {},
+    }));
+    expect(html).toContain("Blocked: waiting for Nova");
+    expect(html).not.toMatch(/>\{</);
+    expect(html).toContain('data-run-teammate-thread="teammate-thread"');
+    expect(html).toContain("text-warning");
+  });
+
+  it("a JSON report reads as plain sentences with Show details", () => {
+    const summary = '{\n  "summary": "Bank watch updated",\n  "todo": ["Approve sheet 100203"]\n}';
+    const html = renderToStaticMarkup(createElement(RoutineRunCard, { message: message("completed", { summary }) }));
+    expect(html).toContain("Bank watch updated");
+    expect(html).toContain("For you: Approve sheet 100203");
+    expect(html).toContain("data-run-result-details");
+  });
 });

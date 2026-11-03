@@ -37,22 +37,25 @@ describe("the templates entry points", () => {
     expect(templatesEntryActions("installLink", "https://github.com/acme/team")).toEqual([{ ...templates, installUrl: "https://github.com/acme/team" }]);
   });
 
-  it("leave the store with Connect apps open on its Bots tab, on Templates, and New bot closed", () => {
-    const busy = { ...initialState, newBotOpen: true, pluginsOpen: true };
+  it("leave the store with the Browse Bots window open on Templates, and Connect apps and New bot closed", () => {
     for (const entry of ["connectApps", "newBot"] as const) {
+      // each entry from the window it sits in
+      const busy = entry === "connectApps" ? { ...initialState, pluginsOpen: true } : { ...initialState, newBotOpen: true };
       const after = templatesEntryActions(entry).reduce(reducer, busy);
-      // Browse Bots is Connect apps' Bots tab (2026-10-29)
-      expect(after.botCatalogOpen).toBe(false);
-      expect(after.pluginsOpen).toBe(true);
-      expect(after.pluginsPage).toBe("bots");
+      // Browse Bots is its own centred window again (619b200c8, windows
+      // stay windows); Connect apps' Bots tab only embeds the same pane.
+      expect(after.botCatalogOpen).toBe(true);
+      expect(after.pluginsOpen).toBe(false);
       expect(after.botCatalogTarget).toEqual({ section: "templates" });
-      if (entry === "newBot") expect(after.newBotOpen).toBe(false);
+      expect(after.newBotOpen).toBe(false);
     }
     const linked = templatesEntryActions("installLink", "openmaus://install?u=x").reduce(reducer, initialState);
-    expect(linked.pluginsPage).toBe("bots");
+    expect(linked.botCatalogOpen).toBe(true);
     expect(linked.botCatalogTarget).toEqual({ section: "templates", installUrl: "openmaus://install?u=x" });
-    // Closing Connect apps forgets the target.
-    expect(reducer(linked, { type: "togglePlugins", open: false }).botCatalogTarget).toBeNull();
+    // Closing the window forgets the target; closing Connect apps does not
+    // touch the open window's target.
+    expect(reducer(linked, { type: "closeBotCatalog" }).botCatalogTarget).toBeNull();
+    expect(reducer(linked, { type: "togglePlugins", open: false }).botCatalogTarget).toEqual(linked.botCatalogTarget);
   });
 
   it("New bot's Browse templates button dispatches them (not in the defaults editor)", () => {

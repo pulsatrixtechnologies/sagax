@@ -506,9 +506,12 @@ export class RuntimeCoordinator implements Coordinator {
     const roots = this.store.all().filter(a => !a.parentId && this.direct(a, threadId) && a.createdAt >= since);
     if (!roots.length) return null;
     const failed: HandedOutOutcome["failed"] = [];
+    const handed: NonNullable<HandedOutOutcome["handed"]> = [];
     for (const root of roots) {
       const children = this.store.children(root.id);
       for (const child of children) {
+        const threadId = child.assignee.destination.threadId;
+        if (threadId && !handed.some((entry) => entry.threadId === threadId)) handed.push({ botId: child.assignee.botId, threadId, status: child.status });
         if (child.reply === "none" || !isTerminal(child)) continue;
         if (child.status === "completed") continue;
         // Redone later by the same teammate, and that completed: not a failure.
@@ -520,6 +523,7 @@ export class RuntimeCoordinator implements Coordinator {
     return {
       root: { status: root.status, ...(root.outcome ? { outcome: root.outcome } : {}), detail: clip(root.outcomeDetail || "", 300), result: root.result },
       failed,
+      ...(handed.length ? { handed: handed.slice(0, 5) } : {}),
       pending: roots.some(r => !isTerminal(r)),
     };
   }

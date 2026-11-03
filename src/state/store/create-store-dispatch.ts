@@ -21,6 +21,7 @@ import { readableError } from "@/lib/plain-error";
 import { approvalModeFor, botApprovalSetting } from "../../../shared/approval-mode";
 import { stepUpApprovals } from "@/lib/step-up-client";
 import { singleStreamTurnField } from "@/lib/thread-preferences";
+import { noteNewChatTopic } from "@/lib/fresh-topic";
 import { beginLocalSend, claimInFlightSend, finishSend } from "@/lib/send-cancel";
 import { restoreComposerDraft } from "@/lib/drafts";
 import { answerResponse, dismissResponse } from "@/lib/card-answer";
@@ -282,6 +283,8 @@ function dispatchSendEffects(action: Action, env: DispatchEnv): void {
             // A second message typed while the topic is being made waits
             // for it and goes there too: one topic, never two.
             let creating = freshTopicsCreating.get(action.botId);
+            // asked for (New chat), not put there by coming back
+            const askedNewChat = stateRef.current.freshTopic[action.botId]?.auto === false;
             if (!creating) {
               const revision = (navigation.get(action.botId) ?? 0) + 1;
               navigation.set(action.botId, revision);
@@ -291,6 +294,9 @@ function dispatchSendEffects(action: Action, env: DispatchEnv): void {
                   const created = r?.task?.threadId ?? r?.bot?.threadId;
                   if (!r?.bot || !created) throw new Error(t("stream.freshFailed"));
                   if (Array.isArray(r.bot.messages)) threadPages.set(r.bot.threadId, { messages: r.bot.messages, hasMore: r.bot.hasMore, activeLeafId: r.bot.activeLeafId, at: Date.now() });
+                  // New chat: the topic opens on its own, never under the
+                  // earlier ones drawn back above it (src/lib/fresh-topic.ts).
+                  if (askedNewChat) noteNewChatTopic(created);
                   if (navigation.get(action.botId) === revision) dispatch({ type: "taskSwitched", bot: r.bot });
                   rawDispatch({ type: "freshTopic", botId: action.botId, threadId: null });
                   return created;

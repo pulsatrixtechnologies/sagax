@@ -384,10 +384,8 @@ struct DesktopShell: View {
                         .transition(.move(edge: .trailing))
                 }
             }
-            // Settings open: the sidebar and the chat are hidden at once, with
-            // no animation, so nothing of them shows through or crosses it.
-            .opacity(model.modal == .settings ? 0 : 1)
-            .animation(nil, value: model.modal == .settings)
+            // Settings open: the window stays drawn behind the centred
+            // modal, as the desktop's (2026-11-03 references).
             if !docked, botOpen, let bot = selectedBot {
                 // Below 1024 the panel covers the leading edge (measured at
                 // 834: x 0, 360 wide), the chat still visible to its right.

@@ -292,7 +292,7 @@ final class MemberEnvironmentGateTests: XCTestCase {
     func testAMemberReachesTheirOwnEngines() {
         XCTAssertTrue(member().allows(.myEngines))
         XCTAssertTrue(DesktopSettingsSection.available(for: member()).contains(.myEngines))
-        XCTAssertEqual(DesktopSettingsNavGroup.of(.myEngines), .bots)
+        XCTAssertEqual(DesktopSettingsNavGroup.of(.myEngines), .ai)
         let phone = Set(SettingsTree.reachable(SettingsContext(gate: member(), connected: true)).map(\.item))
         XCTAssertTrue(phone.contains(.myEngines))
         XCTAssertEqual(SettingsTree.path(to: .myEngines), [.bots])

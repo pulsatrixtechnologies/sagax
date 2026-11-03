@@ -13,33 +13,34 @@ final class DesktopSettingsTests: XCTestCase {
 
     func testAnAdminSessionListsTheDesktopSectionsInOrder() {
         let expected: [DesktopSettingsSection] = [
-            .general, .organization, .appearance, .experimental, .engines, .computer, .usage, .backups,
+            .general, .appearance, .providers, .engines, .voice, .organization, .computer, .usage, .backups,
+            .experimental, .updates, .about,
         ]
         XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: .serverAdmin)), expected)
         // an organization server adds My engines (#1098) and My connections
-        // after Models and voice
+        // after Models
         var organization = expected
-        organization.insert(contentsOf: [.myEngines, .myConnections], at: 5)
+        organization.insert(contentsOf: [.myEngines, .myConnections], at: 4)
         XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: .serverAdmin, organization: true)), organization)
     }
 
     func testAClientOnAnOrganizationServerGetsMyConnections() {
         XCTAssertEqual(
             DesktopSettingsSection.available(for: SurfaceGate(scope: .serverClient, organization: true)),
-            [.organization, .myEngines, .myConnections, .appearance]
+            [.appearance, .myEngines, .myConnections, .organization, .updates, .about]
         )
         XCTAssertTrue(DesktopSettingsSection.myConnections.matches("mes connexions", label: "My connections"))
     }
 
     func testASidecarAndAClientSessionGetTheRemoteClientSections() {
         for scope in [PairingScope.sidecar, .serverClient] {
-            XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: scope)), [.organization, .appearance])
+            XCTAssertEqual(DesktopSettingsSection.available(for: SurfaceGate(scope: scope)), [.appearance, .organization, .updates, .about])
         }
     }
 
     func testAFormerSectionOpensThePageThatHoldsItsCard() {
         let all = DesktopSettingsSection.available(for: SurfaceGate(scope: .serverAdmin))
-        XCTAssertEqual(DesktopSettingsSection.resolve(.connections, available: all, visible: all), .engines)
+        XCTAssertEqual(DesktopSettingsSection.resolve(.connections, available: all, visible: all), .providers)
         XCTAssertEqual(DesktopSettingsSection.resolve(.decisionModel, available: all, visible: all), .engines)
         XCTAssertEqual(DesktopSettingsSection.resolve(.companion, available: all, visible: all), .organization)
         XCTAssertTrue(DesktopSettingsSection.engines.matches("jev", label: "Models and voice"))
@@ -59,7 +60,7 @@ final class DesktopSettingsTests: XCTestCase {
         XCTAssertEqual(DesktopSettingsSection.resolve(.usage, available: all, visible: [.appearance]), .appearance)
         // a section the pairing does not list opens its first one
         let remote = DesktopSettingsSection.available(for: SurfaceGate(scope: .sidecar))
-        XCTAssertEqual(DesktopSettingsSection.resolve(.general, available: remote, visible: []), .organization)
+        XCTAssertEqual(DesktopSettingsSection.resolve(.general, available: remote, visible: []), .appearance)
     }
 
     func testPluginsTabsFollowTheConnectorGates() {

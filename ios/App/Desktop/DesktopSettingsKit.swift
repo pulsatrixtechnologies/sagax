@@ -13,7 +13,7 @@ import CompanionCore
 // MARK: - Icons
 
 enum DesktopSettingsIcon: String, CaseIterable {
-    case user, building2, palette, flaskConical, keyRound, zap, terminal, tabletSmartphone, monitor, coins, mail, archive, users, scrollText, search, x, chevronDown, chevronUp, circleQuestionMark, refreshCw, check, externalLink, download, upload, arrowUpRight, loaderCircle, shield, rotateCcw, triangleAlert, clipboardPaste, plus, circlePower, pencil, trash2, globe, plugZap, plug, circle, circleCheck
+    case user, building2, palette, flaskConical, keyRound, zap, terminal, tabletSmartphone, monitor, coins, mail, archive, users, scrollText, search, x, chevronDown, chevronUp, circleQuestionMark, refreshCw, check, externalLink, download, upload, arrowUpRight, loaderCircle, shield, rotateCcw, triangleAlert, clipboardPaste, plus, circlePower, pencil, trash2, globe, plugZap, plug, circle, circleCheck, audioLines, info
 
     /// Path data in the 24 pt viewBox (lucide-react 0.539, ISC).
     var paths: [String] {
@@ -57,6 +57,8 @@ enum DesktopSettingsIcon: String, CaseIterable {
         case .plug: ["M12 22v-5","M9 8V2","M15 8V2","M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"]
         case .circle: ["M2 12A10 10 0 1 0 22 12A10 10 0 1 0 2 12Z"]
         case .circleCheck: ["M2 12A10 10 0 1 0 22 12A10 10 0 1 0 2 12Z","m9 12 2 2 4-4"]
+        case .audioLines: ["M2 10v3","M6 6v11","M10 3v18","M14 8v7","M18 5v13","M22 10v3"]
+        case .info: ["M2 12A10 10 0 1 0 22 12A10 10 0 1 0 2 12Z","M12 16v-4","M12 8h.01"]
         }
     }
 }

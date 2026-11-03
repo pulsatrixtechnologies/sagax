@@ -27,7 +27,10 @@ vi.mock("./DesktopCapabilities", async (importOriginal) => ({
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 
 const { initialState } = await import("@/state/store");
-const { RoutinesPage, RoutineEditor, EventDetails } = await import("./RoutineCalendarPage");
+const { RoutinesPage: MemoRoutinesPage, RoutineEditor, EventDetails } = await import("./RoutineCalendarPage");
+// The page is memoized (2026-11-02, calendar performance): these tests call
+// its function directly.
+const RoutinesPage = MemoRoutinesPage.type;
 const { PageMenuItem } = await import("./content-page");
 const SOURCE = readFileSync(join(process.cwd(), "src/components/RoutineCalendarPage.tsx"), "utf8");
 

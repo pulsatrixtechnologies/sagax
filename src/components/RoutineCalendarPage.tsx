@@ -1,6 +1,7 @@
 import { boatCapableEngine } from "@/lib/remote-desktop";
 import { boatComputerEnabled, routinesInConversationEnabled } from "@/lib/feature-flags";
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -105,7 +106,7 @@ import {
   toLocalTimeInput,
   type RoutineCalendarItem,
 } from "@/lib/routine-calendar";
-import { dayNames, durationLabel, intervalLabel, niceDate, niceTime, scheduleLabel, scheduleLabelCompact } from "@/lib/schedule-label";
+import { cachedDateFormat, dayNames, durationLabel, intervalLabel, niceDate, niceTime, scheduleLabel, scheduleLabelCompact } from "@/lib/schedule-label";
 import { PillSelect, Switch } from "./SettingsPrimitives";
 import { MarkdownEditor } from "./markdown/MarkdownEditor";
 import {
@@ -121,7 +122,8 @@ import {
   type RoutineScheduleInput,
   type RoutineTarget,
 } from "@/lib/routines";
-import { api, useStore, type Bot, type Group } from "@/state/store";
+import { api, useStore, type AppState, type Bot, type Group } from "@/state/store";
+import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { viewerCanCreateBots } from "@/lib/viewer";
 import { createAnswerErrorMessage, recoverCreatedRoutineAfterLostAnswer } from "@/lib/routine-save-recovery";
 import { RoutineScheduleNote } from "./RoutineScheduleNote";
@@ -1758,13 +1760,21 @@ export function QuickComposer({
   );
 }
 
-function CalendarEventCard({
+const SINGLE_COLUMN = { column: 0, columns: 1 };
+const viewerPrincipalOf = (state: AppState) => state.config?.viewer?.principalId?.toLowerCase();
+
+/** One card of the grid. Memoized (2026-11-02): it renders when its own item,
+ * its bots or the minute it turns past changes, never on another card's
+ * live frame. */
+const CalendarEventCard = memo(function CalendarEventCard({
   item,
   bots,
   groups,
   compact,
-  layout,
+  column,
+  columns,
   reserveRight = 0,
+  past,
   onOpen,
   onResize,
 }: {
@@ -1772,11 +1782,16 @@ function CalendarEventCard({
   bots: Bot[];
   groups: Group[];
   compact: boolean;
-  layout: { column: number; columns: number };
+  /** Its column among the overlapping cards (numbers, so an equal layout
+   * computed again does not render the card). */
+  column: number;
+  columns: number;
   /** Room kept free for the "+N" marker of a crowded half hour. */
   reserveRight?: number;
-  onOpen: () => void;
-  onResize: (minutes: number) => void;
+  /** The occurrence is in the past (a plan there no longer moves). */
+  past: boolean;
+  onOpen: (item: CalendarEventItem) => void;
+  onResize: (item: CalendarEventItem, minutes: number) => void;
 }) {
   const isCall = item.kind === "call";
   const routine = item.kind === "routine" ? item.routine : null;
@@ -1795,14 +1810,13 @@ function CalendarEventCard({
   // Someone else's routine (a wider scope): its owner, and no drag unless
   // the server says this person may edit it.
   const confirm = useConfirm();
-  const { state: cardState } = useStore();
-  const viewerId = cardState.config?.viewer?.principalId?.toLowerCase();
+  const viewerId = useStoreSelector(viewerPrincipalOf);
   const otherOwner = routine?.owner && routine.owner.id && routine.owner.id.toLowerCase() !== viewerId ? routine.owner : null;
   const [previewDuration, setPreviewDuration] = useState(item.durationMinutes);
   useEffect(() => setPreviewDuration(item.durationMinutes), [item.durationMinutes]);
   const status = run?.status;
   const statusLabel = run ? routineRunLabel(run) : undefined;
-  const canMove = isCall || Boolean(routine && !run && item.at >= Date.now() && routine.schedule.type !== "cron" && routine.canEdit !== false);
+  const canMove = isCall || Boolean(routine && !run && !past && routine.schedule.type !== "cron" && routine.canEdit !== false);
   const schedule = isCall ? item.call.schedule : routine?.schedule;
   const recurring = Boolean(schedule && schedule.type !== "once");
   const intervalCadence = schedule?.type === "interval" ? intervalLabel(schedule.everyMinutes) : null;
@@ -1836,7 +1850,7 @@ function CalendarEventCard({
           setPreviewDuration(item.durationMinutes);
           return;
         }
-        onResize(next);
+        onResize(item, next);
       })();
     };
     document.addEventListener("pointermove", move);
@@ -1855,11 +1869,11 @@ function CalendarEventCard({
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData(EVENT_DRAG_TYPE, JSON.stringify({ kind: item.kind, id: isCall ? item.call.id : routine!.id, at: item.at }));
       }}
-      onClick={(event) => { event.stopPropagation(); onOpen(); }}
+      onClick={(event) => { event.stopPropagation(); onOpen(item); }}
       className={cn("group absolute z-10 overflow-hidden rounded-md border text-left shadow-sm transition hover:z-20 hover:brightness-110 focus:z-20 focus:outline-none focus:ring-2 focus:ring-accent", previewDuration < 30 ? "px-1.5 py-0" : "px-2 py-1.5", (status === "cancelled" || deletedRoutine) && "opacity-55", deletedRoutine && "border-dashed", (status === "failed" || status === "missed") && "border-danger/60")}
       style={{
-        left: `calc(${(layout.column / layout.columns) * 100}% + 2px)`,
-        width: `calc(${100 / layout.columns}% - ${4 + reserveRight}px)`,
+        left: `calc(${(column / columns) * 100}% + 2px)`,
+        width: `calc(${100 / columns}% - ${4 + reserveRight}px)`,
         top: `${((new Date(item.at).getHours() * 60 + new Date(item.at).getMinutes()) / 60) * HOUR_HEIGHT}px`,
         height: `${Math.max(16, (previewDuration / 60) * HOUR_HEIGHT)}px`,
         background: `linear-gradient(110deg, color-mix(in srgb, ${color} 58%, #242424), color-mix(in srgb, ${color} 28%, #181818))`,
@@ -1875,12 +1889,51 @@ function CalendarEventCard({
         </div>
         {!titleOnly && ownerBots.length > 1 && <span className="rounded bg-black/20 px-1 py-0.5 text-[11px]">+{ownerBots.length - 1}</span>}
       </div>
-      {isCall && <div onPointerDown={beginResize} className="absolute inset-x-1 bottom-0 h-1.5 cursor-ns-resize rounded-full opacity-0 transition group-hover:opacity-100" aria-label={t("routineCalendar.resizeEvent")}><div className="mx-auto mt-0.5 h-0.5 w-5 rounded-full bg-white/55" /></div>}
+      {isCall && <div onPointerDown={beginResize} className="absolute inset-x-1 bottom-0 h-1.5 cursor-ns-resize rounded-full opacity-0 transition-opacity group-hover:opacity-100" aria-label={t("routineCalendar.resizeEvent")}><div className="mx-auto mt-0.5 h-0.5 w-5 rounded-full bg-white/55" /></div>}
     </button>
   );
+});
+
+/** The current minute, for the now line and what turns past: one timer per
+ * grid, aligned on the minute (the memoized grid no longer renders on every
+ * store frame, which used to move the line by accident). */
+function useMinuteNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    let timer = 0;
+    const schedule = () => {
+      timer = window.setTimeout(() => { setNow(Date.now()); schedule(); }, 60_000 - (Date.now() % 60_000) + 50);
+    };
+    schedule();
+    return () => window.clearTimeout(timer);
+  }, []);
+  return now;
 }
 
-function CalendarGrid({
+const HOUR_LABEL_OPTIONS: Intl.DateTimeFormatOptions = { hour: "numeric" };
+const NO_MARKERS: ResetMarker[] = [];
+
+type DayLayout = {
+  start: number;
+  shown: CalendarEventItem[];
+  overflow: Array<{ id: string; at: number; items: CalendarEventItem[] }>;
+  layouts: Map<string, { column: number; columns: number }>;
+  crowded: Set<string>;
+};
+
+/** Each visible day's cards, "+N" groups and columns, in one pass over the
+ * items (sorted once, bucketed by day): computed when the items or the range
+ * change, not on every render of the grid. */
+function layoutDays(items: readonly CalendarEventItem[], starts: readonly number[]): DayLayout[] {
+  const byDay = new Map<number, CalendarEventItem[]>(starts.map((start) => [start, []]));
+  for (const item of items) byDay.get(startOfDay(item.at))?.push(item);
+  return starts.map((start) => {
+    const { shown, overflow } = groupCalendarSlots(byDay.get(start) ?? []);
+    return { start, shown, overflow, layouts: packCalendarCollisions(shown), crowded: new Set(overflow.map((group) => group.id.slice("more-".length))) };
+  });
+}
+
+const CalendarGrid = memo(function CalendarGrid({
   anchor,
   days,
   items,
@@ -1927,8 +1980,15 @@ function CalendarGrid({
     document.addEventListener("pointerdown", close);
     return () => { document.removeEventListener("pointerdown", close); document.removeEventListener("keydown", onKey); };
   }, [moreOpen]);
-  const today = startOfDay(Date.now());
-  const starts = Array.from({ length: days }, (_, index) => addDays(anchor, index));
+  const minuteNow = useMinuteNow();
+  const today = startOfDay(minuteNow);
+  const starts = useMemo(() => Array.from({ length: days }, (_, index) => addDays(anchor, index)), [anchor, days]);
+  const dayLayouts = useMemo(() => layoutDays(items, starts), [items, starts]);
+  const weekdayNames = dayNames();
+  const hourLabels = useMemo(() => {
+    const format = cachedDateFormat(HOUR_LABEL_OPTIONS, activeLocale());
+    return Array.from({ length: 24 }, (_, hour) => hour === 0 ? "" : format.format(new Date(2000, 0, 1, hour)));
+  }, []);
   const minDayWidth = days === 7 ? 88 : days === 3 ? 180 : 340;
   const gridTemplateColumns = `64px repeat(${days}, minmax(${minDayWidth}px, 1fr))`;
   const minWidth = 64 + days * minDayWidth;
@@ -1941,12 +2001,16 @@ function CalendarGrid({
     viewport.scrollTo({ top: hour * HOUR_HEIGHT });
   }, [days]);
 
+  // The bots read when a drag starts, so the listeners stay put while the
+  // bots' live frames arrive.
+  const botsRef = useRef(bots);
+  botsRef.current = bots;
   useEffect(() => {
     const start = (event: DragEvent) => {
       const transfer = event.dataTransfer;
       if (!transfer?.types.includes(BOT_DRAG_TYPE)) return;
       const botId = transfer.getData(BOT_DRAG_TYPE);
-      setBotDrag({ name: bots.find((bot) => bot.id === botId)?.name ?? "" });
+      setBotDrag({ name: botsRef.current.find((bot) => bot.id === botId)?.name ?? "" });
     };
     const stop = () => { setBotDrag(null); setDragPreview(null); };
     document.addEventListener("dragstart", start);
@@ -1957,7 +2021,7 @@ function CalendarGrid({
       document.removeEventListener("dragend", stop);
       document.removeEventListener("drop", stop);
     };
-  }, [bots]);
+  }, []);
 
   const beginSelection = (event: ReactPointerEvent<HTMLDivElement>, day: number) => {
     if (event.button !== 0 || (event.target as HTMLElement).closest("[data-event-card]")) return;
@@ -2023,19 +2087,16 @@ function CalendarGrid({
         {starts.map((start) => {
           const date = new Date(start);
           const isToday = start === today;
-          return <div key={start} role="columnheader" className={cn("border-b border-r border-hairline/40 px-2 py-2 text-center last:border-r-0", isToday && "bg-accent/[0.035]")}><div className={cn("text-[11px] font-medium", isToday ? "text-accent" : "text-ink-secondary")}>{dayNames()[date.getDay()]}</div><div className={cn("mx-auto mt-1 flex size-8 items-center justify-center rounded-full text-[15px] font-medium", isToday ? "bg-accent text-accent-ink" : "text-ink")}>{date.getDate()}</div></div>;
+          return <div key={start} role="columnheader" className={cn("border-b border-r border-hairline/40 px-2 py-2 text-center last:border-r-0", isToday && "bg-accent/[0.035]")}><div className={cn("text-[11px] font-medium", isToday ? "text-accent" : "text-ink-secondary")}>{weekdayNames[date.getDay()]}</div><div className={cn("mx-auto mt-1 flex size-8 items-center justify-center rounded-full text-[15px] font-medium", isToday ? "bg-accent text-accent-ink" : "text-ink")}>{date.getDate()}</div></div>;
         })}
       </div>
       <div role="grid" aria-label={t("routineCalendar.calendarAria")} onDragEnd={() => setDragPreview(null)} className="relative grid" style={{ height: HOUR_HEIGHT * 24, gridTemplateColumns, minWidth }}>
         <div className="relative border-r border-hairline/40">
-          {Array.from({ length: 24 }, (_, hour) => <div key={hour} className="absolute right-2 -translate-y-1/2 text-[11px] tabular-nums text-ink-tertiary" style={{ top: hour * HOUR_HEIGHT }}>{hour === 0 ? "" : new Date(2000, 0, 1, hour).toLocaleTimeString(activeLocale(), { hour: "numeric" })}</div>)}
+          {hourLabels.map((label, hour) => <div key={hour} className="absolute right-2 -translate-y-1/2 text-[11px] tabular-nums text-ink-tertiary" style={{ top: hour * HOUR_HEIGHT }}>{label}</div>)}
         </div>
-        {starts.map((start) => {
-          const now = new Date();
+        {dayLayouts.map(({ start, shown: dayItems, overflow, layouts: collisionLayouts, crowded }) => {
+          const now = new Date(minuteNow);
           const nowTop = ((now.getHours() * 60 + now.getMinutes()) / 60) * HOUR_HEIGHT;
-          const { shown: dayItems, overflow } = groupCalendarSlots(items.filter((item) => startOfDay(item.at) === start));
-          const collisionLayouts = packCalendarCollisions(dayItems);
-          const crowded = new Set(overflow.map((group) => group.id.slice("more-".length)));
           const selected = selection?.day === start ? selection : null;
           const preview = dragPreview?.day === start ? dragPreview : null;
           return (
@@ -2045,8 +2106,8 @@ function CalendarGrid({
               {selected && <div className="pointer-events-none absolute inset-x-1 z-10 rounded-md border border-accent/70 bg-accent/20" style={{ top: ((new Date(selected.start).getHours() * 60 + new Date(selected.start).getMinutes()) / 60) * HOUR_HEIGHT, height: Math.max(16, ((selected.end - selected.start) / 3_600_000) * HOUR_HEIGHT) }} />}
               {!selected && pending && startOfDay(pending.at) === start && <div data-calendar-pending="" className="pointer-events-none absolute inset-x-1 z-10 overflow-hidden rounded-md border border-accent/70 bg-accent/15 px-2 py-1 text-[12px] font-medium text-accent-text" style={{ top: ((new Date(pending.at).getHours() * 60 + new Date(pending.at).getMinutes()) / 60) * HOUR_HEIGHT, height: Math.max(16, (pending.durationMinutes / 60) * HOUR_HEIGHT) }}>{pending.kind === "call" ? t("routineCalendar.newEvent") : t("routineEditor.titleNew")}</div>}
               {preview && <div className="pointer-events-none absolute inset-x-1 z-20 rounded-md border border-accent/80 bg-accent/25 shadow-sm" style={{ top: ((new Date(preview.at).getHours() * 60 + new Date(preview.at).getMinutes()) / 60) * HOUR_HEIGHT, height: HOUR_HEIGHT / 2 }}><div className="px-2 py-1 text-[11px] font-medium text-accent">{niceTime(preview.at)}</div></div>}
-              {dayItems.map((item) => <CalendarEventCard key={item.id} item={item} bots={bots} groups={groups} compact={days === 7} layout={collisionLayouts.get(item.id) ?? { column: 0, columns: 1 }} reserveRight={crowded.has(item.id) ? 34 : 0} onOpen={() => onOpen(item)} onResize={(minutes) => onResize(item, minutes)} />)}
-              {(markers ?? []).filter((marker) => startOfDay(marker.at) === start).map((marker) => (
+              {dayItems.map((item) => <CalendarEventCard key={item.id} item={item} bots={bots} groups={groups} compact={days === 7} column={(collisionLayouts.get(item.id) ?? SINGLE_COLUMN).column} columns={(collisionLayouts.get(item.id) ?? SINGLE_COLUMN).columns} reserveRight={crowded.has(item.id) ? 34 : 0} past={item.at < minuteNow} onOpen={onOpen} onResize={onResize} />)}
+              {(markers ?? NO_MARKERS).filter((marker) => startOfDay(marker.at) === start).map((marker) => (
                 <LimitResetMarker
                   key={marker.engine}
                   marker={marker}
@@ -2079,7 +2140,7 @@ function CalendarGrid({
     </div>
     </div>
   );
-}
+});
 
 export function EventDetails({
   item,
@@ -2405,9 +2466,47 @@ export function RoutineEditor({
   return <EventEditor seed={{ kind: "routine", at, durationMinutes: source?.durationMinutes ?? 30, botIds: lockedBotId ? [lockedBotId] : source ? [source.botId] : [], routine, ...(copyOf && !routine ? { copyOf } : {}), ...(folder && !routine ? { folder } : {}) }} bots={bots} lockedBotId={lockedBotId} defaultRunOn={defaultRunOn} presentation={presentation} onClose={onClose} onSavedCall={() => {}} />;
 }
 
-export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fill = false }: { onBack: () => void; onOpenRoom: (id: string) => void; embedded?: boolean; fill?: boolean }) {
+/** The slices of the store the Automations page reads (2026-11-02): it
+ * renders when one of them changes, not on every store frame (a bot's
+ * stream, an unread mark, the sidebar). */
+function selectRoutinesPage(state: AppState) {
+  return {
+    routines: state.routines,
+    routineRuns: state.routineRuns,
+    bots: state.bots,
+    groups: state.groups,
+    config: state.config,
+    routinesFocus: state.routinesFocus,
+    routinesLoadState: state.routinesLoadState,
+    webhooks: state.webhooks,
+  };
+}
+
+const IN_FLIGHT_STATUSES: ReadonlySet<RoutineRunStatus> = new Set(["queued", "running", "waiting"]);
+/** The in-flight runs, kept as the same array while that set (ids and
+ * statuses) does not change: the upcoming panel reads only these. */
+function useInFlightRuns(runs: RoutineRun[]): RoutineRun[] {
+  const held = useRef<{ key: string; runs: RoutineRun[] }>({ key: "", runs: [] });
+  return useMemo(() => {
+    const inFlight = runs.filter((run) => IN_FLIGHT_STATUSES.has(run.status));
+    const key = inFlight.map((run) => `${run.id}:${run.routineId}:${run.status}`).join("|");
+    if (key !== held.current.key) held.current = { key, runs: inFlight };
+    return held.current.runs;
+  }, [runs]);
+}
+
+/** The latest render's function behind a stable one: a memoized child keeps
+ * the same prop while the function reads this render's state. */
+function useStableHandler<A extends unknown[], R>(handler: (...args: A) => R): (...args: A) => R {
+  const ref = useRef(handler);
+  ref.current = handler;
+  return useCallback((...args: A) => ref.current(...args), []);
+}
+
+export const RoutinesPage = memo(function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fill = false }: { onBack: () => void; onOpenRoom: (id: string) => void; embedded?: boolean; fill?: boolean }) {
   const confirm = useConfirm();
-  const { state, dispatch } = useStore();
+  const state = useStoreSelector(selectRoutinesPage, shallowEqual);
+  const dispatch = useStoreDispatch();
   const { capabilities } = useDesktopCapabilities();
   const advanced = useAdvancedMode();
   const routinesOnly = window.ogb?.remoteClient?.active === true;
@@ -2469,13 +2568,55 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
   }, [loadCalls, routinesOnly]);
   useDismissMenus([newMenuRef, navMenuRef, filtersMenuRef]);
 
+  // The plans come from the schedules alone (scheduledRoutineItems ignores
+  // the runs): a live run frame never recomputes them.
+  // An item that reads the same as the last one drawn (same routine or call
+  // record, time and length) stays the same object, so its card skips the
+  // render when another routine changes.
+  const heldItems = useRef(new Map<string, CalendarEventItem>());
   const items = useMemo<CalendarEventItem[]>(() => {
-    const routineItems = scheduledRoutineItems(scopedRoutines, scopedRuns, rangeStart, rangeEnd).map((item) => ({ ...item, kind: "routine" as const }));
+    const routineItems = scheduledRoutineItems(scopedRoutines, [], rangeStart, rangeEnd).map((item) => ({ ...item, kind: "routine" as const }));
     const callItems = projectCalls(calls, rangeStart, rangeEnd).map((item) => ({ ...item, kind: "call" as const }));
-    return [...routineItems, ...callItems]
+    const next = [...routineItems, ...callItems]
       .filter((item) => botFilter === "all" || (item.kind === "call" ? item.call.botIds.includes(botFilter) : (item.routine?.botId ?? item.run?.botId) === botFilter))
       .sort((left, right) => left.at - right.at);
-  }, [scopedRoutines, scopedRuns, calls, rangeStart, rangeEnd, botFilter]);
+    const held = heldItems.current;
+    const kept = new Map<string, CalendarEventItem>();
+    const shared = next.map((item) => {
+      const old = held.get(item.id);
+      const same = old && old.kind === item.kind && old.at === item.at && old.durationMinutes === item.durationMinutes
+        && (item.kind === "call" ? old.kind === "call" && old.call === item.call : old.kind === "routine" && old.routine === item.routine && old.run === item.run);
+      const value = same ? old : item;
+      kept.set(item.id, value);
+      return value;
+    });
+    heldItems.current = kept;
+    return shared;
+  }, [scopedRoutines, calls, rangeStart, rangeEnd, botFilter]);
+
+  // The ranges either side are projected while the page is idle, one day per
+  // idle slice (no long task), so Previous and Next (and Day, 3 days, Week)
+  // find their cron runs already computed (the per-day cache in
+  // routine-calendar.ts).
+  const calendarShown = section === "calendar" && scheduleView === "calendar";
+  useEffect(() => {
+    if (!calendarShown) return;
+    const idle = window.requestIdleCallback ?? ((callback: IdleRequestCallback) => window.setTimeout(() => callback({ didTimeout: true, timeRemaining: () => 8 } as IdleDeadline), 200));
+    const cancel = window.cancelIdleCallback ?? window.clearTimeout;
+    const days: number[] = [];
+    for (let day = startOfWeek(addDays(rangeStart, -7)); day < rangeStart; day = addDays(day, 1)) days.push(day);
+    for (let day = rangeEnd; day < addDays(startOfWeek(rangeEnd), 14); day = addDays(day, 1)) days.push(day);
+    let handle = 0;
+    const step = (deadline: IdleDeadline) => {
+      while (days.length && deadline.timeRemaining() > 4) {
+        const day = days.shift()!;
+        scheduledRoutineItems(scopedRoutines, [], day, addDays(day, 1));
+      }
+      if (days.length) handle = idle(step);
+    };
+    handle = idle(step);
+    return () => cancel(handle);
+  }, [calendarShown, scopedRoutines, rangeStart, rangeEnd]);
 
   const liveSelected = selected?.kind === "call"
     ? (() => { const call = calls.find((candidate) => candidate.id === selected.call.id); return call ? { ...selected, call } : null; })()
@@ -2491,8 +2632,9 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
   const paused = scopedRoutines.filter((routine) => !routine.enabled && (routine.schedule.type !== "once" || routine.schedule.at > Date.now()));
   const running = scopedRuns.filter((run) => ["queued", "running", "waiting"].includes(run.status)).length;
   const unseenFailures = scopedRuns.filter((run) => isRoutineProblemRun(run) && !run.seenAt).length;
-  const filteredRoutines = scopedRoutines.filter((routine) => botFilter === "all" || routine.botId === botFilter);
-  const upcoming = upcomingRoutines(filteredRoutines);
+  const filteredRoutines = useMemo(() => scopedRoutines.filter((routine) => botFilter === "all" || routine.botId === botFilter), [scopedRoutines, botFilter]);
+  const upcoming = useMemo(() => upcomingRoutines(filteredRoutines), [filteredRoutines]);
+  const inFlightRuns = useInFlightRuns(scopedRuns);
   const filteredRuns = scopedRuns.filter((run) => botFilter === "all" || run.botId === botFilter);
   const routineOwnerOf = (run: RoutineRun) => scopedRoutines.find((routine) => routine.id === run.routineId);
   const clearLogs = () => {
@@ -2756,6 +2898,16 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
     </>
   );
   const sectionName = section === "logs" ? t("routines.logs") : section === "webhooks" ? t("routines.webhooks") : null;
+  // The calendar's handlers keep their identity, so the memoized grid, its
+  // cards and the side panel skip a render that changes none of their data.
+  const openGridItem = useStableHandler((item: CalendarEventItem) => { setSelected(item); if (item.kind === "routine" && item.run && ["failed", "missed"].includes(item.run.status) && !item.run.seenAt && !item.run.redacted) dispatch({ type: "markRoutineRunSeen", runId: item.run.id }); });
+  const moveGridItem = useStableHandler((item: { kind: EventKind; id: string; at: number }, at: number) => void moveEvent(item, at));
+  const resizeGridItem = useStableHandler((item: CalendarEventItem, duration: number) => void resizeEvent(item, duration));
+  const dropGridReset = useStableHandler((drop: ResetDrop, marker: ResetMarker) => void dropOnReset(drop, marker));
+  const selectSidebarDate = useCallback((at: number) => setAnchor(startOfDay(at)), []);
+  const openSidebarRoutine = useStableHandler(showUpcoming);
+  const collapseSidebar = useCallback(() => setBotsOpen(false), []);
+  const pendingSlot = useMemo(() => quick && !quick.limitReset ? { at: quick.at, durationMinutes: quick.durationMinutes, kind: quick.kind } : null, [quick]);
 
   return (
     <main className={cn("flex h-full min-w-0 flex-col bg-app", fill ? "flex-1" : embedded ? "w-[min(820px,48vw)] min-w-[420px] shrink-0 border-l border-hairline/40" : "flex-1 animate-workspace-in")}>
@@ -2822,7 +2974,7 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
             renamingId={renamingId} onRenameStart={(routine) => setRenamingId(routine.id)} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)} />
           {rowMenu && <RoutineMenuPortal x={rowMenu.x} y={rowMenu.y} kind="row" label={rowMenu.routine.name} onClose={closeRowMenu}>
             <RoutineRowMenuItems routine={rowMenu.routine} actions={routineRowActions({
-              routine: rowMenu.routine, bot: state.bots.find((bot) => bot.id === rowMenu.routine.botId), state, dispatch, close: closeRowMenu,
+              routine: rowMenu.routine, bot: state.bots.find((bot) => bot.id === rowMenu.routine.botId), state: { config: state.config, routineRuns: state.routineRuns }, dispatch, close: closeRowMenu,
               onOpen: () => openRoutine(rowMenu.routine),
               onDuplicate: () => duplicateRoutine(rowMenu.routine),
               onRename: () => setRenamingId(rowMenu.routine.id),
@@ -2832,10 +2984,10 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
         </div></div>
       ) : (
         <div className="flex min-h-0 flex-1">
-          <CalendarGrid anchor={rangeStart} days={viewDays} items={items} bots={state.bots} groups={state.groups} onOpen={(item) => { setSelected(item); if (item.kind === "routine" && item.run && ["failed", "missed"].includes(item.run.status) && !item.run.seenAt && !item.run.redacted) dispatch({ type: "markRoutineRunSeen", runId: item.run.id }); }} onCreate={openCreate} onMove={(item, at) => void moveEvent(item, at)} onResize={(item, duration) => void resizeEvent(item, duration)} markers={markers} onDropOnReset={(drop, marker) => void dropOnReset(drop, marker)} pending={quick && !quick.limitReset ? { at: quick.at, durationMinutes: quick.durationMinutes, kind: quick.kind } : null} />
+          <CalendarGrid anchor={rangeStart} days={viewDays} items={items} bots={state.bots} groups={state.groups} onOpen={openGridItem} onCreate={openCreate} onMove={moveGridItem} onResize={resizeGridItem} markers={markers} onDropOnReset={dropGridReset} pending={pendingSlot} />
           {botsOpen ? (
             <div className="hidden shrink-0 lg:block">
-              <CalendarSidebar anchor={anchor} onSelectDate={(at) => setAnchor(startOfDay(at))} routines={upcoming} runs={scopedRuns} bots={state.bots} viewerPrincipalId={state.config?.viewer?.principalId ?? null} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && upcoming.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpenRoutine={showUpcoming} filteredOut={filteredRoutines.length > 0} onCollapse={() => setBotsOpen(false)} />
+              <CalendarSidebar anchor={anchor} onSelectDate={selectSidebarDate} routines={upcoming} runs={inFlightRuns} bots={state.bots} viewerPrincipalId={state.config?.viewer?.principalId ?? null} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && upcoming.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpenRoutine={openSidebarRoutine} filteredOut={filteredRoutines.length > 0} onCollapse={collapseSidebar} />
             </div>
           ) : (
             <button type="button" onClick={() => setBotsOpen(true)} aria-label={t("routines.upcoming.show")} title={t("routines.upcoming.title")} className="hidden w-10 shrink-0 flex-col items-center gap-2 border-l border-hairline/40 bg-panel px-1 py-4 text-[11px] text-ink-secondary hover:bg-raised hover:text-ink lg:flex">
@@ -2861,7 +3013,7 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
       </div>
     </main>
   );
-}
+});
 
 /** Desktop only: the one lever the app has against a sleeping computer.
  * The scheduler runs inside the local server, so while the Mac sleeps no

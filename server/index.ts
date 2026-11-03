@@ -16536,7 +16536,7 @@ function routineRunThread(threadId: string | undefined): boolean {
 
 type HarnessChoice = { title: string; question: string; options: string[] };
 
-/** 2026-11-03 (JC: "J'ai jamais reçu de card pour faire un choix"): a Grok
+/** 2026-11-03 (a person: "J'ai jamais reçu de card pour faire un choix"): a Grok
  * routine run called ask_choice, the passive card landed in the run's hidden
  * task, the run ended Completed six seconds later, and nothing reached the
  * person: no requestId, so no Approvals row, no member-API approval

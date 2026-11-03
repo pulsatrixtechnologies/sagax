@@ -1,7 +1,7 @@
-// 2026-11-03, GOX (Sagax 0.8.35): Ember's run of "Projet CW #801 : temps et
+// 2026-11-03, production (Sagax 0.8.35): a bot's run of "Projet CW #100200 : temps et
 // cédule" called ask_choice. The card was a passive options row in the run's
 // hidden task (no requestId), the run ended Completed six seconds later, and
-// JC never saw it: not in his chat, not in Approvals, not as a notification,
+// The person never saw it: not in their chat, not in Approvals, not as a notification,
 // not through list_pending_approvals (the member API). This is that path on a
 // real isolated server: a routine run's turn calls ask_choice on the internal
 // card route with its own capability, then ends.
@@ -34,9 +34,9 @@ it("a routine run's choice card reaches its person in the chat, the inbox, a not
   const messages = async (threadId: string) => (await api("GET", `/api/threads/${threadId}/messages?limit=100`)).messages as any[];
   const stream = await openSse(`${url}/api/events`, { origin: url });
   try {
-    const bot = (await api("POST", "/api/bots", { name: "Ember fixture" }, 201)).bot;
+    const bot = (await api("POST", "/api/bots", { name: "Scout fixture" }, 201)).bot;
     const { routine } = await api("POST", "/api/routines", {
-      name: "Projet CW #801 : temps et cédule", prompt: "Prepare the day's batch and let the person choose it.", botId: bot.id, enabled: false,
+      name: "Projet CW #100200 : temps et cédule", prompt: "Prepare the day's batch and let the person choose it.", botId: bot.id, enabled: false,
       schedule: { type: "cron", expression: "30 18 * * 1-5", timeZone: "America/Toronto" },
     }, 201);
     const { run } = await api("POST", `/api/routines/${routine.id}/run`, undefined, 201);
@@ -83,7 +83,7 @@ it("a routine run's choice card reaches its person in the chat, the inbox, a not
 
     // ── in the Approvals inbox ─────────────────────────────────────────
     const pending = (await api("GET", "/api/approvals")).pending as any[];
-    expect(pending.find((entry) => entry.requestId === requestId)).toMatchObject({ kind: "question", threadId, decidable: true, botName: "Ember fixture" });
+    expect(pending.find((entry) => entry.requestId === requestId)).toMatchObject({ kind: "question", threadId, decidable: true, botName: "Scout fixture" });
 
     // ── the run's task is listed for the person (what list_pending_approvals
     // walks; org-member-api.e2e.test.ts M11 reads it through the member API),

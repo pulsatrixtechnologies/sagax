@@ -162,8 +162,11 @@ describe("a routine run seen from the bot's chat", () => {
       : "";
     const observer = new MutationObserver((records) => {
       for (const record of records) {
-        for (const node of record.addedNodes) if (node instanceof Element) added.set(label(node), (added.get(label(node)) ?? 0) + 1);
-        for (const node of record.removedNodes) if (node instanceof Element) removed.set(label(node), (removed.get(label(node)) ?? 0) + 1);
+        // the receipt's Running spinner is its status icon: it comes with
+        // Running and goes with Completed, in a status slot that stays
+        const icon = (node: Node) => node instanceof Element && node.classList.contains("animate-spin");
+        for (const node of record.addedNodes) if (node instanceof Element && !icon(node)) added.set(label(node), (added.get(label(node)) ?? 0) + 1);
+        for (const node of record.removedNodes) if (node instanceof Element && !icon(node)) removed.set(label(node), (removed.get(label(node)) ?? 0) + 1);
       }
     });
     observer.observe(container, { subtree: true, childList: true });

@@ -1,4 +1,5 @@
 import { ArrowRight, Loader2, Play } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/cn";
 import { routineAutoPausedText, routineDateTime, routineResultText, routineRunBlockedLine, routineRunError, routineRunProblems } from "@/lib/routine-display";
@@ -41,6 +42,37 @@ const GOAL_COPY = {
 const DEFERRED = { label: "routines.status.deferred" as const, tone: "text-warning" };
 /** 2026-11-01: completed, but not all of it went right. */
 const WITH_PROBLEMS = { label: "routines.status.completedWithProblems" as const, tone: "text-warning" };
+
+/** 2026-11-03 (JC, 0.8.35: "when the status flips from Running fast, the
+ * app flashes"): a card's status change shows once it has held this long, so
+ * a burst of flips (queued, running, completed, running again...) renders
+ * once, at its end, never each step. */
+export const ROUTINE_STATUS_SETTLE_MS = 300;
+
+/** What changes the card's look: its status line. A report growing under
+ * the same status shows at once; a different status waits to settle. */
+function statusKey(run: RoutineRunCardData | undefined): string {
+  if (!run) return "";
+  return [run.status, run.goalStatus ?? "", run.problems ? "p" : "", run.deferredAt != null ? "d" : "", run.autoPausedAfter ?? ""].join("|");
+}
+
+/** The run the card draws: the latest one while its status holds, the one
+ * shown before while a new status has not held ROUTINE_STATUS_SETTLE_MS. */
+export function useSettledRoutineRun(run: RoutineRunCardData | undefined): RoutineRunCardData | undefined {
+  const [shown, setShown] = useState(run);
+  const latest = useRef(run);
+  latest.current = run;
+  const pending = statusKey(run) !== statusKey(shown);
+  useEffect(() => {
+    if (!pending) return;
+    // each new flip restarts the wait: the burst's last status wins
+    const timer = setTimeout(() => setShown(latest.current), ROUTINE_STATUS_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [pending, run?.status, run?.goalStatus, run?.problems, run?.deferredAt, run?.autoPausedAfter]);
+  // the first status, or the same status with a newer report: at once
+  if (!shown || !run || shown.runId !== run.runId) return run;
+  return pending ? shown : run;
+}
 
 function compactDetail(value: string | undefined): string {
   const clean = value?.replace(/\s+/g, " ").trim() ?? "";
@@ -117,7 +149,7 @@ export function RoutineRunCard({
    * to it). Absent: the teammate is named without a link. */
   onOpenThread?: (botId: string, threadId: string) => void;
 }) {
-  const run = message.routineRun;
+  const run = useSettledRoutineRun(message.routineRun);
   // Newer computers can send this message kind to an older or partially
   // hydrated client. Keep the concise text fallback visible instead of
   // leaving an unexplained hole in the conversation.
@@ -145,7 +177,13 @@ export function RoutineRunCard({
   // 2026-11-03 (owner report: the bubble was a lone "{"): a structured
   // report reads as plain sentences, its whole under "Show details"; a
   // blocked run says why in one line (the run list's own line).
-  const readable = reported && run.summary?.trim() ? routineResultText(run.summary) : null;
+  // 2026-11-03 (JC, the flash): the report reads the same while the run is
+  // queued or running again (a retry carries the last report) as once it
+  // completed. It used to be cut to one 280-character line until Completed,
+  // so each Running/Completed flip swapped the bubble's whole content and
+  // its height (111 px to 528 px), and the chat above jumped with it.
+  const reportStatus = reported || ((run.status === "queued" || run.status === "running") && !run.goalStatus);
+  const readable = reportStatus && run.summary?.trim() ? routineResultText(run.summary) : null;
   const report = readable ? (readable.structured ? readable.text : run.summary!.trim()) : undefined;
   const details = readable?.details;
   const detail = report ? "" : compactDetail(
@@ -163,11 +201,12 @@ export function RoutineRunCard({
 
   return (
     <section
+      data-routine-run-card
       aria-label={t("routineRun.ariaLabel", { name: run.routineName, status: statusLabel })}
       className="flex w-full max-w-[680px] flex-col items-start"
     >
       {/* the bot's own bubble, as its other messages beside it */}
-      {(report || detail) && <div className="w-fit max-w-[min(42rem,88%)] rounded-2xl bg-card px-4 py-2.5 text-[14px] leading-relaxed text-ink">
+      {(report || detail) && <div data-routine-run-bubble className="w-fit max-w-[min(42rem,88%)] rounded-2xl bg-card px-4 py-2.5 text-[14px] leading-relaxed text-ink">
         {report ? <ChatMarkdown text={report} inert /> : <p className="whitespace-pre-wrap">{detail}</p>}
         {details && <RunResultDetails details={details} />}
       </div>}
@@ -176,13 +215,16 @@ export function RoutineRunCard({
           the chat card only says "Completed with problems". */}
       <div className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-1 text-[11.5px] text-ink-secondary", (report || detail) && "mt-1")}>
         <span className="truncate">{t("routines.post.routine", { name: run.routineName })}</span>
-        {(!reported || withProblems) && <>
+        {/* Always mounted (the flash, 2026-11-03): a status change swaps
+            only this text and its icon, a report hides it without
+            removing it. Nothing here animates its size. */}
+        <span data-routine-run-status className={cn("inline-flex items-center gap-x-1.5", reported && !withProblems && "hidden")}>
           <span aria-hidden="true">·</span>
           <span aria-live="polite" className={cn("inline-flex items-center gap-1 font-medium", copy.tone)}>
             {run.status === "running" && !run.goalStatus && <Loader2 aria-hidden="true" className="size-3 animate-spin" />}
-            {statusLabel}
+            {reported && !withProblems ? "" : statusLabel}
           </span>
-        </>}
+        </span>
         {pausedAfter && <>
           <span aria-hidden="true">·</span>
           <span data-routine-auto-paused={pausedAfter} className="font-medium text-warning">{routineAutoPausedText(pausedAfter)}</span>

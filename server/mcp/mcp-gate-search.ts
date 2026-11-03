@@ -9,11 +9,15 @@
 // by their own names as before. A small catalog is listed as it is.
 //
 // Pure helpers only; the gate (mcp-gate.ts) runs them.
-import { searchesCatalog, type CatalogTool } from "./mcp-directory.ts";
+import { isDirectoryTool, searchesCatalog, type CatalogTool } from "./mcp-directory.ts";
 
 export interface GateSearch {
   /** Tools listed whole: the bot's own most used ones. */
   pinned: string[];
+  /** #1935: tools listed whole by the end of their name (a Perspicax
+   * profile's `<product>_query`, `_write`, `_action`): a bot's first turn on
+   * a profile sees the profile's own tools, not only the directory. */
+  pinnedSuffixes: string[];
   /** Search a catalog with more tools than this... */
   maxTools: number;
   /** ...or longer definitions than this (JSON characters). */
@@ -25,11 +29,35 @@ export interface GateSearch {
 export const SEARCH_MAX_TOOLS = 12;
 export const SEARCH_MAX_CHARS = 14_000;
 const PINNED_MAX = 64;
+const SUFFIX = /^[A-Za-z0-9_-]{1,32}$/;
+const SUFFIXES_MAX = 8;
+/** At most this many tools are listed whole by a suffix, shortest names
+ * first: a product's own `cw_psa_query` before `cw_cpq_quoteItems_write`. */
+export const SUFFIX_PINNED_MAX = 16;
 
-export function gateSearchEnv(search: { pinned?: readonly string[]; maxTools?: number; maxChars?: number }): string {
+/** #1935: what a Perspicax profile bridge lists whole in a searched
+ * catalog. The gateway's own finding tools by name (the server's
+ * instructions point to them), each product's query, write and action tool
+ * by suffix; the rest of the profile stays behind search_tools. */
+export const PERSPICAX_BRIDGE_PINS = {
+  pinned: ["api_describe", "api_result_query", "api_search"],
+  pinnedSuffixes: ["_action", "_query", "_write"],
+} as const;
+
+/** The search setting of a bot-owned server in a compact prompt: the bot's
+ * own most used tools, and on a Perspicax profile bridge its core too. */
+export function compactGateSearch(used: readonly string[], perspicaxBridge: boolean): { pinned: string[]; pinnedSuffixes?: string[] } {
+  return perspicaxBridge
+    ? { pinned: [...new Set([...used, ...PERSPICAX_BRIDGE_PINS.pinned])], pinnedSuffixes: [...PERSPICAX_BRIDGE_PINS.pinnedSuffixes] }
+    : { pinned: [...used] };
+}
+
+export function gateSearchEnv(search: { pinned?: readonly string[]; pinnedSuffixes?: readonly string[]; maxTools?: number; maxChars?: number }): string {
   const pinned = [...new Set(search.pinned ?? [])].filter((name) => typeof name === "string" && name.length > 0 && name.length <= 200).sort().slice(0, PINNED_MAX);
+  const suffixes = [...new Set(search.pinnedSuffixes ?? [])].filter((suffix) => typeof suffix === "string" && SUFFIX.test(suffix)).sort().slice(0, SUFFIXES_MAX);
   return JSON.stringify({
     pinned,
+    ...(suffixes.length ? { pinnedSuffixes: suffixes } : {}),
     ...(search.maxTools !== undefined ? { maxTools: search.maxTools } : {}),
     ...(search.maxChars !== undefined ? { maxChars: search.maxChars } : {}),
   });
@@ -47,6 +75,10 @@ export function parseGateSearch(raw: string | undefined, fail: (message: string)
   if (pinned !== undefined && (!Array.isArray(pinned) || pinned.length > PINNED_MAX || !pinned.every((name) => typeof name === "string" && name.length > 0 && name.length <= 200))) {
     return fail("invalid pinned tool list");
   }
+  const suffixes = record.pinnedSuffixes;
+  if (suffixes !== undefined && (!Array.isArray(suffixes) || suffixes.length > SUFFIXES_MAX || !suffixes.every((suffix) => typeof suffix === "string" && SUFFIX.test(suffix)))) {
+    return fail("invalid pinned tool suffixes");
+  }
   const number = (key: string, fallback: number) => {
     const raw = record[key];
     if (raw === undefined) return fallback;
@@ -55,6 +87,7 @@ export function parseGateSearch(raw: string | undefined, fail: (message: string)
   };
   return {
     pinned: [...new Set((pinned ?? []) as string[])].sort(),
+    pinnedSuffixes: [...new Set((suffixes ?? []) as string[])].sort(),
     maxTools: number("maxTools", SEARCH_MAX_TOOLS),
     maxChars: number("maxChars", SEARCH_MAX_CHARS),
   };
@@ -72,4 +105,21 @@ export function searchedCatalog(tools: readonly CatalogTool[], search: GateSearc
     if (chars > search.maxChars) return true;
   }
   return false;
+}
+
+/** The names a searched catalog lists whole: the exact pins, then at most
+ * SUFFIX_PINNED_MAX tools whose name ends with a pinned suffix (shortest
+ * first, then by name). Never a directory tool's own name. */
+export function pinnedToolNames(tools: readonly CatalogTool[], search: Pick<GateSearch, "pinned" | "pinnedSuffixes">): string[] {
+  const names = new Set(search.pinned);
+  const suffixes = search.pinnedSuffixes ?? [];
+  if (suffixes.length) {
+    const matched = tools
+      .map((tool) => tool.name)
+      .filter((name) => !names.has(name) && !isDirectoryTool(name) && suffixes.some((suffix) => name.length > suffix.length && name.endsWith(suffix)))
+      .sort((a, b) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0))
+      .slice(0, SUFFIX_PINNED_MAX);
+    for (const name of matched) names.add(name);
+  }
+  return [...names];
 }

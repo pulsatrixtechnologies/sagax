@@ -245,6 +245,8 @@ interface Entry {
   token: string;
   expiresAt: number;
   mcpSessionId?: string;
+  /** #1935: the MCP server name the engine sees this profile under. */
+  mount?: string;
   /** One re-initialize at a time (relay, a session Perspicax dropped). */
   reopening?: Promise<boolean>;
   /** The person is out, or the access could not be renewed: every call ends. */
@@ -799,6 +801,30 @@ export class PerspicaxMcp {
       if (at.startsWith(prefix) && entry.botId === botId && !entry.ended && listed.includes(entry.profileId)) return entry;
     }
     return undefined;
+  }
+
+  /** #1935: the MCP server name this turn gives a mounted profile, so a
+   * tool name from a gateway answer can be sent to the server that runs it. */
+  setMount(threadId: string, generation: string, profileId: string, server: string): void {
+    const entry = this.entries.get(key(threadId, generation, profileId));
+    if (entry) entry.mount = server;
+  }
+
+  /** #1935: the MCP server of this turn that runs `name`: the mount of the
+   * profile that lists it (`served`), else, while no listing is known for
+   * it, the mount of the profile the gateway tools answer from. */
+  toolHome(threadId: string, generation: string, botId: string, name?: string): { server: string; served: boolean } | undefined {
+    const prefix = `${threadId}\u0000${generation}\u0000`;
+    if (name) {
+      const listed = this.options.botProfiles(botId) ?? [];
+      for (const [at, entry] of this.entries) {
+        if (!at.startsWith(prefix) || entry.botId !== botId || entry.ended || !entry.mount || !listed.includes(entry.profileId)) continue;
+        const served = this.servedTools.get(entry.profileId);
+        if (served?.has(servedSpelling(name, served))) return { server: entry.mount, served: true };
+      }
+    }
+    const first = this.turnEntry(threadId, generation, botId);
+    return first?.mount ? { server: first.mount, served: false } : undefined;
   }
 
   /** The person this turn's Perspicax tokens speak for, if a profile is mounted. */

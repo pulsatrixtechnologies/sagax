@@ -365,6 +365,38 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     return JSON.parse(await nextLine());
   };
 
+  // #1935: a Perspicax-like profile catalog, too big to list whole.
+  const PROFILE_UPSTREAM = `
+const { createInterface } = require("node:readline");
+const send = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\\n");
+const names = ["api_search", "api_describe", "api_result_query", "api_list", "cw_psa_query", "cw_psa_write", "cw_psa_action", "backup_query",
+  ...Array.from({ length: 14 }, (_, i) => "cw_psa_find_thing_" + i)];
+createInterface({ input: process.stdin }).on("line", (line) => {
+  const msg = JSON.parse(line);
+  if (msg.method === "tools/list") return send(msg.id, { tools: names.map((name) => ({ name, description: "Tool " + name, inputSchema: { type: "object" } })) });
+  if (msg.method === "tools/call") return send(msg.id, { content: [{ type: "text", text: "ran " + msg.params.name }] });
+  send(msg.id, {});
+});
+`;
+
+  it("#1935: a searched profile catalog still lists its query, write and action tools whole", async () => {
+    start({}, { SAGAX_GATE_SEARCH: JSON.stringify({ pinned: ["api_describe", "api_result_query", "api_search"], pinnedSuffixes: ["_action", "_query", "_write"] }) }, PROFILE_UPSTREAM);
+    send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const listed = JSON.parse(await nextLine()).result.tools.map((tool: { name: string }) => tool.name);
+    expect(listed).toEqual(expect.arrayContaining(["api_search", "api_describe", "api_result_query", "cw_psa_query", "cw_psa_write", "cw_psa_action", "backup_query", "search_tools", "describe_tool", "call_tool"]));
+    expect(listed).not.toContain("cw_psa_find_thing_0");
+    expect(listed).not.toContain("api_list");
+    // a pinned tool runs by its own name; the rest stays behind call_tool
+    expect((await callWith("cw_psa_query", { resource: "service.tickets" }, 2)).result.content[0].text).toBe("ran cw_psa_query");
+    expect((await callWith("call_tool", { name: "cw_psa_find_thing_3", arguments: {} }, 3)).result.content[0].text).toBe("ran cw_psa_find_thing_3");
+  });
+
+  it("#1935: an unreadable pinned suffix stops the gate rather than widening", async () => {
+    start({}, { SAGAX_GATE_SEARCH: JSON.stringify({ pinned: [], pinnedSuffixes: ["*"] }) }, PROFILE_UPSTREAM);
+    const [code] = await once(gate!, "exit");
+    expect(code).not.toBe(0);
+  });
+
   it("checks call_tool against the tool it runs only when its upstream is the tool directory", async () => {
     const scope = { SAGAX_GATE_TOOL_SCOPE: JSON.stringify({ allow: ["mcp:shop:read"] }), SAGAX_GATE_BUDGET: "600" };
     start({}, { ...scope, SAGAX_GATE_DIRECTORY: "1" }, DIRECTORY_UPSTREAM);

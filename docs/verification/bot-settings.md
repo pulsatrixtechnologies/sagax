@@ -3,7 +3,7 @@
 Launch the isolated renderer fixture directly:
 
 ```sh
-node --experimental-strip-types scripts/verify-bot-settings.ts
+node --experimental-strip-types scripts/verify/dev/verify-bot-settings.ts
 ```
 
 Open its printed `previewUrl`. It mounts the real settings dialog and

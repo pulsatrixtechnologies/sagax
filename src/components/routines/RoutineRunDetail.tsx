@@ -19,7 +19,7 @@ import { t } from "@/lib/i18n";
 import { api, type Bot, type Group } from "@/state/store";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import { loadBotActivityDetail, type BotActivityDetail, type BotActivityStatus } from "@/lib/bot-activity";
-import { routineAutoPausedText, routineDateTime, routineQueuePosition, routineRunError, routineRunLabel, routineRunTone } from "@/lib/routine-display";
+import { routineAutoPausedText, routineDateTime, routineQueuePosition, routineRunError, routineRunLabel, routineRunProblems, routineRunTone } from "@/lib/routine-display";
 import { formatUsd } from "@/lib/usage";
 import { ChatMarkdown } from "../ChatMarkdown";
 import { waitingSources } from "../bot-settings/ActivityDetailModal";
@@ -126,7 +126,7 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
 }) {
   const status = runActivityStatus(run);
   // 2026-11-01: completed, but not all of it went right.
-  const problems = run.status === "completed" && run.problems?.trim() ? run.problems.trim() : "";
+  const problems = routineRunProblems(run);
   const queue = runs ? routineQueuePosition(run, runs) : null;
   const queuePlace = queue && queue.count > 1 ? t("routineRun.queuePosition", { position: queue.position, count: queue.count }) : "";
   const live = ["queued", "running", "waiting"].includes(run.status);

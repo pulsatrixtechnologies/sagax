@@ -3,7 +3,7 @@
 Launch a disposable fake-engine server and the real channel/direct chat views:
 
 ```sh
-node --experimental-strip-types scripts/verify-mentions.ts
+node --experimental-strip-types scripts/verify/dev/verify-mentions.ts
 ```
 
 Open the printed `previewUrl`. The fixture creates Atlas, Juniper, a Japanese-named
@@ -55,7 +55,7 @@ user bubble and colored mentions in the fake-engine reply. Evidence:
 [transcript](evidence/mentions/rtl-messages.json).
 
 ```sh
-node --experimental-strip-types scripts/verify-mentions.ts --bot-mentions
+node --experimental-strip-types scripts/verify/dev/verify-mentions.ts --bot-mentions
 # Open the printed previewUrl, fill the real composer with these three lines:
 # مرحبا @Atlas راجع هذا
 # English @Juniper review this
@@ -127,7 +127,7 @@ Run details (2026-09-07, isolated API `http://127.0.0.1:21621`, renderer
 `http://127.0.0.1:5173/__mentions.html`):
 
 ```sh
-node --experimental-strip-types scripts/verify-mentions.ts
+node --experimental-strip-types scripts/verify/dev/verify-mentions.ts
 node --experimental-strip-types scripts/control-omb.ts channels --url http://127.0.0.1:21621
 # Fill the real channel composer with the following three lines, switch Light,
 # and press Enter. Refill the same draft after sending for screenshot comparison.
@@ -165,7 +165,7 @@ highlight in the bot reply or draft, and typing `@every` offered no candidate.
 This preview checks DM rendering only; no message was sent from that preview.
 
 ```sh
-node --experimental-strip-types scripts/verify-mentions.ts --bot-mentions
+node --experimental-strip-types scripts/verify/dev/verify-mentions.ts --bot-mentions
 node --experimental-strip-types scripts/control-omb.ts channels --url http://127.0.0.1:21580
 # In the printed previewUrl, fill the channel composer with
 # @Atlas Please ask the team to review.

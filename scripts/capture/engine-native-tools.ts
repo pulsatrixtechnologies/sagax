@@ -143,17 +143,17 @@ async function capturePi() {
 }
 
 /** ACP engines: what each offered a local fake model in a control and a
- * withheld turn of its Sagax driver (scripts/verify-org-host-tools.ts). */
+ * withheld turn of its Sagax driver (scripts/verify/dev/verify-org-host-tools.ts). */
 function captureAcp(dir: string) {
   const out = join(dir, "inventory.json");
-  const run = spawn(process.execPath, ["--experimental-strip-types", join(root, "scripts/verify-org-host-tools.ts"), engine, cli], {
+  const run = spawn(process.execPath, ["--experimental-strip-types", join(root, "scripts/verify/dev/verify-org-host-tools.ts"), engine, cli], {
     cwd: root, env: { ...process.env, SAGAX_TOOL_INVENTORY_OUT: out }, stdio: ["ignore", "inherit", "inherit"],
   });
   return new Promise<{ how: string; solo: string[]; org: string[] }>((done, fail) => {
     run.on("exit", () => {
-      if (!existsSync(out)) { fail(new Error("scripts/verify-org-host-tools.ts wrote no inventory")); return; }
+      if (!existsSync(out)) { fail(new Error("scripts/verify/dev/verify-org-host-tools.ts wrote no inventory")); return; }
       const inventory = JSON.parse(readFileSync(out, "utf8")) as { solo: string[]; org: string[] };
-      done({ how: "tools offered to a local fake model by a control and a withheld turn of the Sagax driver (scripts/verify-org-host-tools.ts)", ...inventory });
+      done({ how: "tools offered to a local fake model by a control and a withheld turn of the Sagax driver (scripts/verify/dev/verify-org-host-tools.ts)", ...inventory });
     });
   });
 }

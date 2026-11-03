@@ -3,7 +3,7 @@
 Launch the isolated server and real Files component:
 
 ```sh
-node --experimental-strip-types scripts/verify-computer-files.ts
+node --experimental-strip-types scripts/verify/dev/verify-computer-files.ts
 ```
 
 Open the printed `previewUrl`. The fixture creates four synthetic files and

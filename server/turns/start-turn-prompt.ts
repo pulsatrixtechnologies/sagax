@@ -1,6 +1,7 @@
 // @ts-nocheck
 // #1388 wave 4 step 3: startTurn prompt build (sections through state.prompt).
 // Never imports server/index.ts.
+import { hideServerPathsInSections } from "../server-path-prompt.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 
@@ -106,6 +107,9 @@ export function createPromptStartTurn(host: StartTurnHost) {
     withholdHostToolsFor,
     workspaceCwdPrompt,
     workspaceLocationsPrompt,
+    sandboxFolderFor,
+    serverPathView,
+    renderSkillInstructions,
   } = host;
 
   return async function promptStartTurn(state: TurnState): Promise<void> {
@@ -139,6 +143,10 @@ export function createPromptStartTurn(host: StartTurnHost) {
     // Cold / automation turns (routines, webhooks, proactive): tighter
     // per-section budgets, lazy skill index, short rich-output (V1/R3).
     state.coldPrompt = state.opts?.automationSource !== undefined;
+    // 2026-11-02 (production): an engine without file tools on the Sagax
+    // server is never given a path of it (server/server-path-prompt.ts)
+    const serverFiles = !withholdHostToolsFor(state.instance);
+    const environmentFolder = serverFiles ? null : sandboxFolderFor?.(state.bot.id) ?? null;
     state.promptParts = [
       { id: "finish-until", label: "Do not finish until", text: finishUntilPrompt((state.liveBot ?? state.bot).finishUntil) },
       // #1372: a 1:1 goal's instruction, while it works; never the person's message
@@ -150,10 +158,10 @@ export function createPromptStartTurn(host: StartTurnHost) {
       // to a turn whose engine actually mounted them (setupMode is already
       // false when they are not — see agentsMounted above)
       { id: "setup", label: "Setup", text: setupSystemPrompt(state.setupMode, { skills: state.skillAuthoring, cwd: state.liveBot?.cwd ?? state.bot.cwd }) },
-      { id: "files", label: "File locations", text: state.worksInWorkspace ? workspaceLocationsPrompt(state.bot.id, state.cwd, state.liveBot?.cwd ?? state.bot.cwd, { attachFile: Boolean(state.integrations.agents) && !HOSTED_WORKSPACE, confidential: store.isConfidentialThread(state.threadId), relativePaths: state.instance.driverKind === "claudeAgent", ...(state.stablePrompt ? { cwdElsewhere: true } : {}) }) : "" },
+      { id: "files", label: "File locations", text: state.worksInWorkspace ? workspaceLocationsPrompt(state.bot.id, state.cwd, state.liveBot?.cwd ?? state.bot.cwd, { attachFile: Boolean(state.integrations.agents) && !HOSTED_WORKSPACE, confidential: store.isConfidentialThread(state.threadId), relativePaths: state.instance.driverKind === "claudeAgent", ...(state.stablePrompt ? { cwdElsewhere: true } : {}), serverFiles, environmentFolder }) : "" },
       // The conversation's own folder, on its own line, so the rest of the
       // file locations is the same bytes in every conversation of this bot.
-      { id: "files-cwd", label: "Current working folder", text: state.stablePrompt && state.worksInWorkspace ? workspaceCwdPrompt(state.cwd) : "" },
+      { id: "files-cwd", label: "Current working folder", text: state.stablePrompt && state.worksInWorkspace && serverFiles ? workspaceCwdPrompt(state.cwd) : "" },
       { id: "shell", label: "Long-running commands", text: state.worksInWorkspace ? longCommandsPrompt(state.computerPromptKind) : "" },
       { id: "computer", label: "Computer", text: computerPrompt(state.computerPromptKind) },
       { id: "team-computer", label: "Team computer", text: teamComputerPrompt(state.teamComputer) },
@@ -210,17 +218,22 @@ export function createPromptStartTurn(host: StartTurnHost) {
       { id: "memory", label: "Memory", text: memoryPromptFor(state.bot, { managedWrites: Boolean(state.integrations.agents), fileTools: state.worksInWorkspace, withholdHostTools: withholdHostToolsFor(state.instance) }) },
       { id: "host-tools", label: "Host tools", text: withholdHostToolsFor(state.instance) ? WITHHELD_HOST_TOOLS_PROMPT : "" },
       // docs/: an index only, never the documents (server/workspace-files.ts)
-      { id: "docs", label: "Documents index", text: docsIndexPrompt(state.bot.id, { tools: state.integrations.agents ? "agents" : state.worksInWorkspace ? "files" : "none" }) },
+      { id: "docs", label: "Documents index", text: docsIndexPrompt(state.bot.id, { tools: state.integrations.agents ? "agents" : state.worksInWorkspace && serverFiles ? "files" : "none" }) },
       // liveBot was captured before awaited setup work; an assignment PUT
       // in that window must still reach this turn's prompt.
       { id: "skills", label: "Skills index", text: scopedSkillsPrompt(state.bot, state.instance, orgSpeakerPrincipal(state.bot, state.speaker), { managedTools: skillDiscoveryAvailable(Boolean(state.integrations.agents), state.toolScope), fileAccess: Boolean(state.privateWorkspace), syncNative: true, indexOnly: state.coldPrompt })?.text ?? "" },
-      { id: "skill-instructions", label: "Skill instructions", text: state.coldPrompt ? "" : state.skillInstructions },
+      { id: "skill-instructions", label: "Skill instructions", text: state.coldPrompt ? "" : serverFiles ? state.skillInstructions : renderSkillInstructions(state.selectedSkills, { includeRoot: false }) },
       { id: "playbooks", label: "Playbooks", text: state.coldPrompt ? "" : state.packagePlaybooks },
       { id: "webhook", label: "Webhook provenance", text: state.opts?.automationSource === "webhook" ? WEBHOOK_PROMPT : "" },
       { id: "mentions", label: "Mentions", text: state.boundedCoordination && state.tagged.length ? `The user named these existing teammates: ${state.tagged.map((b: any) => uniquePeerName(b, state.sectionPeers) ? peerName(b.name) : `${peerName(b.name)} (${b.id})`).join(", ")}. Use coordinate_bots when their contribution is needed (a unique name works as its bot_ids entry), with relay=true when the user only wants one teammate's own answer passed back; do not substitute native helper agents for these bots.` : mentionPrompt(state.tagged) },
       // a voice call: the phone-call instruction (server/voice-call-prompt.ts)
       { id: "voice-call", label: "Phone call", text: state.voiceCallText },
     ];
+    if (!serverFiles) {
+      const hidden = hideServerPathsInSections(state.promptParts, serverPathView(state.bot.id));
+      if (hidden.leaked.length) console.warn(`[prompt] server paths hidden for ${state.bot.id} (no server file tools): ${hidden.leaked.join(", ")}`);
+      state.promptParts = hidden.sections;
+    }
     state.builtPrompt = buildSystemPrompt(state.persona, state.liveBot?.soul ?? state.bot.soul ?? "", state.coldPrompt ? lightenColdPrompt(state.promptParts) : state.promptParts, state.stablePrompt || state.instance.driverKind === "claudeAgent"
       ? new Set([
         ...(state.instance.driverKind === "claudeAgent" ? CLAUDE_REUSE_VOLATILE_SECTIONS : []),

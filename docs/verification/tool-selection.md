@@ -45,10 +45,10 @@ Install the official Pi CLI into a disposable prefix, then supply its absolute
 path. The scripts configure their own loopback synthetic provider:
 
 ```sh
-node --experimental-strip-types scripts/verify-pi-tool-scope.ts /absolute/path/to/pi
-node --experimental-strip-types scripts/verify-tool-scope.ts /absolute/path/to/grok
+node --experimental-strip-types scripts/verify/dev/verify-pi-tool-scope.ts /absolute/path/to/pi
+node --experimental-strip-types scripts/verify/dev/verify-tool-scope.ts /absolute/path/to/grok
 pnpm build:server
-node --experimental-strip-types scripts/verify-pi-tool-scope.ts /absolute/path/to/pi dist-server/drivers/pi-mcp-extension.ts
+node --experimental-strip-types scripts/verify/dev/verify-pi-tool-scope.ts /absolute/path/to/pi dist-server/drivers/pi-mcp-extension.ts
 ```
 
 Verified contracts: **Pi 0.99.1**, **Grok 1.0.41**. Pi checks late package tool
@@ -86,8 +86,8 @@ parallel request, and an explicit temporary identifier. Confirm those values
 with the runtime's loaded-model report, then run Pi and Grok sequentially:
 
 ```sh
-node --experimental-strip-types scripts/verify-local-tool-selection.ts pi /absolute/path/to/pi http://127.0.0.1:1234/v1 MODEL_ID
-node --experimental-strip-types scripts/verify-local-tool-selection.ts grok /absolute/path/to/grok http://127.0.0.1:1234/v1 MODEL_ID
+node --experimental-strip-types scripts/verify/dev/verify-local-tool-selection.ts pi /absolute/path/to/pi http://127.0.0.1:1234/v1 MODEL_ID
+node --experimental-strip-types scripts/verify/dev/verify-local-tool-selection.ts grok /absolute/path/to/grok http://127.0.0.1:1234/v1 MODEL_ID
 ```
 
 The proxy forwards actual model responses and unmodified tool schemas. It

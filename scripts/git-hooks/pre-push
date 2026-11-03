@@ -1,5 +1,5 @@
 #!/bin/sh
-# Runs before every push: the local merge gate, scripts/verify-merge.mjs
+# Runs before every push: the local merge gate, scripts/verify/release/verify-merge.mjs
 # (`pnpm verify:merge`). No CI runs on a private PR, so this is the barrier:
 # lint, typecheck, locale catalogs, source terms, skin contrast, the guard
 # tests that break main silently (ratchets, goldens, source scans), the

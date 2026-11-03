@@ -3,7 +3,7 @@
 Run the real Settings connection component in disposable Electron windows:
 
 ```sh
-node scripts/verify-server-connection.mjs
+node scripts/verify/dev/verify-server-connection.mjs
 ```
 
 Use the repository's installed dependencies, including the Electron binary.

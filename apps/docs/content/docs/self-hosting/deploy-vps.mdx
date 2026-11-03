@@ -91,9 +91,14 @@ root, sign in again as `maus`; those accounts have different homes and credentia
 No domain, no proxy, no open port. The server gets an address like `https://c-7f3a9c.openmausbot.com` through a Cloudflare tunnel; only traffic through the tunnel reaches it, and that traffic still has to pair.
 
 ```sh
+pnpm omb setup          # once: choose AI access, connect, and choose a model
 pnpm omb login          # once: an emailed code signs this machine in and reserves its address
 pnpm omb serve --tunnel # runs the server there and prints the pairing link with a QR code
 ```
+
+`setup` connects an AI provider; it is separate from the Sagax account.
+Use Codex's device-code option over SSH, or enter a hidden API key for a
+chat-only connection. More engines can be added later. See [CLI setup](https://github.com/pulsatrixtechnologies/sagax/blob/main/docs/cli-onboarding.md).
 
 `login` asks for your email, sends an 8-digit code, and prints the address it reserved for this machine. `serve --tunnel` downloads `cloudflared` on the first run (a pinned version with a verified digest, into `~/.sagax`), starts the server, connects the tunnel, and after a few seconds prints `tunnel: live at https://…`. Leave it running; see "Keep it running" for a service.
 
@@ -170,7 +175,7 @@ the service account's browser. Both commands must finish successfully.
 On Ubuntu 24.04, AppArmor may also require [administrator sandbox setup](#ubuntu-2404-browser-sandbox).
 The one-click installer downloads the browser; it does not grant these OS permissions.
 
-Then turn the browser on under Settings → Experimental, and per bot. Each bot
+Then turn the browser on under Settings → Computers, and per bot. Each bot
 gets its own isolated session whose logins persist across restarts.
 
 ## Install and sign the engines in
@@ -272,6 +277,10 @@ on its own.
 
 ## Update
 
+People should not see errors during a short restart: Caddy holds requests while
+the process drains, and clients show Reconnecting and resume the stream
+([Invisible deploys](https://github.com/pulsatrixtechnologies/sagax/blob/main/docs/zero-downtime-deploy.md)).
+
 - **Paths A and C with the service above:** choose the new release, then run
   these commands from the administrator shell, replacing `X.Y.Z`:
 
@@ -283,10 +292,11 @@ on its own.
 
   Check that the build succeeded before starting. A service restart by itself
   does not update the checkout. For a foreground server, check out the release
-  the same way, then run `pnpm omb serve --tunnel`.
+  the same way, then run `pnpm omb serve --tunnel`. Prefer `systemctl restart`
+  (SIGTERM) over a hard kill so the drain and Caddy hold can run.
 - **Path B:** `cd sagax && git pull && cd deploy && docker compose up -d --build`.
 
-Routines and queued work survive a restart; a turn running at that moment does not, so update between runs.
+Routines and queued work survive a restart. A teammate turn running at that moment runs again once at the next start, told to check what it already did, and the bot that asked for it is told. A person's own turn and a running routine are not run again: the conversation says it was interrupted. Update between runs where you can.
 
 ## Back up
 

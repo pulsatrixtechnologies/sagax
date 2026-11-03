@@ -660,7 +660,7 @@ export function createGroupsHttpRoutes(deps: GroupsHttpDeps): RouteHandler {
       const groupMisuseActor = misuseActor(groupSpeaker.origin === "person" ? groupSpeaker.principalId : undefined, groupSpeaker.origin);
       const groupThreadId = typeof body.threadId === "string" ? body.threadId : group.threadId;
       const groupMisuse = misuseRefusal(text, { ...groupMisuseActor, surface: "message", threadId: groupThreadId });
-      if (groupMisuse) return json(res, groupMisuse.status, { error: groupMisuse.message, code: groupMisuse.code });
+      if (groupMisuse) return json(res, groupMisuse.status, { error: groupMisuse.message, code: groupMisuse.code, ...(groupMisuse.reason ? { reason: groupMisuse.reason } : {}) });
       const groupSafety = safetyHttpRefusal({ text, surface: "message", triage: groupMisuseActor.triage, ...(groupMisuseActor.principalId ? { principalId: groupMisuseActor.principalId } : {}), threadId: groupThreadId });
       if (groupSafety) return json(res, groupSafety.status, { error: groupSafety.message, code: groupSafety.code });
       if (body.mode !== undefined && body.mode !== "chat" && body.mode !== "goal") {

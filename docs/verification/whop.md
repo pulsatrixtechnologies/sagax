@@ -13,7 +13,7 @@ Use an installed Playwright module and Chromium executable. Set
 resolve its own browser. Then run:
 
 ```sh
-node --experimental-strip-types scripts/verify-whop.ts
+node --experimental-strip-types scripts/verify/dev/verify-whop.ts
 ```
 
 This launches a disposable fake-engine workspace and synthetic OAuth/MCP

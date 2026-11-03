@@ -34,7 +34,7 @@ Hidden activity suppresses live reasoning while retaining the working
 indicator, and Full keeps the reasoning control available. The tests attach
 screenshots of the collapsed transcript and expanded webhook payload.
 
-The existing `scripts/verify-ios-thread-navigation-ci.sh` also runs this suite
+The existing `scripts/verify/release/verify-ios-thread-navigation-ci.sh` also runs this suite
 on disposable iPhone and iPad simulators. Keep the result bundles, then shut
 down and delete only the simulator IDs created for verification.
 

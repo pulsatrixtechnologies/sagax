@@ -33,7 +33,7 @@ jobs:
       - name: Verify thread navigation on disposable iPhone and iPad simulators
         # `xcodebuild test` builds the app itself, so there is no separate
         # simulator build step here.
-        run: bash scripts/verify-ios-thread-navigation-ci.sh
+        run: bash scripts/verify/release/verify-ios-thread-navigation-ci.sh
       - name: Keep native thread test results and screenshots
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

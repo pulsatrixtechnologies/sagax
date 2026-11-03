@@ -70,6 +70,27 @@ describe("workspace", () => {
     expect(workspaceLocationsPrompt(BOT, undefined)).toContain("inspect the working directory");
   });
 
+  // 2026-11-02 (production): an engine with no file tools on the Sagax
+  // server took sharedBotFolder for its folder
+  it("names no server path when the engine has no file tools on the server, only how it reaches each thing", () => {
+    ensureWorkspace(BOT);
+    const thread = ensureTaskWorkspace(BOT, "thread-first");
+    const prompt = workspaceLocationsPrompt(BOT, thread, "/projects/app", { serverFiles: false, environmentFolder: "/workspace/bots/nova", attachFile: true });
+    expect(prompt).not.toContain(DATA_DIR);
+    expect(prompt).not.toContain(WORKSPACES_DIR);
+    expect(prompt).not.toContain("sharedBotFolder");
+    expect(prompt).toContain("workspace_read by its relative path (MEMORY.md, memory/<topic>.md, RULES.md, docs/<name>.md");
+    expect(prompt).toContain("memory_update");
+    expect(prompt).toContain("your server environment folder /workspace/bots/nova");
+    expect(prompt).toContain("Never give a path of the Sagax server to your server environment tools.");
+    expect(prompt).toContain("attach_file");
+    const confidential = workspaceLocationsPrompt(BOT, thread, undefined, { serverFiles: false, confidential: true });
+    expect(confidential).not.toContain(DATA_DIR);
+    expect(confidential).toContain("confidential conversation");
+    // a turn with server file tools keeps its paths
+    expect(workspaceLocationsPrompt(BOT, thread)).toContain(JSON.stringify(thread));
+  });
+
   it("tells a bot with attach_file to deliver a file saved outside its folders, and no one else", () => {
     const thread = ensureTaskWorkspace(BOT, "thread-first");
     expect(workspaceLocationsPrompt(BOT, thread, undefined, { attachFile: true }))
@@ -707,6 +728,16 @@ describe("workspace", () => {
     // native file tools on a solo Mac still name the absolute path
     const native = memorySystemPrompt(BOT, { fileTools: true, withholdHostTools: false });
     expect(native).toContain(JSON.stringify(join(workspaceDir(BOT), "MEMORY.md")));
+  });
+
+  it("a withheld turn reads a topic note with workspace_read, not with file tools it does not have (2026-11-02)", () => {
+    writeMemoryFile(BOT, "# Memory\n- prefers CSV\n");
+    writeMemoryTopic(BOT, "deploys.md", "railway up from main\n");
+    const withheld = memorySystemPrompt(BOT, { managedWrites: true, fileTools: true, withholdHostTools: true });
+    expect(withheld).toContain("read memory/<name> with workspace_read before you answer");
+    expect(withheld).not.toContain("read that file with your file tools");
+    expect(withheld).not.toContain(workspaceDir(BOT));
+    expect(memorySystemPrompt(BOT, { fileTools: true, withholdHostTools: false })).toContain("read that file with your file tools");
   });
 
   it("API drivers retain supplied memory without inventing filesystem tools", () => {

@@ -3,6 +3,7 @@
 // (~/.grok/auth.json), NOT the xAI API key (that driver is drivers/grok.ts).
 // The generic protocol runtime lives in acp/core.ts; this file is only the
 // per-harness quirks. Verified against grok 1.0.0.
+import { GROK_PROMPT_BYTE_LIMIT } from "./prompt-fit.ts";
 import { spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -707,13 +708,13 @@ export function ensureGrokInjectSlug(
 }
 
 /** Grok 1.0.25 and later 1.x consume native image blocks but advertise image:false.
- * Verified with the real CLI and a loopback model: scripts/verify-grok-images.ts.
+ * Verified with the real CLI and a loopback model: scripts/verify/dev/verify-grok-images.ts.
  * Keep unknown/older runtimes on the normal capability negotiation path. */
 export function grokAcceptsUnadvertisedImages(init: unknown): boolean {
   const meta = (init as { _meta?: { grokShell?: unknown; agentVersion?: unknown } } | null)?._meta;
   if (meta?.grokShell !== true || typeof meta.agentVersion !== "string") return false;
   // Any 1.x release from 1.0.25 on (grok 1.0.62 on 2026-10-19). A 2.x stays
-  // unknown until scripts/verify-grok-images.ts checks it; so does a
+  // unknown until scripts/verify/dev/verify-grok-images.ts checks it; so does a
   // pre-release suffix.
   const version = /^(\d+)\.(\d+)\.(\d+)$/.exec(meta.agentVersion);
   if (!version) return false;
@@ -1199,6 +1200,8 @@ const support: AcpSupport = {
   // reach the agent-stdio system prompt (verified against 1.0.0), so the
   // persona is prepended codex-style.
   buildPromptText: (turn) => (turn.system ? `${turn.system}\n\n${turn.text}` : turn.text),
+  // Grok moves a prompt of about 100 KB to a file on the server (prompt-fit.ts)
+  promptByteLimit: GROK_PROMPT_BYTE_LIMIT,
 
   // Grok reaches every Sagax MCP tool through search_tool then use_tool, and
   // each of those is a full model round trip carrying the whole context.
@@ -1279,3 +1282,5 @@ export async function waitForGrokMcpSettled(
 }
 
 export const GrokAgentDriver = createAcpDriver(support);
+/** The size Grok's requests are kept under (prompt-fit.ts). */
+export const grokPromptByteLimit = (): number | undefined => support.promptByteLimit;

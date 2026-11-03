@@ -15,7 +15,7 @@ import { t } from "@/lib/i18n";
 import { activeLocale } from "@/lib/i18n";
 import { activityWhereLabel, type BotActivityStep } from "@/lib/bot-activity";
 import { groupActivitySteps, type ActivityStepGroup } from "@/lib/activity-step-groups";
-import { stepArgs } from "@/lib/step-label";
+import { stepArgs, stepToolName } from "@/lib/step-label";
 import { StepRow } from "../StepRow";
 
 function WhereMark({ where }: { where: NonNullable<BotActivityStep["where"]> }) {
@@ -49,11 +49,12 @@ function StepInput({ input }: { input: string }) {
 }
 
 /** Every call of the group: when, its summary, its arguments; the tool's
- * id once at the top. */
+ * name in words once at the top. */
 export function GroupDetail({ group }: { group: ActivityStepGroup }) {
   return (
     <div data-activity-technical={group.id} className="flex flex-col gap-1.5 text-[12px]">
-      <div className="break-all font-mono text-[11.5px] text-ink-tertiary">{group.steps[0]!.name}</div>
+      {/* 2026-11-02: the tool in words, never its raw id */}
+      <div className="break-words text-[11.5px] text-ink-tertiary">{stepToolName(group.steps[0]!)}</div>
       <ol className="flex max-h-56 flex-col gap-1 overflow-y-auto overscroll-contain">
         {group.steps.map((step) => (
           <li key={step.id} data-activity-step-id={step.id} className="flex min-w-0 flex-col gap-0.5 rounded-md bg-inset px-2 py-1.5">

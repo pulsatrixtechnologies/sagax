@@ -15,11 +15,39 @@ export function readsFrench(language: string): boolean {
   return language.toLowerCase().split("-")[0] === "fr";
 }
 
+/** French function words that are not English words. */
+const FRENCH_WORDS = new Set([
+  "le", "la", "les", "un", "une", "des", "du", "de", "et", "est", "pas", "je", "tu", "il", "elle", "nous", "vous", "ils",
+  "elles", "que", "qui", "quoi", "pour", "avec", "dans", "sur", "mais", "ou", "oui", "non", "merci", "bonjour",
+  "ce", "cette", "ces", "mon", "ma", "mes", "ton", "ta", "son", "sa", "ses", "au", "aux", "c'est", "j'ai",
+  "votre", "notre", "leur", "très", "bien", "aussi", "demain", "aujourd'hui", "heures", "rendez-vous",
+]);
+const ENGLISH_WORDS = new Set([
+  "the", "and", "is", "are", "was", "you", "your", "we", "it", "this", "that", "with", "for", "from", "have", "has",
+  "not", "but", "can", "will", "what", "which", "who", "when", "where", "how", "of", "to", "in", "at", "be", "do", "yes",
+  "thanks", "hello", "today", "tomorrow", "my",
+]);
+
+/** The voice judge: an accented letter, or more French function words than
+ * English ones (at least two). Unsure: false, so an automatic call leaves
+ * "15:30" as written. Not shared/looks-french.ts, which counts short text as
+ * French so a thread's language holds; the voice net must not guess. */
+function soundsFrench(text: string): boolean {
+  if (/[àâçéèêëîïôûùüÿœ]/i.test(text)) return true;
+  let fr = 0;
+  let en = 0;
+  for (const word of text.toLowerCase().match(/[a-zà-ÿœ'-]+/g) ?? []) {
+    if (FRENCH_WORDS.has(word)) fr += 1;
+    if (ENGLISH_WORDS.has(word)) en += 1;
+  }
+  return fr >= 2 && fr > en;
+}
+
 /** Read this text as French: a French call, or an automatic one whose text
- * looks French. */
+ * sounds French. */
 export function readsFrenchText(language: string, text: string): boolean {
   if (readsFrench(language)) return true;
-  return language.toLowerCase() === "auto" && looksFrench(text);
+  return language.toLowerCase() === "auto" && soundsFrench(text);
 }
 
 const ORDINALS: Readonly<Record<string, string>> = {

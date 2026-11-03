@@ -37,7 +37,7 @@ Old clients attempting
 ## Drive and evidence
 
 ```sh
-node --experimental-strip-types scripts/verify-team-backup.ts
+node --experimental-strip-types scripts/verify/dev/verify-team-backup.ts
 ```
 
 This mapped regression command uses `launchVerificationServer` and the shared

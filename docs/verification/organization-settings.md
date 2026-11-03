@@ -11,7 +11,7 @@ Run the actual renderer and production desktop preload/client in a disposable
 Electron window:
 
 ```sh
-node scripts/verify-organization-settings.mjs
+node scripts/verify/dev/verify-organization-settings.mjs
 ```
 
 The script accepts no external URL. It creates its own loopback Vite preview,
@@ -245,6 +245,6 @@ Tested, not production qualification:
   failed it, a "Slack workspace" value did not, then en.json was restored.
 - `pnpm i18n:check`: translations whose meaning changed were removed so those
   keys fall back to English; spelling-only keys were re-accepted.
-- `scripts/verify-organization-settings.mjs` and
-  `scripts/verify-server-connection.mjs` now look for the new labels. They were
+- `scripts/verify/dev/verify-organization-settings.mjs` and
+  `scripts/verify/dev/verify-server-connection.mjs` now look for the new labels. They were
   not run locally, because they launch the real Electron app.

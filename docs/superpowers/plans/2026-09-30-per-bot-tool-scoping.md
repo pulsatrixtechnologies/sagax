@@ -124,7 +124,7 @@
 
 ### Task 7: Grok and engine coverage
 
-**Files:** Modify `server/drivers/acp/core.ts`, `server/drivers/acp/grok.ts` and ACP tests; extend Claude/Codex/other adapter paths; add `scripts/verify-tool-scope.ts` and driver coverage tests.
+**Files:** Modify `server/drivers/acp/core.ts`, `server/drivers/acp/grok.ts` and ACP tests; extend Claude/Codex/other adapter paths; add `scripts/verify/dev/verify-tool-scope.ts` and driver coverage tests.
 
 **Consumes:** Scoped turn input, descriptor gate and native identity matcher. **Produces:** engine capability matrix and strict native control contracts.
 

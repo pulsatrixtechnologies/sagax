@@ -190,11 +190,28 @@ const BY_CODE: Readonly<Record<string, LocaleKey>> = {
   org_setting_in_perspicax: "serverError.orgSettingInPerspicax",
 };
 
+/** One sentence per misuse category (shared/misuse-guardrails.ts
+ * MISUSE_CATEGORIES): the reason, then what to do instead. */
+const MISUSE_REASON: Readonly<Record<string, LocaleKey>> = {
+  privilege_escalation: "serverError.misuseReason.privilegeEscalation",
+  sandbox_escape: "serverError.misuseReason.sandboxEscape",
+  security_evasion: "serverError.misuseReason.securityEvasion",
+  offensive_hacking: "serverError.misuseReason.offensiveHacking",
+  malware: "serverError.misuseReason.malware",
+  platform_exfiltration: "serverError.misuseReason.platformFiles",
+  destruction: "serverError.misuseReason.destruction",
+  resource_abuse: "serverError.misuseReason.resourceAbuse",
+};
+
 /** The sentence, in the app's language, for a refusal body that carries one
  * of the codes above, or null for any other body. */
 export function serverErrorMessage(body: unknown): string | null {
   if (!body || typeof body !== "object") return null;
   const code = (body as { code?: unknown }).code;
+  // 2026-11-02: a security block names the one reason that matched
+  // (server/misuse-guardrails.ts `reason`), never the whole list.
+  const reason = (body as { reason?: unknown }).reason;
+  if (code === "misuse_blocked" && typeof reason === "string" && Object.hasOwn(MISUSE_REASON, reason)) return t(MISUSE_REASON[reason]!);
   const key = typeof code === "string" && Object.hasOwn(BY_CODE, code) ? BY_CODE[code] : undefined;
   return key ? t(key) : null;
 }

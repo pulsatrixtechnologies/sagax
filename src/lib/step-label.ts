@@ -15,6 +15,7 @@ import * as shared from "../../shared/approval-describe";
 import { parseArgs, parseToolId } from "@/lib/approval-describe";
 import { isOpaqueId, isOpaqueValue } from "../../shared/human-id";
 import { readMcpGatewayCall, readUseToolCall, type McpGatewayCall } from "../../shared/mcp-gateway-call";
+import { humanPath } from "@/lib/short-path";
 
 export type StepPhase = "running" | "done" | "failed";
 
@@ -439,6 +440,37 @@ export function readStep(tool: StepTool, nameOf?: StepNameOf): StepReading {
   return { label: t(`step.use.${phase}` as LocaleKey, { name: display }), target: summary };
 }
 
+/** 2026-11-02: what a tool is called in an opened step, never its raw id
+ * (`mcp__sagax-environment__list_files`): "List files" for the file,
+ * command, page and screen tools, else its own name in words. The id stays
+ * in the folded JSON record. */
+const TOOL_NAME: Partial<Record<Kind, LocaleKey>> = {
+  readFile: "step.toolName.readFile",
+  writeFile: "step.toolName.writeFile",
+  editFile: "step.toolName.editFile",
+  deleteFile: "step.toolName.deleteFile",
+  runCommand: "step.toolName.runCommand",
+  searchFiles: "step.toolName.searchFiles",
+  listFiles: "step.toolName.listFiles",
+  searchWeb: "step.toolName.searchWeb",
+  fetchPage: "step.toolName.fetchPage",
+  openPage: "step.toolName.openPage",
+  screen: "step.toolName.screen",
+  computer: "step.toolName.computer",
+};
+
+export function stepToolName(tool: Pick<StepTool, "name" | "product">): string {
+  const name = tool.name.trim();
+  const kind = kindOf(name);
+  const key = kind ? TOOL_NAME[kind] : undefined;
+  if (key) return t(key);
+  // the tool's own part of an MCP id, in words: no server, no underscores;
+  // with the product the server declared for it, when it declared one
+  const own = capitalize((name.split("__").filter(Boolean).pop() ?? name).replace(/[_.]+/g, " ").trim() || name);
+  const product = tool.product?.trim();
+  return product ? `${own} · ${product}` : own;
+}
+
 /** The label alone, for callers that only need the sentence. */
 export function stepLabel(tool: StepTool, nameOf?: StepNameOf): string {
   return readStep(tool, nameOf).label;
@@ -458,7 +490,7 @@ const ARG_MAX = 6;
 
 /** The arguments a person can read: a few `key: value` pairs, long values
  * cut, nested ones counted. The full JSON stays one click further. */
-export function stepArgs(input: string | undefined): Array<{ key: string; value: string; full?: string }> {
+export function stepArgs(input: string | undefined, nameOf?: StepNameOf): Array<{ key: string; value: string; full?: string }> {
   const args = parseArgs(input);
   if (!args) return [];
   const pairs: Array<{ key: string; value: string; full?: string }> = [];
@@ -468,6 +500,15 @@ export function stepArgs(input: string | undefined): Array<{ key: string; value:
     // as "…": the value stays in the tooltip and the folded JSON record.
     if (typeof value === "string" && isOpaqueValue(value)) {
       pairs.push({ key, value: "…", full: value });
+      if (pairs.length >= ARG_MAX) break;
+      continue;
+    }
+    // 2026-11-02: a path with an id in it (/data/.../workspaces/<bot id>)
+    // reads with the bot's name, else as the folder it is; the path as
+    // written stays in the tooltip.
+    const path = typeof value === "string" ? readablePath(value, nameOf) : undefined;
+    if (path !== undefined) {
+      pairs.push({ key, value: oneLine(path, 120), full: value as string });
       if (pairs.length >= ARG_MAX) break;
       continue;
     }
@@ -482,6 +523,15 @@ export function stepArgs(input: string | undefined): Array<{ key: string; value:
     if (pairs.length >= ARG_MAX) break;
   }
   return pairs;
+}
+
+/** A path whose segments hold an opaque id, as a person reads it: a known
+ * bot's id becomes its name, any other id the folder it names or "…"
+ * (short-path.ts humanPath). Undefined for a path with no id. */
+function readablePath(value: string, nameOf?: StepNameOf): string | undefined {
+  if (!/[\\/]/.test(value) || !value.split(/[\\/]/).some(isOpaqueId)) return undefined;
+  const named = value.split(/([\\/])/).map((part) => (isOpaqueId(part) ? nameOf?.(part) ?? part : part)).join("");
+  return humanPath(named);
 }
 
 /** The first lines of a result, enough to see what came back. */

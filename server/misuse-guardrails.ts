@@ -36,6 +36,9 @@ export interface MisuseRefusal {
   status: number;
   code: "misuse_blocked" | "misuse_approval_required" | "misuse_locked";
   message: string;
+  /** 2026-11-02: the one category that matched a block, so the app says
+   * that reason in its own language (serverError.misuseReason.*). */
+  reason?: MisuseCategory;
   verdict: MisuseVerdict;
 }
 
@@ -145,7 +148,7 @@ function refusalFor(verdict: MisuseVerdict, locked: boolean): MisuseRefusal {
   if (verdict.action === "require_approval") {
     return { status: 403, code: "misuse_approval_required", message: misuseRefusalText(verdict.category, "require_approval"), verdict };
   }
-  return { status: 403, code: "misuse_blocked", message: misuseRefusalText(verdict.category, "block"), verdict };
+  return { status: 403, code: "misuse_blocked", message: misuseRefusalText(verdict.category, "block"), ...(verdict.category ? { reason: verdict.category } : {}), verdict };
 }
 
 /** The classifier scope of a surface: a chat message runs nothing, and the

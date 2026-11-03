@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultFleetDeps, runFleetCommand, type FleetInput } from "./fleet-cli.ts";
 import { emptyRegistry, fleetLayout, MANAGED_OPENROUTER } from "./fleet.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
-import { readUsage, summarizeUsage, type UsageRow } from "./usage-ledger.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
+import { readUsage, summarizeUsage, type UsageRow } from "../usage-ledger.ts";
 
 const fixture = vi.hoisted(() => ({ home: "", account: "", calls: [] as { command: string; args: string[]; options: ExecFileSyncOptionsWithStringEncoding }[] }));
 vi.mock("node:child_process", async (importOriginal) => {

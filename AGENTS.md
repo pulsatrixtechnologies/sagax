@@ -8643,7 +8643,7 @@ it after an upstream merge instead of renaming by hand.
 - Environment: an old `OMB_*`, `OPENMAUSBOT_*` or `OPENMAUS_*` variable is
   moved onto `SAGAX_*` at start for one release (`bridgeLegacyEnv`; names
   saved as data go through `currentEnvName`/`readEnvName`). The fleet unit
-  template and instance env files (`server/fleet.ts`), the `Dockerfile`, the
+  template and instance env files (`server/fleet/fleet.ts`), the `Dockerfile`, the
   compose files, `.env.example` and `deploy/` still write `OMB_*`: installed
   units and operators' `.env` files use them.
 - Data: `~/.sagax` (an old `~/.openmausbot` moves there once), but the lease
@@ -8693,7 +8693,7 @@ it after an upstream merge instead of renaming by hand.
   (the VPS recipe), the npx cache warning in `server/service-unit.ts`, the
   npm package README (`scripts/build-npm-package.mjs`), the npm line of the
   release notes (`.github/workflows/npm-package.yml`) and `fleet upgrade` in
-  `server/fleet.ts`. The rebrand script re-applies the image, the native copy
+  `server/fleet/fleet.ts`. The rebrand script re-applies the image, the native copy
   and the signing names after a merge, and reports `npx openmausbot` or
   `npm install -g openmausbot` in the docs for a person to replace.
 - Legal and history: the OpenMausBot lines of `NOTICE`, the README attribution,

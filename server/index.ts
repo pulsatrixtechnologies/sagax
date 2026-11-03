@@ -659,7 +659,7 @@ import {
   spendState,
   takeSpendAlert
 } from "./spend.ts";
-import { fleetAvailable, fleetRequest, fleetSocketPath } from "./fleet-client.ts";
+import { fleetAvailable, fleetRequest, fleetSocketPath } from "./fleet/fleet-client.ts";
 import { entitled } from "./enterprise.ts";
 import { HOSTED_CONTRACT_HEADER, HOSTED_CONTRACT_METADATA, HOSTED_CONTRACT_VERSION } from "./hosted-contract.ts";
 import { describeSpawnFailure, execCli, runAsBotEngine } from "./procs.ts";

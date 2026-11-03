@@ -448,3 +448,11 @@ server/sessions.ts
 server/totp.test.ts
 server/totp.ts
 server/trust-controls.e2e.test.ts
+server/fleet-agent.test.ts
+server/fleet-agent.ts
+server/fleet-cli-filesystem.test.ts
+server/fleet-cli.test.ts
+server/fleet-cli.ts
+server/fleet-client.ts
+server/fleet.test.ts
+server/fleet.ts

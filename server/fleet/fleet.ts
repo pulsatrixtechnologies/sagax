@@ -5,7 +5,7 @@
 // argument lists as steps, so what the CLI does as root is inspectable and
 // testable, and nothing here ever builds a shell command string.
 import { posix } from "node:path";
-import { globalPackageEntry, NPM_PACKAGE, pinnedInstallSpec } from "./npm-package.ts";
+import { globalPackageEntry, NPM_PACKAGE, pinnedInstallSpec } from "../npm-package.ts";
 
 const { basename, join } = posix;
 

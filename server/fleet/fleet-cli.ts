@@ -6,9 +6,9 @@
 import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync, closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { posix } from "node:path";
-import { writeFileAtomic } from "./atomic.ts";
-import { releaseVersion } from "./environment.ts";
-import { unstableInstallWarning } from "./service-unit.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { releaseVersion } from "../environment.ts";
+import { unstableInstallWarning } from "../service-unit.ts";
 import {
   applySignIn,
   assertManagedWorkspace,

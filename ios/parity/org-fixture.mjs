@@ -87,7 +87,7 @@ function avatarPng(size, [r, g, b]) {
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(raw)), chunk("IEND", Buffer.alloc(0))]);
 }
 
-// ── the stub fleet agent (server/fleet-client.ts speaks to it) ──────────
+// ── the stub fleet agent (server/fleet/fleet-client.ts speaks to it) ──────────
 function startFleetStub(socketPath) {
   const month = new Date().toISOString().slice(0, 7);
   const version = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;

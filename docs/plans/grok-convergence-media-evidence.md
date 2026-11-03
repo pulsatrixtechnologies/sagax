@@ -61,7 +61,7 @@ Implemented:
   still forcing private/no-store. Caddy's `encode` honors no-transform and
   never encodes 206 (checked against Caddy's encode.go on 2026-11-01), so the
   shipped Caddyfiles (`deploy/`, `install.sh`, `server/caddy.ts`,
-  `server/fleet.ts`) and an external Caddy front keep exact lengths and seek.
+  `server/fleet/fleet.ts`) and an external Caddy front keep exact lengths and seek.
   The Electron companion origin gateway and the companion proxy pass Range,
   206/416 and seek headers byte for byte. Provider media proxy responses also
   carry no-transform. A bot's `attach_file` copy of a video now uses the 1 GB

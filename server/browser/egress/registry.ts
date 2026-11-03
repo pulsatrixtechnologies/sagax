@@ -4,7 +4,7 @@ import { subscribe } from "node:diagnostics_channel";
 import type { Server } from "node:net";
 
 import { agentBrowserDevToolsPorts, agentBrowserStreamPorts } from "../browser-engine.ts";
-import { FLEET_FIRST_PORT, FLEET_PORT_STRIDE } from "../../fleet.ts";
+import { FLEET_FIRST_PORT, FLEET_PORT_STRIDE } from "../../fleet/fleet.ts";
 import { botEngineSessions } from "../../procs.ts";
 import { openGate, type EgressGate, type GateTarget } from "./gate.ts";
 import { ListenerOwnership } from "./ownership.ts";

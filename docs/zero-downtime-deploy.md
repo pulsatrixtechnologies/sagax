@@ -32,7 +32,7 @@ when turns need longer to land.
 ## 2. Caddy holds requests during the restart
 
 Every Caddyfile we ship (`deploy/Caddyfile`, `install.sh`,
-`server/caddy.ts`, `server/fleet.ts`, helm configmap, local/podman)
+`server/caddy.ts`, `server/fleet/fleet.ts`, helm configmap, local/podman)
 configures the reverse proxy to **wait** instead of 502 while the single
 upstream is gone:
 
@@ -114,7 +114,7 @@ a rendered manifest.
 
 - `server/http-shutdown.test.ts`, `server/graceful-shutdown.test.ts`,
   `server/healthz.test.ts`
-- `server/caddy.test.ts`, `server/fleet.test.ts`
+- `server/caddy.test.ts`, `server/fleet/fleet.test.ts`
 - `src/lib/deploy-reconnect.test.ts`, `src/components/ChatErrorBanner.test.ts`
 - `companion/test/upstream-failure.test.ts`
 - iOS: `FailoverTests.testDeployOutageShowsCalmReconnectingWithoutAnotherRoute`

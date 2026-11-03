@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { parseBotPackage, renderBotPackageMarkdown } from "./bot-package.ts";
-import { memberFromAgent } from "../package-import.ts";
+import { memberFromAgent } from "../packages/package-import.ts";
 
 const validPackage: any = {
   format: "openmaus.package",

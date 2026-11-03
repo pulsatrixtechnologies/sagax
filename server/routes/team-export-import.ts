@@ -22,14 +22,14 @@ import {
   createTeamPackageExport,
   TeamExportError,
   type TeamExportSkip,
-} from "../package-export.ts";
+} from "../packages/package-export.ts";
 import {
   importPackageDocument,
   importTeamManifest,
   PackageImportError,
   type PackageImportDeps,
   type PackageImportResult,
-} from "../package-import.ts";
+} from "../packages/package-import.ts";
 import { scoutProject, suggestTeam } from "../project-scout.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { BotRecord, GroupRecord } from "../store.ts";

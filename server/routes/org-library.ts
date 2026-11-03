@@ -14,7 +14,7 @@
 import { z } from "zod";
 
 import type { OrgLibrary } from "../org/org-library.ts";
-import type { PackageImportDeps } from "../package-import.ts";
+import type { PackageImportDeps } from "../packages/package-import.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { BotRecord, GroupRecord } from "../store.ts";
 import { PASS, type RouteHandler } from "./table.ts";

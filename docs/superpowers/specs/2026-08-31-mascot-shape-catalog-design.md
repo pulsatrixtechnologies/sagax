@@ -177,7 +177,7 @@ The field follows `avatarCrop`'s existing path end to end:
 - `server/store.ts` — `BotRecord.mascotShape?: MascotShapeId | null`.
 - `server/bots/bot-profile.ts` — added to the patch allow-list, with a readable
   error message in the same style as the `avatarCrop` one.
-- `server/team/team-manifest.ts`, `server/bots/bot-package.ts`, `server/package-export.ts`
+- `server/team/team-manifest.ts`, `server/bots/bot-package.ts`, `server/packages/package-export.ts`
   — carried inside `appearance`, beside `color` and `mascotExpression`.
 - `server/index.ts` — added to the profile broadcast key list (~line 4048).
 - iOS `Sources/CompanionCore/Models.swift` — `Bot.mascotShape: String?` and the

@@ -1372,13 +1372,13 @@ import {
   TeamExportError,
   type ExportablePackageSkill,
   type TeamExportSkip
-} from "./package-export.ts";
+} from "./packages/package-export.ts";
 import {
   importPackageDocument,
   PackageImportError,
   type PackageImportDeps,
   type PackageImportResult
-} from "./package-import.ts";
+} from "./packages/package-import.ts";
 import {
   createPresetStore,
   DEFAULTS_PRESET_KEY,

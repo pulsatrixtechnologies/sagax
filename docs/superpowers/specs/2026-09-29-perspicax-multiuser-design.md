@@ -49,7 +49,7 @@ L'app de bureau garde toujours son harness local en solo. Un serveur d'organisat
 ### Revenir en solo
 
 - « Quitter l'organisation » sur le bureau: l'app appelle la déconnexion du serveur (révocation de la session Pulsa Bot et du refresh token Perspicax, section 2), puis retire l'environnement. Le harness local n'a jamais cessé d'être solo.
-- Récupérer un bot: une personne qui a `manage` sur un bot d'organisation peut l'exporter en paquet (`server/package-export.ts`) et l'importer en local. Les fils ne suivent que si l'admin l'autorise (réglage d'organisation, désactivé par défaut: ce sont des données de l'organisation).
+- Récupérer un bot: une personne qui a `manage` sur un bot d'organisation peut l'exporter en paquet (`server/packages/package-export.ts`) et l'importer en local. Les fils ne suivent que si l'admin l'autorise (réglage d'organisation, désactivé par défaut: ce sont des données de l'organisation).
 - Désactiver le compte dans Perspicax coupe tout accès au serveur d'organisation (section 2, déconnexion par le canal arrière). Les copies locales restent à la personne.
 
 ### Serveur intérim déjà en organisation

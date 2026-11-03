@@ -44,7 +44,7 @@ import type { TeamSetupRequest, TeamSetupResult } from "../shared/team-setup.ts"
 import type { GroupGoalRunCardData } from "../shared/group-goal-run.ts";
 import { isMentionBoundary, isMentionNameContinuation } from "../shared/mention-boundary.ts";
 import type { HandedState } from "./context/delta-context.ts";
-import type { AgentPart, PartPair, RoomPart } from "./package-parts.ts";
+import type { AgentPart, PartPair, RoomPart } from "./packages/package-parts.ts";
 import type { BotHost } from "./turns/turn-route.ts";
 import { advancesPosition, type ReadMap, type ReadPosition } from "./messages/read-receipts.ts";
 import { applyReaction, normalizeReactions, type ReactionActor, type ReactionMode } from "../shared/reactions.ts";
@@ -73,7 +73,7 @@ export type { InstalledPlaybook, InstalledPackageMetadata, MausColor, MausExpres
 export type Message = WireMessage;
 
 /** Server-private: a group chat added from the organization's library, with
- * its package key, member keys and per-part hashes (server/package-parts.ts). */
+ * its package key, member keys and per-part hashes (server/packages/package-parts.ts). */
 export interface GroupPackageStamp {
   installId: string;
   key: string;
@@ -483,7 +483,7 @@ export interface BotRecord extends Omit<WireBot, "avatarUrl" | "tasks"> {
   /** Receipt committed with a reviewed team batch; prevents replay after a lost response. */
   lastTeamSetupReceipt?: { requestId: string; result: TeamSetupResult };
   /** Organization library only: each part's release and written hashes
-   * (server/package-parts.ts), for the later automatic update. */
+   * (server/packages/package-parts.ts), for the later automatic update. */
   packageBase?: Partial<Record<AgentPart, PartPair>>;
   /** Skills library (features.skillsLibrary): names of library skills
    * assigned to this bot. Server-private until the Skills UI ships. */

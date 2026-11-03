@@ -43,7 +43,7 @@ codebase already enforces; a task that violates one is wrong even if its tests p
   older one and degrade to "unavailable" rather than throwing. `InstanceConfig.driver`
   is deliberately unvalidated for this reason.
 - **Exports never carry** credentials, transcripts, memory, grants, absolute paths,
-  engine bindings, or a schedule's active state. `server/package-export.ts` states
+  engine bindings, or a schedule's active state. `server/packages/package-export.ts` states
   this as its contract; every new export path inherits it. The one deliberate
   exception is the private team backup (`server/backup/team-backup.ts`): it exists to
   move a person's own fleet between their own machines, so it carries transcripts

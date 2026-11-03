@@ -10,14 +10,14 @@
 // version.
 import { createHash } from "node:crypto";
 
-import { canonicalJson, decodeBase64 } from "../shared/package-format.ts";
+import { canonicalJson, decodeBase64 } from "../../shared/package-format.ts";
 import type {
   PackageAgent,
   PackageConnection,
   PackagePlaybook,
   PackageRoom,
   PackageRoutine,
-} from "../shared/package-format.ts";
+} from "../../shared/package-format.ts";
 
 export interface PartPair { r: string; w: string }
 

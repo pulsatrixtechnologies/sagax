@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { PackageDocument } from "../shared/package-format.ts";
+import type { PackageDocument } from "../../shared/package-format.ts";
 
-const FIXTURES = join(import.meta.dirname, "..", "shared", "package-fixtures");
+const FIXTURES = join(import.meta.dirname, "..", "..", "shared", "package-fixtures");
 const fixture = (name: string): any => JSON.parse(readFileSync(join(FIXTURES, name), "utf8"));
 let home: string;
 
@@ -16,15 +16,15 @@ async function installation(options: { refuse?: (name: string) => string | undef
   vi.resetModules();
   vi.stubEnv("HOME", home);
   vi.stubEnv("USERPROFILE", home);
-  const { Store } = await import("./store.ts");
-  const { RoutineManager } = await import("./routines/routines.ts");
-  const skills = await import("./skills/skills.ts");
-  const workspace = await import("./workspace/workspace.ts");
-  const sections = await import("./rooms/section-context.ts");
-  const { saveImage } = await import("./attachments/attachments.ts");
-  const { botAvatarUrlFromStoredPath } = await import("../shared/bot-avatar.ts");
+  const { Store } = await import("../store.ts");
+  const { RoutineManager } = await import("../routines/routines.ts");
+  const skills = await import("../skills/skills.ts");
+  const workspace = await import("../workspace/workspace.ts");
+  const sections = await import("../rooms/section-context.ts");
+  const { saveImage } = await import("../attachments/attachments.ts");
+  const { botAvatarUrlFromStoredPath } = await import("../../shared/bot-avatar.ts");
   const importer = await import("./package-import.ts");
-  const { parsePackageDocument } = await import("../shared/package-format.ts");
+  const { parsePackageDocument } = await import("../../shared/package-format.ts");
   const store = new Store(() => ({ instanceId: "claude", model: "default-model" }));
   const routines = new RoutineManager({
     file: join(home, "routines.json"),
@@ -56,7 +56,7 @@ async function installation(options: { refuse?: (name: string) => string | undef
 }
 
 afterEach(async () => {
-  const { closeMessageDb } = await import("./messages/message-db.ts");
+  const { closeMessageDb } = await import("../messages/message-db.ts");
   closeMessageDb();
   vi.unstubAllEnvs();
   rmSync(home, { recursive: true, force: true });

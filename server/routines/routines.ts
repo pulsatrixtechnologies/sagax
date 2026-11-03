@@ -53,7 +53,7 @@ import {
   ROUTINE_FOLDERS_PER_BOT,
   type RoutineFolderUndo,
 } from "../../shared/routine-folders.ts";
-import { ROUTINE_PARTS, type PartPair, type RoutinePart } from "../package-parts.ts";
+import { ROUTINE_PARTS, type PartPair, type RoutinePart } from "../packages/package-parts.ts";
 import {
   engineNeedsReconnecting,
   engineReconnectAhead,
@@ -278,7 +278,7 @@ export function routineAdmitDelayMs(retryAfterMs: number, attempts: number): num
 }
 
 /** Which organization install a routine came from, its key in the package,
- * and each part's release and written hashes (server/package-parts.ts). */
+ * and each part's release and written hashes (server/packages/package-parts.ts). */
 export interface RoutinePackageStamp {
   installId: string;
   key: string;

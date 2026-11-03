@@ -25,9 +25,9 @@ async function installation() {
   const workspace = await import("./workspace/workspace.ts");
   const sections = await import("./rooms/section-context.ts");
   const presets = await import("./presets.ts");
-  const importer = await import("./package-import.ts");
-  const exporter = await import("./package-export.ts");
-  const parts = await import("./package-parts.ts");
+  const importer = await import("./packages/package-import.ts");
+  const exporter = await import("./packages/package-export.ts");
+  const parts = await import("./packages/package-parts.ts");
   const { parsePackageDocument } = await import("../shared/package-format.ts");
   const store = new Store(() => ({ instanceId: "claude", model: "default-model" }));
   const routines = new RoutineManager({

@@ -45,8 +45,8 @@ import {
   type OrgInstallIndex,
   type PackageImportDeps,
   type PackageImportResult,
-} from "../package-import.ts";
-import { pair, partHash, sha256Hex, type PartPair, type TeamPart } from "../package-parts.ts";
+} from "../packages/package-import.ts";
+import { pair, partHash, sha256Hex, type PartPair, type TeamPart } from "../packages/package-parts.ts";
 import { storedPresetObject, type StoredPreset } from "../presets.ts";
 import type { RoutineManager } from "../routines/routines.ts";
 import type { SkillListing, SkillPackageStamp } from "../skills/skills.ts";

@@ -1,10 +1,10 @@
-import { parseBotPackage, type BotPackageDefinition, type BotPackagePlaybook, type BotPackageSkill, type ParsedBotPackage } from "./bots/bot-package.ts";
-import type { DefaultsPreset, PublishedLibrary } from "./presets.ts";
-import type { PublishedTeam } from "./pages/published-teams.ts";
-import { nextPatchRelease } from "./pages/published-teams.ts";
-import type { Routine } from "./routines/routines.ts";
-import { isTriggerSchedule } from "../shared/routines.ts";
-import type { BotRecord, GroupRecord, InstalledPlaybook } from "./store.ts";
+import { parseBotPackage, type BotPackageDefinition, type BotPackagePlaybook, type BotPackageSkill, type ParsedBotPackage } from "../bots/bot-package.ts";
+import type { DefaultsPreset, PublishedLibrary } from "../presets.ts";
+import type { PublishedTeam } from "../pages/published-teams.ts";
+import { nextPatchRelease } from "../pages/published-teams.ts";
+import type { Routine } from "../routines/routines.ts";
+import { isTriggerSchedule } from "../../shared/routines.ts";
+import type { BotRecord, GroupRecord, InstalledPlaybook } from "../store.ts";
 import {
   AGENT_MAX_SKILLS,
   AVATAR_MAX_BYTES,
@@ -29,7 +29,7 @@ import {
   type PackageRoom,
   type PackageRoutine,
   type PackageRoutineSchedule,
-} from "../shared/package-format.ts";
+} from "../../shared/package-format.ts";
 
 function portableKey(value: string, fallback: string, used: Set<string>): string {
   const stem = value

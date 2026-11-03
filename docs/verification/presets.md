@@ -56,7 +56,7 @@ The printed JSON line names the fixture's data directory and server log.
 ## Units
 
 ```sh
-pnpm exec vitest run server/presets.test.ts server/routes/bot-presets.test.ts server/package-import.test.ts server/package-export.test.ts shared/package-format.test.ts
+pnpm exec vitest run server/presets.test.ts server/routes/bot-presets.test.ts server/packages/package-import.test.ts server/packages/package-export.test.ts shared/package-format.test.ts
 ```
 
 - `server/presets.test.ts` imports into a real store, skill store and memory
@@ -173,8 +173,8 @@ preset's skill has none. `server/presets.e2e.test.ts` writes a withdrawn
 Run on macOS (arm64) against disposable fixtures only: `pnpm typecheck`,
 `pnpm lint`, `pnpm i18n:check`, `server/presets.test.ts`,
 `server/org/org-library.test.ts`, `server/org/org-library.e2e.test.ts`,
-`server/routes/bot-presets.test.ts`, `server/package-import.test.ts`,
-`server/package-export.test.ts`, `server/presets.e2e.test.ts`,
+`server/routes/bot-presets.test.ts`, `server/packages/package-import.test.ts`,
+`server/packages/package-export.test.ts`, `server/presets.e2e.test.ts`,
 `server/team-share.e2e.test.ts`, `scripts/testing/verification-docs.test.ts`
 and the presets headless-renderer recipe (`SAGAX_UI_E2E=1`).
 Mutation-checked (each broken, the named test seen failing, restored):

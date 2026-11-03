@@ -19,20 +19,20 @@
 // A failure anywhere rolls back every record this import created.
 import { createHash, randomUUID } from "node:crypto";
 
-import { mcpServerNameError, MAX_MCP_SERVERS, parseStoredMcpServer } from "./mcp/mcp-registry.ts";
+import { mcpServerNameError, MAX_MCP_SERVERS, parseStoredMcpServer } from "../mcp/mcp-registry.ts";
 import {
   AGENT_PARTS, agentReleaseValues, connectionLocalValue, connectionReleaseValue, pair, pairs, playbookValues,
   ROOM_PARTS, roomReleaseValues, ROUTINE_PARTS, routineReleaseValues, scheduleValue, sha256Hex, TEAM_PARTS,
   type AgentPart, type PartPair, type TeamPart,
 } from "./package-parts.ts";
-import type { PresetRegistry } from "./presets.ts";
-import type { Routine, RoutineInput, RoutineManager } from "./routines/routines.ts";
-import type { SkillListing, SkillPackageStamp } from "./skills/skills.ts";
-import type { BotRecord, GroupRecord, InstalledPackageMetadata, Store } from "./store.ts";
-import { importedMemberProfile, type ParsedTeamManifest, type TeamManifestMember } from "./team/team-manifest.ts";
-import { takeImportName } from "../shared/import-name.ts";
-import { decodeBase64, type PackageAgent, type PackageDocument, type PackageTrust } from "../shared/package-format.ts";
-import type { BotVisibility, ModelSelection } from "../shared/wire.ts";
+import type { PresetRegistry } from "../presets.ts";
+import type { Routine, RoutineInput, RoutineManager } from "../routines/routines.ts";
+import type { SkillListing, SkillPackageStamp } from "../skills/skills.ts";
+import type { BotRecord, GroupRecord, InstalledPackageMetadata, Store } from "../store.ts";
+import { importedMemberProfile, type ParsedTeamManifest, type TeamManifestMember } from "../team/team-manifest.ts";
+import { takeImportName } from "../../shared/import-name.ts";
+import { decodeBase64, type PackageAgent, type PackageDocument, type PackageTrust } from "../../shared/package-format.ts";
+import type { BotVisibility, ModelSelection } from "../../shared/wire.ts";
 
 export const NO_BOTS_MESSAGE = "This package has no bots. Add it from your organization's shelf, or update Sagax.";
 /** A file with skills only: a file never adds a skill without a bot or a preset to hold it. */

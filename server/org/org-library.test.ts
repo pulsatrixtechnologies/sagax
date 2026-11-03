@@ -93,7 +93,7 @@ async function installation(from?: string) {
   const { botAvatarUrlFromStoredPath } = await import("../../shared/bot-avatar.ts");
   const { DATA_DIR } = await import("../config.ts");
   const { OrgLibrary, parseOrgLibraryCatalog } = await import("./org-library.ts");
-  const parts = await import("../package-parts.ts");
+  const parts = await import("../packages/package-parts.ts");
   // Preset bots (presets.ts), wired as server/index.ts wires them.
   const presetStore = (await import("../presets.ts")).createPresetStore(join(DATA_DIR, "org-library", "presets.json"));
   const store = new Store(() => ({ instanceId: "claude", model: "default-model" }));

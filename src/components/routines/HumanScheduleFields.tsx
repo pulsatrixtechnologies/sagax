@@ -60,8 +60,10 @@ export function ScheduleSummary({ value, paused = false }: { value: ScheduleEdit
   </div>;
 }
 
-/** `essentials`: one time + days (Grok-simple When). `advanced`: extra times,
- * time zone, next-runs preview (More options). `all`: previous full block. */
+/** `essentials`: the shape and the first time (the simple When picker).
+ * `advanced`: only the extra times ("Also at", never the first time again:
+ * one field per time, 2026-11-02), the time zone and the next runs (the
+ * editor's Advanced). `all`: the full block. */
 export type HumanScheduleMode = "all" | "essentials" | "advanced";
 
 export function HumanScheduleFields({ draft, value, onChange, paused = false, mode = "all" }: {
@@ -89,7 +91,6 @@ export function HumanScheduleFields({ draft, value, onChange, paused = false, mo
   };
   const timed = model.frequency !== "hourly" && model.frequency !== "every";
   const showShape = mode === "all" || mode === "essentials";
-  const showTimesFull = mode === "all" || mode === "advanced";
   const showZoneAndPreview = mode === "all" || mode === "advanced";
   const firstTime = model.times[0] ?? "09:00";
   return <div data-human-schedule={mode} className="space-y-3">
@@ -122,10 +123,19 @@ export function HumanScheduleFields({ draft, value, onChange, paused = false, mo
     {showShape && timed && mode === "essentials" && <div className="flex flex-wrap items-center gap-2">
       <span className={LABEL}>{t("scheduleEditor.at")}</span>
       <input data-schedule-time type="time" step={60} value={firstTime} aria-label={t("scheduleEditor.timeN", { n: 1 })} aria-invalid={Boolean(value.error)} onChange={(event) => setTime(0, event.target.value)} className={cn(FIELD, "tabular-nums")} />
-      {model.times.length > 1 && <span data-schedule-more-times className="text-[11.5px] text-ink-secondary">{t("scheduleEditor.moreTimesHint", { count: model.times.length - 1 })}</span>}
+      {model.times.length > 1 && <span data-schedule-more-times className="text-[11.5px] text-ink-secondary">{t("scheduleEditor.moreTimesAdvanced", { count: model.times.length - 1 })}</span>}
     </div>}
 
-    {timed && showTimesFull && <div className="flex flex-wrap items-center gap-2">
+    {timed && mode === "advanced" && <div data-schedule-extra-times className="flex flex-wrap items-center gap-2">
+      <span className={LABEL}>{t("scheduleEditor.alsoAt")}</span>
+      {model.times.map((time, index) => index === 0 ? null : <span key={index} className="inline-flex items-center gap-1">
+        <input data-schedule-time type="time" step={60} value={time} aria-label={t("scheduleEditor.timeN", { n: index + 1 })} aria-invalid={Boolean(value.error)} onChange={(event) => setTime(index, event.target.value)} className={cn(FIELD, "tabular-nums")} />
+        <button type="button" aria-label={t("scheduleEditor.removeTime")} title={t("scheduleEditor.removeTime")} onClick={() => update({ times: model.times.filter((_, at) => at !== index) })} className="rounded-md p-1 text-ink-secondary hover:bg-raised hover:text-ink"><X size={13} /></button>
+      </span>)}
+      {model.times.length < 12 && <button type="button" data-schedule-add-time onClick={addTime} className="inline-flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[12.5px] font-medium text-accent hover:bg-raised"><Plus size={13} />{t("scheduleEditor.addTime")}</button>}
+    </div>}
+
+    {timed && mode === "all" && <div className="flex flex-wrap items-center gap-2">
       <span className={LABEL}>{t("scheduleEditor.at")}</span>
       {model.times.map((time, index) => <span key={index} className="inline-flex items-center gap-1">
         <input data-schedule-time type="time" step={60} value={time} aria-label={t("scheduleEditor.timeN", { n: index + 1 })} aria-invalid={Boolean(value.error)} onChange={(event) => setTime(index, event.target.value)} className={cn(FIELD, "tabular-nums")} />
@@ -136,7 +146,10 @@ export function HumanScheduleFields({ draft, value, onChange, paused = false, mo
 
     {showZoneAndPreview && <>
       <TimeZonePicker value={draft.timeZone} onChange={(timeZone) => onChange({ ...draft, timeZone })} />
-      <ScheduleSummary value={value} paused={paused} />
+      {/* Advanced: the sentence and any error already read in When to run. */}
+      {mode === "advanced"
+        ? value.schedule && !value.error && <CronRunDates runs={value.runs} timeZone={value.schedule.timeZone} paused={paused} />
+        : <ScheduleSummary value={value} paused={paused} />}
     </>}
   </div>;
 }

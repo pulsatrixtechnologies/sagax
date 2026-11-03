@@ -33,9 +33,20 @@ export const SANDBOX_SHARED_DIR = `${SANDBOX_WORKSPACE}/shared`;
 export const SANDBOX_UNSORTED_DIR = `${SANDBOX_WORKSPACE}/_unsorted`;
 /** Days a file of a bot's tmp/ is kept after its last change. */
 export const BOT_TMP_RETENTION_DAYS = 7;
+/** The names a bot's own folder reserves: an entry of the root by one of
+ * these names is never moved into a bot folder (audit S-3: /workspace/tmp
+ * became bots/<slug>/tmp, whose files older than 7 days the same apply
+ * deleted). */
+export const BOT_FOLDER_RESERVED: readonly string[] = ["tmp"];
 /** The entries of /workspace the tidy never moves, besides every dot entry
  * (HOME is /workspace: .config, .ssh, .gitconfig, .sagax...). One list:
- * the tidy script receives it as is. */
+ * the tidy script receives it as is. Checked 2026-11-03 against what the
+ * sandbox image and Sagax write at the root: bots, shared, _unsorted (this
+ * layout), attachments (attachment-staging.ts), sagax-plugins
+ * (sandbox-plugins.ts), sagax-capability-skills (personal-skills.ts),
+ * Desktop and Downloads (HOME=/workspace: the desktop session and
+ * Chromium's default download folder), lost+found (the volume), skills and
+ * marketplaces (older layouts), and tmp (a bot folder's reserved name). */
 export const SANDBOX_ROOT_KEEP: readonly string[] = [
   "bots",
   "shared",
@@ -47,6 +58,8 @@ export const SANDBOX_ROOT_KEEP: readonly string[] = [
   "skills",
   "marketplaces",
   "Desktop",
+  "Downloads",
+  ...BOT_FOLDER_RESERVED,
 ];
 
 const SLUG_MAX = 40;
@@ -174,13 +187,18 @@ export function workspaceDiskWarning(disk: WorkspaceDisk | null, folder?: string
  *          (entries: the loose root entries, only when not tidied yet)
  *   apply: reads the plan on stdin ({"date", "moves": [{name, dest}]}), moves
  *          without overwriting, writes the manifests, empties old tmp files,
- *          marks this start tidied; prints {"moved": [{from, to}], "cleaned": n} */
-export const TIDY_SCRIPT = String.raw`
-import json, os, sys, time
+ *          marks this start tidied; prints {"moved": [{from, to}], "cleaned": n,
+ *          "protected": [tmp folders left alone]}
+ * The cleaning deletes only inside /workspace/bots/<slug>/tmp (real path
+ * checked), never a tmp folder that a move put there (this apply's moves or
+ * an earlier one in moves.json): that is the person's own folder. */
+const TIDY_SCRIPT_SOURCE = String.raw`
+import json, os, re, sys, time
 ROOT = os.environ.get('SAGAX_TIDY_ROOT') or '/workspace'
 MARK = os.environ.get('SAGAX_TIDY_MARK') or '/tmp/.sagax-workspace-tidy'
 mode = sys.argv[1]
 keep = set(json.loads(sys.argv[2]))
+BOT_RESERVED = set(__RESERVED__)
 HIDDEN = os.path.join(ROOT, '.hidden')
 def links():
     # The links the tidy left at the root (listed in .hidden, still links).
@@ -233,6 +251,9 @@ for move in plan.get('moves', []):
         continue
     if not (dest.startswith(ROOT + '/bots/') or dest.startswith(ROOT + '/_unsorted/')) or '..' in dest.split('/'):
         continue
+    # a bot folder's reserved name (tmp) never lands in a bot folder
+    if name in BOT_RESERVED and dest.startswith(ROOT + '/bots/'):
+        continue
     source = os.path.join(ROOT, name)
     if not os.path.lexists(source):
         continue
@@ -283,13 +304,38 @@ if moved:
         json.dump(known, out, indent=1, sort_keys=True)
     os.replace(index + '.tmp', index)
 cleaned = 0
+protected = []
 limit = time.time() - int(sys.argv[4]) * 86400
 bots = os.path.join(ROOT, 'bots')
-for slug in os.listdir(bots):
+real_bots = os.path.realpath(bots)
+# Every folder a move put somewhere, this apply or an earlier one: the
+# person's own files, never emptied as a bot's tmp (audit S-3).
+moved_to = set()
+try:
+    with open(os.path.join(ROOT, '_unsorted', 'moves.json'), encoding='utf-8') as source:
+        moved_to.update(os.path.realpath(to) for to in json.load(source).values() if isinstance(to, str))
+except (OSError, ValueError, AttributeError):
+    pass
+moved_to.update(os.path.realpath(row['to']) for row in moved)
+def inside(path, folder):
+    return path == folder or path.startswith(folder + os.sep)
+SLUG = re.compile(r'^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$')
+slugs = os.listdir(bots) if real_bots == os.path.join(os.path.realpath(ROOT), 'bots') else []
+for slug in slugs:
+    if not SLUG.match(slug):
+        continue
     tmp = os.path.join(bots, slug, 'tmp')
-    if os.path.islink(tmp) or not os.path.isdir(tmp):
+    if os.path.islink(tmp) or os.path.islink(os.path.join(bots, slug)) or not os.path.isdir(tmp):
+        continue
+    real_tmp = os.path.realpath(tmp)
+    if real_tmp != os.path.join(real_bots, slug, 'tmp'):
+        continue
+    if any(inside(to, real_tmp) or inside(real_tmp, to) for to in moved_to):
+        protected.append(tmp)
         continue
     for base, dirs, files in os.walk(tmp, topdown=False):
+        if not inside(os.path.realpath(base), real_tmp):
+            continue
         for name in files:
             path = os.path.join(base, name)
             try:
@@ -305,8 +351,9 @@ for slug in os.listdir(bots):
             except OSError:
                 pass
 open(MARK, 'w').close()
-print(json.dumps({'moved': moved, 'cleaned': cleaned, 'disk': disk()}))
+print(json.dumps({'moved': moved, 'cleaned': cleaned, 'protected': protected, 'disk': disk()}))
 `;
+export const TIDY_SCRIPT = TIDY_SCRIPT_SOURCE.replace("__RESERVED__", JSON.stringify(BOT_FOLDER_RESERVED));
 
 export interface TidyMove {
   from: string;
@@ -396,7 +443,10 @@ export class WorkspaceTidier {
       maxOutputBytes: 1024 * 1024,
     }, botId);
     if (applied.exitCode !== 0) throw new Error(applied.stderr.trim().slice(0, 200) || "tidy failed");
-    const result = JSON.parse(applied.stdout.trim().split("\n").at(-1) ?? "{}") as { moved?: TidyMove[]; cleaned?: number; disk?: { free?: unknown; total?: unknown } | null };
+    const result = JSON.parse(applied.stdout.trim().split("\n").at(-1) ?? "{}") as { moved?: TidyMove[]; cleaned?: number; protected?: unknown[]; disk?: { free?: unknown; total?: unknown } | null };
+    if (Array.isArray(result.protected) && result.protected.length) {
+      this.deps.log?.(`workspace tidy: left ${result.protected.length} moved tmp folder${result.protected.length === 1 ? "" : "s"} as is (never emptied)`);
+    }
     this.checked.set(principalId, { at: this.now(), disk: diskOf(result.disk) ?? diskOf(found.disk) });
     const moved = (result.moved ?? []).filter((row) => typeof row?.from === "string" && typeof row?.to === "string");
     if (moved.length) {

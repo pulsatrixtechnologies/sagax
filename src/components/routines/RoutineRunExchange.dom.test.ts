@@ -82,7 +82,7 @@ afterEach(() => {
   host.remove();
 });
 
-function mountExchange(props: { run?: RoutineRun; onClose?: () => void; onRunAgain?: () => void; onLogs?: () => void; onOpenConfiguration?: () => void }) {
+function mountExchange(props: { run?: RoutineRun; onClose?: () => void }) {
   const onClose = props.onClose ?? vi.fn();
   flushSync(() => root.render(createElement(ExchangeColumnProvider, {
     node: column,
@@ -91,9 +91,6 @@ function mountExchange(props: { run?: RoutineRun; onClose?: () => void; onRunAga
       routine,
       bots: [bot],
       onClose,
-      ...(props.onRunAgain ? { onRunAgain: props.onRunAgain } : {}),
-      ...(props.onLogs ? { onLogs: props.onLogs } : {}),
-      ...(props.onOpenConfiguration ? { onOpenConfiguration: props.onOpenConfiguration } : {}),
     }),
   })));
   return onClose;
@@ -101,7 +98,7 @@ function mountExchange(props: { run?: RoutineRun; onClose?: () => void; onRunAga
 
 describe("RoutineRunExchange", () => {
   it("portals into the exchange column with routine <-> bot header and a bottom Close Chat pill", async () => {
-    mountExchange({ onClose: vi.fn(), onRunAgain: vi.fn(), onLogs: vi.fn() });
+    mountExchange({ onClose: vi.fn() });
     await vi.waitFor(() => expect(column.querySelector("[data-testid=routine-run-exchange]")).not.toBeNull());
     const sheet = column.querySelector("[data-testid=routine-run-exchange]")!;
     expect(sheet.textContent).toContain("Morning brief");
@@ -131,38 +128,13 @@ describe("RoutineRunExchange", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("exposes Run again, Continue, and a ⋯ menu anchored to its button with plain items", async () => {
-    const onClose = vi.fn();
-    const onOpenConfiguration = vi.fn();
-    mountExchange({ onClose, onRunAgain: vi.fn(), onLogs: vi.fn(), onOpenConfiguration });
-    await vi.waitFor(() => expect(column.querySelector("[data-run-again]")).not.toBeNull());
-    expect(column.querySelector("[data-run-continue]")).not.toBeNull();
-    flushSync(() => column.querySelector<HTMLButtonElement>("[data-run-more]")!.click());
-    // Drawn through AnchoredPopover (on <body>, placed against the button).
-    const menu = document.querySelector<HTMLElement>("[data-run-more-menu]")!;
-    expect(menu).not.toBeNull();
-    expect(menu.hasAttribute("data-anchored-popover")).toBe(true);
-    expect(menu.getAttribute("role")).toBe("menu");
-    expect(menu.querySelector("[data-run-logs]")).not.toBeNull();
-    const configuration = menu.querySelector<HTMLButtonElement>("[data-run-configuration]")!;
-    // A plain item: no chevron, no accordion inside the menu.
-    expect(configuration.querySelectorAll("svg")).toHaveLength(1);
-    expect(configuration.hasAttribute("aria-expanded")).toBe(false);
-    flushSync(() => configuration.click());
-    expect(onOpenConfiguration).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalled();
-    expect(document.querySelector("[data-run-configuration-panel]")).toBeNull();
-    expect(document.querySelector("[data-run-more-menu]")).toBeNull();
-  });
-
-  it("Escape closes the open ⋯ menu first, not the sheet", async () => {
-    const onClose = mountExchange({ onLogs: vi.fn(), onOpenConfiguration: vi.fn() });
-    await vi.waitFor(() => expect(column.querySelector("[data-run-more]")).not.toBeNull());
-    flushSync(() => column.querySelector<HTMLButtonElement>("[data-run-more]")!.click());
-    expect(document.querySelector("[data-run-more-menu]")).not.toBeNull();
-    flushSync(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
-    expect(onClose).not.toHaveBeenCalled();
-    expect(document.querySelector("[data-run-more-menu]")).toBeNull();
+  it("keeps only Continue and Close Chat in the footer of a finished run (JC 2026-11-03)", async () => {
+    mountExchange({});
+    await vi.waitFor(() => expect(column.querySelector("[data-run-continue]")).not.toBeNull());
+    const actions = column.querySelector<HTMLElement>("[data-routine-run-actions]")!;
+    expect(actions.querySelectorAll("button")).toHaveLength(1);
+    expect(column.querySelector("[data-run-again]")).toBeNull();
+    expect(column.querySelector("[data-run-more]")).toBeNull();
   });
 
   it("uses the same short runCommand labels as the chat (no UUID or server path on screen)", async () => {

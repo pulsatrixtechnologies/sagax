@@ -2835,10 +2835,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           routine={routine}
           bots={state.bots}
           onClose={() => dispatch({ type: "closeRoutineRunSheet" })}
-          onRunAgain={routine ? () => dispatch({ type: "runRoutine", routineId: routine.id, onStarted: (started) => dispatch({ type: "openRoutineRunSheet", runId: started.id, routineId: routine.id, botId: started.botId }) }) : undefined}
           onStop={["queued", "running", "waiting"].includes(run.status) ? () => dispatch({ type: "cancelRoutineRun", runId: run.id }) : undefined}
-          onLogs={() => dispatch({ type: "showRoutines", section: "logs", routineId: routine?.id ?? run.routineId, botId: run.botId })}
-          onOpenConfiguration={routine ? () => dispatch({ type: "showRoutines", editRoutineId: routine.id }) : undefined}
         />
       );
     })()}

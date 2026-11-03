@@ -1,11 +1,11 @@
 // A routine run opened like a bot-to-bot exchange (JC, 2026-11-01): the same
 // ExchangeSheet shell (header pill, chat bubbles, Close Chat pill at the bottom), with the
 // routine's instruction as the opening line, tool steps in the transcript,
-// and one footer row (2026-11-02, as in Grok Bot): Continue (primary), Stop or
-// Run again, the ⋯ menu (Run logs, Configuration as plain items), then the
-// neutral Close Chat pill last. Live runs poll activity and refresh the sheet.
-import { useMemo, useRef, useState } from "react";
-import { History, Loader2, MessageSquareText, MoreHorizontal, RotateCcw, Settings2, Square } from "lucide-react";
+// and one footer row: Continue (primary), Stop while the run is live, then the
+// neutral Close Chat pill last (JC 2026-11-03: Run again and the ⋯ menu are
+// gone; logs and configuration stay in the routine panel). Live runs poll activity and refresh the sheet.
+import { useMemo } from "react";
+import { Loader2, MessageSquareText, Square } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import type { Routine, RoutineRun } from "@/lib/routines";
@@ -14,11 +14,8 @@ import { routineRunToExchange, routineRunExchangeMeta } from "@/lib/routine-run-
 import { continueRoutineRunInConversation, useStore, type Bot } from "@/state/store";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { ExchangeSheet } from "../BotExchangeChip";
-import { PILL, PRIMARY_PILL } from "../SettingsPrimitives";
-import { AnchoredPopover, enclosingWindowBounds, useAnchoredDismissRoot } from "../AnchoredPopover";
-import { usePopoverDismiss } from "@/hooks/use-popover-dismiss";
+import { PRIMARY_PILL } from "../SettingsPrimitives";
 import { ConnectedRunActivity } from "./RoutineRunDetail";
-import { canRunRoutineNow, routineRunInFlight } from "./RunNowButton";
 
 function RoutineRunExchangeSheet({
   run,
@@ -29,10 +26,7 @@ function RoutineRunExchangeSheet({
   detailError,
   reload,
   onClose,
-  onRunAgain,
   onStop,
-  onLogs,
-  onOpenConfiguration,
   onOpenRoom,
   working,
 }: {
@@ -44,18 +38,13 @@ function RoutineRunExchangeSheet({
   detailError: boolean;
   reload: () => Promise<void>;
   onClose: () => void;
-  onRunAgain?: () => void;
   onStop?: () => void;
-  onLogs?: () => void;
-  onOpenConfiguration?: () => void;
   onOpenRoom?: (id: string) => void;
   working: boolean;
 }) {
-  const { state, dispatch } = useStore();
+  const { dispatch } = useStore();
   const showThreads = useShowThreads();
   const live = ["queued", "running", "waiting"].includes(run.status);
-  const canRunAgain = Boolean(routine && canRunRoutineNow(state.config, routine, bot));
-  const inFlight = Boolean(routine && routineRunInFlight(state.routineRuns, routine.id));
   const canContinue = run.target === "bot";
   // A team goal ran in its group: Continue is the group's thread.
   const goalGroupId = run.target === "room-goal" ? run.groupId ?? routine?.groupId : undefined;
@@ -65,12 +54,6 @@ function RoutineRunExchangeSheet({
     onOpenRoom?.(goalGroupId);
     onClose();
   };
-  const [menuOpen, setMenuOpen] = useState(false);
-  const moreRef = useRef<HTMLDivElement | null>(null);
-  const moreButtonRef = useRef<HTMLButtonElement | null>(null);
-  const menuRef = useRef<HTMLElement | null>(null);
-  const dismissRoot = useAnchoredDismissRoot(moreRef, menuRef);
-  usePopoverDismiss(menuOpen, dismissRoot, () => setMenuOpen(false));
   const exchange = useMemo(
     () => routineRunToExchange({ run, routine, bot, detail }),
     [run, run.output, run.status, run.error, routine, bot, detail],
@@ -80,19 +63,6 @@ function RoutineRunExchangeSheet({
     continueRoutineRunInConversation(dispatch, bot, run, showThreads);
     onClose();
   };
-  const openLogs = () => {
-    setMenuOpen(false);
-    onLogs?.();
-    onClose();
-  };
-  // A routine is edited in the side panel (JC): Configuration opens it.
-  const openConfig = () => {
-    setMenuOpen(false);
-    onOpenConfiguration?.();
-    onClose();
-  };
-  const hasMenu = Boolean(onLogs || onOpenConfiguration);
-
   const meta = (
     <span data-routine-run-meta>
       {routineRunExchangeMeta(run)}
@@ -106,7 +76,6 @@ function RoutineRunExchangeSheet({
   // of that row, so narrow widths wrap them in order, centered.
   const quietStop =
     "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[12.5px] text-danger hover:bg-danger/10 disabled:opacity-50";
-  const menuItem = "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[12.5px] text-ink hover:bg-raised";
   const footer = (
     <div data-routine-run-actions className="contents">
       {canContinue && (
@@ -121,57 +90,11 @@ function RoutineRunExchangeSheet({
           {t("routineCalendar.openGroupThread")}
         </button>
       )}
-      {!live && canRunAgain && onRunAgain && (
-        <button type="button" data-run-again onClick={onRunAgain} disabled={working || inFlight} title={inFlight ? t("routines.runNow.inFlight") : t("routineRun.runAgain")} className={cn(PILL, "gap-1.5")}>
-          {working ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <RotateCcw size={13} aria-hidden="true" />}
-          {t("routineRun.runAgain")}
-        </button>
-      )}
       {live && onStop && (
         <button type="button" data-run-stop onClick={onStop} disabled={working} className={quietStop}>
           {working ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Square size={12} fill="currentColor" aria-hidden="true" />}
           {t("routineRun.stop")}
         </button>
-      )}
-      {hasMenu && (
-        <div ref={moreRef} className="flex">
-          <button
-            ref={moreButtonRef}
-            type="button"
-            data-run-more
-            aria-expanded={menuOpen}
-            aria-haspopup="menu"
-            aria-label={t("chat.moreMenu.aria")}
-            onClick={() => setMenuOpen((value) => !value)}
-            className={cn(PILL, "gap-1.5")}
-          >
-            <MoreHorizontal size={13} aria-hidden="true" />
-          </button>
-          {menuOpen && (
-            <AnchoredPopover
-              anchorRef={moreButtonRef}
-              popoverRef={menuRef}
-              side="top"
-              align="end"
-              gap={8}
-              bounds={enclosingWindowBounds}
-              role="menu"
-              data-run-more-menu=""
-              className="min-w-[11rem] rounded-xl border border-border bg-elevated p-1 shadow-lg"
-            >
-              {onLogs && (
-                <button type="button" role="menuitem" data-run-logs onClick={openLogs} className={menuItem}>
-                  <History size={13} aria-hidden="true" />{t("routines.logs")}
-                </button>
-              )}
-              {onOpenConfiguration && (
-                <button type="button" role="menuitem" data-run-configuration onClick={openConfig} className={menuItem}>
-                  <Settings2 size={13} aria-hidden="true" />{t("routineRun.configuration")}
-                </button>
-              )}
-            </AnchoredPopover>
-          )}
-        </div>
       )}
     </div>
   );
@@ -197,10 +120,7 @@ export function RoutineRunExchange({
   routine,
   bots,
   onClose,
-  onRunAgain,
   onStop,
-  onLogs,
-  onOpenConfiguration,
   onOpenRoom,
   working = false,
 }: {
@@ -208,10 +128,7 @@ export function RoutineRunExchange({
   routine: Routine | null;
   bots: readonly Bot[];
   onClose: () => void;
-  onRunAgain?: () => void;
   onStop?: () => void;
-  onLogs?: () => void;
-  onOpenConfiguration?: () => void;
   onOpenRoom?: (id: string) => void;
   working?: boolean;
 }) {
@@ -231,10 +148,7 @@ export function RoutineRunExchange({
         detailError={detailError}
         reload={reload}
         onClose={onClose}
-        onRunAgain={onRunAgain}
         onStop={onStop}
-        onLogs={onLogs}
-        onOpenConfiguration={onOpenConfiguration}
         onOpenRoom={onOpenRoom}
         working={working}
       />

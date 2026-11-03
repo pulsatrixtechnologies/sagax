@@ -140,9 +140,6 @@ function RunShell() {
               routine={routine}
               bots={[bot]}
               onClose={() => {}}
-              onRunAgain={() => {}}
-              onLogs={() => {}}
-              onOpenConfiguration={() => {}}
             />
           )}
         </ExchangeColumnProvider>

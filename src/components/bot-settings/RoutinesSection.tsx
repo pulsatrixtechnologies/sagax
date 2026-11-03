@@ -52,8 +52,6 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
     dispatch({ type: "routineFocused" });
   }, [focus, bot.id, routines, dispatch]);
 
-  const openLogs = (routineId: string) => dispatch({ type: "showRoutines", section: "logs", routineId, botId: bot.id });
-
   // 2026-11-01: a run opened from the routine's history (or Run now) opens
   // as an exchange sheet over the chat column (same place as Wren <->
   // Osprey), not as a modal over the app.
@@ -69,9 +67,6 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
         working={working}
         onClose={() => setOpenedRun(null)}
         onStop={live ? () => void cancelRun(run.id) : undefined}
-        onRunAgain={() => { setOpenedRun(null); dispatch({ type: "runRoutine", routineId: detail.id, onStarted: (started) => setOpenedRun(started) }); }}
-        onLogs={() => openLogs(detail.id)}
-        onOpenConfiguration={() => openEditor(detail, "view")}
       />
     );
   }

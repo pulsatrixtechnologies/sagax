@@ -2424,11 +2424,6 @@ export function EventDetails({
     onClose();
   };
   const toggleRoutine = () => { if (routine) void invoke(`/api/routines/${routine.id}`, "PATCH", { enabled: !routine.enabled }); };
-  const openLogs = () => {
-    const routineId = routine?.id ?? run?.routineId;
-    dispatch({ type: "showRoutines", section: "logs", ...(routineId ? { routineId } : {}), botId: routine?.botId ?? run?.botId });
-    onClose();
-  };
 
   // 2026-11-01 (no modals): a routine, its run and a calendar call all open
   // in the right detail panel (DetailPanel.tsx), the calendar usable beside it.
@@ -2441,9 +2436,6 @@ export function EventDetails({
         working={working || starting}
         onClose={canGoBack ? goBack : onClose}
         onStop={() => void invoke(`/api/routine-runs/${run.id}/cancel`)}
-        onRunAgain={runRoutineNow}
-        onLogs={openLogs}
-        onOpenConfiguration={() => onEdit("view")}
         onOpenRoom={onOpenRoom}
       />
     );

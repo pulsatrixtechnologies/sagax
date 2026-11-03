@@ -663,7 +663,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["GET", "PUT"], path: /^\/api\/bots\/[\w-]+\/memory$/ },
   { methods: ["GET", "PUT", "DELETE"], path: /^\/api\/bots\/[\w-]+\/memory\/file$/ },
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/memory\/(?:journal|upkeep|semantic)$/ },
-  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/memory\/(?:journal\/[\w-]+\/revert|tidy|rename)$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/memory\/(?:journal\/[\w-]+\/revert|tidy|rename|import)$/ },
   // 2026-10-26: the bot's change history, its SOUL.md undo and a
   // version restore: the owner (or an edit grant) or an admin, checked in
   // the handlers.

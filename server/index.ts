@@ -31833,6 +31833,7 @@ ROUTES.push(createMemoryManagerRoutes({
     id: bot.id,
     name: bot.name,
     mayWrite: botMemoryMayEdit(auth, bot.id),
+    temporary: Boolean(bot.temporary),
   })),
   botReachable: botMemoryReachable,
   teamSections: (auth) => {

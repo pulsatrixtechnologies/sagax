@@ -28,7 +28,7 @@ function setup(deps: Parameters<typeof createMemoryManagerRoutes>[0]) {
 describe("GET /api/memory-manager/sources", () => {
   it("lists local bots and team sections, and marks Perspicax when available", async () => {
     const invoke = setup({
-      bots: () => [{ id: "atlas", name: "Atlas", mayWrite: true }],
+      bots: () => [{ id: "atlas", name: "Atlas", mayWrite: true }, { id: "perf", name: "perf-test-061", mayWrite: true, temporary: true }],
       botReachable: () => true,
       teamSections: () => [{ section: "", label: "General", mayWrite: true, count: 2 }],
       perspicax: () => ({ available: true }),
@@ -38,7 +38,9 @@ describe("GET /api/memory-manager/sources", () => {
     expect(out.body).toMatchObject({
       perspicax: { available: true },
       sources: [
-        { id: "bot:atlas", kind: "bot", name: "Atlas", botId: "atlas", mayWrite: true },
+        { id: "bot:atlas", kind: "bot", name: "Atlas", botId: "atlas", mayWrite: true, linked: true },
+        // a temporary agent's memory: no current bot is linked to it
+        { id: "bot:perf", kind: "bot", name: "perf-test-061", botId: "perf", linked: false },
         { id: "team:general", kind: "team", name: "General", section: "", mayWrite: true },
         { id: "perspicax", kind: "perspicax", name: "Perspicax", mayWrite: true },
       ],

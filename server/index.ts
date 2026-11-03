@@ -10636,7 +10636,9 @@ const wireBot = (bot: BotRecord): WireBot => {
     rest.activity = shown.activity;
     rest.busy = shown.busy;
   }
-  if (!rest.busy && allTasks?.some((task) => continuationHolds.has(task.threadId) && (task.hidden !== true || task.threadId === bot.threadId))) {
+  // As the aggregate itself (store.activityOf): a routine run's own task
+  // never makes the bot read busy (2026-11-03).
+  if (!rest.busy && allTasks?.some((task) => continuationHolds.has(task.threadId) && !task.routineRunId && (task.hidden !== true || task.threadId === bot.threadId))) {
     Object.assign(rest, HELD_ACTIVITY);
   }
   // An elevated selection is inert until the desktop confirms its exact
@@ -24248,13 +24250,14 @@ routines = new RoutineManager({
   },
   createTask: (botId, title, activate = false, run) => {
     // Private threads: the run's thread is the person it runs as (else the bot owner's).
-    const task = store.createTask(botId, title, activate, undefined, undefined, undefined, privateThreads() && run?.runAs ? run.runAs : undefined);
-    // Tagged from its first instant (2026-10-28): an execution task that
-    // stayed untagged until dispatch was, for a moment, the newest plain
-    // thread, which the one-conversation rule (shared/single-stream.ts)
-    // would take for the person's conversation. syncRoutineRunToSource
-    // keeps the tag; a person writing in it later still promotes it.
-    if (task && run && !activate) store.patchTask(botId, task.threadId, { routineRunId: run.id, unread: false });
+    // Tagged from its first instant (2026-10-28), in the very frame that
+    // announces it (2026-11-03): an execution task untagged even for one
+    // frame is the newest plain thread, which the one-conversation rule
+    // (shared/single-stream.ts) takes for the person's conversation, and the
+    // chat on screen followed it and came back. syncRoutineRunToSource keeps
+    // the tag; a person writing in it later still promotes it.
+    const task = store.createTask(botId, title, activate, undefined, undefined, undefined, privateThreads() && run?.runAs ? run.runAs : undefined,
+      undefined, false, undefined, false, undefined, run && !activate ? run.id : undefined);
     // On a Cloud home a run's conversation is opened, like its results
     // conversation, by whoever wrote the routine: a run of one that is
     // nobody's is confined to a folder of its own, never the bot's project.
@@ -24283,10 +24286,11 @@ routines = new RoutineManager({
   // PREWARM_ENGINE_LEAD_MS ahead in the task its run will take, with the
   // run's own speaker and place, so the run is not a cold start.
   reserveTask: (botId, title, run) => {
-    const task = store.createTask(botId, title, false, undefined, undefined, undefined, privateThreads() && run.runAs ? run.runAs : undefined);
+    // hidden like a run's task until the run takes it (then tagged with its
+    // run), from the frame that announces it (createTask above)
+    const task = store.createTask(botId, title, false, undefined, undefined, undefined, privateThreads() && run.runAs ? run.runAs : undefined,
+      undefined, false, undefined, false, undefined, `${RESERVED_RUN_PREFIX}${run.routineId}`);
     if (!task) return null;
-    // hidden like a run's task until the run takes it (then tagged with its run)
-    store.patchTask(botId, task.threadId, { routineRunId: `${RESERVED_RUN_PREFIX}${run.routineId}` });
     return task;
   },
   claimReservedTask: (botId, threadId, runId) => {

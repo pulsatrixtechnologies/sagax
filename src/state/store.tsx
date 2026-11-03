@@ -128,6 +128,9 @@ interface StreamState {
   reasoning: Record<string, string>;
 }
 const EMPTY_STREAM: StreamState = { streaming: {}, reasoning: {} };
+/** How long a newer topic must hold before the chat on screen follows it
+ * (the follow effect in StoreProvider). */
+export const FOLLOW_SETTLE_MS = 600;
 const StreamContext = createContext<StreamState>(EMPTY_STREAM);
 
 type PendingDelta = { text: string; reasoning: string };
@@ -368,22 +371,57 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // that thread theirs and leave their own conversation behind. Once, at the
   // first snapshot. With threads shown the bot stays where it was.
   const launched = useRef(false);
+  // A follow waits until the newer topic has held for FOLLOW_SETTLE_MS
+  // (2026-11-03): a thread that is the newest plain one for a frame or two
+  // (a routine run's task before its tag, a frame racing a switch) made the
+  // chat switch to it and back, a flicker on every run.
+  const follow = useRef<{ key: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const cancelFollow = () => {
+    if (follow.current) clearTimeout(follow.current.timer);
+    follow.current = null;
+  };
+  useEffect(() => cancelFollow, []);
   useEffect(() => {
     if (!state.hydrated) return;
     const bot = state.bots.find((candidate) => candidate.id === state.selectedId);
     const first = !launched.current;
     launched.current = true;
-    if (!bot || state.activeView !== "chat") return;
+    if (!bot || state.activeView !== "chat") {
+      cancelFollow();
+      return;
+    }
     // With one conversation the thread on screen is always the conversation
     // (shared/single-stream.ts): at launch, after a reconnect that adopted
     // the server's selection, and when another device or a routine started
     // a newer topic, the window follows it (the reference design: one
     // transcript per bot, on every device). Never while a switch is under
     // way. With threads shown the bot stays where it was, once checked.
-    if ((first || !showThreads) && !bot.switchingTo && botOpensTo(bot, showThreads) !== bot.threadId) openBot(dispatch, bot, showThreads, first ? {} : { landing: false });
-    // Launching the app is a return too: after the threshold (since the
-    // conversation went quiet, or since the app closed) a fresh topic.
-    else if (first && !showThreads) landOnBot(dispatch, bot, bot.threadId, { force: true });
+    const target = botOpensTo(bot, showThreads);
+    if (first) {
+      cancelFollow();
+      if (!bot.switchingTo && target !== bot.threadId) openBot(dispatch, bot, showThreads);
+      // Launching the app is a return too: after the threshold (since the
+      // conversation went quiet, or since the app closed) a fresh topic.
+      else if (!showThreads) landOnBot(dispatch, bot, bot.threadId, { force: true });
+      return;
+    }
+    if (showThreads || bot.switchingTo || target === bot.threadId) {
+      cancelFollow();
+      return;
+    }
+    const key = `${bot.id}\u0000${bot.threadId}\u0000${target}`;
+    if (follow.current?.key === key) return;
+    cancelFollow();
+    follow.current = {
+      key,
+      timer: setTimeout(() => {
+        follow.current = null;
+        const now = stateRef.current;
+        const live = now.bots.find((candidate) => candidate.id === bot.id);
+        if (!live || now.selectedId !== bot.id || now.activeView !== "chat" || live.switchingTo || showThreadsRef.current) return;
+        if (botOpensTo(live, false) === target && target !== live.threadId) openBot(dispatch, live, false, { landing: false });
+      }, FOLLOW_SETTLE_MS),
+    };
   }, [state.hydrated, state.bots, state.selectedId, state.activeView, showThreads, dispatch]);
 
   // An asked-for New chat is kept on this device (src/lib/fresh-topic.ts)

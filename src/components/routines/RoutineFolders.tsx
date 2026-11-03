@@ -24,7 +24,7 @@ import { ArrowDown, ArrowUp, Check, ChevronRight, Folder, FolderInput, FolderPlu
 import { Fragment, useEffect, useImperativeHandle, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
-import { api, useStore, type Bot } from "@/state/store";
+import { api, openRoutineRun, useStore, type Bot } from "@/state/store";
 import type { Routine, RoutineRun } from "@/lib/routines";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -310,8 +310,9 @@ export function RoutineFolderList({ bot, routines, allRoutines, runs, grouped, l
     return () => clearTimeout(timer);
   }, [dragging, dropTarget, collapsed]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // "Running" on a row: Automations, on that run, with its live process and logs.
-  const openRunning = (routine: Routine, run: RoutineRun) => dispatch({ type: "showRoutines", section: "logs", botId: routine.botId, routineId: routine.id, runStatus: "running", runId: run.id });
+  // "Running" on a row opens that run's chat where the chat is (JC
+  // 2026-11-03), never the Automations page.
+  const openRunning = (routine: Routine, run: RoutineRun) => openRoutineRun(dispatch, { runId: run.id, routineId: routine.id, botId: run.botId ?? routine.botId });
   const canDrag = editable && supported && folders.length > 0;
   const list = (items: Routine[], label?: string) => <RoutineList
     routines={items}

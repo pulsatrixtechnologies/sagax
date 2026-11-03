@@ -8,7 +8,7 @@ import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNo
 import { createPortal } from "react-dom";
 
 import type { Routine, RoutineRun } from "@/lib/routines";
-import type { Action, AppState, Bot } from "@/state/store";
+import { openRoutineRun, type Action, type AppState, type Bot } from "@/state/store";
 import { canRunRoutineNow } from "./RunNowButton";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -50,7 +50,7 @@ export function routineRowActions({ routine, bot, state, dispatch, close, onOpen
   const live = routineLiveRun(state.routineRuns, routine.id);
   return {
     ...(live && editable ? { onStop: () => { close(); dispatch({ type: "cancelRoutineRun", runId: live.id }); } } : {}),
-    ...(!live && canRunRoutineNow(state.config, routine, bot) ? { onRunNow: () => { close(); dispatch({ type: "runRoutine", routineId: routine.id, onStarted: (run) => dispatch({ type: "routineRunPatched", run }) }); } } : {}),
+    ...(!live && canRunRoutineNow(state.config, routine, bot) ? { onRunNow: () => { close(); dispatch({ type: "runRoutine", routineId: routine.id, onStarted: (run) => { dispatch({ type: "routineRunPatched", run }); openRoutineRun(dispatch, { runId: run.id, routineId: routine.id, botId: run.botId }); } }); } } : {}),
     ...(editable ? { onToggle: () => { close(); dispatch({ type: "updateRoutine", routineId: routine.id, patch: { enabled: !routine.enabled } }); } } : {}),
     ...(editable && onRename ? { onRename: () => { close(false); onRename(); } } : {}),
     onOpen: () => { close(false); onOpen(); },

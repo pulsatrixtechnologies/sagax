@@ -25,6 +25,8 @@ export type { AgentCardResult, AgentCardStore } from "./chat-card-types.ts";
 
 const ROOM_REFUSAL = "Widgets are not available in rooms yet. Answer in text.";
 const NO_SUCH_WIDGET = "No widget with that id in this conversation.";
+/** ask_choice where nobody watches, when its question card could not be raised. */
+export const QUESTION_NOT_RAISED = "The question card could not be shown to the person. Nothing is waiting for them: do not say a card is shown. Ask again, or end the run saying what you need from them.";
 /** What a widget with nothing readable in it (a lone spacer) is called, so
  * the row still has words to preview, replay and reply to. */
 const EMPTY_FALLBACK = "[widget]";
@@ -131,6 +133,14 @@ export function createAgentCard(args: {
   /** #1905: the level the calling turn runs at (index.ts sourceApprovalMode),
    * so a may-I ask_choice under Full access is answered, not drawn. */
   approvalLevel?: ApprovalMode;
+  /** 2026-11-03 (a routine's choice card reached nobody): where the person
+   * is not watching the conversation (a routine run's hidden task, an AI
+   * client's hidden conversation), ask_choice is raised as a real question
+   * card through the request path (index.ts raiseHarnessQuestion): it
+   * waits in the Approvals inbox, the member API, a notification and the
+   * run's status, and its answer comes back as the person's next message.
+   * Null: the card could not be raised, and the tool fails saying so. */
+  raiseQuestion?(choice: { title: string; question: string; options: string[] }): { messageId: string } | null;
 }): AgentCardResult {
   const { store, bot, threadId, input } = args;
   if (!isRecord(input) || input.tool === undefined) return createOptionsCard(args);
@@ -188,6 +198,13 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
     });
     args.authored?.(settled.id);
     return { ok: true, messageId: settled.id, answered: { choice: answered.choice, question: parsed.value.subtitle } };
+  }
+  if (args.raiseQuestion && !from.from) {
+    const raised = args.raiseQuestion({ title: parsed.value.title, question: parsed.value.subtitle, options: parsed.value.options });
+    // Never a passive card here: nobody would see it, and the bot would say it showed one.
+    if (!raised) return { ok: false, status: 409, error: QUESTION_NOT_RAISED };
+    args.authored?.(raised.messageId);
+    return { ok: true, messageId: raised.messageId, waitsForPerson: true };
   }
   // a direct thread replays a bot row that carries `from` as another bot's line
   // full-access: ask-choice

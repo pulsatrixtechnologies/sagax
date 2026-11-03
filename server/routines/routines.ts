@@ -768,6 +768,15 @@ export interface RoutineManagerOptions {
   /** A successful provider turn is intermediate while its peer work or
    * queued continuation still belongs to this detached execution. */
   hasPendingDelegations?: (threadId: string) => boolean;
+  /** 2026-11-03: the run's thread holds a card only the person can settle
+   * (a question, an approval, a proposal) that outlives the turn, such as
+   * ask_choice raised in a routine run: the waiting line, else null. A turn
+   * that ends on it leaves the run waiting for the person, never Completed. */
+  awaitsPerson?: (threadId: string) => string | null;
+  /** 2026-11-03: whether any card was drawn in the run's thread since it
+   * started. A bot that says it showed a card when none exists fails its run
+   * (routineClaimsCard), so the person is never told to look for nothing. */
+  cardRaisedSince?: (threadId: string, since: number) => boolean;
   /** The job runtime still holds this run thread's teammate work and goes
    * on with it after a restart (docs/runtime-contract.md §5): a run waiting
    * on it stays waiting, and that work's resume completes it. */
@@ -877,6 +886,17 @@ const ROUTINE_DEFINITION_FIELDS = [
 const ACTIVE_RUN_STATUSES = new Set(["queued", "running", "waiting"]);
 /** What a run waiting on its teammates' work says while it waits. */
 export const ROUTINE_WAITING_ON_TEAMMATES = "Waiting for delegated work to finish";
+export const ROUTINE_CARD_CLAIM_WITHOUT_CARD = "The bot said it showed you a card, but no card was shown: nothing is waiting for your choice and nothing was written. Run the routine again.";
+
+/** The bot's final words say a card or a choice is on the person's screen
+ * (French or English): "La carte est affichée", "I've shown you a card",
+ * "the approval card is waiting for you". */
+export function routineClaimsCard(output: string | undefined): boolean {
+  if (!output) return false;
+  const text = output.normalize("NFC");
+  return /\b(?:carte|card)s?\b[^.\n]{0,60}\b(?:affich|montr|présent|envoy|shown|displayed|posted|waiting|on your screen|en attente|t'attend|vous attend)/i.test(text)
+    || /\b(?:affich|montr|présent|show|display|post)\w*\b[^.\n]{0,30}\b(?:une|la|ta|a|the|an|your)\s+(?:\w+\s+)?(?:carte|card)\b/i.test(text);
+}
 
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 /** 2026-10-26: a queued run cancelled because its routine paused itself. */
@@ -1823,6 +1843,8 @@ export class RoutineManager {
         continue;
       }
       if (run.status === "waiting" && run.target !== "room-goal" && run.threadId && this.options.teammatesContinue?.(run.threadId)) continue;
+      // 2026-11-03: a question card survives the restart, and its answer starts the next turn
+      if (run.status === "waiting" && run.target !== "room-goal" && run.threadId && this.options.awaitsPerson?.(run.threadId)) continue;
       if (run.status === "running" || run.status === "waiting") {
         run.status = "failed";
         if (run.target === "room-goal") run.goalStatus = "failed";
@@ -3634,9 +3656,14 @@ export class RoutineManager {
       }
       this.failureFacts.delete(run.id);
       const pending = this.options.hasPendingDelegations?.(event.threadId) === true;
+      const awaiting = pending ? null : this.options.awaitsPerson?.(event.threadId) ?? null;
       if (pending) {
         this.wait(run, ROUTINE_WAITING_ON_TEAMMATES);
         run.waitingOn = "teammates";
+        run.error = undefined;
+      } else if (awaiting) {
+        // the card holds the run: the person's answer starts its next turn
+        this.wait(run, run.status === "waiting" && run.attention ? run.attention : awaiting);
         run.error = undefined;
       } else if (this.settleCompleted(run)) {
         return cloneRun(run);
@@ -3742,6 +3769,14 @@ export class RoutineManager {
     else delete run.handedTo;
     if (flowBlocked) {
       this.blockRun(run, flowBlocked);
+      queueMicrotask(() => this.tickInBackground());
+      return true;
+    }
+    // 2026-11-03: "La carte est affichée" with no card anywhere is a failure
+    // the person must hear, not a success that sends them looking for it.
+    if (run.threadId && run.startedAt !== undefined && this.options.cardRaisedSince
+      && routineClaimsCard(run.output) && !this.options.cardRaisedSince(run.threadId, run.startedAt)) {
+      this.failRun(run, ROUTINE_CARD_CLAIM_WITHOUT_CARD);
       queueMicrotask(() => this.tickInBackground());
       return true;
     }

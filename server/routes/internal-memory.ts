@@ -73,7 +73,7 @@ export interface InternalMemoryDeps {
     authored: (messageId: string) => void;
     proposePage: (proposal: { pageId?: string; title: string; kind: string; content: string }) =>
       { ok: true; pageId: string; version: number } | { ok: false; status: 400 | 404 | 409; error: string };
-  }): { ok: true; messageId: string; masked?: boolean; pageId?: string; version?: number; answered?: { choice: string; question: string } } | { ok: false; status: number; error: string };
+  }): { ok: true; messageId: string; masked?: boolean; pageId?: string; version?: number; answered?: { choice: string; question: string }; waitsForPerson?: true } | { ok: false; status: number; error: string };
   authored(threadId: string, generation: string, messageId: string): void;
   proposePublishedPage(input: {
     pageId?: string;
@@ -213,6 +213,8 @@ export function createInternalMemoryRoutes(deps: InternalMemoryDeps): InternalRo
           ...(result.pageId ? { pageId: result.pageId, version: result.version } : {}),
           // #1905: a may-I ask_choice Full access answered, for the tool result
           ...(result.answered ? { answered: result.answered } : {}),
+          // 2026-11-03: raised as a real question card the run waits on
+          ...("waitsForPerson" in result && result.waitsForPerson ? { waitsForPerson: true } : {}),
         })
         : json(res, result.status, { error: result.error });
     }

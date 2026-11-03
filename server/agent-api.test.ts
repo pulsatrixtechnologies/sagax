@@ -714,6 +714,56 @@ describe("send_prompt / await_turn", () => {
     expect(waited.body).toMatchObject({ finished: true, expires_at: sent.body.expires_at });
   });
 
+  it("send_prompt async publishes the handle's lifetime as ttl_ms and an ISO expiry (#1896)", async () => {
+    const w = world();
+    const c = person("pr_ana");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "ttl", mode: "async" });
+    expect(sent.body).toMatchObject({ status: "accepted", ttl_ms: HANDLE_TTL_MS });
+    expect(sent.body.ttl_ms).toBe(7 * 24 * 3_600_000);
+    expect(typeof sent.body.expires_at).toBe("number");
+    expect(sent.body.expires_at_iso).toBe(new Date(Number(sent.body.expires_at)).toISOString());
+    expect(String(sent.body.expires_at_iso)).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    const waited = await w.api.call(c, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: AWAIT_TIMEOUT_MS_MAX });
+    expect(waited.body).toMatchObject({ finished: true, ttl_ms: HANDLE_TTL_MS, expires_at: sent.body.expires_at, expires_at_iso: sent.body.expires_at_iso });
+  });
+
+  it("after an idle gap, the same person in a new MCP session keeps the handle; another person is refused (#1896)", async () => {
+    const w = world({ replyAfterPolls: 1000 });
+    const carSession: AgentCaller = { ...person("pr_ana"), client: "voice-car", sub: "sess-1" };
+    const sent = await w.api.call(carSession, "send_prompt", { agent_id: "bot-a", prompt: "long job", mode: "async" });
+    const threadId = String(sent.body.thread_id);
+    w.advance(35 * 60_000);
+    // A re-established session: another MCP session and AI client, same person.
+    const reconnected: AgentCaller = { ...person("pr_ana"), client: "desktop", sub: "sess-2", via: "console" };
+    const again = await w.api.call(reconnected, "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 0 });
+    expect(again.status).toBe(200);
+    expect(again.body).toMatchObject({ handle: sent.body.handle, thread_id: threadId, status: "still_working" });
+    expect(again.body).not.toHaveProperty("recovered_from");
+    // Another person is refused and is not told the conversation.
+    const stranger = await w.api.call(person("pr_bo"), "await_turn", { agent_id: "bot-a", handle: sent.body.handle, timeout_ms: 0 });
+    expect(stranger.status).toBe(400);
+    expect(stranger.body).toMatchObject({ code: "handle_session_mismatch", details: { reason: "other_caller" } });
+    expect(JSON.stringify(stranger.body)).not.toContain(threadId);
+  });
+
+  it("a handle passed with the wrong agent_id carries its own thread_id and agent_id for recovery (#1896)", async () => {
+    const w = world();
+    const c = person("pr_ana");
+    const sent = await w.api.call(c, "send_prompt", { agent_id: "bot-a", prompt: "x", mode: "async" });
+    const wrong = await w.api.call(c, "await_turn", { agent_id: "bot-b", handle: sent.body.handle, timeout_ms: 0 });
+    expect(wrong.status).toBe(400);
+    expect(wrong.body).toMatchObject({
+      code: "handle_agent_mismatch", thread_id: sent.body.thread_id, agent_id: "bot-a",
+      details: { reason: "other_agent", thread_id: sent.body.thread_id, agent_id: "bot-a" },
+    });
+    const recovered = await w.api.call(c, "read_latest_page", { agent_id: wrong.body.agent_id, thread_id: wrong.body.thread_id });
+    expect(recovered.status).toBe(200);
+    // Another person with the same mix-up learns nothing.
+    const stranger = await w.api.call(person("pr_bo"), "await_turn", { agent_id: "bot-b", handle: sent.body.handle, timeout_ms: 0 });
+    expect(stranger.body.code).toBe("handle_agent_mismatch");
+    expect(JSON.stringify(stranger.body)).not.toContain(String(sent.body.thread_id));
+  });
+
   it("an expired handle on the caller's own conversation answers that turn instead of an error", async () => {
     const w = world();
     const user = w.add("t-old", { role: "user", kind: "text", text: "old question" });

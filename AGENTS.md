@@ -974,7 +974,12 @@ limit refuses it (`turnFailed`, `detourFailed`), its conversation
 untouched and no incident filed. A fast model Sagax picked on the
 conversation's own engine (`LimitDispatch.detour`) holds only that model for
 the payer (`refuseModel`, Auto's refusal memory), never the whole engine,
-unless that engine's plan is spent. A takeover is not the run's one
+unless that engine's plan is spent. So does a refusal bound to one model
+(Claude's `limitScope` "model": its extra-usage credits, its family's weekly
+window) of any quick model Sagax picked, on any engine: nothing engine-wide,
+but the next wake's or call's quick pick skips that model until the reset, as
+the lines say, instead of picking it again (a call's message used to go back
+onto it up to `MAX_RESENDS` times). A takeover is not the run's one
 automatic retry: its start carries the limit's note (`retried`) with
 `takeoverRetried`, so a stall or an empty response on the engine that took
 the run over, or a wait for a reset after it, still gets that retry
@@ -1003,9 +1008,18 @@ real reset or says the engine gave none, in English or Quebec French ("2 nov.
 (`server/routines/routine-limit-words.ts`); a rate limit is called one. The
 thread's notice names a backup standing in (`LimitFailoverLine.home`,
 `limitFailover.switchedStandIn`) and a return after its refusal
-(`back` with `refused`, `limitFailover.backAfterLimit`). Incidents
-and notification titles say "proactive wake" or "webhook run", failed or
-waiting (`routineRunTitle`, `server/notify.ts`), never "scheduled routine".
+(`back` with `refused`, `limitFailover.backAfterLimit`); a person's message
+(and a run left to `turnFailed`) says the same when that backup is refused,
+or known to be held before the next turn (`beforeTurn`): the switch names
+the backup at its limit and the engine it stood in for, never that engine
+as the one that refused, and goes back there at that engine's own reset;
+with nothing else to take it, the wait names both and the engine it waits
+for (`waiting` or `waitingRoutine` with `home`,
+`limitFailover.waitingStandIn`, `limitFailover.waitingRoutineStandIn`), the
+bot owner's limit included (`limitFailover.ownerSwitchedStandIn`,
+`limitFailover.ownerWaitingStandIn`). Incidents and notification titles say
+"proactive wake" or "webhook run", failed or waiting (`routineRunTitle`,
+`server/notify.ts`), never "scheduled routine".
 
 What Sagax holds is per payer and per engine, and as accurate as it knows.
 Only a refusal Sagax saw holds an engine for Auto, its panel, a backup
@@ -1016,10 +1030,13 @@ hint, since a report can be wrong: it never reads as spent while the row
 shows extra usage or credit left (Claude's "Extra Usage", a "Credits"
 line), it keeps only Sagax's quick pick (a wake's or a call's fast model,
 `autoExcluded(..., "quick")`) off that engine until a turn on it works again
-(`planWorked`, from `turnSucceeded`), and a real refusal there that names
-no reset is held until that window's reset instead of the one-hour estimate.
-A person's chosen engine is still moved only after a real refusal. The
-engines' report (`/api/limit-resets`) notes a refusal only when it holds the
+(`planWorked`, from `turnSucceeded`). A real refusal there that names no
+reset is still held for the one-hour estimate, marked as one, and the engine
+tried again after it, never until that window's reset: a top-up shows only in
+a later report, which clears the hint and never a hold, so such a hold kept
+the person's own conversation off that engine for days. A person's chosen
+engine is still moved only after a real refusal. The engines' report
+(`/api/limit-resets`) notes a refusal only when it holds the
 whole engine (`refusalHoldsEngine`): never one bound to one model (its
 extra-usage credits, its own weekly window), nor a fast model Sagax picked
 on the conversation's own engine. A hold, and a takeover's return

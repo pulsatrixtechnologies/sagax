@@ -24,7 +24,9 @@ export function limitFailoverLineText(line: LimitFailoverLine, now = Date.now())
       // A backup standing in for the conversation's own engine refused in
       // turn: the conversation goes back to its own engine, never to it.
       if (line.home) {
-        return t(line.estimated ? "limitFailover.switchedStandInNoReset" : "limitFailover.switchedStandIn", { from: line.from, home: line.home, to: line.to, time });
+        const words = { from: line.from, home: line.home, to: line.to, time };
+        if (line.owner) return t(line.estimated ? "limitFailover.ownerSwitchedStandInNoReset" : "limitFailover.ownerSwitchedStandIn", words);
+        return t(line.estimated ? "limitFailover.switchedStandInNoReset" : "limitFailover.switchedStandIn", words);
       }
       // The engine named no reset: the time is only when Sagax tries it again.
       if (line.estimated) {
@@ -35,9 +37,18 @@ export function limitFailoverLineText(line: LimitFailoverLine, now = Date.now())
       if (line.refused) return t("limitFailover.backAfterLimit", { refused: line.refused, engine: line.engine });
       return t("limitFailover.back", { engine: line.engine });
     case "waiting":
+      // A backup standing in for the conversation's own engine refused: the message waits for that engine.
+      if (line.home) {
+        const words = { from: line.from, home: line.home, time };
+        if (line.owner) return t(line.estimated ? "limitFailover.ownerWaitingStandInNoReset" : "limitFailover.ownerWaitingStandIn", words);
+        return t(line.estimated ? "limitFailover.waitingStandInNoReset" : "limitFailover.waitingStandIn", words);
+      }
       if (line.estimated) return t(line.owner ? "limitFailover.ownerWaitingNoReset" : "limitFailover.waitingNoReset", { from: line.from, time });
       return t(line.owner ? "limitFailover.ownerWaiting" : "limitFailover.waiting", { from: line.from, time });
     case "waitingRoutine":
+      if (line.home) {
+        return t(line.estimated ? "limitFailover.waitingRoutineStandInNoReset" : "limitFailover.waitingRoutineStandIn", { from: line.from, home: line.home, time });
+      }
       return t(line.estimated ? "limitFailover.waitingRoutineNoReset" : "limitFailover.waitingRoutine", { from: line.from, time });
   }
 }

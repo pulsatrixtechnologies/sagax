@@ -16149,8 +16149,10 @@ function limitResumeText(threadId: string, turnId: string, text: string): string
  * app is open; the server's when solo). The scope is the payer's key
  * (autoPayerKey). The usage-limit failover reads it (planLimitUntil) as a
  * hint only: Sagax's quick pick (a wake's or a call's fast model) skips a
- * spent engine, and a real refusal on it that names no reset holds it until
- * then. Auto, a backup and a run's takeover read only real refusals. */
+ * spent engine. A real refusal on it that names no reset is still held for
+ * Sagax's one-hour estimate, never until this reset: a top-up shows only in a
+ * later report, which clears this hint, never a hold (2026-11-02). Auto, a
+ * backup and a run's takeover read only real refusals. */
 const spentPlans = new Map<string, number>();
 function notePlanLimits(report: PlanUsageReport, scope: string): void {
   const payer = scope.toLowerCase();

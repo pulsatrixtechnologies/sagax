@@ -64,12 +64,13 @@ export interface LimitFailoverHostDeps {
   /** J4 plan usage: until when a plan window of this engine is spent for
    * this payer (used at 100 % with no extra usage or credit left, with the
    * reset its provider reported), from the last usage report Sagax read;
-   * null when none is known. A report is only a hint (an early reset, an
-   * allowance it does not show): Sagax's quick pick (a wake's or a call's
-   * fast model) skips such an engine, and a real refusal on it that names
-   * no reset is held until then instead of an estimate. Auto, a backup and
-   * a run's takeover read only the refusals Sagax saw, and a person's
-   * chosen engine is never moved on it alone (2026-11-02). */
+   * null when none is known. A report is only a hint (an early reset, a
+   * top-up it shows only later, an allowance it does not show): only Sagax's
+   * quick pick (a wake's or a call's fast model) skips such an engine. A
+   * refusal on it that names no reset is still held for Sagax's estimate,
+   * never until that window's reset. Auto, a backup and a run's takeover
+   * read only the refusals Sagax saw, and a person's chosen engine is never
+   * moved on it alone (2026-11-02). */
   planLimitUntil?: (payer: string, instanceId: string) => number | null;
   /** A turn on this engine just worked for this payer: a plan window Sagax
    * read as spent for it is not (extra-usage credits, a plan upgrade, an
@@ -285,10 +286,17 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     !(detoured(dispatch, current) && current.instanceId === dispatch.engine.instanceId && planUntil(dispatch.payer, dispatch.engine.instanceId) === null);
   /** Holds what a limit refused for the payer, from now on whatever happens
    * to the turn: no other turn of this payer starts on it before the reset
-   * (its engine, or only its model: holdsEngine). `estimated`: the engine
-   * named no reset. */
+   * (its engine, or only its model: holdsEngine). A refusal bound to one
+   * model (`scope`) holds nothing engine-wide, but a quick model Sagax picked
+   * that it refused is still skipped by Sagax's quick picks until then, as
+   * the lines say (2026-11-02, final review: before, nothing was held, the
+   * next wake picked that model again and a call's message went back onto
+   * it). `estimated`: the engine named no reset. */
   const hold = (dispatch: LimitDispatch, current: ModelSelection | null, resetsAt: number, estimated: boolean, scope?: "model") => {
-    if (scope === "model") return;
+    if (scope === "model") {
+      if (detoured(dispatch, current)) deps.refuseModel?.(dispatch.payer, dispatch.selection, resetsAt);
+      return;
+    }
     if (!holdsEngine(dispatch, current, scope)) {
       deps.refuseModel?.(dispatch.payer, dispatch.selection, resetsAt);
       return;
@@ -296,14 +304,14 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     store.block(dispatch.payer, dispatch.engine.instanceId, resetsAt, estimated);
   };
   /** When the limit a turn met resets: the engine's own time (its error, or
-   * its words), else the reset of its spent plan window for this payer, else
-   * an estimate. A rate limit or a model-only refusal is never a plan window. */
-  const resetOf = (dispatch: LimitDispatch, kind: LimitKind, cause: string | undefined,
-    error: { message: string; resetsAt?: number; scope?: "model" } | undefined) => {
+   * its words), else Sagax's estimate, marked as one, after which the engine
+   * is tried again. A plan window the payer's usage report showed spent
+   * never sets it: a report is only a hint, and a hold until that window's
+   * reset kept the engine off for days after a top-up the next report showed
+   * (2026-11-02, final review). */
+  const resetOf = (kind: LimitKind, cause: string | undefined, error: { message: string; resetsAt?: number } | undefined) => {
     const now = deps.now();
-    const said = error?.resetsAt ?? limitResetFromText(cause, now) ?? limitResetFromText(error?.message, now) ??
-      (kind === "quota" && error?.scope !== "model" ? planUntil(dispatch.payer, dispatch.engine.instanceId) ?? undefined : undefined);
-    return limitResetOrEstimate(kind, said, now);
+    return limitResetOrEstimate(kind, error?.resetsAt ?? limitResetFromText(cause, now) ?? limitResetFromText(error?.message, now), now);
   };
   const modelName = (selection: ModelSelection) => `${deps.engineName(selection.instanceId)} (${selection.model})`;
   /** Who refused, in words: the engine, with its model when the turn was on a detour. */
@@ -390,6 +398,21 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     const moved = home
       ? { resetsAt: homeReset, ...(estimatedFor(dispatch.payer, home.from.instanceId, homeReset, home.estimated === true) ? { estimated: true as const } : {}) }
       : { resetsAt, ...(estimated ? { estimated: true as const } : {}) };
+    /** When the turn ran on a backup standing in for the conversation's own
+     * engine (`home`), the lines name that backup as the engine that refused
+     * and the conversation's own engine with its own reset, as a run's lines
+     * do (routineLimit), never that engine as the one that refused
+     * (2026-11-02, final review: the switch line named it, and the wait never
+     * named the backup). */
+    const standIn = home ? { from: deps.engineName(dispatch.engine.instanceId), home: deps.engineName(home.from.instanceId) } : null;
+    /** The switch line of a move to `backup`, whose return is recorded as `kept`. */
+    const switchedTo = (backup: ModelSelection, kept: { from: ModelSelection; resetsAt: number; estimated?: true }): Extract<LimitFailoverLine, { kind: "switched" }> => standIn
+      ? { kind: "switched", ...standIn, to: deps.engineName(backup.instanceId), resetsAt: kept.resetsAt, ...(kept.estimated ? { estimated: true as const } : {}) }
+      : { kind: "switched", from: deps.engineName(kept.from.instanceId), to: deps.engineName(backup.instanceId), resetsAt: kept.resetsAt, ...noReset(kept.from.instanceId, kept.resetsAt) };
+    /** What a wait for the reset of the engine the thread goes back to names. */
+    const waitFor = standIn
+      ? { ...standIn, resetsAt: homeReset, ...(moved.estimated ? { estimated: true as const } : {}) }
+      : { from: deps.engineName(homeEngine.instanceId), resetsAt: homeReset, ...noReset(homeEngine.instanceId, homeReset) };
     const backup = await pick(dispatch.botId, threadId, dispatch.speaker, dispatch.engine, dispatch.payer).catch(() => null);
     if (run) {
       if (backup && store.takeResend(`routine:${run.id}`)) {
@@ -413,10 +436,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         const refused = deps.switchThread(dispatch.botId, threadId, backup);
         if (!refused) {
           const kept = store.record({ botId: dispatch.botId, threadId, from: dispatch.selection, to: backup, ...moved, at: deps.now() });
-          deps.replaceFailure(threadId, turnId, {
-            kind: "switched", from: deps.engineName(kept.from.instanceId), to: deps.engineName(backup.instanceId), resetsAt: kept.resetsAt,
-            ...noReset(kept.from.instanceId, kept.resetsAt),
-          }, dispatch.at);
+          deps.replaceFailure(threadId, turnId, switchedTo(backup, kept), dispatch.at);
           if (deps.rerunRoutine(run.routineId, run.id)) return;
         } else {
           console.warn(`[limit-failover] ${threadId}: could not move to ${backup.instanceId}: ${refused}`);
@@ -428,9 +448,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       // scheduled resume restarts the routine.
       deps.clearRoutineRun?.(run.id);
       store.schedule({ kind: "routine", routineId: run.routineId, engine: homeEngine.instanceId, at: homeReset + store.afterResetMs });
-      deps.replaceFailure(threadId, turnId, {
-        kind: "waitingRoutine", from: deps.engineName(homeEngine.instanceId), resetsAt: homeReset, ...noReset(homeEngine.instanceId, homeReset),
-      }, dispatch.at);
+      deps.replaceFailure(threadId, turnId, { kind: "waitingRoutine", ...waitFor }, dispatch.at);
       arm();
       return;
     }
@@ -463,10 +481,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
           }, dispatch.at);
         } else {
           const kept = store.record({ botId: dispatch.botId, threadId, from: dispatch.selection, to: backup, ...moved, at: deps.now() });
-          deps.replaceFailure(threadId, turnId, {
-            kind: "switched", from: deps.engineName(kept.from.instanceId), to: deps.engineName(backup.instanceId), resetsAt: kept.resetsAt,
-            ...(dispatch.owner ? { owner: true as const } : {}), ...noReset(kept.from.instanceId, kept.resetsAt),
-          }, dispatch.at);
+          deps.replaceFailure(threadId, turnId, { ...switchedTo(backup, kept), ...(dispatch.owner ? { owner: true as const } : {}) }, dispatch.at);
         }
         await deps.resend(dispatch.botId, threadId, own.messageId, dispatch.speaker, dispatch.trigger, turnId ? { turnId } : {});
         return;
@@ -481,10 +496,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       at: homeReset + store.afterResetMs, ...(dispatch.speaker !== undefined ? { speaker: dispatch.speaker } : {}),
       ...(dispatch.trigger !== undefined ? { trigger: dispatch.trigger } : {}),
     })) return;
-    deps.replaceFailure(threadId, turnId, {
-      kind: "waiting", from: deps.engineName(homeEngine.instanceId), resetsAt: homeReset, ...(dispatch.owner ? { owner: true as const } : {}),
-      ...noReset(homeEngine.instanceId, homeReset),
-    }, dispatch.at);
+    deps.replaceFailure(threadId, turnId, { kind: "waiting", ...waitFor, ...(dispatch.owner ? { owner: true as const } : {}) }, dispatch.at);
     arm();
   };
 
@@ -548,7 +560,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         if (!kind) return null;
         dispatches.delete(threadId);
         errors.delete(threadId);
-        const { resetsAt, estimated } = resetOf(dispatch, kind, cause, error);
+        const { resetsAt, estimated } = resetOf(kind, cause, error);
         const current = deps.threadSelection(dispatch.botId, threadId);
         hold(dispatch, current, resetsAt, estimated, error?.scope);
         const auto = current?.auto === true;
@@ -712,7 +724,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         // engine or waiting for a reset.
         const exhausted = !kind && isEngineExhaustedRefusal(message);
         if (!kind && !exhausted) return false;
-        const { resetsAt, estimated } = kind ? resetOf(dispatch, kind, cause, error) : { resetsAt: deps.now(), estimated: false };
+        const { resetsAt, estimated } = kind ? resetOf(kind, cause, error) : { resetsAt: deps.now(), estimated: false };
         const current = deps.threadSelection(dispatch.botId, threadId);
         // Known from now on, whatever happens to this turn (hold). An
         // exhausted catalog never blocks the whole engine: other models may
@@ -777,15 +789,35 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         if (until === null || !from) return null;
         return pick(botId, threadId, speaker, from, payer).then((backup) => {
           // Nothing awaited after the pick: the thread is read again here.
-          if (!backup || !same(deps.threadSelection(botId, threadId), selection) || deps.switchThread(botId, threadId, backup)) return;
+          if (!backup || !same(deps.threadSelection(botId, threadId), selection)) return;
+          // The thread runs on a backup standing in for its own engine (an
+          // earlier move) and that backup is held now: back on its own engine
+          // at that engine's own reset, never at the backup's later one, and
+          // the line names the backup as the engine at its limit, as failed()
+          // does (2026-11-02, final review).
+          const earlier = store.failover(botId, threadId);
+          const home = earlier && same(earlier.to, selection) ? earlier : null;
+          if (deps.switchThread(botId, threadId, backup)) return;
+          const owner = deps.ownerPays?.(botId, speaker) ? { owner: true as const } : {};
+          if (home) {
+            const resetsAt = Math.max(home.resetsAt, store.blockedUntil(payer, home.from.instanceId) ?? 0);
+            const kept = store.record({
+              botId, threadId, from: selection, to: backup, resetsAt, at: deps.now(),
+              ...(estimatedFor(payer, home.from.instanceId, resetsAt, home.estimated === true) ? { estimated: true as const } : {}),
+            });
+            deps.note(threadId, {
+              kind: "switched", from: deps.engineName(selection.instanceId), to: deps.engineName(backup.instanceId),
+              home: deps.engineName(home.from.instanceId), resetsAt: kept.resetsAt, ...owner, ...(kept.estimated ? { estimated: true as const } : {}),
+            });
+            return;
+          }
           const kept = store.record({
             botId, threadId, from: selection, to: backup, resetsAt: until, at: deps.now(),
             ...(estimatedFor(payer, selection.instanceId, until, false) ? { estimated: true as const } : {}),
           });
           deps.note(threadId, {
             kind: "switched", from: deps.engineName(kept.from.instanceId), to: deps.engineName(backup.instanceId), resetsAt: kept.resetsAt,
-            ...(deps.ownerPays?.(botId, speaker) ? { owner: true as const } : {}),
-            ...(estimatedFor(payer, kept.from.instanceId, kept.resetsAt, false) ? { estimated: true as const } : {}),
+            ...owner, ...(estimatedFor(payer, kept.from.instanceId, kept.resetsAt, false) ? { estimated: true as const } : {}),
           });
         }).catch((failure) => {
           console.warn(`[limit-failover] before turn ${threadId}: ${failure instanceof Error ? failure.message : String(failure)}`);

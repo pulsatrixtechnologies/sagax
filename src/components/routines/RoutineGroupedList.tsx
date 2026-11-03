@@ -120,7 +120,7 @@ function BotSection({ botId, bot, routines, allRoutines, runs, collapsed, onTogg
   const control = useRef<RoutineFolderControl | null>(null);
   const supported = useServerFeature("routineFolders") !== "no";
   const name = bot?.name ?? routines[0]?.bot?.name ?? t("routines.group.unknownBot");
-  const health = routineGroupHealth(routines, runs);
+  const health = useMemo(() => routineGroupHealth(routines, runs), [routines, runs]);
   const editable = routines.some((routine) => routine.canEdit !== false);
   const manage = Boolean(bot) && canManageRoutineFolders(routines, supported);
   return <section data-routine-group-bot={botId} aria-label={name} className="flex flex-col">

@@ -507,15 +507,21 @@ export function MemoryManagerPanel() {
   }, [place, rows, tierByKey, pins, archivedRows, trashRows, openCollection, collections, collectionItems]);
 
   // The Collections scope: every collection's notes not loaded yet.
+  // 2026-11-03 (audit N-6): each collection is asked once, four at a time;
+  // a select while they load (it stores the picked one's items) used to
+  // cancel the batch and ask every missing collection again.
+  const collectionsLoading = useRef(new Set<string>());
   useEffect(() => {
     if (place.kind !== "collections") return;
-    const missing = collections.filter((entry) => !(entry.id in collectionItems));
+    const missing = collections.filter((entry) => !(entry.id in collectionItems) && !collectionsLoading.current.has(entry.id));
     if (missing.length === 0) return;
-    let cancelled = false;
-    void Promise.all(missing.map(async (entry) => [entry.id, await fetchCollectionItems(entry.id).catch(() => [] as CollectionItem[])] as const)).then((loaded) => {
-      if (!cancelled) setCollectionItems((current) => ({ ...current, ...Object.fromEntries(loaded) }));
+    for (const entry of missing) collectionsLoading.current.add(entry.id);
+    void pooled(missing, 4, async (entry) => {
+      const items = await fetchCollectionItems(entry.id).catch(() => [] as CollectionItem[]);
+      collectionsLoading.current.delete(entry.id);
+      // a select meanwhile stored a fresher copy: it stays
+      setCollectionItems((current) => (entry.id in current ? current : { ...current, [entry.id]: items }));
     });
-    return () => { cancelled = true; };
   }, [place.kind, collections, collectionItems]);
   useEffect(() => { if (place.kind !== "collections") setOpenCollection(null); }, [place.kind]);
 

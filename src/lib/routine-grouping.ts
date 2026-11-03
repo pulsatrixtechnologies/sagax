@@ -138,8 +138,11 @@ export function groupRoutinesAcrossFolders<R extends GroupRoutine, B extends Gro
 export function routineGroupHealth(routines: readonly { id: string; failureStreak?: number; autoPaused?: unknown; enabled: boolean }[], runs: readonly { routineId: string; status: string }[]): { running: number; failing: number } {
   let running = 0;
   let failing = 0;
+  // 2026-11-03 (audit N-6): one pass over the runs, not one per routine
+  const live = new Set<string>();
+  for (const run of runs) if (run.status === "running") live.add(run.routineId);
   for (const routine of routines) {
-    if (runs.some((run) => run.routineId === routine.id && run.status === "running")) running += 1;
+    if (live.has(routine.id)) running += 1;
     else if ((routine.failureStreak ?? 0) > 0 || (!routine.enabled && routine.autoPaused)) failing += 1;
   }
   return { running, failing };

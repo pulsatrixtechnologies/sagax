@@ -102,6 +102,19 @@ vi.mock("@/state/store", async () => {
           links_out: [], backlinks: [{ scope: "me", id: "n9", title: "Plan", context: "See the Brief first." }],
         };
       }
+      // audit N-6: many collections, each detail answered a little later
+      const many = (globalThis as { __memoryMany?: { inflight: number; max: number } }).__memoryMany;
+      if (many && path === "/api/me/memory/collections" && init?.method !== "POST") {
+        return { collections: Array.from({ length: 10 }, (_, n) => ({ id: `c${n + 1}`, scope: "me", title: `Book ${n + 1}`, description: "", author_name: "Dana Reyes", item_count: 1, may_edit: true })) };
+      }
+      if (many && path.startsWith("/api/me/memory/collections/")) {
+        many.inflight += 1;
+        many.max = Math.max(many.max, many.inflight);
+        await new Promise((resolve) => setTimeout(resolve, 15));
+        many.inflight -= 1;
+        const id = path.split("/").at(-1)!;
+        return { id, scope: "me", title: id, description: "", item_count: 1, may_edit: true, items: [{ note_scope: "me", note_id: "n1", rank: 0, title: "Brief", topic: "notes", readable: true }] };
+      }
       if (path === "/api/me/memory/collections") {
         if (init?.method === "POST") return { id: "c2", scope: "me", title: "New", description: "", item_count: 0, may_edit: true, items: [] };
         return { collections: [{ id: "c1", scope: "me", title: "Onboarding book", description: "Read in order", author_name: "Dana Reyes", item_count: 1, may_edit: true }] };
@@ -584,6 +597,26 @@ describe("MemoryManagerPanel page", () => {
     expect(host.querySelector("[data-memory-scope-chip]")).toBeNull();
     expect(host.querySelector('[data-memory-stat="active"]')?.textContent).toContain("5");
   });
+  // 2026-11-03 (audit N-6): one request per collection at once, asked again
+  // on every select while they loaded.
+  it("loads the collections' notes four at a time, each collection once, even when one is selected meanwhile", async () => {
+    const many = { inflight: 0, max: 0 };
+    (globalThis as { __memoryMany?: typeof many }).__memoryMany = many;
+    try {
+      await render();
+      await act(async () => { (host.querySelector('[data-memory-nav="collections"]') as HTMLButtonElement).click(); });
+      await wait();
+      const row = host.querySelector("[data-memory-collection-row]") as HTMLButtonElement | null;
+      if (row) await act(async () => { row.click(); });
+      for (let n = 0; n < 8; n += 1) await wait();
+      const asked = (id: string) => calls.filter((call) => call.path === `/api/me/memory/collections/${id}` && call.method === "GET").length;
+      for (let n = 2; n <= 10; n += 1) expect(asked(`c${n}`), `c${n}`).toBe(1);
+      expect(many.max).toBeLessThanOrEqual(5);
+    } finally {
+      delete (globalThis as { __memoryMany?: unknown }).__memoryMany;
+    }
+  });
+
   // Follow-up 2026-11-03: Collections scopes the views to its notes, not to nothing.
   it("the Collections scope narrows Map, Tags and Quality to the collections' notes, loaded once and kept", async () => {
     await render();

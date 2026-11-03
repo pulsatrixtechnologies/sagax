@@ -77,6 +77,18 @@ export interface ProactiveEvent {
   /** Person isolation: when set, the wake runs as this principal (e.g. the
    * failed run's runAs on a shared org bot). */
   runAs?: string;
+  /** A teammate's one-way notice (source peer): what the person is told
+   * when no wake can run for it (surfacePeerNotice in server/index.ts). */
+  peer?: PeerNoticeFacts;
+}
+
+/** The facts of a teammate's notice a person can be shown without a model. */
+export interface PeerNoticeFacts {
+  threadId: string;
+  title: string;
+  status: string;
+  senderId?: string;
+  senderName?: string;
 }
 
 /** A chain of bots waking each other stops here (the fleet's hop limit). */
@@ -97,6 +109,15 @@ export const PROACTIVE_WAKE_BUDGET: ProactiveBudgetOptions = {
 };
 
 export type ProactiveOfferVerdict = "off" | "gone" | "own" | "hops" | "irrelevant" | "duplicate" | "gathered" | "auth";
+
+/** 2026-11-02 (peer inbox, second pass): the verdicts that mean no wake will
+ * ever run for an event. A teammate's notice is never dropped on them: the
+ * person is shown it in the bot's own conversation instead (proactive off,
+ * the hop limit of a chain of bots, an expired engine sign-in, a temporary
+ * bot the waker does not wake). */
+export function peerNoticeDropped(verdict: ProactiveOfferVerdict): boolean {
+  return verdict !== "gathered" && verdict !== "duplicate";
+}
 
 /** The simple filter: can this event concern the bot at all? No model is
  * called for an event that fails it. Returns why it may, or null. */
@@ -169,6 +190,11 @@ export function peerNoticeEvent(input: {
     key: `peer-notice:${input.noticeId}`,
     ...(input.senderId ? { fromBotId: input.senderId } : {}),
     hops: input.hops ?? 1,
+    peer: {
+      threadId: input.threadId, title: input.title, status: input.status,
+      ...(input.senderId ? { senderId: input.senderId } : {}),
+      ...(input.senderName?.trim() ? { senderName: input.senderName.trim() } : {}),
+    },
     label: `Message from ${from}`,
     summary: `${from}: ${input.title}`,
     detail: [
@@ -181,6 +207,18 @@ export function peerNoticeEvent(input: {
       ...(result ? ["", "What that turn said:", result] : []),
     ].join("\n"),
   };
+}
+
+/** 2026-11-02: what a wake on teammates' messages reports when the bot
+ * itself said nothing: who wrote and about what, from the events alone. */
+export function peerWakeDigest(events: readonly ProactiveEvent[], more = 0): string | undefined {
+  const lines = events.filter((event) => event.source === "peer").map((event) => {
+    const peer = event.peer;
+    const status = peer?.status === "completed" ? "" : peer?.status ? ` (${peer.status})` : "";
+    return `- ${(event.summary ?? event.label).slice(0, 200)}${status}`;
+  });
+  if (!lines.length) return undefined;
+  return [`Messages from teammates:`, ...lines, ...(more > 0 ? [`- and ${more} more`] : [])].join("\n");
 }
 
 /** Whether a post names this bot: "@Nova" or "Nova" as a word, any case. */
@@ -219,6 +257,9 @@ export interface ProactiveWakerDeps {
    * older test harnesses that still pass it compile; the waker never calls it.
    */
   propose?: (batch: ProactiveWakeBatch) => void;
+  /** 2026-11-02: gathered events no wake will run for (the hour's limit
+   * of wakes, or proactive turned off while they gathered). */
+  dropped?: (botId: string, events: readonly ProactiveEvent[]) => void;
   /** Cheap: this bot's login engine is marked expired. Skip new wakes until reconnect. */
   engineExpired?: (botId: string) => boolean;
   now?: () => number;
@@ -324,10 +365,15 @@ export class ProactiveWaker {
     const bot = this.deps.bot(botId);
     if (!bot) return null;
     const mode = proactiveModeFor(bot);
-    // turned off while the events gathered: nothing happens
-    if (mode === "off") return null;
+    // turned off while the events gathered: no wake (a teammate's notice
+    // is still shown to the person, deps.dropped)
+    if (mode === "off") {
+      this.drop(botId, pending.events);
+      return null;
+    }
     if (!this.budget.mayInitiate(botId)) {
       this.deps.log(botId, `Proactive wake skipped: ${pending.events.length + pending.more} events within the hour's limit of wakes. ${eventLabels(pending.events, pending.more)}`);
+      this.drop(botId, pending.events);
       return null;
     }
     this.budget.noteCycle(botId);
@@ -351,6 +397,14 @@ export class ProactiveWaker {
       this.deps.log(botId, `Proactive wake could not start: ${error instanceof Error ? error.message.slice(0, 160) : "error"}`);
     }
     return batch;
+  }
+
+  private drop(botId: string, events: readonly ProactiveEvent[]): void {
+    try {
+      this.deps.dropped?.(botId, events);
+    } catch {
+      // never into the timer that flushed
+    }
   }
 
   /** Waiting events of a bot (tests, and a deleted bot). */
@@ -391,7 +445,10 @@ export function proactiveEventsBlock(events: readonly ProactiveEvent[], more = 0
  * card per message. A reply to the sender is a hop of the chain. */
 export const PEER_WAKE_RULES = [
   "Teammates' messages: each one below already ran once in its own thread of yours; its outcome is part of the event.",
-  "Handle what is left that your level allows, then tell the person in one short report what came in and what you did.",
+  // 2026-11-02 (second pass): five wakes of six went quiet on GOX, the bot
+  // reasoning "already told you": that thread is one the person never sees.
+  "The person never sees those threads: nothing said there reached them, so never answer that it was already said or handled there.",
+  "Handle what is left that your level allows, then ALWAYS tell the person in one short report what came in, from whom, and what you did or what is left; a wake on teammates' messages never ends with NOTHING_TO_REPORT.",
   "Everything that needs the person (a decision, an approval, a GO for a write or a send) goes into ONE card for all of these messages, with the options they can pick; never one card per message.",
   "Reply to a teammate only when it is waiting on something from you. Never send a reply just to acknowledge: replies count against the hop limit and a chain of bots stops there.",
 ].join(" ");

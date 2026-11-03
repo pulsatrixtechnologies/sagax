@@ -88,3 +88,30 @@ describe("a second level in the sidebar's popover menu", () => {
     expect(document.querySelector("[data-submenu]")).toBeNull();
   });
 });
+
+describe("Usage ›'s star (2026-11-03)", () => {
+  it("toggles from its info line and leaves the level open", () => {
+    const toggle = vi.fn();
+    const starred: SidebarMenuItem[] = [{
+      key: "usage",
+      label: "Usage",
+      value: "Grok 87%",
+      submenu: [
+        { key: "grok:weekly", label: "Grok SuperGrok Heavy · Weekly", value: "87% used", info: true, favorite: { on: true, label: "Stop showing Grok", onToggle: toggle } },
+        { key: "codex:five-hour", label: "Codex Business · 5-hour", value: "100% used", info: true, favorite: { on: false, label: "Show Codex", onToggle: toggle } },
+      ],
+      onSelect: () => {},
+    }];
+    flushSync(() => root.render(createElement(SidebarPopoverMenu, { items: starred, ariaLabel: "Account", renderTrigger: () => createElement("span", null, "Owner") })));
+    flushSync(() => host.querySelector<HTMLElement>('[data-menu-key="usage"]')!.click());
+    const sub = document.querySelector<HTMLElement>('[data-submenu="usage"]')!;
+    const stars = [...sub.querySelectorAll<HTMLButtonElement>("[data-usage-favorite]")];
+    expect(stars.map((star) => [star.dataset.usageFavorite, star.getAttribute("aria-pressed")])).toEqual([["on", "true"], ["off", "false"]]);
+    // always visible while on; the other only on hover or focus
+    expect(stars[0]!.className).not.toContain("opacity-0");
+    expect(stars[1]!.className).toContain("opacity-0");
+    flushSync(() => stars[1]!.click());
+    expect(toggle).toHaveBeenCalledOnce();
+    expect(document.querySelector('[data-submenu="usage"]')).not.toBeNull();
+  });
+});

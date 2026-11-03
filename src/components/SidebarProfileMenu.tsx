@@ -65,7 +65,8 @@ import { InitialsAvatar } from "./Avatar";
 import { SidebarPopoverMenu, type SidebarMenuItem, type SidebarSubmenuEntry } from "./SidebarPopoverMenu";
 import { useServerMode } from "./ServerModeSettings";
 import { api } from "@/state/store";
-import { accountChoices, businessAccount, SAGAX_MOBILE_URL, switchAccount, switchTargets as listSwitchTargets, usageLines as planUsageLines, usagePercent as planUsagePercent, type AccountChoice, type SwitchTarget, type UsageLine } from "@/lib/account-menu";
+import { accountChoices, businessAccount, SAGAX_MOBILE_URL, switchAccount, switchTargets as listSwitchTargets, usageLines as planUsageLines, usageSummary, type AccountChoice, type SwitchTarget, type UsageLine } from "@/lib/account-menu";
+import { toggleUsageFavorite, useUsageFavorite } from "@/lib/usage-favorite";
 import { connectedPlanRows, type PlanRow, type PlanUsageReport } from "@/lib/plan-usage";
 import { costOf, formatCost, personalUsagePeriods, usageQuery, type PersonalUsageSummary } from "@/lib/usage-personal";
 import { requestAbout } from "@/lib/about-ui";
@@ -314,7 +315,12 @@ export interface ProfileMenuHandlers {
 export function profileMenuItems(input: {
   /** null: no plan reports a window, so Usage carries no percent */
   usagePercent: number | null;
+  /** the starred plan's short name while its figure is the one shown
+   * ("Grok 87%"); null or absent: the usual figure ("100% used") */
+  usageName?: string | null;
   usageLines: UsageLine[];
+  /** the starred plan's id, and how a star is toggled; absent: no stars */
+  usageFavorite?: { id: string | null; onToggle: (planId: string) => void };
   /** this month's cost of the person's own turns, formatted; null unknown */
   monthCost: string | null;
   mobile: boolean;
@@ -347,7 +353,26 @@ export function profileMenuItems(input: {
   handlers: ProfileMenuHandlers;
 }): SidebarMenuItem[] {
   const usage: SidebarSubmenuEntry[] = [
-    ...input.usageLines.map((line) => ({ key: line.key, label: line.label, subtitle: line.subtitle, value: line.value, info: true })),
+    // one star per plan, on its first line
+    ...input.usageLines.map((line, index, lines) => {
+      const favorite = input.usageFavorite;
+      const first = line.planId !== undefined && lines.findIndex((other) => other.planId === line.planId) === index;
+      const on = favorite?.id != null && favorite.id === line.planId;
+      return {
+        key: line.key,
+        label: line.label,
+        subtitle: line.subtitle,
+        value: line.value,
+        info: true,
+        ...(favorite && first && line.planId ? {
+          favorite: {
+            on,
+            label: t(on ? "usage.favorite.remove" : "usage.favorite.add", { name: line.planName ?? line.label }),
+            onToggle: () => favorite.onToggle(line.planId!),
+          },
+        } : {}),
+      };
+    }),
     ...(input.monthCost !== null ? [{ key: "month-cost", label: t("sidebar.account.monthCost"), value: input.monthCost, info: true }] : []),
   ];
   const help: SidebarSubmenuEntry[] = [
@@ -484,7 +509,11 @@ export function profileMenuItems(input: {
       key: "usage",
       label: t("sidebar.account.usage"),
       icon: <Gauge size={18} />,
-      value: input.usagePercent === null ? undefined : t("planUsage.used", { used: input.usagePercent }),
+      value: input.usagePercent === null
+        ? undefined
+        : input.usageName
+          ? t("sidebar.account.usageFavorite", { name: input.usageName, used: input.usagePercent })
+          : t("planUsage.used", { used: input.usagePercent }),
       submenu: [
         ...usage,
         { key: "view-usage", label: t("sidebar.account.viewUsage"), separatorBefore: usage.length > 0, onSelect: input.handlers.onViewUsage },
@@ -532,6 +561,8 @@ function WhenOpen({ open, onOpen }: { open: boolean; onOpen: () => void }) {
 
 interface AccountMenuData {
   percent: number | null;
+  /** the starred plan's short name while it drives the percent */
+  percentName: string | null;
   lines: UsageLine[];
   monthCost: string | null;
   targets: SwitchTarget[];
@@ -543,6 +574,7 @@ interface AccountMenuData {
  * the menu first opens; each part stays empty when it cannot be read. */
 function useAccountMenuData(enabled: boolean, refresh = 0): AccountMenuData {
   const { state } = useStore();
+  const favorite = useUsageFavorite();
   const org = usePerspicaxOrg();
   const plans = enabled && (org !== null || canViewUsage(state.config));
   const [rows, setRows] = useState<PlanRow[]>([]);
@@ -565,8 +597,10 @@ function useAccountMenuData(enabled: boolean, refresh = 0): AccountMenuData {
       .then((next) => { if (alive && next) setEnvironments(next); }, () => {});
     return () => { alive = false; };
   }, [enabled, refresh]);
+  const summary = usageSummary(rows, favorite);
   return {
-    percent: planUsagePercent(rows),
+    percent: summary.percent,
+    percentName: summary.name,
     lines: planUsageLines(rows, {
       weekly: t("planUsage.weekly"),
       fiveHour: t("planUsage.fiveHour"),
@@ -635,6 +669,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   // Lot 6: rename stays in the Switch account row (no window on the menu).
   const [renaming, setRenaming] = useState<{ id: string; name: string; defaultName: string; draft: string } | null>(null);
   const account = useAccountMenuData(menuOpened, namesTick);
+  const usageFavorite = useUsageFavorite();
   const serverMode = useServerMode(namesTick);
   // The desktop opens on an organization server (server mode) and this is
   // that server's page; Personal's own page (it has the saved-server list)
@@ -675,7 +710,9 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   };
   const profileItems = profileMenuItems({
     usagePercent: account.percent,
+    usageName: account.percentName,
     usageLines: account.lines,
+    usageFavorite: { id: usageFavorite, onToggle: toggleUsageFavorite },
     monthCost: account.monthCost,
     mobile: SAGAX_MOBILE_URL !== null,
     achievementsLabel: achievements.status === "ready" ? t("achievements.menu") : null,

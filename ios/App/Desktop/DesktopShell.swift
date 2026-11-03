@@ -80,7 +80,7 @@ final class DesktopShellModel: ObservableObject {
         case releaseNotes, whatsNew
 
         /// Drawn in the shell as the desktop's modals, not as sheets.
-        var inShell: Bool { [.settings, .plugins, .shortcuts, .releaseNotes, .whatsNew].contains(self) }
+        var inShell: Bool { [.settings, .search, .plugins, .shortcuts, .releaseNotes, .whatsNew].contains(self) }
         var id: String { rawValue }
     }
 
@@ -413,7 +413,12 @@ struct DesktopShell: View {
                 AnyView(DesktopSettingsModal(close: { model.modal = nil }))
                     .transition(.identity)
             } else if model.modal == .plugins {
-                AnyView(DesktopPluginsModal(close: { model.modal = nil }))
+                // lot 3: Capabilities, the desktop's centred window
+                AnyView(DesktopCapabilitiesModal(close: { model.modal = nil }))
+                    .transition(.opacity)
+            } else if model.modal == .search {
+                // lot 3: the desktop's command palette (⌘K)
+                AnyView(DesktopCommandPalette(close: { model.modal = nil }))
                     .transition(.opacity)
             } else if model.modal == .shortcuts {
                 AnyView(DesktopShortcutsModal(close: { model.modal = nil }))
@@ -751,16 +756,7 @@ private struct DesktopShellPresenter: ViewModifier {
         case .settings:
             EmptyView()
         case .search:
-            // The phone's sheet, large: the iPad's page sheet holds it
-            // (no dim or top inset of its own).
-            SearchSheet(embedded: true, close: { model.modal = nil }) { destination in
-                model.modal = nil
-                switch destination {
-                case let .chat(chat): model.open(session.returning(to: chat))
-                case let .exact(chat): model.open(chat)
-                }
-            }
-            .searchPageSheet()
+            EmptyView()
         case .newBot:
             CreateBotSheet(close: { model.modal = nil }) { bot in
                 model.modal = nil

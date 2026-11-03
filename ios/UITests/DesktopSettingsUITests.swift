@@ -121,9 +121,13 @@ final class DesktopSettingsUITests: XCTestCase {
         app.buttons["desktop-sidebar-capabilities"].tap()
         let close = app.buttons["desktop-plugins.close"]
         XCTAssertTrue(close.waitForExistence(timeout: 10), "Capabilities opens")
-        XCTAssertTrue(app.buttons["desktop-plugins.apps-tab.marketplace"].waitForExistence(timeout: 10))
-        app.buttons["desktop-plugins.tab.mcp"].tap()
-        XCTAssertTrue(app.buttons["desktop-plugins.mcp-refresh"].waitForExistence(timeout: 10))
+        // Me: Connect apps (Discover, Bots, Installed, Sources), one search
+        XCTAssertTrue(app.descendants(matching: .any)["connect-apps-tabs"].firstMatch.waitForExistence(timeout: 10))
+        // This bot: the open bot's capabilities
+        let thisBot = app.buttons["desktop-capabilities.scope.bot"]
+        XCTAssertTrue(thisBot.waitForExistence(timeout: 5), "This bot while a bot is open")
+        thisBot.tap()
+        XCTAssertFalse(app.descendants(matching: .any)["connect-apps-tabs"].firstMatch.waitForExistence(timeout: 2))
         close.tap()
         XCTAssertFalse(close.waitForExistence(timeout: 2))
     }

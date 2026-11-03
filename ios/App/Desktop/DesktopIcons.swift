@@ -21,6 +21,8 @@ enum DesktopIcon: String, CaseIterable {
     case gauge, bookOpen, wrench
     // the compose picker's wizard row (WandSparkles)
     case wand
+    // the palette's bot rows (lucide Bot)
+    case bot
 
     /// Path data in the 24 pt viewBox.
     var paths: [String] {
@@ -96,6 +98,7 @@ enum DesktopIcon: String, CaseIterable {
         case .x: ["M18 6 6 18", "m6 6 12 12"]
         case .command: ["M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"]
         case .check: ["M20 6 9 17l-5-5"]
+        case .bot: ["M12 8V4H8", Self.rect(4, 8, 16, 12, 2), "M2 14h2", "M20 14h2", "M15 13v2", "M9 13v2"]
         case .wand: [
             "m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72",
             "m14 7 3 3", "M5 6v4", "M19 14v4", "M10 2v2", "M7 8H3", "M21 16h-4", "M11 3H9",
@@ -163,6 +166,7 @@ enum DesktopIcon: String, CaseIterable {
         case .command: "command"
         case .check: "checkmark"
         case .appsGrid: "square.grid.2x2"
+        case .bot: "cpu"
         case .wand: "wand.and.stars"
         case .gauge: "gauge.with.dots.needle.33percent"
         case .bookOpen: "book"

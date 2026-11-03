@@ -157,5 +157,13 @@
   "Command palette": "palette.aria",
   "Added %@": "security.keys.added",
   "Always deny": "approval.action.alwaysDeny",
-  "All bots": "usage.allBots"
+  "All bots": "usage.allBots",
+  "This bot": "connectApps.scope.bot",
+  "These capabilities serve all of your bots. You manage them here.": "connectApps.scope.meNote",
+  "Pages": "connectApps.manage.tab.pages",
+  "Discover": "connectApps.manage.tab.discover",
+  "Installed": "connectApps.manage.tab.installed",
+  "Sources": "connectApps.manage.tab.sources",
+  "Search plugins, skills, MCP servers, bots, templates, pages and sources": "connectApps.search.placeholder",
+  "Plugins installed here go to %@ only, with their agents, commands and skills. Hooks and the plugin's own MCP servers are left out.": "connectApps.scope.botNote"
 }

@@ -10,7 +10,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
-import type { BotCodeBranch, BotCodeCommit, BotCodePullAction, BotCodePullRequest, BotCodeWork } from "../shared/bot-activity.ts";
+import type { BotCodeBranch, BotCodeCommit, BotCodePullAction, BotCodePullRequest, BotCodeWork } from "../../shared/bot-activity.ts";
 import { commandTexts, gitArgs, runCommands, shellProgram } from "./activity-coding.ts";
 
 export interface CodeWorkToolCall {

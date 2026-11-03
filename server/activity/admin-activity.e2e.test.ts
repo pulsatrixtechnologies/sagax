@@ -12,9 +12,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { SessionRegistry } from "./auth/sessions.ts";
-import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
-import { freePortBlock } from "./testing/ports.ts";
+import { SessionRegistry } from "../auth/sessions.ts";
+import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
+import { freePortBlock } from "../testing/ports.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const PORT = await freePortBlock([0, 1]);
@@ -50,8 +50,8 @@ const api = async (method: string, path: string, body?: unknown, as?: string, ex
 };
 
 async function start() {
-  child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
-    cwd: join(SERVER_DIR, ".."),
+  child = spawn(process.execPath, [join(SERVER_DIR, "..", "index.ts")], {
+    cwd: join(SERVER_DIR, "..", ".."),
     env: {
       ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
       ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),

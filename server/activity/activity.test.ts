@@ -9,8 +9,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { describeTool, readBotActivity, type ActivityRow } from "./activity.ts";
-import type { DecisionRow } from "./decision-log.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
+import type { DecisionRow } from "../decision-log.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
 
 describe("describeTool", () => {
   it("names the built-in agent tools as actions", () => {

@@ -22,8 +22,8 @@ import {
   signInListsOf,
   type AdminActionRow,
 } from "./admin-activity.ts";
-import { bindDecisionRetention, DEFAULT_DECISION_RETENTION_DAYS, type DecisionRow } from "./decision-log.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
+import { bindDecisionRetention, DEFAULT_DECISION_RETENTION_DAYS, type DecisionRow } from "../decision-log.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
 
 const dirs: string[] = [];
 const tempDir = () => {

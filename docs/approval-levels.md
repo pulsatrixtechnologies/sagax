@@ -570,7 +570,7 @@ confidential threads; views across people stay in Perspicax.
 
 Nothing new is captured for it: `server/action-journal.ts` folds the
 decision log (`server/decision-log.ts`), the tool runs of your threads
-(`server/activity.ts`) and the agent tools' audit with the tool guard's
+(`server/activity/activity.ts`) and the agent tools' audit with the tool guard's
 verdict. A decision row now keeps the call's arguments (bounded, redacted,
 dropped in a confidential thread) so a rule can be replayed exactly.
 

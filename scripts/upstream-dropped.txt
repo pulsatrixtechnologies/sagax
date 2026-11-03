@@ -581,3 +581,8 @@ server/profile-requests.ts
 server/profile-revision.ts
 server/profile-versions.test.ts
 server/profile-versions.ts
+server/activity.test.ts
+server/activity.ts
+server/admin-activity.e2e.test.ts
+server/admin-activity.test.ts
+server/admin-activity.ts

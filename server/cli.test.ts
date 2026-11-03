@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { applyStartupPreferences, formatSessions, parseArgs, runAccess, runLogin, runOnboardingCommand, serverEntry, type CliOptions, USAGE, verifyPhoneEndpoint } from "./cli.ts";
 import { browserSignInLines, pairingBlock, qrToString } from "./cli/cli-pairing.ts";
-import { readAdminActivityRange } from "./admin-activity.ts";
+import { readAdminActivityRange } from "./activity/admin-activity.ts";
 import { SetupCancelled } from "./cli/cli-prompts.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { startControlPlaneStub } from "./testing/control-plane-stub.ts";

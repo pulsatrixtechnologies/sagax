@@ -55,7 +55,7 @@ export interface BotRulesRouteDeps {
   mayEdit(auth: RequestAuth, botId: string): boolean;
   /** Wraps a write, as the memory routes do on a Cloud home. */
   ownersWrite?: <T>(auth: RequestAuth, botId: string, write: () => T) => T;
-  /** The admin activity log (server/admin-activity.ts). */
+  /** The admin activity log (server/activity/admin-activity.ts). */
   audit?(auth: RequestAuth, req: IncomingMessage, row: BotRulesAuditRow): void;
 }
 

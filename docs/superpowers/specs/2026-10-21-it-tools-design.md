@@ -279,7 +279,7 @@ Port policy (`port_check`, `tcp_ping`, `tls_check` port):
   rule (`cwToolRowWidget(..., personText)` and the lookup near `slimMessage` in `server/index.ts`). Otherwise the
   call is refused with "Ask the person to type the host to check." In the panel and `/check`, the person typed
   it by definition;
-- every port check is appended to the admin activity log (`server/admin-activity.ts` `appendAdminAction`,
+- every port check is appended to the admin activity log (`server/activity/admin-activity.ts` `appendAdminAction`,
   category `security`): who, target and ports. No other check is logged beyond its normal tool row (decision 13).
 
 Limits (`limits.ts`, in memory, starting values to tune):

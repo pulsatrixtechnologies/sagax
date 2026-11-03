@@ -12,7 +12,7 @@
 // kept unread dots nobody could clear. `planHiddenAgentThreads` finds those
 // threads once, from the admin activity rows the member API wrote
 // (`client.message` with `newThread: true`), so the server can hide them.
-import type { AdminActionRow } from "../admin-activity.ts";
+import type { AdminActionRow } from "../activity/admin-activity.ts";
 
 export interface HiddenAgentThread {
   botId: string;

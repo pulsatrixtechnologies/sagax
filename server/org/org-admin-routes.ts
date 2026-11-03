@@ -27,7 +27,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { aggregateOrgUsage, ORG_USAGE_MAX_ROWS, parseOrgUsageRange, type OrgUsageAggregate, type UsageRow } from "../usage/usage-ledger.ts";
 import type { ConsoleAssertion, ConsoleGrant, ConsoleGrantKind, OidcTeamClaim } from "../auth/oidc-rp.ts";
-import type { IdentifiedAdminAction } from "../admin-activity.ts";
+import type { IdentifiedAdminAction } from "../activity/admin-activity.ts";
 import type { AdminBotLook, AdminBotPersona } from "./org-admin-look.ts";
 import { ADMIN_FILES_ROUTE, answerBotFiles, type OrgAdminFilesDeps } from "./org-admin-files.ts";
 import {

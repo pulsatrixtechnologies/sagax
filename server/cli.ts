@@ -32,7 +32,7 @@ import { fileURLToPath } from "node:url";
 
 import { phonePairingLink } from "../shared/pairing-link.ts";
 import { parseAllowList } from "./auth/account-signin.ts";
-import { appendAdminAction, flushAdminActivity, sharedSignIn } from "./admin-activity.ts";
+import { appendAdminAction, flushAdminActivity, sharedSignIn } from "./activity/admin-activity.ts";
 import { bindDecisionRetention, decisionRetentionDays } from "./decision-log.ts";
 import { hostedWorkspaceConfigured } from "./enterprise.ts";
 import { resolveLoopbackTrust } from "./auth/request-auth.ts";

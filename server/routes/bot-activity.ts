@@ -9,7 +9,7 @@
 // or, in work another bot handed over, that bot's newest request line
 // (`roomRequest`: a work thread keeps every request one conversation sends).
 // It says whether that turn is coding work (`coding`,
-// server/activity-coding.ts: read off its tool calls and folder, never its
+// server/activity/activity-coding.ts: read off its tool calls and folder, never its
 // title; a person's conversation whose folder is a repository is a coding
 // job as a whole), so the panel lists coding jobs under Coding and
 // everything else under Activity. An ordinary conversation is never Coding
@@ -20,7 +20,7 @@
 // that turn's steps, files and sub-agents only (older steps stay in the
 // conversation, older sub-agents in the list's `subagents`). An entry with
 // code work anywhere in its window also carries it (`code`,
-// server/activity-code-work.ts: repository, branch, and the pull requests,
+// server/activity/activity-code-work.ts: repository, branch, and the pull requests,
 // branches and commits its calls produced). `?filter=coding|other` narrows
 // the list the same way, and the list also carries `subagents`: the
 // sub-agents its listed threads started, running or recent.
@@ -53,8 +53,8 @@ import {
 } from "../../shared/bot-activity.ts";
 import type { BotLaunchedAgentItem } from "../../shared/bot-launched-agents.ts";
 import { PASS, type RouteHandler } from "./table.ts";
-import { addCodingSignal, isCodingWork, type CodingSignals } from "../activity-coding.ts";
-import { CodeWorkCollector, type RepositoryInfo } from "../activity-code-work.ts";
+import { addCodingSignal, isCodingWork, type CodingSignals } from "../activity/activity-coding.ts";
+import { CodeWorkCollector, type RepositoryInfo } from "../activity/activity-code-work.ts";
 import type { CloudAgentManager } from "../cloud-agents/manager.ts";
 import { cloudAgentActivityItem } from "../cloud-agents/activity.ts";
 import { cloudAgentStatusActive, type CloudAgentRecord } from "../../shared/cloud-agents.ts";
@@ -380,7 +380,7 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
    * own task, Coding only for its own code work (2026-11-02). A turn longer
    * than the page keeps what the last scan read of it. A settled thread is
    * read once per change, a running one at most every CODING_RESCAN_MS.
-   * Code work (server/activity-code-work.ts: its repository folder and
+   * Code work (server/activity/activity-code-work.ts: its repository folder and
    * branch, and the pull requests, branches and commits its calls produced)
    * is read off every turn of the page and carried whenever the thread did
    * coding work, so the Coding section's code work keeps what earlier turns

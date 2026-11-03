@@ -10,7 +10,7 @@
 //   - a manager reads only their reach; out of reach reads as 404 not_found;
 //   - every POST writes one admin activity row (actor: the console person);
 //   - a refusal is `{code, message, reason}`, never a stack or a secret.
-import type { AdminActivityCategory } from "../admin-activity.ts";
+import type { AdminActivityCategory } from "../activity/admin-activity.ts";
 import type { AdminBotReach, ConsoleRole, OrgAdminViewer } from "./org-admin-routes.ts";
 
 export const CONSOLE_LIST_DEFAULT = 50;

@@ -1855,7 +1855,7 @@ export function mergeOpenCodeProviderKeys(
 const configSaveListeners = new Set<(before: JsonObject, after: JsonObject) => void>();
 
 /** Told, synchronously, what each saveConfig wrote: the file before and
- * after. The admin activity log (server/admin-activity.ts) records the
+ * after. The admin activity log (server/activity/admin-activity.ts) records the
  * change for whoever's request made it. A listener must not throw. */
 export function onConfigSaved(listener: (before: JsonObject, after: JsonObject) => void): () => void {
   configSaveListeners.add(listener);

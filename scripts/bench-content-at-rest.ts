@@ -223,7 +223,7 @@ try {
   // on disk when its append returns. Read live (small blocks), then after the
   // migration gathered them (the log quiet).
   await load<Any>("server/harness/bus.ts");
-  const activity = await load<Any>("server/activity.ts");
+  const activity = await load<Any>("server/activity/activity.ts");
   const nativeDir = config.NATIVE_DIR as string;
   const eventsDir = config.EVENTS_DIR as string;
   mkdirSync(nativeDir, { recursive: true });

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { flushAdminActivity } from "../admin-activity.ts";
+import { flushAdminActivity } from "../activity/admin-activity.ts";
 import {
   openSafetyHold,
   resetSafetyReviewForTests,

@@ -5,7 +5,7 @@ import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import type { AdminActionRow } from "../admin-activity.ts";
+import type { AdminActionRow } from "../activity/admin-activity.ts";
 import { parseHideList, planHiddenAgentThreads, planHiddenBotThreads } from "./agent-threads.ts";
 import { DATA_DIR } from "../config.ts";
 import type { ModelSelection } from "../contracts.ts";

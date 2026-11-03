@@ -9,7 +9,7 @@
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 
-import { isWriteTool } from "./threads/thread-files.ts";
+import { isWriteTool } from "../threads/thread-files.ts";
 
 export interface CodingToolCall {
   name: string;

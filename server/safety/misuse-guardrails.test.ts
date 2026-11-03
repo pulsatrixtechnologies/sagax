@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { adminActivityFileFor, flushAdminActivity } from "../admin-activity.ts";
+import { adminActivityFileFor, flushAdminActivity } from "../activity/admin-activity.ts";
 import {
   misuseGuardrailMode,
   misusePathRefusal,

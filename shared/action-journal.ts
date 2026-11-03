@@ -2,7 +2,7 @@
 // every action of the signed-in person's own bots, allowed, asked (a card),
 // refused, failed or expired, with what decided it. Built by the server
 // (server/action-journal.ts) from what is already on disk: the decision log
-// (server/decision-log.ts), the per-thread tool runs (server/activity.ts)
+// (server/decision-log.ts), the per-thread tool runs (server/activity/activity.ts)
 // and the agent tools' audit rows (server/agent-api.ts, the tool guard).
 //
 // Read by the desktop (src/components/approvals/ApprovalsJournal.tsx) and

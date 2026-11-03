@@ -1299,7 +1299,7 @@ import {
   teamMemoryCardReachesMember,
   teamMemorySharingOf
 } from "../shared/team-memory-sharing.ts";
-import { readBotActivity, readToolRuns } from "./activity.ts";
+import { readBotActivity, readToolRuns } from "./activity/activity.ts";
 import {
   COMPACT_VOLATILE_SECTIONS,
   KNOWN_USE_CALLS,
@@ -1775,7 +1775,7 @@ import {
   signInListsOf,
   type AdminActionRow,
   type AdminActor
-} from "./admin-activity.ts";
+} from "./activity/admin-activity.ts";
 import {
   frameForMember,
   memberBody,
@@ -2238,8 +2238,8 @@ import { cloudAgentInternalAction, handleCloudAgentInternal } from "./routes/clo
 import { cloudAgentWakePrompt } from "./cloud-agents/wake.ts";
 import { cloudAgentWireItem } from "./cloud-agents/activity.ts";
 import type { CloudAgentRecord } from "../shared/cloud-agents.ts";
-import { inGitRepository } from "./activity-coding.ts";
-import { repositoryInfo } from "./activity-code-work.ts";
+import { inGitRepository } from "./activity/activity-coding.ts";
+import { repositoryInfo } from "./activity/activity-code-work.ts";
 import { launchedAgentsForBot } from "./launched-agents.ts";
 import { createGroupMemoryRoutes } from "./routes/group-memory.ts";
 import { createTtsProviderRoutes } from "./routes/tts-provider.ts";
@@ -2368,7 +2368,7 @@ import {
 } from "./auth/oidc-login.ts";
 import { OidcRelyingParty } from "./auth/oidc-rp.ts";
 import type { BotAttachment, BotFileRoot } from "./org/org-admin-files.ts";
-import { ADMIN_ACTIVITY_CATEGORIES } from "./admin-activity.ts";
+import { ADMIN_ACTIVITY_CATEGORIES } from "./activity/admin-activity.ts";
 import {
   createOrgMemberRoutes,
   ORG_MEMBER_ASSERTION_ACTORS,
@@ -4445,7 +4445,7 @@ function memberFrameContext(visible: VisibleSet, viewer: ApprovalViewer): FrameC
   };
 }
 
-// ── admin activity (server/admin-activity.ts) ──────────────────────────
+// ── admin activity (server/activity/admin-activity.ts) ──────────────────────────
 /** Recorded only where several people share the workspace: a hosted
  * workspace, an email sign-in list naming more than one person (or a whole
  * domain), or a device paired with chat-only access. The desktop app and a

@@ -13,7 +13,7 @@
 // block stays a block.
 
 import { randomUUID } from "node:crypto";
-import { appendAdminAction } from "../admin-activity.ts";
+import { appendAdminAction } from "../activity/admin-activity.ts";
 import { DATA_DIR } from "../config.ts";
 import { misuseGuardrailMode, misuseOwnPaths } from "./misuse-guardrails.ts";
 import {

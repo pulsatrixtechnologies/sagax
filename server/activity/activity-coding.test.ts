@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { codingSignals, commandTexts, inGitRepository, isCodeFile, isCodingWork } from "./activity-coding.ts";
-import { commandSummary, toolDetailPreview } from "./tools/tool-summary.ts";
+import { commandSummary, toolDetailPreview } from "../tools/tool-summary.ts";
 
 // A call as the store keeps it (server/index.ts, item.started): the engine's
 // title as its name, commandSummary as its summary (newlines folded, cut at

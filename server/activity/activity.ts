@@ -11,10 +11,10 @@
 // decisions share the decision log. Read those alongside native tool runs.
 import { join } from "node:path";
 
-import { readDecisions, type DecisionKind, type DecisionRow } from "./decision-log.ts";
-import { isRuntimeEvent, readRecentLines } from "./threads/thread-events.ts";
+import { readDecisions, type DecisionKind, type DecisionRow } from "../decision-log.ts";
+import { isRuntimeEvent, readRecentLines } from "../threads/thread-events.ts";
 
-import type { ActivityOutcome, ActivityRow } from "../shared/activity.ts";
+import type { ActivityOutcome, ActivityRow } from "../../shared/activity.ts";
 
 export type { ActivityOutcome, ActivityRow };
 

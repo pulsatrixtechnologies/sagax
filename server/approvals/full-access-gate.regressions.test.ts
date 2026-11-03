@@ -12,7 +12,7 @@ import { createAgentCard, type AgentCardStore } from "../chat-widgets.ts";
 import { DATA_DIR } from "../config.ts";
 import type { ModelSelection } from "../contracts.ts";
 import { grokPermissionMode } from "../drivers/acp/grok.ts";
-import { flushAdminActivity } from "../admin-activity.ts";
+import { flushAdminActivity } from "../activity/admin-activity.ts";
 import { fullAccessActs, fullAccessChoiceAnswer } from "./full-access-gate.ts";
 import { ownerModeForLevel } from "./owner-autonomy.ts";
 import { ownerDecision, ownerVerdictOver, type OwnerRule } from "./owner-approval.ts";

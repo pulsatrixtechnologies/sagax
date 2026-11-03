@@ -201,7 +201,7 @@ const ALLOWED: ReadonlyArray<{ method: string; path: RegExp }> = [
   // pull-to-refresh.
   { method: "GET", path: /^\/api\/bots\/[\w-]+\/overview$/ },
   // Read-only: what the bot did, with the outcome, built from logs that
-  // already exist (server/activity.ts). No settings reachable through it.
+  // already exist (server/activity/activity.ts). No settings reachable through it.
   { method: "GET", path: /^\/api\/bots\/[\w-]+\/activity$/ },
   // The section's shared team memory: people, places, decisions and terms.
   // Reading, adding, answering a proposal, editing a detail, and removing

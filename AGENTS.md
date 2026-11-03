@@ -7399,7 +7399,7 @@ pane under it. Details lists Coding,
 Activity, then Routines (`ActivitySection`, `ActivityListModal`,
 `ActivityDetailModal`).
 Coding is code work only: the server marks an entry `coding` from its
-tool calls and folder (`server/activity-coding.ts`: source edits, git
+tool calls and folder (`server/activity/activity-coding.ts`: source edits, git
 commit/push/worktree, pull requests, file changes inside a repository;
 never the title, never the bot's own SOUL.md/MEMORY.md or its folder, never
 a sub-agent's request or a heredoc's text quoting git; a sub-agent's own
@@ -7443,7 +7443,7 @@ agent API (`launchedAgents`, `server/launched-agents.ts`) is read the same
 way, from its newest prompt on (`turnStartIndex`): a prompt sent on to the
 same conversation is Coding for its own code work only, and a run that
 changed code stays Coding while it reads. A coding entry carries `code`
-(`server/activity-code-work.ts`): its folder's repository root, checked-out
+(`server/activity/activity-code-work.ts`): its folder's repository root, checked-out
 branch and origin (read from `.git` on the server, credentials stripped;
 a folder on the person's computer is not read), and the pull requests,
 branches and commits its own successful git, gh and GitHub tool calls
@@ -7478,8 +7478,8 @@ in another person's private thread there, with its actions, and nothing else
 of that thread. The owner's notification of such a run names no thread, only
 `routineRunId` (`routineAccessNotifications`), and opens the run there
 (`openBotActivity`); the run's person keeps the thread link. Tests:
-`server/routes/bot-activity.test.ts`, `server/activity-coding.test.ts`,
-`server/activity-code-work.test.ts`, `ActivitySection.test.ts`,
+`server/routes/bot-activity.test.ts`, `server/activity/activity-coding.test.ts`,
+`server/activity/activity-code-work.test.ts`, `ActivitySection.test.ts`,
 `InlineEditableText.test.ts`, `BotSettingsDialog.caption.test.ts`,
 `server/org/org-routines.e2e.test.ts` (owner pays).
 
@@ -7498,7 +7498,7 @@ Open the pull request (or open one), View diff (the Code section's
 `DiffView`), Show in folder (local app, a local path only), Open in
 Computer, Archive or Unarchive, Delete local branch. Each action shows a
 spinner on the row, then one line saying what happened or why not. A
-pull request carries its head `branch` (`server/activity-code-work.ts`),
+pull request carries its head `branch` (`server/activity/activity-code-work.ts`),
 so the card shows what the bot did to it until GitHub says more.
 
 Rules, none optional (`server/routes/bot-code-branches.ts`, git in
@@ -7559,7 +7559,7 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
   for later.
 - Tests: `server/routes/bot-code-branches.e2e.test.ts` (real git, a bare
   local remote), `src/components/bot-settings/CodeBranchList.test.ts`,
-  `ActivitySection.test.ts`, `server/activity-code-work.test.ts`.
+  `ActivitySection.test.ts`, `server/activity/activity-code-work.test.ts`.
   Screenshots: `node scripts/capture/bot-panel-coding.mjs` (headless, the
   gallery `src/gallery/bot-panel-coding.html`).
 

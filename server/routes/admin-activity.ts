@@ -8,7 +8,7 @@ import {
   activityEntries,
   parseActivityWhat,
   readAdminActivityRange,
-} from "../admin-activity.ts";
+} from "../activity/admin-activity.ts";
 import { boundRetentionDays, readDecisionRange } from "../decision-log.ts";
 import { parseUsageRange } from "../usage/usage-ledger.ts";
 import { PASS, type RouteHandler } from "./table.ts";

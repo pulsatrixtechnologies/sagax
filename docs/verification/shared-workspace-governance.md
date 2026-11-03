@@ -31,7 +31,7 @@ prompt or dialog: visibility is access control and the log is a record.
     asks, delegations, @mentions and the Chief's team);
   - admins, the owner on this machine and a session-less local service see
     everything; members never receive a bot's audience list.
-- **Admin activity log.** `server/admin-activity.ts`. Each successful admin
+- **Admin activity log.** `server/activity/admin-activity.ts`. Each successful admin
   change is diffed around its request (config.json, the bot's audited
   fields, the bot and webhook lists, sessions, pairing codes, engine actions)
   and written to `<data>/admin-activity/YYYY-MM.ndjson` (0600) with the
@@ -48,7 +48,7 @@ prompt or dialog: visibility is access control and the log is a record.
 
 ```sh
 pnpm exec vitest run server/bots/bot-visibility.test.ts server/bots/bot-visibility.e2e.test.ts \
-  server/admin-activity.test.ts server/admin-activity.e2e.test.ts server/peers/peer-roster.test.ts \
+  server/activity/admin-activity.test.ts server/activity/admin-activity.e2e.test.ts server/peers/peer-roster.test.ts \
   server/cli.test.ts src/components/ActivitySection.test.ts \
   src/components/bot-settings/VisibilitySection.test.ts
 ```
@@ -68,7 +68,7 @@ pnpm exec vitest run server/bots/bot-visibility.test.ts server/bots/bot-visibili
   `group.deleted`, and later changes to it send them nothing). Finally, two
   bots with the same audience are teammates and a bot with a different one
   is not, in the real system prompt.
-- `server/admin-activity.e2e.test.ts` changes people, an engine key, a spend
+- `server/activity/admin-activity.e2e.test.ts` changes people, an engine key, a spend
   limit and settings (as Boss, as the owner on loopback, and with the
   command-line marker), adds an MCP server with a secret, creates, restricts,
   re-permissions and deletes a bot, creates and deletes a webhook, revokes a
@@ -144,7 +144,7 @@ A review of #1717 reproduced eight problems; each is now covered.
   any member cursor at or before it resumes with a fresh snapshot
   (`resumed:false`), including a member who was away; admin streams stay up.
 - **Redaction.** Flag values after `--api-key`/`--token` and credential URL
-  parameters are hidden (`server/admin-activity.test.ts`).
+  parameters are hidden (`server/activity/admin-activity.test.ts`).
 - **Attribution.** Config rows come from each `saveConfig` in the request's
   own async context; bot and webhook rows compare only the fields the
   request named; creations come from the request's own answer

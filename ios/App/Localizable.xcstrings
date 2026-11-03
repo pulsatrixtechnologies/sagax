@@ -50884,6 +50884,26 @@
         }
       }
     },
+    "Pages": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pages"
+          }
+        }
+      }
+    },
+    "Pages a bot proposed and you published": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pages qu'un bot a proposées et que vous avez publiées"
+          }
+        }
+      }
+    },
     "Pages your bots proposed. A page goes online only when you publish it. Revoking takes the link down at once.": {
       "localizations": {
         "en": {
@@ -53386,6 +53406,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Plugins e habilidades"
+          }
+        }
+      }
+    },
+    "Plugins installed here go to %@ only, with their agents, commands and skills. Hooks and the plugin's own MCP servers are left out.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les plugins installés ici vont à %@ seulement, avec leurs agents, commandes et compétences. Les hooks et les serveurs MCP du plugin sont laissés de côté."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Os plugins instalados aqui vão apenas para %@, com seus agentes, comandos e habilidades. Os hooks e os servidores MCP do próprio plugin ficam de fora."
           }
         }
       }
@@ -62394,6 +62430,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rechercher des plugins, compétences, serveurs MCP, bots, modèles et sources"
+          }
+        }
+      }
+    },
+    "Search plugins, skills, MCP servers, bots, templates, pages and sources": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher plugins, compétences, serveurs MCP, bots, modèles, pages et sources"
           }
         }
       }
@@ -74242,6 +74288,16 @@
         }
       }
     },
+    "These capabilities serve all of your bots. You manage them here.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ces capacités servent tous vos bots. Vous les gérez ici."
+          }
+        }
+      }
+    },
     "These routines run only when you are here. Run one now or mark it as seen.": {
       "localizations": {
         "en": {
@@ -74436,6 +74492,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ce bot"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este bot"
           }
         }
       }
@@ -86174,6 +86236,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Le Perspicax de votre organisation doit être mis à jour avant de pouvoir changer la photo depuis Sagax."
+          }
+        }
+      }
+    },
+    "Your organization's capabilities are set by its admins in Perspicax. Those your bots can use are listed under Me.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les capacités de votre organisation sont réglées par ses admins dans Perspicax. Celles que vos bots peuvent utiliser sont listées sous Moi."
           }
         }
       }

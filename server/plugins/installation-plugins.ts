@@ -3,10 +3,10 @@
 // MCP declarations stay private and mount through the ordinary turn policy.
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { copySanitizedPlugin, readPluginContents } from "./bot-plugins.ts";
+import { copySanitizedPlugin, readPluginContents } from "../bot-plugins.ts";
 import type { InstalledMarketplacePlugin, PluginMarketplaces } from "./plugin-marketplaces.ts";
-import type { McpServerSpec } from "./contracts.ts";
-import { SANDBOX_PLUGINS_DIR } from "./sandbox/sandbox-plugins.ts";
+import type { McpServerSpec } from "../contracts.ts";
+import { SANDBOX_PLUGINS_DIR } from "../sandbox/sandbox-plugins.ts";
 import { invalidatePluginMetaCache, pluginMetadataCacheRoot, rebuildPluginMetaCache } from "./plugin-metadata-cache.ts";
 
 export class InstallationPlugins {

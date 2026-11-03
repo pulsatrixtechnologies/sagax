@@ -24,7 +24,7 @@ import {
   type XaiMarketplaceEntry,
   type XaiMarketplaceErrorCode,
   type XaiMarketplaceList,
-} from "../shared/xai-marketplace.ts";
+} from "../../shared/xai-marketplace.ts";
 
 type Fetcher = typeof fetch;
 

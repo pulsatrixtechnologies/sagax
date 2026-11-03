@@ -36,7 +36,7 @@ import { writeFileAtomic } from "../atomic.ts";
 import { copySanitizedPlugin, readPluginContents, type PluginContents } from "../bot-plugins.ts";
 import type { McpServerSpec } from "../contracts.ts";
 import { installationCapabilityBridge } from "../installation-capability-bridge.ts";
-import { applyPluginConfig, readPluginConfigFields } from "../plugin-config.ts";
+import { applyPluginConfig, readPluginConfigFields } from "../plugins/plugin-config.ts";
 import type { OrgCapabilityDeclaration } from "../perspicax-link.ts";
 
 export const ORG_FLOW_MOUNT_PREFIX = "pulsatrix-flow";

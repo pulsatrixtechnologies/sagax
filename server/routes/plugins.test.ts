@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import type { PluginListing, RegistrySearch } from "../plugin-registry.ts";
+import type { PluginListing, RegistrySearch } from "../plugins/plugin-registry.ts";
 import { requiredScope, type RequestAuth } from "../request-auth.ts";
 import { createPluginRoutes, pluginServerName, type PluginRouteDeps } from "./plugins.ts";
 import { dispatchRoutes } from "./table.ts";

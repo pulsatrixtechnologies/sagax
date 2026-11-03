@@ -9,9 +9,9 @@ import { createHash } from "node:crypto";
 import { closeSync, existsSync, lstatSync, mkdirSync, openSync, opendirSync, readFileSync, readSync, rmSync, type Dirent } from "node:fs";
 import { join, relative, sep } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { redactSecretsInText } from "../shared/redact.ts";
-import { parseSkillMd } from "../shared/skill-md.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { redactSecretsInText } from "../../shared/redact.ts";
+import { parseSkillMd } from "../../shared/skill-md.ts";
 
 export interface PluginMetaEntry {
   kind: "skill" | "command" | "agent";

@@ -1,4 +1,4 @@
-// The xAI Bot Marketplace reader (server/xai-marketplace.ts): the parser on
+// The xAI Bot Marketplace reader (server/plugins/xai-marketplace.ts): the parser on
 // a recorded sample of the real pages (server/fixtures/xai-marketplace-*.html,
 // the structure of 2026-10-28 with neutral names), the source errors, and
 // the few-hours cache with its manual refresh.
@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { fetchXaiPage, parseXaiMarketplaceBot, parseXaiMarketplaceList, XaiMarketplaceError, XaiMarketplaceSource } from "./xai-marketplace.ts";
 
-const fixture = (name: string) => readFileSync(join(import.meta.dirname, "fixtures", name), "utf8");
+const fixture = (name: string) => readFileSync(join(import.meta.dirname, "..", "fixtures", name), "utf8");
 const listPage = fixture("xai-marketplace-list.html");
 const botPage = fixture("xai-marketplace-bot.html");
 const html = (body: string, status = 200, headers: Record<string, string> = {}) => new Response(body, { status, headers: { "content-type": "text/html", ...headers } });

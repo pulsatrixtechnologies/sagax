@@ -23,7 +23,7 @@ not claim real provider or comparative Grok Bot qualification.
 | Engine switch preserves selected skill bytes | Same bot and thread: API primary -> fake Codex file engine; alias read, `skills_list` and the installed file on disk are byte-identical to the API read | `server/plugin-engine-continuity.e2e.test.ts` |
 | Provider failover preserves bytes and dependencies | Same thread, primary returns a spent-quota 429; limit failover continues the same message once on the API backup, whose prompt carries the alias, whose `workspace_read` returns identical bytes, and whose `skills_list` and plugin MCP tool work | `server/plugin-engine-continuity.e2e.test.ts`; capability gate `recoveryCapabilityError` also asserted in `plugin-api-delivery.e2e.test.ts` |
 | Plugin declared MCP dependency executes on API engines | `mountPluginMcp` proxies the plugin's stdio server (`customMcp`); the fake MCP server records the `tools/call` | `server/plugin-engine-continuity.e2e.test.ts` (primary and backup) |
-| Large-plugin metadata lifecycle (manifest/cache/invalidation) | `server/plugin-metadata-cache.ts` v3: rebuilt on install/update/config (`bot-plugins`, `installation-plugins`), dropped on remove, marketplace removal and bot deletion; hot path = memoized manifest + lstat of known directories (mtime stamps catch additions) and files; miss = bounded live scan, partial only if that scan stopped early, one deduplicated rebuild queued after the turn (30 s cooldown) | `server/plugin-metadata-cache.test.ts` (add/move/rename/delete/tamper/mtime, miss heals off the turn, config write heals, memoized 2,000-file verification, write soft-fail, 600-file cache) |
+| Large-plugin metadata lifecycle (manifest/cache/invalidation) | `server/plugins/plugin-metadata-cache.ts` v3: rebuilt on install/update/config (`bot-plugins`, `installation-plugins`), dropped on remove, marketplace removal and bot deletion; hot path = memoized manifest + lstat of known directories (mtime stamps catch additions) and files; miss = bounded live scan, partial only if that scan stopped early, one deduplicated rebuild queued after the turn (30 s cooldown) | `server/plugins/plugin-metadata-cache.test.ts` (add/move/rename/delete/tamper/mtime, miss heals off the turn, config write heals, memoized 2,000-file verification, write soft-fail, 600-file cache) |
 | Partial/unreadable cases reported honestly | inventory `truncated` / `unreadable`; opendir/lstat failures mark incomplete/truncated (except ENOENT at depth 1); cache IO soft-fail | metadata cache + plugin-turn tests |
 | Flow stays Claude-only for reads too | `workspace_read` resolves plugin aliases from `enginePluginFolders` on the running engine | code path shared with the discovery filter; no organization Flow e2e fixture exists (see remaining) |
 | Disabled/staged privacy and stable discovery/pagination | unchanged Lot 1 `skillDiscoveryPage` rules; disable returns no such file on `workspace_read` | e2e disable + library unassign |
@@ -78,7 +78,7 @@ native Claude `--plugin-dir` loading and Flow receipts are unchanged.
 
 ```
 pnpm exec vitest run shared/capabilities.test.ts server/capabilities.test.ts \
-  server/plugin-metadata-cache.test.ts server/turns/plugin-turn.test.ts \
+  server/plugins/plugin-metadata-cache.test.ts server/turns/plugin-turn.test.ts \
   server/skills/skill-discovery.test.ts server/turns/turn-connectors.test.ts \
   server/plugin-api-delivery.e2e.test.ts
 # 7 files, 58 tests passed
@@ -94,8 +94,8 @@ not run in this worker (root owns the integration gate).
 
 ```
 pnpm exec vitest run shared/capabilities.test.ts server/capabilities.test.ts \
-  server/plugin-metadata-cache.test.ts server/turns/plugin-turn.test.ts \
-  server/bot-plugins.test.ts server/installation-plugins.test.ts \
+  server/plugins/plugin-metadata-cache.test.ts server/turns/plugin-turn.test.ts \
+  server/bot-plugins.test.ts server/plugins/installation-plugins.test.ts \
   server/skills/skill-discovery.test.ts server/skills/skill-discovery.e2e.test.ts \
   server/turns/turn-connectors.test.ts server/workspace-files.test.ts \
   server/plugin-api-delivery.e2e.test.ts server/plugin-engine-continuity.e2e.test.ts

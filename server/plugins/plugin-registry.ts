@@ -14,7 +14,7 @@
 // addresses; a registry remote whose address has ONE variable with a closed
 // list of choices ({region} with choices us, eu) becomes one address per
 // choice. Either way the person picks the region before connecting.
-import { PLUGIN_CATALOG, type PluginCatalogEntry, type PluginRegion } from "../shared/plugin-catalog.ts";
+import { PLUGIN_CATALOG, type PluginCatalogEntry, type PluginRegion } from "../../shared/plugin-catalog.ts";
 
 export const REGISTRY_URL = "https://registry.modelcontextprotocol.io/v0/servers";
 export const REGISTRY_TIMEOUT_MS = 5_000;

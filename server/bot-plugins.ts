@@ -1,5 +1,5 @@
 // Claude Code plugins on a bot (Capabilities, scope "For this bot"). The
-// marketplaces are the installation's one list (server/plugin-marketplaces.ts,
+// marketplaces are the installation's one list (server/plugins/plugin-marketplaces.ts,
 // Capabilities > Sources > Marketplaces); Sagax copies the plugins
 // the owner picks from there into the bot's own folder. Claude loads each
 // enabled folder with `--plugin-dir`. Every other engine gets the same
@@ -44,18 +44,18 @@ import { z } from "zod";
 import { writeFileAtomic } from "./atomic.ts";
 import type { McpServerSpec } from "./contracts.ts";
 import { parseStoredMcpServer } from "./mcp/mcp-registry.ts";
-import { readPluginMcpServers } from "./plugin-mcp.ts";
+import { readPluginMcpServers } from "./plugins/plugin-mcp.ts";
 import { SANDBOX_PLUGINS_DIR } from "./sandbox/sandbox-plugins.ts";
 import { capabilityPluginRecordSchema as pluginRecord, capabilityPluginStateSchema as stateSchema } from "./capability-plugin-state.ts";
 import type { CapabilityPluginValues } from "./capability-plugin-state.ts";
 import { capturePluginHooks, type LifecycleHook } from "./lifecycle-hooks.ts";
-import { pluginUpdateAvailable, type MarketplaceViewer, type MarketplaceVisibility, type PluginMarketplaces } from "./plugin-marketplaces.ts";
+import { pluginUpdateAvailable, type MarketplaceViewer, type MarketplaceVisibility, type PluginMarketplaces } from "./plugins/plugin-marketplaces.ts";
 import { probeGithubRepo, type GithubCredential, type GithubProbe } from "./github-access.ts";
 import { githubGitEnvironment } from "./github-connect.ts";
 import { WORKSPACE_SCOPE as WORKSPACE_TOKEN_KEY } from "./github-credentials.ts";
 import type { MarketplaceCredentialView } from "../shared/github-credentials.ts";
-import { applyPluginConfig, checkPluginConfig, readConfigValues, readPluginConfigFields, writeConfigValues, type PluginConfigField, type PluginConfigValue } from "./plugin-config.ts";
-import { invalidatePluginMetaCache, pluginMetadataCacheRoot, rebuildPluginMetaCache } from "./plugin-metadata-cache.ts";
+import { applyPluginConfig, checkPluginConfig, readConfigValues, readPluginConfigFields, writeConfigValues, type PluginConfigField, type PluginConfigValue } from "./plugins/plugin-config.ts";
+import { invalidatePluginMetaCache, pluginMetadataCacheRoot, rebuildPluginMetaCache } from "./plugins/plugin-metadata-cache.ts";
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const BOT_ID = /^[\w-]{1,80}$/;
@@ -193,7 +193,7 @@ export type PluginState = z.infer<typeof stateSchema>;
  * it (server/bot-zip.ts): its marketplaces with its installs. */
 export type LegacyPluginState = z.infer<typeof legacyStateSchema>;
 export type MarketplaceRecord = z.infer<typeof marketplaceRecord>;
-/** A plugin's declared fields and this bot's values (server/plugin-config.ts). */
+/** A plugin's declared fields and this bot's values (server/plugins/plugin-config.ts). */
 export interface PluginConfigView { fields: PluginConfigField[]; values: Record<string, PluginConfigValue> }
 export type InstalledBotPlugin = Omit<z.infer<typeof pluginRecord>, "mcpServers"> & { key: string; config?: PluginConfigView };
 
@@ -777,7 +777,7 @@ export class BotPlugins {
   }
 
   /** Save a plugin's configuration values for this bot and write them into
-   * its skills, agents and commands (server/plugin-config.ts). */
+   * its skills, agents and commands (server/plugins/plugin-config.ts). */
   setPluginConfig(botId: string, key: string, input: unknown): Promise<InstalledBotPlugin> {
     return this.withLock(botId, async () => {
       const record = this.read(botId).plugins[key];

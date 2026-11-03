@@ -9,7 +9,7 @@ import { join, posix, relative, sep } from "node:path";
 
 import { redactSecretsInText } from "../../shared/redact.ts";
 import { parseSkillMd } from "../../shared/skill-md.ts";
-import { loadPluginMetaForTurn, scheduleMetaRebuild } from "../plugin-metadata-cache.ts";
+import { loadPluginMetaForTurn, scheduleMetaRebuild } from "../plugins/plugin-metadata-cache.ts";
 
 export interface PluginTurnFile {
   kind: "skill" | "command" | "agent";

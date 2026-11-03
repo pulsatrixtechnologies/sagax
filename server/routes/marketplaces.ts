@@ -1,5 +1,5 @@
 // Plugins > Manage > Marketplaces: the installation's own plugin
-// marketplaces (server/plugin-marketplaces.ts).
+// marketplaces (server/plugins/plugin-marketplaces.ts).
 //
 //   GET    /api/marketplaces                              { marketplaces }
 //   POST   /api/marketplaces { source, ref?, credential?, visibility? }  add or fetch again
@@ -22,7 +22,7 @@
 import type { IncomingMessage } from "node:http";
 
 import { setCapabilityDeprecationHeaders } from "../capability-route-deprecation.ts";
-import { MarketplaceError, type MarketplaceView, type MarketplaceViewer, type MarketplaceVisibility, type PluginMarketplaces } from "../plugin-marketplaces.ts";
+import { MarketplaceError, type MarketplaceView, type MarketplaceViewer, type MarketplaceVisibility, type PluginMarketplaces } from "../plugins/plugin-marketplaces.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import type { MarketplaceCredentialView } from "../../shared/github-credentials.ts";
 import { PASS, type RouteHandler } from "./table.ts";

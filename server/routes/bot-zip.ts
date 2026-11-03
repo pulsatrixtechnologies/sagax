@@ -39,7 +39,7 @@ import {
 } from "../bot-zip.ts";
 import { GROK_EXPORT_PROMPT, GrokImportError, grokExportToPackage, parseGrokExport } from "../../shared/grok-import.ts";
 import { xaiMarketplaceToPackage, type XaiMarketplaceBot } from "../../shared/xai-marketplace.ts";
-import { XaiMarketplaceError } from "../xai-marketplace.ts";
+import { XaiMarketplaceError } from "../plugins/xai-marketplace.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
@@ -72,7 +72,7 @@ export interface BotZipRouteDeps {
   imported?(botId: string): void;
   /** The new bot as the client sees it, for the import's answer. */
   wireBot?(botId: string): unknown;
-  /** A bot of the xAI Bot Marketplace (server/xai-marketplace.ts), for the phone's import. */
+  /** A bot of the xAI Bot Marketplace (server/plugins/xai-marketplace.ts), for the phone's import. */
   xaiMarketplaceBot?(slug: string): Promise<XaiMarketplaceBot>;
   now?(): number;
 }

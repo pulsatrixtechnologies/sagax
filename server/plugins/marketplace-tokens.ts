@@ -5,7 +5,7 @@
 // Manage > Marketplaces): how a bot reads a private repository when nobody's
 // GitHub connection can, and how it reads one on another git host (GitLab,
 // Gitea, a company server). The marketplace itself is in the installation's
-// one list (server/plugin-marketplaces.ts); its token stays per bot.
+// one list (server/plugins/plugin-marketplaces.ts); its token stays per bot.
 //
 // Stored like MCP header values and the organization's GitHub tokens: one
 // AES-256-GCM file under the data directory (marketplace-tokens.enc),
@@ -23,8 +23,8 @@ import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 
-import { writeFileAtomic } from "./atomic.ts";
-import type { VaultKeySource } from "./mcp/mcp-oauth.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import type { VaultKeySource } from "../mcp/mcp-oauth.ts";
 
 const FILE = "marketplace-tokens.enc";
 const AAD = Buffer.from("sagax marketplace-tokens v1");

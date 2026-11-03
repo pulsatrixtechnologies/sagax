@@ -1360,7 +1360,7 @@ import {
   selectBundledSkills,
   updateLibrarySkill,
 } from "./skills/skill-library.ts";
-import { InstallationPlugins } from "./installation-plugins.ts";
+import { InstallationPlugins } from "./plugins/installation-plugins.ts";
 import { PersonalSkills, createPersonalSkillRoutes } from "./skills/personal-skills.ts";
 import { createSkillShareRoutes } from "./routes/skill-share.ts";
 import { runSkillsLibraryBootSweep } from "./skills/skills-library-migration.ts";
@@ -1998,7 +1998,7 @@ import { createBrowserNetworkRoutes } from "./routes/browser-network.ts";
 import { createMyChromeRoutes } from "./routes/my-chrome.ts";
 import { createTeamLibraryGrokRoutes } from "./routes/team-library-grok.ts";
 import { createXaiMarketplaceRoutes } from "./routes/xai-marketplace.ts";
-import { XaiMarketplaceSource } from "./xai-marketplace.ts";
+import { XaiMarketplaceSource } from "./plugins/xai-marketplace.ts";
 import { MyChromeService } from "./browser/my-chrome/service.ts";
 import { hasShellOnThisComputer, MY_CHROME_SHELL_PROMPT } from "./browser/my-chrome/shell.ts";
 import {
@@ -2023,10 +2023,10 @@ import {
   planServerUpdate,
   updatedServerEntry,
   type MarketplaceViewer
-} from "./plugin-marketplaces.ts";
+} from "./plugins/plugin-marketplaces.ts";
 import { createAccountRoutes, type PerspicaxDeletion } from "./routes/account.ts";
 import { ACCOUNT_REAUTH_PATH, AccountReauth, perspicaxDeletion } from "./account-reauth.ts";
-import { createRegistrySearch } from "./plugin-registry.ts";
+import { createRegistrySearch } from "./plugins/plugin-registry.ts";
 import {
   BotPluginError,
   BotPlugins,
@@ -2040,7 +2040,7 @@ import {
   type MarketplacePolicy,
   type PluginContents
 } from "./bot-plugins.ts";
-import { pluginMetadataCacheRoot } from "./plugin-metadata-cache.ts";
+import { pluginMetadataCacheRoot } from "./plugins/plugin-metadata-cache.ts";
 import { pluginTurnInventory } from "./turns/plugin-turn.ts";
 import { orderedSkillDiscovery, skillDiscoveryAvailable, type DiscoveredSkill } from "./skills/skill-discovery.ts";
 import {
@@ -2059,7 +2059,7 @@ import { createBotCapabilitiesRoutes, type BotCapabilitiesAnswer } from "./route
 import { engineWorksInFiles, type BotCapabilities } from "../shared/capabilities.ts";
 import { reservedMcpName } from "../shared/mcp-reserved-names.ts";
 import { createBotPluginRoutes, createPersonalPluginRoutes } from "./routes/bot-plugins.ts";
-import { personalPluginStorage } from "./person-plugins.ts";
+import { personalPluginStorage } from "./plugins/person-plugins.ts";
 import { capabilityPrompt, capabilityPromptGroups } from "./capability-prompt.ts";
 import {
   pluginMcpPrecheck,
@@ -2100,7 +2100,7 @@ import { InstallationCapabilityStore } from "./installation-capability-store.ts"
 import { installationCapabilityBridge, makeInstallationCapabilityBridge, setInstallationCapabilityBridge } from "./installation-capability-bridge.ts";
 import { discoverBotPluginIds, discoverPersonIds, migrateCapabilitiesStores } from "./capabilities-store-migration.ts";
 import { OrgBotSecrets } from "./org/org-bot-secrets.ts";
-import { MarketplaceTokens } from "./marketplace-tokens.ts";
+import { MarketplaceTokens } from "./plugins/marketplace-tokens.ts";
 import { type GithubCredential } from "./github-access.ts";
 import {
   parsePersonalMcpInput,
@@ -9416,7 +9416,7 @@ if (skillsLibraryEnabled(cfg) && installationCapabilityBridge()) {
     console.error(`[skills-library] boot sweep failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
-// The installation's one marketplace list (server/plugin-marketplaces.ts):
+// The installation's one marketplace list (server/plugins/plugin-marketplaces.ts):
 // Capabilities installs a plugin from it for everyone (MCP servers and
 // skills) or for one bot (the whole plugin, server/bot-plugins.ts). Added
 // for everyone, it reads with the installation's token for it (an admin's,

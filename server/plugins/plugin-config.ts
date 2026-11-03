@@ -17,7 +17,7 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, st
 import { dirname, join, relative, sep } from "node:path";
 import { z } from "zod";
 
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 
 export const PLUGIN_CONFIG_MAX_FIELDS = 30;
 const KEY = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;

@@ -13,7 +13,7 @@
 //   POST   /api/bots/:id/plugins/install { marketplace, plugin }     install or update
 //   PATCH  /api/bots/:id/plugins/:key { enabled }
 //   PUT    /api/bots/:id/plugins/:key/config { values }   the plugin's declared
-//          fields (server/plugin-config.ts); a secret field answers 400 sensitive_field
+//          fields (server/plugins/plugin-config.ts); a secret field answers 400 sensitive_field
 //   DELETE /api/bots/:id/plugins/:key
 //
 // Reads need use on the bot; every change needs its owner or manage (an
@@ -23,7 +23,7 @@
 // A person without the Sagax permission `apps.ownIntegrations` reads the
 // listing with `canChange: false`, and every change answers that 403.
 import type { BotPluginError, BotPlugins, MarketplacePolicy } from "../bot-plugins.ts";
-import type { MarketplaceViewer, MarketplaceVisibility } from "../plugin-marketplaces.ts";
+import type { MarketplaceViewer, MarketplaceVisibility } from "../plugins/plugin-marketplaces.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

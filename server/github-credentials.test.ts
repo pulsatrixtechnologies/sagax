@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { GithubCredentials, LOCAL_OWNER, ORG_OWNER, parseCredentialChange, WORKSPACE_SCOPE } from "./github-credentials.ts";
-import { MarketplaceTokens } from "./marketplace-tokens.ts";
+import { MarketplaceTokens } from "./plugins/marketplace-tokens.ts";
 import { OrgGithubTokens } from "./org/org-github-tokens.ts";
 
 const ORG_A = "fake-org-alpha-token-1111";

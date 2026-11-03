@@ -666,7 +666,7 @@ decrypted is never overwritten.
 
 Plugin records share `server/capability-plugin-state.ts`. `BotPlugins` takes
 an optional scoped storage adapter; `personalPluginStorage`
-(`server/person-plugins.ts`) keeps its state and values encrypted and its
+(`server/plugins/person-plugins.ts`) keeps its state and values encrypted and its
 source files under that person's `capability-plugins/`. It writes no
 plaintext `state.json` or `config.json`. Credential selections use a
 `person:` namespace so a person and a bot with the same id cannot share a
@@ -6881,7 +6881,7 @@ had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.tes
   migration uses.
 - Plugins (`server/bot-plugins.ts`, `/api/bots/:id/plugins/*`): per bot, the
   owner or a person with manage changes them, use reads. One marketplace
-  list (`server/plugin-marketplaces.ts`, 2026-10-09) serves both install
+  list (`server/plugins/plugin-marketplaces.ts`, 2026-10-09) serves both install
   scopes of Connect apps: everyone (a plugin's MCP servers and skills,
   `/api/marketplaces`, `apps.marketplaces`) and one bot (the whole plugin,
   the scope toggle "For <bot>", `src/lib/plugin-scope.ts`). A member adds a
@@ -9492,7 +9492,7 @@ the person asked for are not views.
 
 ## Plugins parity 2F: configuration, data centers, link (2026-10-21)
 
-- Plugin configuration (`server/plugin-config.ts`): the `userConfig` fields a
+- Plugin configuration (`server/plugins/plugin-config.ts`): the `userConfig` fields a
   Claude Code plugin declares in `.claude-plugin/plugin.json`, filled per bot
   (`PUT /api/bots/:id/plugins/:key/config { values }`, owner or manager,
   `bot-plugins/<bot>/plugins/config.json` 0600). Values replace

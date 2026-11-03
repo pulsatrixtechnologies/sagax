@@ -30,15 +30,15 @@
 // environment the bot's store worked out (server/bot-plugins.ts: that bot's
 // token for the marketplace first, then the person's GitHub connection,
 // then the organization's tokens); the token itself stays per bot
-// (server/marketplace-tokens.ts), never here.
+// (server/plugins/marketplace-tokens.ts), never here.
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { guardedFetch } from "./public-fetch.ts";
-import { personalMcpHostRefusal } from "./person-connections.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { guardedFetch } from "../public-fetch.ts";
+import { personalMcpHostRefusal } from "../person-connections.ts";
 import { readPluginMcpServers } from "./plugin-mcp.ts";
 import {
   BotPluginError,
@@ -51,9 +51,9 @@ import {
   type GitSource,
   type MarketplacePolicy,
   type MarketplacePluginEntry,
-} from "./bot-plugins.ts";
-import type { StoredMcpServer } from "./mcp/mcp-registry.ts";
-import { parseSkillMd } from "../shared/skill-md.ts";
+} from "../bot-plugins.ts";
+import type { StoredMcpServer } from "../mcp/mcp-registry.ts";
+import { parseSkillMd } from "../../shared/skill-md.ts";
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const MAX_MARKETPLACES = 40;

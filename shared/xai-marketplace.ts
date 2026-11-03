@@ -1,6 +1,6 @@
 // The xAI Bot Marketplace (https://x.ai/bot/marketplace) as a source of bot
 // templates in Browse Bots (docs/xai-marketplace.md). The server reads the
-// public pages (server/xai-marketplace.ts, no sign-in: the pages are public)
+// public pages (server/plugins/xai-marketplace.ts, no sign-in: the pages are public)
 // and keeps them a few hours; this module holds the wire shapes, the look
 // and category mapping, and the conversion of one marketplace bot into an
 // ordinary Sagax package through the agent import (shared/grok-import.ts),

@@ -1,5 +1,5 @@
 // Private GitHub plugins and skills (server/github-access.ts,
-// server/bot-plugins.ts, server/marketplace-tokens.ts): a fake GitHub
+// server/bot-plugins.ts, server/plugins/marketplace-tokens.ts): a fake GitHub
 // answers 404 without a token and 200 with the right one; every refusal
 // names its real cause; the token rides a header, never the argv or a file;
 // a bot's own plugin skills, commands and agents reach its turns.
@@ -14,13 +14,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { githubAccessFailure, githubSkillFetch, probeGithubRepo, type GithubCredential } from "./github-access.ts";
 import { BotPluginError, BotPlugins, type GitRunner } from "./bot-plugins.ts";
 import { botPluginsWithMarketplaces } from "./testing/plugin-stores.ts";
-import { WORKSPACE_TOKEN_KEY } from "./marketplace-tokens.ts";
+import { WORKSPACE_TOKEN_KEY } from "./plugins/marketplace-tokens.ts";
 import { GithubCredentials } from "./github-credentials.ts";
 import { fetchSkillFromSource } from "./skills/skill-fetch.ts";
 import { pluginTurnFiles, pluginTurnPrompt } from "./turns/plugin-turn.ts";
 import { createBotPluginRoutes } from "./routes/bot-plugins.ts";
 import { createMarketplaceRoutes, type MarketplaceRouteDeps } from "./routes/marketplaces.ts";
-import { PluginMarketplaces } from "./plugin-marketplaces.ts";
+import { PluginMarketplaces } from "./plugins/plugin-marketplaces.ts";
 import { dispatchRoutes } from "./routes/table.ts";
 import { json, readBody } from "./harness/http.ts";
 import type { RequestAuth } from "./request-auth.ts";

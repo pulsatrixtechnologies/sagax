@@ -16,7 +16,7 @@ import type { BotZipHost } from "../bot-zip.ts";
 import { json, readBody } from "../harness/http.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { createBotZipRoutes, type BotZipAuditRow, type BotZipRouteDeps } from "./bot-zip.ts";
-import { XaiMarketplaceError } from "../xai-marketplace.ts";
+import { XaiMarketplaceError } from "../plugins/xai-marketplace.ts";
 import type { XaiMarketplaceBot } from "../../shared/xai-marketplace.ts";
 import { dispatchRoutes } from "./table.ts";
 

@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
-import type { PluginMarketplaces } from "../plugin-marketplaces.ts";
+import type { PluginMarketplaces } from "../plugins/plugin-marketplaces.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { createMarketplaceRoutes, type MarketplaceRouteDeps } from "./marketplaces.ts";
 import { dispatchRoutes } from "./table.ts";

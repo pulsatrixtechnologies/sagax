@@ -174,7 +174,7 @@ const GROK_KINDS = new Set(["grok", "grokAgent"]);
  *   Flow. Its skills are linked into its native skills folder.
  * - The other engines with files (Codex, Pi, Grok CLI, ...) get a plugin's
  *   skills, commands and agents named in the turn prompt with their path
- *   (server/plugin-turn.ts), and the bot's skills in the skills index.
+ *   (server/turns/plugin-turn.ts), and the bot's skills in the skills index.
  * - Engines without files (`grok`, `openai-compat`, `minimax`, `mistral`,
  *   `cerebras`, `groq`) get whole instruction files within a visible budget
  *   per plugin, skill or Flow capability (server/capability-prompt.ts),

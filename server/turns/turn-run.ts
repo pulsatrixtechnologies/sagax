@@ -1,4 +1,4 @@
-import type { EffortLevel, ModelSelection } from "../shared/wire.ts";
+import type { EffortLevel, ModelSelection } from "../../shared/wire.ts";
 
 /** What a turn ran on, stored on each bot text message it wrote. Optional on
  * the wire, so messages from before this field simply do not carry it. */

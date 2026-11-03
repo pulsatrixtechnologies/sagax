@@ -2,7 +2,7 @@
 // Capabilities migration). Before it, three rules disagreed: the
 // installation's servers (server/mcp/mcp-registry.ts), a person's own servers
 // (server/index.ts PERSONAL_MCP_RESERVED_PREFIX) and the turn's Connectors
-// record (server/turn-connectors.ts). A name one refused is now refused by
+// record (server/turns/turn-connectors.ts). A name one refused is now refused by
 // all three, the strictest rule kept:
 //   - the built-in names below;
 //   - the families sagax*, perspicax*, openmausbot*, claude_ai*, claude-ai-*,

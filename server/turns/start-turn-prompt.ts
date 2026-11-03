@@ -185,7 +185,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       }) },
       // 2026-10-30: the bot knows it is proactive, and how (server/proactive-wake.ts)
       { id: "proactive", label: "Proactive", text: proactivePrompt(proactiveModeFor(state.liveBot ?? state.bot)) },
-      // what this turn reaches, in one line: "what connectors do you have" needs no tool call (server/turn-reach.ts)
+      // what this turn reaches, in one line: "what connectors do you have" needs no tool call (server/turns/turn-reach.ts)
       { id: "reach", label: "Reach", text: turnReachPrompt(state.liveBot ?? state.bot, state.instance, state.speaker, state.threadId, state.integrations, Boolean(state.mountedComputer)) },
       { id: "browser", label: "Browser", text: state.integrations.browser ? BUILT_IN_BROWSER_SYSTEM_PROMPT + myChromePromptFor(state.bot, state.threadId) : "" },
       { id: "data", label: "Data", text: state.integrations.data ? BUILT_IN_DATA_SYSTEM_PROMPT : "" },

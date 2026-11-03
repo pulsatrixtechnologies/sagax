@@ -671,7 +671,7 @@ sur l'app au prochain audit.
 - Jamais après une question à la personne, une carte ou un widget à répondre, un arrêt,
   un échec, une routine, un tour entre bots, un appel vocal, une boucle que le garde de
   boucle traite, ni sur le tour déjà repris. Inscrit au journal des étapes
-  (`sagax.unfinished_turn`). Code : `server/unfinished-turn.ts`.
+  (`sagax.unfinished_turn`). Code : `server/turns/unfinished-turn.ts`.
 
 ### 2.21 Mémoire (page principale)
 

@@ -23,7 +23,7 @@ On `SIGTERM` / `SIGINT` (`server/graceful-shutdown.ts`, wired in
    ledgers) and exit.
 
 Runtime state is already durable on disk. Interrupted turns resume once
-at the next start (`server/interrupted-turns.ts`).
+at the next start (`server/turns/interrupted-turns.ts`).
 
 Raise `SAGAX_SHUTDOWN_DRAIN_MS` together with the container stop grace
 period (Compose `stop_grace_period`, k8s `terminationGracePeriodSeconds`)

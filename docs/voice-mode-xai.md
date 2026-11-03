@@ -756,7 +756,7 @@ and lines said meanwhile piled up. Now (`server/voice/voice-turn.ts`):
   its words cut, `expectedUtteranceId`), and a stale answer is still never
   spoken (the speech fence). Lines said while the bot cannot take them
   (a turn being stopped) wait in the queue, and every waiting line of the
-  same call drains as one turn (`callLineGroup`, server/steer-queue.ts)
+  same call drains as one turn (`callLineGroup`, server/turns/steer-queue.ts)
   that answers the newest, the earlier ones given as its context
   (`voiceQueuePrompt`). Every line stays in the conversation.
 - **Timings.** The Events lens line of each call turn names the model, the
@@ -767,7 +767,7 @@ and lines said meanwhile piled up. Now (`server/voice/voice-turn.ts`):
   (`audioTurnNotice`). The server log has `[voice-turn]` per dispatch.
 
 Tests: `server/voice/voice-turn.test.ts`, `server/model-auto.test.ts`
-(`pickVoiceModel`), `server/steer-queue.test.ts` (one call's lines),
+(`pickVoiceModel`), `server/turns/steer-queue.test.ts` (one call's lines),
 `server/voice/voice-fast-turn.e2e.test.ts` (fake Claude CLI: the fast model and
 short context in one warm session, the conversation's own session after,
 barge-in, no pile-up, a heavy request handed off).

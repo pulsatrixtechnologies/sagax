@@ -124,7 +124,7 @@ resuming the current session. A transient retry after a reset resumes the
 replacement session, not the abandoned one.
 
 ```sh
-pnpm exec vitest run server/drivers/claude.test.ts server/turn-context.test.ts server/resume-recovery.test.ts
+pnpm exec vitest run server/drivers/claude.test.ts server/turns/turn-context.test.ts server/resume-recovery.test.ts
 pnpm exec vitest run server/delta-context.e2e.test.ts -t "resets Claude's native context"
 ```
 

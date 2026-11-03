@@ -8,7 +8,7 @@
 //
 //   1. small text files are also given inline, so the bot reads them with no
 //      tool at all (images already reach vision models natively,
-//      server/turn-images.ts);
+//      server/turns/turn-images.ts);
 //   2. every file is copied, lazily (at the bot's first tool call), into the
 //      target: `/workspace/attachments/<name>` in the server environment, or
 //      the desktop app's own attachments folder on the person's computer;

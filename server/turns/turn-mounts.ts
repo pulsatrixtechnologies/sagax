@@ -4,11 +4,11 @@
 // integrations; the resolver calls the same ones to say what a bot
 // receives, so the list and the turn cannot drift (test "a turn mounts
 // exactly what the list says", server/capabilities.test.ts).
-import type { McpServerSpec } from "./contracts.ts";
-import { githubServersAsPerson, withGithubToken } from "./github-mcp-token.ts";
-import { personalAuthHeaders, type GithubConnection, type PersonalMcpServer } from "./person-connections.ts";
+import type { McpServerSpec } from "../contracts.ts";
+import { githubServersAsPerson, withGithubToken } from "../github-mcp-token.ts";
+import { personalAuthHeaders, type GithubConnection, type PersonalMcpServer } from "../person-connections.ts";
 import { claudePluginDirs } from "./plugin-turn.ts";
-import { reservedMcpName } from "../shared/mcp-reserved-names.ts";
+import { reservedMcpName } from "../../shared/mcp-reserved-names.ts";
 
 // ── this installation's MCP servers (config.json mcpServers) ─────────────
 

@@ -89,7 +89,7 @@ export type RuntimeEvent = RuntimeEventBase &
         /** A resumable terminal: the turn exhausted its model/tool budget,
          * and a structured handoff was persisted. The harness may start a
          * `Continue:` thread automatically; an assigned turn's requester gets
-         * the handoff with the stop instead (server/turn-continuation.ts). */
+         * the handoff with the stop instead (server/turns/turn-continuation.ts). */
         type: "cap.exhausted";
         /** Absolute path to the persisted handoff for the dead turn. */
         handoffPath: string;

@@ -55,7 +55,7 @@ import {
   typedCommandForTurn,
   unavailableCommandError,
 } from "../harness-commands.ts";
-import { recordHeldSteer } from "../held-steers.ts";
+import { recordHeldSteer } from "../turns/held-steers.ts";
 import { introAdvance } from "../intro-tour.ts";
 import { spokenLineFields } from "../voice/live-call-record.ts";
 import { cancelledChatFollowup } from "../message-db.ts";
@@ -86,9 +86,9 @@ import {
   queuedSteeredMessage,
   restoreHeldSteeredQueue,
   settleHeldSteeredQueue,
-} from "../steer-queue.ts";
+} from "../turns/steer-queue.ts";
 import { resolveAndSendTerminal } from "../terminal-requests.ts";
-import { extractTurnImages } from "../turn-images.ts";
+import { extractTurnImages } from "../turns/turn-images.ts";
 import {
   pinVoiceInterrupt,
   voiceFullDuplexEnabled,

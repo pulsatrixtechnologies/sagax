@@ -2,8 +2,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import type { RuntimeEvent } from "./contracts.ts";
-import type { Store } from "./store.ts";
+import type { RuntimeEvent } from "../contracts.ts";
+import type { Store } from "../store.ts";
 
 /**
  * Automatic continuity: when a turn ends without a final answer and the work

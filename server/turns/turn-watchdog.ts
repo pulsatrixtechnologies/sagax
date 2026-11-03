@@ -15,7 +15,7 @@
 // the turn's tools is still running the turn may stay silent for
 // `toolStallMs` instead: a hard bound of its own, so a tool that truly hangs
 // still ends the turn. Any event starts the silence over.
-import type { RuntimeEvent } from "./contracts.ts";
+import type { RuntimeEvent } from "../contracts.ts";
 
 export interface WatchedTurn {
   threadId: string;

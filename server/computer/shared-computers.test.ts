@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { provenRequestPerson, SharedComputers, sharedComputerScopeRefusal } from "./shared-computers.ts";
 import { SharedComputerControl } from "./shared-computer-control.ts";
-import { TurnResources } from "../turn-resources.ts";
+import { TurnResources } from "../turns/turn-resources.ts";
 
 const secret = "a".repeat(64);
 const other = "b".repeat(64);

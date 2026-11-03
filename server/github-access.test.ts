@@ -17,7 +17,7 @@ import { botPluginsWithMarketplaces } from "./testing/plugin-stores.ts";
 import { WORKSPACE_TOKEN_KEY } from "./marketplace-tokens.ts";
 import { GithubCredentials } from "./github-credentials.ts";
 import { fetchSkillFromSource } from "./skill-fetch.ts";
-import { pluginTurnFiles, pluginTurnPrompt } from "./plugin-turn.ts";
+import { pluginTurnFiles, pluginTurnPrompt } from "./turns/plugin-turn.ts";
 import { createBotPluginRoutes } from "./routes/bot-plugins.ts";
 import { createMarketplaceRoutes, type MarketplaceRouteDeps } from "./routes/marketplaces.ts";
 import { PluginMarketplaces } from "./plugin-marketplaces.ts";

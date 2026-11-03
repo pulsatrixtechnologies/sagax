@@ -618,7 +618,7 @@ sheet). Keep these rules, covered by `server/capabilities.test.ts`,
   one mount. Read library provenance even while the library is off. Flow
   name priority follows the actual bot folders passed to Claude, never an
   enabled record whose copy is missing.
-- The list and the turn use the same functions (`server/turn-mounts.ts`):
+- The list and the turn use the same functions (`server/turns/turn-mounts.ts`):
   `engineServerMcp` and `serverMcpAsPerson` (this installation's servers,
   `engineMcpServers` / `mcpServersAsPerson`), `personalMcpPrecheck` (the
   person's own servers, `mountPersonalMcp`), `perspicaxServerName`,
@@ -1565,7 +1565,7 @@ A bot repeated itself and answered late. The rules that keep it from doing so:
   bounded by `DRAIN_COALESCE_MAX_ITEMS`. Tests:
   `server/drain-coalescing-golden.test.ts`.
 - Text one turn already wrote (whitespace aside) is not written again in that
-  turn (server/turn-reply-repeats.ts); the next turn starts clean. Test:
+  turn (server/turns/turn-reply-repeats.ts); the next turn starts clean. Test:
   `server/turn-reply-repeat.e2e.test.ts`.
 - A requester reworks the same brief at most `MAX_REWORKS` (3) times and hands
   out at most `MAX_REQUESTS_PER_REQUESTER` (64) pieces of work over its life;
@@ -1611,7 +1611,7 @@ never "×2"; notices for different calls stay apart, each with its call.
 Tests: `server/host/loop-guard.test.ts` (the guard is the only writer, one
 call counts once, MCP calls by their failing start),
 `src/lib/step-label.test.ts`, `src/lib/step-group.test.ts`,
-`src/lib/activity-step-groups.test.ts`, `server/turn-watchdog.test.ts`.
+`src/lib/activity-step-groups.test.ts`, `server/turns/turn-watchdog.test.ts`.
 
 ## The person can always write (2026-10-29)
 
@@ -4354,7 +4354,7 @@ it for one of its bots.
 
 Decision: on an organization server every person's turn of a bot, in a 1:1
 or in a group, runs on a model the person who pays can run
-(`server/turn-model-routing.ts`, called by `speakerTurnSelection` in
+(`server/turns/turn-model-routing.ts`, called by `speakerTurnSelection` in
 `server/index.ts` for direct and room turns). Routines are not routed: they
 keep the owner's credentials and model.
 
@@ -4384,9 +4384,9 @@ keep the owner's credentials and model.
   approval (the person who pays decides with their own credentials); the
   bot's approval level must hold on that engine (`modelSwitchNeedsAsk`:
   Custom stays on its engine), as for Auto and the limit backup.
-- Tests: `shared/payable-model.test.ts`, `server/turn-model-routing.test.ts`,
+- Tests: `shared/payable-model.test.ts`, `server/turns/turn-model-routing.test.ts`,
   `server/model-auto.test.ts`, `server/principal-engine-logins.test.ts`,
-  `server/turn-run.test.ts`, `src/components/TurnRunLine.test.ts`, S4-9 in
+  `server/turns/turn-run.test.ts`, `src/components/TurnRunLine.test.ts`, S4-9 in
   `server/org/org-rights.e2e.test.ts` (another engine, starred model, a group).
 
 ## Per-bot runtime settings (2026-10-15)
@@ -6743,7 +6743,7 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
   message share 200 MiB and at most 32 images on every host
   (`IMAGE_AGGREGATE_MAX_BYTES`/`MESSAGE_IMAGE_MAX_COUNT` in
   `server/attachments.ts`, mirrored in `src/lib/composer-attachments.ts`,
-  enforced by `server/turn-images.ts` and refused before upload by
+  enforced by `server/turns/turn-images.ts` and refused before upload by
   `startAttachmentUpload` with a composer notice). Other files keep no
   message count. `attach_file` copies use the same per-kind ceilings. The exact-message
   POST may resolve a visible file to `/api/threads/<thread>/files/<opaque>`;
@@ -6765,7 +6765,7 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
   `server/threads/thread-files.e2e.test.ts`, `server/attachments-resume-org.e2e.test.ts`,
   `server/media-proxy.test.ts`, `src/components/AttachmentGallery.test.ts`,
   `src/components/bot-settings/FilesSection.media.dom.test.ts`,
-  `server/turn-images.test.ts`, `src/lib/attachment-uploads.test.ts`,
+  `server/turns/turn-images.test.ts`, `src/lib/attachment-uploads.test.ts`,
   `companion/test/proxy-response.test.ts`.
 - The desktop never reads or writes the app's own data, its cookies or the
   person's credential stores through the bridge.
@@ -6834,7 +6834,7 @@ had no gh. Keep these rules, each covered by `server/org/org-connections.e2e.tes
 (OC-1 to OC-9), `server/person-connections.test.ts`,
 `server/org/org-person-connections.test.ts`,
 `server/github-connect.test.ts`, `server/bot-plugins.test.ts`,
-`server/plugin-turn.test.ts`, `server/bot-plugin-act.test.ts`,
+`server/turns/plugin-turn.test.ts`, `server/bot-plugin-act.test.ts`,
 `server/sandbox/sandbox-stdio-mcp.test.ts`, `server/sandboxd.test.ts` or
 `src/components/settings/MyConnectionsSettings.test.ts`:
 
@@ -7127,7 +7127,7 @@ index omits skills. Tests: `src/lib/capabilities*.test.ts`,
 One rule, `reservedMcpName` (`shared/mcp-reserved-names.ts`), for this
 installation's servers (`server/mcp/mcp-registry.ts`), a person's own servers
 (`addPersonalMcpServer`, `personalMcpPrecheck`) and the turn's Connectors
-record (`server/turn-connectors.ts`): `mcp`, any name with `__`, the
+record (`server/turns/turn-connectors.ts`): `mcp`, any name with `__`, the
 built-in names and the families `sagax`, `perspicax`, `openmausbot`,
 `claude_ai`, `claude-ai-`/`claude-ai_` and `mcp`, with or without a
 separator (#695; since 2026-10-30 the strictest of the three former rules,
@@ -7687,7 +7687,7 @@ exported and read by older builds, no client reads it). Rules, covered by
   unread, no toast. The next turn starts a new engine session with the
   system prompt rebuilt as on every turn (memory, recall, roster), the
   summary and the latest turns, under `COMPACTED_PREAMBLE`
-  (`server/turn-context.ts`): a continuation, never "the user switched this
+  (`server/turns/turn-context.ts`): a continuation, never "the user switched this
   bot over to you".
 - `/compact` (the person's own) still writes a visible `kind: "compaction"`
   row; older threads may hold harness rows from before, which the web chat
@@ -7730,7 +7730,7 @@ up (cloud computer woken, three commands, text at +67 s). Rules:
   (one, or none, on a short thread); with nothing new since the last fold it
   re-applies that fold. The record is marked `stale` (kept across a retry or
   a restart). The turn starts a new session under
-  `PAUSED_PREAMBLE` (`server/turn-context.ts`): "resumed after a pause",
+  `PAUSED_PREAMBLE` (`server/turns/turn-context.ts`): "resumed after a pause",
   unfinished work only if the new message asks for it. No chat row. A
   prewarm of a stale thread is skipped (`prewarmRefusal` "stale session").
 - Small talk (`server/small-talk.ts` `isSmallTalk`: a greeting, thanks, a
@@ -7742,7 +7742,7 @@ up (cloud computer woken, three commands, text at +67 s). Rules:
   The standing rule rides `RUN_YOURSELF_PROMPT`: small talk calls no tool and
   never resumes earlier work; one line may name it and ask.
 - Tests: `server/stale-session.test.ts`, `server/small-talk.test.ts`,
-  `server/turn-context.test.ts`, the stale case of
+  `server/turns/turn-context.test.ts`, the stale case of
   `server/context-compaction.e2e.test.ts`, `sessionBytes` in
   `server/drivers/claude.test.ts`.
 

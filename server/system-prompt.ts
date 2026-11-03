@@ -39,7 +39,7 @@ export function userProfileSystemPrompt(profile?: { aboutMe?: string }): string 
  * turns of a voice call and the first written turn after it. The Auto
  * workspace rules (server/computer/auto-computer.ts) come and go with the bot's
  * Workspace setting and with who speaks; volatile, so neither relaunches. */
-// "reach" (server/turn-reach.ts) follows the speaker and what a feature
+// "reach" (server/turns/turn-reach.ts) follows the speaker and what a feature
 // opened for the conversation: volatile, so neither relaunches.
 // "goal" (server/solo-goal.ts) comes and goes with a 1:1 /goal: volatile,
 // so starting or finishing a goal never relaunches the engine.

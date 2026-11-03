@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
 
 // A turn stamps the model and effort it ran on onto the bot text it writes,
 // so the chat can say so under the reply. The stamp is an optional field of

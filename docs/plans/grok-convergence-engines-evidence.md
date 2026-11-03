@@ -17,7 +17,7 @@ not claim real provider or comparative Grok Bot qualification.
 | Declared MCP dependencies keep existing proxied path on API engines | plugin `.mcp.json` / plugin.json mcpServers sanitized into turn mounts; receipt MCP branch `proxied` when `customMcp` | e2e installs packing with `packing-track`; prompt and reach list it; `shared/capabilities.test.ts` |
 | Truthful supported/unsupported receipts | `engineReceipt` serves plugin skills/commands/agents as `prompt` when `skillDiscovery`; Flow remains `none` on non-Claude; tools-off / denied list stays `none` | e2e denied `skills_list` asserts `engine.skills === "none"` and no `promptIndex`; capabilities unit tests |
 | Turn connectors claim plugins only when delivery tools are allowed | `turnConnectorsFor` uses `skillDiscoveryAvailable(integrations.agents, toolScope)` and the same engine-scoped folders as the inventory (`enginePluginFolders`) | e2e asserts plugin connector present on allowed turn and absent after deny |
-| Native Claude plugin loading stays native (`--plugin-dir`) | `turnPluginDirs` / `claudePluginDirs` unchanged; inventory marks Claude plugin rows `native: true` | `server/plugin-turn.test.ts`; capabilities Claude cases; e2e Claude preview `skills: "native"` |
+| Native Claude plugin loading stays native (`--plugin-dir`) | `turnPluginDirs` / `claudePluginDirs` unchanged; inventory marks Claude plugin rows `native: true` | `server/turns/plugin-turn.test.ts`; capabilities Claude cases; e2e Claude preview `skills: "native"` |
 | Organization Flow engine decision preserved | `fileReceipt` for `flow` is Claude-native only; org folders filtered out of non-Claude inventory | capabilities tests; e2e asserts no served Flow on API |
 | `/skill` keeps inline for API/org; managed index still available when tools allow | comment + existing `skillCommandInline` path | existing `server/skill-command.test.ts` |
 | Engine switch preserves selected skill bytes | Same bot and thread: API primary -> fake Codex file engine; alias read, `skills_list` and the installed file on disk are byte-identical to the API read | `server/plugin-engine-continuity.e2e.test.ts` |
@@ -78,8 +78,8 @@ native Claude `--plugin-dir` loading and Flow receipts are unchanged.
 
 ```
 pnpm exec vitest run shared/capabilities.test.ts server/capabilities.test.ts \
-  server/plugin-metadata-cache.test.ts server/plugin-turn.test.ts \
-  server/skill-discovery.test.ts server/turn-connectors.test.ts \
+  server/plugin-metadata-cache.test.ts server/turns/plugin-turn.test.ts \
+  server/skill-discovery.test.ts server/turns/turn-connectors.test.ts \
   server/plugin-api-delivery.e2e.test.ts
 # 7 files, 58 tests passed
 
@@ -94,10 +94,10 @@ not run in this worker (root owns the integration gate).
 
 ```
 pnpm exec vitest run shared/capabilities.test.ts server/capabilities.test.ts \
-  server/plugin-metadata-cache.test.ts server/plugin-turn.test.ts \
+  server/plugin-metadata-cache.test.ts server/turns/plugin-turn.test.ts \
   server/bot-plugins.test.ts server/installation-plugins.test.ts \
   server/skill-discovery.test.ts server/skill-discovery.e2e.test.ts \
-  server/turn-connectors.test.ts server/workspace-files.test.ts \
+  server/turns/turn-connectors.test.ts server/workspace-files.test.ts \
   server/plugin-api-delivery.e2e.test.ts server/plugin-engine-continuity.e2e.test.ts
 # 12 files, 114 tests passed
 pnpm exec vitest run server/plugin-engine-continuity.e2e.test.ts   # 3 consecutive passes

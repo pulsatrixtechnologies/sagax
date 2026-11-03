@@ -26,7 +26,7 @@ import {
   type RosterMember,
 } from "../peer-roster.ts";
 import { requiresDecisionCard } from "../runtime/done-when.ts";
-import { queuedThreadPosition } from "../steer-queue.ts";
+import { queuedThreadPosition } from "../turns/steer-queue.ts";
 import type { InternalCapabilityView, InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
 

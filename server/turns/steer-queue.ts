@@ -17,17 +17,17 @@
 // stop-then-steer (queue a correction, hit Stop, the correction runs) is
 // the feature.
 
-import { newId } from "./contracts.ts";
-import { chatFollowups, saveChatFollowup, settleChatFollowups } from "./message-db.ts";
-import { drainCoalesceHead, WAITING_LINES_COALESCE_WINDOW_MS } from "./admission.ts";
-import { SAFE_POINT_NOTE } from "./safe-point-preempt.ts";
-import { spokenLineFields } from "./voice/live-call-record.ts";
-import { workOriginSchema, type WorkOrigin } from "./peer-provenance.ts";
-import { voiceQueuePrompt } from "./voice/voice-turn.ts";
-import type { ResolvedSender, SteerQueueReason } from "../shared/wire.ts";
-import type { BotRecord, Message } from "./store.ts";
-import type { TurnSpeaker } from "./engine-access.ts";
-import type { UsageTrigger } from "./usage-ledger.ts";
+import { newId } from "../contracts.ts";
+import { chatFollowups, saveChatFollowup, settleChatFollowups } from "../message-db.ts";
+import { drainCoalesceHead, WAITING_LINES_COALESCE_WINDOW_MS } from "../admission.ts";
+import { SAFE_POINT_NOTE } from "../safe-point-preempt.ts";
+import { spokenLineFields } from "../voice/live-call-record.ts";
+import { workOriginSchema, type WorkOrigin } from "../peer-provenance.ts";
+import { voiceQueuePrompt } from "../voice/voice-turn.ts";
+import type { ResolvedSender, SteerQueueReason } from "../../shared/wire.ts";
+import type { BotRecord, Message } from "../store.ts";
+import type { TurnSpeaker } from "../engine-access.ts";
+import type { UsageTrigger } from "../usage-ledger.ts";
 
 /** The slice of Store this module needs — narrow so tests can fake it. */
 export interface SteerStore {

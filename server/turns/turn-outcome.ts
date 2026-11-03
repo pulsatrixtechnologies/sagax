@@ -10,10 +10,10 @@
 // The harness (index.ts) folds runtime events into TurnStops, notes there why
 // it stops a turn itself, and reads it when a coordinated or delegated turn
 // settles; the wording is a pure function.
-import { errorTranscript } from "../shared/client-cancel.ts";
-import type { RuntimeEvent } from "./contracts.ts";
-import { buildTurnDigest, digestTools } from "./digest.ts";
-import type { Message } from "./store.ts";
+import { errorTranscript } from "../../shared/client-cancel.ts";
+import type { RuntimeEvent } from "../contracts.ts";
+import { buildTurnDigest, digestTools } from "../digest.ts";
+import type { Message } from "../store.ts";
 
 /** The longest cause an outcome repeats: a provider's HTML body or a stack
  * trace is cut, a sentence a requester acts on is not. */

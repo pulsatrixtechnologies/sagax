@@ -1,11 +1,11 @@
-import { transpileTs } from "./testing/transpile.ts";
+import { transpileTs } from "../testing/transpile.ts";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import vm from "node:vm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { RuntimeEvent } from "./contracts.ts";
+import type { RuntimeEvent } from "../contracts.ts";
 import { classifyContinuable, makeCapContinuationSubscriber, writeTurnHandoff } from "./turn-continuation.ts";
 
 let temp: string | undefined;
@@ -211,7 +211,7 @@ describe("makeCapContinuationSubscriber", () => {
 // can decide what to send next; where none is, the step cap continues the
 // work on its own as before, rather than leaving it stopped with no one told.
 describe("the harness's reportsToRequester", () => {
-  const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
   const from = source.indexOf("\nfunction reportsToRequester("), to = source.indexOf("\n/** Consume one delegated-turn watch");
   if (from < 0 || to <= from) throw new Error("reportsToRequester section moved");
   const code = transpileTs(source.slice(from, to));

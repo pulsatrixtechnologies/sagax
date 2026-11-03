@@ -58,7 +58,7 @@ import {
 import type { BotRecord, GroupRecord, Message } from "../store.ts";
 import { sectionKey } from "../store.ts";
 import { parseThreadOrganization } from "../threads/thread-folders.ts";
-import { extractTurnImages } from "../turn-images.ts";
+import { extractTurnImages } from "../turns/turn-images.ts";
 import { personDisplayName } from "../viewer-identity.ts";
 import { permissionRefusal } from "../../shared/permissions.ts";
 import type { GroupCommandRoute } from "../../shared/harness-commands.ts";

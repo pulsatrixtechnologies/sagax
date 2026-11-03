@@ -4,8 +4,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { FAKE_CLAUDE_CLI, QualServer, sleep, type ServerPaths } from "../scripts/qualification/harness.ts";
-import type { EngineProfile } from "../scripts/qualification/engines.ts";
+import { FAKE_CLAUDE_CLI, QualServer, sleep, type ServerPaths } from "../../scripts/qualification/harness.ts";
+import type { EngineProfile } from "../../scripts/qualification/engines.ts";
 import { heldSteersDir, listHeldSteers } from "./held-steers.ts";
 
 const fakeProfile: EngineProfile = {

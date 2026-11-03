@@ -10,9 +10,9 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { DATA_DIR } from "./config.ts";
-import { noteAtRestWrite, readAtRestTextSync, registerAtRestRoot, type ContentScope } from "./content-at-rest.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { DATA_DIR } from "../config.ts";
+import { noteAtRestWrite, readAtRestTextSync, registerAtRestRoot, type ContentScope } from "../content-at-rest.ts";
 
 export interface HeldSteer {
   botId: string;

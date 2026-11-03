@@ -17,7 +17,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { saveChatFollowup } from "./message-db.ts";
+import { saveChatFollowup } from "../message-db.ts";
 import {
   cancelSteeredMessage,
   drainSteeredMessages,
@@ -35,11 +35,11 @@ import {
   _queuedCount,
   type SteerStore,
 } from "./steer-queue.ts";
-import type { BotRecord, Message } from "./store.ts";
-import { freePortBlock } from "./testing/ports.ts";
+import type { BotRecord, Message } from "../store.ts";
+import { freePortBlock } from "../testing/ports.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
-const FAKE_CLI = join(SERVER_DIR, "testing", "fake-acp-cli.ts");
+const FAKE_CLI = join(SERVER_DIR, "..", "testing", "fake-acp-cli.ts");
 const PORT = await freePortBlock([0, 1]);
 const BASE = `http://127.0.0.1:${PORT}`;
 
@@ -832,8 +832,8 @@ describe("steer-queue e2e (fake ACP fleet)", () => {
     // acknowledgment, reproducing completion before sendTurn resolves.
     const prelude = join(home, "delayed-dispatch.mjs");
     writeFileSync(prelude, [
-      `import { ProviderRegistry } from ${JSON.stringify(pathToFileURL(join(SERVER_DIR, "harness/registry.ts")).href)};`,
-      `import { EventBus } from ${JSON.stringify(pathToFileURL(join(SERVER_DIR, "harness/bus.ts")).href)};`,
+      `import { ProviderRegistry } from ${JSON.stringify(pathToFileURL(join(SERVER_DIR, "..", "harness", "registry.ts")).href)};`,
+      `import { EventBus } from ${JSON.stringify(pathToFileURL(join(SERVER_DIR, "..", "harness", "bus.ts")).href)};`,
       'import { existsSync, writeFileSync } from "node:fs";',
       'import { randomUUID } from "node:crypto";',
       'let oldCompletion, receiptBus;',
@@ -923,8 +923,8 @@ describe("steer-queue e2e (fake ACP fleet)", () => {
     if (process.env.PATH) env.PATH = process.env.PATH;
     // Without SystemRoot, winsock fails to initialize in the child.
     if (process.env.SystemRoot) env.SystemRoot = process.env.SystemRoot;
-    child = spawn(process.execPath, ["--import", pathToFileURL(prelude).href, join(SERVER_DIR, "index.ts")], {
-      cwd: join(SERVER_DIR, ".."),
+    child = spawn(process.execPath, ["--import", pathToFileURL(prelude).href, join(SERVER_DIR, "..", "index.ts")], {
+      cwd: join(SERVER_DIR, "..", ".."),
       env,
       stdio: ["ignore", "pipe", "pipe"],
     });

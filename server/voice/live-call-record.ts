@@ -4,7 +4,7 @@
 // went live leaves one "call" row when it ends. Neither ever holds anything
 // said on the call beyond the requests the bot already received.
 //
-// server/steer-queue.ts imports this module at runtime, so keep it light: no
+// server/turns/steer-queue.ts imports this module at runtime, so keep it light: no
 // store, index or title machinery. Types come in as `import type`, the one
 // runtime import is the pure shared/live-call.ts (it imports nothing), and
 // everything that touches the store or makes a title (the excerpt, the

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeTurnConnectors } from "../shared/turn-connectors.ts";
+import { normalizeTurnConnectors } from "../../shared/turn-connectors.ts";
 import { turnConnectorsRecord } from "./turn-connectors.ts";
 
 const base = { at: 1, mounted: [], serverServers: [], personalServers: [], plugins: [], claudeAi: false, grokCloud: false };

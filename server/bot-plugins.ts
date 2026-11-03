@@ -3,7 +3,7 @@
 // Capabilities > Sources > Marketplaces); Sagax copies the plugins
 // the owner picks from there into the bot's own folder. Claude loads each
 // enabled folder with `--plugin-dir`. Every other engine gets the same
-// enabled skills and commands in the turn prompt (server/plugin-turn.ts).
+// enabled skills and commands in the turn prompt (server/turns/plugin-turn.ts).
 // Nothing here goes through a bot's shell: on an organization server the
 // host Bash is denied (withholdHostTools), so `claude plugin marketplace add`
 // typed by a bot could never run there, whatever SAGAX_CLAUDE_ALLOW says.

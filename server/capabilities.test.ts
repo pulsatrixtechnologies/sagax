@@ -4,7 +4,7 @@ import { basename } from "node:path";
 import type { McpServerSpec } from "./contracts.ts";
 import type { PersonalMcpServer } from "./person-connections.ts";
 import { listedMounts, resolveBotCapabilities, type CapabilityInputs } from "./capabilities.ts";
-import { engineServerMcp, perspicaxServerName, personalMcpPrecheck, serverMcpAsPerson, turnPluginPromptDirs } from "./turn-mounts.ts";
+import { engineServerMcp, perspicaxServerName, personalMcpPrecheck, serverMcpAsPerson, turnPluginPromptDirs } from "./turns/turn-mounts.ts";
 import { selectPluginScopes } from "./capability-plugin-mounts.ts";
 import { servedCapabilities } from "../shared/capabilities.ts";
 import { PERSPICAX_MCP_PREFIX, reservedMcpName } from "../shared/mcp-reserved-names.ts";

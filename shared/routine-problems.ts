@@ -1,6 +1,6 @@
 // The "Completed with problems" text of a routine run, as a person reads it.
 //
-// A teammate's failed work is told by its account (server/turn-outcome.ts):
+// A teammate's failed work is told by its account (server/turns/turn-outcome.ts):
 // the cause, what it did, then `Its last message, quoted: "<JSON string>"`.
 // That quote is data for prompts; shown as is, a person read literal `\n`,
 // `**` and an unclosed quote where the run's 1,000-character cut fell

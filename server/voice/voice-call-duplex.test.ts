@@ -19,7 +19,7 @@ import {
   discardSteeredQueue,
   hasQueuedSteeredMessages,
   queueSteeredMessage,
-} from "../steer-queue.ts";
+} from "../turns/steer-queue.ts";
 import { classifyVoiceIntent } from "../../src/lib/voice-mode/voice-topics.ts";
 
 describe("admitDuplexSend", () => {

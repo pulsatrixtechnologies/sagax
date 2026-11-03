@@ -138,7 +138,7 @@ it differs from the selected instance. Tasks from before the field existed fall
 back to the cursor map: a lone cursor that is ours keeps resuming, anything
 ambiguous replays. Ship this before item 7; a 40-message text replay is better
 than no context, and the rebuild path is where item 7 later plugs in.
-*(As built in #180: `engineIsFresh()` in `server/turn-context.ts`,
+*(As built in #180: `engineIsFresh()` in `server/turns/turn-context.ts`,
 `store.markTaskDispatched()`; the naive missing-cursor rule was tried first and
 failed the A → B → A case in manual testing.)*
 

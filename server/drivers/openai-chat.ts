@@ -25,7 +25,7 @@ import { outOfCreditsMessage } from "./engine-errors.ts";
 import { refusesRequestSize, RequestTooLargeError, sizeChange, smallerResend } from "./chat-size-limit.ts";
 import { requestTooLargeMessage } from "../../shared/request-too-large.ts";
 import { providerReplyCutMessage, providerReplyCutReason } from "../../shared/provider-reply-cut.ts";
-import { classifyContinuable, writeTurnHandoff } from "../turn-continuation.ts";
+import { classifyContinuable, writeTurnHandoff } from "../turns/turn-continuation.ts";
 import { DUPLEX_INTERRUPT_WAIT_MS } from "../voice/voice-call-duplex.ts";
 import { KEY_REJECTED_REASON, keyRejected, noteKeyAccepted, noteKeyRejected, rejectsKey } from "../key-rejections.ts";
 import { fullAccessActs } from "../approvals/full-access-gate.ts";

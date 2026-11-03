@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ModelSelection } from "../shared/wire.ts";
+import type { ModelSelection } from "../../shared/wire.ts";
 import { routeTurnModel, type TurnModelRoutingInput } from "./turn-model-routing.ts";
 
 const GROK: ModelSelection = { instanceId: "grok", model: "grok-4.7", effort: "xhigh" };

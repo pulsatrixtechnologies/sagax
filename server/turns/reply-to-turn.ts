@@ -7,7 +7,7 @@
 // `replyToId` (src/components/ReplyQuote.tsx); this only decides what the bot's
 // answer points at.
 
-import type { WireMessage } from "../shared/wire.ts";
+import type { WireMessage } from "../../shared/wire.ts";
 
 /** A line the person typed as part of a turn: their own text, not another
  * bot's relayed line (peerAsk) and not an event row. */

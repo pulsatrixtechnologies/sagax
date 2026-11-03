@@ -158,7 +158,7 @@ describe("titleLiveCall", () => {
 });
 
 describe("live-call-record.ts", () => {
-  // server/steer-queue.ts imports this module at runtime: the store, the
+  // server/turns/steer-queue.ts imports this module at runtime: the store, the
   // title machinery and the harness reach it only through injected deps.
   it("imports nothing but a pure shared leaf at runtime", () => {
     const source = readFileSync(new URL("./live-call-record.ts", import.meta.url), "utf8");

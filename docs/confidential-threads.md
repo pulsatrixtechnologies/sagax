@@ -9,7 +9,7 @@ land in a shared bot's memory, an export or an admin console.
 Code: `server/threads/confidential-threads.ts` (the rules), with the enforcement in
 `server/index.ts`, `server/bot-zip.ts`, `server/org/org-admin-files.ts`,
 `server/decision-log.ts`, `server/workspace-backup.ts`,
-`server/turn-log.ts`, `server/sandbox/user-sandbox-routing.ts`,
+`server/turns/turn-log.ts`, `server/sandbox/user-sandbox-routing.ts`,
 `server/runtime/store.ts` (`forgetThread`), `server/message-db.ts`,
 `server/engine-transcripts.ts` (the engines' own session files) and
 `server/routes/perspicax-tool-internal.ts`. Clients:

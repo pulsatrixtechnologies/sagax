@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { InstallationPlugins } from "./installation-plugins.ts";
 import { PluginMarketplaces } from "./plugin-marketplaces.ts";
 import { selectPluginScopes, pluginSpecOnComputer } from "./capability-plugin-mounts.ts";
-import { pluginTurnFiles, pluginTurnPrompt } from "./plugin-turn.ts";
+import { pluginTurnFiles, pluginTurnPrompt } from "./turns/plugin-turn.ts";
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 describe("complete organization plugin copies", () => {

@@ -761,7 +761,7 @@ import { limitFailoverText, resetClockText, type LimitFailoverLine } from "../sh
 import { isTechnicalNoticeName } from "../shared/chat-notices.ts";
 import { renewalPrompt, type RenewalStep } from "./context-renewal.ts";
 import { ModelCatalogStore } from "./model-catalog/catalog.ts";
-import { turnRunFor, type TurnRun } from "./turn-run.ts";
+import { turnRunFor, type TurnRun } from "./turns/turn-run.ts";
 import {
   attachmentsInText,
   autoModelRecord,
@@ -889,7 +889,7 @@ import {
   queuedThreadPosition,
   queueSteeredMessage,
   restoreSteeredMessages
-} from "./steer-queue.ts";
+} from "./turns/steer-queue.ts";
 import {
   parallelAdmission,
   parallelBlocked,
@@ -1037,7 +1037,7 @@ import { LiveCallController, LiveCallSignedOutError, type LiveSocket } from "./v
 import { recordLiveCall, spokenLineFields, titleLiveCall } from "./voice/live-call-record.ts";
 import { narrateTool, toUtterances } from "./tts/speech-text.ts";
 import { toolWorkingStep } from "./working-step.ts";
-import { autoRecallLogLine, turnStartLogLine } from "./turn-log.ts";
+import { autoRecallLogLine, turnStartLogLine } from "./turns/turn-log.ts";
 import {
   CONFIDENTIAL_CARD_REFUSED,
   CONFIDENTIAL_INCIDENT_TEXT,
@@ -1057,14 +1057,14 @@ import {
   perspicaxMemoryVerdict,
   pinPersonalScope
 } from "./threads/confidential-threads.ts";
-import { makeCapContinuationSubscriber } from "./turn-continuation.ts";
-import { TurnStops, stoppedTurnOutcome } from "./turn-outcome.ts";
+import { makeCapContinuationSubscriber } from "./turns/turn-continuation.ts";
+import { TurnStops, stoppedTurnOutcome } from "./turns/turn-outcome.ts";
 import {
   buildRecoveryText,
   buildTurnContext,
   engineIsFresh,
   replaysNatively
-} from "./turn-context.ts";
+} from "./turns/turn-context.ts";
 import { ReplayBuffer } from "./sse-replay.ts";
 import {
   Handoffs,
@@ -1077,15 +1077,15 @@ import {
   withUnseenMessages,
   type ContextMessage
 } from "./delta-context.ts";
-import { extractTurnImages } from "./turn-images.ts";
+import { extractTurnImages } from "./turns/turn-images.ts";
 import { fitTurnImagesForModel, modelImageCopyPath } from "./model-image.ts";
 import {
   callTitleExcerpt,
   threadTitlePrompt,
   type ThreadTitleSource
 } from "./threads/thread-title.ts";
-import { stallLimitMs, TurnWatchdog } from "./turn-watchdog.ts";
-import { TurnResources, type TurnOwner } from "./turn-resources.ts";
+import { stallLimitMs, TurnWatchdog } from "./turns/turn-watchdog.ts";
+import { TurnResources, type TurnOwner } from "./turns/turn-resources.ts";
 import {
   ensureWorkspace,
   ensureTaskWorkspace,
@@ -1202,7 +1202,7 @@ import { localVmStopReason, recordLocalVmIdleStop } from "./computer/local-vm-st
 import { LocalVmIdleTimer } from "./computer/local-vm-idle.ts";
 import { LocalVmLease, LocalVmLeasePool } from "./computer/local-vm-lease.ts";
 import { LocalVmSeatPool, type LocalVmSeatHolder } from "./computer/local-vm-seat-pool.ts";
-import { TurnReplyRepeats } from "./turn-reply-repeats.ts";
+import { TurnReplyRepeats } from "./turns/turn-reply-repeats.ts";
 import { dispatchLoopStop, makeLoopStopSubscriber } from "./loop-detector.ts";
 import {
   wireLoopGuard,
@@ -1230,7 +1230,7 @@ import * as vps from "./computer/vps-computer.ts";
 import { runAsRefusal, type RunAsChooser, type RunAsPerson } from "./routines/routine-run-as.ts";
 import type { RoutineScopeCaller, RoutineScopeDeps, RoutineScopeFacts } from "./routines/routine-scope.ts";
 import { recordRoutineChange, recordRoutineToggle, routineToggleForViewer } from "./routines/routine-chat-events.ts";
-import { botReplyQuoteId } from "./reply-to-turn.ts";
+import { botReplyQuoteId } from "./turns/reply-to-turn.ts";
 import { isTriggerSchedule } from "../shared/routines.ts";
 import {
   nextOccurrence,
@@ -1333,7 +1333,7 @@ import { normalizeAllowedRecipients, sendRecipientsAllowed } from "../shared/all
 import { standingGrantsAllowed } from "./custom-rules-org.ts";
 import { bindThreadLogCapProvider } from "./threads/thread-log-rotation.ts";
 import { listenWebhookIngress, resolveWebhookPublicUrl, type WebhookIngress } from "./webhook-ingress.ts";
-import { assertModelVariantSupported, memberTurnSelection } from "./member-turn.ts";
+import { assertModelVariantSupported, memberTurnSelection } from "./turns/member-turn.ts";
 import { WebhookManager } from "./webhooks.ts";
 import {
   cardStandingGrants,
@@ -1434,7 +1434,7 @@ import {
   guardTurnDispatch,
   isTurnAdmissionBlocked,
   isTurnEventQuarantined
-} from "./turn-dispatch-guard.ts";
+} from "./turns/turn-dispatch-guard.ts";
 import { createGracefulShutdown } from "./graceful-shutdown.ts";
 import {
   drainTurns,
@@ -1443,7 +1443,7 @@ import {
   takeInterruptedTurns,
   TURN_RESUME_PROMPT,
   type InterruptedTurn
-} from "./interrupted-turns.ts";
+} from "./turns/interrupted-turns.ts";
 import {
   clearHeldSteersForThread,
   joinHeldSteerTexts,
@@ -1452,7 +1452,7 @@ import {
   resumePromptWithHeld,
   takeHeldSteersForThread,
   takeRemainingHeldSteers
-} from "./held-steers.ts";
+} from "./turns/held-steers.ts";
 import { acquireDataDirLeaseForProcess } from "./data-dir-lease.ts";
 import {
   createWorkspaceAccess,
@@ -1615,7 +1615,7 @@ import {
   voiceUnseenBlock
 } from "./voice/voice-turn.ts";
 import { effortAcceptedByEngine, resolveEngineTurnEffort } from "../shared/ultracode-effort.ts";
-import { routeTurnModel, type TurnModelSwitch } from "./turn-model-routing.ts";
+import { routeTurnModel, type TurnModelSwitch } from "./turns/turn-model-routing.ts";
 import { effortAcceptedByModel, effortForModel } from "../shared/model-capabilities.ts";
 import { VoiceLatencyLog } from "./voice/voice-latency.ts";
 import {
@@ -1623,7 +1623,7 @@ import {
   noteTurnQueued,
   setTurnTimingWriter,
   turnTrace
-} from "./turn-trace.ts";
+} from "./turns/turn-trace.ts";
 import { unansweredCallMessage, VOICE_CALL_WATCHDOG_MS, voiceCallRecoveryPrompt } from "./voice/voice-call-watchdog.ts";
 import * as grokVoice from "./tts/grok.ts";
 import { realtimeUrl, WORK_TIMEOUT_MS as REALTIME_WORK_TIMEOUT_MS } from "./voice/realtime-call.ts";
@@ -1659,8 +1659,8 @@ import {
   reachContributions,
   reachSummaryPrompt,
   registerReachProvider
-} from "./turn-reach.ts";
-import { turnConnectorsRecord } from "./turn-connectors.ts";
+} from "./turns/turn-reach.ts";
+import { turnConnectorsRecord } from "./turns/turn-connectors.ts";
 import { remoteSessionReach } from "./remote-support/remote-session-reach.ts";
 import {
   commandListAccess,
@@ -1866,7 +1866,7 @@ import {
 } from "./approvals/approval-audience.ts";
 import { interBotWaiting } from "./approvals/inter-bot-approvals.ts";
 import { interBotConversations } from "./inter-bot-conversations.ts";
-import type { BotHost } from "./turn-route.ts";
+import type { BotHost } from "./turns/turn-route.ts";
 import { signInListWithOpenInvites, type OrgRole } from "./org/org-directory.ts";
 import { createOwnerAvatarRoute, OwnerIdentityStore, parseOwnerIdentityMessage } from "./owner-identity.ts";
 import {
@@ -2041,14 +2041,14 @@ import {
   type PluginContents
 } from "./bot-plugins.ts";
 import { pluginMetadataCacheRoot } from "./plugin-metadata-cache.ts";
-import { pluginTurnInventory } from "./plugin-turn.ts";
+import { pluginTurnInventory } from "./turns/plugin-turn.ts";
 import { orderedSkillDiscovery, skillDiscoveryAvailable, type DiscoveredSkill } from "./skill-discovery.ts";
 import {
   engineServerMcp,
   perspicaxServerName,
   personalMcpPrecheck,
   serverMcpAsPerson
-} from "./turn-mounts.ts";
+} from "./turns/turn-mounts.ts";
 import {
   resolveBotCapabilities,
   type CapabilityInputs,
@@ -2134,7 +2134,7 @@ import {
   defaultOrgTimeZone,
   hostTimeZone
 } from "./bot-settings.ts";
-import { turnClockEnabled, turnTimeZone, withTurnClock } from "./turn-clock.ts";
+import { turnClockEnabled, turnTimeZone, withTurnClock } from "./turns/turn-clock.ts";
 import { createComputerInputRoutes, createVmScreenshotRoute, type ComputerShell } from "./routes/computer-input.ts";
 import { createComputerTeachRoutes } from "./routes/computer-teach.ts";
 import { ComputerTeachRecordings } from "./computer/computer-teach.ts";
@@ -2350,7 +2350,7 @@ import {
   type PresenceView
 } from "../shared/presence.ts";
 import { NudgeCooldown, nudgeFrameAllowed, recordNudgeLine } from "./nudge.ts";
-import { createUnfinishedTurnGuard, decideUnfinishedTurn, unfinishedTurnPrompt, type UnfinishedKind } from "./unfinished-turn.ts";
+import { createUnfinishedTurnGuard, decideUnfinishedTurn, unfinishedTurnPrompt, type UnfinishedKind } from "./turns/unfinished-turn.ts";
 import { findPeopleDm, isPeopleDmParticipant, otherPerson, PEOPLE_DM_THREADS_HEADER, PeopleDmSelections, peopleDmForViewer, peopleDmRouteRefusal, peopleDmThreadUnreadPatch } from "./people-dms.ts";
 import { groupMemoryEnabled, groupMemorySystemPrompt, updateGroupMemory } from "./memory/group-memory.ts";
 import type { OrgRecord } from "./org/org-record.ts";
@@ -7279,7 +7279,7 @@ function messagesIntegration(botId: string, threadId: string, generation: string
 const imessageSender = createOsascriptSender();
 
 // ── Perspicax MCP for the person who speaks (slice 5) ─────────────────
-// perspicaxServerName: server/turn-mounts.ts (shared with the capabilities resolver)
+// perspicaxServerName: server/turns/turn-mounts.ts (shared with the capabilities resolver)
 /** The Perspicax user id of a principal of this organization, or null (the
  * operator, an interim or local principal, another issuer). */
 function perspicaxSubOf(principalId: string): string | null {
@@ -9639,7 +9639,7 @@ async function mountPersonalMcp(
   // (organization > Me); mountPluginMcp mounts it next.
   const orgClaimed = orgCapabilities.claimedNames(principalId);
   for (const [name, server] of Object.entries(servers)) {
-    // server/turn-mounts.ts, shared with the capabilities resolver: off, a
+    // server/turns/turn-mounts.ts, shared with the capabilities resolver: off, a
     // name the turn already has, a reserved name, no environment for a
     // command, no GitHub connection or token: not mounted
     const check = personalMcpPrecheck(name, server, { taken: (taken) => Object.hasOwn(integrations.custom ?? {}, taken) || orgClaimed.has(taken), hasEnvironment: Boolean(userSandbox), github });
@@ -16098,7 +16098,7 @@ function requestBehavior(value: unknown): "allow" | "deny" | "answer" | null {
 // the last settled assistant text per thread, so a "finished" notification
 // can carry what the bot actually said
 const lastReply = new Map<string, string>();
-/** Text one turn already wrote is not written again (server/turn-reply-repeats.ts). */
+/** Text one turn already wrote is not written again (server/turns/turn-reply-repeats.ts). */
 const turnReplyRepeats = new TurnReplyRepeats();
 /** Dated reads from a connected app during the current turn. */
 const appPiecesByThread = new Map<string, AppPiece[]>();
@@ -16464,7 +16464,7 @@ const stoppedTurns = new Map<string, string | undefined>();
 /** the model each thread's provider session announced in session.started,
  * so a fallback notice can name the model Auto is unavailable for */
 const sessionModelByThread = new Map<string, string>();
-/** The model and effort of each thread's latest dispatched turn (server/turn-run.ts). */
+/** The model and effort of each thread's latest dispatched turn (server/turns/turn-run.ts). */
 const turnRunByThread = new Map<string, TurnRun>();
 /** threads already told that the provider's reviewer never started */
 const nativeReviewNoticed = new Set<string>();
@@ -18592,7 +18592,7 @@ bus.subscribe((event: RuntimeEvent) => {
     const routedBy = routed && speaker && routed.botId === speaker.botId ? routed.routedBy : undefined;
     if (routedBy) routedRoomReplies.delete(event.threadId);
     // The quote chip above a 1:1 reply: which of the person's messages it
-    // answers, when that is worth showing (server/reply-to-turn.ts).
+    // answers, when that is worth showing (server/turns/reply-to-turn.ts).
     const quoteId = proven && !group && m.role === "bot" && m.kind === "text" && !m.replyToId
       ? botReplyQuoteId(store.messagesFor(event.threadId), owner?.messageId)
       : undefined;
@@ -20123,7 +20123,7 @@ bus.subscribe((event: RuntimeEvent) => {
       if (bot) {
         const resourceOwner = turnResourceOwners.get(event.threadId);
         const generation = directTurnGenerationByThread.get(event.threadId);
-        // A person waits on this turn in the chat (server/unfinished-turn.ts):
+        // A person waits on this turn in the chat (server/turns/unfinished-turn.ts):
         // read now, settleTrackedRequest forgets the request below.
         const personTurn = !internal && !routineRun && !routines?.runForThread(event.threadId) &&
           directRequestOwners.get(event.threadId)?.origin?.kind === "user";
@@ -21922,7 +21922,7 @@ function scheduleFinishUntilRound(botId: string, threadId: string, outcome: { ok
 const FINISH_UNTIL_RELAUNCH_DELAY_MS = 500;
 
 /** A person's turn that ended on an announcement with no tool call after it,
- * or on tool calls with nothing said (server/unfinished-turn.ts): continued
+ * or on tool calls with nothing said (server/turns/unfinished-turn.ts): continued
  * once with a short internal note, recorded in the step journal. One per
  * person's message; the continued turn is never continued again. */
 const unfinishedTurns = createUnfinishedTurnGuard();
@@ -28634,7 +28634,7 @@ function mcpServerBody(body: unknown): Record<string, unknown> {
 /** Configured MCP servers that may reach this bot's engine. While enrolled,
  * the organisation's allow-list filters them; config.json is never changed. */
 function engineMcpServers(bot: BotRecord, threadId?: string) {
-  // the selection is server/turn-mounts.ts engineServerMcp, which the
+  // the selection is server/turns/turn-mounts.ts engineServerMcp, which the
   // capabilities resolver (server/capabilities.ts) reads too
   const servers = engineServerMcp({
     configured: customMcpServers(cfg, bot.mcpServers),
@@ -28876,7 +28876,7 @@ function personIsOrgAdmin(principalId: string): boolean {
   const person = principals.byId(principalId);
   return person?.local === true || person?.orgRole === "admin";
 }
-/** The zone a turn's clock is told in (server/turn-clock.ts). */
+/** The zone a turn's clock is told in (server/turns/turn-clock.ts). */
 // The zone someone set for the speaker, the owner or the server; null when none
 // is set (the engine already sees the host clock, so no note is added then).
 function turnZoneFor(bot: { ownerUserId?: unknown }, speaker: TurnSpeaker): string | null {
@@ -29077,7 +29077,7 @@ function piLocalModel(selection: { instanceId: string; model?: string | null }):
 }
 /** #1137, #1154: the model a person's turn runs on, so every turn of a bot
  * (a group included) runs on an engine the person who pays can pay for
- * (server/turn-model-routing.ts has the order). Null when the bot's model
+ * (server/turns/turn-model-routing.ts has the order). Null when the bot's model
  * runs as it is, or nothing does (the access card then says what to do).
  * A routine never comes here: it runs on its owner's credentials. */
 function speakerTurnSelection(bot: BotRecord, speaker: TurnSpeaker): TurnModelSwitch | null {
@@ -29596,7 +29596,7 @@ function piLocalTurnAccess(bot: BotRecord, speaker: TurnSpeaker): TurnAccess {
  * runs on: the speaker's own subscription only (server/harness-connectors.ts).
  * `via` is the turn's access; without it (the prompt is built before the
  * access is materialized) the planned access stands in. */
-/** The reach section of a direct turn (server/turn-reach.ts): the servers,
+/** The reach section of a direct turn (server/turns/turn-reach.ts): the servers,
  * built-in places and provider lines this turn mounted, names only. */
 function turnReachPrompt(bot: BotRecord, instance: Parameters<typeof withholdHostToolsFor>[0] & { instanceId: string }, speaker: TurnSpeaker, threadId: string,
   integrations: NonNullable<SendTurnInput["integrations"]>, computer: boolean): string {
@@ -29636,7 +29636,7 @@ function turnReachPrompt(bot: BotRecord, instance: Parameters<typeof withholdHos
   });
 }
 
-/** The Connectors record of a direct turn (server/turn-connectors.ts): the
+/** The Connectors record of a direct turn (server/turns/turn-connectors.ts): the
  * servers this turn mounted by source, the person's own servers it could not
  * use, the bot's plugins and the speaker's own engine account connectors,
  * by the same payer-is-speaker rule as the reach section. Names only. */
@@ -47752,7 +47752,7 @@ async function runtimeDelegationStatus(taskId: string, from: BotRecord, fromThre
 }
 
 /** A quit, update or restart first lets the turns in progress finish, for
- * a bounded time (SAGAX_SHUTDOWN_DRAIN_MS, server/interrupted-turns.ts):
+ * a bounded time (SAGAX_SHUTDOWN_DRAIN_MS, server/turns/interrupted-turns.ts):
  * nothing new is dispatched meanwhile (routines paused, the coordinator
  * closed: a teammate turn that finishes keeps its result). A turn waiting
  * on a person's approval does not hold the stop. */

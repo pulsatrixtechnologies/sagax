@@ -1,12 +1,12 @@
 // The bot's Tailcat tools, named to the turn while a session is open
-// (server/turn-reach.ts): Grok, which defers MCP tools behind search_tool,
+// (server/turns/turn-reach.ts): Grok, which defers MCP tools behind search_tool,
 // then offers remote_session_snapshot and remote_session_exec directly, so
 // "check this computer" is one call. Owner-only (the contract in
 // turn-reach.ts): the speaker is the bot's owner and pays for the turn, never
 // in a room, and an unknown speaker gets nothing. Naming the tools grants
 // nothing: the approval rule (server/remote-support/remote-session-exec.ts) still decides.
 import type { RemoteSessionOs } from "../../shared/remote-session.ts";
-import type { ReachContext, ReachContribution } from "../turn-reach.ts";
+import type { ReachContext, ReachContribution } from "../turns/turn-reach.ts";
 
 export const REMOTE_SESSION_REACH_TOOLS = ["agents__remote_session_snapshot", "agents__remote_session_exec"] as const;
 

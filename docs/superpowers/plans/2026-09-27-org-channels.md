@@ -614,8 +614,8 @@ git commit -m "feat: list channel humans and bots separately"
 ### Task 10: Destination d'un tour
 
 **Files:**
-- Create: `server/turn-route.ts`
-- Test: `server/turn-route.test.ts`
+- Create: `server/turns/turn-route.ts`
+- Test: `server/turns/turn-route.test.ts`
 
 **Interfaces:**
 - Consumes: rien des tâches précédentes, à part le fait qu'un bot a maintenant un hôte
@@ -641,7 +641,7 @@ it("keeps a fleet bot on the fleet host", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm exec vitest run server/turn-route.test.ts`
+Run: `pnpm exec vitest run server/turns/turn-route.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: Write minimal implementation**
@@ -650,13 +650,13 @@ Fonction pure. Le champ bot `host` est ajouté au record avec défaut `{ kind: "
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/turn-route.test.ts`
+Run: `pnpm exec vitest run server/turns/turn-route.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/turn-route.ts server/turn-route.test.ts
+git add server/turns/turn-route.ts server/turns/turn-route.test.ts
 git commit -m "feat: route a bot turn to its chosen host"
 ```
 
@@ -698,7 +698,7 @@ Expected: FAIL
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/workers.test.ts server/turn-route.test.ts`
+Run: `pnpm exec vitest run server/workers.test.ts server/turns/turn-route.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -806,7 +806,7 @@ Quand le socket du worker se ferme pendant un tour, appeler `failTurn` et écrir
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/workers.test.ts server/turn-route.test.ts server/approvals/approval-audience.test.ts server/channel-membership.test.ts src/components/OwnerWait.test.ts src/components/OrgSidebar.test.ts src/components/OrgDirectory.test.ts`
+Run: `pnpm exec vitest run server/workers.test.ts server/turns/turn-route.test.ts server/approvals/approval-audience.test.ts server/channel-membership.test.ts src/components/OwnerWait.test.ts src/components/OrgSidebar.test.ts src/components/OrgDirectory.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**

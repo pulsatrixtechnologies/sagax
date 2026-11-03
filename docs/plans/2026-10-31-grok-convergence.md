@@ -77,7 +77,7 @@ same rule. The internal list uses the actual running engine, including a
 failover, rather than only the bot's saved selection.
 
 Verification: `server/skill-discovery.test.ts`,
-`server/skill-discovery.e2e.test.ts`, `server/plugin-turn.test.ts`,
+`server/skill-discovery.e2e.test.ts`, `server/turns/plugin-turn.test.ts`,
 the agents catalog wire goldens, `server/openai-tools.e2e.test.ts` and
 existing skill/workspace scope tests, including the organization room MCP
 fixture with different owner and speaker libraries.

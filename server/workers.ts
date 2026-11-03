@@ -1,6 +1,6 @@
 import type { RequestAuth } from "./request-auth.ts";
 import { PASS, type RouteHandler } from "./routes/table.ts";
-import { turnDestination, type BotHost } from "./turn-route.ts";
+import { turnDestination, type BotHost } from "./turns/turn-route.ts";
 import { isEffortLevel, type ModelSelection } from "../shared/wire.ts";
 
 /** One engine on a person's computer, as that computer published it. No keys. */

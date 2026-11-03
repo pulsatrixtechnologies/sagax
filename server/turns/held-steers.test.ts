@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { DATA_DIR } from "./config.ts";
+import { DATA_DIR } from "../config.ts";
 import {
   atRestInfoSync,
   noteAtRestWrite,
@@ -12,9 +12,9 @@ import {
   resetAtRestState,
   runAtRestMigration,
   setAtRestGrace,
-} from "./content-at-rest.ts";
-import { WORKSPACE_OWNER } from "./content-keys.ts";
-import { closeMessageDb, closeMessageSearch, configureContentEncryption } from "./message-db.ts";
+} from "../content-at-rest.ts";
+import { WORKSPACE_OWNER } from "../content-keys.ts";
+import { closeMessageDb, closeMessageSearch, configureContentEncryption } from "../message-db.ts";
 import {
   clearHeldSteers,
   clearHeldSteersForThread,

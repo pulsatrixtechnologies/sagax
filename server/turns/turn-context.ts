@@ -1,7 +1,7 @@
-import type { DriverKind } from "./contracts.ts";
-import { peerName } from "./peer-roster.ts";
-import { wrapUntrusted } from "../shared/safety-review.ts";
-import { replaysTranscriptNatively } from "./runtime/capabilities.ts";
+import type { DriverKind } from "../contracts.ts";
+import { peerName } from "../peer-roster.ts";
+import { wrapUntrusted } from "../../shared/safety-review.ts";
+import { replaysTranscriptNatively } from "../runtime/capabilities.ts";
 
 // Every driver built on createOpenAIChatRuntime gets its history via
 // SendTurnInput.transcript; the list lives in runtime/capabilities.ts.

@@ -1,4 +1,4 @@
-import { TurnResources, type TurnOwner } from "../turn-resources.ts";
+import { TurnResources, type TurnOwner } from "../turns/turn-resources.ts";
 
 /** A local desktop call competes with ordinary bot turns for the same screen.
  * Leases expire if Electron crashes; human takeover always wins renewal. */

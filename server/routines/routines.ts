@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { turnTrace } from "../turn-trace.ts";
+import { turnTrace } from "../turns/turn-trace.ts";
 import { readableRoutineProblems } from "../../shared/routine-problems.ts";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";

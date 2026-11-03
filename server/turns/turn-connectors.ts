@@ -2,8 +2,8 @@
 // the server mounted for this turn, sorted by where it comes from, plus what
 // the person set up that this turn could not use (to reconnect). Pure: the
 // caller hands every list it already holds when it builds the turn.
-import { PERSPICAX_MCP_PREFIX as PERSPICAX, reservedMcpName } from "../shared/mcp-reserved-names.ts";
-import { TURN_CONNECTORS_MAX, type TurnConnector, type TurnConnectors } from "../shared/turn-connectors.ts";
+import { PERSPICAX_MCP_PREFIX as PERSPICAX, reservedMcpName } from "../../shared/mcp-reserved-names.ts";
+import { TURN_CONNECTORS_MAX, type TurnConnector, type TurnConnectors } from "../../shared/turn-connectors.ts";
 
 export interface TurnConnectorsInput {
   at: number;

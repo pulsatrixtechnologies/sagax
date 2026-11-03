@@ -134,7 +134,7 @@ pick.
 
 A bot's own plugins reach its turns: Claude loads each enabled plugin with
 `--plugin-dir` (skills, commands, agents); every other workspace engine
-gets their paths in the turn prompt (`server/plugin-turn.ts`).
+gets their paths in the turn prompt (`server/turns/plugin-turn.ts`).
 
 ## Capability store shape (lot 5)
 

@@ -17,7 +17,7 @@ import {
   scheduleMetaRebuild,
   writePluginMetaCache,
 } from "./plugin-metadata-cache.ts";
-import { pluginTurnInventory } from "./plugin-turn.ts";
+import { pluginTurnInventory } from "./turns/plugin-turn.ts";
 
 const dirs: string[] = [];
 const temp = () => {

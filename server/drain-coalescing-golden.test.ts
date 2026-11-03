@@ -14,7 +14,7 @@ import {
   drainSteeredMessages,
   queueSteeredMessage,
   type SteerStore,
-} from "./steer-queue.ts";
+} from "./turns/steer-queue.ts";
 import {
   type ChannelQueueItem,
   _queuedChannelCount,

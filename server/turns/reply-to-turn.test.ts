@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { WireMessage } from "../shared/wire.ts";
+import type { WireMessage } from "../../shared/wire.ts";
 import { botReplyQuoteId } from "./reply-to-turn.ts";
 
 let sequence = 0;

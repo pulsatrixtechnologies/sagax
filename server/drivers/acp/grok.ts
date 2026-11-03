@@ -25,7 +25,7 @@ import { gateReadOnlyTools, grokApprovalGateEnabled } from "./grok-approval-gate
 import { knownGrokTools, knownGrokToolsSection, recordGrokToolUse, useToolName } from "./grok-tool-usage.ts";
 import { grokCatalogFor, grokCatalogSection, noteGrokAccountReach, rememberGrokCatalog } from "./grok-tool-catalog.ts";
 import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors.ts";
-import { turnReachFor } from "../../turn-reach.ts";
+import { turnReachFor } from "../../turns/turn-reach.ts";
 import { allowsTool, canUseMcpServer, narrowsNativeTools, parseToolScope } from "../../../shared/tool-scope.ts";
 import { grokAliasBase, grokToolNameProblem } from "../../mcp/mcp-tool-names.ts";
 

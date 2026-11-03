@@ -3,8 +3,8 @@
 // cap's handoff, and the turn's last message whole — never a bare "error".
 import { describe, expect, it } from "vitest";
 
-import type { RuntimeEvent } from "./contracts.ts";
-import type { Message } from "./store.ts";
+import type { RuntimeEvent } from "../contracts.ts";
+import type { Message } from "../store.ts";
 import { TurnStops, stoppedTurnOutcome } from "./turn-outcome.ts";
 
 const event = (fields: Record<string, unknown>): RuntimeEvent =>

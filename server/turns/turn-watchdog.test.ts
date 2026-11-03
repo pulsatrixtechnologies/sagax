@@ -1,12 +1,12 @@
 // Stall-watchdog contract: activity keeps a turn alive indefinitely, human
 // approvals pause the clock, silence past the ceiling stalls exactly once.
-import { transpileTs } from "./testing/transpile.ts";
+import { transpileTs } from "../testing/transpile.ts";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 
-import type { RuntimeEvent } from "./contracts.ts";
-import type { Message } from "./store.ts";
+import type { RuntimeEvent } from "../contracts.ts";
+import type { Message } from "../store.ts";
 import { TurnStops, stoppedTurnOutcome } from "./turn-outcome.ts";
 import { stallLimitMs, TurnWatchdog, type WatchedTurn } from "./turn-watchdog.ts";
 
@@ -204,7 +204,7 @@ describe("stallLimitMs", () => {
 // a bare "The coordinated turn was interrupted".
 describe("the stall handler", () => {
   function load(env: Record<string, string> = {}) {
-    const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+    const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8");
     const from = source.indexOf("\nconst TURN_STALL_MS"), to = source.indexOf("\nwatchdog.start();");
     if (from < 0 || to <= from) throw new Error("Stall handler section moved");
     const code = transpileTs(`${source.slice(from, to)}\nglobalThis.watchdog = watchdog;`);

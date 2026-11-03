@@ -1,8 +1,8 @@
 // #1137, #1154: which model a person's turn runs on, so every turn of a bot
 // (a group's included) runs on an engine the person who pays can pay for.
 // Pure: the server passes what it knows about access, sessions and picks.
-import type { ModelSelection } from "../shared/wire.ts";
-import { equivalentOfferedModel } from "../shared/payable-model.ts";
+import type { ModelSelection } from "../../shared/wire.ts";
+import { equivalentOfferedModel } from "../../shared/payable-model.ts";
 
 /** A turn that left the bot's model for one the person who pays can run. */
 export interface TurnModelSwitch {

@@ -367,7 +367,7 @@ export interface SendTurnInput {
    * folder each, already stripped of hooks, MCP and LSP servers. The Claude
    * driver loads each with --plugin-dir. Other drivers do not get these
    * folders; their turns read the same enabled skills and commands from the
-   * skills section of the prompt (server/plugin-turn.ts). */
+   * skills section of the prompt (server/turns/plugin-turn.ts). */
   pluginDirs?: string[];
   /** The person typed one of the engine's own slash commands
    * (shared/harness-commands.ts): `text` is that command line, verbatim.

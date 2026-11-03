@@ -10,10 +10,10 @@ import { dirname, extname, resolve } from "node:path";
 
 import { fromMarkdown } from "mdast-util-from-markdown";
 
-import { ATTACHMENTS_DIR, IMAGE_AGGREGATE_MAX_BYTES, imageMaxBytes, MESSAGE_IMAGE_MAX_COUNT } from "./attachments.ts";
-import { atRestSizeSync } from "./content-at-rest.ts";
-import type { TurnImageInput } from "./contracts.ts";
-import { decodeAttachmentAttribute } from "./message-file.ts";
+import { ATTACHMENTS_DIR, IMAGE_AGGREGATE_MAX_BYTES, imageMaxBytes, MESSAGE_IMAGE_MAX_COUNT } from "../attachments.ts";
+import { atRestSizeSync } from "../content-at-rest.ts";
+import type { TurnImageInput } from "../contracts.ts";
+import { decodeAttachmentAttribute } from "../message-file.ts";
 
 /** Matches the web and native composer policy: up to 32 pictures sharing
  * 200 MiB of stored bytes on every host. What a provider ingests is the

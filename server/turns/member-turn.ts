@@ -2,7 +2,7 @@
 // picker selection. 1:1 chat already does this; a missing `model` is
 // how Hermes hits OpenRouter (HTTP 401) and Qwen dies with Internal error
 // while Grok silently runs its cloud default.
-import { isModelVariant, type EffortLevel, type ModelSelection } from "./contracts.ts";
+import { isModelVariant, type EffortLevel, type ModelSelection } from "../contracts.ts";
 
 /** A choice saved while an engine was offline must not be silently ignored. */
 export function assertModelVariantSupported(

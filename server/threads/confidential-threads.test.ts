@@ -27,7 +27,7 @@ import { appendDecision, bindConfidentialDecisions, flushDecisionLog, readDecisi
 import { CaptureBuffer } from "../memory/memory-capture.ts";
 import { answerBotFiles, type BotFileRoot } from "../org/org-admin-files.ts";
 import { createPerspicaxToolInternalRoutes } from "../routes/perspicax-tool-internal.ts";
-import { turnStartLogLine } from "../turn-log.ts";
+import { turnStartLogLine } from "../turns/turn-log.ts";
 import { sandboxPrincipalForTurn } from "../sandbox/user-sandbox-routing.ts";
 import { confidentialBackupPath, confidentialRoster, rosterWithoutConfidentialContent, stripConfidentialMessages, CONFIDENTIAL_BACKUP_TITLE } from "../workspace-backup.ts";
 import { workspaceLocationsPrompt } from "../workspace.ts";

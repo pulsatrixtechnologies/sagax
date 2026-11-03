@@ -2,8 +2,8 @@
 import { createServer, type Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { GroqDriver } from "./drivers/groq.ts";
-import { recordEvents } from "./testing/events.ts";
+import { GroqDriver } from "../drivers/groq.ts";
+import { recordEvents } from "../testing/events.ts";
 import { buildTurnContext, engineIsFresh, replaysNatively } from "./turn-context.ts";
 
 type Body = { messages: Array<{ role: string; content: unknown }> };

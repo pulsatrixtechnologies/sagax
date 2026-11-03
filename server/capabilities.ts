@@ -7,14 +7,14 @@
 //
 // Pure: the stores are handed in (`CapabilityInputs`, filled by
 // server/index.ts). What a turn would mount comes from the same functions
-// the turn calls (server/turn-mounts.ts), so the list says what a turn gets
+// the turn calls (server/turns/turn-mounts.ts), so the list says what a turn gets
 // (server/capabilities.test.ts, "a turn mounts exactly what the list says").
 // Ids never reach a name: names are readable, keys are never shown.
 import { basename } from "node:path";
 import type { McpServerSpec } from "./contracts.ts";
 import type { GithubConnection, PersonalMcpServer } from "./person-connections.ts";
 import type { PluginContents } from "./bot-plugins.ts";
-import { engineServerMcp, perspicaxServerName, withoutHostCommands, personalMcpPrecheck, serverMcpAsPerson, turnPluginPromptDirs } from "./turn-mounts.ts";
+import { engineServerMcp, perspicaxServerName, withoutHostCommands, personalMcpPrecheck, serverMcpAsPerson, turnPluginPromptDirs } from "./turns/turn-mounts.ts";
 import { pluginMcpPrecheck, selectPluginScopes } from "./capability-plugin-mounts.ts";
 import {
   engineReceipt,

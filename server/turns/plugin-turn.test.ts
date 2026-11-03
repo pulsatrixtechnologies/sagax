@@ -3,10 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { BotPluginError, type GitRunner } from "./bot-plugins.ts";
-import { botPluginsWithMarketplaces } from "./testing/plugin-stores.ts";
+import { BotPluginError, type GitRunner } from "../bot-plugins.ts";
+import { botPluginsWithMarketplaces } from "../testing/plugin-stores.ts";
 import { claudePluginDirs, pluginTurnFiles, pluginTurnInventory, pluginTurnPrompt } from "./plugin-turn.ts";
-import { capabilityPrompt } from "./capability-prompt.ts";
+import { capabilityPrompt } from "../capability-prompt.ts";
 
 const dirs: string[] = [];
 const temp = () => {

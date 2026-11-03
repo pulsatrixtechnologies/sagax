@@ -15,7 +15,7 @@
 // to the person, a card or widget the person must answer, a stop, a failure,
 // a routine, a bot-to-bot turn or a loop the loop guard is handling.
 // Recorded in the step journal (tool `sagax.unfinished_turn`, class `guard`).
-import type { WireMessage as Message } from "../shared/wire.ts";
+import type { WireMessage as Message } from "../../shared/wire.ts";
 
 export type UnfinishedKind = "announced" | "after_tools";
 

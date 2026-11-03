@@ -1,4 +1,5 @@
 /** ACP turn prompt phase: build prompt, send, continue, settle success. */
+import { fitPromptBytes } from "./prompt-fit.ts";
 import { joinCachePrime } from "../../voice-first-sentence.ts";
 import {
   deletePromptSplitReceipt, promptHalves, readPromptSplitReceipt, splitSessionPrompt, writePromptSplitReceipt,
@@ -117,11 +118,16 @@ if (halves.stable !== null) {
   // Visible to finishAcpTurnError if sendPrompt throws before this phase returns.
   ctx.pendingSplitReceipt = pendingSplitReceipt;
 }
-const text = support.buildPromptText
+const composedText = support.buildPromptText
   ? support.buildPromptText(promptInput)
   : promptInput.system
     ? `${promptInput.system}\n\n${promptInput.text}`
     : promptInput.text;
+// 2026-11-02: under the size the agent takes whole, so nothing is moved to
+// a file the bot cannot read (prompt-fit.ts)
+const fitted = fitPromptBytes(composedText, support.promptByteLimit);
+if (fitted.cut) console.info(`[acp] ${DRIVER_KIND} prompt shortened by ${fitted.cut} bytes to fit ${support.promptByteLimit} (thread ${threadId})`);
+const text = fitted.text;
 const imageBlocks = support.images === true && runtimeAcceptsImages
   ? await readAcpImageBlocks(turn.images ?? [])
   : [];

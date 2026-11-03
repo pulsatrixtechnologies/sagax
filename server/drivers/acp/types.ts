@@ -377,6 +377,9 @@ export interface AcpSupport {
   describeAccountError?(code: AccountErrorCode, model?: string): string;
   /** Compose the session/prompt text. Default prepends the persona. */
   buildPromptText?(turn: SendTurnInput): string;
+  /** The largest session/prompt text the agent takes whole (Grok moves a
+   * larger one to a file on the server: drivers/acp/prompt-fit.ts). */
+  promptByteLimit?: number;
   /** A standing line appended to the stable system half (and the full
    * system prompt), delivered with it once per native session. */
   stableSystemHint?: string;

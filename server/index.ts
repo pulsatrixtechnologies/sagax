@@ -76,6 +76,7 @@ import {
   takeSafetyNote
 } from "./safety-review.ts";
 import { writeFileAtomic } from "./atomic.ts";
+import { hideServerPathsInSections } from "./server-path-prompt.ts";
 import { rm as removeDirectory } from "node:fs/promises";
 import { hostname, userInfo } from "node:os";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -10704,7 +10705,7 @@ function previewSystemPrompt(bot: BotRecord, principal?: string) {
     browserOn: caps?.browserMcp === true && builtInBrowserEnabled(cfg) && bot.browser !== false
   });
   const privateWorkspace = instance && supportsWorkspaceFiles(instance.driverKind);
-  const built = buildSystemPrompt(persona, bot.soul ?? "", [
+  const previewParts = [
     { id: "finish-until", label: "Do not finish until", text: finishUntilPrompt(bot.finishUntil) },
     { id: "user-profile", label: "About the user", text: userProfileSystemPrompt(botUserProfile(bot)) },
     {
@@ -10741,7 +10742,11 @@ function previewSystemPrompt(bot: BotRecord, principal?: string) {
     { id: "host-tools", label: "Host tools", text: instance && withholdHostToolsFor(instance) ? WITHHELD_HOST_TOOLS_PROMPT : "" },
     { id: "docs", label: "Documents index", text: docsIndexPrompt(bot.id, { tools: agentsMounted ? "agents" : privateWorkspace ? "files" : "none" }) },
     { id: "skills", label: "Skills index", text: scopedSkillsPrompt(bot, instance, principal, { managedTools: skillDiscoveryAvailable(agentsMounted, bot.toolScope), fileAccess: Boolean(privateWorkspace) })?.text ?? "" },
-  ], instance?.driverKind === "claudeAgent" ? CLAUDE_REUSE_VOLATILE_SECTIONS : undefined);
+  ];
+  // 2026-11-02: the preview names no server path where the turn would not
+  // (server/server-path-prompt.ts)
+  const previewHidden = instance && withholdHostToolsFor(instance) ? hideServerPathsInSections(previewParts, serverPathView(bot.id)).sections : previewParts;
+  const built = buildSystemPrompt(persona, bot.soul ?? "", previewHidden, instance?.driverKind === "claudeAgent" ? CLAUDE_REUSE_VOLATILE_SECTIONS : undefined);
   const totalBytes = built.sections.reduce((n, s) => n + s.bytes, 0);
   return {
     sections: built.sections,
@@ -22732,6 +22737,18 @@ setMisuseOwnPaths(({ principalId, botId }) => {
   const spelled = roots.flatMap((root) => (real !== DATA_DIR && root.startsWith(`${DATA_DIR}/`) ? [root, real + root.slice(DATA_DIR.length)] : [root]));
   return { roots: spelled, attachmentsDir: ATTACHMENTS_DIR };
 });
+
+/** 2026-11-02: the server's data folder and this bot's workspace, as
+ * written and through a linked data folder, for a prompt that must name no
+ * path of the server (server/server-path-prompt.ts). */
+function serverPathView(botId: string): { dataDirs: string[]; botWorkspaces: string[] } {
+  let real = DATA_DIR;
+  try { real = realpathSync(DATA_DIR); } catch { /* not created yet */ }
+  const dataDirs = real === DATA_DIR ? [DATA_DIR] : [DATA_DIR, real];
+  const workspace = workspaceDir(botId);
+  const botWorkspaces = real !== DATA_DIR && workspace.startsWith(`${DATA_DIR}/`) ? [workspace, real + workspace.slice(DATA_DIR.length)] : [workspace];
+  return { dataDirs, botWorkspaces };
+}
 
 /** 2026-11-02: this bot's own folders on the Sagax server (its workspace
  * and its task workspaces), as written and through a linked data folder.
@@ -46654,6 +46671,8 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   workplaceTurnText,
   workspaceCwdPrompt,
   workspaceLocationsPrompt,
+  sandboxFolderFor: (botId: string) => (userSandbox ? sandboxBotFolder(botId) : null),
+  serverPathView,
   workspaceMaintenance
 });
 
@@ -47131,6 +47150,8 @@ const startTurnRunner = createStartTurn({
   workplaceTurnText,
   workspaceCwdPrompt,
   workspaceLocationsPrompt,
+  sandboxFolderFor: (botId: string) => (userSandbox ? sandboxBotFolder(botId) : null),
+  serverPathView,
   workspaceMaintenance
 });
 

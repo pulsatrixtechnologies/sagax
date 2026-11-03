@@ -1294,7 +1294,7 @@ export interface AppState {
   routinesLoadState: "loading" | "ready" | "error";
   /** 2026-10-28: each bot's routine folders in order (shared/routine-folders.ts). */
   routineFolders: Record<string, string[]>;
-  routinesFocus: { section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; runId?: string; nonce: number };
+  routinesFocus: { section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; runId?: string; /** Opens this routine's editor in the side panel. */ editRoutineId?: string; nonce: number };
   /** The Code section (src/components/code/CodePage.tsx): the run it opens,
    * or the list when none. */
   codeFocus: { runId?: string; nonce: number };
@@ -1571,7 +1571,7 @@ export type Action =
   | { type: "sidebarHidden"; keys: ReadonlySet<string> }
   | { type: "sections"; sections: string[] }
   | { type: "sectionDeleted"; section: string; sections: string[] }
-  | { type: "showRoutines"; section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; runId?: string }
+  | { type: "showRoutines"; section?: "schedule" | "logs" | "webhooks"; view?: "calendar" | "list"; botId?: string; routineId?: string; runStatus?: RoutineRunStatusFilter; runId?: string; editRoutineId?: string }
   | { type: "showTeamMap" }
   /** The Code section: the list, or one run when `runId` is set. */
   | { type: "showCode"; runId?: string }

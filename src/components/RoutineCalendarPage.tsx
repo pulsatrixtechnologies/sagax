@@ -2542,6 +2542,16 @@ export function RoutinesPage({ onBack: _onBack, onOpenRoom, embedded = false, fi
     const run = runId ? scopedRuns.find((candidate) => candidate.id === runId) ?? state.routineRuns.find((candidate) => candidate.id === runId) : undefined;
     if (run) openRun(run);
   }, [state.routinesFocus, state.routineRuns.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 2026-11-02: Configuration in a run's ⋯ menu opens the routine's editor
+  // in the side panel (a routine is edited there).
+  useEffect(() => {
+    const editId = state.routinesFocus?.editRoutineId;
+    const routine = editId ? scopedRoutines.find((candidate) => candidate.id === editId) ?? state.routines.find((candidate) => candidate.id === editId) : undefined;
+    if (!routine) return;
+    setSelected(null);
+    setPausedOpen(false);
+    setEditor({ kind: "routine", at: routineEditorAt(routine), durationMinutes: routine.durationMinutes, botIds: [routine.botId], routine });
+  }, [state.routinesFocus, state.routines.length > 0]); // eslint-disable-line react-hooks/exhaustive-deps
   const macInset = capabilities.windowChrome === "mac-inset";
   const windowDragStyle = macInset
     ? ({ WebkitAppRegion: "drag" } as CSSProperties)

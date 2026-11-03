@@ -85,6 +85,7 @@ function Ready() {
               onStop={live ? () => {} : undefined}
               onRunAgain={live ? undefined : () => {}}
               onLogs={() => {}}
+              onOpenConfiguration={() => {}}
             />
           )}
         </ExchangeColumnProvider>

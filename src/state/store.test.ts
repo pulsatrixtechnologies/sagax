@@ -1524,6 +1524,13 @@ describe("routine receipt retention", () => {
     expect(failures.routinesFocus).toEqual({ section: "logs", view: undefined, botId: undefined, routineId: undefined, nonce: 2 });
   });
 
+  it("a run's Configuration opens that routine's editor, and a later visit does not reopen it", () => {
+    const edit = reducer(initialState, { type: "showRoutines", editRoutineId: "routine-1" });
+    expect(edit.activeView).toBe("routines");
+    expect(edit.routinesFocus.editRoutineId).toBe("routine-1");
+    expect(reducer(edit, { type: "showRoutines" }).routinesFocus.editRoutineId).toBeUndefined();
+  });
+
   it("carries the problems filter from the errors pill and drops it on a plain visit", () => {
     const focused = reducer(initialState, { type: "showRoutines", section: "logs", runStatus: "problems" });
     expect(focused.routinesFocus).toEqual({ section: "logs", view: undefined, botId: undefined, routineId: undefined, runStatus: "problems", nonce: 1 });

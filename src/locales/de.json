@@ -1856,5 +1856,15 @@
   "routineEditor.summary.mailTag": "Mail-Tag +{tag}",
   "routines.postResults.hint": "Aus: Jeder Lauf bleibt im Hintergrund.",
   "scheduleEditor.alsoAt": "Auch um",
-  "scheduleEditor.moreTimesAdvanced": "+{count} weitere unter Erweitert"
+  "scheduleEditor.moreTimesAdvanced": "+{count} weitere unter Erweitert",
+  "routines.group.label": "Gruppieren nach",
+  "routines.group.bot": "Bot",
+  "routines.group.folder": "Ordner",
+  "routines.group.none": "Keine",
+  "routines.group.noFolder": "Kein Ordner",
+  "routines.group.unknownBot": "Anderer Bot",
+  "routines.group.running": "{count} laufen",
+  "routines.group.failing": "{count} fehlerhaft",
+  "routines.group.botMenu": "Mehr für {name}",
+  "routines.group.newFor": "Neue Routine für {name}"
 }

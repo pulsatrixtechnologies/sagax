@@ -1838,5 +1838,15 @@
   "routineEditor.summary.mailTag": "Etiqueta de correo +{tag}",
   "routines.postResults.hint": "Desactivado, cada ejecución queda en segundo plano.",
   "scheduleEditor.alsoAt": "También a las",
-  "scheduleEditor.moreTimesAdvanced": "+{count} más en Avanzado"
+  "scheduleEditor.moreTimesAdvanced": "+{count} más en Avanzado",
+  "routines.group.label": "Agrupar por",
+  "routines.group.bot": "Bot",
+  "routines.group.folder": "Carpeta",
+  "routines.group.none": "Ninguno",
+  "routines.group.noFolder": "Sin carpeta",
+  "routines.group.unknownBot": "Otro bot",
+  "routines.group.running": "{count} en curso",
+  "routines.group.failing": "{count} con fallos",
+  "routines.group.botMenu": "Más para {name}",
+  "routines.group.newFor": "Nueva rutina para {name}"
 }

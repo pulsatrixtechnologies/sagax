@@ -1859,7 +1859,17 @@
       "routineEditor.summary.mailTag": "c4ac6b36b65ca903cc0d182eef6e2ae42bde8a5a7cd7d2b64b4ef3635baaaafd",
       "routines.postResults.hint": "b6c98c1a67574f9cfba5aad861f8393a44253c234b23c0c27818316ff04e2bc8",
       "scheduleEditor.alsoAt": "0e05e41b136b061c71b519cfa92a5d38e4bac3919dff3eac9258b990d7bbc420",
-      "scheduleEditor.moreTimesAdvanced": "1cdbb275037cbb74f4c0f50a025eb03bade204adf887fdacd1b03664a6d5eaf2"
+      "scheduleEditor.moreTimesAdvanced": "1cdbb275037cbb74f4c0f50a025eb03bade204adf887fdacd1b03664a6d5eaf2",
+      "routines.group.label": "956a51f6b098a41b7c3108015f0790bb24af7693717b07cee39d5df6a5da1826",
+      "routines.group.bot": "41e35ba1a1fd8b4cdc7f899b3b8f9442a7542f445170e8782e219732cc25c10f",
+      "routines.group.folder": "74ccd43303847f2655300641a934959cdb11689ce171aa0f00faa92917fbd340",
+      "routines.group.none": "dc937b59892604f5a86ac96936cd7ff09e25f18ae6b758e8014a24c7fa039e91",
+      "routines.group.noFolder": "ca98f4c7bf9dab8a67b8678ce3f696bbf6abdfad313f89e958e93b19eeb31465",
+      "routines.group.unknownBot": "bedd292cf360b1a3b730ac2ba245dcb5cf9a043b882029000ff502abf6ba7a4e",
+      "routines.group.running": "759e5538d8b58cae4de1c25e1540c3425d21da65cdee2e5680c85bb26dd408e4",
+      "routines.group.failing": "502f2792b30e6e9518b4023c59904ac6eba8aa1162995a8700c08089f1ebb53d",
+      "routines.group.botMenu": "f608d3348f5f91d57ab2cce10e8532510658d5773ef01d01cad83396e652c1b3",
+      "routines.group.newFor": "7c2c9e425f6f855d22ab990933619cc79184cf7a37dd40361cf7c9e4a6f4789b"
     },
     "es": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -3701,7 +3711,17 @@
       "routineEditor.summary.mailTag": "c4ac6b36b65ca903cc0d182eef6e2ae42bde8a5a7cd7d2b64b4ef3635baaaafd",
       "routines.postResults.hint": "b6c98c1a67574f9cfba5aad861f8393a44253c234b23c0c27818316ff04e2bc8",
       "scheduleEditor.alsoAt": "0e05e41b136b061c71b519cfa92a5d38e4bac3919dff3eac9258b990d7bbc420",
-      "scheduleEditor.moreTimesAdvanced": "1cdbb275037cbb74f4c0f50a025eb03bade204adf887fdacd1b03664a6d5eaf2"
+      "scheduleEditor.moreTimesAdvanced": "1cdbb275037cbb74f4c0f50a025eb03bade204adf887fdacd1b03664a6d5eaf2",
+      "routines.group.label": "956a51f6b098a41b7c3108015f0790bb24af7693717b07cee39d5df6a5da1826",
+      "routines.group.bot": "41e35ba1a1fd8b4cdc7f899b3b8f9442a7542f445170e8782e219732cc25c10f",
+      "routines.group.folder": "74ccd43303847f2655300641a934959cdb11689ce171aa0f00faa92917fbd340",
+      "routines.group.none": "dc937b59892604f5a86ac96936cd7ff09e25f18ae6b758e8014a24c7fa039e91",
+      "routines.group.noFolder": "ca98f4c7bf9dab8a67b8678ce3f696bbf6abdfad313f89e958e93b19eeb31465",
+      "routines.group.unknownBot": "bedd292cf360b1a3b730ac2ba245dcb5cf9a043b882029000ff502abf6ba7a4e",
+      "routines.group.running": "759e5538d8b58cae4de1c25e1540c3425d21da65cdee2e5680c85bb26dd408e4",
+      "routines.group.failing": "502f2792b30e6e9518b4023c59904ac6eba8aa1162995a8700c08089f1ebb53d",
+      "routines.group.botMenu": "f608d3348f5f91d57ab2cce10e8532510658d5773ef01d01cad83396e652c1b3",
+      "routines.group.newFor": "7c2c9e425f6f855d22ab990933619cc79184cf7a37dd40361cf7c9e4a6f4789b"
     },
     "fr": {
       "access.addKey": "8a9f02fd9bdb83ac02d3240dcade949d6f3ffa2fc0b3df528e348bb4d29ae639",
@@ -16550,7 +16570,17 @@
       "memoryManager.map.levels": "8b7cdd298053a5fa87efca2c62d7adc7da91425d2ef0a2d220cfe5ef8a040322",
       "memoryManager.map.notesN": "408a47691f533bcf36041dd7c9baa6e4da4c96a0f3b3b184c7bb7d93eb7a3e5d",
       "memoryManager.orderSaved": "23655db58b8e9c6d7e6c74d9f3d58e2129d2ce77075b3f49e949a3a82503a9e6",
-      "memoryManager.reorderHint": "96376522074b7dfc399a6329f95ea96ec81146b46cddef3d5d5d9056287ae59b"
+      "memoryManager.reorderHint": "96376522074b7dfc399a6329f95ea96ec81146b46cddef3d5d5d9056287ae59b",
+      "routines.group.label": "956a51f6b098a41b7c3108015f0790bb24af7693717b07cee39d5df6a5da1826",
+      "routines.group.bot": "41e35ba1a1fd8b4cdc7f899b3b8f9442a7542f445170e8782e219732cc25c10f",
+      "routines.group.folder": "74ccd43303847f2655300641a934959cdb11689ce171aa0f00faa92917fbd340",
+      "routines.group.none": "dc937b59892604f5a86ac96936cd7ff09e25f18ae6b758e8014a24c7fa039e91",
+      "routines.group.noFolder": "ca98f4c7bf9dab8a67b8678ce3f696bbf6abdfad313f89e958e93b19eeb31465",
+      "routines.group.unknownBot": "bedd292cf360b1a3b730ac2ba245dcb5cf9a043b882029000ff502abf6ba7a4e",
+      "routines.group.running": "759e5538d8b58cae4de1c25e1540c3425d21da65cdee2e5680c85bb26dd408e4",
+      "routines.group.failing": "502f2792b30e6e9518b4023c59904ac6eba8aa1162995a8700c08089f1ebb53d",
+      "routines.group.botMenu": "f608d3348f5f91d57ab2cce10e8532510658d5773ef01d01cad83396e652c1b3",
+      "routines.group.newFor": "7c2c9e425f6f855d22ab990933619cc79184cf7a37dd40361cf7c9e4a6f4789b"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -18382,7 +18412,17 @@
       "routineEditor.summary.mailTag": "c4ac6b36b65ca903cc0d182eef6e2ae42bde8a5a7cd7d2b64b4ef3635baaaafd",
       "routines.postResults.hint": "b6c98c1a67574f9cfba5aad861f8393a44253c234b23c0c27818316ff04e2bc8",
       "scheduleEditor.alsoAt": "0e05e41b136b061c71b519cfa92a5d38e4bac3919dff3eac9258b990d7bbc420",
-      "scheduleEditor.moreTimesAdvanced": "1cdbb275037cbb74f4c0f50a025eb03bade204adf887fdacd1b03664a6d5eaf2"
+      "scheduleEditor.moreTimesAdvanced": "1cdbb275037cbb74f4c0f50a025eb03bade204adf887fdacd1b03664a6d5eaf2",
+      "routines.group.label": "956a51f6b098a41b7c3108015f0790bb24af7693717b07cee39d5df6a5da1826",
+      "routines.group.bot": "41e35ba1a1fd8b4cdc7f899b3b8f9442a7542f445170e8782e219732cc25c10f",
+      "routines.group.folder": "74ccd43303847f2655300641a934959cdb11689ce171aa0f00faa92917fbd340",
+      "routines.group.none": "dc937b59892604f5a86ac96936cd7ff09e25f18ae6b758e8014a24c7fa039e91",
+      "routines.group.noFolder": "ca98f4c7bf9dab8a67b8678ce3f696bbf6abdfad313f89e958e93b19eeb31465",
+      "routines.group.unknownBot": "bedd292cf360b1a3b730ac2ba245dcb5cf9a043b882029000ff502abf6ba7a4e",
+      "routines.group.running": "759e5538d8b58cae4de1c25e1540c3425d21da65cdee2e5680c85bb26dd408e4",
+      "routines.group.failing": "502f2792b30e6e9518b4023c59904ac6eba8aa1162995a8700c08089f1ebb53d",
+      "routines.group.botMenu": "f608d3348f5f91d57ab2cce10e8532510658d5773ef01d01cad83396e652c1b3",
+      "routines.group.newFor": "7c2c9e425f6f855d22ab990933619cc79184cf7a37dd40361cf7c9e4a6f4789b"
     },
     "ja": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -22112,7 +22152,17 @@
       "routineEditor.summary.mailTag": "c4ac6b36b65ca903cc0d182eef6e2ae42bde8a5a7cd7d2b64b4ef3635baaaafd",
       "routines.postResults.hint": "b6c98c1a67574f9cfba5aad861f8393a44253c234b23c0c27818316ff04e2bc8",
       "scheduleEditor.alsoAt": "0e05e41b136b061c71b519cfa92a5d38e4bac3919dff3eac9258b990d7bbc420",
-      "scheduleEditor.moreTimesAdvanced": "1cdbb275037cbb74f4c0f50a025eb03bade204adf887fdacd1b03664a6d5eaf2"
+      "scheduleEditor.moreTimesAdvanced": "1cdbb275037cbb74f4c0f50a025eb03bade204adf887fdacd1b03664a6d5eaf2",
+      "routines.group.label": "956a51f6b098a41b7c3108015f0790bb24af7693717b07cee39d5df6a5da1826",
+      "routines.group.bot": "41e35ba1a1fd8b4cdc7f899b3b8f9442a7542f445170e8782e219732cc25c10f",
+      "routines.group.folder": "74ccd43303847f2655300641a934959cdb11689ce171aa0f00faa92917fbd340",
+      "routines.group.none": "dc937b59892604f5a86ac96936cd7ff09e25f18ae6b758e8014a24c7fa039e91",
+      "routines.group.noFolder": "ca98f4c7bf9dab8a67b8678ce3f696bbf6abdfad313f89e958e93b19eeb31465",
+      "routines.group.unknownBot": "bedd292cf360b1a3b730ac2ba245dcb5cf9a043b882029000ff502abf6ba7a4e",
+      "routines.group.running": "759e5538d8b58cae4de1c25e1540c3425d21da65cdee2e5680c85bb26dd408e4",
+      "routines.group.failing": "502f2792b30e6e9518b4023c59904ac6eba8aa1162995a8700c08089f1ebb53d",
+      "routines.group.botMenu": "f608d3348f5f91d57ab2cce10e8532510658d5773ef01d01cad83396e652c1b3",
+      "routines.group.newFor": "7c2c9e425f6f855d22ab990933619cc79184cf7a37dd40361cf7c9e4a6f4789b"
     },
     "pt-br": {
       "achievements.panel.all": "e2adb0c3b5f28a7c9d5bdac240382201b39376dd11671aedc93e8a73b6468f19",
@@ -24749,7 +24799,17 @@
       "routineEditor.summary.mailTag": "c4ac6b36b65ca903cc0d182eef6e2ae42bde8a5a7cd7d2b64b4ef3635baaaafd",
       "routines.postResults.hint": "b6c98c1a67574f9cfba5aad861f8393a44253c234b23c0c27818316ff04e2bc8",
       "scheduleEditor.alsoAt": "0e05e41b136b061c71b519cfa92a5d38e4bac3919dff3eac9258b990d7bbc420",
-      "scheduleEditor.moreTimesAdvanced": "1cdbb275037cbb74f4c0f50a025eb03bade204adf887fdacd1b03664a6d5eaf2"
+      "scheduleEditor.moreTimesAdvanced": "1cdbb275037cbb74f4c0f50a025eb03bade204adf887fdacd1b03664a6d5eaf2",
+      "routines.group.label": "956a51f6b098a41b7c3108015f0790bb24af7693717b07cee39d5df6a5da1826",
+      "routines.group.bot": "41e35ba1a1fd8b4cdc7f899b3b8f9442a7542f445170e8782e219732cc25c10f",
+      "routines.group.folder": "74ccd43303847f2655300641a934959cdb11689ce171aa0f00faa92917fbd340",
+      "routines.group.none": "dc937b59892604f5a86ac96936cd7ff09e25f18ae6b758e8014a24c7fa039e91",
+      "routines.group.noFolder": "ca98f4c7bf9dab8a67b8678ce3f696bbf6abdfad313f89e958e93b19eeb31465",
+      "routines.group.unknownBot": "bedd292cf360b1a3b730ac2ba245dcb5cf9a043b882029000ff502abf6ba7a4e",
+      "routines.group.running": "759e5538d8b58cae4de1c25e1540c3425d21da65cdee2e5680c85bb26dd408e4",
+      "routines.group.failing": "502f2792b30e6e9518b4023c59904ac6eba8aa1162995a8700c08089f1ebb53d",
+      "routines.group.botMenu": "f608d3348f5f91d57ab2cce10e8532510658d5773ef01d01cad83396e652c1b3",
+      "routines.group.newFor": "7c2c9e425f6f855d22ab990933619cc79184cf7a37dd40361cf7c9e4a6f4789b"
     },
     "uk": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -27085,7 +27145,17 @@
       "routineEditor.summary.mailTag": "c4ac6b36b65ca903cc0d182eef6e2ae42bde8a5a7cd7d2b64b4ef3635baaaafd",
       "routines.postResults.hint": "b6c98c1a67574f9cfba5aad861f8393a44253c234b23c0c27818316ff04e2bc8",
       "scheduleEditor.alsoAt": "0e05e41b136b061c71b519cfa92a5d38e4bac3919dff3eac9258b990d7bbc420",
-      "scheduleEditor.moreTimesAdvanced": "1cdbb275037cbb74f4c0f50a025eb03bade204adf887fdacd1b03664a6d5eaf2"
+      "scheduleEditor.moreTimesAdvanced": "1cdbb275037cbb74f4c0f50a025eb03bade204adf887fdacd1b03664a6d5eaf2",
+      "routines.group.label": "956a51f6b098a41b7c3108015f0790bb24af7693717b07cee39d5df6a5da1826",
+      "routines.group.bot": "41e35ba1a1fd8b4cdc7f899b3b8f9442a7542f445170e8782e219732cc25c10f",
+      "routines.group.folder": "74ccd43303847f2655300641a934959cdb11689ce171aa0f00faa92917fbd340",
+      "routines.group.none": "dc937b59892604f5a86ac96936cd7ff09e25f18ae6b758e8014a24c7fa039e91",
+      "routines.group.noFolder": "ca98f4c7bf9dab8a67b8678ce3f696bbf6abdfad313f89e958e93b19eeb31465",
+      "routines.group.unknownBot": "bedd292cf360b1a3b730ac2ba245dcb5cf9a043b882029000ff502abf6ba7a4e",
+      "routines.group.running": "759e5538d8b58cae4de1c25e1540c3425d21da65cdee2e5680c85bb26dd408e4",
+      "routines.group.failing": "502f2792b30e6e9518b4023c59904ac6eba8aa1162995a8700c08089f1ebb53d",
+      "routines.group.botMenu": "f608d3348f5f91d57ab2cce10e8532510658d5773ef01d01cad83396e652c1b3",
+      "routines.group.newFor": "7c2c9e425f6f855d22ab990933619cc79184cf7a37dd40361cf7c9e4a6f4789b"
     },
     "zh": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -29702,7 +29772,17 @@
       "routineEditor.summary.mailTag": "c4ac6b36b65ca903cc0d182eef6e2ae42bde8a5a7cd7d2b64b4ef3635baaaafd",
       "routines.postResults.hint": "b6c98c1a67574f9cfba5aad861f8393a44253c234b23c0c27818316ff04e2bc8",
       "scheduleEditor.alsoAt": "0e05e41b136b061c71b519cfa92a5d38e4bac3919dff3eac9258b990d7bbc420",
-      "scheduleEditor.moreTimesAdvanced": "1cdbb275037cbb74f4c0f50a025eb03bade204adf887fdacd1b03664a6d5eaf2"
+      "scheduleEditor.moreTimesAdvanced": "1cdbb275037cbb74f4c0f50a025eb03bade204adf887fdacd1b03664a6d5eaf2",
+      "routines.group.label": "956a51f6b098a41b7c3108015f0790bb24af7693717b07cee39d5df6a5da1826",
+      "routines.group.bot": "41e35ba1a1fd8b4cdc7f899b3b8f9442a7542f445170e8782e219732cc25c10f",
+      "routines.group.folder": "74ccd43303847f2655300641a934959cdb11689ce171aa0f00faa92917fbd340",
+      "routines.group.none": "dc937b59892604f5a86ac96936cd7ff09e25f18ae6b758e8014a24c7fa039e91",
+      "routines.group.noFolder": "ca98f4c7bf9dab8a67b8678ce3f696bbf6abdfad313f89e958e93b19eeb31465",
+      "routines.group.unknownBot": "bedd292cf360b1a3b730ac2ba245dcb5cf9a043b882029000ff502abf6ba7a4e",
+      "routines.group.running": "759e5538d8b58cae4de1c25e1540c3425d21da65cdee2e5680c85bb26dd408e4",
+      "routines.group.failing": "502f2792b30e6e9518b4023c59904ac6eba8aa1162995a8700c08089f1ebb53d",
+      "routines.group.botMenu": "f608d3348f5f91d57ab2cce10e8532510658d5773ef01d01cad83396e652c1b3",
+      "routines.group.newFor": "7c2c9e425f6f855d22ab990933619cc79184cf7a37dd40361cf7c9e4a6f4789b"
     },
     "zh-tw": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -33317,7 +33397,17 @@
       "routineEditor.summary.mailTag": "c4ac6b36b65ca903cc0d182eef6e2ae42bde8a5a7cd7d2b64b4ef3635baaaafd",
       "routines.postResults.hint": "b6c98c1a67574f9cfba5aad861f8393a44253c234b23c0c27818316ff04e2bc8",
       "scheduleEditor.alsoAt": "0e05e41b136b061c71b519cfa92a5d38e4bac3919dff3eac9258b990d7bbc420",
-      "scheduleEditor.moreTimesAdvanced": "1cdbb275037cbb74f4c0f50a025eb03bade204adf887fdacd1b03664a6d5eaf2"
+      "scheduleEditor.moreTimesAdvanced": "1cdbb275037cbb74f4c0f50a025eb03bade204adf887fdacd1b03664a6d5eaf2",
+      "routines.group.label": "956a51f6b098a41b7c3108015f0790bb24af7693717b07cee39d5df6a5da1826",
+      "routines.group.bot": "41e35ba1a1fd8b4cdc7f899b3b8f9442a7542f445170e8782e219732cc25c10f",
+      "routines.group.folder": "74ccd43303847f2655300641a934959cdb11689ce171aa0f00faa92917fbd340",
+      "routines.group.none": "dc937b59892604f5a86ac96936cd7ff09e25f18ae6b758e8014a24c7fa039e91",
+      "routines.group.noFolder": "ca98f4c7bf9dab8a67b8678ce3f696bbf6abdfad313f89e958e93b19eeb31465",
+      "routines.group.unknownBot": "bedd292cf360b1a3b730ac2ba245dcb5cf9a043b882029000ff502abf6ba7a4e",
+      "routines.group.running": "759e5538d8b58cae4de1c25e1540c3425d21da65cdee2e5680c85bb26dd408e4",
+      "routines.group.failing": "502f2792b30e6e9518b4023c59904ac6eba8aa1162995a8700c08089f1ebb53d",
+      "routines.group.botMenu": "f608d3348f5f91d57ab2cce10e8532510658d5773ef01d01cad83396e652c1b3",
+      "routines.group.newFor": "7c2c9e425f6f855d22ab990933619cc79184cf7a37dd40361cf7c9e4a6f4789b"
     }
   }
 }

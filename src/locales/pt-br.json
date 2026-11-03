@@ -2633,5 +2633,15 @@
   "routineEditor.summary.mailTag": "Tag de e-mail +{tag}",
   "routines.postResults.hint": "Desligado, cada execução fica em segundo plano.",
   "scheduleEditor.alsoAt": "Também às",
-  "scheduleEditor.moreTimesAdvanced": "+{count} em Avançado"
+  "scheduleEditor.moreTimesAdvanced": "+{count} em Avançado",
+  "routines.group.label": "Agrupar por",
+  "routines.group.bot": "Bot",
+  "routines.group.folder": "Pasta",
+  "routines.group.none": "Nenhum",
+  "routines.group.noFolder": "Sem pasta",
+  "routines.group.unknownBot": "Outro bot",
+  "routines.group.running": "{count} em execução",
+  "routines.group.failing": "{count} com falha",
+  "routines.group.botMenu": "Mais para {name}",
+  "routines.group.newFor": "Nova rotina para {name}"
 }

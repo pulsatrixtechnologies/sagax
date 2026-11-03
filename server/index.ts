@@ -16492,7 +16492,9 @@ function notify(notification: Notification | null) {
   // An AI client's hidden conversation (#291) never buzzes the person: the
   // client that started it reads the answer. An approval is the exception:
   // only the person can give it, and the conversation is in no sidebar.
-  if (notification && notification.kind !== "approval" && notificationInHiddenThread(notification.threadId)) return;
+  // 2026-11-03: so is a question (a routine run's ask_choice, in its hidden
+  // task): dropped here, it reached nobody.
+  if (notification && notification.kind !== "approval" && notification.kind !== "question" && notificationInHiddenThread(notification.threadId)) return;
   // a bot-to-bot thread never buzzes the person for its own replies
   if (notification && notificationIsInterBotChatter(notification)) return;
   // 2026-10-29: an outside agent's conversation (a person's AI client over
@@ -16530,6 +16532,41 @@ function routineRunThread(threadId: string | undefined): boolean {
   if (activeRoutineRunForThread(threadId)) return true;
   const bot = store.botByThread(threadId);
   return Boolean(bot && store.taskByThread(bot.id, threadId)?.routineRunId);
+}
+
+type HarnessChoice = { title: string; question: string; options: string[] };
+
+/** 2026-11-03 (a person: "J'ai jamais reçu de card pour faire un choix"): a Grok
+ * routine run called ask_choice, the passive card landed in the run's hidden
+ * task, the run ended Completed six seconds later, and nothing reached the
+ * person: no requestId, so no Approvals row, no member-API approval
+ * (list_pending_approvals), no notification, no waiting run. Where the
+ * person is not watching the conversation, ask_choice is raised as a real
+ * question card instead. Never in a room (its speakers answer there). */
+function harnessQuestionThread(threadId: string): boolean {
+  if (store.groupByThread(threadId)) return false;
+  return routineRunThread(threadId) || notificationInHiddenThread(threadId);
+}
+
+/** The bot's ask_choice as a question request: the same path as an engine's
+ * own question tool (request.opened), so the card carries a requestId and
+ * reaches the person in the chat, the Approvals inbox, the member API, a
+ * notification and the run's "Waiting for your answer". No engine holds the
+ * request (harnessAsk): the answer comes back as the person's next message
+ * (deliverLateQuestionAnswer). The card's row, or null when none was drawn. */
+function raiseHarnessQuestion(threadId: string, choice: HarnessChoice): { messageId: string } | null {
+  if (!store.botByThread(threadId)) return null;
+  const requestId = `ask-choice-${newId()}`;
+  const header = choice.title !== "Your bot has a question" ? choice.title.slice(0, 40) : undefined;
+  bus.publish({
+    eventId: newId(), provider: "harness" as RuntimeEvent["provider"], threadId, createdAt: new Date().toISOString(),
+    type: "request.opened", requestType: "question", requestId, tool: "ask_choice", summary: choice.question,
+    choices: choice.options,
+    questions: [{ ...(header ? { header } : {}), question: choice.question, options: choice.options.map((label) => ({ label })) }],
+    origin: "tool", harnessAsk: true,
+  });
+  const messageId = askMessageByRequest.get(`${threadId}:${requestId}`);
+  return messageId ? { messageId } : null;
 }
 
 /** The approval wait a turn gets: a routine run's, else the driver's own. */
@@ -18820,7 +18857,8 @@ bus.subscribe((event: RuntimeEvent) => {
     case "request.opened": {
       {
         const askerEarly = bot ?? (speaker ? store.bot(speaker.botId) : undefined);
-        if (askerEarly && readAndDraft.answers(event, askerEarly, (message) => pushMessage(message))) break;
+        // a harness ask is only a card, and no adapter could take a refusal
+        if (askerEarly && !event.harnessAsk && readAndDraft.answers(event, askerEarly, (message) => pushMessage(message))) break;
       }
       // A structured ask carries the model's own options and has no
       // allow/deny answer, so it is a question no matter which channel the
@@ -19552,7 +19590,8 @@ bus.subscribe((event: RuntimeEvent) => {
       // option, the first one, is given back and the turn goes on. A real
       // decision, a form of several questions, a multi-select and a fact
       // only the person can supply keep their card (full-access-gate.ts).
-      if (!permission && asker && event.requestId && !guestDriven) {
+      // A harness ask (ask_choice) had this same reading in createChoiceCard.
+      if (!permission && asker && event.requestId && !guestDriven && !event.harnessAsk) {
         const single = questions?.length === 1 ? questions[0] : undefined;
         const choice = single
           ? { ...(single.header ? { title: single.header } : {}), question: single.question, options: single.options.map((option) => option.label) }
@@ -20414,6 +20453,20 @@ const delegationWatch = new Map<string, {
 
 /** The card in this thread that is waiting on the person: an approval, a
  * question or a proposal to review, newest first. */
+/** The open question card of a conversation that outlives its turn (an
+ * engine's question, an ask_choice raised as one): its answer comes back as
+ * the person's next message. Never a permission card, which its turn closes. */
+function openQuestionCard(threadId: string): NonNullable<Message["card"]> | undefined {
+  const messages = store.messagesFor(threadId);
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]!;
+    const card = message.kind === "options" ? message.card : undefined;
+    if (!card?.requestId || card.answered || card.dismissed || card.expired) continue;
+    if (isPersistentQuestionCard(card) && !isApprovalCardMessage(message)) return card;
+  }
+  return undefined;
+}
+
 function openPersonCard(threadId: string): { kind: "approval" | "question" | "review"; tool?: string } | undefined {
   const messages = store.messagesFor(threadId);
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -24214,6 +24267,14 @@ routines = new RoutineManager({
       return true;
     }
   },
+  // 2026-11-03: a question card that outlives the turn holds the run (routines.ts turn.completed)
+  awaitsPerson: (threadId) => {
+    const open = openQuestionCard(threadId);
+    if (!open) return null;
+    const words = redactSecretsInText(open.subtitle ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+    return words ? `Waiting for your answer: ${words}` : "Waiting for your answer";
+  },
+  cardRaisedSince: (threadId, since) => store.messagesFor(threadId).some((message) => message.kind === "options" && message.at >= since && Boolean(message.card)),
   hasPendingDelegations: (threadId) => coordinator.awaitsTeammates(threadId) ||
     [...delegationWatch.values()].some((watch) => watch.sourceThreadId === threadId) ||
     pendingDelegationWakes.has(threadId),
@@ -30911,6 +30972,8 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
       proposePage: proposePage as Parameters<typeof createAgentCard>[0]["proposePage"],
       // #1905: a may-I ask_choice under Full access is answered, not drawn
       approvalLevel: sourceApprovalMode(bot.id, threadId),
+      // 2026-11-03: where nobody watches, a real question card (raiseHarnessQuestion)
+      ...(harnessQuestionThread(threadId) ? { raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, choice) } : {}),
     }),
     authored: (threadId, generation, messageId) => handoffs.authored(threadId, generation, messageId),
     proposePublishedPage: (input) => publishedPages.propose({
@@ -41330,7 +41393,8 @@ function agentTurnState(agentId: string, threadId: string): TurnState {
   if (task?.activity === "waiting-on-you") return "waiting";
   if (threadBusy(agentId, threadId)) return "running";
   if (queuedThreadPosition(agentId, threadId) !== null || coordinator.activeDirect(threadId)) return "queued";
-  return "idle";
+  // 2026-11-03: a question card that outlived its turn (ask_choice where nobody watches) waits on the person
+  return openQuestionCard(threadId) ? "waiting" : "idle";
 }
 function agentSummary(bot: BotRecord): AgentSummary {
   // Same owner source as profile() / get_agent: no per-agent profile call.
@@ -42042,7 +42106,10 @@ const orgMember = createOrgMemberRoutes({
     const bot = store.botByThread(threadId);
     if (!bot) return null;
     if (store.taskByThread(bot.id, threadId)?.activity === "waiting-on-you") return "waiting";
-    return threadBusy(bot.id, threadId) ? "working" : "idle";
+    if (threadBusy(bot.id, threadId)) return "working";
+    // 2026-11-03: a question card that outlived its turn (a routine run's
+    // ask_choice) still waits on the person: list_pending_approvals lists it.
+    return openQuestionCard(threadId) ? "waiting" : "idle";
   },
   resolvePerson: (ref) => {
     const id = ref.trim().toLowerCase();

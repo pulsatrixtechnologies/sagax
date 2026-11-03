@@ -463,7 +463,7 @@ OpenAI-compatible server" (`OpenAiCompatServers`), each an engine
 (`server/routes/openai-compat-servers.ts`), an
 organization admin's only. Tests: `shared/offered-engines.test.ts`,
 `shared/org-engine-readiness.test.ts`, `server/engine-credentials.test.ts`,
-`server/openai-compat-servers.test.ts`, `server/desktop-local-models.test.ts`,
+`server/openai-compat-servers.test.ts`, `server/desktop/desktop-local-models.test.ts`,
 `src/lib/model-payers.test.ts`, `ModelPicker.interaction.test.ts`, C5 in
 `server/org/org-admin-console.e2e.test.ts`.
 ## Azure AI Foundry / Azure OpenAI (2026-10-30)
@@ -3097,7 +3097,7 @@ lui-même." On every server (solo and organization):
   the computer after the cloud now leaves no line.
 - Tests: `server/surface.test.ts`, `server/surface-pins.e2e.test.ts`,
   `server/host-lazy-claim.e2e.test.ts`, `server/group-local-vm.e2e.test.ts`,
-  `server/place-view.e2e.test.ts`, `server/desktop-bridge.e2e.test.ts`.
+  `server/place-view.e2e.test.ts`, `server/desktop/desktop-bridge.e2e.test.ts`.
 
 ## Routines pause themselves after failures in a row (2026-10-26)
 
@@ -4343,7 +4343,7 @@ it for one of its bots.
   `GroupBotPayers.tsx` in the group panel's Details). `sagax_settings`:
   `bot.turnPayer`, `group.botPayer`.
 - Tests: `shared/turn-payer.test.ts`, `server/engine-credentials.test.ts`
-  (owner pays), `server/desktop-local-models.test.ts` (owner's grant, offline),
+  (owner pays), `server/desktop/desktop-local-models.test.ts` (owner's grant, offline),
   `server/engine-access.test.ts`, `server/harness-connectors.test.ts`
   (isolation), `server/routes/bot-runtime-settings.test.ts`,
   `server/routes/group-bot-payer.test.ts`, `src/components/AccessCard.payer.test.ts`,
@@ -5564,7 +5564,7 @@ they share no stem) and `context_length` becomes `contextWindow`.
   window). Solo re-reads the engine's catalog; server mode calls
   `ogb.serverMode.refreshLocalModels()` (IPC `server-mode:refresh-local-models`,
   5 s fresh window in the bridge), then reloads `/api/instances`.
-- Tests: `src/lib/local-models.test.ts`, `server/desktop-local-models.test.ts`,
+- Tests: `src/lib/local-models.test.ts`, `server/desktop/desktop-local-models.test.ts`,
   `server/drivers/local-inject.test.ts`, `electron/local-models.node-test.mjs`.
 
 ### Grok models and local models on Grok (2026-10-08)
@@ -6618,12 +6618,12 @@ server; failure delivery has its own bounded cancellation signal.
 
 In server mode the desktop app is the bridge between the organization server
 and the person's PC (`electron/desktop-bridge.mjs`, `electron/desktop-tunnel.mjs`,
-`server/desktop-bridge*.ts`, `server/desktop-egress.ts`). Bots working for a
+`server/desktop-bridge*.ts`, `server/desktop/desktop-egress.ts`). Bots working for a
 person run the solo-mode tools on that person's own computer, as the MCP
 server `sagax-desktop` (shell, files, search, fetch, offscreen browser,
 computer use, Local VM), and the engine's own network traffic leaves through
 it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
-`server/desktop-egress.test.ts`, `server/attachment-staging.test.ts`,
+`server/desktop/desktop-egress.test.ts`, `server/attachment-staging.test.ts`,
 `electron/local-vm.node-test.mjs`, `electron/desktop-bridge.node-test.mjs`,
 `server/computer/local-vm-computer.test.ts` or
 `scripts/verify/dev/verify-desktop-bridge.ts`:
@@ -6657,10 +6657,10 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
   `routine-not-allowed`, `routine-default`; `shared/workspace-line.ts`).
   Claude pre-allows only `mcp__sagax-computer`. Rooms are unchanged. Tests:
   `server/computer/auto-computer.test.ts`, `shared/workspace-line.test.ts`,
-  `server/desktop-bridge.e2e.test.ts`.
+  `server/desktop/desktop-bridge.e2e.test.ts`.
 - Auto never becomes the conversation's setting: see "Workspace: Auto
   remembers no place" above. Where a turn worked never drops
-  `sagax-desktop` from the next turns (`server/desktop-bridge.e2e.test.ts`).
+  `sagax-desktop` from the next turns (`server/desktop/desktop-bridge.e2e.test.ts`).
 - A bridge is bound to the person of the session that registered it and to
   a secret only the desktop's main process holds; every poll, result and the
   tunnel re-check that the session is live and still that person. A turn's
@@ -6737,7 +6737,7 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
   `skill_manage`, `memory_update` and `propose_routine` and does not
   download the zip or open a browser to read it. Tests:
   `electron/archive-extract.node-test.mjs`, `server/attachment-archives.test.ts`,
-  `server/archive-attachments.e2e.test.ts`, `server/desktop-bridge.e2e.test.ts`.
+  `server/archive-attachments.e2e.test.ts`, `server/desktop/desktop-bridge.e2e.test.ts`.
 - Large conversation files: documents and audio stop at 250 MB, videos at
   1 GB, shared images at 32 MB and solo images at 90 MB. Pictures in one
   message share 200 MiB and at most 32 images on every host
@@ -8275,7 +8275,7 @@ control's last chip, Browser, where the server has the built-in browser
 server): `BrowserPanel` in the screen's frame (`BrowserScreen`, "<Bot>'s
 browser" below), opened first when the bot works on its browser. Tests:
 `OrgComputerTab.test.ts`, `ComputerPanel.browser.test.ts`,
-`server/desktop-bridge.test.ts`, `server/desktop-bridge-local-vm.test.ts`.
+`server/desktop/desktop-bridge.test.ts`, `server/desktop/desktop-bridge-local-vm.test.ts`.
 States are words (Off, Starting, Running, Paused, Error); never show the desktop's raw
 answer. The server environment's live view is view-only with "Take control"
 in the middle of the screen and a "Release control" chip while in control.
@@ -8296,7 +8296,7 @@ and, on a solo server only, the Cloud place; they never hide the
 organization's Cloud nor the local places (`placeOffered(place, config,
 organization)`). Tests: `OrgComputerTab.test.ts`,
 `experimental-computers.test.ts`, `place.test.ts`,
-`AccessSection.test.ts`, `server/desktop-bridge.test.ts`.
+`AccessSection.test.ts`, `server/desktop/desktop-bridge.test.ts`.
 
 The Local VM in server mode lives on the person's computer
 (`electron/local-vm.mjs`, `POST /api/me/desktop-bridge/local-vm`):
@@ -8315,7 +8315,7 @@ The Local VM in server mode lives on the person's computer
   become `openmausbot-test-<ns>-computer`, labeled and removed at the end;
   a real-named VM is refused in the temp folder (`localVmFolderRefusal`).
   Tests: `electron/local-vm.node-test.mjs`, `server/computer/local-vm-hygiene.test.ts`,
-  `server/desktop-bridge-local-vm.test.ts`.
+  `server/desktop/desktop-bridge-local-vm.test.ts`.
 - The bot sees and drives that VM's desktop with `local_vm` action `use`
   (operation `vm_computer_call`). The Computer tab itself stays a still
   image and the power buttons. See Desktop bridge above.

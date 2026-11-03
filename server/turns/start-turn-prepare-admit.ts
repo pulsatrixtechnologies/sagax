@@ -256,7 +256,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
       state.userMessage.sender?.name ?? botUserName(state.bot),
     );
   // Organization server: where this turn's tools run, and for whom, decided
-  // once (server/desktop-bridge.ts); the speaker's own attachments are
+  // once (server/desktop/desktop-bridge.ts); the speaker's own attachments are
   // pointed there and small text ones given inline.
   const turnRemote = remoteComputerForTurn({
     organization: IDENTITY.kind === "perspicax",

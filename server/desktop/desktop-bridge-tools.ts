@@ -1,16 +1,16 @@
 // The tools a bot gets on the person's own computer through their desktop
-// app ("sagax-desktop", server/desktop-bridge.ts): the solo-mode set (shell,
+// app ("sagax-desktop", server/desktop/desktop-bridge.ts): the solo-mode set (shell,
 // files, search, fetch, browser, computer use, Local VM). Each call becomes
 // one typed operation the desktop validates and runs locally; nothing here
 // touches the Sagax server's own filesystem, processes or network.
 //
 // Never pre-allowed for any engine: every call rides the bot's approval mode
 // (Ask shows a card per call), exactly as the engine's own tools do in solo.
-import { localVmDesktopSpec } from "./computer/container-computer.ts";
-import { cleanCommandVariables } from "./vault/credential-command-env.ts";
+import { localVmDesktopSpec } from "../computer/container-computer.ts";
+import { cleanCommandVariables } from "../vault/credential-command-env.ts";
 import type { DesktopBridgeOperation } from "./desktop-bridge.ts";
-import { localVmComputerCall, localVmComputerCatalogText } from "./computer/local-vm-computer.ts";
-import { boundToolResult, readOnHint, type BoundToolTextOptions } from "./tool-output-bound.ts";
+import { localVmComputerCall, localVmComputerCatalogText } from "../computer/local-vm-computer.ts";
+import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tool-output-bound.ts";
 
 const where = "on the computer of the person you are working for (their own PC, through their Sagax desktop app), like their own terminal";
 

@@ -1,6 +1,6 @@
 // The Local VM on this computer, desktop side (server mode): the Sagax Linux
 // desktop container the person's bots can use, reached through the desktop
-// bridge (electron/desktop-bridge.mjs, server/desktop-bridge-routes.ts).
+// bridge (electron/desktop-bridge.mjs, server/desktop/desktop-bridge-routes.ts).
 //
 // What it does, and what it never does:
 // - Finds the container runtime this computer has (Docker Desktop, OrbStack,

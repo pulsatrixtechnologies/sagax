@@ -11,7 +11,7 @@ import { resolveRequestAuth, type RequestAuth } from "../request-auth.ts";
 import { json, readBody } from "../harness/http.ts";
 import { SHARED_LOCAL_VM_TARGET, perBotLocalVmTarget, poolLocalVmTarget, type ContainerComputerStatus } from "../computer/container-computer.ts";
 import { createDesktopViewer, desktopViewerUrl, type DesktopTarget } from "./desktop-viewer.ts";
-import { localDesktopTarget, localVmViewerStatus, viewerTargetId } from "../desktop-viewer-targets.ts";
+import { localDesktopTarget, localVmViewerStatus, viewerTargetId } from "../desktop/desktop-viewer-targets.ts";
 
 let dir: string;
 let sessions: SessionRegistry;

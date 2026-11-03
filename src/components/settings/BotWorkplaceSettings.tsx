@@ -5,7 +5,7 @@
 // group: whether routines may use it, which destinations bots may reach
 // through it (with whether it is connected), the person's other computers,
 // and, behind a discreet link, what bots recently did there (#555)
-// (src/lib/desktop-bridge.ts, server/desktop-bridge.ts).
+// (src/lib/desktop-bridge.ts, server/desktop/desktop-bridge.ts).
 import { useEffect, useState } from "react";
 import { Link2, Pencil, Trash2 } from "lucide-react";
 

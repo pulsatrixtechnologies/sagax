@@ -17,7 +17,7 @@ function failure(id: RpcId, method: unknown, message: string, code = -32603): un
 }
 
 /** Which tool server this proxy is: the person's server environment, their
- * own computer through the desktop bridge (server/desktop-bridge.ts), or the
+ * own computer through the desktop bridge (server/desktop/desktop-bridge.ts), or the
  * Auto computer choice (server/computer/auto-computer.ts). */
 export const PROXIED_TOOL_SERVERS = {
   "sagax-environment": { endpoint: "/api/internal/sandbox/mcp", unavailable: "The server environment is not connected. Start a new bot turn from Sagax.", interrupted: "The connection to the server environment was interrupted. Check the result before repeating the action." },

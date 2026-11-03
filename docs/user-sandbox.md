@@ -16,7 +16,7 @@ open a shared machine.
 | `host` | solo server | this machine, unchanged |
 | `none` | organization mode without a provisioner | nothing is mounted |
 
-The choice between the two is `resolveBotWorkplace` (`server/desktop-bridge.ts`),
+The choice between the two is `resolveBotWorkplace` (`server/desktop/desktop-bridge.ts`),
 from the bot's Works on: Auto and Cloud ("Cloud (server environment)") use the
 server environment, the default; Local VM and This computer use the person's
 own computer, and when their desktop app is not connected nothing runs there

@@ -2599,7 +2599,7 @@ function sharingController() {
 // ── desktop bridge (server mode) ────────────────────────────────────────
 // The organization server's bots, working for the person signed in here,
 // run their tools on this computer and their traffic leaves through it
-// (electron/desktop-bridge.mjs, server/desktop-bridge.ts). Only while this
+// (electron/desktop-bridge.mjs, server/desktop/desktop-bridge.ts). Only while this
 // app is locked to that server and signed in; the cookie and the bridge
 // secret never leave the main process.
 let desktopBridgeConnector = null;

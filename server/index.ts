@@ -1576,7 +1576,7 @@ import type { TerminalWorkPlace } from "./terminal-requests.ts";
 import type { TerminalAccess } from "./terminal-resources/types.ts";
 import { streamTerminalAttachment } from "./terminal-resources/adapters/personal.ts";
 import { parseTerminalDestinationPick, type TerminalDestinationPick } from "../shared/terminal-request.ts";
-import { DesktopTerminals } from "./desktop-terminal.ts";
+import { DesktopTerminals } from "./desktop/desktop-terminal.ts";
 import { spawnScriptPty } from "../electron/script-pty.mjs";
 import { loginShellArgv } from "../electron/desktop-terminal.mjs";
 import {
@@ -2152,7 +2152,7 @@ import {
   viewerWantsBotNotification
 } from "../shared/viewer-bot-overrides.ts";
 import { createDesktopAppearanceRoutes } from "./routes/desktop-appearance.ts";
-import { createDesktopAppearanceStore } from "./desktop-appearance.ts";
+import { createDesktopAppearanceStore } from "./desktop/desktop-appearance.ts";
 import {
   achievementFrameAllowed,
   achievementRequestEvents,
@@ -2567,13 +2567,13 @@ import { handleUserSandboxMcp } from "./sandbox/user-sandbox-tools.ts";
 import { BotFolderRegistry, WorkspaceTidier, botFolderNote, botFolderPath, inBotFolder, rewriteMovedPaths, workspaceDiskWarning, type TidyMove } from "./sandbox/sandbox-bot-folder.ts";
 import { enginePluginCommandRefusal } from "./person-integrations.ts";
 import { SandboxControlHolds } from "./sandbox/sandbox-control.ts";
-import { DesktopBridges, resolveBotWorkplace, type WorkplaceDecision } from "./desktop-bridge.ts";
-import { DesktopLocalModels } from "./desktop-local-models.ts";
-import { withDesktopModelPerson } from "./desktop-model-grant.ts";
+import { DesktopBridges, resolveBotWorkplace, type WorkplaceDecision } from "./desktop/desktop-bridge.ts";
+import { DesktopLocalModels } from "./desktop/desktop-local-models.ts";
+import { withDesktopModelPerson } from "./desktop/desktop-model-grant.ts";
 import { isDesktopInjectModel, isLocalModelId, setDesktopInjectModels } from "./drivers/local-inject.ts";
 import { isPiLocalModel, piLocalKeyRefusalLifted } from "./pi-local-model.ts";
 import { defaultTurnPayerMode, effectiveTurnPayerMode, type TurnPayerMode } from "../shared/turn-payer.ts";
-import { handleDesktopBridgeMcp } from "./desktop-bridge-tools.ts";
+import { handleDesktopBridgeMcp } from "./desktop/desktop-bridge-tools.ts";
 import { cloudOnlyBot } from "./cloud-only-bots.ts";
 import { TypingPrewakeThrottle } from "./sandbox/sandbox-typing-prewake.ts";
 import {
@@ -2596,8 +2596,8 @@ import {
   attachDesktopTunnel,
   createBridgeAudit,
   createDesktopBridgeRoutes
-} from "./desktop-bridge-routes.ts";
-import { DesktopTunnels, startEgressProxy, type EgressProxy } from "./desktop-egress.ts";
+} from "./desktop/desktop-bridge-routes.ts";
+import { DesktopTunnels, startEgressProxy, type EgressProxy } from "./desktop/desktop-egress.ts";
 import { attachedFilesInText, attachmentChunks, attachmentIsTheirs, stageTurnAttachments, stagedName, SANDBOX_ATTACHMENTS_DIR, type StagingTarget, type TurnAttachedFile } from "./attachment-staging.ts";
 import { OFFICE_IMAGE_MAX_COUNT, OFFICE_IMAGES_MAX_TOTAL_BYTES, officeKind, officeMediaFolder, officeNote, readOfficeMedia } from "./office-media.ts";
 import { archiveInlineTexts, archiveNote, extractedFolderName, localExtractedPath, recoverArchiveUpload, sandboxArchiveArgv, storedArchiveManifest } from "./attachment-archives.ts";
@@ -2636,7 +2636,7 @@ import {
   localVmViewerStatus,
   sandboxDesktopTarget,
   viewerTargetId
-} from "./desktop-viewer-targets.ts";
+} from "./desktop/desktop-viewer-targets.ts";
 import { createAntigravityLeftoverRoutes } from "./routes/antigravity-leftovers.ts";
 import { createAntigravityAccountRoutes } from "./routes/antigravity-accounts.ts";
 import { findAntigravityLeftovers, removeAntigravityLeftovers } from "./drivers/antigravity-temp.ts";
@@ -2823,9 +2823,9 @@ function liveSessionPerson(sessionId: string): string | null {
   return sessions.byId(sessionId)?.principalId?.trim().toLowerCase() || null;
 }
 // Organization server: each person's own desktop app bridges their computer
-// (server/desktop-bridge.ts): bots in their conversations run shell, files,
+// (server/desktop/desktop-bridge.ts): bots in their conversations run shell, files,
 // search, fetch, browser, computer use and Local VM there, and their network
-// traffic leaves through it (server/desktop-egress.ts).
+// traffic leaves through it (server/desktop/desktop-egress.ts).
 const desktopBridges = new DesktopBridges(liveSessionPerson, Date.now, join(DATA_DIR, "desktop-computer-names.json"));
 /** The last model fallback per thread (session.model-fallback). */
 const modelFallbackByThread = new Map<string, { requested: string; actual: string }>();
@@ -6849,7 +6849,7 @@ function noteAutoWorkspace(threadId: string, start: AutoStart, explicit: boolean
   store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: workspaceLineName(line), ok: true } });
 }
 
-/** Where this turn's tools run and for whom (server/desktop-bridge.ts
+/** Where this turn's tools run and for whom (server/desktop/desktop-bridge.ts
  * resolveBotWorkplace), from the person's preference and whether their
  * desktop app is connected right now. */
 function decideWorkplace(input: { desktopTargeted: boolean; routine: boolean; principal: string | null; personAsked: boolean }): WorkplaceDecision {
@@ -13836,7 +13836,7 @@ function terminalPrincipalId(auth: RequestAuth): string | undefined {
   return id || undefined;
 }
 /** In-chat terminals on people's own computers and Local VMs through their
- * Sagax app (organization server, server/desktop-terminal.ts). */
+ * Sagax app (organization server, server/desktop/desktop-terminal.ts). */
 const desktopTerminals = new DesktopTerminals((person, operation) => desktopBridges.request(person, operation, () => true));
 /** What `principalId` may open in the in-chat terminal for `botId`
  * (2026-10-15; 2026-10-19): the server's hosts are an organization

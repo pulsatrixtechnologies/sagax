@@ -8,12 +8,12 @@ import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { createServer } from "node:http";
 import { join } from "node:path";
 
-import { isDesktopHostId, LOOPBACK_PROBE_STATUSES, normalizeLoopbackBase, SEED_ENDPOINTS, type LoopbackEndpoint, type LoopbackProbe, type LoopbackProbeStatus } from "../shared/desktop-local-models.ts";
-import { localModelLabels, localModelUnavailable, withServerHints } from "../shared/local-model-engines.ts";
-import { writeFileAtomic } from "./atomic.ts";
+import { isDesktopHostId, LOOPBACK_PROBE_STATUSES, normalizeLoopbackBase, SEED_ENDPOINTS, type LoopbackEndpoint, type LoopbackProbe, type LoopbackProbeStatus } from "../../shared/desktop-local-models.ts";
+import { localModelLabels, localModelUnavailable, withServerHints } from "../../shared/local-model-engines.ts";
+import { writeFileAtomic } from "../atomic.ts";
 import { personForDesktopGrant } from "./desktop-model-grant.ts";
 import type { DesktopBridgeOperation } from "./desktop-bridge.ts";
-import type { LocalReach } from "../shared/send-state.ts";
+import type { LocalReach } from "../../shared/send-state.ts";
 import {
   decodeInjectId,
   encodeInjectId,
@@ -21,7 +21,7 @@ import {
   removeDesktopInjectHost,
   upsertDesktopInjectHost,
   type InjectedModel,
-} from "./drivers/local-inject.ts";
+} from "../drivers/local-inject.ts";
 
 export const DESKTOP_MODEL_UNAVAILABLE = "This local model is unavailable. The computer is offline, or it is not shared with you.";
 export const DESKTOP_MODEL_WRONG_ENGINE = "This engine cannot run a model from your computer. Pick it on pi, Codex, Grok or another engine that takes an OpenAI-compatible endpoint.";

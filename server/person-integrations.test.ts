@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { json, readBody } from "./harness/http.ts";
 import { permissionRefusal } from "../shared/permissions.ts";
 import { engineIntegrationCommand, enginePluginCommandRefusal, PLUGIN_ACT_COMMAND } from "./person-integrations.ts";
-import { handleDesktopBridgeMcp } from "./desktop-bridge-tools.ts";
+import { handleDesktopBridgeMcp } from "./desktop/desktop-bridge-tools.ts";
 import type { RequestAuth } from "./request-auth.ts";
 import { createBotPluginRoutes } from "./routes/bot-plugins.ts";
 import { createPersonConnectionRoutes } from "./routes/person-connections.ts";

@@ -147,7 +147,7 @@ Extend `observeAchievementFrame` (`server/index.ts:1194-1216`) and the send site
 - `runtime` `turn.completed` with `modelFamily(threadModel) ?? modelFamily(provider) === "anthropic"` (`server/achievements-mastery.ts:111-126`): `claude.turn`, `key` from a small `claudeTide(model)` (`opus` / `sonnet` / `haiku` by id substring; other anthropic ids still count the turn).
 - `activityEvents` already emits `subagent.used` (`server/achievements.ts:518-523`): when the thread's family is anthropic, also `claude.subagent`.
 - `routine.run` completed (`:513-516, 1202-1211`): when that run's bot/thread family is anthropic, also `claude.routine`.
-- Tool line named `computer_use` / `computer_exec` / `mcp__computer__*` (`server/desktop-bridge-tools.ts:81-85`, `server/achievements-mastery.ts:61`) on an anthropic turn: `claude.computer`. This is not `computer.control` (`server/achievements.ts:462`).
+- Tool line named `computer_use` / `computer_exec` / `mcp__computer__*` (`server/desktop/desktop-bridge-tools.ts:81-85`, `server/achievements-mastery.ts:61`) on an anthropic turn: `claude.computer`. This is not `computer.control` (`server/achievements.ts:462`).
 - `achievementSendEvents` when `voiceCall` is set (`:500-508`) and the thread family is anthropic: `claude.voice`.
 
 Auto-picked Claude counts (the completed turn's model, not the bot's fallback).

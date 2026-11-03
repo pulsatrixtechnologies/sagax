@@ -1,13 +1,13 @@
-// The desktop bridge (server/desktop-bridge.ts): where a turn's tools run on
+// The desktop bridge (server/desktop/desktop-bridge.ts): where a turn's tools run on
 // an organization server (the routing table), and that a bridge relays only
 // for the signed-in person who connected it, only while connected.
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import { DesktopBridges, desktopBridgeCapability, desktopBridgeOperation, resolveBotWorkplace, type DesktopBridgeRegistration } from "./desktop-bridge.ts";
-import { localVmDesktopSpec } from "./computer/container-computer.ts";
+import { localVmDesktopSpec } from "../computer/container-computer.ts";
 import { desktopToolOperation, handleDesktopBridgeMcp } from "./desktop-bridge-tools.ts";
-import { DEFAULT_BOT_WORKPLACE, parseBotWorkplace, serializeBotWorkplace } from "../shared/bot-workplace.ts";
+import { DEFAULT_BOT_WORKPLACE, parseBotWorkplace, serializeBotWorkplace } from "../../shared/bot-workplace.ts";
 
 const ADA = "pr_11111111-1111-4111-8111-111111111111";
 const BOB = "pr_22222222-2222-4222-8222-222222222222";

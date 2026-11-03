@@ -4,8 +4,8 @@
 // per person in server/user-preferences.ts instead.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { cleanDesktopAppearance, type DesktopAppearance } from "../shared/desktop-appearance.ts";
-import { writeFileAtomic } from "./atomic.ts";
+import { cleanDesktopAppearance, type DesktopAppearance } from "../../shared/desktop-appearance.ts";
+import { writeFileAtomic } from "../atomic.ts";
 
 export interface DesktopAppearanceRecord {
   /** False until the desktop (or the phone) saved anything. */

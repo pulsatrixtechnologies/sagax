@@ -16,7 +16,7 @@ import {
   mergeLocalInject,
   setDesktopInjectModels,
   upsertDesktopInjectHost,
-} from "./drivers/local-inject.ts";
+} from "../drivers/local-inject.ts";
 
 const dirs: string[] = [];
 const services: DesktopLocalModels[] = [];

@@ -863,7 +863,7 @@ pref("models.voiceMode", "models", "omb.voiceMode.v1", "object", "Voice mode (vo
 // #1545: read back as {place, routines, network}, the default filled in
 pref("computer.botWorkplace", "computer", "sagax.botWorkplace.v1", "object", "Where bots work for you ({place: computer|server, routines: boolean, network: all|lan}; organization server)", "Settings > Computer > Bot workplace", always("rule-change"),
   (value) => parseBotWorkplace(value === undefined || value === null ? null : typeof value === "string" ? value : JSON.stringify(value)));
-// the person's other computers (organization server; server/desktop-bridge.ts):
+// the person's other computers (organization server; server/desktop/desktop-bridge.ts):
 // named by the computer's name or id, never offline-only for a rename
 add({
   key: "computer.rename", family: "computer", target: "none", value: "object", label: "Rename one of your other computers ({computer: its name, name: the new name})", where: "Settings > Computer > Other computers",

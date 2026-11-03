@@ -19,7 +19,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { sandboxDesktopTarget } from "../server/desktop-viewer-targets.ts";
+import { sandboxDesktopTarget } from "../server/desktop/desktop-viewer-targets.ts";
 import { json, readBody } from "../server/harness/http.ts";
 import { resolveRequestAuth } from "../server/request-auth.ts";
 import { createDesktopViewer, SANDBOX_VIEWER_TARGET } from "../server/routes/desktop-viewer.ts";

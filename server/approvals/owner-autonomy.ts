@@ -231,7 +231,7 @@ function plainCommand(command: unknown): boolean {
   return !COMMAND_CREDENTIAL.test(command) && !COMMAND_HIDDEN.test(command) && !COMMAND_HOME_WALK.test(command);
 }
 
-/** The Local VM's actions (server/desktop-bridge.ts desktopToolOperation). */
+/** The Local VM's actions (server/desktop/desktop-bridge.ts desktopToolOperation). */
 const LOCAL_VM_PLAIN_ACTIONS: ReadonlySet<string> = new Set(["status", "start", "create", "tools"]);
 
 /** A Local VM call of the owner's lineage: a plain action, a command line

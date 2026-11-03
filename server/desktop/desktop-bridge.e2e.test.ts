@@ -23,24 +23,24 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { localVmDesktopSpec } from "./computer/container-computer.ts";
-import { SandboxdVerifier } from "./sandbox/sandboxd-auth.ts";
-import { SandboxService } from "./sandbox/sandboxd-core.ts";
-import { createSandboxdHandler } from "./sandboxd.ts";
-import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
-import { FakeDocker } from "./testing/fake-docker.ts";
-import { zipArchive } from "./testing/archive-fixtures.mjs";
-import { connectFakeDesktop, openFakeTunnel, type FakeDesktop } from "./testing/fake-desktop.ts";
-import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "./testing/fake-oidc-provider.ts";
-import { freePortBlock } from "./testing/ports.ts";
-import { sandboxdConfigFromEnv } from "./sandbox/user-sandbox-spec.ts";
+import { localVmDesktopSpec } from "../computer/container-computer.ts";
+import { SandboxdVerifier } from "../sandbox/sandboxd-auth.ts";
+import { SandboxService } from "../sandbox/sandboxd-core.ts";
+import { createSandboxdHandler } from "../sandboxd.ts";
+import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
+import { FakeDocker } from "../testing/fake-docker.ts";
+import { zipArchive } from "../testing/archive-fixtures.mjs";
+import { connectFakeDesktop, openFakeTunnel, type FakeDesktop } from "../testing/fake-desktop.ts";
+import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
+import { freePortBlock } from "../testing/ports.ts";
+import { sandboxdConfigFromEnv } from "../sandbox/user-sandbox-spec.ts";
 
 // The echo is plain text, never HTML: the request path it repeats cannot
 // become markup in whatever reads it.
 const PLAIN_TEXT = { "content-type": "text/plain; charset=utf-8", "x-content-type-options": "nosniff" } as const;
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
-const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
+const FAKE_CLAUDE = join(SERVER_DIR, "..", "testing", "fake-claude-cli.ts");
 const posixOnly = describe.skipIf(process.platform === "win32");
 const ORG_KEY = "sk-ant-test-org-key-000000";
 const SANDBOXD_KEY = "d".repeat(64);
@@ -263,8 +263,8 @@ posixOnly("organization server: the desktop bridge", () => {
         },
       },
     }));
-    child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
-      cwd: join(SERVER_DIR, ".."),
+    child = spawn(process.execPath, [join(SERVER_DIR, "..", "index.ts")], {
+      cwd: join(SERVER_DIR, "..", ".."),
       env: { SAGAX_TEST_FIXED_WORKSPACE: "1", SAGAX_TEST_SEAMS: "1",
         ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
         HOME: home, USERPROFILE: home, SAGAX_LOCAL_VM_TEST_NAMESPACE: process.env.SAGAX_LOCAL_VM_TEST_NAMESPACE ?? "", SAGAX_PORT: String(PORT), SAGAX_WEBHOOK_PORT: String(PORT + 1),

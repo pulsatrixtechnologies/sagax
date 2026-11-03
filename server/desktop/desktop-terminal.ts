@@ -1,6 +1,6 @@
 // The in-chat terminal on a person's own computer, or on the Local VM of
 // that computer, on an organization server (the desktop bridge,
-// server/desktop-bridge.ts). The server never reaches into the PC: it asks
+// server/desktop/desktop-bridge.ts). The server never reaches into the PC: it asks
 // the person's own connected Sagax app (a bridge operation, terminal_open
 // or vm_terminal_open, carrying a one-time ticket), and that app connects
 // OUT with a WebSocket (GET /api/desktop-bridge/<id>/terminal/<ticket>),
@@ -14,8 +14,8 @@ import type { Socket } from "node:net";
 import { PassThrough } from "node:stream";
 
 import type { DesktopBridgeOperation } from "./desktop-bridge.ts";
-import type { TerminalAttachment } from "./terminal-resources/types.ts";
-import { encodeWebSocketFrame, websocketAccept, webSocketFrameDecoder } from "./ws-bridge.ts";
+import type { TerminalAttachment } from "../terminal-resources/types.ts";
+import { encodeWebSocketFrame, websocketAccept, webSocketFrameDecoder } from "../ws-bridge.ts";
 
 export type DesktopTerminalTarget = "desktop" | "vm";
 

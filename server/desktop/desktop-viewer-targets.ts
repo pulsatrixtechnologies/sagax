@@ -1,8 +1,8 @@
-import type { ContainerComputerStatus, LocalVmTarget } from "./computer/container-computer.ts";
-import type { RequestAuth } from "./request-auth.ts";
-import { desktopViewerUrl, type DesktopTarget } from "./routes/desktop-viewer.ts";
-import type { UserSandboxManager } from "./sandbox/user-sandbox-manager.ts";
-import { UserSandboxUnavailable } from "./sandbox/user-sandbox-manager.ts";
+import type { ContainerComputerStatus, LocalVmTarget } from "../computer/container-computer.ts";
+import type { RequestAuth } from "../request-auth.ts";
+import { desktopViewerUrl, type DesktopTarget } from "../routes/desktop-viewer.ts";
+import type { UserSandboxManager } from "../sandbox/user-sandbox-manager.ts";
+import { UserSandboxUnavailable } from "../sandbox/user-sandbox-manager.ts";
 
 export const viewerTargetId = (target: { key: string }) => `local/${target.key.replace(":", "-")}`;
 

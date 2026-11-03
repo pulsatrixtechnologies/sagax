@@ -10,7 +10,7 @@ import { join } from "node:path";
 import type { Duplex } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { sandboxDesktopTarget } from "./desktop-viewer-targets.ts";
+import { sandboxDesktopTarget } from "./desktop/desktop-viewer-targets.ts";
 import { json, readBody } from "./harness/http.ts";
 import { requiredScope, resolveRequestAuth } from "./request-auth.ts";
 import { createDesktopViewer, SANDBOX_VIEWER_TARGET } from "./routes/desktop-viewer.ts";

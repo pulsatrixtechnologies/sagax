@@ -19,7 +19,7 @@ import { request as httpRequest, createServer, type IncomingMessage, type Server
 import { connect as netConnect, isIP, type Socket } from "node:net";
 import { Duplex } from "node:stream";
 
-import type { BotWorkplaceNetwork } from "../shared/bot-workplace.ts";
+import type { BotWorkplaceNetwork } from "../../shared/bot-workplace.ts";
 
 // ── a minimal server side of RFC 6455 (binary messages only) ─────────────
 

@@ -349,7 +349,7 @@ export interface SendTurnInput {
   withholdHostTools?: boolean;
   /** Organization server, desktop bridge: the engine's own network traffic
    * (remote MCP servers, tool HTTP calls) leaves through the person's
-   * computer for this turn (server/desktop-egress.ts). The driver sets
+   * computer for this turn (server/desktop/desktop-egress.ts). The driver sets
    * HTTP(S)_PROXY to `url` and NO_PROXY to its own model hosts plus
    * `noProxy`, so the engine's model traffic never goes through it. */
   networkProxy?: { url: string; noProxy: string[] };

@@ -1,14 +1,14 @@
-// A personal computer's look for its paired phone (server/desktop-appearance.ts,
+// A personal computer's look for its paired phone (server/desktop/desktop-appearance.ts,
 // server/routes/desktop-appearance.ts).
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { createDesktopAppearanceStore } from "./desktop-appearance.ts";
-import { createDesktopAppearanceRoutes } from "./routes/desktop-appearance.ts";
-import { PASS } from "./routes/table.ts";
-import { CLIENT_ALLOW } from "./request-auth.ts";
-import { DESKTOP_APPEARANCE_PATH } from "../shared/desktop-appearance.ts";
+import { createDesktopAppearanceRoutes } from "../routes/desktop-appearance.ts";
+import { PASS } from "../routes/table.ts";
+import { CLIENT_ALLOW } from "../request-auth.ts";
+import { DESKTOP_APPEARANCE_PATH } from "../../shared/desktop-appearance.ts";
 
 describe("desktop appearance store", () => {
   it("keeps the four appearance keys, valid values only, across restarts", () => {

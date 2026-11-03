@@ -1,6 +1,6 @@
 // Where bots work for a person on an organization server (server mode):
 // "computer", their own PC through their Sagax desktop app (the desktop
-// bridge, server/desktop-bridge.ts), or "server", their server environment
+// bridge, server/desktop/desktop-bridge.ts), or "server", their server environment
 // (server/user-sandbox-*.ts). A per-person preference that travels with the
 // person (shared/user-preferences.ts) and that the server reads at each turn.
 //
@@ -18,7 +18,7 @@ export interface BotWorkplace {
    * it is connected). Off by default: routines run unattended. */
   routines: boolean;
   /** Which destinations bots may reach THROUGH this person's computer (the
-   * egress tunnel, server/desktop-egress.ts): "all" (default) or "lan", the
+   * egress tunnel, server/desktop/desktop-egress.ts): "all" (default) or "lan", the
    * local network only (private addresses; anything else leaves from the
    * server as it would without the tunnel). */
   network: BotWorkplaceNetwork;

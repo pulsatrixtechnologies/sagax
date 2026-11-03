@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleDesktopBridgeMcp } from "./desktop-bridge-tools.ts";
+import { handleDesktopBridgeMcp } from "./desktop/desktop-bridge-tools.ts";
 import { handleUserSandboxMcp } from "./sandbox/user-sandbox-tools.ts";
 import { TOOL_RESULT_READ, TOOL_TEXT_BUDGET, boundToolResult, boundToolText } from "./tool-output-bound.ts";
 

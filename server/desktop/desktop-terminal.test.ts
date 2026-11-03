@@ -7,7 +7,7 @@ import type { AddressInfo } from "node:net";
 import { PassThrough } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { openBridgeTerminal } from "../electron/desktop-terminal.mjs";
+import { openBridgeTerminal } from "../../electron/desktop-terminal.mjs";
 import { attachDesktopTerminal, isDesktopTunnelPath } from "./desktop-bridge-routes.ts";
 import type { DesktopBridgeOperation } from "./desktop-bridge.ts";
 import { DesktopTerminals } from "./desktop-terminal.ts";

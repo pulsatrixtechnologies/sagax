@@ -4,7 +4,7 @@
 // call becomes one exec in that person's sandbox through the manager; nothing
 // here touches the Sagax server's own filesystem or processes.
 //
-// Computer use has the desktop bridge's shape (server/desktop-bridge-tools.ts):
+// Computer use has the desktop bridge's shape (server/desktop/desktop-bridge-tools.ts):
 // computer_list_tools, then computer_use with one of SANDBOX_COMPUTER_TOOLS,
 // the same vocabulary as a cloud computer (server/drivers/chat-boat-tools.ts).
 // The desktop starts on the first such call (deploy/sandbox/sagax-desktop).

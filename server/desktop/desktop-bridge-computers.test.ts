@@ -1,5 +1,5 @@
 // Settings > Computer > Other computers (parity 2E): rename and remove one of
-// the person's computers (server/desktop-bridge.ts).
+// the person's computers (server/desktop/desktop-bridge.ts).
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

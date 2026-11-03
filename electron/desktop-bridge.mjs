@@ -3,7 +3,7 @@
 // computer: the server's bots, working for THIS person, run the solo-mode
 // tools here (shell, files, search, fetch, browser, computer use, Local VM)
 // and their network traffic leaves through here (electron/desktop-tunnel.mjs).
-// The server side is server/desktop-bridge.ts.
+// The server side is server/desktop/desktop-bridge.ts.
 //
 // Outbound only (HTTPS long poll + one WebSocket); no port opens here. The
 // session cookie and the bridge secret stay in the main process. Approvals

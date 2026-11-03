@@ -24,7 +24,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
 
-import type { BotWorkplace } from "../shared/bot-workplace.ts";
+import type { BotWorkplace } from "../../shared/bot-workplace.ts";
 
 const ABSOLUTE_PATH = /^(?:\/|[a-zA-Z]:[\\/]|\\\\)/;
 // oxlint-disable-next-line no-control-regex
@@ -75,7 +75,7 @@ export const DESKTOP_BRIDGE_ACTIONS = [
   // One allowlisted call to a loopback model the desktop published (endpoint id, never a URL).
   "local_model",
   // The in-chat terminal the person opened on their computer or its Local VM
-  // (server/desktop-terminal.ts): the app connects back with the ticket.
+  // (server/desktop/desktop-terminal.ts): the app connects back with the ticket.
   "terminal_open", "vm_terminal_open",
 ] as const;
 export type DesktopBridgeAction = (typeof DESKTOP_BRIDGE_ACTIONS)[number];

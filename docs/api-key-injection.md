@@ -95,7 +95,7 @@ $NAME"). Names a shell or the engines need are refused (`PATH`, `HOME`, `LD_*`,
 1Password keys are not exposed as variables (their value is read only at use).
 Tests: `server/vault/credential-command-env.test.ts`, `server/drivers/acp/command-variables.test.ts`,
 `server/drivers/codex.test.ts`, `server/drivers/pi.test.ts`, `server/computer/container-exec.test.ts`,
-`server/desktop-bridge.test.ts`, `electron/desktop-bridge.node-test.mjs`.
+`server/desktop/desktop-bridge.test.ts`, `electron/desktop-bridge.node-test.mjs`.
 
 Not covered: the cloud computer's `exec` (its provider's API takes a command line only,
 so the value would be on it) and `remote_session_exec` (someone else's machine, outside

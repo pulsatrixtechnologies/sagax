@@ -105,7 +105,7 @@ Environment facts:
 
 - Node ≥ 24 (`package.json` engines).
 - The server image is `node:24-trixie-slim` with no `iputils-ping` (`Dockerfile`).
-- Engine egress may go through the person's computer (`server/desktop-egress.ts`), but harness-side code such
+- Engine egress may go through the person's computer (`server/desktop/desktop-egress.ts`), but harness-side code such
   as the Data tools runs **in the server process**. The IT tools will too, so their vantage point is the Sagax
   server and never the person's LAN.
 

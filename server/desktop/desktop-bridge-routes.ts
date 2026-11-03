@@ -24,11 +24,11 @@ import type { IncomingMessage, Server } from "node:http";
 import { Socket } from "node:net";
 import type { Duplex } from "node:stream";
 
-import { localVmDesktopSpec } from "./computer/container-computer.ts";
+import { localVmDesktopSpec } from "../computer/container-computer.ts";
 import { desktopBridgeRegistration, desktopSystemInfo, type DesktopBridgeOperation, type DesktopBridges } from "./desktop-bridge.ts";
 import type { DesktopTunnels } from "./desktop-egress.ts";
 import type { DesktopTerminals } from "./desktop-terminal.ts";
-import { PASS, type RouteHandler } from "./routes/table.ts";
+import { PASS, type RouteHandler } from "../routes/table.ts";
 
 const ID_ROUTE = /^\/api\/desktop-bridge\/([0-9a-f-]{36})\/(poll|lease|progress|result|disconnect|system)$/;
 const LOCAL_VM_ROUTE = "/api/me/desktop-bridge/local-vm";
@@ -42,7 +42,7 @@ const LOCAL_VM_ACTIONS: Record<string, DesktopBridgeOperation["action"]> = {
   setup: "vm_setup", install: "vm_install", screenshot: "vm_screenshot",
 };
 const TUNNEL_ROUTE = /^\/api\/desktop-bridge\/([0-9a-f-]{36})\/tunnel$/;
-/** The person's app calling back for an in-chat terminal (server/desktop-terminal.ts). */
+/** The person's app calling back for an in-chat terminal (server/desktop/desktop-terminal.ts). */
 const TERMINAL_ROUTE = /^\/api\/desktop-bridge\/([0-9a-f-]{36})\/terminal\/([a-f0-9]{48})$/;
 
 /** The desktop bridge answers these upgrades itself (tunnel, terminal). */

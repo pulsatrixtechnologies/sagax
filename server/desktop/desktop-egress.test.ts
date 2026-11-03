@@ -1,4 +1,4 @@
-// Network egress through the person's computer (server/desktop-egress.ts):
+// Network egress through the person's computer (server/desktop/desktop-egress.ts):
 // the tunnel only for the signed-in person whose desktop registered it, the
 // proxy only with the thread's credential and only during that person's
 // turn, and traffic really leaving through the desktop's own resolver.
@@ -11,7 +11,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DesktopBridges } from "./desktop-bridge.ts";
 import { attachDesktopTunnel } from "./desktop-bridge-routes.ts";
 import { DesktopTunnels, egressEnvironment, egressRoute, encodeFrame, FrameReader, isLanAddress, startEgressProxy, type EgressAuditEntry, type EgressProxy } from "./desktop-egress.ts";
-import { openFakeTunnel } from "./testing/fake-desktop.ts";
+import { openFakeTunnel } from "../testing/fake-desktop.ts";
 
 // The echo is plain text, never HTML: the request path it repeats cannot
 // become markup in whatever reads it.

@@ -1035,11 +1035,17 @@ describe("notification routing", () => {
 
     it("fresh topic on return: a notification or a link never leaves a fresh topic over what it opens", () => {
       const dispatch = vi.fn();
+      // Opening the bot itself drops an automatic fresh topic and keeps a New
+      // chat the person asked for (2026-11-02); a thread named by a
+      // notification or a link drops either (openBotThread, focusMessage).
       openBot(dispatch, bot, false, { landing: false });
-      expect(dispatch.mock.calls.map(([action]) => action).filter((action) => action.type === "freshTopic").at(-1)).toEqual({ type: "freshTopic", botId: "bot-1", threadId: null });
+      expect(dispatch.mock.calls.map(([action]) => action).filter((action) => action.type === "freshTopic").at(-1)).toEqual({ type: "freshTopic", botId: "bot-1", threadId: null, keepAsked: true });
       const thread = vi.fn();
       openBotThread(thread, bot, "routine-report", false);
-      expect(thread.mock.calls.map(([action]) => action).at(-1)).toEqual({ type: "freshTopic", botId: "bot-1", threadId: null });
+      // an earlier topic: the focus on it drops the draft, asked for or not
+      let drafted = { ...initialState, bots: [bot], freshTopic: { "bot-1": { threadId: "routine-report", auto: false } } } as typeof initialState;
+      for (const [action] of thread.mock.calls) drafted = reducer(drafted, action);
+      expect(drafted.freshTopic["bot-1"]).toBeUndefined();
     });
 
     it("opens the thread it was on while threads are shown", () => {

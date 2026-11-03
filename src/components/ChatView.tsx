@@ -4,6 +4,7 @@ import { downloadBotZip, showBotZipExport } from "@/lib/bot-zip";
 import { ThreadLinkContext } from "@/components/ThreadLinkMenu";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { isStreamSegment, segmentsAbove, segmentsToReach } from "@/lib/single-stream";
+import { startedByNewChat } from "@/lib/fresh-topic";
 import { useSegmentTranscript } from "@/lib/use-segment-transcript";
 import { useFocusMessage } from "@/lib/focus-message";
 import { citationAttachment } from "@/lib/citations";
@@ -2235,7 +2236,10 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
     composerDockRef.current?.querySelector("textarea")?.focus();
   }, [bot.id, bot.threadId]);
   const streamEngine = state.instances.find((i) => i.instanceId === bot.modelSelection.instanceId);
-  const streamReadBack = streamHasEarlier && !olderPending && hiddenCount === 0 && !bot.hasMore;
+  // A topic started from New chat opens on its own (src/lib/fresh-topic.ts):
+  // reading it back to its first line does not draw the earlier topics above
+  // it; a link, a search hit or the activity pill still reaches them.
+  const streamReadBack = streamHasEarlier && !olderPending && hiddenCount === 0 && !bot.hasMore && !startedByNewChat(bot.threadId);
   // One timeline for the live topic: earlier topics above once read back.
   // An asked-for New topic clears that view (empty greeting); scrolling up
   // does not reveal the covered topic until Back (or the topics list).

@@ -5,7 +5,7 @@ import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { placeLabelKey, type Place } from "@/lib/place";
 import { copyText } from "@/lib/copy-text";
-import { readStep, stepArgs, stepDuration, stepJson, stepPhase, stepResult, type StepNameOf } from "@/lib/step-label";
+import { readStep, stepArgs, stepDuration, stepJson, stepPhase, stepResult, stepToolName, type StepNameOf } from "@/lib/step-label";
 import { parseArgs } from "@/lib/approval-describe";
 import { computerSelectTarget, toolExecutionTarget } from "../../shared/execution-target";
 import { PlaceIcon } from "./PlaceIcon";
@@ -66,7 +66,7 @@ export function ToolActivity({ tool, place = null, nameOf, defaultOpen = false }
         </span>
       ) : undefined}
     >
-      {() => <ToolStepDetail tool={tool} status={status} />}
+      {() => <ToolStepDetail tool={tool} status={status} nameOf={nameOf} place={place} />}
     </StepRow>
   );
   // 2026-10-16: the person's custom rule that answered this with no card.
@@ -100,12 +100,18 @@ export function autoApprovalText(approval: { source: string } | undefined): stri
 const KEY = "text-[11px] text-ink-tertiary";
 const MONO_BLOCK = "max-h-52 overflow-auto rounded-md bg-inset px-2 py-1.5 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap break-words text-ink";
 
-/** What the open row shows, top to bottom: the technical name with its
+/** What the open row shows, top to bottom: the tool's name in words with its
  * status and duration, the arguments in a few readable lines, the start of
  * the result, then the whole record as JSON, folded and copyable. */
-export function ToolStepDetail({ tool, status }: { tool: Tool; status: string }) {
+export function ToolStepDetail({ tool, status, nameOf, place = null }: { tool: Tool; status: string; nameOf?: StepNameOf; place?: Place | null }) {
   const phase = stepPhase(tool);
-  const args = stepArgs(tool.input);
+  const args = stepArgs(tool.input, nameOf);
+  // 2026-11-02: the tool in words and where it ran ("List files · Your
+  // server environment"); its technical id is only in the folded JSON.
+  const target = toolExecutionTarget(tool.name, place);
+  const toolName = target
+    ? `${stepToolName(tool)} · ${t(target === "user-sandbox" ? "toolTarget.userSandbox" : "toolTarget.userDesktop")}`
+    : stepToolName(tool);
   const parsed = parseArgs(tool.input);
   const command = typeof parsed?.command === "string" ? parsed.command : undefined;
   const plainInput = !parsed && (tool.input ?? tool.summary);
@@ -115,7 +121,7 @@ export function ToolStepDetail({ tool, status }: { tool: Tool; status: string })
     <div className="space-y-2 py-1 text-[12px] text-ink-secondary" data-testid="tool-step-detail">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className={KEY}>{t("step.detail.tool")}</span>
-        <code dir="ltr" className="min-w-0 break-all font-mono text-[11.5px] text-ink">{tool.name}</code>
+        <span className="min-w-0 break-words text-[12px] text-ink" data-testid="tool-step-name">{toolName}</span>
         <span className={cn("text-[11px]", phase === "failed" ? "text-danger" : "text-ink-tertiary")}>
           {status}{duration && phase !== "running" ? ` · ${duration}` : ""}
         </span>

@@ -24,7 +24,7 @@ Build the renderer (`node node_modules/vite/bin/vite.js build`), set
 then run:
 
 ```sh
-node --experimental-strip-types scripts/verify-group-vm.ts
+node --experimental-strip-types scripts/verify/dev/verify-group-vm.ts
 ```
 
 The launcher creates a temporary home, data directory, explicit loopback server

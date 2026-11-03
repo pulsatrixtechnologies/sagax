@@ -6,7 +6,7 @@ used here were synthetic; no live credentials or keyring were accessed.
 ## Run the fixture
 
 ```sh
-node --experimental-strip-types scripts/verify-codex-account.ts
+node --experimental-strip-types scripts/verify/dev/verify-codex-account.ts
 ```
 
 Open the printed preview URL, then Settings → Engines → Codex. The standard

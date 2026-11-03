@@ -29,6 +29,18 @@ describe("server refusals, in the app's language", () => {
     }
   });
 
+  // 2026-11-02: one reason, never the list of every forbidden action
+  it("names the one reason of a security block, in the app's language", () => {
+    setLocale("en");
+    const files = serverErrorMessage({ error: "x", code: "misuse_blocked", reason: "platform_exfiltration" });
+    expect(files).toMatch(/belongs to the Sagax server/);
+    expect(files).not.toMatch(/privilege|malware|attacking/i);
+    setLocale("fr");
+    expect(serverErrorMessage({ error: "x", code: "misuse_blocked", reason: "offensive_hacking" })).toMatch(/attaquer ou à balayer/);
+    expect(serverErrorMessage({ error: "x", code: "misuse_blocked", reason: "constructor" })).toBe("Refusé par la politique de sécurité de Sagax. Reformulez la demande sans cette action.");
+    expect(serverErrorMessage({ error: "x", code: "misuse_blocked" })).not.toMatch(/élévation|malveillant|attaque/);
+  });
+
   it("covers the desktop-flow approval refusal and leaves other bodies alone", () => {
     setLocale("fr");
     expect(serverErrorMessage({ code: "approval_desktop_required" })).toMatch(/flux de permissions/);

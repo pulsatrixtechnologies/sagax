@@ -257,7 +257,7 @@ const support: AcpSupport = {
   statusLog: { path: qwenDebugLogPath, parse: parseQwenLogLine },
   // Organization server: no shell, file, web, subagent or background memory
   // agent of Qwen's own (server/drivers/host-tools.ts; verified on 0.24.7
-  // with scripts/verify-org-host-tools.ts).
+  // with scripts/verify/dev/verify-org-host-tools.ts).
   withholdsHostTools: true,
   withheldWorkspace,
   applyTurnEnv: (env, { withholdHostTools }) => qwenHostToolEnv(env, withholdHostTools === true),

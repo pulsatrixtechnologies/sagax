@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { verifyWorkspaceBackup } from "../scripts/verify-workspace-backup.ts";
+import { verifyWorkspaceBackup } from "../scripts/verify/dev/verify-workspace-backup.ts";
 
 it("restores an encrypted workspace through the real server and continues its original chat", async () => {
   const result = await verifyWorkspaceBackup();

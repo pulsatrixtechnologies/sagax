@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { setLocale } from "./i18n";
-import { routineAutoPauseChoices, routineAutoPausedText, routineAutoPauseOption, routineRunError, routineRunsOn, routineWeekRunsText, scheduleRepeatsEventDate } from "./routine-display";
+import { routineAutoPauseChoices, routineAutoPausedText, routineAutoPauseOption, routineRunError, routineRunProblems, routineRunsOn, routineWeekRunsText, scheduleRepeatsEventDate } from "./routine-display";
 
 describe("a routine's details (#1516)", () => {
   it("says one run in the singular", () => {
@@ -96,5 +96,13 @@ describe("routineQueuePosition (2026-11-01)", () => {
     expect(routineQueuePosition(runs[0]!, runs)).toEqual({ position: 3, count: 3 });
     expect(routineQueuePosition(runs[2]!, runs)).toEqual({ position: 1, count: 1 });
     expect(routineQueuePosition(runs[3]!, runs)).toBeNull();
+  });
+});
+
+describe("a run's problems as stored before 2026-11-03 (production, a catch-up routine)", () => {
+  it("reads a teammate's cut quote as plain text", () => {
+    const problems = "Robin's work failed: The turn did not complete (tool_error).\nIts last message, quoted: \"FAIL\\n\\nThe two-message archive plan is **not";
+    expect(routineRunProblems({ status: "completed", problems })).toBe("Robin's work failed: The turn did not complete (tool_error).\nIts last message:\nFAIL\n\nThe two-message archive plan is not…");
+    expect(routineRunProblems({ status: "failed", problems })).toBe("");
   });
 });

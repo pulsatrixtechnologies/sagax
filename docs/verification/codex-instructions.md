@@ -30,7 +30,7 @@ with an upgrade error.
 
 ## Sandbox consistency
 
-Run `node --experimental-strip-types scripts/verify-codex-sandbox.mjs` with
+Run `node --experimental-strip-types scripts/verify/dev/verify-codex-sandbox.mjs` with
 `PROBE_CODEX` set to the native executable when it is not on PATH. This uses the
 production adapter, disposable Codex homes and a loopback synthetic Responses
 endpoint. It does not use account credentials or paid model inference. On Windows
@@ -52,8 +52,8 @@ permission profiles and older-server fallback.
 pnpm exec vitest run server/drivers/codex.test.ts server/drivers/codex-instructions.test.ts
 pnpm typecheck
 pnpm test
-node --experimental-strip-types scripts/verify-codex-instructions.mjs
-PROBE_BEFORE=1 node --experimental-strip-types scripts/verify-codex-instructions.mjs
+node --experimental-strip-types scripts/verify/dev/verify-codex-instructions.mjs
+PROBE_BEFORE=1 node --experimental-strip-types scripts/verify/dev/verify-codex-instructions.mjs
 ```
 
 The optional native verifier requires Codex on PATH. `PROBE_CODEX` can select a

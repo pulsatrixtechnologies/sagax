@@ -2,6 +2,13 @@ import type { Routine, RoutineRun } from "./routines";
 import { activeLocale, t } from "./i18n";
 import { scheduleLabel } from "./schedule-label";
 import { ROUTINE_AUTO_PAUSE_CHOICES } from "../../shared/routine-auto-pause";
+import { readableRoutineProblems } from "../../shared/routine-problems";
+
+/** A completed run's problems as a person reads them: a teammate's quoted
+ * last message as plain text, rows stored before 2026-11-03 included. */
+export function routineRunProblems(run: Pick<RoutineRun, "status" | "problems">): string {
+  return run.status === "completed" && run.problems?.trim() ? readableRoutineProblems(run.problems) : "";
+}
 
 export function routineRunTime(run: RoutineRun): number {
   return run.createdAt || run.startedAt || run.scheduledFor;
@@ -183,7 +190,7 @@ export function routineRunDuration(run: Pick<RoutineRun, "startedAt" | "finished
 /** The first line of what a run has to say: what it waits on, its error, its
  * report. A quiet run says it had nothing. */
 export function routineRunPreview(run: Pick<RoutineRun, "status" | "quiet" | "attention" | "error" | "output" | "problems">): string {
-  if (run.status === "completed" && run.problems) return run.problems.split("\n")[0]!.trim();
+  if (run.status === "completed" && run.problems) return routineRunProblems(run).split("\n")[0]!.trim();
   if (run.status === "completed" && run.quiet) return t("routineRun.quiet");
   const text = run.attention || routineRunError(run.error) || run.output || "";
   const line = text.split("\n").map((part) => part.trim()).find((part) => part && !/^\|?\s*:?-{2,}/.test(part)) ?? "";

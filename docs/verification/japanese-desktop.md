@@ -25,7 +25,7 @@ tag, rather than replacing an image used by running user desktops. Set explicit
 `SAGAX_VERIFY_PODMAN`, `SAGAX_VERIFY_MACHINE`, and `SAGAX_VERIFY_IMAGE`, then run:
 
 ```sh
-node --experimental-strip-types scripts/verify-japanese-desktop.ts
+node --experimental-strip-types scripts/verify/dev/verify-japanese-desktop.ts
 ```
 
 The script saves a minimal UTF-8 HTML file, launches Firefox in two independently

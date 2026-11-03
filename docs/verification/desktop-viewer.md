@@ -4,7 +4,7 @@ Build and run the isolated server/browser fixture on Linux or macOS:
 
 ```sh
 pnpm build
-node --experimental-strip-types scripts/verify-desktop-viewer.ts
+node --experimental-strip-types scripts/verify/dev/verify-desktop-viewer.ts
 ```
 
 To reuse installed browser tools, set `SAGAX_AGENT_BROWSER_PATH` and

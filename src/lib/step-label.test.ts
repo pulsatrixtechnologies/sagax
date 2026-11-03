@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { setLocale } from "@/lib/i18n";
-import { readStep, stepArgs, stepDuration, stepJson, stepLabel, stepPhase, stepResult, stuckNoticeKey } from "./step-label";
+import { readStep, stepArgs, stepDuration, stepJson, stepLabel, stepPhase, stepResult, stepToolName, stuckNoticeKey } from "./step-label";
 
 afterEach(() => {
   setLocale("en");
@@ -149,6 +149,28 @@ describe("step detail helpers", () => {
       { key: "subject", value: "Invoice 4012" },
     ]);
     expect(stepJson({ name: "mcp__outlook__get_message", ok: false, input: JSON.stringify({ message_id: messageId }) })).toContain(messageId);
+  });
+
+  // 2026-11-02 (production): a server path named after the bot's id
+  it("shows a path with a bot's id as the bot's name, else as the folder it is, the path in the tooltip", () => {
+    const botId = "5a1d0c3e-7b42-4c8e-9f10-2d3e4f5a6b7c";
+    const path = `/data/.openmausbot/workspaces/${botId}/docs`;
+    const nameOf = (id: string) => (id === botId ? "Nova" : undefined);
+    expect(stepArgs(JSON.stringify({ path }), nameOf)).toEqual([{ key: "path", value: "/data/.openmausbot/workspaces/Nova/docs", full: path }]);
+    expect(stepArgs(JSON.stringify({ path }))).toEqual([{ key: "path", value: "The bot's own folder/docs", full: path }]);
+    expect(stepArgs(JSON.stringify({ path: "/workspace/bots/nova" }))).toEqual([{ key: "path", value: "/workspace/bots/nova" }]);
+  });
+
+  it("names a tool in words in its detail, never its raw id (2026-11-02)", () => {
+    expect(stepToolName({ name: "mcp__sagax-environment__list_files" })).toBe("List files");
+    expect(stepToolName({ name: "mcp__sagax-environment__run_command" })).toBe("Run a command");
+    expect(stepToolName({ name: "mcp__desk__view_tickets" })).toBe("View tickets");
+    expect(stepToolName({ name: "mcp__gw__acme_desk__query", product: "Acme Desk" })).toBe("Query · Acme Desk");
+    for (const name of ["mcp__sagax-environment__list_files", "mcp__desk__view_tickets", "mcp__agents__coordinate_bots"]) {
+      expect(stepToolName({ name })).not.toMatch(/__|_/);
+    }
+    setLocale("fr");
+    expect(stepToolName({ name: "mcp__sagax-environment__list_files" })).toBe("Lister les fichiers");
   });
 
   it("cuts a long result and says so", () => {

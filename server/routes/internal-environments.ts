@@ -37,6 +37,7 @@ import { handleDesktopBridgeMcp } from "../desktop-bridge-tools.ts";
 import { handleMessagesMcp } from "../imessage-mcp.ts";
 import { messagesOnBotMac } from "../../shared/imessage.ts";
 import { misusePathRefusal, misuseRefusal, misuseToolFrameText } from "../misuse-guardrails.ts";
+import { serverPathAnswer, serverPathInCommand } from "../sandbox-server-path.ts";
 import { deliverableNotification } from "../notify.ts";
 import { enginePluginCommandRefusal } from "../person-integrations.ts";
 import type { PersonalMcpServer } from "../person-connections.ts";
@@ -172,6 +173,10 @@ export interface InternalEnvironmentsDeps {
   /** The bot's own folder in the environment (server/sandbox-bot-folder.ts),
    * or null: its commands then start at /workspace as before. */
   sandboxBotFolder?(botId: string): string | null;
+  /** This bot's own folders on the Sagax server (its workspace and task
+   * workspaces, every spelling): a sandbox tool given one gets a short line
+   * naming its folder in the environment (server/sandbox-server-path.ts). */
+  serverBotRoots?(botId: string): string[];
   /** The start-of-environment tidy (once per start) and disk check. */
   sandboxTidy?(ownerId: string, botId: string): Promise<void>;
   /** A disk-full warning for this person's environment, or null. */
@@ -505,6 +510,10 @@ export function createInternalEnvironmentsRoutes(deps: InternalEnvironmentsDeps)
           commandRefusal: (command) => deps.enginePluginCommandRefusal(command)
             ?? enginePluginCommandRefusal(command)
             ?? deps.misuseTextRefusal(command, ownerId, "shell", { botId: capability.botId, threadId: capability.threadId, tool: "run_command" }),
+          serverPathAnswer: (value, kind) => {
+            const where = { roots: deps.serverBotRoots?.(capability.botId) ?? [], folder };
+            return kind === "path" ? serverPathAnswer(value, where) : serverPathInCommand(value, where);
+          },
           pathRefusal: (pathValue) => deps.misusePathRefusal(pathValue, {
             ...deps.misuseActor(ownerId),
             botId: capability.botId,

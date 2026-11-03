@@ -5,7 +5,7 @@ loopback-only fake Images API. Do not enter real provider keys or select
 **Generate avatar** with a configured cloud provider during this check.
 
 ```sh
-node --experimental-strip-types scripts/verify-avatar-providers.ts
+node --experimental-strip-types scripts/verify/dev/verify-avatar-providers.ts
 ```
 
 Open the printed `previewUrl`. The page shows the fake API's `imageBase`.

@@ -112,7 +112,7 @@ realtime voice agent, Grok responses, chat completions or function calling,
 nor any mode where xAI writes the reply. Every accepted utterance becomes an
 ordinary bot turn through the normal send route (attributed to the person who
 spoke, private-thread rules applied), and only the bot's own reply text is
-synthesized. `server/voice-call.e2e.test.ts` and `scripts/verify-voice-mode.ts`
+synthesized. `server/voice-call.e2e.test.ts` and `scripts/verify/dev/verify-voice-mode.ts`
 fail if a call reaches any xAI path other than `/v1/stt`, `/v1/tts` and
 `/v1/tts/voices`.
 
@@ -1183,7 +1183,7 @@ the server's own voice routes.
   punctuation, the answer over one streaming voice socket, barge-in cleared
   at xAI, hold, the POST fallback after xAI's socket drops for good, and no
   xAI path but voice:
-  `pnpm exec vite build && node --experimental-strip-types scripts/verify-voice-mode.ts`.
+  `pnpm exec vite build && node --experimental-strip-types scripts/verify/dev/verify-voice-mode.ts`.
   It drives the call through `window.__sagaxVoiceCall`, which exists only
   when `localStorage["omb.voiceCall.debug"]` is `"1"`.
 

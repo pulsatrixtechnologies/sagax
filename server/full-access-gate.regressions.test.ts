@@ -276,3 +276,80 @@ describe("#1065: Bypass on the owner's own computer from their own turn", () => 
     expect(decision).toMatchObject({ kind: "card", reason: "cross-person" });
   });
 });
+
+// 2026-11-02: a phone call reached any other way than place_phone_call came
+// back allowed. It reaches a real person and costs money: held like a text
+// below Full, the person's level at Full.
+describe("a phone call is held like a text", () => {
+  let dataDir = "";
+  beforeEach(() => {
+    dataDir = mkdtempSync(join(tmpdir(), "sagax-full-call-"));
+    setSafetyDataDirForTests(dataDir);
+    process.env.SAGAX_MISUSE_GUARDRAILS = "enforce";
+  });
+  afterEach(async () => {
+    delete process.env.SAGAX_MISUSE_GUARDRAILS;
+    resetSafetyReviewForTests();
+    if (dataDir) await flushAdminActivity(dataDir);
+    await removeTempDir(dataDir);
+  });
+
+  const CREATE = { resource: "Calls", action: "create", set: { To: "+15145550142", From: "+15145550100", Twiml: "<Response><Say>Rappel</Say></Response>" } };
+  const CALLS: Array<[string, Record<string, unknown>]> = [
+    ["mcp__perspicax__twilio_api_write", CREATE],
+    ["mcp__perspicax__twilio_api__write", CREATE],
+    ["mcp__perspicax__voice_call", { to: "+15145550142", purpose: "Rappel du rendez-vous" }],
+    ["mcp__twilio__create_call", { to: "+15145550142", from: "+15145550100", url: "https://example.test/twiml" }],
+  ];
+  const ask = (tool: string, args: Record<string, unknown>, threadId: string, fullAccess = false) => safetyPermissionEffect({
+    // the server's review text: the tool, then its input on its own line
+    text: `${tool}\n${JSON.stringify(args)}`,
+    surface: "mcp",
+    tool,
+    known: true,
+    triage: false,
+    principalId: "pr_owner",
+    threadId,
+    botId: BOT.id,
+    fullAccess,
+  });
+
+  it("a call create is held below Full, in both spellings, with a card that says it is a call", () => {
+    // the safer path once, saying it is a call (the live sequence of a send) ...
+    const [firstTool, firstArgs] = CALLS[0]!;
+    const first = ask(firstTool, firstArgs, "t-call");
+    expect(first).toMatchObject({ kind: "stop", classKey: "outbound:send" });
+    expect(first?.kind === "stop" ? first.message : "").toMatch(/phone call .*real person .*costs money/i);
+    // ... then every call, each spelling, is held on its first attempt and the next
+    for (const [tool, args] of CALLS) {
+      expect(ask(tool, args, `t-${tool}`), tool).toMatchObject({ kind: "hold", classKey: "outbound:send" });
+      expect(ask(tool, args, `t-${tool}`), tool).toMatchObject({ kind: "hold", classKey: "outbound:send" });
+    }
+    // the outbound guard holds it below Full, as a text
+    expect(autoVerdict("auto", "mcp__perspicax__voice_call", {})).toEqual({ approve: null, source: "outbound-guard" });
+    expect(autoVerdict("auto", "other", { safetyHold: true, toolName: "mcp__perspicax__twilio_api__write" })).toEqual({ approve: null, source: "safety-hold" });
+  });
+
+  it("at Full the call follows the person's level, as a text does", () => {
+    for (const [tool, args] of CALLS) expect(ask(tool, args, `t-full-${tool}`, true), tool).toBeNull();
+    expect(autoVerdict("full", "mcp__perspicax__voice_call", { outbound: true })).toMatchObject({ source: "full-access" });
+    // a person's own Ask first rule still holds it
+    expect(autoVerdict("full", "mcp__perspicax__voice_call", { customRule: { behavior: "ask", id: "rule_person" } })).toEqual({ approve: null, source: "custom-rule-ask" });
+  });
+
+  it("a read of calls is not held", () => {
+    for (const tool of ["mcp__perspicax__twilio_api_query", "mcp__perspicax__twilio_api__query"]) {
+      expect(ask(tool, { resource: "Calls", params: { To: "+15145550142" } }, `t-read-${tool}`), tool).toBeNull();
+    }
+    expect(ask("mcp__perspicax__voice_line", {}, "t-read-line")).toBeNull();
+  });
+
+  it("a name that merely contains call is not held", () => {
+    for (const tool of ["mcp__crm__log_call", "mcp__directory__call_tool", "mcp__crm__callback_handler", "mcp__crm__get_call_recordings"]) {
+      expect(isOutboundTool(tool), tool).toBe(false);
+      expect(ask(tool, { note: "called the client" }, `t-name-${tool}`), tool).toBeNull();
+    }
+    // a Twilio write that places no call (a live call hung up) is not a send
+    expect(ask("mcp__perspicax__twilio_api__write", { resource: "Calls", action: "update", id: "CA1", set: { Status: "completed" } }, "t-hangup")).toBeNull();
+  });
+});

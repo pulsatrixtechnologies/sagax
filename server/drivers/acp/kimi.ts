@@ -592,7 +592,7 @@ const support: AcpSupport = {
   resolveTurnModel: (model, env) => (env[KIMI_KEY_MARK] ? KIMI_MOONSHOT_MODEL : model ? ensureKimiInjectAlias(model, env) : model),
   // Organization server: no shell, file, web, subagent or schedule tool of
   // Kimi's own (server/drivers/host-tools.ts; verified on 2.1.1 with
-  // scripts/verify-org-host-tools.ts).
+  // scripts/verify/dev/verify-org-host-tools.ts).
   withholdsHostTools: true,
   withheldWorkspace,
   spawnArgs: (_config, turn) => {

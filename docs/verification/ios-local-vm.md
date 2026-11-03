@@ -3,7 +3,7 @@
 Launch the isolated server, synthetic Local VM and companion sidecar:
 
 ```sh
-node --experimental-strip-types scripts/verify-ios-local-vm.ts
+node --experimental-strip-types scripts/verify/dev/verify-ios-local-vm.ts
 ```
 
 The script starts the standard fake-engine server in a disposable home, a

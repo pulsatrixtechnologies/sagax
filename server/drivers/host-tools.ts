@@ -632,7 +632,7 @@ export function hermesTurnHome(
 }
 
 /** Host tool names per ACP engine, as each real CLI offered them to the
- * model (scripts/verify-org-host-tools.ts). */
+ * model (scripts/verify/dev/verify-org-host-tools.ts). */
 export const HOST_TOOL_NAMES_BY_ENGINE: Readonly<Record<string, readonly string[]>> = {
   qwen: QWEN_HOST_TOOLS,
   gemini: GEMINI_HOST_TOOLS,

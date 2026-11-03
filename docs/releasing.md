@@ -114,7 +114,7 @@ sha you pass) is not an ancestor of `origin/main`. Run it after
    release build. After-pack refuses a
    package whose `.node` addons or `Sagax.exe` are not PE images for that
    arch; recheck a built or downloaded package with
-   `node scripts/verify-win-natives.mjs <win-unpacked or unzipped dir> x64|arm64`.
+   `node scripts/verify/release/verify-win-natives.mjs <win-unpacked or unzipped dir> x64|arm64`.
    Nothing here runs the app: a Windows launch (Windows, below) is still
    needed before release.
 4. Gates: `scripts/smoke-browser-bundle.mjs` (live on the host arch,
@@ -136,7 +136,7 @@ sha you pass) is not an ancestor of `origin/main`. Run it after
    (fails when either updater manifest is missing on disk, or when a feed does
    not carry exactly `docs/releases/X.Y.Z.md`; both `latest-mac.yml` and
    `latest.yml` must always be published),
-   `node scripts/verify-win-signatures.mjs release` (every Windows `.exe`
+   `node scripts/verify/release/verify-win-signatures.mjs release` (every Windows `.exe`
    signed and timestamped, `latest.yml` sha512 and sizes match the signed
    files), and
    `gh release create pulsa-vX.Y.Z --target "$(git rev-parse HEAD)" --notes-file docs/releases/X.Y.Z.md`
@@ -201,7 +201,7 @@ What the build does (`scripts/package-fork.mjs` with
 3. The access token is requested once per build, kept in memory and handed
    to jsign through its environment (`--storepass env:...`), never on a
    command line, in a file or in a log.
-4. After the feed gets its release notes, `scripts/verify-win-signatures.mjs`
+4. After the feed gets its release notes, `scripts/verify/release/verify-win-signatures.mjs`
    runs `osslsigncode verify` on the setup and on every `.exe` of
    `win-unpacked`, `win-arm64-unpacked` and both zips (signer CN must be
    `SAGAX_WIN_SIGN_PUBLISHER`, signature and timestamp valid, against the
@@ -257,7 +257,7 @@ profile. Note the Windows build (`winver`) and the arch.
 
   ```powershell
   node scripts\smoke-packaged-launch.mjs --app "$env:LOCALAPPDATA\Programs\Sagax\Sagax.exe"
-  node scripts\verify-win-natives.mjs "$env:LOCALAPPDATA\Programs\Sagax" arm64
+  node scripts\verify\release\verify-win-natives.mjs "$env:LOCALAPPDATA\Programs\Sagax" arm64
   ```
 
   It prints `[smoke] renderer-ready` and exits 0 when the window reached the

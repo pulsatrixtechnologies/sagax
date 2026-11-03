@@ -15,7 +15,7 @@ import { join } from "node:path";
  * step. `deps` is injected so the routing can be tested without a package.
  *
  * A marker present in BOTH artifacts would silently route the AppImage to the
- * hand-off; scripts/verify-linux-package.mjs guards the packaging side. */
+ * hand-off; scripts/verify/release/verify-linux-package.mjs guards the packaging side. */
 export function linuxPackageType({
   platform = process.platform,
   resourcesPath = process.resourcesPath,

@@ -27,7 +27,7 @@ Set `SAGAX_VERIFY_PODMAN` and `SAGAX_VERIFY_MACHINE` explicitly, with the manage
 image already prepared on that test engine, then run:
 
 ```sh
-node --experimental-strip-types scripts/verify-podman-firefox.ts
+node --experimental-strip-types scripts/verify/dev/verify-podman-firefox.ts
 ```
 
 The script creates disposable desktops and engine-host temporary workspaces.

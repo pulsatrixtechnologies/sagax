@@ -33,7 +33,7 @@ SAGAX_UI_E2E=1 pnpm exec vitest run scripts/testing/cron-routines-ui.e2e.test.ts
 Run the launcher directly so Ctrl-C reaches the fixture owner:
 
 ```sh
-node --experimental-strip-types scripts/verify-routines.ts
+node --experimental-strip-types scripts/verify/dev/verify-routines.ts
 ```
 
 Open the printed `previewUrl`, not the user's running app. The launcher uses

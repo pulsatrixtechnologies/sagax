@@ -264,7 +264,7 @@ describe("red team: tool frames and the MCP gate", () => {
   it("blocks only a hard category, and only in enforce mode", () => {
     expect(misuseGateBlockText("run_command\nnmap -sS 10.0.0.1", "shadow")).toBeNull();
     expect(misuseGateBlockText("run_command\nnmap -sS 10.0.0.1", "off")).toBeNull();
-    expect(misuseGateBlockText("run_command\nnmap -sS 10.0.0.1", "enforce")).toContain("attaque contre un tiers");
+    expect(misuseGateBlockText("run_command\nnmap -sS 10.0.0.1", "enforce")).toContain("attaquer ou à balayer un système");
     expect(misuseGateBlockText("flow_action\n{\"query\":\"menaces EDR\"}", "enforce")).toBeNull();
   });
 });
@@ -285,6 +285,21 @@ describe("what a person reads", () => {
       expect(text.length).toBeGreaterThan(10);
     }
     expect(MISUSE_REFUSAL_APPROVAL).toContain("Perspicax");
+  });
+
+  // 2026-11-02 (production): the refusal listed every forbidden action at once and
+  // read as an accusation; it names the one reason, then what to do
+  it("names one reason per category, never the whole list, and says what to do instead", () => {
+    const phrases = ["droits d'administrateur", "environnement isolé", "protection", "attaquer", "programme malveillant", "serveur Sagax", "serveur partagé", "épuiserait"];
+    for (const category of MISUSE_CATEGORIES.filter((entry) => entry !== "security_operations")) {
+      const text = misuseRefusalText(category, "block");
+      expect(text, category).toMatch(/^Refusé : /);
+      expect(phrases.filter((phrase) => text.includes(phrase)).length, `${category}: ${text}`).toBe(1);
+      expect(text.split(". ").length, text).toBeGreaterThanOrEqual(2);
+    }
+    expect(misuseRefusalText("platform_exfiltration", "block")).toContain("Vos fichiers sont dans /workspace");
+    expect(MISUSE_REFUSAL_BLOCK).not.toMatch(/élévation|malveillant|attaque|destructrice/);
+    expect(misuseRefusalText(undefined, "block")).toBe(MISUSE_REFUSAL_BLOCK);
   });
 
   it("states the policy before any persona and says it cannot be waived", () => {

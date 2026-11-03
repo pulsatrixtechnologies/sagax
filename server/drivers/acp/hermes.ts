@@ -450,7 +450,7 @@ const support: AcpSupport = {
   spawnArgs: () => ["acp"],
   // Organization server: no shell, file, web, browser, code, subagent,
   // memory or skill tool of Hermes's own (server/drivers/host-tools.ts;
-  // verified on 0.21.5 with scripts/verify-org-host-tools.ts).
+  // verified on 0.21.5 with scripts/verify/dev/verify-org-host-tools.ts).
   withholdsHostTools: true,
   withheldWorkspace,
   applyTurnEnv: (env, { withholdHostTools, localKeyPrincipal }) => {

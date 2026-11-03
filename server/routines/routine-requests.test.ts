@@ -436,6 +436,23 @@ describe("RoutineRequestService", () => {
     expect(routines.listRoutines()[0].overlap).toBeUndefined();
   });
 
+  it("Format with AI (2026-11-03): an update of the instructions alone waits for the approval, then replaces them and keeps the rest", async () => {
+    const { service, routines } = harness();
+    const created = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: createProposal({ overlap: "queue" }) });
+    service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: created.requestId, behavior: "allow" });
+    const routine = routines.listRoutines()[0];
+    const formatted = "## Morning brief\n\n1. Read the overnight queue.\n2. Summarize it by client.\n3. Flag tickets older than 2 days.";
+    const update = await service.propose({ botId: "bot-a", threadId: "thread-a", proposal: { action: "update", routineId: routine.id, changes: { instructions: formatted } } });
+    // Nothing changes before the person approves.
+    expect(routines.listRoutines()[0].prompt).toBe(routine.prompt);
+    expect(update.detail).toContain("1. Read the overnight queue.");
+    const result = service.resolve({ botId: "bot-a", threadId: "thread-a", requestId: update.requestId, behavior: "allow" });
+    expect(result.state).toBe("applied");
+    const after = routines.listRoutines()[0];
+    expect(after.prompt).toBe(formatted);
+    expect(after).toMatchObject({ id: routine.id, name: routine.name, schedule: routine.schedule, overlap: "queue" });
+  });
+
   it("a proposal can make a routine run only when something changes, and remove it (2026-10-26)", async () => {
     const { service, routines } = harness();
     const watch = { kind: "watch", source: { type: "files", path: "inbox" } } as const;

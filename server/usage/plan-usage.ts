@@ -24,10 +24,10 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import type { InstanceConfigMap } from "./contracts.ts";
-import { resolveClaudeConfigDir } from "./drivers/claude.ts";
-import { codexHome } from "./drivers/codex-identity.ts";
-import { harnessHome } from "./env-path.ts";
+import type { InstanceConfigMap } from "../contracts.ts";
+import { resolveClaudeConfigDir } from "../drivers/claude.ts";
+import { codexHome } from "../drivers/codex-identity.ts";
+import { harnessHome } from "../env-path.ts";
 
 export type PlanDriver = "claude" | "codex" | "grok";
 

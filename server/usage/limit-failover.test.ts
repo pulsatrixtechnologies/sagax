@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { AFTER_RESET_MS } from "../shared/limit-failover.ts";
+import { AFTER_RESET_MS } from "../../shared/limit-failover.ts";
 import { LimitFailoverStore, limitBackupAllowed, MAX_RESENDS, pickLimitBackup, ROUTINE_RESUME_COOLDOWN_MS, type LimitCandidate } from "./limit-failover.ts";
 
 const claude = { instanceId: "claude", driverKind: "claudeAgent" };

@@ -603,7 +603,7 @@ import { WorkflowStore, workflowScope } from "./workflows.ts";
 import { createHealthReportRoutes } from "./routes/health-report.ts";
 import { createUsageMeterRoutes } from "./routes/usage-meter.ts";
 import { createLimitResetRoutes } from "./routes/limit-resets.ts";
-import { UsageMeter, usageMeterScope } from "./usage-meter.ts";
+import { UsageMeter, usageMeterScope } from "./usage/usage-meter.ts";
 import { createWebSearchStore, webSearchScope } from "./web-search/store.ts";
 import { engineHasNativeWebSearch } from "./web-search/native.ts";
 import { isIP } from "node:net";
@@ -631,12 +631,12 @@ import {
   flushUsageLedger,
   type UsageRow,
   type UsageTrigger
-} from "./usage-ledger.ts";
-import type { PlanUsageReport } from "./plan-usage.ts";
-import { newPlanUsageAlerts, planAccountsFromInstances, planUsageAlertText } from "./plan-usage.ts";
+} from "./usage/usage-ledger.ts";
+import type { PlanUsageReport } from "./usage/plan-usage.ts";
+import { newPlanUsageAlerts, planAccountsFromInstances, planUsageAlertText } from "./usage/plan-usage.ts";
 import { GroupUsageReader } from "./group-thread-usage.ts";
 import { ledgerCost, listPriceFor } from "./models/model-prices.ts";
-import type { PriceList } from "./prices.ts";
+import type { PriceList } from "./usage/prices.ts";
 import type { RequestAuth } from "./auth/request-auth.ts";
 import {
   BOT_FIELD_PERMISSIONS,
@@ -649,7 +649,7 @@ import { isMemberBotField } from "../shared/viewer-capabilities.ts";
 import { effectivePermissions, permissionList, type EffectivePermissions } from "./org/org-permissions.ts";
 import { PROVIDER_KEY_KINDS } from "./engines/provider-key-check.ts";
 import { forgetKey, onKeyRejectionChange } from "./key-rejections.ts";
-import { personalCapNotice, setPersonalCapOrganization } from "./personal-spend-cap.ts";
+import { personalCapNotice, setPersonalCapOrganization } from "./usage/personal-spend-cap.ts";
 import { startLowDiskWatch } from "./low-disk-alert.ts";
 import { voiceCostUsd } from "./voice/voice-cost.ts";
 import {
@@ -658,7 +658,7 @@ import {
   spendAlertText,
   spendState,
   takeSpendAlert
-} from "./spend.ts";
+} from "./usage/spend.ts";
 import { fleetAvailable, fleetRequest, fleetSocketPath } from "./fleet/fleet-client.ts";
 import { entitled } from "./enterprise.ts";
 import { HOSTED_CONTRACT_HEADER, HOSTED_CONTRACT_METADATA, HOSTED_CONTRACT_VERSION } from "./hosted-contract.ts";
@@ -751,10 +751,10 @@ import {
 import { RETRY_MAX_ATTEMPTS, USAGE_LIMIT } from "./drivers/retry.ts";
 import { recoveryCapabilityError } from "./automatic-recovery.ts";
 import { createCacheKeepWarm, type KeepWarmStatus, type KeepWarmTarget } from "./cache-keepwarm.ts";
-import { createLimitResetHost } from "./limit-reset-host.ts";
-import { engineLabel } from "./limit-resets.ts";
-import { LimitFailoverStore } from "./limit-failover.ts";
-import { createLimitFailoverHost, limitBackupRefusedText } from "./limit-failover-host.ts";
+import { createLimitResetHost } from "./usage/limit-reset-host.ts";
+import { engineLabel } from "./usage/limit-resets.ts";
+import { LimitFailoverStore } from "./usage/limit-failover.ts";
+import { createLimitFailoverHost, limitBackupRefusedText } from "./usage/limit-failover-host.ts";
 import { sendBlockFor, type SendBlock } from "../shared/send-state.ts";
 import { repeatsShownFailure } from "../shared/failure-dedup.ts";
 import { limitFailoverText, resetClockText, type LimitFailoverLine } from "../shared/limit-failover.ts";
@@ -857,7 +857,7 @@ import {
   type IncidentKind
 } from "./peers/incidents.ts";
 import { createEmptyResponseRetry, shouldEmptyResponseRetry } from "./empty-response-retry.ts";
-import { limitKindOf } from "./limit-reset-time.ts";
+import { limitKindOf } from "./usage/limit-reset-time.ts";
 
 /** A session_read answer competes with the transcript for the context
  * window; a computer-use turn's output can run to hundreds of KB. */
@@ -4687,7 +4687,7 @@ function operatorPrices(): PriceList | null {
 /** Write one settled turn to the ledger, estimating its cost when the
  * engine reported tokens but no price, and let the spend cap see it at once.
  * The first booking that takes the month past the warning threshold, or to
- * the cap, notifies admins (once per month each; server/spend.ts). */
+ * the cap, notifies admins (once per month each; server/usage/spend.ts). */
 function bookTurnUsage(row: Omit<UsageRow, "at" | "costSource">, tokensReported = true, notificationThreadId = row.threadId): void {
   // Missing helper usage is unpriced, not an estimated zero-dollar call.
   const cost = tokensReported || row.costUsd !== null ? ledgerCost(row, operatorPrices()) : { costUsd: null };
@@ -16113,7 +16113,7 @@ function turnFailureCause(event: { threadId: string; turnId?: string; ok: boolea
   return turnStops.read(event.threadId, event.turnId)?.error ?? (event.stopReason?.trim() || undefined);
 }
 
-// ── usage limits (port of OpenMausBot #3074 and #2754, server/limit-failover.ts) ──
+// ── usage limits (port of OpenMausBot #3074 and #2754, server/usage/limit-failover.ts) ──
 // An engine whose usage limit refuses a turn hands the same message to
 // another engine this speaker really has, at once, with one line in the
 // thread; the thread goes back after the reset. Off with SAGAX_LIMIT_FAILOVER=0.
@@ -16406,7 +16406,7 @@ bus.subscribe((event: RuntimeEvent) => {
   }
 });
 
-// Limit-reset automations (server/limit-resets.ts / limit-reset-host.ts):
+// Limit-reset automations (server/usage/limit-resets.ts / limit-reset-host.ts):
 // each engine's reset from plan usage and refusals, so a routine with
 // schedule.type === "limit_reset" knows when to run. Routes: Continue card,
 // near-limit after-reset, and GET report (server/routes/limit-resets.ts).
@@ -20052,7 +20052,7 @@ bus.subscribe((event: RuntimeEvent) => {
       const computerParked = event.stopReason === "exit_before_result" &&
         turnResourceOwners.get(event.threadId)?.computerParkedOn !== undefined;
       // A usage limit: another engine continues the turn, or it waits for the
-      // reset (server/limit-failover-host.ts); either way no incident.
+      // reset (server/usage/limit-failover-host.ts); either way no incident.
       // Prefer backup failover over reconnect-wait / usage requeue when a
       // backup exists: pass waiting and queued routine runs too (Claude
       // extra-usage often lands as waiting, never failed).
@@ -29441,7 +29441,7 @@ function autoPickForTurn(input: {
   const skip = [...autoRefusalsFor(payer), ...(input.skip ?? [])];
   const offered = autoEnginesFor(bot, input.speaker, input.guestConfined === true);
   // An engine at its usage limit for this payer, and another sign-in to the
-  // same subscription, wait for the reset (server/limit-failover-host.ts);
+  // same subscription, wait for the reset (server/usage/limit-failover-host.ts);
   // with nothing else left, Auto keeps its list and the limit says when.
   const limited = limitFailover.autoExcluded(payer, offered);
   const open = offered.filter((engine) => !limited.has(engine.instanceId));

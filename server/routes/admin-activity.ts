@@ -10,7 +10,7 @@ import {
   readAdminActivityRange,
 } from "../admin-activity.ts";
 import { boundRetentionDays, readDecisionRange } from "../decision-log.ts";
-import { parseUsageRange } from "../usage-ledger.ts";
+import { parseUsageRange } from "../usage/usage-ledger.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 export interface AdminActivityRouteDeps {

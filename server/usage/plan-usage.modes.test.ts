@@ -1,4 +1,4 @@
-// Plan usage per mode (server/plan-usage.ts): whose login each row reads,
+// Plan usage per mode (server/usage/plan-usage.ts): whose login each row reads,
 // one row per provider, and the state of every row. Fake credentials in a
 // temporary data dir and a fake fetch: no network, no real login.
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LOGIN_MARKER, PrincipalEngineLogins } from "./engines/principal-engine-logins.ts";
+import { LOGIN_MARKER, PrincipalEngineLogins } from "../engines/principal-engine-logins.ts";
 import {
   API_KEY_NO_WINDOWS,
   NOT_SIGNED_IN,
@@ -21,7 +21,7 @@ import {
   type PlanFetch,
   type PlanResponse,
 } from "./plan-usage.ts";
-import type { InstanceConfigMap } from "./contracts.ts";
+import type { InstanceConfigMap } from "../contracts.ts";
 
 /** The host a faked request goes to, compared whole (never a substring of the URL). */
 const hostOf = (url: string) => new URL(url).hostname;

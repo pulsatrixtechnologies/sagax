@@ -931,7 +931,7 @@ person has (`limit-failover-host.ts`, `isEngineExhaustedRefusal`), as a usage
 limit does (#1668); only when nothing else can answer does the turn end in
 plain words (`noModelLeftMessage`). Tests:
 `server/drivers/openai-responses.test.ts`, `server/models/refused-models.test.ts`,
-`server/limit-failover-host.test.ts`.
+`server/usage/limit-failover-host.test.ts`.
 
 ## A reply is never an error (2026-10-29)
 
@@ -5755,7 +5755,7 @@ organization server: the asking person's own subscription login only
 (`principals/<pid>/claude`, `codex`, `grok/.grok`, behind its sign-in
 marker), never the server's own HOME or default keychain entry, never the
 organization's key and never another person's directory (`orgPlanAccounts`
-in `server/plan-usage.ts`); a member may read their own. In solo: this
+in `server/usage/plan-usage.ts`); a member may read their own. In solo: this
 computer's own CLI logins, admin only. One row per provider: rows that read
 the same login are one (the ChatGPT plan instance folds into Codex), with
 the plan name as a subtitle. A key row ("Claude (API key)") appears only
@@ -5767,7 +5767,7 @@ again). Only a missing login or a 401 is signed-out; a network failure,
 timeout, 429, 403, 5xx or an expired access token next to a refresh token
 (it renews on the next turn) is an error with its reason, never "sign in
 again". `ok` and `error` stay on each row for the phone apps. Tests:
-`server/plan-usage.test.ts`, `server/plan-usage.modes.test.ts`,
+`server/usage/plan-usage.test.ts`, `server/usage/plan-usage.modes.test.ts`,
 `src/components/PlanUsage.test.ts`, MA-5 in
 `server/org/org-member-access.e2e.test.ts`.
 
@@ -8779,7 +8779,7 @@ clock fix #3120) and #2754 (another engine when one runs out), adapted to
 the rule: no card, the turn continues at once.
 
 - A failed turn whose cause is a usage limit (`limitKindOf` in
-  `server/limit-reset-time.ts`: the shared `quota` class, a spent balance,
+  `server/usage/limit-reset-time.ts`: the shared `quota` class, a spent balance,
   a driver's `quota` stop, or a 429 the driver gave up on) blocks that
   engine for that payer (`autoPayerKey`) until its reset: the engine's own
   time (`runtime.error.limitResetsAt`, from Claude's `rate_limit_info`;
@@ -8787,7 +8787,7 @@ the rule: no card, the turn continues at once.
   at 5:23 PM"), else a prudent estimate (1 h, 15 min for a 429).
 - The person's own message (request origin `user`) is sent again at once on
   a backup, in the same thread, the message not duplicated
-  (`server/limit-failover-host.ts`). The engine's error row becomes one
+  (`server/usage/limit-failover-host.ts`). The engine's error row becomes one
   `recovery:` line carrying `tool.limitFailover`, which the app draws in the
   reader's language (`limitFailover.*` keys, `src/lib/limit-failover.ts`).
 - Candidates are `autoEnginesFor` (the same filter Auto uses): enabled,
@@ -8807,9 +8807,9 @@ the rule: no card, the turn continues at once.
   (delegations, webhooks) only block the engine: their next turn starts on a
   backup before it is refused (`beforeTurn` in `startTurn`).
 - Auto threads are left to Auto. Off with `SAGAX_LIMIT_FAILOVER=0`. Tests:
-  `server/limit-reset-time.test.ts`, `server/limit-failover.test.ts`,
-  `server/limit-failover-host.test.ts`, `src/lib/limit-failover.test.ts`,
-  `server/limit-failover.e2e.test.ts` (fake engines, the reset shortened by
+  `server/usage/limit-reset-time.test.ts`, `server/usage/limit-failover.test.ts`,
+  `server/usage/limit-failover-host.test.ts`, `src/lib/limit-failover.test.ts`,
+  `server/usage/limit-failover.e2e.test.ts` (fake engines, the reset shortened by
   `SAGAX_TEST_LIMIT_AFTER_RESET_MS`, read only when HOME is the data dir).
 
 ## App icon: the Pulsatrix logo (2026-10-14)

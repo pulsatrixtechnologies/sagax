@@ -1,6 +1,6 @@
 # Usage ledger
 
-> 2026-10-14: Settings > Usage reads `GET /api/usage?mine=1` (the requester's own turns, `usageRowsFor` in server/usage-ledger.ts). The History card and its groupings left the app.
+> 2026-10-14: Settings > Usage reads `GET /api/usage?mine=1` (the requester's own turns, `usageRowsFor` in server/usage/usage-ledger.ts). The History card and its groupings left the app.
 >
 > 2026-10-15: Settings > Usage reads `GET /api/me/usage` instead, open to every signed-in person (CLIENT_ALLOW): the handler keeps the caller's own turns only, refuses `groupBy=user`, carries no budget, and on an organization server refuses a session that names no person (403). `/api/usage` (and `?mine=1`, still read by the iOS app) stays admin or `usage.view`. Tests: server/routes/usage.test.ts.
 
@@ -29,7 +29,7 @@ a period, group it, or **Export CSV**.
 ## Driving it
 
 ```sh
-pnpm exec vitest run --no-file-parallelism server/usage-ledger-api.test.ts server/usage-attribution.e2e.test.ts
+pnpm exec vitest run --no-file-parallelism server/usage/usage-ledger-api.test.ts server/usage-attribution.e2e.test.ts
 ```
 
 The test launches a fresh `control-omb` fixture with the repository's fake
@@ -80,7 +80,7 @@ waits for settlement, and checks that the tooltip separates 10 uncached input,
 headline. Its JSON evidence sits next to the fixture log; no live account is used.
 
 ```sh
-pnpm exec vitest run server/usage-ledger.test.ts src/components/UsageSection.test.ts server/auth/request-auth.test.ts
+pnpm exec vitest run server/usage/usage-ledger.test.ts src/components/UsageSection.test.ts server/auth/request-auth.test.ts
 ```
 
 These cover month files and 0600 modes, torn lines, clamped tokens, a blocked

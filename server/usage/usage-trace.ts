@@ -1,5 +1,5 @@
 // Usage traces: where each job spent its time and its money, read back from
-// the durable USAGE ledger (server/usage-ledger.ts). A job is the finest unit
+// the durable USAGE ledger (server/usage/usage-ledger.ts). A job is the finest unit
 // the ledger can name on its own: the turns of one thread under one trigger,
 // so a routine run, a person's conversation and a bot-to-bot exchange are
 // separate jobs even when they share a thread. The per-turn breakdown is the
@@ -13,7 +13,7 @@
 // Who reads it: the owner or an organization member with usage.view
 // (server/routes/usage.ts, shared/permissions.ts). Ids ride the wire for a
 // copy affordance only; the app shows the human label, never a raw UUID.
-import type { CostSource } from "./models/model-prices.ts";
+import type { CostSource } from "../models/model-prices.ts";
 import { costSourceOf, triggerKey, triggerLabel, type UsageRow, type UsageTrigger } from "./usage-ledger.ts";
 
 const clean = (value: unknown): number =>

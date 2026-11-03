@@ -73,7 +73,7 @@ export function renewalPrompt(input: {
   base: string; steps: readonly RenewalStep[]; lastText?: string;
   /** Why the work moved: the session's context filled up (the default), or
    * the engine reached its usage limit and another one carries the same
-   * turn on (server/limit-failover-host.ts). */
+   * turn on (server/usage/limit-failover-host.ts). */
   cause?: "context" | "limit";
 }): string {
   const lines = input.steps.slice(-STEPS_KEPT).map((step) => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { estimatePriceFor, LIST_PRICES, ledgerCost, listPriceFor } from "./model-prices.ts";
-import type { PriceList } from "../prices.ts";
+import type { PriceList } from "../usage/prices.ts";
 
 const OFFICIAL = [
   "https://developers.openai.com/",

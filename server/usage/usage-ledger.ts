@@ -10,8 +10,8 @@
 import { readFileSync } from "node:fs";
 import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { ACCESS_VIAS, type AccessVia } from "./engines/engine-credentials.ts";
-import type { CostSource } from "./models/model-prices.ts";
+import { ACCESS_VIAS, type AccessVia } from "../engines/engine-credentials.ts";
+import type { CostSource } from "../models/model-prices.ts";
 import { billableFor, type PriceList } from "./prices.ts";
 
 /** Who asked for the turn. A person is named by the email they signed in

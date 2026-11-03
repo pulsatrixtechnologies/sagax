@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { assertWithinBudget, resetSpendAlertsForTests, resetSpendCacheForTests } from "./spend.ts";
 import { setPersonalCapOrganization, clearPersonalCap, personalCapAlert, personalCapState, readPersonalCap, writePersonalCap, MIN_PERSONAL_CAP_USD } from "./personal-spend-cap.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
 import { appendUsage, flushUsageLedger } from "./usage-ledger.ts";
 
 describe("personal monthly spend cap", () => {

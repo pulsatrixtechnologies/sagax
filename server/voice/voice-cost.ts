@@ -1,5 +1,5 @@
 // An estimate of what voice costs (xAI, OpenAI, ElevenLabs), so a speech or transcription request
-// counts toward the spend limits (server/spend.ts). xAI reports no price on
+// counts toward the spend limits (server/usage/spend.ts). xAI reports no price on
 // these calls: speech is estimated per character and transcription per second
 // of audio (audio size at 16 kHz, 16-bit mono). A known approximation: the
 // real bill may differ. Prices are list prices, as of 2026-10.

@@ -254,7 +254,7 @@ export type RuntimeEvent = RuntimeEventBase &
       /** The engine went silent and the turn was stopped as stuck. */
       stalled?: boolean;
       /** A usage limit refused the turn: epoch ms when it resets, when the
-       * engine said (server/limit-failover-host.ts). */
+       * engine said (server/usage/limit-failover-host.ts). */
       limitResetsAt?: number;
       /** The refusal binds this model only (its extra-usage credits, or its
        * own weekly window): the engine stays free for its other models. */

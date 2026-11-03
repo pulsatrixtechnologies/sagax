@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { removeTempDir } from "./testing/cleanup.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
 import {
   aggregateOrgUsage,
   appendUsage,
@@ -19,7 +19,7 @@ import {
   usageRowsFor,
   type UsageRow,
 } from "./usage-ledger.ts";
-import { usageViewerOf } from "./routes/usage.ts";
+import { usageViewerOf } from "../routes/usage.ts";
 
 function row(overrides: Partial<UsageRow> = {}): Omit<UsageRow, "at"> & { at?: string } {
   return {

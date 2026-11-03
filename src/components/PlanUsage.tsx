@@ -1,7 +1,7 @@
 // Settings → Usage: remaining subscription allowance. This is not the token
 // ledger below it — each provider reports its own 5-hour and weekly windows.
 //
-// One row per provider (server/plan-usage.ts): its windows, "No plan
+// One row per provider (server/usage/plan-usage.ts): its windows, "No plan
 // windows", "Not signed in" with Connect, or the real error with Try again
 // (#1774: an expired token stays listed; it must not vanish so only the
 // last used engine shows). Since 2026-10-16 the card is always drawn: with

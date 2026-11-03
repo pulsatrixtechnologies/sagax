@@ -22,7 +22,7 @@ import { resolveVaultKey } from "../mcp/mcp-oauth.ts";
 import { blindSnippet, indexColumns, indexSourcesOf, recallHolds, recallMatch, recallTermsFor, skeletonOf, type RecallTerm } from "../encryption/message-sealing.ts";
 import { peerProvenanceAuthor, WEBHOOK_AUTHOR, type WorkOrigin } from "../peers/peer-provenance.ts";
 import type { ResolvedSender, SteerQueueReason, WireMessage as Message } from "../../shared/wire.ts";
-import type { UsageTrigger } from "../usage-ledger.ts";
+import type { UsageTrigger } from "../usage/usage-ledger.ts";
 import { MessageSearchWorker } from "../message-search-worker.ts";
 import { searchMessagesInDatabase, type SealedKeyMaterial, type SearchHit } from "./message-search-query.ts";
 export type { SearchHit } from "./message-search-query.ts";

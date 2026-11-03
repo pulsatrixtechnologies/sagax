@@ -3,7 +3,7 @@
 // engine runs out", adapted to the rule of 2026-10-19: no card, the turn
 // continues at once on another engine the person really has).
 //
-//   - Which engines may take over is the host's (server/limit-failover-host.ts):
+//   - Which engines may take over is the host's (server/usage/limit-failover-host.ts):
 //     the engines a turn of this speaker could run on (sign-ins, keys,
 //     the organization's engines, allowedEngines, the approval mode and the
 //     organization's policy), never another account of the same subscription.
@@ -18,9 +18,9 @@
 //     again once the limit resets, once.
 import { readFileSync } from "node:fs";
 
-import { AFTER_RESET_MS } from "../shared/limit-failover.ts";
-import type { ModelSelection } from "../shared/wire.ts";
-import { writeFileAtomic } from "./atomic.ts";
+import { AFTER_RESET_MS } from "../../shared/limit-failover.ts";
+import type { ModelSelection } from "../../shared/wire.ts";
+import { writeFileAtomic } from "../atomic.ts";
 
 /** Engines a person signs in to with a subscription whose usage limit refuses turns. */
 const SUBSCRIPTION_DRIVERS = new Set(["claudeAgent", "codex", "grokAgent", "kimiAgent", "cursorAgent", "geminiAgent", "antigravityAgent"]);

@@ -10,7 +10,7 @@ import { EngineSelfCheck } from "../engines/engines-self-check.ts";
 import { buildOverview, deployFacts, hostFacts, percentile, readBackupStatus, selfCheckEngines, type OverviewDeps } from "./org-admin-overview.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
 import type { ProblemRow } from "./org-problem-log.ts";
-import type { UsageRow } from "../usage-ledger.ts";
+import type { UsageRow } from "../usage/usage-ledger.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "omb-overview-"));
 afterAll(() => removeTempDir(dir));

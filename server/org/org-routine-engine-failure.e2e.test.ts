@@ -121,7 +121,7 @@ async function start() {
       SAGAX_ORG_NAME: "Acme",
       // The Grok 402 is a usage limit: the automatic backup engine would run
       // the routine again on another engine and the run would not fail
-      // (server/limit-failover-host.ts). This suite is about the failure.
+      // (server/usage/limit-failover-host.ts). This suite is about the failure.
       SAGAX_LIMIT_FAILOVER: "0",
     },
     stdio: ["ignore", "pipe", "pipe"],

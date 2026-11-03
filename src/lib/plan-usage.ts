@@ -1,5 +1,5 @@
 // Settings > Usage > Plan usage: the rows GET /api/plan-usage returns, one
-// state per row (server/plan-usage.ts). Pure, so the card's states are
+// state per row (server/usage/plan-usage.ts). Pure, so the card's states are
 // tested without a server.
 import { t } from "@/lib/i18n";
 

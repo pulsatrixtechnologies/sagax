@@ -1,12 +1,12 @@
 // The harness side of the automatic backup on a usage limit
-// (server/limit-failover.ts): what a failed turn, a turn about to start and
+// (server/usage/limit-failover.ts): what a failed turn, a turn about to start and
 // the reset timer do. Everything that touches the server's state comes in
 // through deps, so the rules are tested here without a server
-// (server/limit-failover-host.test.ts) and through it in
-// server/limit-failover.e2e.test.ts.
-import type { LimitFailoverLine } from "../shared/limit-failover.ts";
-import type { ModelSelection } from "../shared/wire.ts";
-import { isEngineExhaustedRefusal } from "./drivers/openai-chat.ts";
+// (server/usage/limit-failover-host.test.ts) and through it in
+// server/usage/limit-failover.e2e.test.ts.
+import type { LimitFailoverLine } from "../../shared/limit-failover.ts";
+import type { ModelSelection } from "../../shared/wire.ts";
+import { isEngineExhaustedRefusal } from "../drivers/openai-chat.ts";
 import { limitBackupAllowed, pickLimitBackup, type LimitCandidate, type LimitEngine, type LimitFailoverStore } from "./limit-failover.ts";
 import { limitKindOf, limitResetFromText, limitResetOrEstimate } from "./limit-reset-time.ts";
 

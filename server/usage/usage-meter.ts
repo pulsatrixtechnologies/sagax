@@ -3,8 +3,8 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { usageEvent, type UsageEvent } from "../shared/usage-meter.ts";
-import { writeFileAtomic } from "./atomic.ts";
+import { usageEvent, type UsageEvent } from "../../shared/usage-meter.ts";
+import { writeFileAtomic } from "../atomic.ts";
 
 const FILE = "usage-meter.json";
 const MAX_EVENTS = 200;

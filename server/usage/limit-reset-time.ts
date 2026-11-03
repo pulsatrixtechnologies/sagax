@@ -3,7 +3,7 @@
 // reset reading: codexLimitResetsAt, the Claude CLI's rate_limit_info).
 // Pure: the clock is passed in (#3120: the reset is always read against the
 // injected clock, never Date.now() behind the caller's back).
-import { classifyError, PROVIDER_NOT_CONFIGURED } from "./drivers/retry.ts";
+import { classifyError, PROVIDER_NOT_CONFIGURED } from "../drivers/retry.ts";
 
 export type LimitKind = "quota" | "rate_limited";
 

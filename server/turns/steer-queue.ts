@@ -27,7 +27,7 @@ import { voiceQueuePrompt } from "../voice/voice-turn.ts";
 import type { ResolvedSender, SteerQueueReason } from "../../shared/wire.ts";
 import type { BotRecord, Message } from "../store.ts";
 import type { TurnSpeaker } from "../engines/engine-access.ts";
-import type { UsageTrigger } from "../usage-ledger.ts";
+import type { UsageTrigger } from "../usage/usage-ledger.ts";
 
 /** The slice of Store this module needs — narrow so tests can fake it. */
 export interface SteerStore {

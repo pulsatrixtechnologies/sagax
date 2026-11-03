@@ -22,7 +22,7 @@ import {
 } from "./org-admin-console.ts";
 import { problemReason, reasonLabel } from "./org-problem-log.ts";
 import type { Routine, RoutineRun } from "../routines/routines.ts";
-import type { UsageRow } from "../usage-ledger.ts";
+import type { UsageRow } from "../usage/usage-ledger.ts";
 
 const DAY_MS = 24 * 60 * 60_000;
 export const APPROVAL_HISTORY_DAYS = 90;

@@ -26,7 +26,7 @@ const LIMIT_WITH_RESET = /This Claude account has reached its weekly limit, whic
 async function launch() {
   // The automatic backup engine would send a limited turn on to another
   // engine and the person would never see the limit this suite is about
-  // (server/limit-failover-host.ts); it has its own e2e suite.
+  // (server/usage/limit-failover-host.ts); it has its own e2e suite.
   const fixture = await launchVerificationServer({ ...process.env, SAGAX_LIMIT_FAILOVER: "0" });
   const { url, dataDir } = fixture.info;
   const api = async (method: string, path: string, body?: unknown) => {

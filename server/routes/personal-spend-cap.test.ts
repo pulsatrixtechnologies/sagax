@@ -9,9 +9,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { json, readBody } from "../harness/http.ts";
 import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
-import { resetSpendCacheForTests } from "../spend.ts";
-import { assertWithinBudget } from "../spend.ts";
-import { appendUsage, flushUsageLedger } from "../usage-ledger.ts";
+import { resetSpendCacheForTests } from "../usage/spend.ts";
+import { assertWithinBudget } from "../usage/spend.ts";
+import { appendUsage, flushUsageLedger } from "../usage/usage-ledger.ts";
 import { createUsageRoutes } from "./usage.ts";
 import { dispatchRoutes } from "./table.ts";
 

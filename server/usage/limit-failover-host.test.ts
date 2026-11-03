@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { LimitFailoverLine } from "../shared/limit-failover.ts";
-import type { ModelSelection } from "../shared/wire.ts";
+import type { LimitFailoverLine } from "../../shared/limit-failover.ts";
+import type { ModelSelection } from "../../shared/wire.ts";
 import { LimitFailoverStore, type LimitCandidate } from "./limit-failover.ts";
 import { createLimitFailoverHost, limitBackupRefusedText, type LimitFailoverHostDeps, type LimitRequest } from "./limit-failover-host.ts";
 

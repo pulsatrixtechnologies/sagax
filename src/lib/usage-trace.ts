@@ -1,4 +1,4 @@
-// Client view of the per-job usage traces (server/usage-trace.ts): where each
+// Client view of the per-job usage traces (server/usage/usage-trace.ts): where each
 // job spent its time and its money, read from GET /api/usage/traces (owner or
 // usage.view). Pure formatting and a fetch helper; the panel is
 // src/components/usage/UsageTraces.tsx. No raw UUID is ever shown: the server
@@ -7,7 +7,7 @@ import { api } from "@/state/store";
 import { t } from "@/lib/i18n";
 
 /** One settled turn of a job: time, token counts and cost, as the ledger
- * recorded them. Mirrors server/usage-trace.ts UsageTraceTurn. */
+ * recorded them. Mirrors server/usage/usage-trace.ts UsageTraceTurn. */
 export interface UsageTraceTurn {
   at: string;
   model: string;
@@ -22,7 +22,7 @@ export interface UsageTraceTurn {
 
 export type UsageTraceTriggerKind = "user" | "owner" | "routine" | "bot";
 
-/** One job's trace. Mirrors server/usage-trace.ts UsageJobTrace. */
+/** One job's trace. Mirrors server/usage/usage-trace.ts UsageJobTrace. */
 export interface UsageJobTrace {
   jobId: string;
   threadId: string;

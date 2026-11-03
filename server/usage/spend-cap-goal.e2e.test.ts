@@ -11,8 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { launchVerificationServer, runControlOmb, type VerificationServer } from "../scripts/control-omb.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
+import { launchVerificationServer, runControlOmb, type VerificationServer } from "../../scripts/control-omb.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
 
 describe("spend cap inside a team goal run", () => {
   let session: VerificationServer;

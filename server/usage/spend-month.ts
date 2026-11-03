@@ -1,5 +1,5 @@
 // Month-to-date spend from the usage ledger, shared by the workspace cap
-// (server/spend.ts) and the personal cap (server/personal-spend-cap.ts).
+// (server/usage/spend.ts) and the personal cap (server/usage/personal-spend-cap.ts).
 import { readUsage, usageRowKey } from "./usage-ledger.ts";
 
 const CACHE_MS = 15_000;

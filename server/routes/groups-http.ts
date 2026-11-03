@@ -63,7 +63,7 @@ import { personDisplayName } from "../viewer-identity.ts";
 import { permissionRefusal } from "../../shared/permissions.ts";
 import type { GroupCommandRoute } from "../../shared/harness-commands.ts";
 import { isStopIntent } from "../../shared/stop-intent.ts";
-import type { UsageTrigger } from "../usage-ledger.ts";
+import type { UsageTrigger } from "../usage/usage-ledger.ts";
 import type { ResolvedSender } from "../../shared/wire.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

@@ -576,7 +576,7 @@ root, path, bytes) to the admin activity log. `/api/health` adds
 ### Automated
 
 ```sh
-pnpm exec vitest run server/auth/oidc-rp.test.ts server/org/org-admin-routes.test.ts server/org/org-admin-files.test.ts server/usage-ledger.test.ts \
+pnpm exec vitest run server/auth/oidc-rp.test.ts server/org/org-admin-routes.test.ts server/org/org-admin-files.test.ts server/usage/usage-ledger.test.ts \
   server/admin-activity.test.ts server/bot-grants.test.ts server/section-channels.test.ts \
   src/lib/open-thread-hash.test.ts server/org/org-admin.e2e.test.ts \
   server/org/org-routines.e2e.test.ts server/org/org-mcp.e2e.test.ts server/org/org-sharing.e2e.test.ts \
@@ -598,7 +598,7 @@ header bent at a time).
   route, a manager's reach on bots and usage, approvals oldest first, the
   POST body (`allow` or `deny` only, never `always` or `rememberCommand`),
   the audit parameters and cursor, the replay cache's expiry and cap.
-- `server/usage-ledger.test.ts` ("organization admin usage"): speakers by
+- `server/usage/usage-ledger.test.ts` ("organization admin usage"): speakers by
   principal, routine runAs, bot or unattributed; grouping by day, bot and
   speaker with the access split; the 92 day and 20,000 row caps.
 - `server/admin-activity.test.ts` ("organization audit page"): the org

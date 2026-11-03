@@ -9,7 +9,7 @@ import { fleetAvailable, fleetRequest } from "./fleet-client.ts";
 import type { FleetDeps } from "./fleet-cli.ts";
 import { emptyRegistry, fleetLayout, MANAGED_OPENROUTER } from "./fleet.ts";
 import { removeTempDir } from "../testing/cleanup.ts";
-import { appendUsage, flushUsageLedger, readUsage, summarizeUsage } from "../usage-ledger.ts";
+import { appendUsage, flushUsageLedger, readUsage, summarizeUsage } from "../usage/usage-ledger.ts";
 
 // A machine that records what the agent does to it, with a real temp root
 // for the files the agent reads back (registry, ledgers). No systemd, nft,

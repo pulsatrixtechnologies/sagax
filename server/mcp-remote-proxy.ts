@@ -38,7 +38,7 @@ import {
   remoteMcpSpec,
 } from "./mcp/mcp-http.ts";
 import { lenientToolValidator, schemaProblems } from "./mcp/mcp-schema-validator.ts";
-import { rateLimitGaveUpText, rateLimitRetryText, rateLimitWait, sleepUnlessAborted } from "./rate-limit-retry.ts";
+import { rateLimitGaveUpText, rateLimitRetryText, rateLimitWait, sleepUnlessAborted } from "./usage/rate-limit-retry.ts";
 
 type Json = Record<string, unknown>;
 function isRecord(value: unknown): value is Json {

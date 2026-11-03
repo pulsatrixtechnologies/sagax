@@ -59,7 +59,7 @@ export function blockedTarget(
   return { threadId: room.threadId, group: { id: room.id, name: room.name } };
 }
 
-/** A workspace spend notice (server/spend.ts decides when). It opens the
+/** A workspace spend notice (server/usage/spend.ts decides when). It opens the
  * thread whose turn crossed the line, so clicking it lands somewhere real,
  * but it is the workspace's news, not that bot's: the bot's notification
  * toggle does not silence it. */

@@ -38,7 +38,7 @@ import { appendLog, LogReader, registerSealedLog, sealLogLine, sealLogLines, wit
 import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
 import { JOURNAL_GENESIS, sealLink, type JournalSealFields, type JournalSealLink } from "./encryption/journal-seal.ts";
 import { redactSecrets } from "./redact.ts";
-import { csvCell, monthKey } from "./usage-ledger.ts";
+import { csvCell, monthKey } from "./usage/usage-ledger.ts";
 
 /** A verdict's outcome. auto-* rows came from a policy — connector grants,
  * auto-approve rules — with no card in front of a person; user-* rows

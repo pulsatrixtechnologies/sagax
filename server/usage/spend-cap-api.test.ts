@@ -8,12 +8,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { launchVerificationServer, runControlOmb, type VerificationServer } from "../scripts/control-omb.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
-import { openSse } from "./testing/sse.ts";
-import { CAPTURE_MARKER } from "./memory/memory-capture.ts";
-import { ORGANIZE_MARKER } from "./memory/memory-organize.ts";
-import { TIDY_MARKER } from "./memory/memory-tidy.ts";
+import { launchVerificationServer, runControlOmb, type VerificationServer } from "../../scripts/control-omb.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
+import { openSse } from "../testing/sse.ts";
+import { CAPTURE_MARKER } from "../memory/memory-capture.ts";
+import { ORGANIZE_MARKER } from "../memory/memory-organize.ts";
+import { TIDY_MARKER } from "../memory/memory-tidy.ts";
 import { readUsage } from "./usage-ledger.ts";
 
 describe("spend cap and prices through real turns", () => {

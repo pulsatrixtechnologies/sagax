@@ -5,7 +5,7 @@
 //   POST /api/limit-resets/after-reset  {routineId, engine}: move only that automation's next run past the reset
 import { AFTER_RESET_MS, type LimitResetSchedule } from "../../shared/limit-reset.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
-import type { LimitResetClock } from "../limit-resets.ts";
+import type { LimitResetClock } from "../usage/limit-resets.ts";
 import type { RoutineRequestService } from "../routines/routine-requests.ts";
 import type { Routine, RoutineManager } from "../routines/routines.ts";
 import { PASS, type RouteHandler } from "./table.ts";

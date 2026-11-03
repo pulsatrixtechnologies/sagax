@@ -15,7 +15,7 @@ import type { TurnSpeaker } from "../engines/engine-access.ts";
 import type { ReplyTarget } from "../messages/replies.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { Message } from "../store.ts";
-import type { UsageTrigger } from "../usage-ledger.ts";
+import type { UsageTrigger } from "../usage/usage-ledger.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 
 import { approvalModeFor } from "../../shared/approval-mode.ts";
@@ -78,7 +78,7 @@ import {
   soloGoalCommand,
   soloGoalLine,
 } from "../solo-goal.ts";
-import { assertWithinBudget } from "../spend.ts";
+import { assertWithinBudget } from "../usage/spend.ts";
 import {
   cancelSteeredMessage,
   holdSteeredQueue,

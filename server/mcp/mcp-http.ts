@@ -10,7 +10,7 @@ import { Readable } from "node:stream";
 
 import type { RemoteMcpSpec } from "../contracts.ts";
 import { guardedFetch } from "../public-fetch.ts";
-import { parseRetryAfter } from "../rate-limit-retry.ts";
+import { parseRetryAfter } from "../usage/rate-limit-retry.ts";
 
 export type McpHttpFailure = "network" | "status" | "protocol";
 

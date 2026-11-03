@@ -147,8 +147,8 @@ describe("LimitResetClock", () => {
   });
 });
 
-// Codex "try again at …" parsing lives in server/limit-reset-time.ts
-// (limitResetFromText); covered by server/limit-reset-time.test.ts.
+// Codex "try again at …" parsing lives in server/usage/limit-reset-time.ts
+// (limitResetFromText); covered by server/usage/limit-reset-time.test.ts.
 
 describe("nearLimitNote", () => {
   it("tells the turn when its engine is at 90% or more, with the reset", () => {

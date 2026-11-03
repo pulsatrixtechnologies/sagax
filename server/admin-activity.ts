@@ -24,7 +24,7 @@ import { appendLog, LogReader, registerSealedLog, sealLogLine } from "./encrypti
 import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
 import { actorLabel, boundRetentionDays, pruneMonthFiles, type DecisionActor, type DecisionRow } from "./decision-log.ts";
 import { redactSecrets } from "./redact.ts";
-import { csvCell, monthKey } from "./usage-ledger.ts";
+import { csvCell, monthKey } from "./usage/usage-ledger.ts";
 
 export const ADMIN_ACTIVITY_CATEGORIES = ["config", "people", "session", "webhook", "mcp", "engine", "bot", "budget", "visibility", "rights", "section", "org", "approval", "computer", "client", "security", "setting"] as const;
 export type AdminActivityCategory = typeof ADMIN_ACTIVITY_CATEGORIES[number];

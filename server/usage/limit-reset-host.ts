@@ -2,8 +2,8 @@
 // LimitResetClock wiring). Keeps each engine's reset from plan usage and
 // from refusals; routines with schedule.type === "limit_reset" get their
 // `at` from this clock (engine reset + AFTER_RESET_MS).
-import { AFTER_RESET_MS, isLimitResetSchedule, type LimitResetSchedule } from "../shared/limit-reset.ts";
-import type { RoutineSchedule } from "../shared/routines.ts";
+import { AFTER_RESET_MS, isLimitResetSchedule, type LimitResetSchedule } from "../../shared/limit-reset.ts";
+import type { RoutineSchedule } from "../../shared/routines.ts";
 import { LimitResetClock, type LimitClockOptions } from "./limit-resets.ts";
 
 export function createLimitResetHost(options: LimitClockOptions & {

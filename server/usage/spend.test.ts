@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { billableFor, priceFor, type PriceList } from "./prices.ts";
 import { assertWithinBudget, monthToDateSpend, noteSpend, resetSpendAlertsForTests, resetSpendCacheForTests, spendAlertText, spendState, takeSpendAlert, type SpendState } from "./spend.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
 import { appendUsage, flushUsageLedger } from "./usage-ledger.ts";
 
 const yes = () => true;

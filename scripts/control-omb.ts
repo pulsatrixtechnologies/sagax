@@ -402,7 +402,7 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   }
   // A suite that checks how a failed turn reads (a rate limit, a refused key)
   // turns the automatic backup engine off, or the same message would simply
-  // continue on another engine and never fail (server/limit-failover-host.ts).
+  // continue on another engine and never fail (server/usage/limit-failover-host.ts).
   if (parentEnv.SAGAX_LIMIT_FAILOVER === "0") childEnv.SAGAX_LIMIT_FAILOVER = "0";
   // Content encryption (docs/content-encryption.md) is on unless the caller
   // says otherwise: the test suite turns it off (server/testing/setup.ts)

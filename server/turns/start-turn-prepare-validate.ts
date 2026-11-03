@@ -109,7 +109,7 @@ export function createPrepareValidateStartTurn(host: StartTurnHost) {
       automationSource: state.opts?.automationSource
     }));
   }
-  // A usage limit (server/limit-failover-host.ts): back on the thread's own
+  // A usage limit (server/usage/limit-failover-host.ts): back on the thread's own
   // engine once it reset, or onto a backup while it is known to refuse.
   // Never for a warm-up or a card's continuation of a running turn.
   if (!state.opts?.warmOnly && !state.opts?.cardContinuation) {

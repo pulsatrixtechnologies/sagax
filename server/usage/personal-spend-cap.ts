@@ -1,7 +1,7 @@
 // A person's own monthly spend limit (Settings > Usage > "Limite de
 // dépenses"). Stored beside the ledger, not in config, so it needs no
 // entitlement and an admin-only config write is not in its way. It counts
-// the same month-to-date figure as the workspace cap (server/spend.ts) and
+// the same month-to-date figure as the workspace cap (server/usage/spend.ts) and
 // stops a new turn the same way (409 `spend_cap`) once reached; the owner
 // raises or removes it from the same page. Solo servers only: on an
 // organization server the person has no cap of their own here (the route

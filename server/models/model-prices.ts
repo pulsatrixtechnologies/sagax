@@ -15,8 +15,8 @@
 // priority or regional tiers cost more than estimated; batch tiers cost
 // less. On a personal subscription (a Codex or Gemini login) the figure is
 // the API equivalent, the same way Claude's own reported cost is.
-import type { ModelPrice, PriceList, PricedTurn } from "../prices.ts";
-import { billableFor } from "../prices.ts";
+import type { ModelPrice, PriceList, PricedTurn } from "../usage/prices.ts";
+import { billableFor } from "../usage/prices.ts";
 
 export interface ListPrice extends ModelPrice {
   /** YYYY-MM-DD the source page was read. */

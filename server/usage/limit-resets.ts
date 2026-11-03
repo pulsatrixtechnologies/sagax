@@ -2,7 +2,7 @@
 // automation knows when to run and the app can warn before a limit is reached.
 import { readFileSync } from "node:fs";
 
-import { NEAR_LIMIT_PERCENT, type EngineLimit, type EngineLimitsReport, type LimitWindowName } from "../shared/limit-reset.ts";
+import { NEAR_LIMIT_PERCENT, type EngineLimit, type EngineLimitsReport, type LimitWindowName } from "../../shared/limit-reset.ts";
 import { loadPlanUsage, type PlanAccount, type PlanProviderRow, type PlanUsageReport, type PlanWindow } from "./plan-usage.ts";
 
 /** How often a waiting limit-reset automation checks usage again, and how fresh a shown limit must be. */

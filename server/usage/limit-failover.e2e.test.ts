@@ -19,8 +19,8 @@ import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 
-import { launchVerificationServer, runControlOmb, verificationServerEnvironment } from "../scripts/control-omb.ts";
-import { waitForExit } from "./testing/cleanup.ts";
+import { launchVerificationServer, runControlOmb, verificationServerEnvironment } from "../../scripts/control-omb.ts";
+import { waitForExit } from "../testing/cleanup.ts";
 
 const PRIMARY = { instanceId: "primary", model: "fixture/primary" };
 const CLAUDE = { instanceId: "claude", model: "claude-sonnet-5" };
@@ -53,7 +53,7 @@ it("continues a limited turn on an engine the person has, never another, and goe
     await waitForExit(fixture.child, { signal: "SIGTERM" });
     const configPath = join(dataDir, "config.json");
     const config = JSON.parse(readFileSync(configPath, "utf8"));
-    const cli = fileURLToPath(new URL("./testing/fake-acp-cli.ts", import.meta.url));
+    const cli = fileURLToPath(new URL("../testing/fake-acp-cli.ts", import.meta.url));
     const instances = config.instances;
     // Catalog order: the two engines that must never be taken come before Claude.
     config.instances = {
@@ -79,8 +79,8 @@ it("continues a limited turn on an engine the person has, never another, and goe
     config.automaticRecovery = { enabled: true, backup: OFF };
     writeFileSync(configPath, JSON.stringify(config));
     const log = openSync(logPath, "a", 0o600);
-    server = spawn(process.execPath, ["--experimental-strip-types", fileURLToPath(new URL("./index.ts", import.meta.url))], {
-      cwd: fileURLToPath(new URL("..", import.meta.url)),
+    server = spawn(process.execPath, ["--experimental-strip-types", fileURLToPath(new URL("../index.ts", import.meta.url))], {
+      cwd: fileURLToPath(new URL("../..", import.meta.url)),
       env: { ...verificationServerEnvironment({}, dataDir, Number(new URL(url).port)), SAGAX_TEST_LIMIT_AFTER_RESET_MS: "300" },
       stdio: ["ignore", log, log],
     });

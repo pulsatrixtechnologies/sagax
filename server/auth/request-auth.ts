@@ -972,7 +972,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // it stays admin scope (server/routes/usage.ts).
   { methods: ["GET"], path: /^\/api\/me\/spend-cap$/ },
   // A person's own plan windows (5-hour, weekly) read from their own
-  // subscription logins only (server/plan-usage.ts orgPlanAccounts). On a
+  // subscription logins only (server/usage/plan-usage.ts orgPlanAccounts). On a
   // solo server this path stays admin.
   { methods: ["GET"], path: /^\/api\/plan-usage$/, feature: "orgDirectory" },
   // The server's engines and their models (Model providers, the model

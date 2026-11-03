@@ -2,11 +2,11 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
-import { createHarnessClient } from "./drivers/agents-client.ts";
-import { callTool, type ToolCallContext } from "./drivers/agents-call.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
+import { createHarnessClient } from "../drivers/agents-client.ts";
+import { callTool, type ToolCallContext } from "../drivers/agents-call.ts";
 
-const mp4 = readFileSync(new URL("./testing/fixtures/generated-video-blue.mp4", import.meta.url));
+const mp4 = readFileSync(new URL("../testing/fixtures/generated-video-blue.mp4", import.meta.url));
 describe("make_video on the real isolated server", () => {
   it("dispatches the real tool, polls xAI, attaches a streamed MP4, retries without a second generation and serves durable bytes", async () => {
     const requests: Array<{ method?: string; path?: string; auth?: string; body?: Record<string, unknown> }> = [];

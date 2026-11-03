@@ -4,7 +4,7 @@ import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request as httpsRequest } from "node:https";
 import type { LookupFunction } from "node:net";
 import { z } from "zod";
-import { checkMediaDestination, mediaProxyPolicyFromEnv, type MediaProxyPolicy, type MediaProxyResolver } from "./media-proxy-guard.ts";
+import { checkMediaDestination, mediaProxyPolicyFromEnv, type MediaProxyPolicy, type MediaProxyResolver } from "../media-proxy-guard.ts";
 
 export const VIDEO_MODEL = "grok-imagine-video-1.5";
 export const videoGenerationSchema = z.object({

@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { createXaiVideoProvider, generatedMp4Chunks, openGeneratedVideo, videoGenerationSchema } from "./video-provider.ts";
-import { mediaProxyPolicyFromEnv } from "./media-proxy-guard.ts";
+import { mediaProxyPolicyFromEnv } from "../media-proxy-guard.ts";
 
 const servers: Server[] = [];
 afterEach(async () => { for (const server of servers.splice(0)) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); } });
@@ -13,7 +13,7 @@ async function listen(handler: RequestListener) {
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
 const policy = mediaProxyPolicyFromEnv({ SAGAX_MEDIA_PROXY_ALLOW_HOSTS: "127.0.0.1" });
-const mp4 = readFileSync(new URL("./testing/fixtures/generated-video-blue.mp4", import.meta.url));
+const mp4 = readFileSync(new URL("../testing/fixtures/generated-video-blue.mp4", import.meta.url));
 describe("xAI video wire and streamed media", () => {
   it("sends the documented generation parameters, polls request_id and keeps credentials off media requests", async () => {
     const calls: Array<{ url?: string; auth?: string; body: unknown }> = [];

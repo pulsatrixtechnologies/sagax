@@ -3,14 +3,14 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
-import { launchVerificationServer, runControlOmb, verificationServerArgs, verificationServerEnvironment } from "../scripts/control-omb.ts";
-import { createHarnessClient } from "./drivers/agents-client.ts";
-import { callTool, type ToolCallContext } from "./drivers/agents-call.ts";
-import { waitForExit } from "./testing/cleanup.ts";
+import { launchVerificationServer, runControlOmb, verificationServerArgs, verificationServerEnvironment } from "../../scripts/control-omb.ts";
+import { createHarnessClient } from "../drivers/agents-client.ts";
+import { callTool, type ToolCallContext } from "../drivers/agents-call.ts";
+import { waitForExit } from "../testing/cleanup.ts";
 
 // Synthetic person, bot, key and provider only. The provider is an owned
 // loopback stand-in for xAI's documented Videos API.
-const mp4 = readFileSync(new URL("./testing/fixtures/generated-video-blue.mp4", import.meta.url));
+const mp4 = readFileSync(new URL("../testing/fixtures/generated-video-blue.mp4", import.meta.url));
 type Row = { id: string; kind: string; text?: string; widget?: unknown; attachments?: Array<{ mime: string }> };
 
 it("a crash after xAI acknowledged the job: the restarted server resumes polling, replaces the progress row with the MP4 and shows a failure receipt", async () => {

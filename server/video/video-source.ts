@@ -1,4 +1,4 @@
-import type { Message } from "./store.ts";
+import type { Message } from "../store.ts";
 
 /** A later queued line must not change the image or idempotency source of
  * work already running, nor lend another room member's image to its payer. */

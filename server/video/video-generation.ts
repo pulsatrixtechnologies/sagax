@@ -3,7 +3,7 @@ import { mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { z } from "zod";
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 import { VIDEO_MODEL, VideoProviderError, type VideoGenerationInput, type VideoProvider, type VideoProviderResult } from "./video-provider.ts";
 
 const scopeSchema = z.object({ botId: z.string(), threadId: z.string(), principalId: z.string() });

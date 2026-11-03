@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Message } from "./store.ts";
+import type { Message } from "../store.ts";
 import { videoSourceMessage } from "./video-source.ts";
 
 const line = (id: string, at: number, person = "alice"): Message => ({ id, at, role: "user", kind: "text", text: id, sender: { id: person, name: person } });

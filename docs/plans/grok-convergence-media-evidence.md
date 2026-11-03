@@ -179,7 +179,7 @@ Verification for this step (worktree `sagax-grok-video`, 2026-11-01):
 - `oxlint --deny-warnings` on the touched server files: pass.
 - `node scripts/generate-locale.mjs --check`: valid; only the French string
   of the one changed key (`keys.xai.descVoice`) was re-signed.
-- 10 test files, 99 tests passed: `server/video-provider.test.ts`,
+- 10 test files, 99 tests passed: `server/video/video-provider.test.ts`,
   `video-generation.test.ts`, `video-credentials.test.ts`,
   `video-source.test.ts`, `video-status.test.ts`,
   `drivers/agents-video.test.ts`, `drivers/agents-catalog-wire.test.ts`,

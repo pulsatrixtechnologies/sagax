@@ -128,7 +128,7 @@ Lot 2 evidence: [`docs/plans/grok-convergence-engines-evidence.md`](docs/plans/g
 
 ## make_video runs on xAI's Videos API (2026-11-01)
 
-`server/video-provider.ts` (wire), `video-generation.ts` (durable jobs),
+`server/video/video-provider.ts` (wire), `video-generation.ts` (durable jobs),
 `video-credentials.ts` (personal key, then the org key only with the
 `xaiImage` grant, never a payer switch), `video-status.ts` (the one row per
 job: progress, receipts, replaced by the MP4) and `routes/video-internal.ts`.

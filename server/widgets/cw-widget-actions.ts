@@ -10,12 +10,12 @@
 
 import { randomUUID } from "node:crypto";
 
-import { cwSite } from "../shared/cw-widgets/links.ts";
-import { cwWidgetFromToolCall, isCwViewTool, isCwWriteTool } from "../shared/cw-widgets/tool-call.ts";
-import type { CwSite, CwWidget } from "../shared/cw-widgets/types.ts";
-import { cwActionMatchesWrite, cwActionSummary, cwActionWrite, type CwAction, type CwLanguage } from "../shared/cw-widgets/actions.ts";
-import { askedForView } from "../shared/requested-views.ts";
-import { redactSecrets } from "./redact.ts";
+import { cwSite } from "../../shared/cw-widgets/links.ts";
+import { cwWidgetFromToolCall, isCwViewTool, isCwWriteTool } from "../../shared/cw-widgets/tool-call.ts";
+import type { CwSite, CwWidget } from "../../shared/cw-widgets/types.ts";
+import { cwActionMatchesWrite, cwActionSummary, cwActionWrite, type CwAction, type CwLanguage } from "../../shared/cw-widgets/actions.ts";
+import { askedForView } from "../../shared/requested-views.ts";
+import { redactSecrets } from "../redact.ts";
 
 export const CW_ACTION_PASS_MS = 10 * 60_000;
 export const CW_ACTION_REQUEST_PREFIX = "cwact-";

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { WATCHER_OPTIONS_CARD_BOT_ID } from "../shared/options-card.ts";
+import { WATCHER_OPTIONS_CARD_BOT_ID } from "../../shared/options-card.ts";
 import { createOptionsCard, type OptionsCardStore } from "./options-card.ts";
 
 function watcher() {

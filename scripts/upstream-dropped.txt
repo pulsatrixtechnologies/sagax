@@ -586,3 +586,10 @@ server/activity.ts
 server/admin-activity.e2e.test.ts
 server/admin-activity.test.ts
 server/admin-activity.ts
+server/chat-apps.test.ts
+server/chat-apps.ts
+server/chat-widgets.e2e.test.ts
+server/chat-widgets.test.ts
+server/chat-widgets.ts
+server/options-card.test.ts
+server/options-card.ts

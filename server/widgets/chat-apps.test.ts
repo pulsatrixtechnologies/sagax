@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { APP_LIMITS } from "../shared/app.ts";
-import type { MausColor } from "../shared/wire.ts";
+import { APP_LIMITS } from "../../shared/app.ts";
+import type { MausColor } from "../../shared/wire.ts";
 import { createAgentCard, type AgentCardStore } from "./chat-widgets.ts";
-import type { Message } from "./store.ts";
+import type { Message } from "../store.ts";
 
 const THREAD = "thread-scout";
 const ROOM = "thread-room";

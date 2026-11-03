@@ -39,7 +39,7 @@ import {
 import {
   prepareWidgetPress,
   reopenCancelledPress,
-} from "../chat-widgets.ts";
+} from "../widgets/chat-widgets.ts";
 import { claudeActivityEvents } from "../engines/claude-activity.ts";
 import {
   cloudGuestSendRefusal,

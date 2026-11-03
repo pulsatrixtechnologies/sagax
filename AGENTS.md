@@ -2340,9 +2340,9 @@ dynamiquement quand il le construit." A bot passes the HTML of a ```widget
 fence to `check_widget` (`server/drivers/agents-widget-tools.ts`) before it
 shows it; the system prompt says so (`WIDGET_SELF_CHECK_PROMPT`).
 
-- `server/widget-check.ts` renders the chat's own document
+- `server/widgets/widget-check.ts` renders the chat's own document
   (`buildWidgetDocument`, iframe sandboxed to allow-scripts) at 720 and 360
-  px, light and dark, and `server/widget-check-audit.ts` reports: JS errors,
+  px, light and dark, and `server/widgets/widget-check-audit.ts` reports: JS errors,
   horizontal scroll, overflow, clipped, overlapping or crushed text, hidden or
   covered controls, contrast below 3:1, targets under 24 px with a neighbour
   (or under 12 px). The bot gets the list plus a small JPEG as the tool result.
@@ -2357,7 +2357,7 @@ shows it; the system prompt says so (`WIDGET_SELF_CHECK_PROMPT`).
   a widget that navigates its frame away is reported, never audited. Chrome: `SAGAX_WIDGET_CHECK_CHROME` (`off` disables), then
   `AGENT_BROWSER_EXECUTABLE_PATH`, the desktop bundle, a Playwright headless
   shell. Never the person's browser. No Chrome: the tool says "unavailable".
-- Tests: `server/widget-check.test.ts` (fixtures in
+- Tests: `server/widgets/widget-check.test.ts` (fixtures in
   `server/testing/widget-check-fixtures/`, broken ones must fail, healthy ones
   must pass with no defect).
 
@@ -9373,7 +9373,7 @@ parity screen `create-bot-import`.
 A bot shows a card, list, form, table or chart with the agents tool
 `show_widget` (and replaces it with `update_widget`): message kind `widget`,
 a JSON tree in ChatKit's format, normalised once by `shared/widget.ts`
-(`parseWidgetInput`) and stored by `server/chat-widgets.ts`. The spec is
+(`parseWidgetInput`) and stored by `server/widgets/chat-widgets.ts`. The spec is
 `docs/superpowers/specs/2026-10-13-chat-widgets-design.md`. The files keep
 upstream's paths, names and data format so the next upstream sync merges:
 do not rename them or invent another format. Sagax keeps the send route
@@ -9450,7 +9450,7 @@ the person asked for are not views.
   and still draw as rows.
 - The bot writes a ```cw fence only when the person explicitly asks for an
   interactive view (`CW_FENCE_PROMPT`, `server/system-prompt.ts`).
-- Test: `server/cw-widget-actions.test.ts`, `server/cw-widgets.e2e.test.ts`.
+- Test: `server/widgets/cw-widget-actions.test.ts`, `server/cw-widgets.e2e.test.ts`.
 
 ## Conversation events: routines turned on or off, Connect apps (2026-10-15)
 

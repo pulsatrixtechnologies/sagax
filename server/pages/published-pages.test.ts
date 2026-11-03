@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createAgentCard, type AgentCardStore } from "../chat-widgets.ts";
+import { createAgentCard, type AgentCardStore } from "../widgets/chat-widgets.ts";
 import { json, readBody } from "../harness/http.ts";
 import { pageOwnerFor, PublishedPages } from "./published-pages.ts";
 import { PageLive } from "./page-live.ts";

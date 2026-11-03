@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
 
 it("records an in-app press as done and runs no turn", async () => {
   const gates = mkdtempSync(join(tmpdir(), "omb-widget-device-"));

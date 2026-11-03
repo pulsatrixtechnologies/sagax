@@ -10,15 +10,15 @@
 import {
   parseWidgetInput, resolveWidgetAction, widgetActions, widgetFields, widgetToText, WIDGET_LIMITS,
   type WidgetAction, type WidgetAppAction, type WidgetNode, type WidgetPayload, type WidgetRoot, type WidgetSettled,
-} from "../shared/widget.ts";
-import { parsePageProposal, type PageKind } from "../shared/published-pages.ts";
-import type { MausColor } from "../shared/wire.ts";
+} from "../../shared/widget.ts";
+import { parsePageProposal, type PageKind } from "../../shared/published-pages.ts";
+import type { MausColor } from "../../shared/wire.ts";
 import { createAppCard, isAppTool } from "./chat-apps.ts";
 import { createOptionsCard } from "./options-card.ts";
-import { ASK_CHOICE_TOOL, parseAskChoiceInput } from "../shared/options-card.ts";
-import type { ApprovalMode } from "../shared/approval-mode.ts";
-import { fullAccessChoiceAnswer } from "./approvals/full-access-gate.ts";
-import { isSecretName, mask, redactSecretsInText } from "./redact.ts";
+import { ASK_CHOICE_TOOL, parseAskChoiceInput } from "../../shared/options-card.ts";
+import type { ApprovalMode } from "../../shared/approval-mode.ts";
+import { fullAccessChoiceAnswer } from "../approvals/full-access-gate.ts";
+import { isSecretName, mask, redactSecretsInText } from "../redact.ts";
 import type { AgentCardResult, AgentCardStore } from "./chat-card-types.ts";
 
 export type { AgentCardResult, AgentCardStore } from "./chat-card-types.ts";

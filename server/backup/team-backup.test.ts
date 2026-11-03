@@ -1,7 +1,7 @@
 import { readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createAgentCard } from "../chat-widgets.ts";
+import { createAgentCard } from "../widgets/chat-widgets.ts";
 import { DATA_DIR } from "../config.ts";
 import { Store, UNTITLED_TASK } from "../store.ts";
 import { RoutineManager } from "../routines/routines.ts";

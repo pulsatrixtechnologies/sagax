@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { autoVerdict } from "./approvals/auto-approve.ts";
+import { autoVerdict } from "../approvals/auto-approve.ts";
 import { CW_ACTION_PASS_MS, cwActionCard, cwActionLanguage, cwToolRowWidget, cwToolWidget, createCwActionPasses } from "./cw-widget-actions.ts";
-import { isCwViewTool, shownCwWidget } from "../shared/cw-widgets/tool-call.ts";
-import { withoutPrivateFields } from "./harness/bus.ts";
-import { FIXTURE_TICKETS, fixtureMcpContent, fixtureQueryResult } from "../shared/cw-widgets/fixtures.ts";
-import type { CwAction } from "../shared/cw-widgets/actions.ts";
-import type { RuntimeEvent } from "../shared/runtime-events.ts";
+import { isCwViewTool, shownCwWidget } from "../../shared/cw-widgets/tool-call.ts";
+import { withoutPrivateFields } from "../harness/bus.ts";
+import { FIXTURE_TICKETS, fixtureMcpContent, fixtureQueryResult } from "../../shared/cw-widgets/fixtures.ts";
+import type { CwAction } from "../../shared/cw-widgets/actions.ts";
+import type { RuntimeEvent } from "../../shared/runtime-events.ts";
 
 const status: CwAction = { kind: "ticket.status", ticketId: 48213, status: "Résolu", from: "En cours" };
 const note: CwAction = { kind: "ticket.note", ticketId: 48150, text: "Accès créé, mot de passe envoyé par texto.", internal: true };

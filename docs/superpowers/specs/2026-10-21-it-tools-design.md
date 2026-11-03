@@ -41,10 +41,10 @@ Rendering surfaces:
   - Android: no widget renderer, so it shows the `text` fallback.
 
   A button press comes back as an ordinary user message that replies to the widget row
-  (`server/chat-widgets.ts` `prepareWidgetPress`, `server/messages/replies.ts` `promptWithReply`). Widgets are refused in
-  rooms (`ROOM_REFUSAL` in `server/chat-widgets.ts`).
+  (`server/widgets/chat-widgets.ts` `prepareWidgetPress`, `server/messages/replies.ts` `promptWithReply`). Widgets are refused in
+  rooms (`ROOM_REFUSAL` in `server/widgets/chat-widgets.ts`).
 - **Tool-result widgets (PSA precedent).** `shared/cw-widgets/tool-call.ts` (`cwWidgetFromToolCall`,
-  `isCwViewTool`, `shownCwWidget`) maps a tool call's result to a typed widget. `server/cw-widget-actions.ts`
+  `isCwViewTool`, `shownCwWidget`) maps a tool call's result to a typed widget. `server/widgets/cw-widget-actions.ts`
   (`cwToolRowWidget`) attaches it to the tool row (`tool.widget` in `shared/wire.ts`). Desktop draws it in
   `src/components/cw/CwWidgetView.tsx` and iOS in `ios/App/Features/Chat/CwWidgetCard.swift`. A change asked from
   the widget becomes an approval card, never a direct write.
@@ -113,7 +113,7 @@ Language:
 
 - `src/locales/*.json` packs are partial and fall back to English (`src/locales/index.ts`). `pt-br.json` also
   serves `pt`. Check with `pnpm i18n:check` (`scripts/generate-locale.mjs`).
-- The server-side language precedent is `cwActionLanguage(cfg.language)` in `server/cw-widget-actions.ts`.
+- The server-side language precedent is `cwActionLanguage(cfg.language)` in `server/widgets/cw-widget-actions.ts`.
 
 Tests:
 

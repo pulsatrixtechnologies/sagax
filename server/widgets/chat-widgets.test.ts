@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { WATCHER_OPTIONS_CARD_BOT_ID } from "../shared/options-card.ts";
-import { redactSecretsInText } from "../shared/redact.ts";
-import { WIDGET_SAMPLES } from "../shared/widget-samples.ts";
-import { WIDGET_LIMITS, widgetActions, widgetToText, type WidgetNode, type WidgetPayload } from "../shared/widget.ts";
+import { WATCHER_OPTIONS_CARD_BOT_ID } from "../../shared/options-card.ts";
+import { redactSecretsInText } from "../../shared/redact.ts";
+import { WIDGET_SAMPLES } from "../../shared/widget-samples.ts";
+import { WIDGET_LIMITS, widgetActions, widgetToText, type WidgetNode, type WidgetPayload } from "../../shared/widget.ts";
 import { createAgentCard, prepareWidgetPress, reopenCancelledPress, type AgentCardStore } from "./chat-widgets.ts";
-import type { Message } from "./store.ts";
+import type { Message } from "../store.ts";
 
 const THREAD = "thread-scout";
 const SCOUT = { id: "bot-scout", name: "Scout", color: "blue" as const };

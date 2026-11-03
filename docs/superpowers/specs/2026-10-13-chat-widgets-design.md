@@ -209,7 +209,7 @@ Two tools join the agents catalog (`server/drivers/agents-widget-tools.ts`, spre
 - `update_widget({ widget_id, widget })` replaces a live widget's tree in place (a progress bar, a status). A settled widget, another bot's widget or another thread's widget is refused.
 
 Both go through the existing internal route `POST /api/internal/options-card`,
-whose handler now calls `createAgentCard` (`server/chat-widgets.ts`). A body with
+whose handler now calls `createAgentCard` (`server/widgets/chat-widgets.ts`). A body with
 `tool: "show_widget" | "update_widget"` is a widget call; a body without `tool`
 is the legacy options card, unchanged. This keeps `server/index.ts` at its
 ratcheted size and path-guard counts.
@@ -270,7 +270,7 @@ URL cannot make a device call out on its own. On phones the type is named
 ## Testing
 
 - `shared/widget.test.ts`: normalisation of every node type, each limit, the password refusal, fallback text, action resolution (scope, required, options, dates, settled, unknown ref).
-- `server/chat-widgets.test.ts`, `server/messages/replies.test.ts`, `server/routes/bot-messages` tests: create, update, room refusal, redaction, press delivery, settle, idempotent retry.
+- `server/widgets/chat-widgets.test.ts`, `server/messages/replies.test.ts`, `server/routes/bot-messages` tests: create, update, room refusal, redaction, press delivery, settle, idempotent retry.
 - Catalog goldens regenerated; ratchet numbers lowered where code moved out.
 - Desktop component tests (happy-dom) for the renderer, form state and the settled line.
 - Shared fixtures `widget-messages.json` feed the iOS and Android decoding tests.

@@ -1193,7 +1193,7 @@ export interface OptionCardData extends WaitCardField {
    * for this person. Recorded per person; never auto-applied. */
   phoneCallConsent?: PhoneCallConsentCardData;
   /** A change asked from a ConnectWise widget, waiting for an Allow
-   * (server/cw-widget-actions.ts). `by` is the principal who asked. */
+   * (server/widgets/cw-widget-actions.ts). `by` is the principal who asked. */
   cwActionRequest?: { id: string; action: CwAction; by: string };
   /** 2026-10-16: the person's custom rule behind this card (an ask rule
    * held it, or an allow rule matched without covering its risk class),

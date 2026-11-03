@@ -109,8 +109,8 @@ export const FULL_ACCESS_SURFACES = {
   "safety-review": "server/safety/safety-review.ts safetyPermissionEffect and safetyToolHold",
   /** The card a server-side safety hold waits on (index.ts confirmHeldCard). */
   "safety-confirm": "server/index.ts confirmHeldCard",
-  /** The Sagax ask_choice tool (server/chat-widgets.ts createChoiceCard). */
-  "ask-choice": "server/chat-widgets.ts createChoiceCard",
+  /** The Sagax ask_choice tool (server/widgets/chat-widgets.ts createChoiceCard). */
+  "ask-choice": "server/widgets/chat-widgets.ts createChoiceCard",
   /** Ask before contacting bots (index.ts peerReviewRequired, peer-approval.ts). */
   "peer-contact": "server/peers/peer-approval.ts requestPeerApproval behind peerReviewRequired",
   /** A proposal the bot makes about itself or its team: profile, routine,

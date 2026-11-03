@@ -4,14 +4,14 @@
 // everything after that reads the stored message.
 //
 // Both tools arrive on the same internal options-card route as the chat
-// widgets (server/chat-widgets.ts createAgentCard), which has already checked
+// widgets (server/widgets/chat-widgets.ts createAgentCard), which has already checked
 // that the conversation is the calling bot's own. The page itself is never
 // rendered on the server; it is drawn in the app's existing sandboxed frame
 // (src/components/AppMessage.tsx -> src/lib/rich-blocks.ts), an opaque-origin
 // iframe with "allow-scripts" only and a no-network CSP. This module adds no
 // bridge and no network egress, so the sandbox is reused as-is, never widened.
-import { APP_VERSION, appToText, parseAppInput, type AppPayload } from "../shared/app.ts";
-import { redactSecretsInText } from "./redact.ts";
+import { APP_VERSION, appToText, parseAppInput, type AppPayload } from "../../shared/app.ts";
+import { redactSecretsInText } from "../redact.ts";
 import type { AgentCardResult, AgentCardStore } from "./chat-card-types.ts";
 
 const ROOM_REFUSAL = "Live apps are not available in rooms. Show it in a direct conversation.";

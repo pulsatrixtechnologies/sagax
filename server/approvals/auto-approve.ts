@@ -238,7 +238,7 @@ export function autoVerdict(
     /** Safety review: a read-only call may run without a card. */
     safetyAllow?: boolean;
     /** The person allowed this exact ConnectWise change on a widget's
-     * approval card (server/cw-widget-actions.ts): one write, one record. */
+     * approval card (server/widgets/cw-widget-actions.ts): one write, one record. */
     widgetApproved?: boolean;
     /** The person's custom rule that decided this call
      * (shared/custom-rules.ts evaluateCustomRules, risk scope already

@@ -1,4 +1,4 @@
-import type { Message } from "./store.ts";
+import type { Message } from "../store.ts";
 
 /** What these calls need of the store (server/store.ts Store satisfies it). */
 export interface AgentCardStore {

@@ -9,9 +9,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 
-import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
-import { WIDGET_SAMPLES } from "../shared/widget-samples.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
+import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
+import { WIDGET_SAMPLES } from "../../shared/widget-samples.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
 
 it("shows, replaces and answers a widget on a bot's own conversation, once per press", async () => {
   const gates = mkdtempSync(join(tmpdir(), "omb-chat-widgets-"));

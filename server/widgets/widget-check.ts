@@ -17,8 +17,8 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Readable, Writable } from "node:stream";
 
-import { buildWidgetDocument, WIDGET_MAX_HEIGHT, WIDGET_MESSAGE, WIDGET_MIN_HEIGHT, WIDGET_SANDBOX } from "../src/lib/rich-blocks.ts";
-import { geistFace } from "./geist-face.ts";
+import { buildWidgetDocument, WIDGET_MAX_HEIGHT, WIDGET_MESSAGE, WIDGET_MIN_HEIGHT, WIDGET_SANDBOX } from "../../src/lib/rich-blocks.ts";
+import { geistFace } from "../geist-face.ts";
 import { auditWidgetPage, type AuditDefect } from "./widget-check-audit.ts";
 
 export const WIDGET_CHECK_MAX_ATTEMPTS = 3;

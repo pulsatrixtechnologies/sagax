@@ -710,7 +710,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // règle" (read only, nothing saved); the handler keeps it to their bots
   { methods: ["GET"], path: /^\/api\/approvals\/journal$/ },
   { methods: ["POST"], path: /^\/api\/approvals\/journal\/test$/ },
-  // a ConnectWise widget's change: an approval card for whoever may answer it (server/cw-widget-actions.ts)
+  // a ConnectWise widget's change: an approval card for whoever may answer it (server/widgets/cw-widget-actions.ts)
   { methods: ["POST"], path: /^\/api\/threads\/[\w-]+\/cw-actions$/ },
   // an email draft's Send: an approval card for the bot's owner, then the send
   // once they allow it (server/mail/email-draft-send.ts)

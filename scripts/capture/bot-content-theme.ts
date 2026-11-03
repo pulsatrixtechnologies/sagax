@@ -16,7 +16,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { pageDocument } from "../../server/pages/published-pages-render.ts";
-import { geistFace, widgetHostPage } from "../../server/widget-check.ts";
+import { geistFace, widgetHostPage } from "../../server/widgets/widget-check.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const arg = (name: string, fallback: string) => {

@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { approvalLevelPrompt } from "./approval-level-prompt.ts";
 import { autoVerdict } from "./auto-approve.ts";
-import { createAgentCard, type AgentCardStore } from "../chat-widgets.ts";
+import { createAgentCard, type AgentCardStore } from "../widgets/chat-widgets.ts";
 import { DATA_DIR } from "../config.ts";
 import type { ModelSelection } from "../contracts.ts";
 import { grokPermissionMode } from "../drivers/acp/grok.ts";

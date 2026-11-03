@@ -231,7 +231,7 @@ import {
   cwActionLanguage,
   cwToolRowWidget,
   createCwActionPasses
-} from "./cw-widget-actions.ts";
+} from "./widgets/cw-widget-actions.ts";
 import { cwActionInstruction, parseCwAction } from "../shared/cw-widgets/actions.ts";
 import { createApprovalModeSupport } from "./capabilities/harness-capabilities.ts";
 import { escapeAttribute } from "../src/lib/composer-attachments.ts";
@@ -570,7 +570,7 @@ import {
   MemoryWatch,
   memoryGuardSettings
 } from "./memory/engine-memory-guard.ts";
-import { checkWidgetForTurn, WidgetCheckAttempts, WidgetRenderer } from "./widget-check.ts";
+import { checkWidgetForTurn, WidgetCheckAttempts, WidgetRenderer } from "./widgets/widget-check.ts";
 import { bundledKnowledgeIndex } from "./self-knowledge.ts";
 import { createSelfKnowledgeInternalRoutes } from "./routes/self-knowledge-internal.ts";
 import { createWebSearchInternalRoutes } from "./routes/web-search-internal.ts";
@@ -1280,7 +1280,7 @@ import {
 } from "./computer/screen-frame-gate.ts";
 import { RoutineRequestService } from "./routines/routine-requests.ts";
 import { directApply, UNDO_STALE, type DirectApply } from "./direct-apply.ts";
-import { createAgentCard } from "./chat-widgets.ts";
+import { createAgentCard } from "./widgets/chat-widgets.ts";
 import { buildBotOverview, type BotOverview } from "./bots/bot-overview.ts";
 import { ProfileRequestService } from "./profiles/profile-requests.ts";
 import { ModelRequestService } from "./models/model-requests.ts";
@@ -8313,7 +8313,7 @@ const sendSequencer = new SendSequencer();
 /** Presses that fold their widget, while their message is on its way in:
  * thread:widget -> the sendId that holds it. The widget is only marked
  * answered once the message is accepted, and a second tap in between must
- * not send a second answer (server/chat-widgets.ts prepareWidgetPress). */
+ * not send a second answer (server/widgets/chat-widgets.ts prepareWidgetPress). */
 const widgetPressesInFlight = new Map<string, string | undefined>();
 // Before the new-bot default is read: a saved default may name the engine.
 await retryComputerEngineMove();
@@ -34455,7 +34455,7 @@ function cwActionActor(auth: RequestAuth): PerformActor | null {
   return auth.kind === "loopback" && auth.trust !== "service" ? { kind: "operator" } : null;
 }
 
-/** A ConnectWise widget asks for a change (server/cw-widget-actions.ts): an
+/** A ConnectWise widget asks for a change (server/widgets/cw-widget-actions.ts): an
  * approval card for the bot's owner, never a write. */
 async function requestCwAction(auth: RequestAuth, threadId: string, body: Record<string, unknown>): Promise<{ status: number; body: Record<string, unknown> }> {
   const action = parseCwAction(body.action);
@@ -44006,7 +44006,7 @@ ROUTES.push(createSharedComputersRoutes({
 }));
 
 const toolResults = new ToolResults();
-// check_widget (server/widget-check.ts): one warm headless browser for every
+// check_widget (server/widgets/widget-check.ts): one warm headless browser for every
 // bot, never started while memory is high, the OOM killer's first pick.
 const widgetRenderer = new WidgetRenderer({
   staticDir: STATIC_DIR,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cwActionLanguage } from "../cw-widget-actions.ts";
+import { cwActionLanguage } from "../widgets/cw-widget-actions.ts";
 import { personLanguage, personLanguageOf } from "./person-language.ts";
 import { serverApprovalWords } from "../approvals/approval-words.ts";
 import { emailSendSummary } from "../../shared/email-draft-send.ts";

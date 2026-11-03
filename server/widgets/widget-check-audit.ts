@@ -1,4 +1,4 @@
-// The in-page half of the widget self-check (server/widget-check.ts): one
+// The in-page half of the widget self-check (server/widgets/widget-check.ts): one
 // function, sent as a string to the headless renderer and run in an isolated
 // world of the widget's own sandboxed frame, so the widget's scripts cannot
 // see or change it. It reads layout only and returns the defects it finds.

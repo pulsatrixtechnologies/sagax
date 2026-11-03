@@ -36,7 +36,7 @@ const DECIDED_IN: Record<FullAccessSurface, string | null> = {
   "question": "server/index.ts",
   "safety-review": "server/safety/safety-review.ts",
   "safety-confirm": "server/index.ts",
-  "ask-choice": "server/chat-widgets.ts",
+  "ask-choice": "server/widgets/chat-widgets.ts",
   "peer-contact": "server/index.ts",
   "proposal": "server/index.ts",
   "send": "server/index.ts",
@@ -89,7 +89,7 @@ describe("every approval or choice card reads the Full access decision", () => {
   it("finds the surfaces at all (the scan is not empty)", () => {
     expect(hits.length).toBeGreaterThan(20);
     expect(hits.some((hit) => hit.file === "server/index.ts" && hit.emitter === "options card")).toBe(true);
-    expect(hits.some((hit) => hit.file === "server/chat-widgets.ts")).toBe(true);
+    expect(hits.some((hit) => hit.file === "server/widgets/chat-widgets.ts")).toBe(true);
     expect(hits.some((hit) => hit.file === "server/drivers/openai-chat.ts" && hit.emitter === "permission request")).toBe(true);
   });
 

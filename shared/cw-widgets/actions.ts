@@ -2,7 +2,7 @@
 // writes to ConnectWise itself: the server shows an approval card, and once
 // the person allows it, asks the bot to make that one change with its own
 // ConnectWise tool. The bot's write is then let through once, for that
-// record only (server/cw-widget-actions.ts).
+// record only (server/widgets/cw-widget-actions.ts).
 
 import { clip, clipBlock, isRecord } from "./read.ts";
 

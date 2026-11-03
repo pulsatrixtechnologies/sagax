@@ -16,7 +16,7 @@ import {
   type WidgetCheckResult,
 } from "./widget-check.ts";
 
-const FIXTURES = join(import.meta.dirname, "testing", "widget-check-fixtures");
+const FIXTURES = join(import.meta.dirname, "..", "testing", "widget-check-fixtures");
 const fixture = (name: string) => readFileSync(join(FIXTURES, `${name}.html`), "utf8");
 
 describe("widget check report", () => {

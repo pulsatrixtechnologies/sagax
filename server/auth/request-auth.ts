@@ -953,7 +953,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["GET", "PUT"], path: /^\/api\/bots\/[\w-]+\/perspicax$/, feature: "orgDirectory" },
   // The bots whose sharing the caller administers (never their messages).
   { methods: ["GET"], path: /^\/api\/org\/bots$/, feature: "orgDirectory" },
-  // Sidebar sections as channels (server/section-channels.ts checks the rights).
+  // Sidebar sections as channels (server/rooms/section-channels.ts checks the rights).
   { methods: ["GET", "POST"], path: /^\/api\/org\/sections$/, feature: "orgDirectory" },
   { methods: ["PATCH", "DELETE"], path: /^\/api\/org\/sections\/(?:sec_[0-9a-f-]{36}|general)$/, feature: "orgDirectory" },
   { methods: ["PUT"], path: /^\/api\/org\/sections\/(?:sec_[0-9a-f-]{36}|general)\/(?:members|bots)$/, feature: "orgDirectory" },

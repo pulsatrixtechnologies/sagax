@@ -365,8 +365,8 @@ git commit -m "feat: show the organization directory above the enterprise card"
 - Modify: `shared/wire.ts` (type du groupe)
 - Modify: `server/store.ts` (`GroupRecord`, `patchGroup`)
 - Modify: `src/state/store.tsx` (`Group`)
-- Create: `server/channel-membership.ts`
-- Test: `server/channel-membership.test.ts`
+- Create: `server/rooms/channel-membership.ts`
+- Test: `server/rooms/channel-membership.test.ts`
 
 **Interfaces:**
 - Consumes: `OrgRole`
@@ -396,7 +396,7 @@ it("lets an admin edit people and stops a member", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm exec vitest run server/channel-membership.test.ts`
+Run: `pnpm exec vitest run server/rooms/channel-membership.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: Write minimal implementation**
@@ -405,21 +405,21 @@ Ajouter `humanIds` au schéma du groupe dans `shared/wire.ts`, à `GroupRecord`,
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/channel-membership.test.ts server/store.test.ts`
+Run: `pnpm exec vitest run server/rooms/channel-membership.test.ts server/store.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add shared/wire.ts server/store.ts server/channel-membership.ts server/channel-membership.test.ts src/state/store.tsx
+git add shared/wire.ts server/store.ts server/rooms/channel-membership.ts server/rooms/channel-membership.test.ts src/state/store.tsx
 git commit -m "feat: keep channel humans apart from bot members"
 ```
 
 ### Task 6: Visibilité des canaux et de Direct
 
 **Files:**
-- Create: `server/channel-visibility.ts`
-- Test: `server/channel-visibility.test.ts`
+- Create: `server/rooms/channel-visibility.ts`
+- Test: `server/rooms/channel-visibility.test.ts`
 
 **Interfaces:**
 - Consumes: `humanIds` de la tâche 5
@@ -445,7 +445,7 @@ it("shows another person's bot in Direct only after a grant", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm exec vitest run server/channel-visibility.test.ts`
+Run: `pnpm exec vitest run server/rooms/channel-visibility.test.ts`
 Expected: FAIL
 
 - [ ] **Step 3: Write minimal implementation**
@@ -454,13 +454,13 @@ Fonctions pures, sans store. Le filtre de `GET /api/groups` pour une session mem
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/channel-visibility.test.ts`
+Run: `pnpm exec vitest run server/rooms/channel-visibility.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/channel-visibility.ts server/channel-visibility.test.ts
+git add server/rooms/channel-visibility.ts server/rooms/channel-visibility.test.ts
 git commit -m "feat: filter channels and direct bots by membership"
 ```
 
@@ -806,7 +806,7 @@ Quand le socket du worker se ferme pendant un tour, appeler `failTurn` et écrir
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm exec vitest run server/workers.test.ts server/turns/turn-route.test.ts server/approvals/approval-audience.test.ts server/channel-membership.test.ts src/components/OwnerWait.test.ts src/components/OrgSidebar.test.ts src/components/OrgDirectory.test.ts`
+Run: `pnpm exec vitest run server/workers.test.ts server/turns/turn-route.test.ts server/approvals/approval-audience.test.ts server/rooms/channel-membership.test.ts src/components/OwnerWait.test.ts src/components/OrgSidebar.test.ts src/components/OrgDirectory.test.ts`
 Expected: PASS
 
 - [ ] **Step 5: Commit**

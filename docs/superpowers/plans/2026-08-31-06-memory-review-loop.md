@@ -150,7 +150,7 @@ writes down something wrong on Tuesday is still acting on it in March.
 - [ ] Write a failing test that `copySkill(fromBotId, toBotId, name)` installs the skill on the target with its provenance (`source`, `sha256`) intact and **disabled**, matching the import policy.
 - [ ] Write a failing test that copying to a bot that already has a skill of that name with a different hash is refused with both hashes named, rather than silently overwriting.
 - [ ] Run; expect FAIL.
-- [ ] Implement `copySkill` and a `POST /api/bots/:id/skills/copy-from` route. This is the community's "share selected skills across bots or entire teams" — deliberately scoped to skills, not memory. Memory is private per bot by design (`server/section-context.ts:3` draws the same line), and sharing it across bots is a different feature with a different consent story.
+- [ ] Implement `copySkill` and a `POST /api/bots/:id/skills/copy-from` route. This is the community's "share selected skills across bots or entire teams" — deliberately scoped to skills, not memory. Memory is private per bot by design (`server/rooms/section-context.ts:3` draws the same line), and sharing it across bots is a different feature with a different consent story.
 - [ ] Run; expect PASS.
 - [ ] Commit `feat(skills): copy a skill to another bot, disabled with provenance intact`.
 

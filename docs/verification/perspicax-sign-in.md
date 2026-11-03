@@ -219,7 +219,7 @@ by hand.
 ```sh
 pnpm exec vitest run server/perspicax-link.test.ts server/engines/engine-access.test.ts server/auth/direct-grants.test.ts \
   server/auth/principals.test.ts server/auth/oidc-rp.test.ts server/auth/oidc-login.test.ts server/auth/idp-session.test.ts \
-  server/auth/request-auth.test.ts server/channel-visibility.test.ts server/org/org-sharing.e2e.test.ts \
+  server/auth/request-auth.test.ts server/rooms/channel-visibility.test.ts server/org/org-sharing.e2e.test.ts \
   server/oidc-session.e2e.test.ts server/auth/oidc-login.e2e.test.ts server/environment.test.ts server/wire.test.ts \
   src/components/bot-settings
 ```
@@ -287,9 +287,9 @@ backstop when the back-channel push cannot arrive, and the engines in
 
 ```sh
 pnpm exec vitest run server/auth/authz.test.ts server/bot-grants.test.ts server/engines/engine-credentials.test.ts \
-  server/section-channels.test.ts server/engines/principal-engine-logins.test.ts server/org/org-teams.test.ts \
+  server/rooms/section-channels.test.ts server/engines/principal-engine-logins.test.ts server/org/org-teams.test.ts \
   server/auth/principals.test.ts server/perspicax-link.test.ts server/auth/oidc-rp.test.ts server/auth/idp-session.test.ts \
-  server/engines/engine-access.test.ts server/auth/direct-grants.test.ts server/channel-visibility.test.ts \
+  server/engines/engine-access.test.ts server/auth/direct-grants.test.ts server/rooms/channel-visibility.test.ts \
   server/auth/request-auth.test.ts server/drivers/claude.test.ts server/drivers/codex.test.ts \
   server/org/org-rights.e2e.test.ts server/org/org-sharing.e2e.test.ts server/oidc-session.e2e.test.ts \
   server/auth/oidc-login.e2e.test.ts src/components/bot-settings
@@ -322,7 +322,7 @@ disabled person).
   owner key reaching the CLI, a subscription's `CLAUDE_CONFIG_DIR` /
   `CODEX_HOME`, no process reused under another identity, the
   `pulsa_owner` provider for Codex.
-- `server/section-channels.test.ts`: migration owner, private records,
+- `server/rooms/section-channels.test.ts`: migration owner, private records,
   rename and delete kept in step, General refused, sharing with a team,
   readonly, moving bots in and out, the manager anchor on members.
 - `server/org/org-rights.e2e.test.ts` (real server): S4-1 teams in the session
@@ -577,7 +577,7 @@ root, path, bytes) to the admin activity log. `/api/health` adds
 
 ```sh
 pnpm exec vitest run server/auth/oidc-rp.test.ts server/org/org-admin-routes.test.ts server/org/org-admin-files.test.ts server/usage/usage-ledger.test.ts \
-  server/admin-activity.test.ts server/bot-grants.test.ts server/section-channels.test.ts \
+  server/admin-activity.test.ts server/bot-grants.test.ts server/rooms/section-channels.test.ts \
   src/lib/open-thread-hash.test.ts server/org/org-admin.e2e.test.ts \
   server/org/org-routines.e2e.test.ts server/org/org-mcp.e2e.test.ts server/org/org-sharing.e2e.test.ts \
   server/oidc-session.e2e.test.ts server/peers/peer-approval.e2e.test.ts
@@ -604,7 +604,7 @@ header bent at a time).
 - `server/admin-activity.test.ts` ("organization audit page"): the org
   categories newest first, stable `<month>-<line>` ids, the `before` cursor,
   the time range, no secret value.
-- `server/bot-grants.test.ts` and `server/section-channels.test.ts`: one
+- `server/bot-grants.test.ts` and `server/rooms/section-channels.test.ts`: one
   audit row per saved change (`grant.set`, `grant.remove`,
   `section.create` ... `section.bot.remove`), none for a refusal.
 - `server/org/org-admin.e2e.test.ts` (real server): every refusal of the gate

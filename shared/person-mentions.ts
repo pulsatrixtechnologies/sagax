@@ -1,6 +1,6 @@
 // Which people a room message tags with @: the same recognition as a bot
 // tag (shared/mention-boundary.ts), against the display names of the
-// people in the room. The server notifies them (server/room-mentions.ts);
+// people in the room. The server notifies them (server/rooms/room-mentions.ts);
 // the composer offers them and the transcript highlights them
 // (src/lib/person-mentions.ts).
 //

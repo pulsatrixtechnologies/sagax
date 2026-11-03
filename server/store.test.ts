@@ -25,7 +25,7 @@ import { peerAllowKey } from "./peers/peer-approval-key.ts";
 import { canAccessTeam } from "./peers/peer-roster.ts";
 import { Store, toWireTask, type BotRecord } from "./store.ts";
 import type { TeamSetupRequest } from "../shared/team-setup.ts";
-import { SECTION_CONTEXTS_FILE, readSectionContext, writeSectionContext } from "./section-context.ts";
+import { SECTION_CONTEXTS_FILE, readSectionContext, writeSectionContext } from "./rooms/section-context.ts";
 import { TeamComputers } from "./computer/team-computers.ts";
 import { allowsTool } from "../shared/tool-scope.ts";
 

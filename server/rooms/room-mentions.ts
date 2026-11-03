@@ -12,8 +12,8 @@
 // A room message that tags nobody keeps the room's rules: no notification
 // for the people in it. A conversation between two people is not handled
 // here (it notifies the other person on every message).
-import { mentionedPeople, type MentionablePerson } from "../shared/person-mentions.ts";
-import { summarize, type Notification } from "./notify.ts";
+import { mentionedPeople, type MentionablePerson } from "../../shared/person-mentions.ts";
+import { summarize, type Notification } from "../notify.ts";
 
 export interface MentionRoom {
   id: string;

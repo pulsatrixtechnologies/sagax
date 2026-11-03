@@ -3,7 +3,7 @@
 // is the operator, described by their profile as before. Anyone else who
 // signed in is described from their own principal and sign-in email, and
 // never sees the operator's private profile fields.
-import type { OrgRole } from "./channel-membership.ts";
+import type { OrgRole } from "./rooms/channel-membership.ts";
 import type { ViewerCapabilities } from "../shared/viewer-capabilities.ts";
 
 export interface ViewerIdentity {

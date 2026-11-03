@@ -23,7 +23,7 @@ async function installation() {
   const { RoutineManager } = await import("./routines/routines.ts");
   const skills = await import("./skills/skills.ts");
   const workspace = await import("./workspace/workspace.ts");
-  const sections = await import("./section-context.ts");
+  const sections = await import("./rooms/section-context.ts");
   const presets = await import("./presets.ts");
   const importer = await import("./package-import.ts");
   const exporter = await import("./package-export.ts");

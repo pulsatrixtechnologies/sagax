@@ -1388,7 +1388,7 @@ export interface WireGroup {
   /** A conversation between two people: which of the two have not read it
    * yet (principal ids). Each person's own `unread` is drawn from it, so
    * the sender reading it never clears it for the recipient. A room: the
-   * people tagged with @ who have not read it yet (server/room-mentions.ts).
+   * people tagged with @ who have not read it yet (server/rooms/room-mentions.ts).
    * Server-side; a client never gets it (server/people-dms.ts
    * peopleDmForViewer). */
   unreadFor?: string[];

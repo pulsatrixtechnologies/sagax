@@ -351,7 +351,7 @@ export interface Group {
   peopleDm?: boolean;
   /** The group's shared memory; absent = on. */
   memoryEnabled?: boolean;
-  /** A room: @all notifies every person in it (server/room-mentions.ts). */
+  /** A room: @all notifies every person in it (server/rooms/room-mentions.ts). */
   mentionAll?: boolean;
   /** #1137: per bot of this room, who pays for its replies here. */
   botPayers?: Record<string, "owner" | "speaker">;

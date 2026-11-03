@@ -88,7 +88,7 @@ async function installation(from?: string) {
   const { RoutineManager } = await import("../routines/routines.ts");
   const skills = await import("../skills/skills.ts");
   const workspace = await import("../workspace/workspace.ts");
-  const sections = await import("../section-context.ts");
+  const sections = await import("../rooms/section-context.ts");
   const { saveImage } = await import("../attachments.ts");
   const { botAvatarUrlFromStoredPath } = await import("../../shared/bot-avatar.ts");
   const { DATA_DIR } = await import("../config.ts");

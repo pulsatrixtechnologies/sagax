@@ -1,4 +1,4 @@
-import type { OrgRole } from "../shared/org-role.ts";
+import type { OrgRole } from "../../shared/org-role.ts";
 
 export type { OrgRole };
 

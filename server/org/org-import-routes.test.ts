@@ -8,7 +8,7 @@ import { createOrgImportRoute, type OrgImportRouteDeps } from "./org-import-rout
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { RoutineManager } from "../routines/routines.ts";
 import { PASS, type RouteContext } from "../routes/table.ts";
-import { SectionChannels } from "../section-channels.ts";
+import { SectionChannels } from "../rooms/section-channels.ts";
 import type { SessionRecord } from "../auth/sessions.ts";
 import { Store } from "../store.ts";
 import { importTeamBackup } from "../backup/team-backup.ts";

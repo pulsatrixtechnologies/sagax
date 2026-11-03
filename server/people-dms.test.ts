@@ -42,7 +42,7 @@ describe("people dm unread, per person", () => {
   it("an older conversation keeps its shared flag; a room keeps its own, plus a person's unread @ tag", () => {
     expect(peopleDmForViewer({ peopleDm: true, unread: true }, "pr_alice")).toEqual({ peopleDm: true, unread: true });
     expect(peopleDmForViewer({ unread: true }, "pr_alice")).toEqual({ unread: true });
-    // a room's unreadFor is who was tagged with @ (server/room-mentions.ts): never sent, unread for them only
+    // a room's unreadFor is who was tagged with @ (server/rooms/room-mentions.ts): never sent, unread for them only
     expect(peopleDmForViewer({ unread: true, unreadFor: ["pr_bob"] }, "pr_alice")).toEqual({ unread: true });
     expect(peopleDmForViewer({ unread: false, unreadFor: ["pr_bob"] }, "pr_alice")).toEqual({ unread: false });
     expect(peopleDmForViewer({ unread: false, unreadFor: ["pr_bob"] }, "PR_BOB")).toEqual({ unread: true });

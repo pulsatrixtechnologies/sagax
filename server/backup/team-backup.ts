@@ -180,7 +180,7 @@ export function createTeamBackup(store: Store, routines: Routine[], name: string
 /** Import is always additive, including sections and Primary Bots. Rollback owns
  * only the fresh records below and cannot touch any pre-existing bot/chat. */
 /** The section-channel records an organization import keeps in step
- * (server/section-channels.ts); absent in solo mode. */
+ * (server/rooms/section-channels.ts); absent in solo mode. */
 export interface ImportSectionChannels {
   byName(name: string): unknown;
   ensure(name: string, ownerPrincipalId: string): unknown;

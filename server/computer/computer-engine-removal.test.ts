@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BUILT_IN_DRIVERS } from "../drivers/builtIn.ts";
 import { computerEngineMoveText, removedComputerInstanceIds, writeComputerEngineMoveLines } from "./computer-engine-removal.ts";
 import { DATA_DIR, instanceConfigs, persistableInstanceConfigs, type AppConfig } from "../config.ts";
-import { SECTION_CONTEXTS_FILE } from "../section-context.ts";
+import { SECTION_CONTEXTS_FILE } from "../rooms/section-context.ts";
 import { Store, type BotRecord } from "../store.ts";
 
 describe("the Computer engine is not offered", () => {

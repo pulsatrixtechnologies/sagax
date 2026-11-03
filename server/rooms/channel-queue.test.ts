@@ -12,7 +12,7 @@ import {
   resolveHeldReplyTarget,
   settleHeldChannelQueueHead,
 } from "./channel-queue.ts";
-import { saveChatFollowup } from "./messages/message-db.ts";
+import { saveChatFollowup } from "../messages/message-db.ts";
 
 describe("channel queue", () => {
   it("keeps readable citation prompts byte-for-byte through room queue and steer hold", () => {

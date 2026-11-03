@@ -647,8 +647,8 @@ git commit -m "feat: resolve org roles by principal and require a server address
 ### Task 5: Visibilité des channels par principal
 
 **Files:**
-- Modify: `server/channel-visibility.ts` (`channelViewerId`)
-- Test: `server/channel-visibility.test.ts`
+- Modify: `server/rooms/channel-visibility.ts` (`channelViewerId`)
+- Test: `server/rooms/channel-visibility.test.ts`
 
 **Interfaces:**
 - Produces: `channelViewerId(auth: { kind: string; session?: { id?: string; email?: string; userId?: string; principalId?: string } }): string | undefined`. For a session it returns the `principalId`, otherwise `anon:<session.id>`, which never matches `humanIds`. For any other auth kind it returns `undefined` (the local operator, unchanged).
@@ -677,12 +677,12 @@ Import `channelViewerId`, `seesChannel` and `seesBotForViewer` from `./channel-v
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npx vitest run server/channel-visibility.test.ts -t "viewer id by principal"`
+Run: `npx vitest run server/rooms/channel-visibility.test.ts -t "viewer id by principal"`
 Expected: FAIL (the session without email returns `undefined` today).
 
 - [ ] **Step 3: Implement**
 
-Replace `channelViewerId` in `server/channel-visibility.ts`:
+Replace `channelViewerId` in `server/rooms/channel-visibility.ts`:
 
 ```ts
 /** A signed-in viewer is their principal. A session that somehow has none
@@ -704,13 +704,13 @@ Existing tests that expected an email as the viewer id: update their fixture ses
 
 - [ ] **Step 4: Run tests**
 
-Run: `npx vitest run server/channel-visibility.test.ts server/approvals/approval-audience.test.ts`
+Run: `npx vitest run server/rooms/channel-visibility.test.ts server/approvals/approval-audience.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add server/channel-visibility.ts server/channel-visibility.test.ts
+git add server/rooms/channel-visibility.ts server/rooms/channel-visibility.test.ts
 git commit -m "fix: sessions without a principal see no org channel"
 ```
 
@@ -776,7 +776,7 @@ principals.localOperator(cfg.profile?.email);
 
 Add `listRecordsForMigration(): { id: string; email?: string; userId?: string; principalId?: string }[]` to `SessionRegistry` in `server/auth/sessions.ts`. It returns `this.sessions.map(({ id, email, userId, principalId }) => ({ id, email, userId, principalId }))`. Add a one-line test for it in `server/auth/sessions.test.ts`.
 
-`store.patchGroup` accepts `humanIds` (`store.ts:1178`). `applyHumanIds` (`server/channel-membership.ts:27`) passes ids through unchanged, so `pr_` ids need no change there.
+`store.patchGroup` accepts `humanIds` (`store.ts:1178`). `applyHumanIds` (`server/rooms/channel-membership.ts:27`) passes ids through unchanged, so `pr_` ids need no change there.
 
 2. **Identity helpers.** Add `localPrincipalId`, `actorPrincipalId` and `actorEmail` (see Interfaces) near `channelActorId`. Then replace:
    - `channelActorId(auth)` body: `return actorPrincipalId(auth);`
@@ -801,7 +801,7 @@ const principal = principals.forAccount({ email: verified.email, controlPlaneUse
 
 - [ ] **Step 4: Run tests**
 
-Run: `npx vitest run server/org/org-identity.e2e.test.ts server/org/org-routes.test.ts server/channel-visibility.test.ts server/auth/sessions.test.ts`
+Run: `npx vitest run server/org/org-identity.e2e.test.ts server/org/org-routes.test.ts server/rooms/channel-visibility.test.ts server/auth/sessions.test.ts`
 Then: `pnpm -s typecheck`
 Then run the whole server suite and compare with the pre-change failure list, saved before starting via `npx vitest run server > /tmp/server-before.txt`: `npx vitest run server`
 Expected: the new e2e test passes, with no new failures.

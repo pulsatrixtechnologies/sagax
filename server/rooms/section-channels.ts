@@ -47,7 +47,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
 
-import { writeFileAtomic } from "./atomic.ts";
+import { writeFileAtomic } from "../atomic.ts";
 import {
   canModerateSection,
   parseTarget,
@@ -57,9 +57,9 @@ import {
   type SectionRole,
   type TeamRef,
   type Viewer,
-} from "./auth/authz.ts";
-import type { RequestAuth } from "./auth/request-auth.ts";
-import { PASS, type RouteHandler } from "./routes/table.ts";
+} from "../auth/authz.ts";
+import type { RequestAuth } from "../auth/request-auth.ts";
+import { PASS, type RouteHandler } from "../routes/table.ts";
 
 export const MAX_SECTION_MEMBERS = 200;
 const SECTION_ID = /^sec_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

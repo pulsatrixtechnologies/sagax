@@ -1,5 +1,5 @@
 // A person tagged with @ in a room is notified like a direct message
-// (server/room-mentions.ts).
+// (server/rooms/room-mentions.ts).
 import { describe, expect, it } from "vitest";
 
 import { roomMentionNotification, roomMentionReadPatch } from "./room-mentions.ts";

@@ -1043,7 +1043,7 @@ export function DefaultResponderSelect({ group, members, disabled = false }: { g
   );
 }
 
-/** Whether @all notifies every person in the room (server/room-mentions.ts).
+/** Whether @all notifies every person in the room (server/rooms/room-mentions.ts).
  * A person tagged by name is notified either way. The owner's setting. */
 function RoomMentionAll({ group, disabled = false }: { group: Group; disabled?: boolean }) {
   const { dispatch } = useStore();

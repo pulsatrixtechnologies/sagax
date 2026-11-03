@@ -12,7 +12,7 @@ import { sameAudience } from "../bot-visibility.ts";
 import { deliverableNotification } from "../notify.ts";
 import { pageOwnerFor } from "../published-pages.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { sectionContextKey } from "../section-context.ts";
+import { sectionContextKey } from "../rooms/section-context.ts";
 import { TEAM_MEMORY_KINDS, type TeamMemoryKind } from "../memory/team-memory.ts";
 import { TOOL_RESULT_MAX_CHARS } from "../tool-results.ts";
 import { workspaceDir } from "../workspace/workspace.ts";

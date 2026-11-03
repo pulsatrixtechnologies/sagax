@@ -250,7 +250,7 @@ import { createCredentialVaultInternalRoutes } from "./routes/credential-vault-i
 import { createTeamBotVaultRoutes, soloMayManage } from "./routes/team-bot-vault.ts";
 import { withCommandVariables } from "./vault/credential-command-env.ts";
 
-import { createRoomTurnLevels } from "./room-turn-level.ts";
+import { createRoomTurnLevels } from "./rooms/room-turn-level.ts";
 import {
   HELD_NOTE,
   approvalHeldNote,
@@ -336,7 +336,7 @@ import {
   snapshotAvatarGenerationState
 } from "./avatar-image.ts";
 import { parseBotProfilePatch } from "./bot-profile.ts";
-import { groupTurnCwd } from "./room-cwd.ts";
+import { groupTurnCwd } from "./rooms/room-cwd.ts";
 import {
   insideFolderRoots,
   MEMBER_FOLDER_REFUSED,
@@ -349,8 +349,8 @@ import {
   effectiveRoomTurnTimeoutMinutes,
   parseConversationTurnTimeout,
   roomTurnTimeoutMessage
-} from "./room-turn-timeout.ts";
-import { roomTurnEnd } from "./room-turn-end.ts";
+} from "./rooms/room-turn-timeout.ts";
+import { roomTurnEnd } from "./rooms/room-turn-end.ts";
 import * as boat from "./computer/boat.ts";
 import { cloudComputerRpc } from "./computer/cloud-computer-tools.ts";
 import {
@@ -913,7 +913,7 @@ import {
   queueChannelMessage,
   restoreChannelMessages,
   type ChannelQueueItem
-} from "./channel-queue.ts";
+} from "./rooms/channel-queue.ts";
 import {
   acceptedSendMatch,
   parseSendId,
@@ -997,7 +997,7 @@ import {
   webhookPostText,
   type WorkOrigin
 } from "./peers/peer-provenance.ts";
-import { type RoomPostBudget } from "./room-post-budget.ts";
+import { type RoomPostBudget } from "./rooms/room-post-budget.ts";
 import {
   mentionedBots,
   roomResponders,
@@ -1118,7 +1118,7 @@ import {
   sectionContextLabel,
   sectionContextSystemPrompt,
   writeSectionContext
-} from "./section-context.ts";
+} from "./rooms/section-context.ts";
 import {
   applyStagedSkillWrite,
   getStagedSkillWrite,
@@ -1755,7 +1755,7 @@ import {
   recordAccess,
   SectionChannels,
   sectionShareGrants
-} from "./section-channels.ts";
+} from "./rooms/section-channels.ts";
 import { createBotGrantRoutes, visibleGrants, wireGrants } from "./bot-grants.ts";
 import { createBotPerspicaxRoutes } from "./bot-perspicax.ts";
 import { OrgFlowPlugins, guarded as orgFlowGuarded } from "./org/org-flow-plugins.ts";
@@ -1817,7 +1817,7 @@ import {
   firstUnseenPerson,
   canPlaceBot,
   ownerUserIdForPlacement
-} from "./channel-membership.ts";
+} from "./rooms/channel-membership.ts";
 import { effectiveBotOwner as resolveBotOwner, recordedBotOwner } from "./bot-owner.ts";
 import { cloudGuestSendRefusal, cloudThreadRefusal } from "./cloud-thread-refusal.ts";
 import { legacyPersonKey, personKey, speakerFor } from "./request-speaker.ts";
@@ -1828,7 +1828,7 @@ import {
   seesBotForViewer,
   seesChannel,
   sseFrameProjection
-} from "./channel-visibility.ts";
+} from "./rooms/channel-visibility.ts";
 import {
   atLeast,
   botLevel,
@@ -2124,7 +2124,7 @@ import { readsGithubToken, githubServersAsPerson, githubWithheldPrompt } from ".
 import { createGithubCredentialRoutes } from "./routes/github-credentials.ts";
 import { SandboxStdioRelay, StdioRelayError } from "./sandbox/sandbox-stdio-mcp.ts";
 import { testStdioMcpCommand, testStdioMcpStream } from "./mcp/mcp-stdio-test.ts";
-import { roomMentionNotification } from "./room-mentions.ts";
+import { roomMentionNotification } from "./rooms/room-mentions.ts";
 import { PERSONAL_STDIO_TOOL_SERVER } from "./user-sandbox-proxy.ts";
 import { PLUGIN_CATALOG } from "../shared/plugin-catalog.ts";
 import { diskSpace, folderBytes } from "./disk-usage.ts";
@@ -11857,7 +11857,7 @@ function updateChannel(groupId: string, value: unknown): GroupRecord {
     if (typeof body.pinned !== "boolean") throw Object.assign(new Error("pinned must be true or false"), { status: 400 });
     patch.pinned = body.pinned || undefined;
   }
-  // Whether @all tags every person in the room (server/room-mentions.ts).
+  // Whether @all tags every person in the room (server/rooms/room-mentions.ts).
   if (body.mentionAll !== undefined) {
     if (existing.dm || existing.peopleDm) throw Object.assign(new Error("only a room can let @all notify its people"), { status: 400 });
     if (typeof body.mentionAll !== "boolean") throw Object.assign(new Error("mentionAll must be true or false"), { status: 400 });
@@ -33938,7 +33938,7 @@ function sendPeopleDmMessage(group: GroupRecord, auth: RequestAuth, text: string
   return { ok: true as const, threadId, message };
 }
 /** A person's room message that tags people with @ (or @all, when the room
- * allows it) notifies them like a direct message (server/room-mentions.ts),
+ * allows it) notifies them like a direct message (server/rooms/room-mentions.ts),
  * and the room is unread for them until they read it, whoever else does. */
 function notifyRoomMentions(groupId: string, threadId: string, text: string, auth: RequestAuth): void {
   const room = store.group(groupId);

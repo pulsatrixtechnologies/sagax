@@ -21,8 +21,8 @@ import {
   resolveHeldReplyTarget,
   restoreHeldChannelQueue,
   settleHeldChannelQueueHead,
-} from "../channel-queue.ts";
-import { channelViewerId } from "../channel-visibility.ts";
+} from "../rooms/channel-queue.ts";
+import { channelViewerId } from "../rooms/channel-visibility.ts";
 import { cloudThreadRefusal } from "../cloud-thread-refusal.ts";
 import type { SteerOutcome } from "../contracts.ts";
 import { groupLeftLine, planGroupLeave } from "../group-leave.ts";
@@ -47,8 +47,8 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import { clientGroupPatchViolation, requestSource } from "../auth/request-auth.ts";
 import type { TurnSpeaker } from "../engines/engine-access.ts";
 import { speakerFor } from "../request-speaker.ts";
-import { roomMentionReadPatch } from "../room-mentions.ts";
-import { parseConversationTurnTimeout } from "../room-turn-timeout.ts";
+import { roomMentionReadPatch } from "../rooms/room-mentions.ts";
+import { parseConversationTurnTimeout } from "../rooms/room-turn-timeout.ts";
 import { safetyHttpRefusal } from "../safety-review.ts";
 import {
   acceptedSendMatch,
@@ -543,7 +543,7 @@ export function createGroupsHttpRoutes(deps: GroupsHttpDeps): RouteHandler {
       }
       let group = updateChannel(m[1], body);
       if (movesSection) recordRoomMove(group.id, fromSection, sectionKey(group.section));
-      // A room marked read by a person reads their @ tag too (server/room-mentions.ts).
+      // A room marked read by a person reads their @ tag too (server/rooms/room-mentions.ts).
       const reader = groupReaderId(auth);
       if ((body as { unread?: unknown } | null)?.unread === false) {
         const mentionRead = roomMentionReadPatch(group, reader);

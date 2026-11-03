@@ -8065,7 +8065,7 @@ captures `node scripts/capture/sidebar-rail.mjs` (gallery
 
 On an organization server a sidebar section is one person's folder and
 shares nothing (2026-10-02). Keep these rules, covered by
-`src/lib/personal-sections.test.ts`, `server/section-channels.test.ts` and
+`src/lib/personal-sections.test.ts`, `server/rooms/section-channels.test.ts` and
 `src/components/bot-settings/SharingSection.test.ts`:
 
 - The sections live in the person's preference `sagax.sidebarSections.v1`

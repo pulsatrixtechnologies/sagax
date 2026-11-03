@@ -213,7 +213,7 @@ export function useComposerCommands({
   const commandPickerOpen = commandCandidates.length > 0;
 
   // Tag another bot; the agent reaches it via ask_bot. In a room, tag a
-  // person too: they get a notification (server/room-mentions.ts), and
+  // person too: they get a notification (server/rooms/room-mentions.ts), and
   // @all tags all of them when the room allows it.
   const mention = mentionQueryAt(text, caret);
   const orgPeople = useOrgPeople();

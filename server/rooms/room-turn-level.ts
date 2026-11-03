@@ -3,7 +3,7 @@
 // stored on the shared room thread, so a request must read it from here, not
 // from the bot's own level. Without this, a turn the Chief ran on Full still
 // asked on engines that leave permission requests to the app (ACP).
-import { approvalModeWidens, type ApprovalMode } from "../shared/approval-mode.ts";
+import { approvalModeWidens, type ApprovalMode } from "../../shared/approval-mode.ts";
 
 export type RoomTurnLevels = ReturnType<typeof createRoomTurnLevels>;
 

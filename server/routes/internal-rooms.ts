@@ -28,7 +28,7 @@ import {
 } from "../peers/peer-roster.ts";
 import { planPriorityWake, parseWakePriority, releasePriorityNow } from "../proactive/priority-wake.ts";
 import { redactSecretsInText } from "../redact.ts";
-import { decideRoomPost, emptyRoomPostBudget, type RoomPostAttempt, type RoomPostBudget } from "../room-post-budget.ts";
+import { decideRoomPost, emptyRoomPostBudget, type RoomPostAttempt, type RoomPostBudget } from "../rooms/room-post-budget.ts";
 import {
   chooseRelayEngine,
   relayOpening,

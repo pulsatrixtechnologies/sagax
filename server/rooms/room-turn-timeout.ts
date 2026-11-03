@@ -1,7 +1,7 @@
 import {
   MAX_ROOM_TURN_TIMEOUT_MINUTES,
   MIN_ROOM_TURN_TIMEOUT_MINUTES,
-} from "./config.ts";
+} from "../config.ts";
 
 export function roomTurnTimeoutMs(minutes: number): number {
   return minutes * 60_000;

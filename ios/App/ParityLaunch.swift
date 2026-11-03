@@ -180,6 +180,8 @@ enum IPadParityScreen: String, CaseIterable {
     case newBot = "new-bot"
     case pluginsMcp = "plugins-mcp"
     case keyboardShortcuts = "keyboard-shortcuts"
+    case aboutDialog = "about-dialog"
+    case releaseNotesDialog = "release-notes-dialog"
     case noticeThreadGone = "notice-thread-gone"
     case settingsGeneral = "settings-general"
     case settingsOrganization = "settings-organization"
@@ -284,7 +286,7 @@ enum IPadParityScreen: String, CaseIterable {
         // I2: the sidebar's densities, threads, hover and menus
         case .mainCompact, .mainCollapsed, .mainThreads, .sidebarRowHover, .sidebarBotMenu,
              .sidebarBotContextMenu, .sidebarSectionMenu, .sidebarProfileMenu, .sidebarNewMenu, .newGroup: true
-        default: isDesktopChat || opensBotPanel || isDesktopSettings || parityPage != nil || self == .keyboardShortcuts
+        default: isDesktopChat || opensBotPanel || isDesktopSettings || parityPage != nil || self == .keyboardShortcuts || self == .aboutDialog || self == .releaseNotesDialog
         }
     }
 

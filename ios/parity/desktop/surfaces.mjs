@@ -267,6 +267,18 @@ add({ id: "plugins-mcp", phase: "main", note: "Connected apps / plugins panel: M
   open: async (ctx) => { await ctx.dispatch({ type: "togglePlugins", open: true, surface: "mcp" }); await ctx.sleep(1200); } });
 add({ id: "keyboard-shortcuts", phase: "main", note: "keyboard shortcuts sheet (? or Cmd-/)",
   open: async (ctx) => { await ctx.dispatch({ type: "toggleShortcuts", open: true }); await ctx.sleep(500); } });
+add({ id: "about-dialog", phase: "main", note: "About Sagax (account menu > Help > About): the small centred window",
+  open: async (ctx) => {
+    await ctx.click('[aria-label="Parity Person"]'); await ctx.sleep(300);
+    await ctx.click({ text: /^Help$/ }); await ctx.sleep(300);
+    await ctx.click({ text: /^About$/ }); await ctx.sleep(600);
+  } });
+add({ id: "release-notes-dialog", phase: "main", note: "Release notes with the version picker (account menu > Help > Release notes)",
+  open: async (ctx) => {
+    await ctx.click('[aria-label="Parity Person"]'); await ctx.sleep(300);
+    await ctx.click({ text: /^Help$/ }); await ctx.sleep(300);
+    await ctx.click({ text: /^Release notes$/ }); await ctx.sleep(700);
+  } });
 add({ id: "notice-thread-gone", phase: "main", note: "in-app notice (toast)",
   open: async (ctx) => { await ctx.dispatch({ type: "notice", notice: { kind: "thread-gone", botName: "Helix" } }); await ctx.sleep(500); } });
 

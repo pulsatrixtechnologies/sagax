@@ -77,7 +77,11 @@ enum ReleaseNotesStore {
     }
 }
 
-/// The dialog: What's new (`current`) or Release notes (`browse`).
+/// The dialog: What's new (`current`) or Release notes (`browse`). The
+/// desktop's `ReleaseNotesPrompt.tsx`: `DialogFrame` at `xl` (700 pt) with
+/// Settings' wide margins, a title at the top left, the round close button,
+/// the pill row under the title (Changes since my last version, the version
+/// menu at the right), then the version heading with its date and the notes.
 struct DesktopReleaseNotesModal: View {
     enum Mode { case current, browse }
 
@@ -98,7 +102,7 @@ struct DesktopReleaseNotesModal: View {
                     .onTapGesture(perform: close)
                     .accessibilityHidden(true)
                 AnyView(box)
-                    .frame(width: min(520, geometry.size.width - 48))
+                    .frame(width: min(700, geometry.size.width - 48))
                     .frame(maxHeight: geometry.size.height - 48)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -108,6 +112,24 @@ struct DesktopReleaseNotesModal: View {
         .background(DesktopEscapeKey(action: close))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("desktop-release-notes")
+    }
+
+    /// `<!-- date: 2026-10-16 -->` as the desktop's `formatReleaseDate` writes it.
+    private func date(_ markdown: String?) -> String? {
+        guard let markdown,
+              let match = markdown.range(of: #"<!--\s*date:\s*(\d{4}-\d{2}-\d{2})\s*-->"#, options: .regularExpression),
+              let day = markdown[match].range(of: #"\d{4}-\d{2}-\d{2}"#, options: .regularExpression)
+        else { return nil }
+        let parser = DateFormatter()
+        parser.locale = Locale(identifier: "en_US_POSIX")
+        parser.timeZone = TimeZone(identifier: "UTC")
+        parser.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        guard let when = parser.date(from: "\(markdown[day])T12:00") else { return nil }
+        let out = DateFormatter()
+        out.locale = locale
+        out.timeZone = TimeZone(identifier: "UTC")
+        out.dateStyle = .long
+        return out.string(from: when)
     }
 
     private var box: some View {
@@ -121,13 +143,33 @@ struct DesktopReleaseNotesModal: View {
         let shown = mode == .browse ? picked : current
         let notes = catalog[shown].map { ReleaseNotes.section($0, language: language) } ?? ""
         return VStack(alignment: .leading, spacing: 0) {
-            Text(mode == .browse ? String(localized: "Release notes") : String(localized: "What's new in \(current)"))
-                .font(theme.font(16, .semibold))
+            Text(mode == .browse ? String(localized: "Release notes") : String(localized: "What's new"))
+                .font(theme.font(17, .semibold))
+                .tracking(-0.14)
                 .foregroundStyle(theme.ink)
+                .frame(height: 24, alignment: .leading)
+                .padding(.horizontal, 32)
+                .padding(.top, 24)
+                .padding(.bottom, 4)
+                .padding(.trailing, 16)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("release-notes-title")
             if mode == .browse {
                 HStack(spacing: 8) {
+                    if !sinceEntries.isEmpty, let previous {
+                        Button { since.toggle() } label: {
+                            Text("Changes since my last version (\(previous))")
+                                .font(theme.font(12))
+                                .foregroundStyle(theme.ink)
+                                .padding(.horizontal, 12)
+                                .frame(height: 32)
+                                .background(since ? theme.selected : theme.raised, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(since ? .isSelected : [])
+                        .accessibilityIdentifier("release-notes-since")
+                    }
+                    Spacer(minLength: 0)
                     Menu {
                         ForEach(versions, id: \.self) { version in
                             Button(version == current ? String(localized: "\(version) (current)") : version) {
@@ -143,70 +185,74 @@ struct DesktopReleaseNotesModal: View {
                         .font(theme.font(13))
                         .foregroundStyle(theme.ink)
                         .padding(.horizontal, 8)
-                        .frame(height: 28)
-                        .background(theme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+                        .frame(height: 32)
+                        .contentShape(Rectangle())
                     }
                     .accessibilityLabel(Text("Version"))
                     .accessibilityValue(Text(verbatim: picked))
                     .accessibilityIdentifier("release-notes-version")
-                    if !sinceEntries.isEmpty, let previous {
-                        Button { since.toggle() } label: {
-                            Text("Changes since my last version (\(previous))")
-                                .font(theme.font(12))
-                                .foregroundStyle(since ? Color.white : theme.ink)
-                                .padding(.horizontal, 8)
-                                .frame(height: 28)
-                                .background(since ? theme.accent : theme.raised, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(since ? .isSelected : [])
-                        .accessibilityIdentifier("release-notes-since")
-                    }
                 }
+                .padding(.horizontal, 32)
                 .padding(.top, 12)
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if mode == .browse, since {
                         ForEach(sinceEntries.filter { catalog[$0] != nil }, id: \.self) { version in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("Version \(version)").font(theme.font(14, .semibold)).foregroundStyle(theme.ink)
-                                MarkdownText(source: ReleaseNotes.section(catalog[version] ?? "", language: language))
-                            }
-                            .accessibilityIdentifier("release-notes-text.\(version)")
+                            versionBlock(version, catalog[version], language: language)
                         }
-                    } else if !notes.isEmpty {
-                        MarkdownText(source: notes)
-                            .accessibilityIdentifier("release-notes-text.\(shown)")
                     } else {
-                        Text("Release notes for \(shown) are not in this copy of Sagax.")
-                            .font(theme.font(13))
-                            .foregroundStyle(theme.inkSecondary)
+                        versionBlock(shown, catalog[shown], language: language)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 32)
+                .padding(.top, 12)
+                .padding(.bottom, 24)
             }
-            .padding(.top, 12)
+        }
+        .overlay(alignment: .topTrailing) {
             Button(action: close) {
-                Text("Close")
-                    .font(theme.font(13, .medium))
-                    .foregroundStyle(theme.ink)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 34)
-                    .background(theme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .contentShape(Rectangle())
+                DesktopIconView(icon: .x, size: 18, strokeWidth: 2)
+                    .foregroundStyle(theme.inkTertiary)
+                    .frame(width: 32, height: 32)
+                    .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .padding(.top, 16)
+            .padding(10)
+            .accessibilityLabel(Text("Close"))
             .accessibilityIdentifier("release-notes-close")
         }
-        .padding(20)
-        .background(theme.elevated)
-        .background(theme.panel)
+        .background(theme.app)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-        .shadow(color: .black.opacity(0.35), radius: 25, y: 12)
         .onAppear { ReleaseNotesStore.markSeen() }
+    }
+
+    /// `ReleaseVersionHeading` (15/22 semibold, the date 12/16 grey) and the notes.
+    private func versionBlock(_ version: String, _ markdown: String?, language: String) -> some View {
+        // the hidden `<!-- date: ... -->` line is stripped from the text shown
+        let text = (markdown.map { ReleaseNotes.section($0, language: language) } ?? "")
+            .replacingOccurrences(of: #"<!--[\s\S]*?-->"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Version \(version)").font(theme.font(15, .semibold)).foregroundStyle(theme.ink).frame(height: 22, alignment: .leading)
+                if let when = date(markdown) {
+                    Text(verbatim: when).font(theme.font(12)).foregroundStyle(theme.inkSecondary).frame(height: 16, alignment: .leading)
+                }
+            }
+            .padding(.horizontal, 4)
+            if text.isEmpty {
+                Text("Release notes for \(version) are not in this copy of Sagax.")
+                    .font(theme.font(13))
+                    .foregroundStyle(theme.inkSecondary)
+                    .padding(.horizontal, 4)
+            } else {
+                MarkdownText(source: text)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("release-notes-text.\(version)")
     }
 }

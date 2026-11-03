@@ -80,7 +80,7 @@ final class DesktopShellModel: ObservableObject {
         case releaseNotes, whatsNew
 
         /// Drawn in the shell as the desktop's modals, not as sheets.
-        var inShell: Bool { [.settings, .search, .plugins, .shortcuts, .releaseNotes, .whatsNew].contains(self) }
+        var inShell: Bool { [.settings, .search, .plugins, .shortcuts, .about, .releaseNotes, .whatsNew].contains(self) }
         var id: String { rawValue }
     }
 
@@ -423,6 +423,9 @@ struct DesktopShell: View {
             } else if model.modal == .shortcuts {
                 AnyView(DesktopShortcutsModal(close: { model.modal = nil }))
                     .transition(.opacity)
+            } else if model.modal == .about {
+                AnyView(DesktopAboutModal(close: { model.modal = nil }, openReleaseNotes: { model.modal = .releaseNotes }))
+                    .transition(.opacity)
             } else if model.modal == .releaseNotes || model.modal == .whatsNew {
                 AnyView(DesktopReleaseNotesModal(mode: model.modal == .whatsNew ? .current : .browse, close: { model.modal = nil }))
                     .transition(.opacity)
@@ -684,6 +687,8 @@ private struct DesktopShellRouting: ViewModifier {
                 model.applyParityModals(screen)
                 model.page = screen.parityPage
                 if screen == .keyboardShortcuts { model.modal = .shortcuts }
+                if screen == .aboutDialog { model.modal = .about }
+                if screen == .releaseNotesDialog { model.modal = .releaseNotes }
                 await applyParitySidebar(screen)
                 return
             }
@@ -781,9 +786,7 @@ private struct DesktopShellPresenter: ViewModifier {
             EmptyView()
         case .templates:
             DesktopTemplatesSheet { model.modal = nil }
-        case .about:
-            NavigationStack { AboutPage() }
-        case .shortcuts, .releaseNotes, .whatsNew:
+        case .about, .shortcuts, .releaseNotes, .whatsNew:
             EmptyView()
         case .achievements:
             NavigationStack {

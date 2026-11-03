@@ -1208,6 +1208,16 @@
         }
       }
     },
+    "%@ notes found": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ notes trouvées"
+          }
+        }
+      }
+    },
     "%@ notes · tap to open": {
       "localizations": {
         "fr": {
@@ -1224,6 +1234,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ notes, %@ liens"
+          }
+        }
+      }
+    },
+    "%@ of %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ sur %@"
           }
         }
       }
@@ -1648,6 +1668,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ a été refusée (%@). La voix passe maintenant par %@."
+          }
+        }
+      }
+    },
+    "%@ · %@ notes": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ notes"
           }
         }
       }
@@ -8086,6 +8116,16 @@
         }
       }
     },
+    "Aging notes": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notes vieillissantes"
+          }
+        }
+      }
+    },
     "Alert": {
       "localizations": {
         "en": {
@@ -8414,6 +8454,16 @@
         }
       }
     },
+    "All tags": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toutes les étiquettes"
+          }
+        }
+      }
+    },
     "All teams": {
       "localizations": {
         "en": {
@@ -8498,6 +8548,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Todos os tipos"
+          }
+        }
+      }
+    },
+    "All, archived included": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toutes, archivées comprises"
           }
         }
       }
@@ -9656,6 +9716,16 @@
         }
       }
     },
+    "Animate": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Animer"
+          }
+        }
+      }
+    },
     "Another account signed in at Pulsatrix. Sign in with your own account to delete it. Nothing was deleted.": {
       "localizations": {
         "en": {
@@ -10774,6 +10844,16 @@
         }
       }
     },
+    "Archived": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivées"
+          }
+        }
+      }
+    },
     "Archived bots": {
       "localizations": {
         "en": {
@@ -10890,6 +10970,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Argumentos · um por linha"
+          }
+        }
+      }
+    },
+    "Arrows": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flèches"
           }
         }
       }
@@ -14492,6 +14582,16 @@
         }
       }
     },
+    "Centre force": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Force de centrage"
+          }
+        }
+      }
+    },
     "Certain days": {
       "localizations": {
         "en": {
@@ -17160,6 +17260,16 @@
         }
       }
     },
+    "Close the graph settings": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fermer les réglages du graphe"
+          }
+        }
+      }
+    },
     "Close without saving": {
       "localizations": {
         "en": {
@@ -17648,6 +17758,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couleur"
+          }
+        }
+      }
+    },
+    "Colour by": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couleur par"
+          }
+        }
+      }
+    },
+    "Colour the notes a query finds: tag:#work, path:Topics, tier:Atlas, or words of the title.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colorer les notes qu'une requête trouve : tag:#travail, path:Topics, tier:Atlas, ou des mots du titre."
+          }
+        }
+      }
+    },
+    "Columns": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colonnes"
           }
         }
       }
@@ -26444,6 +26584,16 @@
         }
       }
     },
+    "Enter a query…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisir une requête…"
+          }
+        }
+      }
+    },
     "Enter a whole number from 5 to 1,440 minutes.": {
       "localizations": {
         "fr": {
@@ -27442,6 +27592,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bots existentes"
+          }
+        }
+      }
+    },
+    "Existing files only": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fichiers existants seulement"
           }
         }
       }
@@ -29180,6 +29340,16 @@
         }
       }
     },
+    "Folders and tiers": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dossiers et niveaux"
+          }
+        }
+      }
+    },
     "Follow approval rules": {
       "localizations": {
         "en": {
@@ -29466,6 +29636,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Forçar parada"
+          }
+        }
+      }
+    },
+    "Forces": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forces"
           }
         }
       }
@@ -31090,6 +31270,36 @@
         }
       }
     },
+    "Graph": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Graphe"
+          }
+        }
+      }
+    },
+    "Graph of the notes": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Graphe des notes"
+          }
+        }
+      }
+    },
+    "Graph settings": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réglages du graphe"
+          }
+        }
+      }
+    },
     "Green": {
       "localizations": {
         "en": {
@@ -31390,6 +31600,16 @@
         }
       }
     },
+    "Group colour": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couleur du groupe"
+          }
+        }
+      }
+    },
     "Group goal": {
       "localizations": {
         "en": {
@@ -31566,6 +31786,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Groupe · %lld personnes"
+          }
+        }
+      }
+    },
+    "Groups": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Groupes"
           }
         }
       }
@@ -32254,6 +32484,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Masquer la transcription en direct"
+          }
+        }
+      }
+    },
+    "Hide memory sources": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masquer les sources de mémoire"
           }
         }
       }
@@ -37358,6 +37598,36 @@
         }
       }
     },
+    "Link distance": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Distance des liens"
+          }
+        }
+      }
+    },
+    "Link force": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Force des liens"
+          }
+        }
+      }
+    },
+    "Link thickness": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Épaisseur des liens"
+          }
+        }
+      }
+    },
     "Link this installation to Perspicax to browse personal, team and organization notes here.": {
       "localizations": {
         "en": {
@@ -39054,6 +39324,16 @@
         }
       }
     },
+    "Map layout": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disposition de la carte"
+          }
+        }
+      }
+    },
     "Map of the memory": {
       "localizations": {
         "fr": {
@@ -39610,6 +39890,16 @@
         }
       }
     },
+    "Memory sources": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sources de mémoire"
+          }
+        }
+      }
+    },
     "Memory upkeep": {
       "localizations": {
         "en": {
@@ -40106,6 +40396,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Minhas"
+          }
+        }
+      }
+    },
+    "Minimap": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mini-carte"
           }
         }
       }
@@ -41670,6 +41970,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "O nome, a função ou a descrição ainda têm alterações não salvas."
+          }
+        }
+      }
+    },
+    "Named view": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vue"
           }
         }
       }
@@ -44252,6 +44562,16 @@
         }
       }
     },
+    "No note matches these filters.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune note ne correspond à ces filtres."
+          }
+        }
+      }
+    },
     "No note on the map yet. Write the first one.": {
       "localizations": {
         "fr": {
@@ -45622,6 +45942,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Personne n'était au clavier."
+          }
+        }
+      }
+    },
+    "Node size": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taille des nœuds"
           }
         }
       }
@@ -52432,6 +52762,16 @@
         }
       }
     },
+    "Pause the timeline": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettre la ligne du temps en pause"
+          }
+        }
+      }
+    },
     "Pause voice note": {
       "localizations": {
         "fr": {
@@ -53046,6 +53386,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Personnalité"
+          }
+        }
+      }
+    },
+    "Perspicax": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perspicax"
           }
         }
       }
@@ -53966,6 +54316,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tocar o som do nudge quando alguém enviar um para você."
+          }
+        }
+      }
+    },
+    "Play the timeline": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lire la ligne du temps"
           }
         }
       }
@@ -55990,6 +56350,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mensagem citada"
+          }
+        }
+      }
+    },
+    "Radial": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radiale"
           }
         }
       }
@@ -58216,6 +58586,16 @@
         }
       }
     },
+    "Remove the group": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer le groupe"
+          }
+        }
+      }
+    },
     "Remove the learned skill “%@”?": {
       "localizations": {
         "en": {
@@ -58650,6 +59030,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Repetições"
+          }
+        }
+      }
+    },
+    "Repel force": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Force de répulsion"
           }
         }
       }
@@ -59554,6 +59944,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Restaurar as instruções anteriores?"
+          }
+        }
+      }
+    },
+    "Restore the default settings": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rétablir les réglages par défaut"
           }
         }
       }
@@ -63062,6 +63462,16 @@
         }
       }
     },
+    "Search files…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chercher des fichiers…"
+          }
+        }
+      }
+    },
     "Search models": {
       "localizations": {
         "en": {
@@ -66018,6 +66428,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Voir la transcription en direct"
+          }
+        }
+      }
+    },
+    "Show memory sources": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher les sources de mémoire"
           }
         }
       }
@@ -70632,6 +71052,16 @@
         }
       }
     },
+    "Tag on the map": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Étiquette sur la carte"
+          }
+        }
+      }
+    },
     "Tags": {
       "localizations": {
         "fr": {
@@ -71644,6 +72074,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Text"
+          }
+        }
+      }
+    },
+    "Text fade threshold": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seuil d'apparition du texte"
           }
         }
       }
@@ -78002,6 +78442,16 @@
         }
       }
     },
+    "Tidy up": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rangement"
+          }
+        }
+      }
+    },
     "Tidy up now": {
       "localizations": {
         "en": {
@@ -78057,7 +78507,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Palier"
+            "value": "Niveau"
           }
         },
         "pt-BR": {
@@ -78152,6 +78602,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fuso horário"
+          }
+        }
+      }
+    },
+    "Timeline": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ligne du temps"
           }
         }
       }
@@ -82226,6 +82686,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Voir l'utilisation"
+          }
+        }
+      }
+    },
+    "View · %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vue · %@"
           }
         }
       }

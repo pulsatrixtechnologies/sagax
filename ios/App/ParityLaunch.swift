@@ -251,6 +251,8 @@ enum IPadParityScreen: String, CaseIterable {
     case memoryMap = "memory-map"
     case memoryTags = "memory-tags"
     case memoryQuality = "memory-quality"
+    case memoryMapRadial = "memory-map-radial"
+    case memoryMapColumns = "memory-map-columns"
     case capabilities = "capabilities"
     case routineEdit = "routine-edit"
     case settingsAccount = "settings-account"

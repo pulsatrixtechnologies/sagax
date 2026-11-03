@@ -2097,7 +2097,7 @@ import { OrgGithubTokens } from "./org/org-github-tokens.ts";
 import { GithubCredentials, LOCAL_OWNER, ORG_OWNER } from "./github-credentials.ts";
 import { BotCapabilityStore } from "./bot-capability-store.ts";
 import { InstallationCapabilityStore } from "./installation-capability-store.ts";
-import { makeInstallationCapabilityBridge, setInstallationCapabilityBridge } from "./installation-capability-bridge.ts";
+import { installationCapabilityBridge, makeInstallationCapabilityBridge, setInstallationCapabilityBridge } from "./installation-capability-bridge.ts";
 import { discoverBotPluginIds, discoverPersonIds, migrateCapabilitiesStores } from "./capabilities-store-migration.ts";
 import { OrgBotSecrets } from "./org/org-bot-secrets.ts";
 import { MarketplaceTokens } from "./marketplace-tokens.ts";
@@ -8377,25 +8377,6 @@ if (IDENTITY.kind === "perspicax" && !existsSync(join(DATA_DIR, ORG_FULL_ACCESS_
   try { writeFileAtomic(join(DATA_DIR, ORG_FULL_ACCESS_DEFAULT_MARKER), "off-by-default\n", { mode: 0o600 }); }
   catch (error) { console.warn("organization: the Full access default marker was not saved", error); }
 }
-// Skills library boot sweep (features.skillsLibrary): migrate per-bot
-// copies into the shared library and apply assignments. Flag-off boots
-// never enter this block, keeping per-bot behavior byte-identical.
-if (skillsLibraryEnabled(cfg)) {
-  try {
-    const sweep = runSkillsLibraryBootSweep({
-      bots: store.bots,
-      patch: (botId, assignedSkills) => {
-        store.patchBot(botId, { assignedSkills });
-      }
-    });
-    const applied = sweep.outcomes.filter((outcome) => outcome.outcome !== "skipped").length;
-    if (sweep.outcomes.length) {
-      console.log(`[skills-library] boot sweep: ${applied} skill(s) migrated or deduplicated, ${sweep.outcomes.length - applied} skipped`);
-    }
-  } catch (error) {
-    console.error(`[skills-library] boot sweep failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
 // A committed profile cleanup means both its config deletion and bot-reference
 // cleanup were intended to be durable. Reconcile stale secondary references
 // before Electron can ACK and remove the journal: a crash between those writes
@@ -9400,6 +9381,41 @@ function migrateCapabilitiesConfigStores(): void {
   }
 }
 migrateCapabilitiesConfigStores();
+// Skills library boot sweep (features.skillsLibrary): migrate the per-bot
+// copies that predate the library into it and apply assignments, once per
+// installation. Flag-off boots never enter this block, keeping per-bot
+// behavior byte-identical.
+// It runs after the capabilities migration: since lot 5 the library index
+// lives in the sealed installation store, reachable only through the bridge
+// that migration sets. Swept before it, a moved copy got its entry in the
+// retired skills-library/index.json, which nothing reads once the index is
+// migrated, and the skill answered 404.
+// It runs once: a skill installed for This bot stays the bot's own (#1811),
+// so a later boot, or the first boot after a workspace restore, must not
+// turn it into an organization library skill. The marker lives in the
+// sealed installation store, which a restore keeps in place. While that
+// store cannot be read (vault not ready), the sweep waits for a later boot
+// and the per-bot copies stay readable where they are.
+const SKILLS_LIBRARY_BOT_SWEEP = "skills-library-bot-sweep";
+if (skillsLibraryEnabled(cfg) && installationCapabilityBridge()) {
+  try {
+    if (!installationCapabilityStore.hasMigrated(SKILLS_LIBRARY_BOT_SWEEP)) {
+      const sweep = runSkillsLibraryBootSweep({
+        bots: store.bots,
+        patch: (botId, assignedSkills) => {
+          store.patchBot(botId, { assignedSkills });
+        }
+      });
+      const applied = sweep.outcomes.filter((outcome) => outcome.outcome !== "skipped").length;
+      if (sweep.outcomes.length) {
+        console.log(`[skills-library] boot sweep: ${applied} skill(s) migrated or deduplicated, ${sweep.outcomes.length - applied} skipped`);
+      }
+      installationCapabilityStore.markMigrated(SKILLS_LIBRARY_BOT_SWEEP);
+    }
+  } catch (error) {
+    console.error(`[skills-library] boot sweep failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
 // The installation's one marketplace list (server/plugin-marketplaces.ts):
 // Capabilities installs a plugin from it for everyone (MCP servers and
 // skills) or for one bot (the whole plugin, server/bot-plugins.ts). Added

@@ -64,6 +64,11 @@ export class InstallationCapabilityStore {
     this.keySource = keySource;
   }
 
+  /** The sealed file this store reads and writes. */
+  location(): string {
+    return this.file;
+  }
+
   present(): boolean {
     return existsSync(this.file);
   }

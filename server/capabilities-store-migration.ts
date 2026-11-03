@@ -15,6 +15,8 @@ import { capabilityPluginStateSchema, capabilityPluginValuesSchema } from "./cap
 import { BotCapabilityStore, emptyBotCapabilityDocument } from "./bot-capability-store.ts";
 import { InstallationCapabilityStore, emptyInstallationCapabilityDocument } from "./installation-capability-store.ts";
 import { principalDir } from "./person-connections.ts";
+import { isSkillLibraryEntry } from "./skill-library.ts";
+import { SKILLS_LIBRARY_INDEX_FORMAT, SKILLS_LIBRARY_INDEX_VERSION, SKILLS_LIBRARY_RESTORE_IMPORT } from "../shared/capability-stores.ts";
 
 const BACKUP_SUFFIX = ".capabilities-l5.bak";
 const RETIRED_SUFFIX = ".migrated";
@@ -429,6 +431,8 @@ function migrateInstallation(
 
   if (verified.migrated.includes("skills-library-index")) {
     const path = join(dataDir, "skills-library", "index.json");
+    importRestoredLibraryIndex(options, verified, imported);
+    recoverStrandedLibraryEntries(options, verified, imported);
     if (!existsSync(path) || deepEqual(readJson(path), verified.skillsLibrary)) retireFile(path);
     repairPersonSkillsInInstallationIndex(options, verified, imported, skipped);
   }
@@ -448,6 +452,107 @@ function migrateInstallation(
     if (Object.keys(verified.mcpServers).length > 0 && deepEqual(fromDisk, verified.mcpServers)) {
       options.clearMcpServers?.();
     }
+  }
+}
+
+/** A library index entry whose SKILL.md under skills-library/skills/<name>/
+ * still has the recorded sha256: the rule both the restore import and the
+ * stranded-entry recovery adopt by. */
+function verifiedLibraryEntry(dataDir: string, name: string, entry: unknown): boolean {
+  if (!SKILL_NAME.test(name) || !isSkillLibraryEntry(entry) || entry.name !== name) return false;
+  try {
+    const bytes = readFileSync(join(dataDir, "skills-library", "skills", name, "SKILL.md"));
+    return createHash("sha256").update(bytes).digest("hex") === entry.sha256;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A workspace restore brings the organization library's skill files in
+ * data/ and their index as its own archive part (the sealed installation
+ * store, where the index lives, stays the destination's). The restore leaves
+ * that part at SKILLS_LIBRARY_RESTORE_IMPORT; here, once the store can be
+ * read, it is adopted under the recovery's rules: each entry valid, its
+ * SKILL.md sha256 matching. In mode "replace" (a workspace restore, which
+ * replaces the whole library folder) an adopted entry replaces the sealed
+ * one of its name, and a sealed entry whose skill file the restore removed
+ * is dropped; a sealed entry whose file still matches stays. In any other
+ * mode an existing name is never replaced. The file is removed once
+ * adopted; a file that is not a supported index is set aside as
+ * `.rejected`; a failed write leaves it for the next boot.
+ */
+function importRestoredLibraryIndex(
+  options: CapabilitiesStoreMigrationOptions,
+  verified: ReturnType<InstallationCapabilityStore["read"]>,
+  imported: string[],
+): void {
+  const { dataDir, installation } = options;
+  const path = join(dataDir, SKILLS_LIBRARY_RESTORE_IMPORT);
+  if (!existsSync(path)) return;
+  const raw = readJson(path) as { format?: unknown; version?: unknown; mode?: unknown; entries?: unknown } | undefined;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw) || raw.format !== SKILLS_LIBRARY_INDEX_FORMAT || raw.version !== SKILLS_LIBRARY_INDEX_VERSION ||
+    !raw.entries || typeof raw.entries !== "object" || Array.isArray(raw.entries)) {
+    try { renameSync(path, `${path}.rejected`); } catch { /* retried next boot */ }
+    return;
+  }
+  const replace = raw.mode === "replace";
+  const adopted: Record<string, unknown> = {};
+  for (const [name, entry] of Object.entries(raw.entries as Record<string, unknown>)) {
+    if (!replace && Object.hasOwn(verified.skillsLibrary, name)) continue;
+    if (verifiedLibraryEntry(dataDir, name, entry)) adopted[name] = entry;
+  }
+  const kept: Record<string, unknown> = {};
+  for (const [name, entry] of Object.entries(verified.skillsLibrary)) {
+    if (Object.hasOwn(adopted, name)) continue;
+    if (!replace || verifiedLibraryEntry(dataDir, name, entry)) kept[name] = entry;
+  }
+  try {
+    installation.write({ ...verified, skillsLibrary: { ...kept, ...adopted } });
+    installation.clearCache();
+    verified.skillsLibrary = installation.read().skillsLibrary;
+    rmSync(path, { force: true });
+    imported.push(...Object.keys(adopted).map((name) => `installation:skills-library-restore:${name}`));
+  } catch {
+    // The file stays in place; the next boot retries.
+  }
+}
+
+/**
+ * Recovery for 0.8.24 to 0.8.33: the skills library boot sweep ran before
+ * the installation bridge was set, so every per-bot skill it moved into the
+ * library (archived copy, manifest entry dropped, bot assigned) got its
+ * index entry written to skills-library/index.json after that file had been
+ * absorbed. Nothing reads it there, and the skill answered 404. Each entry
+ * of that file the sealed index lacks, whose SKILL.md under
+ * skills-library/skills/<name>/ still has the recorded sha256, is adopted.
+ * A name the sealed index already has is never replaced. Once every entry
+ * of the file is in the sealed index, the caller retires the file.
+ */
+function recoverStrandedLibraryEntries(
+  options: CapabilitiesStoreMigrationOptions,
+  verified: ReturnType<InstallationCapabilityStore["read"]>,
+  imported: string[],
+): void {
+  const { dataDir, installation } = options;
+  const path = join(dataDir, "skills-library", "index.json");
+  const raw = readJson(path);
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return;
+  const stranded: Record<string, unknown> = {};
+  for (const [name, entry] of Object.entries(raw as Record<string, unknown>)) {
+    if (Object.hasOwn(verified.skillsLibrary, name) || !verifiedLibraryEntry(dataDir, name, entry)) continue;
+    stranded[name] = entry;
+  }
+  if (!Object.keys(stranded).length) return;
+  const next = { ...verified, skillsLibrary: { ...verified.skillsLibrary, ...stranded } };
+  try {
+    installation.write(next);
+    installation.clearCache();
+    const reread = installation.read();
+    verified.skillsLibrary = reread.skillsLibrary;
+    imported.push(...Object.keys(stranded).map((name) => `installation:skills-library-index:${name}`));
+  } catch {
+    // The file stays in place; the next boot retries.
   }
 }
 

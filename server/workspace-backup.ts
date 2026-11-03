@@ -26,8 +26,12 @@ import { escapeAttribute, splitTranscriptAttachments } from "../src/lib/composer
 import { WORKSPACE_BACKUP_CLIENT_KEYS } from "../shared/workspace-backup-client.ts";
 import {
   CLAUDE_AUTH_FIELDS, configSecretCounts, confidentialDataScopePath, destinationSignInFile, disposableEngineHomePath, engineSettingsPath, ephemeralWorkspaceTokenPath, excludedWorkspaceAuthPath, liveDataEnginePath,
-  portableWorkspaceConfig, ReconnectTally, redownloadedOrgLibraryPath, registrySettingsPath, restoredWorkspaceConfig, savedSignInPath, secretCategory, withoutEngineSecrets, withoutRegistrySecrets,
+  portableWorkspaceConfig, ReconnectTally, redownloadedOrgLibraryPath, registrySettingsPath, restoredLibraryIndexPath, restoredWorkspaceConfig, savedSignInPath, secretCategory, withoutEngineSecrets, withoutRegistrySecrets,
 } from "./workspace-backup-policy.ts";
+import { installationCapabilityBridge } from "./installation-capability-bridge.ts";
+import {
+  INSTALLATION_CAPABILITIES_FILE, SKILLS_LIBRARY_INDEX_FORMAT, SKILLS_LIBRARY_INDEX_PART, SKILLS_LIBRARY_INDEX_VERSION, SKILLS_LIBRARY_RESTORE_IMPORT,
+} from "../shared/capability-stores.ts";
 import { WORKSPACE_BACKUP_RECONNECT, type WorkspaceBackupClientState, type WorkspaceBackupPrivateMetadata, type WorkspaceBackupReconnectCategory, type WorkspaceBackupSummary } from "../shared/workspace-backup.ts";
 
 export type { WorkspaceBackupSummary, WorkspaceBackupPrivateMetadata } from "../shared/workspace-backup.ts";
@@ -81,10 +85,19 @@ const EXCLUSION_NOTES = [
 const RESTORE_WARNING = "Restoring pauses routines, webhooks and calendar calls, and does not resume pending delegations, queued chat messages or queued runs. Definitions and historical receipts are retained; review before enabling them again.";
 
 type Entry = { path: string; type: "file" | "directory"; size: number; mode: number; sha256?: string };
+/** A part of the archive beside manifest.json and data/: a file the data
+ * folder does not hold as such (docs/verification/workspace-backups.md
+ * « Archive format »). */
+type Part = { path: string; version: number; size: number; sha256: string; entries: number };
 interface Manifest extends WorkspaceBackupPrivateMetadata {
   sourceDataDir: string;
   entries: Entry[];
+  /** Absent from archives made before the part existed (0.8.33 and older). */
+  parts?: { skillsLibraryIndex?: Part };
 }
+/** The organization skills library index as a backup reads it: its entries,
+ * or unreadable on this launch (the sealed store's key is not available). */
+export type SkillsLibraryIndexForBackup = { entries: Record<string, unknown> } | { unreadable: true };
 interface RestoreJournal {
   id: string;
   phase: "applying" | "committed" | "rolled-back";
@@ -98,6 +111,9 @@ export interface CreateWorkspaceBackupOptions {
   /** Unwrapped content keys, handed to the worker in memory so the message
    * snapshot is exported in the clear (docs/content-encryption.md). */
   contentKeys?: ExportedContentKey[];
+  /** The organization skills library index, read on the main thread where
+   * the installation store is open (skillsLibraryIndexForBackup). */
+  skillsLibraryIndex?: SkillsLibraryIndexForBackup;
 }
 type CreatedWorkspaceBackup = { id: string; path: string; summary: WorkspaceBackupSummary };
 export interface WorkspaceRestoreResult {
@@ -534,6 +550,35 @@ function sharedLinkCount(root: string): number {
   return count;
 }
 
+/**
+ * The organization skills library index of this data folder, for its own
+ * archive part. Since lot 5 it lives in the sealed installation store
+ * (installation-capabilities.enc), which a backup never carries: only the
+ * `skillsLibrary` field is read here, never the store's MCP servers,
+ * marketplaces or any other field. Before that migration the index is
+ * skills-library/index.json, read the same way so a restore treats both
+ * alike.
+ */
+export function skillsLibraryIndexForBackup(dataDir: string): SkillsLibraryIndexForBackup {
+  const bridge = installationCapabilityBridge();
+  if (bridge && resolve(bridge.store.location()) === resolve(dataDir, INSTALLATION_CAPABILITIES_FILE) && bridge.hasMigrated("skills-library-index")) {
+    try {
+      const entries = bridge.read().skillsLibrary;
+      return { entries: record(entries) ? structuredClone(entries) : {} };
+    } catch {
+      return { unreadable: true };
+    }
+  }
+  const path = join(dataDir, "skills-library", "index.json");
+  if (!existsSync(path)) return { entries: {} };
+  try {
+    const entries = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    return record(entries) ? { entries } : { unreadable: true };
+  } catch {
+    return { unreadable: true };
+  }
+}
+
 /** The existing maintenance gate owns exclusivity until this worker has exited.
  * Keep synchronous file validation/fsync intact, but off the request thread. */
 export async function createWorkspaceBackup(dataDir: string, options: CreateWorkspaceBackupOptions): Promise<CreatedWorkspaceBackup> {
@@ -547,7 +592,7 @@ export async function createWorkspaceBackup(dataDir: string, options: CreateWork
   const resumeAtRest = await pauseAtRestMigration();
   try {
     worker = new Worker(existsSync(source) ? source : new URL("./workspace-backup.worker.js", import.meta.url), {
-      workerData: { dataDir, options: { ...options, contentKeys: options.contentKeys ?? contentKeysForExport() }, jobId }, execArgv: [],
+      workerData: { dataDir, options: { ...options, contentKeys: options.contentKeys ?? contentKeysForExport(), skillsLibraryIndex: options.skillsLibraryIndex ?? skillsLibraryIndexForBackup(dataDir) }, jobId }, execArgv: [],
     });
     const result = await new Promise<CreatedWorkspaceBackup>((resolveBackup, reject) => {
       const failed = () => reject(new Error("The backup worker stopped before completing. Try again."));
@@ -652,7 +697,7 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
         // a turn reads files plain (server/content-at-rest.ts): never content
         if (isAtRestTemp(name) || (!prefix && name === ".at-rest-originals")) continue;
         if (excludedWorkspaceAuthPath(path)) { reconnect.path(path); continue; }
-        if (ephemeralWorkspaceTokenPath(path) || redownloadedOrgLibraryPath(path) || liveDataEnginePath(path) || confidentialDataScopePath(path)) continue;
+        if (ephemeralWorkspaceTokenPath(path) || redownloadedOrgLibraryPath(path) || restoredLibraryIndexPath(path) || liveDataEnginePath(path) || confidentialDataScopePath(path)) continue;
         // no secret in a backup (2026-10-18, « Exclure tout »): an engine's
         // saved sign-in, a person's sealed stores, the workspace's keys, the
         // phones' push registrations; whoever restores reconnects them
@@ -814,6 +859,20 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
     if (skippedEngineSettings) warnings.push(`${skippedEngineSettings} engine settings file(s) could not be copied without their sign-in and were omitted.`);
     if (copiedLinks) warnings.push(`${copiedLinks} symbolic link(s) inside a workspace were saved as copies of what they point to; restoring creates regular files and folders there.`);
     if (skippedWorkLinks) warnings.push(`${skippedWorkLinks} symbolic link(s) in conversation work folders were omitted; what they point to is outside this backup.`);
+    // The organization skills library index, its own part: the files under
+    // skills-library/skills/ are in data/, their index is not (it lives in
+    // the sealed installation store, which stays on this machine).
+    const library = options.skillsLibraryIndex ?? skillsLibraryIndexForBackup(dataDir);
+    let parts: Manifest["parts"];
+    if ("entries" in library) {
+      const text = JSON.stringify({ format: SKILLS_LIBRARY_INDEX_FORMAT, version: SKILLS_LIBRARY_INDEX_VERSION, entries: library.entries });
+      if (Buffer.byteLength(text) > MAX_METADATA_BYTES) throw new Error("The skills library index is too large to back up.");
+      const partPath = join(snapshot, SKILLS_LIBRARY_INDEX_PART);
+      writeFileSync(partPath, text, { mode: 0o600, flag: "wx" });
+      parts = { skillsLibraryIndex: { path: SKILLS_LIBRARY_INDEX_PART, version: SKILLS_LIBRARY_INDEX_VERSION, size: lstatSync(partPath).size, sha256: hashFile(partPath), entries: Object.keys(library.entries).length } };
+    } else {
+      warnings.push("The organization skills library index could not be read on this launch, so it is not in this backup: its skills come back as files without their library entries.");
+    }
     const summary: WorkspaceBackupSummary = {
       format: "openmaus.workspace-backup", version: 1, id: job.id, createdAt: new Date().toISOString(),
       appVersion: options.appVersion ?? "unknown", files: entries.filter((entry) => entry.type === "file").length,
@@ -825,7 +884,7 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
     const reconnectList = reconnect.result();
     if (Object.keys(reconnectList).length) summary.reconnect = reconnectList;
     const manifest: Manifest = {
-      summary, sourceDataDir: resolve(dataDir), clientState: options.clientState ?? {}, entries,
+      summary, sourceDataDir: resolve(dataDir), clientState: options.clientState ?? {}, entries, ...(parts ? { parts } : {}),
     };
     writeJson(join(snapshot, "manifest.json"), manifest);
     // Validate our own output too: JSON serialization must never silently
@@ -839,7 +898,7 @@ export async function createWorkspaceBackupSnapshot(dataDir: string, options: Cr
     const cipher = createCipheriv("aes-256-gcm", key, iv);
     cipher.setAAD(header);
     writeFileSync(path, header, { mode: 0o600, flag: "wx" });
-    await pipeline(tar.c({ cwd: snapshot, portable: true, strict: true }, ["manifest.json", "data"]), cipher, createWriteStream(path, { flags: "a", mode: 0o600 }));
+    await pipeline(tar.c({ cwd: snapshot, portable: true, strict: true }, ["manifest.json", "data", ...(parts?.skillsLibraryIndex ? [SKILLS_LIBRARY_INDEX_PART] : [])]), cipher, createWriteStream(path, { flags: "a", mode: 0o600 }));
     const fd = openSync(path, "a");
     try { writeSync(fd, cipher.getAuthTag()); fsyncSync(fd); } finally { closeSync(fd); }
     rmSync(snapshot, { recursive: true, force: true });
@@ -860,7 +919,7 @@ function validateManifest(value: unknown): Manifest {
     value.sourceDataDir.length > 4096 || value.sourceDataDir.includes("\0") ||
     value.sourceDataDir === posix.parse(value.sourceDataDir).root || value.sourceDataDir === win32.parse(value.sourceDataDir).root ||
     value.sourceDataDir.replaceAll("\\", "/").split("/").some((part) => part === "." || part === "..") ||
-    Object.keys(value).some((key) => !["summary", "sourceDataDir", "clientState", "entries"].includes(key)) ||
+    Object.keys(value).some((key) => !["summary", "sourceDataDir", "clientState", "entries", "parts"].includes(key)) ||
     Object.keys(value.summary).some((key) => !["format", "version", "id", "createdAt", "appVersion", "files", "directories", "bytes", "bots", "groups", "threads", "messages", "exclusions", "warnings", "reconnect"].includes(key)) || !record(value.clientState) ||
     !Object.values(value.clientState).every((item) => typeof item === "string") || !Array.isArray(value.entries) ||
     value.entries.length > MAX_WORKSPACE_BACKUP_FILES) throw new Error("Invalid or unsupported workspace backup metadata.");
@@ -877,6 +936,16 @@ function validateManifest(value: unknown): Manifest {
     if (!record(list) || Object.entries(list).some(([category, entry]) => !(WORKSPACE_BACKUP_RECONNECT as readonly string[]).includes(category) || !record(entry) ||
       Object.keys(entry).some((field) => field !== "count" && field !== "people") || !Number.isSafeInteger(entry.count) || (entry.count as number) < 1 ||
       (entry.people !== undefined && (!Number.isSafeInteger(entry.people) || (entry.people as number) < 1)))) throw new Error("Invalid workspace backup summary.");
+  }
+  if (value.parts !== undefined) {
+    const parts = value.parts;
+    const part = record(parts) ? parts.skillsLibraryIndex : undefined;
+    if (!record(parts) || Object.keys(parts).some((key) => key !== "skillsLibraryIndex") || (part !== undefined && (!record(part) ||
+      Object.keys(part).some((key) => !["path", "version", "size", "sha256", "entries"].includes(key)) ||
+      part.path !== SKILLS_LIBRARY_INDEX_PART || part.version !== SKILLS_LIBRARY_INDEX_VERSION ||
+      !Number.isSafeInteger(part.size) || (part.size as number) < 0 || (part.size as number) > MAX_METADATA_BYTES ||
+      typeof part.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(part.sha256) ||
+      !Number.isSafeInteger(part.entries) || (part.entries as number) < 0))) throw new Error("Invalid or unsupported workspace backup part.");
   }
   const names = new Map<string, string>();
   let bytes = 0;
@@ -943,7 +1012,7 @@ async function inspectTar(path: string): Promise<Map<string, { type: string; siz
   let problem = "";
   await tar.t({ file: path, strict: true, brotli: false, zstd: false, onReadEntry(entry) {
     const name = entry.type === "Directory" ? entry.path.replace(/\/$/, "") : entry.path;
-    const expectedRoot = name === "manifest.json" || name === "data" || name.startsWith("data/");
+    const expectedRoot = name === "manifest.json" || name === SKILLS_LIBRARY_INDEX_PART || name === "data" || name.startsWith("data/");
     // ReadEntry normalizes backslashes on Windows; inspect the raw header too
     // so the same hostile archive is rejected before extraction on every OS.
     if (entry.header.path?.includes("\\") || !validRelative(name) || !expectedRoot || !["File", "Directory"].includes(entry.type) ||
@@ -952,7 +1021,7 @@ async function inspectTar(path: string): Promise<Map<string, { type: string; siz
       problem ||= "The archive contains unsafe, duplicate or unsupported entries.";
       return;
     }
-    if (name === "manifest.json" && (entry.type !== "File" || entry.size > MAX_METADATA_BYTES)) problem ||= "Invalid backup metadata file.";
+    if ((name === "manifest.json" || name === SKILLS_LIBRARY_INDEX_PART) && (entry.type !== "File" || entry.size > MAX_METADATA_BYTES)) problem ||= "Invalid backup metadata file.";
     bytes += entry.size;
     if (bytes > MAX_WORKSPACE_BACKUP_BYTES + MAX_METADATA_BYTES) problem ||= "The archive exceeds the extracted size limit.";
     names.add(name.toLowerCase());
@@ -966,9 +1035,29 @@ async function inspectTar(path: string): Promise<Map<string, { type: string; siz
   }
   return entries;
 }
+/** The skills library index part of a staged archive, checked against its
+ * manifest record (size, checksum, format, version, entry count), or null
+ * when the archive has none. Its entries are adopted by the next boot under
+ * the recovery's rules (capabilities-store-migration.ts). */
+function readLibraryIndexPart(directory: string, manifest: Manifest): Record<string, unknown> | null {
+  const part = manifest.parts?.skillsLibraryIndex;
+  if (!part) return null;
+  const path = join(directory, part.path);
+  const stat = entryExists(path) ? lstatSync(path) : null;
+  if (!stat || stat.isSymbolicLink() || !stat.isFile() || stat.size !== part.size || hashFile(path) !== part.sha256) throw new Error("The skills library index of this backup failed its checksum.");
+  const value = privateJson(path);
+  if (!record(value) || Object.keys(value).some((key) => !["format", "version", "entries"].includes(key)) ||
+    value.format !== SKILLS_LIBRARY_INDEX_FORMAT || value.version !== SKILLS_LIBRARY_INDEX_VERSION || !record(value.entries) ||
+    Object.keys(value.entries).length !== part.entries) throw new Error("Invalid or unsupported skills library index in this backup.");
+  return value.entries;
+}
 function validateStaged(directory: string, expected?: Map<string, { type: string; size: number }>): Manifest {
   const manifest = validateManifest(privateJson(join(directory, "manifest.json")));
-  if (expected && expected.size !== manifest.entries.length + 2) throw new Error("Archive entries do not match the backup manifest.");
+  const partCount = manifest.parts?.skillsLibraryIndex ? 1 : 0;
+  if (expected && expected.size !== manifest.entries.length + 2 + partCount) throw new Error("Archive entries do not match the backup manifest.");
+  if (expected && partCount && expected.get(SKILLS_LIBRARY_INDEX_PART)?.size !== manifest.parts!.skillsLibraryIndex!.size) throw new Error("Archive contents do not match the backup manifest.");
+  if (!partCount && entryExists(join(directory, SKILLS_LIBRARY_INDEX_PART))) throw new Error("Staged workspace contains files absent from its manifest.");
+  readLibraryIndexPart(directory, manifest);
   const declared = new Set(manifest.entries.map((entry) => entry.path));
   const inspect = (root: string, prefix = "") => {
     for (const name of readdirSync(root)) {
@@ -1323,11 +1412,20 @@ function prepareRestore(dataDir: string, id: string, manifest: Manifest): string
   // journal files would then be absent from the manifest.
   const stagedData = join(job, "staged", "data");
   const engineKeys = confidentialEngineKeys(stagedData, existsSync(join(stagedData, "bots.json")) ? privateJson(join(stagedData, "bots.json")) : [], manifest.sourceDataDir, false);
-  const installed = manifest.entries.filter((entry) => !ephemeralWorkspaceTokenPath(entry.path) && !confidentialDataScopePath(entry.path) && !savedSignInPath(entry.path) && !disposableEngineHomePath(entry.path) && !confidentialEngineSessionPath(entry.path, engineKeys));
+  const installed = manifest.entries.filter((entry) => !ephemeralWorkspaceTokenPath(entry.path) && !restoredLibraryIndexPath(entry.path) && !confidentialDataScopePath(entry.path) && !savedSignInPath(entry.path) && !disposableEngineHomePath(entry.path) && !confidentialEngineSessionPath(entry.path, engineKeys));
   for (const entry of installed.filter((entry) => entry.type === "directory")) folder(join(prepared, entry.path));
   for (const entry of installed) {
     const destination = join(prepared, entry.path);
     if (entry.type === "file") copyRegular(join(job, "staged", "data", entry.path), destination);
+  }
+  // The organization skills library index (its own archive part): the
+  // destination's sealed store stays in place, so the next boot adopts these
+  // entries into it, for the skill files this restore brings (REPLACE: the
+  // library becomes the archive's). Never a field of that store but these.
+  const libraryIndex = readLibraryIndexPart(join(job, "staged"), manifest);
+  if (libraryIndex) {
+    folder(join(prepared, "skills-library"));
+    writeJson(join(prepared, SKILLS_LIBRARY_RESTORE_IMPORT), { format: SKILLS_LIBRARY_INDEX_FORMAT, version: SKILLS_LIBRARY_INDEX_VERSION, mode: "replace", restoreId: id, entries: libraryIndex });
   }
   // A `*_FILE` secret inside the data folder stays where it is: a top-level
   // one in place (applyPendingWorkspaceRestore), a nested one copied into the
@@ -1702,5 +1800,5 @@ export function removeWorkspaceBackupJob(dataDir: string, id: string): void {
  * rules as the export walk (cloud-move.ts sizes a move with it). Symbolic
  * links are the caller's to skip. */
 export function omittedFromWorkspaceBackup(path: string): boolean {
-  return excluded(path.split("/")[0]) || excludedWorkspaceAuthPath(path) || ephemeralWorkspaceTokenPath(path) || redownloadedOrgLibraryPath(path) || liveDataEnginePath(path) || confidentialDataScopePath(path) || savedSignInPath(path) || disposableEngineHomePath(path);
+  return excluded(path.split("/")[0]) || excludedWorkspaceAuthPath(path) || ephemeralWorkspaceTokenPath(path) || redownloadedOrgLibraryPath(path) || restoredLibraryIndexPath(path) || liveDataEnginePath(path) || confidentialDataScopePath(path) || savedSignInPath(path) || disposableEngineHomePath(path);
 }

@@ -230,6 +230,150 @@ describe("migrateCapabilitiesStores", () => {
     expect(JSON.parse(readFileSync(join(dir, "principals", "pr_alice", "capability-skills", "index.json"), "utf8"))).toEqual(aliceIndex);
   });
 
+  it("adopts library entries a boot sweep stranded in the retired index.json, never replacing a sealed one", () => {
+    // 0.8.24 to 0.8.33 swept per-bot skills into the library before the
+    // installation bridge was set: the entry landed in skills-library/index.json
+    // after that file was absorbed, and the moved skill answered 404.
+    const { dir, bots, installation } = open();
+    const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+    const entry = (name: string, text: string, description = `About ${name}`) => ({ name, description, source: "package:fixture", sha256: sha(text), importedAt: "2026-11-01T00:00:00.000Z", reviewState: "approved", warnings: [], skippedFiles: [] });
+    const write = (name: string, text: string) => {
+      mkdirSync(join(dir, "skills-library", "skills", name), { recursive: true });
+      writeFileSync(join(dir, "skills-library", "skills", name, "SKILL.md"), text);
+    };
+    const moved = "---\nname: backup-check\ndescription: Moved by the sweep\n---\nMOVED\n";
+    const sealed = "---\nname: order-audit\ndescription: Sealed\n---\nSEALED\n";
+    const changed = "---\nname: drifted\ndescription: Changed\n---\nCHANGED\n";
+    write("backup-check", moved);
+    write("order-audit", sealed);
+    write("drifted", changed);
+    const document = installation.read();
+    document.skillsLibrary = { "order-audit": entry("order-audit", sealed) };
+    document.migrated = ["marketplaces-state", "skills-library-index", "org-flow-state", "org-capabilities-state", "config-mcp-servers", "org-github-tokens", "marketplace-tokens", PERSON_SKILLS_SPLIT_ID];
+    installation.write(document);
+    writeFileSync(join(dir, "skills-library", "index.json"), JSON.stringify({
+      "backup-check": entry("backup-check", moved),
+      "order-audit": entry("order-audit", sealed, "A stale plaintext copy"),
+      "drifted": entry("drifted", "the reviewed bytes were different"),
+      "invalid": { name: "invalid", sha256: "nope" },
+    }));
+
+    const first = migrate(dir, bots, installation);
+    expect(first.imported).toContain("installation:skills-library-index:backup-check");
+    installation.clearCache();
+    const after = installation.read().skillsLibrary as Record<string, { description: string; sha256: string }>;
+    expect(Object.keys(after).sort()).toEqual(["backup-check", "order-audit"]);
+    expect(after["backup-check"]).toMatchObject({ sha256: sha(moved) });
+    expect(after["order-audit"]!.description).toBe("About order-audit");
+    // Entries it could not prove stay in the plaintext file for a person to see.
+    expect(existsSync(join(dir, "skills-library", "index.json"))).toBe(true);
+
+    const second = migrate(dir, bots, installation);
+    expect(second.imported.filter((row) => row.startsWith("installation:skills-library-index:"))).toEqual([]);
+  });
+
+  it("retires the stranded index.json once every entry is in the sealed index", () => {
+    const { dir, bots, installation } = open();
+    const text = "---\nname: backup-check\ndescription: Moved\n---\nMOVED\n";
+    const sha256 = createHash("sha256").update(text).digest("hex");
+    mkdirSync(join(dir, "skills-library", "skills", "backup-check"), { recursive: true });
+    writeFileSync(join(dir, "skills-library", "skills", "backup-check", "SKILL.md"), text);
+    const document = installation.read();
+    document.migrated = ["marketplaces-state", "skills-library-index", "org-flow-state", "org-capabilities-state", "config-mcp-servers", "org-github-tokens", "marketplace-tokens", PERSON_SKILLS_SPLIT_ID];
+    installation.write(document);
+    const stranded = { "backup-check": { name: "backup-check", description: "Moved", source: "package:fixture", sha256, importedAt: "2026-11-01T00:00:00.000Z", reviewState: "approved", warnings: [], skippedFiles: [] } };
+    writeFileSync(join(dir, "skills-library", "index.json"), JSON.stringify(stranded));
+
+    migrate(dir, bots, installation);
+    installation.clearCache();
+    expect(installation.read().skillsLibrary).toEqual(stranded);
+    expect(existsSync(join(dir, "skills-library", "index.json"))).toBe(false);
+  });
+
+  describe("a restored workspace's skills library index", () => {
+    const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+    const entry = (name: string, text: string, description = `About ${name}`) => ({ name, description, source: "package:fixture", sha256: sha(text), importedAt: "2026-11-01T00:00:00.000Z", reviewState: "approved", warnings: [], skippedFiles: [] });
+    const MIGRATED = ["marketplaces-state", "skills-library-index", "org-flow-state", "org-capabilities-state", "config-mcp-servers", "org-github-tokens", "marketplace-tokens", PERSON_SKILLS_SPLIT_ID];
+    function setUp(mode: "replace" | "merge") {
+      const opened = open();
+      const { dir, installation } = opened;
+      const write = (name: string, text: string) => {
+        mkdirSync(join(dir, "skills-library", "skills", name), { recursive: true });
+        writeFileSync(join(dir, "skills-library", "skills", name, "SKILL.md"), text);
+      };
+      const restored = "---\nname: order-audit\ndescription: Restored\n---\nRESTORED\n";
+      const kept = "---\nname: still-here\ndescription: Kept\n---\nKEPT\n";
+      write("order-audit", restored);
+      write("backup-check", "---\nname: backup-check\ndescription: Backup\n---\nBACKUP\n");
+      write("still-here", kept);
+      // the destination's own index: one entry the restore's copy names too,
+      // one whose file the restore removed, one whose file still matches
+      const document = installation.read();
+      document.skillsLibrary = {
+        "order-audit": entry("order-audit", "the destination's own bytes", "Destination copy"),
+        "gone": entry("gone", "removed by the restore"),
+        "still-here": entry("still-here", kept),
+      };
+      document.mcpServers = { keep: { command: "destination-only" } };
+      document.migrated = MIGRATED;
+      installation.write(document);
+      writeFileSync(join(dir, "skills-library", "restore-import.json"), JSON.stringify({
+        format: "sagax.skills-library-index", version: 1, mode, restoreId: "00000000-0000-4000-8000-000000000000",
+        entries: {
+          "order-audit": entry("order-audit", restored, "Restored copy"),
+          "backup-check": entry("backup-check", "---\nname: backup-check\ndescription: Backup\n---\nBACKUP\n"),
+          "drifted": entry("drifted", "bytes the archive does not hold"),
+          "invalid": { name: "invalid", sha256: "nope" },
+          "Bad Name": entry("Bad Name", "x"),
+        },
+      }));
+      return { ...opened, restored };
+    }
+
+    it("adopts the validated entries into the sealed index, replacing same names in replace mode, and keeps every other store field", () => {
+      const { dir, bots, installation, restored } = setUp("replace");
+      const result = migrate(dir, bots, installation);
+      expect(result.imported.filter((row) => row.startsWith("installation:skills-library-restore:")).sort())
+        .toEqual(["installation:skills-library-restore:backup-check", "installation:skills-library-restore:order-audit"]);
+      installation.clearCache();
+      const after = installation.read();
+      const library = after.skillsLibrary as Record<string, { description: string; sha256: string }>;
+      expect(Object.keys(library).sort()).toEqual(["backup-check", "order-audit", "still-here"]);
+      expect(library["order-audit"]).toMatchObject({ description: "Restored copy", sha256: sha(restored) });
+      expect(after.mcpServers).toEqual({ keep: { command: "destination-only" } });
+      expect(after.migrated).toEqual(MIGRATED);
+      expect(existsSync(join(dir, "skills-library", "restore-import.json"))).toBe(false);
+      // a second boot has nothing left to adopt
+      expect(migrate(dir, bots, installation).imported.filter((row) => row.startsWith("installation:skills-library-restore:"))).toEqual([]);
+    });
+
+    it("never replaces an existing name in any other mode", () => {
+      const { dir, bots, installation } = setUp("merge");
+      migrate(dir, bots, installation);
+      installation.clearCache();
+      const library = installation.read().skillsLibrary as Record<string, { description: string }>;
+      expect(Object.keys(library).sort()).toEqual(["backup-check", "gone", "order-audit", "still-here"]);
+      expect(library["order-audit"]!.description).toBe("Destination copy");
+    });
+
+    it("sets aside a file that is not a supported index, and waits while the sealed store cannot be read", () => {
+      const { dir, bots, installation } = open();
+      const document = installation.read();
+      document.migrated = MIGRATED;
+      installation.write(document);
+      mkdirSync(join(dir, "skills-library"), { recursive: true });
+      writeFileSync(join(dir, "skills-library", "restore-import.json"), JSON.stringify({ format: "sagax.skills-library-index", version: 2, entries: {} }));
+      migrate(dir, bots, installation);
+      expect(existsSync(join(dir, "skills-library", "restore-import.json"))).toBe(false);
+      expect(existsSync(join(dir, "skills-library", "restore-import.json.rejected"))).toBe(true);
+
+      const locked = new InstallationCapabilityStore(dir, () => ({ kind: "unavailable", reason: "no vault" }));
+      writeFileSync(join(dir, "skills-library", "restore-import.json"), JSON.stringify({ format: "sagax.skills-library-index", version: 1, mode: "replace", entries: {} }));
+      migrate(dir, bots, locked);
+      expect(existsSync(join(dir, "skills-library", "restore-import.json"))).toBe(true);
+    });
+  });
+
   it("is rollback-safe: backups remain after a successful migrate", () => {
     const { dir, bots, installation } = open();
     writeInstallationLegacy(dir);

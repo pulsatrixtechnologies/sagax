@@ -67,7 +67,7 @@ description is in [self-hosting](../self-hosting.md#loopback-trust-owner-or-serv
 ```sh
 pnpm exec vitest run server/request-auth.test.ts server/decision-log.test.ts \
   server/card-answerers.e2e.test.ts server/cli-service-trust.e2e.test.ts \
-  server/hosted-access.test.ts server/decision-log-wiring.test.ts server/hosted-models-api.test.ts \
+  server/hosted-access.test.ts server/decision-log-wiring.test.ts server/models/hosted-models-api.test.ts \
   src/components/PeopleSection.test.ts src/components/ServerPairingCard.test.ts src/lib/session.test.ts
 ```
 

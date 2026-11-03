@@ -5,13 +5,13 @@
 // exactly like applyTeamSetup: saved per-thread selections are never
 // rewritten. Staleness is a snapshot of the one field being changed, not
 // the team-setup plan's whole-state revision hash.
-import type { ModelRequestCardData } from "../shared/model-request.ts";
-import type { ModelSelection } from "../shared/wire.ts";
-import { harnessCapabilityLines, type DriverCapabilities } from "./harness-capabilities.ts";
-import { newId } from "./contracts.ts";
-import { UNDO_STALE, type DirectApply, type DirectApplyCheck } from "./direct-apply.ts";
-import { redactSecretsInText } from "./redact.ts";
-import type { BotRecord } from "./store.ts";
+import type { ModelRequestCardData } from "../../shared/model-request.ts";
+import type { ModelSelection } from "../../shared/wire.ts";
+import { harnessCapabilityLines, type DriverCapabilities } from "../harness-capabilities.ts";
+import { newId } from "../contracts.ts";
+import { UNDO_STALE, type DirectApply, type DirectApplyCheck } from "../direct-apply.ts";
+import { redactSecretsInText } from "../redact.ts";
+import type { BotRecord } from "../store.ts";
 
 const MAX_REASON = 500;
 const STALE = "This bot's default model changed after this card was prepared. Ask the bot to review it and propose again.";

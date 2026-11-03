@@ -1,5 +1,5 @@
-import type { EffortLevel, EngineAccess, ModelCatalog, ModelSelection, ProviderSnapshot } from "./contracts.ts";
-import { effortAcceptedByEngine } from "../shared/ultracode-effort.ts";
+import type { EffortLevel, EngineAccess, ModelCatalog, ModelSelection, ProviderSnapshot } from "../contracts.ts";
+import { effortAcceptedByEngine } from "../../shared/ultracode-effort.ts";
 
 export interface SelectableInstance {
   instanceId: string;

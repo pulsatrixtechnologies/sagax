@@ -59,7 +59,7 @@ features are on) and use the normal chat-turn commands.
 ## Unit regressions
 
 ```sh
-pnpm exec vitest run server/spend.test.ts server/model-prices.test.ts server/prices.ts server/config.test.ts server/usage-ledger.test.ts src/lib/notify.test.ts
+pnpm exec vitest run server/spend.test.ts server/models/model-prices.test.ts server/prices.ts server/config.test.ts server/usage-ledger.test.ts src/lib/notify.test.ts
 ```
 
 These cover price precedence and cached-input pricing, month-to-date sums

@@ -635,7 +635,7 @@ import {
 import type { PlanUsageReport } from "./plan-usage.ts";
 import { newPlanUsageAlerts, planAccountsFromInstances, planUsageAlertText } from "./plan-usage.ts";
 import { GroupUsageReader } from "./group-thread-usage.ts";
-import { ledgerCost, listPriceFor } from "./model-prices.ts";
+import { ledgerCost, listPriceFor } from "./models/model-prices.ts";
 import type { PriceList } from "./prices.ts";
 import type { RequestAuth } from "./request-auth.ts";
 import {
@@ -780,7 +780,7 @@ import {
   type AutoEngine,
   type AutoPick,
   type CatalogFacts
-} from "./model-auto.ts";
+} from "./models/model-auto.ts";
 import type {
   AutoModelRecord,
   AutoModelExcluded,
@@ -930,7 +930,7 @@ import {
   ManagedDesktopPolicy,
   type ComputerKind
 } from "./managed-policy.ts";
-import { hostedModelPolicy, HOSTED_MODEL_POLICY_HEADER, HOSTED_PROVIDER_SETTINGS_ERROR } from "./hosted-models.ts";
+import { hostedModelPolicy, HOSTED_MODEL_POLICY_HEADER, HOSTED_PROVIDER_SETTINGS_ERROR } from "./models/hosted-models.ts";
 import { holdIncludedServices, voiceCredential } from "./included-services.ts";
 import type { ProviderInstance, RemoteMcpSpec } from "./contracts.ts";
 import {
@@ -938,7 +938,7 @@ import {
   personPayer,
   withoutRefusedModels,
   type RefusalPayer
-} from "./model-access-refusals.ts";
+} from "./models/model-access-refusals.ts";
 import { MODEL_ACCESS_DISABLED_MESSAGE } from "../shared/model-access-disabled.ts";
 import {
   instancesForPerson,
@@ -948,7 +948,7 @@ import {
   selectDefaultModelSelection,
   withNewBotEffort,
   type SelectableInstance
-} from "./default-model-selection.ts";
+} from "./models/default-model-selection.ts";
 import { threadModelFallback, type ThreadEngine } from "./threads/thread-model.ts";
 import {
   NO_ENGINE_PERSON,
@@ -1078,7 +1078,7 @@ import {
   type ContextMessage
 } from "./delta-context.ts";
 import { extractTurnImages } from "./turns/turn-images.ts";
-import { fitTurnImagesForModel, modelImageCopyPath } from "./model-image.ts";
+import { fitTurnImagesForModel, modelImageCopyPath } from "./models/model-image.ts";
 import {
   callTitleExcerpt,
   threadTitlePrompt,
@@ -1283,7 +1283,7 @@ import { directApply, UNDO_STALE, type DirectApply } from "./direct-apply.ts";
 import { createAgentCard } from "./chat-widgets.ts";
 import { buildBotOverview, type BotOverview } from "./bot-overview.ts";
 import { ProfileRequestService } from "./profile-requests.ts";
-import { ModelRequestService } from "./model-requests.ts";
+import { ModelRequestService } from "./models/model-requests.ts";
 import { RuleRequestService } from "./rule-requests.ts";
 import { TeamSetupError, TeamSetupRequestService, teamSetupDirectApply } from "./team-setup-requests.ts";
 import type { TeamSetupRequest } from "../shared/team-setup.ts";
@@ -1409,7 +1409,7 @@ import {
   computerWaitingText,
   type ComputerHolder
 } from "./computer/computer-wait.ts";
-import { modelContextWindow } from "./model-context-window.ts";
+import { modelContextWindow } from "./models/model-context-window.ts";
 import {
   autoOnlyDestination,
   browserIsThePlace,
@@ -2571,7 +2571,7 @@ import { DesktopBridges, resolveBotWorkplace, type WorkplaceDecision } from "./d
 import { DesktopLocalModels } from "./desktop/desktop-local-models.ts";
 import { withDesktopModelPerson } from "./desktop/desktop-model-grant.ts";
 import { isDesktopInjectModel, isLocalModelId, setDesktopInjectModels } from "./drivers/local-inject.ts";
-import { isPiLocalModel, piLocalKeyRefusalLifted } from "./pi-local-model.ts";
+import { isPiLocalModel, piLocalKeyRefusalLifted } from "./models/pi-local-model.ts";
 import { defaultTurnPayerMode, effectiveTurnPayerMode, type TurnPayerMode } from "../shared/turn-payer.ts";
 import { handleDesktopBridgeMcp } from "./desktop/desktop-bridge-tools.ts";
 import { cloudOnlyBot } from "./cloud-only-bots.ts";

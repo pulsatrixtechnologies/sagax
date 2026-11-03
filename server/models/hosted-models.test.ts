@@ -3,12 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { hostedModelPolicy } from "./hosted-models.ts";
-import { ProviderRegistry } from "./harness/registry.ts";
-import { ClaudeDriver } from "./drivers/claude.ts";
-import { CodexDriver } from "./drivers/codex.ts";
-import { OpenAICompatDriver } from "./drivers/openai-compat.ts";
-import { recordEvents } from "./testing/events.ts";
-import { removeTempDir } from "./testing/cleanup.ts";
+import { ProviderRegistry } from "../harness/registry.ts";
+import { ClaudeDriver } from "../drivers/claude.ts";
+import { CodexDriver } from "../drivers/codex.ts";
+import { OpenAICompatDriver } from "../drivers/openai-compat.ts";
+import { recordEvents } from "../testing/events.ts";
+import { removeTempDir } from "../testing/cleanup.ts";
 
 const directories: string[] = [], registries: ProviderRegistry[] = [];
 afterEach(async () => {
@@ -55,8 +55,8 @@ it.each([{ variant: "high" }, { effort: "high" as const }])("preserves an assign
 
 it("locks native and OpenRouter instances to assigned catalogs and fixed gateway routes", async () => {
   const root = directory(), policy = hostedModelPolicy(root, { ...env(),
-    SAGAX_HOSTED_CLAUDE_CLI: join(import.meta.dirname, "testing/fake-claude-cli.ts"),
-    SAGAX_HOSTED_CODEX_CLI: join(import.meta.dirname, "testing/fake-codex-app-server.ts"),
+    SAGAX_HOSTED_CLAUDE_CLI: join(import.meta.dirname, "..", "testing", "fake-claude-cli.ts"),
+    SAGAX_HOSTED_CODEX_CLI: join(import.meta.dirname, "..", "testing", "fake-codex-app-server.ts"),
   })!;
   const configs = policy.configs();
   expect(Object.keys(configs)).toEqual(["claude", "codex", "opencode"]);
@@ -84,7 +84,7 @@ it("uses bundled executable names unless the operator explicitly overrides them"
 });
 
 it("sends a hosted Claude turn and helper through the approved model with synthetic CLI only", async () => {
-  const root = directory(), policy = hostedModelPolicy(root, { ...env(), SAGAX_HOSTED_CLAUDE_CLI: join(import.meta.dirname, "testing/fake-claude-cli.ts") })!;
+  const root = directory(), policy = hostedModelPolicy(root, { ...env(), SAGAX_HOSTED_CLAUDE_CLI: join(import.meta.dirname, "..", "testing", "fake-claude-cli.ts") })!;
   const configs = policy.configs();
   const dump = join(root, "claude-spawn.json");
   configs.claude.environment!.FAKE_CLAUDE_DUMP = dump;

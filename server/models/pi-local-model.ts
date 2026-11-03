@@ -5,7 +5,7 @@
 // member: the organization's engine list still applies to it (index.ts,
 // orgEngineTurnRefusal), and each person's pi home stays their own
 // (piLocalTurnAccess).
-import { LOCAL_HOSTS } from "./drivers/local-inject.ts";
+import { LOCAL_HOSTS } from "../drivers/local-inject.ts";
 
 export function isPiLocalModel(driverKind: string | undefined, model: string | null | undefined): boolean {
   if (driverKind !== "piAgent" || !model) return false;

@@ -4,7 +4,7 @@
 // threshold and the cap. The figure is every cost in the ledger: what
 // engines reported (on a workspace of personal subscriptions, their
 // equivalents too) plus the estimates booked for engines that report tokens
-// but no price (server/model-prices.ts). A turn on an unpriced model counts
+// but no price (server/models/model-prices.ts). A turn on an unpriced model counts
 // nothing. Enforced whenever the `budgets` feature is on, which it always is
 // in the open-source edition (server/enterprise.ts); only an enterprise layer
 // that withholds it leaves the setting inert.

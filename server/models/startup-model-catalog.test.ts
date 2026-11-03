@@ -6,11 +6,11 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DATA_DIR } from "./config.ts";
-import type { ModelCatalog, ProviderDriver, ProviderInstance, SendTurnInput } from "./contracts.ts";
-import { createAcpDriver, type AcpSupport } from "./drivers/acp/core.ts";
-import { ProviderRegistry } from "./harness/registry.ts";
-import * as procs from "./procs.ts";
+import { DATA_DIR } from "../config.ts";
+import type { ModelCatalog, ProviderDriver, ProviderInstance, SendTurnInput } from "../contracts.ts";
+import { createAcpDriver, type AcpSupport } from "../drivers/acp/core.ts";
+import { ProviderRegistry } from "../harness/registry.ts";
+import * as procs from "../procs.ts";
 import { openStartupModelCatalog, readStartupModelCache, writeStartupModelCache } from "./startup-model-catalog.ts";
 
 const CACHED: ModelCatalog = {

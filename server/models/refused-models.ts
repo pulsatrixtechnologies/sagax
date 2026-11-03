@@ -5,8 +5,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { DATA_DIR } from "./config.ts";
-import { writeFileAtomic } from "./atomic.ts";
+import { DATA_DIR } from "../config.ts";
+import { writeFileAtomic } from "../atomic.ts";
 
 interface Row {
   instanceId: string;

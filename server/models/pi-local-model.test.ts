@@ -41,7 +41,7 @@ describe("piLocalKeyRefusalLifted (#1422): the selection judged, never the bot's
   });
 
   it("is never fed the bot's own model by the server (source guard)", () => {
-    const source = readFileSync(fileURLToPath(new URL("./index.ts", import.meta.url)), "utf8");
+    const source = readFileSync(fileURLToPath(new URL("../index.ts", import.meta.url)), "utf8");
     expect(source).not.toMatch(/piLocalModel\(\{[^}]*bot\.modelSelection/);
     expect(source).not.toMatch(/piLocalKeyRefusalLifted\([^)]*bot\.modelSelection/);
     // each exemption takes the judged model as a parameter

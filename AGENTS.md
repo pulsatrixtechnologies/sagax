@@ -930,7 +930,7 @@ of that engine remains, the host moves the same turn to another engine the
 person has (`limit-failover-host.ts`, `isEngineExhaustedRefusal`), as a usage
 limit does (#1668); only when nothing else can answer does the turn end in
 plain words (`noModelLeftMessage`). Tests:
-`server/drivers/openai-responses.test.ts`, `server/refused-models.test.ts`,
+`server/drivers/openai-responses.test.ts`, `server/models/refused-models.test.ts`,
 `server/limit-failover-host.test.ts`.
 
 ## A reply is never an error (2026-10-29)
@@ -1272,7 +1272,7 @@ cards and banner, replay in the background with no gate, final page state),
 
 A bot on Auto classifies the person's own message like a worker's task
 (`classifyTask`) and runs it on the tier the words ask for
-(`ORCHESTRATION_TIER`, server/model-auto.ts): a quick question on the fast
+(`ORCHESTRATION_TIER`, server/models/model-auto.ts): a quick question on the fast
 tier (the bot's fast model when set, else the engine's own, Haiku on Claude
 Code), an image on a model that reads images, a long document or a big
 paste on the largest context; reasoning, coding, tool-heavy and general work
@@ -1281,7 +1281,7 @@ model, never down. A turn that lands on another model than the thread's
 last pick gets one activity line (`explainPick`, "Auto: ... for this quick
 question, ..."); the chip and the picker's Auto row say it on the first turn
 (`model.auto.why.quickTier|vision|long`). A pin always wins. Tests:
-`server/model-auto.test.ts` ("the person's own turn runs on the tier its
+`server/models/model-auto.test.ts` ("the person's own turn runs on the tier its
 words ask for").
 
 ## Do not finish until, checked after each turn (#1329, 2026-10-29)
@@ -4385,7 +4385,7 @@ keep the owner's credentials and model.
   bot's approval level must hold on that engine (`modelSwitchNeedsAsk`:
   Custom stays on its engine), as for Auto and the limit backup.
 - Tests: `shared/payable-model.test.ts`, `server/turns/turn-model-routing.test.ts`,
-  `server/model-auto.test.ts`, `server/engines/principal-engine-logins.test.ts`,
+  `server/models/model-auto.test.ts`, `server/engines/principal-engine-logins.test.ts`,
   `server/turns/turn-run.test.ts`, `src/components/TurnRunLine.test.ts`, S4-9 in
   `server/org/org-rights.e2e.test.ts` (another engine, starred model, a group).
 
@@ -5606,7 +5606,7 @@ The selection's `instanceId` and `model` stay the bot's engine and fallback,
 so any path or client that ignores Auto still runs a valid model; picking a
 model in the chip clears it (a pin). Rules:
 
-- Pure logic in `server/model-auto.ts` (`classifyTask`, `pickOrchestrationModel`,
+- Pure logic in `server/models/model-auto.ts` (`classifyTask`, `pickOrchestrationModel`,
   `pickWorkerModel`, `TIER_TABLE`): engines, model lists and catalogue facts
   come in as data. The table holds id patterns per engine family and tier,
   never ids; a pick is always a model the engine lists now and the models.dev
@@ -5644,7 +5644,7 @@ model in the chip clears it (a pin). Rules:
   and the delegation card (`Message.autoModel`), `check_delegation` receipts
   (`workerModel`), Settings > Model providers (one paragraph).
 
-Tests: `server/model-auto.test.ts`, `server/auto-model.e2e.test.ts`,
+Tests: `server/models/model-auto.test.ts`, `server/auto-model.e2e.test.ts`,
 `server/team-setup-requests.test.ts`, `shared/viewer-bot-overrides.test.ts`,
 `src/lib/auto-model.test.ts`, `src/components/ModelPicker.interaction.test.ts`.
 

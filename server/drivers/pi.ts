@@ -28,7 +28,7 @@ import { randomUUID } from "node:crypto";
 import { readAtRestSync } from "../content-at-rest.ts";
 import { PROVIDER_CREDENTIAL_ENV, stripWorkspaceCredentialEnv } from "../config.ts";
 import { applyEngineCommandVariables } from "../vault/credential-command-env.ts";
-import { openStartupModelCatalog, writeStartupModelCache } from "../startup-model-catalog.ts";
+import { openStartupModelCatalog, writeStartupModelCache } from "../models/startup-model-catalog.ts";
 import { augmentedPath } from "../env-path.ts";
 import { describeSpawnFailure, execCli, killCliTree, spawnCli } from "../procs.ts";
 import { SEARCH_CALL_TOOL, searchedToolCall } from "../../shared/searched-tool-call.ts";

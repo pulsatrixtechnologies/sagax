@@ -1,6 +1,6 @@
 /** ACP ProviderInstance factory. */
 import { PROVIDER_CREDENTIAL_ENV, stripControlPlaneEnv, WORKSPACE_CREDENTIAL_ENV } from "../../config.ts";
-import { openStartupModelCatalog, writeStartupModelCache } from "../../startup-model-catalog.ts";
+import { openStartupModelCatalog, writeStartupModelCache } from "../../models/startup-model-catalog.ts";
 import { DeviceAuthController } from "../device-auth.ts";
 import { LinkSignInController } from "../link-sign-in.ts";
 import { killCliTree, spawnCli } from "../../procs.ts";

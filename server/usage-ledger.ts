@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { ACCESS_VIAS, type AccessVia } from "./engines/engine-credentials.ts";
-import type { CostSource } from "./model-prices.ts";
+import type { CostSource } from "./models/model-prices.ts";
 import { billableFor, type PriceList } from "./prices.ts";
 
 /** Who asked for the turn. A person is named by the email they signed in
@@ -44,7 +44,7 @@ export interface UsageRow {
   promptBytes?: { stable: number; volatile: number };
   /** What the turn cost. As the engine reported it (real on a metered key,
    * an equivalent on a subscription), or, for an engine that reports tokens
-   * but no price, estimated from list prices (server/model-prices.ts) or the
+   * but no price, estimated from list prices (server/models/model-prices.ts) or the
    * operator's own. Null when neither applies: an unpriced model. */
   costUsd: number | null;
   /** Where costUsd came from. Absent on rows written before estimates

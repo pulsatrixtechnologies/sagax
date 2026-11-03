@@ -36,7 +36,7 @@ import { constants, copyFileSync, lstatSync, mkdirSync, readdirSync } from "node
 import { join, resolve } from "node:path";
 
 import type { CompactPromptInput } from "./contracts.ts";
-import { isPiLocalModel } from "./pi-local-model.ts";
+import { isPiLocalModel } from "./models/pi-local-model.ts";
 
 export type LocalPromptMode = "compact" | "full";
 

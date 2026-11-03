@@ -19,7 +19,7 @@ Claude の harness compaction は `autoCompactWindow` の既定 200,000 のま�
 | 対象 | 箇所 | 種別 | 方針 |
 | --- | --- | --- | --- |
 | Claude の静的一覧 | `server/drivers/claude.ts` `STATIC_CLAUDE_MODELS` | 機能 | 1 行追加。既定と既存ボットは不変 |
-| コンテキスト幅 | `server/model-context-window.ts` | 機能 | Opus 5.5 と、スラッシュまたはドットで区切った転送形だけ 1M |
+| コンテキスト幅 | `server/models/model-context-window.ts` | 機能 | Opus 5.5 と、スラッシュまたはドットで区切った転送形だけ 1M |
 | 使用量チップ | `server/index.ts` の `modelContextWindow` | 機能 | カタログが窓を返さないときの分母。compaction は変えない |
 | 窓の解決 | `server/context-budget.ts` `contextWindowFor` | 機能 | カタログの `contextWindow` をパターン表より先に使う |
 | Droid の `MODELS` | `server/drivers/acp/droid.ts` | なし | Factory 側のスナップショットなので触らない |

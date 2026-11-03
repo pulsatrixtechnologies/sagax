@@ -1,5 +1,5 @@
 import type { ModelCatalog } from "./contracts.ts";
-import { modelContextWindow } from "./model-context-window.ts";
+import { modelContextWindow } from "./models/model-context-window.ts";
 
 export const DEFAULT_CONTEXT_WINDOW = 128_000;
 const positive = (n: number | null | undefined): n is number => typeof n === "number" && Number.isFinite(n) && n > 0;

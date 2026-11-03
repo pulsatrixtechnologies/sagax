@@ -42,7 +42,7 @@ import {
   writeFileEngineKey,
 } from "../engines/engine-api-keys.ts";
 import { providersOfInstance } from "../engines/engine-credentials.ts";
-import { HOSTED_PROVIDER_SETTINGS_ERROR } from "../hosted-models.ts";
+import { HOSTED_PROVIDER_SETTINGS_ERROR } from "../models/hosted-models.ts";
 import { cliCommandRefusal } from "../procs.ts";
 import type { ProviderAccountOwner } from "../engines/provider-accounts.ts";
 import { providerIconPatchSchema, withInstanceIcon } from "../engines/provider-icon.ts";

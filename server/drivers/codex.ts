@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 import { DATA_DIR, stripWorkspaceCredentialEnv } from "../config.ts";
-import { laterStartup, openStartupModelCatalog, writeStartupModelCache } from "../startup-model-catalog.ts";
+import { laterStartup, openStartupModelCatalog, writeStartupModelCache } from "../models/startup-model-catalog.ts";
 import { hostedWorkspaceConfigured } from "../enterprise.ts";
 import { ChatGptPlanAuthController } from "./chatgpt-plan-auth.ts";
 import { codexLaunchesStarting, codexLaunchSlot } from "./codex-process.ts";

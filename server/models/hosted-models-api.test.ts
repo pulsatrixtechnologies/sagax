@@ -5,10 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { launchVerificationServer, runControlOmb, verificationServerEnvironment, type VerificationServer } from "../scripts/control-omb.ts";
-import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
+import { launchVerificationServer, runControlOmb, verificationServerEnvironment, type VerificationServer } from "../../scripts/control-omb.ts";
+import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const enterpriseAdapterPresent = existsSync(join(ROOT, "enterprise/server/workspace-access.ts"));
 const TOKEN = `omb_workspace_${"s".repeat(43)}`;
 const ORIGINAL_TEXT = "Preserve this synthetic conversation through model changes.";

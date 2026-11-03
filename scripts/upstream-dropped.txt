@@ -364,3 +364,16 @@ server/provider-auth-sessions.ts
 server/provider-icon.ts
 server/provider-key-check.test.ts
 server/provider-key-check.ts
+server/default-model-selection.test.ts
+server/default-model-selection.ts
+server/hosted-models-api.test.ts
+server/hosted-models.test.ts
+server/hosted-models.ts
+server/model-context-window.test.ts
+server/model-context-window.ts
+server/model-prices.test.ts
+server/model-prices.ts
+server/model-requests.test.ts
+server/model-requests.ts
+server/startup-model-catalog.test.ts
+server/startup-model-catalog.ts

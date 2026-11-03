@@ -13,7 +13,7 @@ import type {
   TurnAccessInput,
 } from "../../contracts.ts";
 import { newEventId } from "../../contracts.ts";
-import { openStartupModelCatalog, writeStartupModelCache } from "../../startup-model-catalog.ts";
+import { openStartupModelCatalog, writeStartupModelCache } from "../../models/startup-model-catalog.ts";
 import { cliVersionReader, execCli, killCliTree } from "../../procs.ts";
 import {
   claudeSubscriptionHomeKey,

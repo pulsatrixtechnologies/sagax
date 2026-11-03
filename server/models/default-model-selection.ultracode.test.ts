@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ULTRACODE_EFFORT } from "../shared/ultracode-effort.ts";
+import { ULTRACODE_EFFORT } from "../../shared/ultracode-effort.ts";
 import { selectDefaultModelSelection, withNewBotEffort } from "./default-model-selection.ts";
 
 const claude = {

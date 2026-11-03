@@ -722,7 +722,7 @@ and lines said meanwhile piled up. Now (`server/voice/voice-turn.ts`):
   when the call is accepted, runs on a fast model: the bot's own fast model
   when it set one, else the fast tier of its engine (Haiku on Claude Code,
   a fast Grok on Grok), else the fast tier of another engine the payer can
-  use (`pickVoiceModel`, server/model-auto.ts, the same tiers Auto uses). A
+  use (`pickVoiceModel`, server/models/model-auto.ts, the same tiers Auto uses). A
   bot pinned to a model gets it too; a request that needed another
   engine's connector keeps that engine. No fast model anywhere: the bot's
   model.
@@ -766,7 +766,7 @@ and lines said meanwhile piled up. Now (`server/voice/voice-turn.ts`):
   sentence, text to speech, playback and the total from the end of speech
   (`audioTurnNotice`). The server log has `[voice-turn]` per dispatch.
 
-Tests: `server/voice/voice-turn.test.ts`, `server/model-auto.test.ts`
+Tests: `server/voice/voice-turn.test.ts`, `server/models/model-auto.test.ts`
 (`pickVoiceModel`), `server/turns/steer-queue.test.ts` (one call's lines),
 `server/voice/voice-fast-turn.e2e.test.ts` (fake Claude CLI: the fast model and
 short context in one warm session, the conversation's own session after,

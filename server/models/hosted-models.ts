@@ -1,10 +1,10 @@
 import { existsSync, lstatSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { writeFileAtomic } from "./atomic.ts";
-import { hostedWorkspaceConfiguration } from "./enterprise.ts";
-import type { InstanceConfigMap, ModelSelection, ProviderInstance } from "./contracts.ts";
-import type { Store } from "./store.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { hostedWorkspaceConfiguration } from "../enterprise.ts";
+import type { InstanceConfigMap, ModelSelection, ProviderInstance } from "../contracts.ts";
+import type { Store } from "../store.ts";
 
 export const HOSTED_MODEL_POLICY_HEADER = "X-Omb-Hosted-Model-Policy";
 export const HOSTED_MODEL_SETUP_ERROR = "No company models are assigned to this workspace. Ask your administrator to enable model access in Admin.";

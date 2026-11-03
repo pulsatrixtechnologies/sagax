@@ -17,7 +17,7 @@ import { decodeAttachmentAttribute } from "../message-file.ts";
 
 /** Matches the web and native composer policy: up to 32 pictures sharing
  * 200 MiB of stored bytes on every host. What a provider ingests is the
- * scaled copy that server/model-image.ts makes, each within the model's
+ * scaled copy that server/models/model-image.ts makes, each within the model's
  * per-image limit. */
 export const TURN_IMAGE_MAX_COUNT = MESSAGE_IMAGE_MAX_COUNT;
 export const TURN_IMAGE_MAX_BYTES = IMAGE_AGGREGATE_MAX_BYTES;

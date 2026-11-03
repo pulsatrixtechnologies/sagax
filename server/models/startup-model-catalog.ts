@@ -5,10 +5,10 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { writeFileAtomic } from "./atomic.ts";
-import { DATA_DIR } from "./config.ts";
-import type { ModelCatalog } from "./contracts.ts";
-import { parseModelEffortFacts } from "../shared/model-capabilities.ts";
+import { writeFileAtomic } from "../atomic.ts";
+import { DATA_DIR } from "../config.ts";
+import type { ModelCatalog } from "../contracts.ts";
+import { parseModelEffortFacts } from "../../shared/model-capabilities.ts";
 
 const SAFE_INSTANCE_ID = /^[\w.-]+$/;
 

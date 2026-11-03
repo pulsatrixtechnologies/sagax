@@ -61,7 +61,7 @@ class scores keyword hits; the role adds one point; fixed priority breaks ties.
 Class to tier: reasoning to `top`; coding, automation and general to `coding` (strong all-round);
 quick to `fast`; long-reading and large-context to `long`; vision to `vision`.
 
-Tier to model: `TIER_TABLE` in `server/model-auto.ts`, per engine family, lists id patterns, never
+Tier to model: `TIER_TABLE` in `server/models/model-auto.ts`, per engine family, lists id patterns, never
 ids (anthropic: top fable then opus (Fable 5.1 is Anthropic's strongest model), coding sonnet then opus, fast haiku; openai: top astra then
 sol, coding codex then sol then terra, fast luna, mini, spark; xai: top plain grok, fast `fast` or
 `mini`; google: top pro, fast flash-lite then flash; moonshot: top k3, coding for-coding, fast

@@ -172,7 +172,7 @@ Unit, component and node tests only. The Electron smoke above was **not**
 re-run for this change, and no installed app, keychain, production Admin,
 engine account or paid model call was used.
 
-- `pnpm vitest run server/default-model-selection.test.ts`: with no saved
+- `pnpm vitest run server/models/default-model-selection.test.ts`: with no saved
   default, an enrolled desktop picks an instance that can run now: a
   signed-in personal engine first (Claude first), then a Company model (Claude
   first), then today's choice. An installed but signed-out personal Claude
@@ -217,7 +217,7 @@ Review fixes (same day, same limits): archived bots are never counted or
 switched; the "Now using …" status names only bots the server kept on the
 Company model after their PATCH settled (none when every PATCH was refused);
 the note now says bots not allowed by the organization change too; and
-`server/default-model-selection.test.ts` runs `index.ts`'s actual
+`server/models/default-model-selection.test.ts` runs `index.ts`'s actual
 `defaultSelection` and `policyModelRefusal` against a synthetic registry,
 enrolment and policy. Mutation checks: counting archived bots, naming every
 requested bot, and dropping the whole context, the enrolment or the policy
@@ -231,7 +231,7 @@ does), **Settings → Servers** / **Server → Connect to a server…** for save
 remote servers, **Settings → Installations** for the fleet screen, "this
 installation" for the whole app and its data, and "folder" for bot and task
 folders. The Anthropic Console's "workspace API key" and ChatGPT's "workspace
-admin" keep their own words. `server/hosted-models.ts` keeps its two model
+admin" keep their own words. `server/models/hosted-models.ts` keeps its two model
 errors word for word, because the cloud Slack worker matches that text.
 
 Tested, not production qualification:

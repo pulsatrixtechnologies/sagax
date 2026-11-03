@@ -6,9 +6,9 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 
 import { ModelRequestService, type ModelRequestStore, type OptionCardLike } from "./model-requests.ts";
-import type { ModelSelection } from "../shared/wire.ts";
-import type { BotRecord } from "./store.ts";
-import { directApply, type DirectApplyCheck } from "./direct-apply.ts";
+import type { ModelSelection } from "../../shared/wire.ts";
+import type { BotRecord } from "../store.ts";
+import { directApply, type DirectApplyCheck } from "../direct-apply.ts";
 
 interface StoredMessage {
   id: string;

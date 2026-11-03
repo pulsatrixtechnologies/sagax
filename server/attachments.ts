@@ -80,7 +80,7 @@ export function storedAttachmentSize(path: string): number {
 
 /** The ceiling of a stored picture: one bigger than this is rejected before
  * it is ever buffered. A phone photo (often 12 MB) fits: the copy an engine
- * gets is scaled down at send time (server/model-image.ts), never refused for
+ * gets is scaled down at send time (server/models/model-image.ts), never refused for
  * its size (2026-10-20). */
 export const IMAGE_MAX_BYTES = 32 * 1024 * 1024;
 
@@ -330,7 +330,7 @@ export function deleteAttachment(path: string): void {
   } catch {
     // Already gone, or never existed — nothing to reconcile.
   }
-  // the copy scaled for the model goes with its picture (server/model-image.ts)
+  // the copy scaled for the model goes with its picture (server/models/model-image.ts)
   try { rmSync(modelImageCopyPath(dirname(path), path), { force: true }); } catch { /* none */ }
 }
 

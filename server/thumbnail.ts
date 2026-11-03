@@ -10,7 +10,7 @@
 import type { renderAsync as RenderAsync } from "@resvg/resvg-js";
 
 import { nativeRequire } from "./data/engine.ts";
-import { boundedSize, rasterSize } from "./model-image.ts";
+import { boundedSize, rasterSize } from "./models/model-image.ts";
 import { scaleWebpOffThread } from "./webp-scale-worker.ts";
 
 /** Side of the square, in px: 4x the 24 px icon it replaces, for dense screens. */

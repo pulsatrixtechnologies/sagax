@@ -10,7 +10,7 @@
 // does not list (a 1M-context variant, a custom or local model) or learn
 // their catalog only once a turn starts. The turn tries the model as picked.
 import type { ModelSelection } from "../contracts.ts";
-import { readyToRun, signedOut, type DefaultSelectionContext, type SelectableInstance } from "../default-model-selection.ts";
+import { readyToRun, signedOut, type DefaultSelectionContext, type SelectableInstance } from "../models/default-model-selection.ts";
 import { sameModelSelection } from "../../shared/thread-model.ts";
 
 /** An engine as a turn's start sees it, without waiting on its CLI: whether

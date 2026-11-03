@@ -12,7 +12,7 @@ import { recordEvents } from "../testing/events.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { excludedWorkspaceAuthPath } from "../workspace-backup-policy.ts";
 import type { ProviderInstance } from "../contracts.ts";
-import { selectDefaultModelSelection } from "../default-model-selection.ts";
+import { selectDefaultModelSelection } from "../models/default-model-selection.ts";
 import { Store } from "../store.ts";
 
 const managers: ManagedDesktopProviders[] = [], registries: ProviderRegistry[] = [];

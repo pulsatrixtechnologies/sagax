@@ -94,7 +94,7 @@ scope on both routes.
   settles leaves no row, so a failed turn is not billed.
 - The cost column is what the engine reported (real on a metered key, an
   equivalent on a subscription) or, for engines that report none, an estimate
-  from `server/model-prices.ts`, marked `~` in History and People and labelled
+  from `server/models/model-prices.ts`, marked `~` in History and People and labelled
   in the CSV's `cost_source` column. A model with no known price stays
   unpriced; the summary counts those turns separately instead of treating them
   as free.

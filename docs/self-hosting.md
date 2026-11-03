@@ -1665,7 +1665,7 @@ The figure is every cost in the usage ledger. Claude reports its own cost
 (real on your keys, an equivalent on personal subscriptions). Codex, the
 OpenAI-compatible/OpenRouter engine, Grok, MiniMax and the ACP engines report
 tokens but no price, so the server books an **estimate** from a built-in list
-of vendor list prices (`server/model-prices.ts`, each entry with its source
+of vendor list prices (`server/models/model-prices.ts`, each entry with its source
 and the date it was read) and marks the row `costSource: "estimated"`. A model
 that is not in the list is unpriced and not counted; Usage says how many
 turns that was. Estimates use each vendor's standard short-context rate, so

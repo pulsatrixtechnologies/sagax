@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ProviderInstance, RuntimeEvent } from "../contracts.ts";
-import { RefusedModelsStore, setRefusedModelsStore } from "../refused-models.ts";
+import { RefusedModelsStore, setRefusedModelsStore } from "../models/refused-models.ts";
 import { isOpenAIChatModel, isOpenAIReasoningModel, OpenAICompatDriver } from "./openai-compat.ts";
 import { isEngineExhaustedRefusal, noModelLeftMessage } from "./openai-chat.ts";
 import { providerReplyCutMessage } from "../../shared/provider-reply-cut.ts";

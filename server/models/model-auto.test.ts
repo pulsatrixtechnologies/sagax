@@ -24,8 +24,8 @@ import {
   type CatalogFacts,
   type CatalogLookup,
 } from "./model-auto.ts";
-import { unpackCatalog } from "./model-catalog/trim.ts";
-import { STATIC_CODEX_MODELS } from "./drivers/codex-catalog.ts";
+import { unpackCatalog } from "../model-catalog/trim.ts";
+import { STATIC_CODEX_MODELS } from "../drivers/codex-catalog.ts";
 
 // A small fixture catalogue: what models.dev says, by bare id.
 const FACTS: Record<string, CatalogFacts> = {
@@ -343,7 +343,7 @@ describe("helpers", () => {
 });
 
 describe("with the shipped catalogue and the drivers' own model lists", () => {
-  const snapshot = JSON.parse(readFileSync(join(import.meta.dirname, "model-catalog", "models-dev.snapshot.json"), "utf8")) as { providers: unknown };
+  const snapshot = JSON.parse(readFileSync(join(import.meta.dirname, "..", "model-catalog", "models-dev.snapshot.json"), "utf8")) as { providers: unknown };
   const providers = unpackCatalog(snapshot.providers) as Record<string, { models: Record<string, { name: string; reasoning: boolean; modalities: { input: string[] }; limit?: { context: number }; cost?: { input?: number; output?: number }; release_date?: string }> }>;
   const real: CatalogLookup = (driver, id) => {
     const provider = { claudeAgent: "anthropic", codex: "openai", grokAgent: "xai" }[driver];

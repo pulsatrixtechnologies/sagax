@@ -8,12 +8,12 @@
 // Adapted from OpenMausBot #3316 (usage as traces) but rebuilt on OUR ledger:
 // no Cloud, no team, no credit or lending plumbing. Everything here is pure
 // and offline, reads what the ledger already settled (counters, time, cost
-// from server/model-prices.ts), and never any message text or secret.
+// from server/models/model-prices.ts), and never any message text or secret.
 //
 // Who reads it: the owner or an organization member with usage.view
 // (server/routes/usage.ts, shared/permissions.ts). Ids ride the wire for a
 // copy affordance only; the app shows the human label, never a raw UUID.
-import type { CostSource } from "./model-prices.ts";
+import type { CostSource } from "./models/model-prices.ts";
 import { costSourceOf, triggerKey, triggerLabel, type UsageRow, type UsageTrigger } from "./usage-ledger.ts";
 
 const clean = (value: unknown): number =>

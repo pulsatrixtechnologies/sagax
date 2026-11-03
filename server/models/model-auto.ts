@@ -8,11 +8,11 @@
 // Pure: the engines the payer can use, their model lists and the catalogue
 // facts are passed in as data. Nothing here reads the registry, the network
 // or the clock, so the same inputs always give the same pick.
-import type { EffortLevel, ModelSelection } from "../shared/wire.ts";
-import { effortAcceptedByEngine } from "../shared/ultracode-effort.ts";
-import type { AutoModelRecord, AutoPayerVia, AutoReason, AutoTaskClass, AutoTier } from "../shared/auto-model.ts";
+import type { EffortLevel, ModelSelection } from "../../shared/wire.ts";
+import { effortAcceptedByEngine } from "../../shared/ultracode-effort.ts";
+import type { AutoModelRecord, AutoPayerVia, AutoReason, AutoTaskClass, AutoTier } from "../../shared/auto-model.ts";
 
-export type { AutoPayerVia, AutoReason } from "../shared/auto-model.ts";
+export type { AutoPayerVia, AutoReason } from "../../shared/auto-model.ts";
 export type TaskClass = AutoTaskClass;
 export type Tier = AutoTier;
 

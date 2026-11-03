@@ -82,6 +82,14 @@ export function redownloadedOrgLibraryPath(path: string): boolean {
   return /^org-library\/(?:catalog\.json(?:\.[0-9a-f-]{36}\.tmp)?$|blobs(?:\/|$))/.test(path);
 }
 
+/** The skills library index a restore left for the boot to adopt
+ * (SKILLS_LIBRARY_RESTORE_IMPORT, with a rejected copy beside it). It belongs
+ * to that one restore: never exported (the index travels as its own archive
+ * part), and an archive that holds it restores without it. */
+export function restoredLibraryIndexPath(path: string): boolean {
+  return /^skills-library\/restore-import\.json(?:$|\.)/i.test(path);
+}
+
 /** Per-turn engine hook bearers (`hook-tokens/<digest>.token`, written by the
  * Claude driver). They are dead once their turn settles, so they are never
  * exported. Unlike the saved auth paths above they are not refused on import:

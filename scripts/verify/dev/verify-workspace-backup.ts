@@ -238,6 +238,107 @@ export async function verifyWorkspaceBackup(report: (event: unknown) => void = (
   }
 }
 
+/** Organization library skills across a backup: their files travel in
+ * data/, their index (sealed in installation-capabilities.enc, which never
+ * leaves a machine) as the archive's own part. Restored into a fresh
+ * install, every skill is listed, readable and assigned as before. */
+export async function verifyWorkspaceBackupLibrarySkills(report: (event: unknown) => void = () => {}) {
+  const events: unknown[] = [];
+  const record = (event: unknown) => { events.push(event); report(event); };
+  const source = await launchBackupFixture();
+  let destination: VerificationServer | undefined;
+  let restarted: ChildProcess | undefined;
+  const evidencePath = `${source.info.logPath}.workspace-backup-library.json`;
+  const api = async (fixture: VerificationServer, method: string, path: string, body?: unknown) => {
+    const response = await fetch(`${fixture.info.url}${path}`, {
+      method, headers: { "content-type": "application/json", origin: fixture.info.url },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(60_000),
+    });
+    const result = await response.json() as Record<string, any>;
+    record({ method, path, status: response.status });
+    return { status: response.status, body: result };
+  };
+  const control = async (fixture: VerificationServer, ...args: string[]) => {
+    const result = await runControlOmb([...args, "--url", fixture.info.url]);
+    record({ command: [...args, "--url", fixture.info.url], result });
+    return result;
+  };
+  try {
+    destination = await launchBackupFixture();
+    record({ source: source.info, destination: destination.info });
+    // #1811: the skills library is on by default on both installs
+    assert.equal((await api(source, "GET", "/api/config")).body.features.skillsLibrary, true);
+    assert.equal((await api(destination, "GET", "/api/config")).body.features.skillsLibrary, true);
+    const { bot } = await control(source, "new-bot", "--name", "Library backup probe") as { bot: { id: string } };
+    const { bot: other } = await control(source, "new-bot", "--name", "Library second bot") as { bot: { id: string } };
+    const skills = {
+      "org-audit": "---\nname: org-audit\ndescription: Audit an order for the organization.\n---\nORG_LIBRARY_MARKER_AUDIT\n",
+      "org-report": "---\nname: org-report\ndescription: Write the weekly report.\n---\nORG_LIBRARY_MARKER_REPORT\n",
+    };
+    for (const text of Object.values(skills)) assert.equal((await api(source, "POST", "/api/skills-library", { text })).status, 201);
+    // one reviewed and on, one left off: both states come back
+    assert.equal((await api(source, "PATCH", "/api/skills-library/org-audit", { enabled: true })).status, 200);
+    assert.equal((await api(source, "PUT", `/api/bots/${bot.id}/skills-library`, { skills: ["org-audit", "org-report"] })).status, 200);
+    assert.equal((await api(source, "PUT", `/api/bots/${other.id}/skills-library`, { skills: ["org-report"] })).status, 200);
+    const listed = (await api(source, "GET", "/api/skills-library")).body.skills as Array<Record<string, unknown>>;
+    assert.deepEqual(listed.map((skill) => skill.name), ["org-audit", "org-report"]);
+    const assignedBefore = (await api(source, "GET", `/api/bots/${bot.id}/skills`)).body.assignedSkills;
+    assert.deepEqual(assignedBefore, ["org-audit", "org-report"]);
+    // the sealed store holds the index; the plaintext file is retired
+    assert.equal(existsSync(join(source.info.dataDir, "skills-library", "index.json")), false);
+
+    const exported = await api(source, "POST", "/api/workspace-backup/export", { password: PASSWORD });
+    assert.equal(exported.status, 200, JSON.stringify(exported.body));
+    const download = await fetch(`${source.info.url}/api/workspace-backup/download/${exported.body.id}`);
+    assert.equal(download.status, 200);
+    const encrypted = Buffer.from(await download.arrayBuffer());
+    for (const marker of ["ORG_LIBRARY_MARKER_AUDIT", "Audit an order for the organization."]) assert.equal(encrypted.includes(Buffer.from(marker)), false);
+    const upload = await fetch(`${destination.info.url}/api/workspace-backup/upload`, {
+      method: "POST", headers: { "content-type": "application/octet-stream" }, body: encrypted,
+    });
+    assert.equal(upload.status, 200);
+    const incoming = await upload.json() as { id: string };
+    const preview = await api(destination, "POST", "/api/workspace-backup/preview", { id: incoming.id, password: PASSWORD });
+    assert.equal(preview.status, 200, JSON.stringify(preview.body));
+    const staged = join(destination.info.dataDir, ".backups", preview.body.id, "staged");
+    const manifest = JSON.parse(readFileSync(join(staged, "manifest.json"), "utf8"));
+    assert.deepEqual({ path: manifest.parts.skillsLibraryIndex.path, version: manifest.parts.skillsLibraryIndex.version, entries: manifest.parts.skillsLibraryIndex.entries },
+      { path: "skills-library-index.json", version: 1, entries: 2 });
+    // only the library entries: no other field of the sealed store
+    const part = JSON.parse(readFileSync(join(staged, "skills-library-index.json"), "utf8"));
+    assert.deepEqual(Object.keys(part).sort(), ["entries", "format", "version"]);
+    assert.deepEqual(Object.keys(part.entries).sort(), ["org-audit", "org-report"]);
+    assert.equal(manifest.entries.some((entry: { path: string }) => entry.path.startsWith("installation-capabilities")), false);
+    const committed = await api(destination, "POST", "/api/workspace-backup/restore", { id: preview.body.id, confirmation: "REPLACE" });
+    assert.equal(committed.status, 200, JSON.stringify(committed.body));
+
+    restarted = await restartFixture(destination);
+    record({ command: "restart exact destination fixture", newPid: restarted.pid, url: destination.info.url });
+    assert.equal(existsSync(join(destination.info.dataDir, "skills-library", "restore-import.json")), false);
+    const after = (await api(destination, "GET", "/api/skills-library")).body.skills as Array<Record<string, unknown>>;
+    assert.deepEqual(after, listed);
+    for (const [name, text] of Object.entries(skills)) {
+      const read = await api(destination, "GET", `/api/skills-library/${name}`);
+      assert.equal(read.status, 200, JSON.stringify(read.body));
+      assert.equal(read.body.text, text);
+      const fromBot = await api(destination, "GET", `/api/bots/${bot.id}/skills/${name}`);
+      assert.equal(fromBot.status, 200, JSON.stringify(fromBot.body));
+      assert.equal(fromBot.body.text, text);
+    }
+    assert.deepEqual((await api(destination, "GET", `/api/bots/${bot.id}/skills`)).body.assignedSkills, assignedBefore);
+    assert.deepEqual((await api(destination, "GET", `/api/bots/${other.id}/skills`)).body.assignedSkills, ["org-report"]);
+    const result = { ok: true, listed: true, readable: true, assigned: true, sealedStoreExcluded: true, evidencePath, logs: [source.info.logPath, destination.info.logPath] };
+    record(result);
+    return result;
+  } finally {
+    await waitForExit(restarted, { signal: "SIGTERM" });
+    await destination?.close();
+    await source.close();
+    record({ cleanup: true, sourceRemoved: !existsSync(source.info.dataDir), destinationRemoved: !destination || !existsSync(destination.info.dataDir) });
+    writeFileSync(evidencePath, JSON.stringify(events, null, 2), { mode: 0o600 });
+  }
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   verifyWorkspaceBackup((event) => console.log(JSON.stringify(event))).catch((error) => {
     console.error(error);

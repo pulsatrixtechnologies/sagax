@@ -99,6 +99,11 @@ describe("skills library routes through an isolated HTTP fixture", () => {
     expect((await api("PATCH", "/api/skills-library/order-audit", { enabled: true }))).toMatchObject({ status: 200 });
     const text = await api("GET", "/api/skills-library/order-audit");
     expect(text.body.text).toContain("Check every line item");
+    // The bot-scoped read serves an assigned library skill too: a per-bot
+    // skill the boot sweep moved stays reachable from its bot.
+    const fromBot = await api("GET", `/api/bots/${botId}/skills/order-audit`);
+    expect(fromBot).toMatchObject({ status: 200, body: { name: "order-audit", origin: "library", text: SKILL_MD } });
+    expect(await api("GET", `/api/bots/${botId}/skills/order-audit/files`)).toMatchObject({ status: 200, body: { files: expect.any(Array) } });
     const enabled = await api("GET", "/api/skills-library");
     expect(enabled.body.skills[0]).toMatchObject({ enabled: true, assignedBots: [{ id: botId, name: "Skills fixture" }] });
 
@@ -109,6 +114,8 @@ describe("skills library routes through an isolated HTTP fixture", () => {
     });
     const afterRemove = await api("GET", `/api/bots/${botId}/skills`);
     expect(afterRemove.body.skills).toEqual([]);
+    // Unassigned, the library skill is no longer this bot's to read.
+    expect((await api("GET", `/api/bots/${botId}/skills/order-audit`)).status).toBe(404);
     expect(afterRemove.body.library.map((entry: { name: string }) => entry.name)).toEqual(["order-audit"]);
     expect(afterRemove.body.assignedSkills).toEqual([]);
   });

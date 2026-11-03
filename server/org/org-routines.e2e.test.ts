@@ -24,7 +24,7 @@
 //               and when the owner is disabled; the owner's notification
 //               opens the run in the bot's Coding activity, where the card
 //               (hers alone) is, never bob's private thread
-//   transient   Perspicax unreachable: the run fails, the routine is kept
+//   transient   Perspicax unreachable: the same run retries, the routine is kept
 //   person out  a disable pauses the routine person_out; no runs follow
 //   disk        no refresh or access token is ever written in clear
 import { spawn, type ChildProcess } from "node:child_process";
@@ -99,7 +99,7 @@ async function waitFor<T>(read: () => Promise<T | null | undefined | false>, ms 
   }
 }
 
-type Run = { id: string; routineId: string; status: string; error?: string; runAs?: string };
+type Run = { id: string; routineId: string; status: string; error?: string; runAs?: string; admitAttempts?: number; admitAfter?: number };
 type RoutineRow = { id: string; runAs?: { principalId: string; name: string }; suspended?: { reason: string } };
 type Message = { id: string; kind: string; role: string; access?: { reason: string; routineId?: string; runAsPrincipalId?: string; suspendReason?: string; payer?: string; payerPrincipalId?: string; cause?: string; routine?: boolean }; digest?: { access?: { via: string; payer: string; payerPrincipalId?: string; routine?: boolean } } };
 
@@ -262,7 +262,8 @@ posixOnly("Perspicax organization, slice 6: routines in their person's name", ()
     const created = await api("POST", "/api/bots", alice, { name: "Xavier" });
     expect(created.status, created.text).toBe(201);
     x = { id: created.body.bot.id, threadId: created.body.bot.threadId };
-    expect((await api("PATCH", `/api/bots/${x.id}`, alice, { modelSelection: { instanceId: "claude", model: "fake-model" } })).status).toBe(200);
+    // 84841aeed: keep unsolicited wakes out of exact delegation and payer counts.
+    expect((await api("PATCH", `/api/bots/${x.id}`, alice, { proactiveMode: "off", modelSelection: { instanceId: "claude", model: "fake-model" } })).status).toBe(200);
     expect((await api("PUT", `/api/bots/${x.id}/perspicax`, alice, { profiles: [PROFILE.id] })).status).toBe(200);
     expect((await api("PUT", `/api/bots/${x.id}/grants`, alice, { target: `user:${ids.bob}`, level: "run" })).status).toBe(200);
     // the owner's key reaches the engine only once the directory lists it
@@ -347,15 +348,22 @@ posixOnly("Perspicax organization, slice 6: routines in their person's name", ()
     expect(idp.refreshes.slice(refreshesBefore).filter((r) => r.delegation)).toEqual([]);
   }, 90_000);
 
-  it("Perspicax unreachable skips the run and keeps the routine", async () => {
-    // past the window, the next run renews: make that refresh fail once
+  it("Perspicax unreachable retries the same run and keeps the routine", async () => {
+    // ad4e2bf7c retries a short connector outage in the existing run window.
     await sleep(RENEW_SECONDS * 1000 + 500);
     idp.failNextToken(503);
-    const failed = await runNow(alice, r1);
-    expect(failed).toMatchObject({ status: "failed", error: "Perspicax is unreachable; this run is skipped" });
+    const started = await api("POST", `/api/routines/${r1}/run`, alice, {});
+    expect(started.status, started.text).toBe(201);
+    const runId = started.body.run.id as string;
+    const delayed = await waitFor(async () => onDisk().runs.find((run) => run.id === runId && run.admitAttempts === 1));
+    expect(delayed).toMatchObject({ status: "queued", admitAttempts: 1 });
+    expect(delayed.admitAfter).toBeGreaterThan(Date.now());
     expect((await routineOf(alice, r1))?.suspended).toBeUndefined();
+    const duplicate = await api("POST", `/api/routines/${r1}/run`, alice, {});
+    expect(duplicate.status, duplicate.text).toBe(409);
+    expect(duplicate.body).toMatchObject({ code: "run_in_flight", runId });
     const refreshesBefore = idp.refreshes.length;
-    const again = await runNow(alice, r1);
+    const again = await waitFor(async () => (await runsOf(alice, r1)).find((run) => run.id === runId && ["completed", "failed"].includes(run.status)), 90_000);
     expect(again.status, again.error).toBe("completed");
     expect(idp.refreshes.slice(refreshesBefore)).toEqual([expect.objectContaining({ sub: ALICE.sub, delegation: true })]);
     expect((await api("GET", "/api/org/routine-delegation", alice)).body.state).toBe("active");

@@ -99,7 +99,8 @@ async function createBot(auth: Auth, name: string, instanceId: string): Promise<
   const created = await api("POST", "/api/bots", auth, { name });
   expect(created.status, created.text).toBe(201);
   const bot = created.body.bot;
-  const patched = await api("PATCH", `/api/bots/${bot.id}`, auth, { modelSelection: { instanceId, model: "fake-model" } });
+  // 84841aeed made proactive the default. Console counters track only the explicit turns here.
+  const patched = await api("PATCH", `/api/bots/${bot.id}`, auth, { proactiveMode: "off", modelSelection: { instanceId, model: "fake-model" } });
   expect(patched.status, patched.text).toBe(200);
   return { id: bot.id, threadId: bot.threadId };
 }

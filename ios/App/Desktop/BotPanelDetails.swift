@@ -158,7 +158,7 @@ struct BotPanelDetails: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             // Details > Suggestions (SuggestionsSection.tsx); the routines are just below
-            BotSuggestionsCard(bot: bot) { action in
+            DesktopBotSuggestionsCard(bot: bot) { action in
                 switch action {
                 case let .openThread(threadId): session.openChat(threadId: threadId)
                 case .openSection("routines"): break
@@ -631,5 +631,95 @@ struct BotPanelRoutines: View {
         let result = await session.loadRoutines()
         routines = result.routines
         loaded = true
+    }
+}
+
+
+// MARK: - Details > Suggestions
+
+/// Details > Suggestions as the desktop draws it (`SuggestionsSection.tsx`):
+/// the 12/17 tertiary title and Hide (12.5 secondary) over one grouped card
+/// (rounded-xl, hairline-weak ring, `card` fill; rows px 12 py 10 split by
+/// hairlines) of a 15 pt sparkles glyph, the title 13/20 semibold and the
+/// subtitle 12/16 secondary. No chevron: the whole row is the button.
+struct DesktopBotSuggestionsCard: View {
+    @Environment(\.desktopTheme) private var theme
+    @EnvironmentObject private var session: Session
+    @ObservedObject private var prefs = SidebarPrefsModel.shared
+    let bot: Bot
+    let run: (BotSuggestion.Action) -> Void
+
+    @State private var setup: [BotSetupStep]?
+
+    private var items: [BotSuggestion] {
+        BotSuggestions.suggestions(setup: setup, tasks: bot.tasks, waiting: bot.waitingApprovals)
+    }
+
+    var body: some View {
+        Group {
+            if prefs.showSuggestions, !items.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Suggestions")
+                            .font(theme.font(12))
+                            .foregroundStyle(theme.inkTertiary)
+                        Spacer(minLength: 0)
+                        Button {
+                            prefs.setShowSuggestions(session, false)
+                        } label: {
+                            Text("Hide").font(theme.font(12.5)).foregroundStyle(theme.inkSecondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("panel-suggestions-hide")
+                    }
+                    .padding(.horizontal, 2)
+                    VStack(spacing: 0) {
+                        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                            Button { run(item.action) } label: {
+                                HStack(alignment: .top, spacing: 10) {
+                                    DesktopIconView(icon: .sparkles, size: 15)
+                                        .foregroundStyle(theme.inkSecondary)
+                                        .padding(.top, 2)
+                                    VStack(alignment: .leading, spacing: 0) {
+                                        Text(LocalizedStringKey(item.title))
+                                            .font(theme.font(13, .semibold))
+                                            .foregroundStyle(theme.ink)
+                                            .lineLimit(1)
+                                            .frame(height: 20, alignment: .leading)
+                                        Text(subtitle(item))
+                                            .font(theme.font(12))
+                                            .foregroundStyle(theme.inkSecondary)
+                                            .lineLimit(2)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("panel-suggestion.\(item.id)")
+                            if index < items.count - 1 {
+                                Rectangle().fill(theme.hairlineWeak).frame(height: 1)
+                            }
+                        }
+                    }
+                    .background(theme.card, in: RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: theme.radiusXl, style: .continuous).strokeBorder(theme.hairlineWeak, lineWidth: 1))
+                }
+            }
+        }
+        .task(id: "\(bot.id)|\(session.connection != nil)") {
+            setup = (try? await session.settingsClient?.overview(botId: bot.id))?.setup
+        }
+    }
+
+    private func subtitle(_ item: BotSuggestion) -> String {
+        let format = String(localized: String.LocalizationValue(item.subtitle))
+        guard let argument = item.argument else { return format }
+        return String(format: format, argument)
     }
 }

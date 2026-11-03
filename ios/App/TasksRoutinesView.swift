@@ -61,6 +61,10 @@ struct TasksRoutinesView: View {
     @State private var foldersListed = true
     private var foldersSupported: Bool { foldersListed && !session.routineFoldersMissing }
     @StateObject private var folderController = RoutineFolderController()
+    /// 2026-11-03: the desktop's List grouping (src/lib/routine-grouping.ts),
+    /// and the folded sections, kept on this device.
+    @State private var groupBy: RoutineGroupBy = RoutineGroupBy(rawValue: UserDefaults.standard.string(forKey: RoutineGrouping.groupByKey) ?? "") ?? .bot
+    @State private var foldedGroups: Set<String> = Set(UserDefaults.standard.stringArray(forKey: RoutineGrouping.collapsedKey) ?? [])
 
     enum RoutinesSection: Hashable { case routines, logs }
     /// The desktop's Schedule view: List or Calendar (the default).
@@ -234,27 +238,33 @@ struct TasksRoutinesView: View {
             }
             .foregroundStyle(Theme.textPrimary)
             .accessibilityAddTraits(.isHeader)
-            HStack(spacing: 2) {
-                desktopViewButton(.list, "List", "list.bullet")
-                desktopViewButton(.calendar, "Calendar", "calendar")
+            // PageSegment: rounded-lg, hairline/50 border, panel fill, p-0.5
+            HStack(spacing: 0) {
+                desktopViewButton(.list, "List", .list)
+                desktopViewButton(.calendar, "Calendar", .calendarDays)
             }
+            .padding(2)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.card))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.hairline.opacity(0.5), lineWidth: 1))
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(Text("Schedule view"))
         }
     }
 
-    private func desktopViewButton(_ view: ScheduleView, _ title: LocalizedStringKey, _ symbol: String) -> some View {
+    private func desktopViewButton(_ view: ScheduleView, _ title: LocalizedStringKey, _ icon: DesktopIcon) -> some View {
         let on = section == .routines && scheduleView == view
         return Button {
             section = .routines
             scheduleView = view
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: symbol).font(.system(size: 12))
-                Text(title).font(Theme.font(12.5))
+                DesktopIconView(icon: icon, size: 14)
+                Text(title).font(Theme.font(12))
             }
             .foregroundStyle(on ? Theme.textPrimary : Theme.textSecondary)
             .padding(.horizontal, 10)
             .frame(minHeight: 32)
-            .background(RoundedRectangle(cornerRadius: 8).fill(on ? Theme.card : Color.clear))
+            .background(RoundedRectangle(cornerRadius: 6).fill(on ? Theme.cardRaised : Color.clear))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -271,14 +281,20 @@ struct TasksRoutinesView: View {
                     ForEach(visibleBots) { bot in Text(verbatim: bot.name).tag(RoutineBotFilter(botId: bot.id)) }
                 } label: { Label("Filter by bot", systemImage: "line.3.horizontal.decrease.circle") }
                 .pickerStyle(.menu)
+                Picker(selection: $groupBy) {
+                    Text("Bot").tag(RoutineGroupBy.bot)
+                    Text("Folder").tag(RoutineGroupBy.folder)
+                    Text("None").tag(RoutineGroupBy.none)
+                } label: { Text("Group by") }
+                .pickerStyle(.menu)
                 if organization { scopeFilters }
                 if seenAllowed {
                     Button("Mark all as read", systemImage: "checkmark.circle") { Task { await markAllSeen() } }
                 }
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: "line.3.horizontal.decrease").font(.system(size: 12))
-                    Text("Filters").font(Theme.font(12.5))
+                    DesktopIconView(icon: .slidersHorizontal, size: 15)
+                    Text("Filters").font(Theme.font(12, .medium))
                 }
                 .foregroundStyle(Theme.textPrimary)
                 .padding(.horizontal, 10)
@@ -289,7 +305,7 @@ struct TasksRoutinesView: View {
             Button {
                 section = section == .logs ? .routines : .logs
             } label: {
-                Image(systemName: "list.bullet.rectangle").font(.system(size: 13))
+                DesktopIconView(icon: .list, size: 16)
                     .foregroundStyle(section == .logs ? Theme.accent : Theme.textPrimary)
                     .frame(width: 32, height: 32)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.hairline, lineWidth: 0.5))
@@ -449,6 +465,7 @@ struct TasksRoutinesView: View {
         }
         .refreshable { await reload() }
         .onValueChange(of: botFilter) { _ in routineFilter = nil }
+        .onValueChange(of: groupBy) { _ in persistGroupBy() }
         .onValueChange(of: scopeQuery) { query in
             routineFilter = nil
             if organization {
@@ -561,15 +578,18 @@ struct TasksRoutinesView: View {
         // 2026-10-28: routines in no folder stay in "Routines" (every bot
         // mixed, as before); each folder follows as its own section, the
         // bot's order, one bot after another when the list shows them all.
-        let groups = folderGroups
-        Section(desktop ? "" : "Routines") {
+        if desktop {
+            desktopGroupedContent
+        }
+        let groups: [RoutineFolderGroup] = desktop ? [] : folderGroups
+        if !desktop {
+        Section("Routines") {
             let loose = groups.first?.routines ?? []
             if loose.isEmpty && groups.count == 1 && !loading {
                 EmptyStateView("No routines", systemImage: "calendar.badge.plus", description: Text("Schedule recurring or one-time agent work."))
             }
-            ForEach(loose) { routine in
-                if desktop { desktopRoutineRow(routine) } else { routineRow(routine) }
-            }
+            ForEach(loose) { routine in routineRow(routine) }
+        }
         }
         ForEach(groups.dropFirst()) { group in
             if let folder = group.folder, let botId = group.botId {
@@ -598,6 +618,142 @@ struct TasksRoutinesView: View {
         if !desktop {
             RoutineTriggersSection(hooks: triggers, baseURL: triggerBaseURL, busyId: triggerBusy) { hook in
                 Task { await toggleTrigger(hook) }
+            }
+        }
+    }
+
+    // MARK: The desktop's grouped List (RoutineGroupedList.tsx)
+
+    private func fold(_ key: String) {
+        if foldedGroups.contains(key) { foldedGroups.remove(key) } else { foldedGroups.insert(key) }
+        UserDefaults.standard.set(Array(foldedGroups), forKey: RoutineGrouping.collapsedKey)
+    }
+
+    private func persistGroupBy() {
+        UserDefaults.standard.set(groupBy.rawValue, forKey: RoutineGrouping.groupByKey)
+    }
+
+    /// "N running", "N failing": the desktop's routines.group.* with {count}.
+    private func countWord(_ key: String.LocalizationValue, _ count: Int) -> String {
+        String(format: String(localized: key), String(count))
+    }
+
+    /// A section header as the sidebar draws them: the chevron in the gutter,
+    /// the lead (avatar or folder), the name, a count, then the live status.
+    private func groupHeader(key: String, name: String, count: Int, strong: Bool, lead: some View, running: Int = 0, failing: Int = 0, createFor botId: String? = nil) -> some View {
+        let folded = foldedGroups.contains(key)
+        return HStack(spacing: 0) {
+            Button { withAnimation(.snappy) { fold(key) } } label: {
+                HStack(spacing: 6) {
+                    DesktopIconView(icon: .chevronRight, size: 12)
+                        .rotationEffect(.degrees(folded ? 0 : 90))
+                        .frame(width: 16, height: 16)
+                    lead
+                    Text(verbatim: name)
+                        .font(Theme.font(strong ? 13 : 12, strong ? .medium : .regular))
+                        .lineLimit(1)
+                    Text(verbatim: "\(count)").font(Theme.font(11)).monospacedDigit().foregroundStyle(Theme.textTertiary)
+                    if running > 0 {
+                        Text(verbatim: "· " + countWord("%@ running", running)).font(Theme.font(11)).foregroundStyle(Theme.success)
+                    }
+                    if failing > 0 {
+                        Text(verbatim: "· " + countWord("%@ failing", failing)).font(Theme.font(11)).foregroundStyle(Theme.warning)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(Theme.textSecondary)
+                .frame(minHeight: strong ? 36 : 30)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(Text(folded ? "Collapsed" : "Expanded"))
+            .accessibilityIdentifier("routine-group.\(key)")
+            if let botId {
+                Button { quickSlot = AutomationsSlot(at: RoutineScheduleForm.nextHour(), botId: botId) } label: {
+                    DesktopIconView(icon: .plus, size: 14)
+                        .foregroundStyle(Theme.textTertiary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(String(format: String(localized: "New routine for %@"), name)))
+            }
+        }
+        .textCase(nil)
+    }
+
+    private func botAvatar(_ botId: String) -> some View {
+        Group {
+            if let bot = session.state.bot(botId) {
+                BotMascotView(bot: bot, size: 20, state: .idle, animated: false)
+            } else {
+                DesktopIconView(icon: .bot, size: 12)
+                    .foregroundStyle(Theme.textTertiary)
+                    .frame(width: 20, height: 20)
+                    .background(Circle().fill(Theme.cardRaised))
+            }
+        }
+        .frame(width: 20, height: 20)
+    }
+
+    @ViewBuilder
+    private var desktopGroupedContent: some View {
+        let shown = botFilter.routines(routines)
+        let order = RoutineGrouping.sidebarOrder(visibleBots)
+        if shown.isEmpty {
+            Section {
+                if !loading {
+                    VStack(spacing: 8) {
+                        DesktopIconView(icon: .calendarClock, size: 20).opacity(0.6)
+                        Text("No routines")
+                    }
+                    .font(Theme.font(13))
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(24)
+                }
+            }
+        } else if groupBy == .none {
+            Section { ForEach(shown) { desktopRoutineRow($0) } }
+        } else if groupBy == .folder {
+            ForEach(RoutineGrouping.byFolder(shown, folders: folders, botOrder: order)) { group in
+                let key = RoutineGrouping.folderKey(group.folder)
+                Section {
+                    if !foldedGroups.contains(key) {
+                        ForEach(group.routines) { desktopRoutineRow($0) }
+                    }
+                } header: {
+                    groupHeader(key: key, name: group.folder ?? String(localized: "No folder"), count: group.routines.count, strong: false,
+                                lead: DesktopIconView(icon: .folder, size: 14).foregroundStyle(Theme.textTertiary))
+                }
+            }
+        } else {
+            ForEach(RoutineGrouping.byBot(shown, botOrder: order)) { group in
+                let key = RoutineGrouping.botKey(group.botId)
+                let health = RoutineGrouping.health(group.routines, runs: runs)
+                let name = session.state.bot(group.botId).map(\.name) ?? group.routines.first?.bot?.name ?? String(localized: "Other bot")
+                Section {
+                    if !foldedGroups.contains(key) {
+                        let sections = RoutineFolders.group(group.routines, order: folders[group.botId] ?? [], botId: group.botId)
+                        ForEach(sections.first?.routines ?? []) { desktopRoutineRow($0) }
+                        ForEach(sections.dropFirst()) { sub in
+                            if let folder = sub.folder {
+                                let folderKey = "\(key)|\(RoutineGrouping.folderKey(folder))"
+                                groupHeader(key: folderKey, name: folder, count: sub.routines.count, strong: false,
+                                            lead: DesktopIconView(icon: .folder, size: 14).foregroundStyle(Theme.textTertiary))
+                                    .padding(.leading, 16)
+                                    .listRowSeparator(.hidden)
+                                if !foldedGroups.contains(folderKey) {
+                                    ForEach(sub.routines) { desktopRoutineRow($0).padding(.leading, 16) }
+                                }
+                            }
+                        }
+                    }
+                } header: {
+                    groupHeader(key: key, name: name, count: group.routines.count, strong: true, lead: botAvatar(group.botId),
+                                running: health.running, failing: health.failing,
+                                createFor: session.state.bot(group.botId) != nil && group.routines.contains(where: \.mayEdit) ? group.botId : nil)
+                }
             }
         }
     }
@@ -631,8 +787,7 @@ struct TasksRoutinesView: View {
                     Capsule().fill(Color.white).frame(width: 26, height: 16).padding(.horizontal, 2)
                 }
                 .frame(width: 44, height: 20)
-                .frame(minWidth: 44, minHeight: 44)
-                .contentShape(Rectangle())
+                .contentShape(Rectangle().inset(by: -12))
             }
             .buttonStyle(.plain)
             .disabled(!canToggle)
@@ -641,6 +796,7 @@ struct TasksRoutinesView: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+        .listRowSeparator(.hidden)
         .onTapGesture { panelRoutine = routine }
         .listRowBackground(panelRoutine?.id == routine.id ? Theme.card : Color.clear)
     }

@@ -736,6 +736,22 @@
         }
       }
     },
+    "%@ failing": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ en échec"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ com falha"
+          }
+        }
+      }
+    },
     "%@ for %@": {
       "localizations": {
         "en": {
@@ -1352,6 +1368,22 @@
         }
       }
     },
+    "%@ running": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ en cours"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ em execução"
+          }
+        }
+      }
+    },
     "%@ saved, %@ load into every conversation: the rest is not being loaded.": {
       "localizations": {
         "en": {
@@ -1424,6 +1456,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Réglages de %@"
+          }
+        }
+      }
+    },
+    "%@ steps done, I'm still going.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ étapes faites, je continue."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ etapas feitas, continuo."
           }
         }
       }
@@ -26310,6 +26358,16 @@
         }
       }
     },
+    "End of turn": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fin de tour"
+          }
+        }
+      }
+    },
     "End voice mode": {
       "localizations": {
         "fr": {
@@ -29095,6 +29153,12 @@
             "state": "translated",
             "value": "Dossier"
           }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pasta"
+          }
         }
       }
     },
@@ -30136,6 +30200,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tela cheia"
+          }
+        }
+      }
+    },
+    "Full-duplex conversation": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversation en duplex"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conversa em duplex"
           }
         }
       }
@@ -31313,7 +31393,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Grouper par"
+            "value": "Regrouper par"
           }
         },
         "pt-BR": {
@@ -32670,6 +32750,16 @@
         }
       }
     },
+    "How long a pause ends what you say. An unfinished sentence always gets more time.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le temps de pause qui termine ce que vous dites. Une phrase inachevée a toujours plus de temps."
+          }
+        }
+      }
+    },
     "How much loads each turn": {
       "localizations": {
         "en": {
@@ -32913,7 +33003,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Je n'ai pas pu enregistrer cette décision. Réessaie."
+            "value": "Je n'ai pas pu enregistrer cette décision. Réessayez."
           }
         }
       }
@@ -42470,6 +42560,22 @@
         }
       }
     },
+    "New routine for %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouvelle routine pour %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nova rotina para %@"
+          }
+        }
+      }
+    },
     "New section": {
       "localizations": {
         "en": {
@@ -43869,7 +43975,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucun dossier"
+            "value": "Sans dossier"
           }
         },
         "pt-BR": {
@@ -44118,6 +44224,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pas de campagnes marketing, pas de composition en masse, pas de numéros d'urgence (911 et assimilés)."
+          }
+        }
+      }
+    },
+    "No marketplace yet. Add one in Capabilities > Sources.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune marketplace pour l'instant. Ajoutez-en une dans Capacités > Sources."
           }
         }
       }
@@ -45637,13 +45753,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucune"
+            "value": "Aucun"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nenhuma"
+            "value": "Nenhum"
           }
         }
       }
@@ -45990,6 +46106,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Non attribué à vous : connectez votre propre compte ou ajoutez votre clé."
+          }
+        }
+      }
+    },
+    "Not heard:": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non entendu :"
           }
         }
       }
@@ -48107,7 +48233,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sur un serveur d'organisation, le mode vocal parle à un bot à la fois : ouvre la conversation d'un bot pour l'appeler."
+            "value": "Sur un serveur d'organisation, le mode vocal parle à un bot à la fois : ouvrez la conversation d'un bot pour l'appeler."
           }
         }
       }
@@ -50143,7 +50269,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ouvre cette conversation pour lire la compétence complète avant de l'activer. Tu peux dire non maintenant pour la refuser."
+            "value": "Ouvrez cette conversation pour lire la compétence complète avant de l'activer. Vous pouvez dire non maintenant pour la refuser."
           }
         }
       }
@@ -51026,6 +51152,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Outra"
+          }
+        }
+      }
+    },
+    "Other bot": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autre bot"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Outro bot"
           }
         }
       }
@@ -52352,6 +52494,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Path in the result"
+          }
+        }
+      }
+    },
+    "Patient": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Patient"
           }
         }
       }
@@ -62583,7 +62735,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Affichage de l'horaire"
+            "value": "Vue de l'horaire"
           }
         },
         "pt-BR": {
@@ -65348,6 +65500,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Shop Pay e Link são carteiras que você já tem. O Sagax pede um cartão de uso único só depois que você aprova a compra, pela ferramenta de linha de comando da carteira conectada no seu computador. O site não recebe o número salvo, e o bot nunca o vê."
+          }
+        }
+      }
+    },
+    "Short": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Court"
           }
         }
       }
@@ -74821,7 +74983,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "La voix n'a pas passé. La réponse est dans la conversation."
+            "value": "La voix n'a pas passé. La réponse est dans le chat."
           }
         }
       }

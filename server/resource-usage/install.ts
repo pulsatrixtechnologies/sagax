@@ -15,7 +15,7 @@ import { resolveTailcatBinary } from "../tailcat-bin.ts";
 import { configuredHosts } from "../terminal-install.ts";
 import type { TerminalAccess } from "../terminal-resources/types.ts";
 import type { AppConfig } from "../config.ts";
-import { prepareVpsSsh } from "../vps-ssh.ts";
+import { prepareVpsSsh } from "../computer/vps-ssh.ts";
 import { createResourceSamplers } from "./sampler.ts";
 import { containerSource, localSource, sshSource, tailcatSource } from "./sources.ts";
 import { resolveResourceTarget, type ResourceHostEntry, type ResourceSessionEntry, type ResourceTargetDeps } from "./targets.ts";

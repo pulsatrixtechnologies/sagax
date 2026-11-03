@@ -287,7 +287,7 @@ export function ownDestinationCall(input: {
 }
 
 // 2026-10-19 (prod 0.5.27, then #810 follow-up): computer_select
-// ("sagax-computer", server/auto-computer.ts) only chooses among the places
+// ("sagax-computer", server/computer/auto-computer.ts) only chooses among the places
 // Sagax already mounted for this turn as one person's own: their cloud
 // computer, their own computer, its Local VM, the built-in browser. There is
 // no menu for the person any more: the bot decides where it works. So when

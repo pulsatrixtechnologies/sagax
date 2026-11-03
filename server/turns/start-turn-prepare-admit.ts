@@ -275,7 +275,7 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
   // the person's computer when connected, else the cloud. A routine starts
   // in the cloud; routinesAllowed only permits an explicit computer_select
   // to this_computer. A thread opened with a workspace starts there when
-  // allowed (server/auto-computer.ts).
+  // allowed (server/computer/auto-computer.ts).
   const turnAutoWanted = turnWorks.auto ? autoWorkspaceWanted(state.bot, state.threadId) : null;
   const turnAutoStart = turnWorks.auto && IDENTITY.kind === "perspicax" && state.turnPrincipal ? autoStartTarget({
     wanted: turnAutoWanted,

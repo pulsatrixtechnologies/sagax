@@ -8,7 +8,7 @@
 // runners are injected; this module never imports index.ts.
 import { z } from "zod";
 import { signTurnHandle } from "../agent-api.ts";
-import { parseAutoComputerTarget } from "../auto-computer.ts";
+import { parseAutoComputerTarget } from "../computer/auto-computer.ts";
 import { createdByBotMark, type BotCreationRefusal } from "../bot-creation.ts";
 import { validateBotCwd } from "../bot-cwd.ts";
 import { recordedBotOwner } from "../bot-owner.ts";
@@ -654,7 +654,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
       const target = store.bot(toBotId);
       if (!target) return json(res, 404, { error: "no such bot" });
       // workspace: where a thread of this bot on Auto starts (sub-agents,
-      // server/auto-computer.ts). Checked again at each of its turns.
+      // server/computer/auto-computer.ts). Checked again at each of its turns.
       const autoWorkspace = body.workspace === undefined || body.workspace === null || body.workspace === "" ? null : parseAutoComputerTarget(body.workspace);
       if (body.workspace !== undefined && body.workspace !== null && body.workspace !== "" && !autoWorkspace) {
         return json(res, 400, { error: "workspace must be this_computer, browser, cloud or local_vm" });

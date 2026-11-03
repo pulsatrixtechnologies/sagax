@@ -180,7 +180,7 @@ After:
 ## Tests
 
 `server/bot-attachment.test.ts` (path mapping, every supported type, refusals),
-`server/container-exec.test.ts` (command line, exit codes, time limit, clipping),
+`server/computer/container-exec.test.ts` (command line, exit codes, time limit, clipping),
 `server/index.test.ts` (attach, serve only through the message, refusals, per-turn cap,
 no VM), `server/drivers/agents-proxy.test.ts` (tool list, request bodies, failure
 wording), and `src/components/AttachmentGallery.test.ts` (bot attachments become private

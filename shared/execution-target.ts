@@ -27,7 +27,7 @@ export function toolExecutionTarget(toolName: string, place?: string | null): To
 }
 
 /** The MCP server computer_select is mounted under (Auto Works on). Keep in
- * sync with AUTO_COMPUTER_MCP_NAME in server/auto-computer.ts. */
+ * sync with AUTO_COMPUTER_MCP_NAME in server/computer/auto-computer.ts. */
 export const AUTO_COMPUTER_SERVER = "sagax-computer";
 
 export type SelectedComputer = "cloud" | "this_computer" | "local_vm" | "browser";

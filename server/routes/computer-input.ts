@@ -1,5 +1,5 @@
 // The phone drives a bot's computer while the person holds control
-// (server/computer-input.ts has the event model and the commands).
+// (server/computer/computer-input.ts has the event model and the commands).
 //
 //   POST /api/bots/:id/computer/input      { events: [...], controlLeaseId? } -> { ok, applied }
 //   GET  /api/bots/:id/computer/clipboard  ?controlLeaseId=                   -> { text }
@@ -23,7 +23,7 @@ import {
   decodeClipboard,
   inputCommands,
   inputSummary,
-} from "../computer-input.ts";
+} from "../computer/computer-input.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

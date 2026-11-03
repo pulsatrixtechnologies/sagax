@@ -866,7 +866,7 @@ export class CredentialVault {
 
   /** Fill a granted field into the computer's focused form control. No page
    * origin check: the person already allowed the login for this bot. The
-   * caller types the value (server/computer-credential-fill.ts) and must
+   * caller types the value (server/computer/computer-credential-fill.ts) and must
    * never put it in a tool result, transcript, memory or log. */
   async resolveForComputerFill(
     principalId: string,

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { vpsContainerName } from "./vps-computer.ts";
+import { vpsContainerName } from "./computer/vps-computer.ts";
 
 const temporary: string[] = [];
 

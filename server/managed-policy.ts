@@ -69,7 +69,7 @@ export function computerKindForResource(resource: string): ComputerKind | undefi
 /** On an organization server bots never use the server's own machine: not
  * its screen ("this computer") and not a local virtual machine on it. A
  * person's computer is reached through their own desktop app instead
- * (server/user-computers.ts). */
+ * (server/computer/user-computers.ts). */
 export const HOST_COMPUTER_REFUSAL = "On an organization server, bots never use the server's own computer or a virtual machine on it. They use the computer of the person who asks, through the Sagax desktop app on that computer: Settings > Organization, the row \"This computer for your bots\" (French: \"Cet ordinateur pour vos bots\"). When that row says the server does not accept computer access yet, an administrator turns it on in the server's settings.";
 const HOST_KINDS: ReadonlySet<ComputerKind> = new Set(["thisComputer", "localVm"]);
 

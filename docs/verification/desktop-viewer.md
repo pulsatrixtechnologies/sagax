@@ -61,7 +61,7 @@ upstream rejection/timeouts, and stripping workspace credentials from the
 upstream request:
 
 ```sh
-pnpm exec vitest run server/routes/desktop-viewer.test.ts server/container-computer.test.ts server/request-auth.test.ts server/vps-computer.test.ts
+pnpm exec vitest run server/routes/desktop-viewer.test.ts server/computer/container-computer.test.ts server/request-auth.test.ts server/computer/vps-computer.test.ts
 pnpm exec vitest run scripts/testing/verification-docs.test.ts
 ```
 

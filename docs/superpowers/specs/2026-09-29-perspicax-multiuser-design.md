@@ -308,7 +308,7 @@ Ordre de résolution pour un tour (`server/engine-credentials.ts`): engine absen
 
 ### Ordinateurs et VM
 
-- Les VM locales passent par un runtime de conteneurs (`server/container-computer.ts`: `docker`, `podman`, `container`). L'image du serveur n'en a pas, et on ne lui donne pas le socket Docker (document du 2026-09-28, « risque trop grand »). En organisation, les bots n'ont donc pas de VM locale dans les tranches 1 à 8; le formulaire de création ne propose que ce qui existe sur le serveur (dossier du bot, navigateur sans écran).
+- Les VM locales passent par un runtime de conteneurs (`server/computer/container-computer.ts`: `docker`, `podman`, `container`). L'image du serveur n'en a pas, et on ne lui donne pas le socket Docker (document du 2026-09-28, « risque trop grand »). En organisation, les bots n'ont donc pas de VM locale dans les tranches 1 à 8; le formulaire de création ne propose que ce qui existe sur le serveur (dossier du bot, navigateur sans écran).
 - Le serveur comme VM derrière `computer:use` (décision 10) et le conteneur par propriétaire (décision 8) restent des tranches ultérieures, sur un runtime séparé.
 - Tant que tous les bots partagent le conteneur et l'utilisateur `maus`, un shell en accès complet pourrait lire l'environnement d'un autre tour (`/proc/<pid>/environ`) et donc une clé. En organisation, l'accès complet sans carte est refusé aux bots des membres jusqu'au conteneur par propriétaire (T15).
 

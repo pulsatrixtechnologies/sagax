@@ -1,5 +1,5 @@
 // Settings > Computer: scheduled update and disk saver of the bot's computer
-// (server/computer-care.ts), for the same computer /api/computer/status
+// (server/computer/computer-care.ts), for the same computer /api/computer/status
 // manages: the signed-in person's own server environment on an
 // organization server, this computer's Local VM on a personal one (its
 // owner only).
@@ -27,7 +27,7 @@ import {
   type DiskSaverTarget,
   type MaintenanceScheduler,
   type MaintenanceStore,
-} from "../computer-care.ts";
+} from "../computer/computer-care.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
 

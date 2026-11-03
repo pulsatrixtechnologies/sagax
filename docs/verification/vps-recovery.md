@@ -3,7 +3,7 @@
 Run the isolated regression fixtures:
 
 ```sh
-pnpm exec vitest run server/vps-routing.test.ts server/vps-computer.test.ts server/vps-computer.runner.test.ts server/vps-ssh.test.ts server/vps-container-mcp.test.ts server/mcp/mcp-bridge.test.ts server/vps-inventory.test.ts server/kill-tree.test.ts
+pnpm exec vitest run server/vps-routing.test.ts server/computer/vps-computer.test.ts server/computer/vps-computer.runner.test.ts server/computer/vps-ssh.test.ts server/vps-container-mcp.test.ts server/mcp/mcp-bridge.test.ts server/vps-inventory.test.ts server/kill-tree.test.ts
 ```
 
 `server/vps-routing.test.ts` launches the real server and a fake engine in a temporary home.

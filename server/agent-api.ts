@@ -139,7 +139,7 @@ export const AGENT_NAME_MAX = 80;
 export const AGENT_DESCRIPTION_MAX = 1_000;
 export const ENTRY_TEXT_MAX = 16_000;
 export const REPLY_MAX_CHARS = 32_000;
-/** create_agent's workspace: where its Auto turns start (server/auto-computer.ts). */
+/** create_agent's workspace: where its Auto turns start (server/computer/auto-computer.ts). */
 export type AgentWorkspace = "this_computer" | "browser" | "cloud" | "local_vm";
 const AGENT_WORKSPACES: readonly AgentWorkspace[] = ["this_computer", "browser", "cloud", "local_vm"];
 /** create_agent's idle_hours (server/temporary-agents.ts). */

@@ -171,7 +171,7 @@ export type RuntimeEvent = RuntimeEventBase &
          * summary, tool title, or argv. Absent when either value is unknown. */
         command?: { command: string; cwd: string };
         /** 2026-10-21 (parité R10, ligne 80): the app of this Mac a screen
-         * action acts on, as the SERVER read it (server/computer-app.ts),
+         * action acts on, as the SERVER read it (server/computer/computer-app.ts),
          * set only by the bus's publish gate; the bus drops any value an
          * adapter put there. */
         screenApp?: { label: string; bundleId: string; team: string };

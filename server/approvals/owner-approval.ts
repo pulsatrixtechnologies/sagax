@@ -96,7 +96,7 @@ export interface RuleCall {
   cwd?: string;
   /** 2026-10-21 (parité R10, ligne 80): the app a screen action of the
    * person's own computer acts on, as the SERVER read it from the call's
-   * process id (server/computer-app.ts): its name, bundle id and signing
+   * process id (server/computer/computer-app.ts): its name, bundle id and signing
    * team, never from the call's arguments.
    * Set only for the person's own turn on their own computer. */
   app?: ScreenAppIdentity;

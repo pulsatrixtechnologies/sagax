@@ -24,7 +24,7 @@ import type { IncomingMessage, Server } from "node:http";
 import { Socket } from "node:net";
 import type { Duplex } from "node:stream";
 
-import { localVmDesktopSpec } from "./container-computer.ts";
+import { localVmDesktopSpec } from "./computer/container-computer.ts";
 import { desktopBridgeRegistration, desktopSystemInfo, type DesktopBridgeOperation, type DesktopBridges } from "./desktop-bridge.ts";
 import type { DesktopTunnels } from "./desktop-egress.ts";
 import type { DesktopTerminals } from "./desktop-terminal.ts";

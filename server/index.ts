@@ -148,10 +148,10 @@ import {
   provenRequestPerson,
   SharedComputers,
   sharedComputerOperation,
-} from "./shared-computers.ts";
+} from "./computer/shared-computers.ts";
 import { publishPersonalCopy, readPersonalCopy } from "./personal-copy.ts";
-import { createUserComputerRouter } from "./user-computers.ts";
-import { SharedComputerControl } from "./shared-computer-control.ts";
+import { createUserComputerRouter } from "./computer/user-computers.ts";
+import { SharedComputerControl } from "./computer/shared-computer-control.ts";
 import {
   createCoordinator,
   type ComposedTurn,
@@ -351,8 +351,8 @@ import {
   roomTurnTimeoutMessage
 } from "./room-turn-timeout.ts";
 import { roomTurnEnd } from "./room-turn-end.ts";
-import * as boat from "./boat.ts";
-import { cloudComputerRpc } from "./cloud-computer-tools.ts";
+import * as boat from "./computer/boat.ts";
+import { cloudComputerRpc } from "./computer/cloud-computer-tools.ts";
 import {
   chartRenderer,
   compileChart,
@@ -381,7 +381,7 @@ import {
 } from "./data/scope.ts";
 import { DataFailure } from "./data/types.ts";
 import { DATA_DOWNLOADS_DIR } from "./data/engine.ts";
-import { TeamComputers, teamComputerOwner, type TeamComputerRecord } from "./team-computers.ts";
+import { TeamComputers, teamComputerOwner, type TeamComputerRecord } from "./computer/team-computers.ts";
 import { instructionsLead } from "../shared/instructions-lead.ts";
 import {
   isEffortLevel,
@@ -410,8 +410,8 @@ import {
 import { reapOrphanEngineGroups } from "./engine-groups.ts";
 import { BOT_ACTIVITY_WINDOW_MS as SUBAGENT_SWEEP_WINDOW_MS } from "../shared/bot-activity.ts";
 import type { TeamComputersPayload } from "../shared/team-computer.ts";
-import { boatCreateRecoverySnapshot, retireDeletedBoatCreate } from "./boat-create-idempotency.ts";
-import { boatDeletionSnapshot } from "./boat-delete-journal.ts";
+import { boatCreateRecoverySnapshot, retireDeletedBoatCreate } from "./computer/boat-create-idempotency.ts";
+import { boatDeletionSnapshot } from "./computer/boat-delete-journal.ts";
 import { liveCardKind, liveDecisionRefusal, liveProposal } from "../shared/live-approval.ts";
 import {
   boatAccountResourceChangeError,
@@ -484,8 +484,8 @@ import {
   VM_WORKSPACE_GUEST,
   type LocalVmTarget,
   type Runtime
-} from "./container-computer.ts";
-import { LocalVmAutoStarter } from "./local-vm-auto.ts";
+} from "./computer/container-computer.ts";
+import { LocalVmAutoStarter } from "./computer/local-vm-auto.ts";
 import {
   cacheUntilConfigChanges,
   ensureDirs,
@@ -554,7 +554,7 @@ import {
   openCodeProviderKeys
 } from "./config.ts";
 import { sweepThreadEventLogsPaced, type ThreadLogRetentionCandidate } from "./thread-retention.ts";
-import { ComputerControl } from "./computer-control.ts";
+import { ComputerControl } from "./computer/computer-control.ts";
 import { augmentedPath, resetPathCache } from "./env-path.ts";
 import { registerEnginesBinDir } from "./engine-install.ts";
 import {
@@ -678,7 +678,7 @@ import {
   mcpAllowKey,
   parseToolId
 } from "../shared/approval-describe.ts";
-import { ComputerAppReader } from "./computer-app.ts";
+import { ComputerAppReader } from "./computer/computer-app.ts";
 import { appRuleOffered } from "../shared/computer-app.ts";
 import { proposalReplacements } from "./proposal-budget.ts";
 import { memberTeamSetupRefusal, TEAM_SETUP_DESKTOP_MESSAGE, TEAM_SETUP_DESKTOP_ONLY } from "./team-setup-review.ts";
@@ -922,7 +922,7 @@ import {
 } from "./send-idempotency.ts";
 import { EventBus, withoutPrivateFields } from "./harness/bus.ts";
 import { ProviderRegistry } from "./harness/registry.ts";
-import { ManagedDesktopProviders } from "./managed-desktop.ts";
+import { ManagedDesktopProviders } from "./computer/managed-desktop.ts";
 import { wasOldestThread } from "./main-thread.ts";
 import {
   HOST_COMPUTER_REFUSAL,
@@ -966,7 +966,7 @@ import {
   type ModelSwitches
 } from "../shared/offered-models.ts";
 import { createModelSwitchRoutes } from "./routes/model-switches.ts";
-import { computerEngineMoveText, removedComputerInstanceIds, writeComputerEngineMoveLines } from "./computer-engine-removal.ts";
+import { computerEngineMoveText, removedComputerInstanceIds, writeComputerEngineMoveLines } from "./computer/computer-engine-removal.ts";
 import {
   cancelPeerApprovalsFor,
   cancelPeerApprovalsForThread,
@@ -1191,17 +1191,17 @@ import {
 import { lightenColdPrompt } from "./cold-prompt-budget.ts";
 import { shellTimeoutHookResult } from "./shell-timeout-hint.ts";
 import { readCuaConnection, readCuaUnavailableReason, gatedLocalComputer } from "./local-computer.ts";
-import { launchedByDesktopApp, listenForDesktopComputer } from "./desktop-computer.ts";
+import { launchedByDesktopApp, listenForDesktopComputer } from "./computer/desktop-computer.ts";
 import {
   discoverExistingPerBotLocalVms,
   discoverExistingPoolLocalVms,
   localVmInventoryEntry,
   shouldArmLocalVmIdle
-} from "./local-vm-inventory.ts";
-import { localVmStopReason, recordLocalVmIdleStop } from "./local-vm-stop-reason.ts";
-import { LocalVmIdleTimer } from "./local-vm-idle.ts";
-import { LocalVmLease, LocalVmLeasePool } from "./local-vm-lease.ts";
-import { LocalVmSeatPool, type LocalVmSeatHolder } from "./local-vm-seat-pool.ts";
+} from "./computer/local-vm-inventory.ts";
+import { localVmStopReason, recordLocalVmIdleStop } from "./computer/local-vm-stop-reason.ts";
+import { LocalVmIdleTimer } from "./computer/local-vm-idle.ts";
+import { LocalVmLease, LocalVmLeasePool } from "./computer/local-vm-lease.ts";
+import { LocalVmSeatPool, type LocalVmSeatHolder } from "./computer/local-vm-seat-pool.ts";
 import { TurnReplyRepeats } from "./turn-reply-repeats.ts";
 import { dispatchLoopStop, makeLoopStopSubscriber } from "./loop-detector.ts";
 import {
@@ -1226,7 +1226,7 @@ import { routineRunCard } from "./routines/routine-run-card.ts";
 import { routineReportOutcome, routineRunReportable } from "./routines/routine-report.ts";
 import type { HeadlessBot } from "./headless-cli.ts";
 import { createHeadlessTaskRunner } from "./headless-task-runner.ts";
-import * as vps from "./vps-computer.ts";
+import * as vps from "./computer/vps-computer.ts";
 import { runAsRefusal, type RunAsChooser, type RunAsPerson } from "./routines/routine-run-as.ts";
 import type { RoutineScopeCaller, RoutineScopeDeps, RoutineScopeFacts } from "./routines/routine-scope.ts";
 import { recordRoutineChange, recordRoutineToggle, routineToggleForViewer } from "./routines/routine-chat-events.ts";
@@ -1271,13 +1271,13 @@ import {
   describeBrowserEngine,
   setBrowserViewport
 } from "./browser/browser-engine.ts";
-import { createScreenFrameSource, type ScreenCapture } from "./screen-frame-source.ts";
+import { createScreenFrameSource, type ScreenCapture } from "./computer/screen-frame-source.ts";
 import {
   screenFrameHash,
   screenSurfaceForTool,
   screenTouchingTool,
   settledFrameIsNews
-} from "./screen-frame-gate.ts";
+} from "./computer/screen-frame-gate.ts";
 import { RoutineRequestService } from "./routines/routine-requests.ts";
 import { directApply, UNDO_STALE, type DirectApply } from "./direct-apply.ts";
 import { createAgentCard } from "./chat-widgets.ts";
@@ -1390,8 +1390,8 @@ import { readPublishedTeam, writePublishedTeam } from "./published-teams.ts";
 import { OrgLibrary } from "./org/org-library.ts";
 import { createTeamBackup, importTeamBackup } from "./team-backup.ts";
 import { shouldMountLocalComputer } from "./local-routing.ts";
-import { autoLocalVmAttachable, type ContainerComputerStatus } from "./container-computer.ts";
-import { startAutoVmClaim, type AutoVmClaimSlot, type AutoVmClaimTable } from "./auto-vm-claims.ts";
+import { autoLocalVmAttachable, type ContainerComputerStatus } from "./computer/container-computer.ts";
+import { startAutoVmClaim, type AutoVmClaimSlot, type AutoVmClaimTable } from "./computer/auto-vm-claims.ts";
 import {
   CONTROL_ACT_WITHIN_MS,
   CONTROL_BUSY,
@@ -1408,7 +1408,7 @@ import {
   computerStoppedWaitingText,
   computerWaitingText,
   type ComputerHolder
-} from "./computer-wait.ts";
+} from "./computer/computer-wait.ts";
 import { modelContextWindow } from "./model-context-window.ts";
 import {
   autoOnlyDestination,
@@ -1993,7 +1993,7 @@ import {
 import { createComputerStatusRoutes, diskStateForFree } from "./routes/computer-status.ts";
 import { createComputerCareRoutes } from "./routes/computer-care.ts";
 import { createComputerWorkingBotsRoutes, HOST_CONTROL_PATH, type WorkingBotsRefusal } from "./routes/computer-working-bots.ts";
-import { workingBots, type WorkingBotHold } from "./computer-working-bots.ts";
+import { workingBots, type WorkingBotHold } from "./computer/computer-working-bots.ts";
 import { createBrowserNetworkRoutes } from "./routes/browser-network.ts";
 import { createMyChromeRoutes } from "./routes/my-chrome.ts";
 import { createTeamLibraryGrokRoutes } from "./routes/team-library-grok.ts";
@@ -2013,7 +2013,7 @@ import {
   oldCheckpointRepos,
   type DiskSaverTarget,
   type MaintainedComputer
-} from "./computer-care.ts";
+} from "./computer/computer-care.ts";
 import { createPluginRoutes, pluginServerName, type InstalledPlugin } from "./routes/plugins.ts";
 import { createMarketplaceRoutes } from "./routes/marketplaces.ts";
 import { createInstallationCapabilityRoutes } from "./routes/installation-capabilities.ts";
@@ -2137,7 +2137,7 @@ import {
 import { turnClockEnabled, turnTimeZone, withTurnClock } from "./turn-clock.ts";
 import { createComputerInputRoutes, createVmScreenshotRoute, type ComputerShell } from "./routes/computer-input.ts";
 import { createComputerTeachRoutes } from "./routes/computer-teach.ts";
-import { ComputerTeachRecordings } from "./computer-teach.ts";
+import { ComputerTeachRecordings } from "./computer/computer-teach.ts";
 import { createLocalComputerAutoRoutes } from "./routes/local-computer-auto.ts";
 import { createUserPreferenceRoutes } from "./routes/user-preferences.ts";
 import { replaceDashes, voiceDashesEnabled, VOICE_DASHES_PREFERENCE } from "../shared/voice-dashes.ts";
@@ -2588,7 +2588,7 @@ import {
   type AutoComputerTarget,
   type AutoStart,
   type FixedWorksOn
-} from "./auto-computer.ts";
+} from "./computer/auto-computer.ts";
 import { parseWorkspaceLine, workspaceLineName } from "../shared/workspace-line.ts";
 import { computerSelectTarget } from "../shared/execution-target.ts";
 import {
@@ -2801,7 +2801,7 @@ const sessions = new SessionRegistry({
 const sharedComputers = new SharedComputers(id => sessions.isLive(id));
 // Organization server: a bot reaches the computer of the person who asks,
 // through that person's own desktop app ("user-desktop"), never the server
-// and never anyone else's (server/user-computers.ts). A per-person server
+// and never anyone else's (server/computer/user-computers.ts). A per-person server
 // sandbox plugs in here as a second provider ("user-sandbox").
 const userComputers = createUserComputerRouter([{
   target: "user-desktop",
@@ -3194,7 +3194,7 @@ type TurnWorkplace = {
   /** The speaker's own attachments still to copy where the tools run. */
   staging: { target: StagingTarget; files: TurnAttachedFile[] } | null;
   /** Works on and, when Auto, the computer the bot chose with
-   * computer_select (server/auto-computer.ts). Absent on a solo server. */
+   * computer_select (server/computer/auto-computer.ts). Absent on a solo server. */
   auto?: AutoComputerState;
   /** The servers mountUserSandbox mounted as the person's environment for
    * this turn (`sagax-environment`, `sagax-desktop`): how the approval path
@@ -6768,7 +6768,7 @@ function userDesktopIntegration(botId: string, threadId: string, generation: str
   };
 }
 
-/** computer_select for one turn ("sagax-computer", server/auto-computer.ts):
+/** computer_select for one turn ("sagax-computer", server/computer/auto-computer.ts):
  * the same stdio proxy, holding only a turn-scoped capability that can do
  * nothing but choose among the computers this turn already may reach. */
 function workplaceIntegration(botId: string, threadId: string, generation: string) {
@@ -8807,7 +8807,7 @@ setInterval(() => {
 }, 10 * 60_000).unref?.();
 const onePassword = new OnePassword({ organization: () => IDENTITY.kind === "perspicax" });
 /** 2026-10-21 (parité R10, ligne 80): the app a screen action of this Mac
- * acts on (server/computer-app.ts), and the turns whose mounted computer is
+ * acts on (server/computer/computer-app.ts), and the turns whose mounted computer is
  * this Mac itself ("this computer"), the only place a process id is ours. */
 const computerApps = new ComputerAppReader();
 const hostScreenTurns = new Map<string, { botId: string; generation: string }>();
@@ -18370,7 +18370,7 @@ void (async () => {
 });
 
 /** The desktop app's own server keeps its Local VM up by itself
- * (server/local-vm-auto.ts): at launch, when a bot needs it, and after a
+ * (server/computer/local-vm-auto.ts): at launch, when a bot needs it, and after a
  * failure with a growing delay. Never on an organization server (the Local
  * VM there lives on each person's computer, electron/local-vm.mjs), a
  * Cloud home, or a self-hosted server without the desktop app. */
@@ -32055,7 +32055,7 @@ ROUTES.push(createBotLibraryRoutes<BotRecord>({
   }
 }));
 // The phone's native remote control of a bot's computer
-// (server/routes/computer-input.ts, server/computer-input.ts): the desktop
+// (server/routes/computer-input.ts, server/computer/computer-input.ts): the desktop
 // the computer panel shows, driven through the same command path its own
 // backend already uses; the person must hold control.
 const computerInputAudited = new Map<string, number>();
@@ -32508,7 +32508,7 @@ ROUTES.push(createComputerStatusRoutes({
 // Update through. The stop itself reuses POST /api/bots/:id/interrupt with its
 // own authorization. A personal server reports the Local VM's lease holder; an
 // organization server reports the signed-in person's own bots with a live turn
-// (server/computer-working-bots.ts, server/routes/computer-working-bots.ts).
+// (server/computer/computer-working-bots.ts, server/routes/computer-working-bots.ts).
 const localComputerManagementRefusal = (auth: RequestAuth): WorkingBotsRefusal | null =>
   (auth.kind === "loopback" ? auth.trust !== "service" : auth.scopes.includes("admin") || adminOrDelegate(auth, "host.shell"))
     ? null
@@ -32564,7 +32564,7 @@ ROUTES.push(createComputerWorkingBotsRoutes({
   })
 }, HOST_CONTROL_PATH));
 // Settings > Computer: scheduled update in a maintenance window and the disk
-// saver (server/computer-care.ts, server/routes/computer-care.ts), for the
+// saver (server/computer/computer-care.ts, server/routes/computer-care.ts), for the
 // same computers as the routes above.
 const computerCare = new MaintenanceStore(join(DATA_DIR, "computer-maintenance.json"));
 /** The shared Local VM is in use: a turn holds it, or a setup action runs. */

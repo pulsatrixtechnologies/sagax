@@ -2550,7 +2550,7 @@ Settings > Security (`MyApprovalRules`, also `rules.owner` and
 ## Advanced approvals: one app, 1Password per request, card photos (2026-10-21, parité R10)
 
 - **One app of this computer** (`shared/computer-app.ts`,
-  `server/computer-app.ts`, `server/approvals/owner-approval.ts` `APP_RULE_TOOL`): a
+  `server/computer/computer-app.ts`, `server/approvals/owner-approval.ts` `APP_RULE_TOOL`): a
   screen action of the host Mac ("this computer", server mount `computer`,
   a desktop or a solo server on macOS, the person's own turn, the same bot
   and live turn generation, never an admin's, a held or an origin card)
@@ -2647,7 +2647,7 @@ Settings > Security (`MyApprovalRules`, also `rules.owner` and
   only". Tests: `server/vault/credential-vault.coffre.test.ts`,
   `server/routes/credential-vault.test.ts`.
 - Not done: a device tool on the phone (row 81): Sagax has no phone tools.
-- Tests: `shared/computer-app.test.ts`, `server/computer-app.test.ts`,
+- Tests: `shared/computer-app.test.ts`, `server/computer/computer-app.test.ts`,
   `server/harness/bus.test.ts` (publish gate), `server/approvals/owner-approval.test.ts`
   (app rules), `server/routes/credential-vault.test.ts` (1Password per
   request, once only, single use), `ios/Tests/CompanionCoreTests/VaultLoginCardTests.swift`.
@@ -5389,13 +5389,13 @@ server's own machine: `ManagedDesktopPolicy` refuses `thisComputer` and
 `localVm` there (`HOST_COMPUTER_REFUSAL`, every claim passes
 `bindTurnComputer`), and the Local VM create/start routes refuse with
 `hostComputerRefusal()`. A bot reaches the computer of the person who asks
-through `server/user-computers.ts`: `speakingPerson` (a person's message or a
+through `server/computer/user-computers.ts`: `speakingPerson` (a person's message or a
 hop carrying it; never a routine), then a provider per target
 (`user-desktop`: that person's desktop app via the owner-scoped `SharedComputers`
 `list(person)` and `request`, for the person `sharedComputerPrincipal` proves; `user-sandbox`: plugs in as a second provider). Not connected, not
 theirs, or no person: the tool answers why. `shared_computer` is never
 pre-allowed for Claude (`agentsAllowedTools`), so the bot's approval mode
-applies. Tests: `server/user-computers.test.ts`,
+applies. Tests: `server/computer/user-computers.test.ts`,
 `electron/server-mode.node-test.mjs`.
 
 A person's preferences on an organization server live per principal
@@ -6625,7 +6625,7 @@ computer use, Local VM), and the engine's own network traffic leaves through
 it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
 `server/desktop-egress.test.ts`, `server/attachment-staging.test.ts`,
 `electron/local-vm.node-test.mjs`, `electron/desktop-bridge.node-test.mjs`,
-`server/local-vm-computer.test.ts` or
+`server/computer/local-vm-computer.test.ts` or
 `scripts/verify/dev/verify-desktop-bridge.ts`:
 
 - Where tools run is decided once per turn by `resolveBotWorkplace` from
@@ -6639,7 +6639,7 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
   the person whose message triggered the turn; a follow-up nobody asked for
   never.
 - Auto picks per step (2026-10-02, routines default 2026-11-01,
-  `server/auto-computer.ts`): a person-asked Auto turn prefers the person's
+  `server/computer/auto-computer.ts`): a person-asked Auto turn prefers the person's
   computer when connected, else the cloud. A routine Auto turn starts in the
   cloud; `routinesAllowed` only permits an explicit `computer_select` to
   `this_computer` or `local_vm`. It mounts `sagax-computer` (`computer_select`,
@@ -6656,7 +6656,7 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
   chip. Workspace fallback notices keep distinct reasons (`offline`,
   `routine-not-allowed`, `routine-default`; `shared/workspace-line.ts`).
   Claude pre-allows only `mcp__sagax-computer`. Rooms are unchanged. Tests:
-  `server/auto-computer.test.ts`, `shared/workspace-line.test.ts`,
+  `server/computer/auto-computer.test.ts`, `shared/workspace-line.test.ts`,
   `server/desktop-bridge.e2e.test.ts`.
 - Auto never becomes the conversation's setting: see "Workspace: Auto
   remembers no place" above. Where a turn worked never drops
@@ -6711,8 +6711,8 @@ it. Keep these rules, each covered by `server/desktop-bridge*.test.ts`,
   (screenshot, get_screen_size, list_apps, click, move_cursor, drag,
   type_text, press_key, scroll). The desktop runs a fixed `cua-driver call`
   as user cua. The allow-list is `electron/local-vm-computer.mjs`, checked
-  again from `server/local-vm-computer.ts` before the call leaves (the two
-  builds cannot import each other; `server/local-vm-computer.test.ts` fails
+  again from `server/computer/local-vm-computer.ts` before the call leaves (the two
+  builds cannot import each other; `server/computer/local-vm-computer.test.ts` fails
   if they disagree). A tool or argument that is not listed is refused.
   Screenshots come back inline. A path, a shell line and the person's own
   screen are not reachable this way. `computer_use` stays the person's own
@@ -8314,7 +8314,7 @@ The Local VM in server mode lives on the person's computer
   `SAGAX_LOCAL_VM_TEST_NAMESPACE` (`server/testing/global-setup.ts`), names
   become `openmausbot-test-<ns>-computer`, labeled and removed at the end;
   a real-named VM is refused in the temp folder (`localVmFolderRefusal`).
-  Tests: `electron/local-vm.node-test.mjs`, `server/local-vm-hygiene.test.ts`,
+  Tests: `electron/local-vm.node-test.mjs`, `server/computer/local-vm-hygiene.test.ts`,
   `server/desktop-bridge-local-vm.test.ts`.
 - The bot sees and drives that VM's desktop with `local_vm` action `use`
   (operation `vm_computer_call`). The Computer tab itself stays a still

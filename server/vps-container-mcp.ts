@@ -4,10 +4,10 @@
 // The piping, drain-safe exit, and dead-transport watchdog live in
 // mcp-bridge.ts, shared with the Local VM entry point.
 import { runMcpBridge } from "./mcp/mcp-bridge.ts";
-import { vpsContainerMcpArgs, vpsDockerArgs } from "./vps-computer.ts";
+import { vpsContainerMcpArgs, vpsDockerArgs } from "./computer/vps-computer.ts";
 import { DATA_DIR } from "./config.ts";
 import { augmentedPath } from "./env-path.ts";
-import { prepareVpsSsh } from "./vps-ssh.ts";
+import { prepareVpsSsh } from "./computer/vps-ssh.ts";
 
 const [alias, containerName] = process.argv.slice(2);
 const sshAlias = alias ?? "";

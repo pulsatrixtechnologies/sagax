@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { MaintenanceStore, type DiskSaverTarget } from "../computer-care.ts";
+import { MaintenanceStore, type DiskSaverTarget } from "../computer/computer-care.ts";
 import { json, readBody } from "../harness/http.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import { createComputerCareRoutes, type ComputerCareRouteDeps } from "./computer-care.ts";

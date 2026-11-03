@@ -23,7 +23,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { localVmDesktopSpec } from "./container-computer.ts";
+import { localVmDesktopSpec } from "./computer/container-computer.ts";
 import { SandboxdVerifier } from "./sandbox/sandboxd-auth.ts";
 import { SandboxService } from "./sandbox/sandboxd-core.ts";
 import { createSandboxdHandler } from "./sandboxd.ts";

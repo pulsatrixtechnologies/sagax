@@ -78,7 +78,7 @@ commands, read again for every command (a revoke holds at the next one):
   (`OPENAI_API_KEY`, `XAI_API_KEY`, `GEMINI_API_KEY`, the workspace keys, the driver's
   own credential names: `engineCommandVariables`): such a variable would move the
   engine itself onto the key. Codex's shell and the other places below still get it;
-- the Local VM's `vm_exec` (`server/container-computer.ts` `containerExec`): a script
+- the Local VM's `vm_exec` (`server/computer/container-computer.ts` `containerExec`): a script
   of exports goes to the shell on stdin (`commandVariablesScript`), and the command
   line holds only `eval "$(cat)"` before the command;
 - the person's own computer through the desktop app on an organization server
@@ -94,7 +94,7 @@ $NAME"). Names a shell or the engines need are refused (`PATH`, `HOME`, `LD_*`,
 `SAGAX_*`, `ANTHROPIC_*`...: `shared/credential-vault.ts` `parseCommandVariable`).
 1Password keys are not exposed as variables (their value is read only at use).
 Tests: `server/vault/credential-command-env.test.ts`, `server/drivers/acp/command-variables.test.ts`,
-`server/drivers/codex.test.ts`, `server/drivers/pi.test.ts`, `server/container-exec.test.ts`,
+`server/drivers/codex.test.ts`, `server/drivers/pi.test.ts`, `server/computer/container-exec.test.ts`,
 `server/desktop-bridge.test.ts`, `electron/desktop-bridge.node-test.mjs`.
 
 Not covered: the cloud computer's `exec` (its provider's API takes a command line only,

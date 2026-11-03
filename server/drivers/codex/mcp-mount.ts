@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import type { McpServerSpec, StdioMcpSpec } from "../../contracts.ts";
 import { USER_SANDBOX_MCP_NAME } from "../../sandbox/user-sandbox-routing.ts";
-import { AUTO_COMPUTER_MCP_NAME } from "../../auto-computer.ts";
+import { AUTO_COMPUTER_MCP_NAME } from "../../computer/auto-computer.ts";
 import { DESKTOP_BRIDGE_MCP_NAME } from "../../../shared/bot-workplace.ts";
 import { SPAWNED_PROXIES } from "../../proxy-paths.ts";
 

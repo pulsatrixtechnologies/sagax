@@ -1,6 +1,6 @@
 // The phone's computer input (parity 13 and 11): gesture -> event
 // translation, batching, typing, and the wire shapes of the input,
-// clipboard and control routes (server/computer-input.ts).
+// clipboard and control routes (server/computer/computer-input.ts).
 import Foundation
 import XCTest
 @testable import CompanionCore

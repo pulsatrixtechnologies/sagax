@@ -3,7 +3,7 @@ import Foundation
 // Wire models and pure input logic for the phone's native computer viewer
 // (visual parity screens 13 and 11). The routes are documented in
 // docs/ios-companion.md "Visual parity routes"; the event shapes mirror
-// server/computer-input.ts `computerInputEventSchema`.
+// server/computer/computer-input.ts `computerInputEventSchema`.
 
 // MARK: - Events
 

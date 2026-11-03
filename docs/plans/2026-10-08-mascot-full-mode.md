@@ -153,9 +153,9 @@ https://community.openai.com/t/custom-chatgpt-avatars-for-voice-mode/1399731 (or
   (allowlisted in `electron/lent-screen-tools.mjs`). Sagax does not use it for "pointing" anywhere.
 - Server mode: the desktop bridge (`electron/desktop-bridge.mjs`, `server/desktop-bridge-tools.ts`)
   exposes `computer_list_tools` / `computer_use` on the person's own screen, outbound only, each action
-  logged in the computer's activity log (action and target only). `server/computer-control.ts`: the
+  logged in the computer's activity log (action and target only). `server/computer/computer-control.ts`: the
   person can take the hands; the bot can only ask (`requestHelp`), actions refused while held.
-  `server/auto-computer.ts`: Works on Auto picks cloud / this_computer / local_vm.
+  `server/computer/auto-computer.ts`: Works on Auto picks cloud / this_computer / local_vm.
 - Approval modes apply to computer actions as to every tool (`approval-mode`, `approval-trusted-mode`).
 
 ### B.4 What "point on the screen" adds

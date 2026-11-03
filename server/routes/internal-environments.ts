@@ -15,10 +15,10 @@ import {
   COMPUTER_SELECT_TOOL,
   selectAutoComputer,
   type AutoComputerState,
-} from "../auto-computer.ts";
+} from "../computer/auto-computer.ts";
 import { MY_CHROME_PROFILE, runMyChromeTool, toolName as browserToolName } from "../browser/my-chrome/pilot.ts";
 import { browserNavigationRefusal } from "../browser/browser-navigation.ts";
-import { pickComputer } from "../computer-selection.ts";
+import { pickComputer } from "../computer/computer-selection.ts";
 import type { Surface } from "../surface.ts";
 
 /** One computer select_computer can offer (selectableComputers in index). */
@@ -44,11 +44,11 @@ import type { PersonalMcpServer } from "../person-connections.ts";
 import { readPersonalCopy } from "../personal-copy.ts";
 import { SANDBOX_CONTROL_REFUSAL } from "../sandbox/sandbox-control.ts";
 import { StdioRelayError } from "../sandbox/sandbox-stdio-mcp.ts";
-import { sharedComputerOperation } from "../shared-computers.ts";
+import { sharedComputerOperation } from "../computer/shared-computers.ts";
 import { SMALL_TALK_CLOUD_REFUSAL } from "../small-talk.ts";
 import { DESKTOP_BRIDGE_MCP_NAME } from "../../shared/bot-workplace.ts";
 import { parseSurface, surfaceLabel } from "../surface.ts";
-import { teamComputerOwner } from "../team-computers.ts";
+import { teamComputerOwner } from "../computer/team-computers.ts";
 import { boundToolResult, readOnHint, type BoundToolTextOptions } from "../tool-output-bound.ts";
 import { USER_SANDBOX_MCP_NAME } from "../sandbox/user-sandbox-routing.ts";
 import { UserSandboxUnavailable } from "../sandbox/user-sandbox-manager.ts";

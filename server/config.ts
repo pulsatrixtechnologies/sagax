@@ -12,7 +12,7 @@ import { normalizeImageGenerationUrl, type ImageGenerationConfig } from "../shar
 import { writeFileAtomic } from "./atomic.ts";
 import { applyStoredEngineEnv } from "./engine-api-keys.ts";
 import { migrateConfigPlaintextKeys, readOnboardingEngineKey } from "./onboarding-engine-key.ts";
-import { withoutComputerEngine } from "./computer-engine-removal.ts";
+import { withoutComputerEngine } from "./computer/computer-engine-removal.ts";
 import { newBotDefaultsSchema, type NewBotDefaults } from "./new-bot-defaults.ts";
 import { loopDetectorConfigSchema, type LoopDetectorConfig } from "./loop-detector.ts";
 import { loopGuardConfigSchema, type LoopGuardConfig } from "./host/loop-guard.ts";

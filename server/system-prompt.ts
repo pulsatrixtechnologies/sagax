@@ -37,7 +37,7 @@ export function userProfileSystemPrompt(profile?: { aboutMe?: string }): string 
  * bot, because its "2h ago" labels drift even when nothing else changed.
  * The phone-call section (server/voice/voice-call-prompt.ts) rides only on the
  * turns of a voice call and the first written turn after it. The Auto
- * workspace rules (server/auto-computer.ts) come and go with the bot's
+ * workspace rules (server/computer/auto-computer.ts) come and go with the bot's
  * Workspace setting and with who speaks; volatile, so neither relaunches. */
 // "reach" (server/turn-reach.ts) follows the speaker and what a feature
 // opened for the conversation: volatile, so neither relaunches.

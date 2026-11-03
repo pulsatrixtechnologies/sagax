@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import { DesktopBridges, desktopBridgeCapability, desktopBridgeOperation, resolveBotWorkplace, type DesktopBridgeRegistration } from "./desktop-bridge.ts";
-import { localVmDesktopSpec } from "./container-computer.ts";
+import { localVmDesktopSpec } from "./computer/container-computer.ts";
 import { desktopToolOperation, handleDesktopBridgeMcp } from "./desktop-bridge-tools.ts";
 import { DEFAULT_BOT_WORKPLACE, parseBotWorkplace, serializeBotWorkplace } from "../shared/bot-workplace.ts";
 

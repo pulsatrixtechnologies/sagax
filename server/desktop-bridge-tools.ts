@@ -6,10 +6,10 @@
 //
 // Never pre-allowed for any engine: every call rides the bot's approval mode
 // (Ask shows a card per call), exactly as the engine's own tools do in solo.
-import { localVmDesktopSpec } from "./container-computer.ts";
+import { localVmDesktopSpec } from "./computer/container-computer.ts";
 import { cleanCommandVariables } from "./vault/credential-command-env.ts";
 import type { DesktopBridgeOperation } from "./desktop-bridge.ts";
-import { localVmComputerCall, localVmComputerCatalogText } from "./local-vm-computer.ts";
+import { localVmComputerCall, localVmComputerCatalogText } from "./computer/local-vm-computer.ts";
 import { boundToolResult, readOnHint, type BoundToolTextOptions } from "./tool-output-bound.ts";
 
 const where = "on the computer of the person you are working for (their own PC, through their Sagax desktop app), like their own terminal";

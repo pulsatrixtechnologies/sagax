@@ -11,7 +11,7 @@ import {
   vpsContainerName,
   type ManagedVpsOwner,
   type VpsCommandRunner,
-} from "./vps-computer.ts";
+} from "./computer/vps-computer.ts";
 
 const CONFIG: AppConfig = { vps: { sshAlias: "production-vps" } };
 const OWNER: ManagedVpsOwner = { botId: "bot-current", name: "Research", inUse: false };

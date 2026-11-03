@@ -20,7 +20,7 @@ import { fixtureApi } from "../../testing/preview-fixture.ts";
 import { fakeVncDesktop } from "../../testing/fake-vnc-desktop.ts";
 import { decodePng } from "../../testing/png.ts";
 import { createServer as createHttpServer } from "node:http";
-import { BASE_IMAGE_DIGEST, CUA_DRIVER_VERSION, IMAGE, IMAGE_LAYER_VERSION, TARGET_LABEL, perBotLocalVmTarget } from "../../../server/container-computer.ts";
+import { BASE_IMAGE_DIGEST, CUA_DRIVER_VERSION, IMAGE, IMAGE_LAYER_VERSION, TARGET_LABEL, perBotLocalVmTarget } from "../../../server/computer/container-computer.ts";
 
 const root = fileURLToPath(new URL("../../..", import.meta.url));
 

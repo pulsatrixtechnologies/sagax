@@ -1,4 +1,4 @@
-// Teach by demonstration on the bot's whole computer (server/computer-teach.ts).
+// Teach by demonstration on the bot's whole computer (server/computer/computer-teach.ts).
 //
 //   GET  /api/bots/:id/computer/teach  -> { recording, steps }
 //   POST /api/bots/:id/computer/teach  { action: "start" }   -> { recording: true }
@@ -14,7 +14,7 @@
 // (routes/computer-input.ts). Admin scope for sessions.
 import { z } from "zod";
 
-import { FOCUSED_WINDOW_COMMAND, type ComputerTeachRecordings } from "../computer-teach.ts";
+import { FOCUSED_WINDOW_COMMAND, type ComputerTeachRecordings } from "../computer/computer-teach.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import type { ComputerShell, ControlState } from "./computer-input.ts";
 import { PASS, type RouteHandler } from "./table.ts";

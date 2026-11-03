@@ -13,7 +13,7 @@ import { commitBotChange, keptRevocation, saveBotsFor } from "./bots-save.ts";
 import { applyHumanIds } from "./channel-membership.ts";
 import { parseToolScope, toolScopeWidens } from "../shared/tool-scope.ts";
 import { ensureSections, readSections, changeEmptySection } from "./section-context.ts";
-import type { TeamComputers } from "./team-computers.ts";
+import type { TeamComputers } from "./computer/team-computers.ts";
 import { removeBotFolder, soulFile, soulHash, writeSoulMirror } from "./bot-folder.ts";
 import { cleanTemporaryAgent, type TemporaryAgent } from "./temporary-agents.ts";
 import { createdByBotMark, type BotCreatedBy } from "./bot-creation.ts";
@@ -35,7 +35,7 @@ import { redactSecretsInText } from "./redact.ts";
 import { AVATAR_FOCUS_CENTER, AVATAR_ZOOM_MIN, botAvatarProfile, clampAvatarFocus, clampAvatarZoom } from "../shared/bot-avatar.ts";
 import { approvalModeFor, isApprovalException, isApprovalMode, modelSwitchNeedsAsk, threadApprovalFields, type ApprovalException } from "../shared/approval-mode.ts";
 import { lastChangeRequestUrl } from "../shared/thread-link.ts";
-import { REMOVED_COMPUTER_DRIVER, type ComputerEngineMove } from "./computer-engine-removal.ts";
+import { REMOVED_COMPUTER_DRIVER, type ComputerEngineMove } from "./computer/computer-engine-removal.ts";
 import type { ProfileRequestChanges } from "../shared/profile-request.ts";
 import type { TaskParallelOf } from "../shared/parallel-tasks.ts";
 import type { SelectedComputer } from "../shared/execution-target.ts";
@@ -142,7 +142,7 @@ export interface TaskRecord extends Omit<WireTask, TaskWireDerivedKeys> {
    * Clients see only whether a pin is an auto pin (WireTask.surfaceAuto). */
   surfaceSource?: "user" | "auto";
   /** Where an Auto turn of this thread starts: the workspace the bot opened
-   * it with (start_thread `workspace`, server/auto-computer.ts). Checked
+   * it with (start_thread `workspace`, server/computer/auto-computer.ts). Checked
    * against what is allowed at every turn; never a pin. */
   autoWorkspace?: SelectedComputer;
   /** Epoch ms a person last wrote here: never a teammate, a routine, a

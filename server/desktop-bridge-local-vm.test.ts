@@ -3,7 +3,7 @@
 // server's own recipe for the desktop to check and fill in.
 import { describe, expect, it } from "vitest";
 
-import { DESKTOP_WORKSPACE_PLACEHOLDER, REAL_CONTAINER } from "./container-computer.ts";
+import { DESKTOP_WORKSPACE_PLACEHOLDER, REAL_CONTAINER } from "./computer/container-computer.ts";
 import { desktopBridgeCapability, type DesktopBridgeOperation } from "./desktop-bridge.ts";
 import { createDesktopBridgeRoutes } from "./desktop-bridge-routes.ts";
 

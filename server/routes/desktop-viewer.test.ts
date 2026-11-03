@@ -9,7 +9,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { SessionRegistry } from "../sessions.ts";
 import { resolveRequestAuth, type RequestAuth } from "../request-auth.ts";
 import { json, readBody } from "../harness/http.ts";
-import { SHARED_LOCAL_VM_TARGET, perBotLocalVmTarget, poolLocalVmTarget, type ContainerComputerStatus } from "../container-computer.ts";
+import { SHARED_LOCAL_VM_TARGET, perBotLocalVmTarget, poolLocalVmTarget, type ContainerComputerStatus } from "../computer/container-computer.ts";
 import { createDesktopViewer, desktopViewerUrl, type DesktopTarget } from "./desktop-viewer.ts";
 import { localDesktopTarget, localVmViewerStatus, viewerTargetId } from "../desktop-viewer-targets.ts";
 

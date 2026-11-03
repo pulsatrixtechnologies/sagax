@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { AUTO_COMPUTER_MCP_NAME } from "../../auto-computer.ts";
+import { AUTO_COMPUTER_MCP_NAME } from "../../computer/auto-computer.ts";
 import { cleanCommandVariables } from "../../vault/credential-command-env.ts";
 import { adoptLegacyAutoMemory, legacyClaudeAutoMemoryDir } from "../../compact-prompt.ts";
 import { writeFileAtomicIfChanged } from "../../atomic.ts";
@@ -166,7 +166,7 @@ for (const [name, server] of Object.entries(turn.integrations?.custom ?? {})) {
   botOwned.add(name);
 }
 // computer_select only chooses among the computers this turn may
-// already reach (server/auto-computer.ts): no card for the choice
+// already reach (server/computer/auto-computer.ts): no card for the choice
 // itself; every tool it routes to still rides the approval mode.
 if (mcpServers[AUTO_COMPUTER_MCP_NAME]) allowed.push(`mcp__${AUTO_COMPUTER_MCP_NAME}`);
 // Pure Flow compute now lives in the signed Perspicax pack. Keep

@@ -13,7 +13,7 @@
 //   recreates it, keeping the files of the folder it was bound to.
 // - Setup (one click) runs in the background with visible steps: start the
 //   runtime if it is installed but stopped, prepare the image, create the
-//   container from the server's own recipe (server/container-computer.ts
+//   container from the server's own recipe (server/computer/container-computer.ts
 //   localVmDesktopSpec, checked here), start it. Idempotent.
 // - Installs nothing by itself: an install opens the vendor's download page,
 //   or runs Homebrew, only after the person confirms in an OS dialog.

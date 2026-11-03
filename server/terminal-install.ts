@@ -1,6 +1,6 @@
 import { readEnvName } from "../electron/legacy-names.mjs";
 import { augmentedPath } from "./env-path.ts";
-import { prepareVpsSsh } from "./vps-ssh.ts";
+import { prepareVpsSsh } from "./computer/vps-ssh.ts";
 import { isValidSshAlias, type AppConfig } from "./config.ts";
 import { createTerminalAuditLog } from "./terminal-audit.ts";
 import { TerminalResourceRegistry } from "./terminal-resources/registry.ts";

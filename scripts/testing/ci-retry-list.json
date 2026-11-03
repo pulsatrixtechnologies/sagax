@@ -44,7 +44,7 @@
       "since": "2026-10-08"
     },
     {
-      "file": "server/boat-included.test.ts",
+      "file": "server/computer/boat-included.test.ts",
       "test": "waking a sleeping computer > forgets a server error once a later resume is accepted",
       "owner": "milind-soni",
       "reason": "Failed 7 runs (3 main runs) since Sep 24: Ubuntu 5, Windows 2. #2444 targeted it; delete this entry once no retry is reported for a week.",

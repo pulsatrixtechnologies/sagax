@@ -87,7 +87,7 @@ vi.mock("@/state/store", async () => {
 });
 // Browse Bots' pane: what the Bots tab hands it
 let paneProps: { tabLabel?: string; focus?: { key: string } | null; sources?: unknown } | null = null;
-vi.mock("./lazy-screens", async () => {
+vi.mock("./lazy-bot-catalog", async () => {
   const { createElement: h } = await import("react");
   return {
     BotCatalogPane: Object.assign((props: NonNullable<typeof paneProps>) => {

@@ -1,4 +1,4 @@
-export interface RoutineFlowInput { routine?: string; plan: Record<string, unknown> }
+export interface RoutineFlowInput { routine?: string; plan?: Record<string, unknown> }
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
 
 /** Read explicit server commands from the same prompt the routine receives.
@@ -23,12 +23,13 @@ export function routineFlowInput(prompt: string): RoutineFlowInput {
   const init = records.find(record => record.command === "run.init");
   const plan = records.find(record => record.command === "plan");
   const explicit = object(init?.args) ? init.args.routine : records.find(record => typeof record.routine === "string")?.routine;
-  const named = prompt.match(/--routine(?:=|\s+)[`"']?([a-zA-Z0-9][a-zA-Z0-9_.-]*)/)
-    ?? prompt.match(/\b(?:routine\s+Flow|Flow\s+routine)\s*[:=]?\s*[`"']?([a-zA-Z0-9][a-zA-Z0-9_.-]*)/i)
-    ?? prompt.match(/\broutine\s+[`"']([a-zA-Z0-9][a-zA-Z0-9_.-]*)[`"']/i)
-    ?? prompt.match(/\b(?:run|execute|launch|ex[eé]cute|lance)\s+(?:(?:the|la)\s+)?routine\s+([a-zA-Z0-9][a-zA-Z0-9_.-]*)/i);
-  const routine = typeof explicit === "string" ? explicit : named?.[1]?.replace(/\.+$/, "");
-  // A named recipe can be shadow-planned; otherwise readiness checks only
-  // the account connection and catalogue, and the model chooses at run time.
-  return { ...(routine ? { routine } : {}), plan: object(plan?.args) ? { ...plan.args } : {} };
+  const flag = prompt.match(/--routine(?:=|\s+)[`"']?([a-zA-Z0-9][a-zA-Z0-9_.-]*)/);
+  const quotedName = prompt.match(/\b(?:Pulsatrix[ -]Flow|Flow\s+routine|routine(?:\s+Flow)?)\s*(?:[:=]\s*)?([`"'])([a-zA-Z0-9][a-zA-Z0-9_.-]*)\1/i);
+  const markedName = prompt.match(/\b(?:Pulsatrix[ -]Flow|Flow\s+routine|routine(?:\s+Flow)?)\s*[:=]\s*([a-zA-Z0-9][a-zA-Z0-9_.-]*)/i);
+  const routine = typeof explicit === "string" && explicit.trim() ? explicit.trim()
+    : quotedName?.[2] ?? (flag?.[1] ?? markedName?.[1])?.replace(/\.+$/, "");
+  // Prose such as "la routine Flow jusqu'à ..." names no recipe. A plan
+  // is explicit only when the prompt supplies its command and arguments;
+  // the model discovers missing units during the actual run.
+  return { ...(routine ? { routine } : {}), ...(object(plan?.args) ? { plan: { ...plan.args } } : {}) };
 }

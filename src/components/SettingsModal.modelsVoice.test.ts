@@ -38,6 +38,8 @@ const baseConfig = (over: Record<string, unknown> = {}) => ({
 async function page(section?: string): Promise<string> {
   if (section) fixture.section = section;
   const { SettingsModal } = await import("./SettingsModal");
+  const { EnginesSettings, ProvidersSettings, VoiceSettingsPage } = await import("./lazy-settings-sections");
+  await Promise.all([EnginesSettings.preload(), ProvidersSettings.preload(), VoiceSettingsPage.preload()]);
   return renderToStaticMarkup(createElement(SettingsModal));
 }
 

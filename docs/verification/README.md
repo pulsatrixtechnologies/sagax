@@ -69,6 +69,7 @@ Use only mapped, tested commands:
 - [Engines and Doctor](engines.md)
 - [Cline engine and native loopback qualification](cline.md)
 - [Claude coordination and turn-scoped tools](claude-tool-lifecycle.md)
+- [Native Claude artifacts](claude-artifacts.md)
 - [Codex bot instructions](codex-instructions.md)
 - [Codex browser routing and native search](codex-browser-routing.md)
 - [Codex helper event isolation](codex-helpers.md)

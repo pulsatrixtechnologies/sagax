@@ -1,5 +1,26 @@
 # Sagax agent notes
 
+## MCP after a cold cloud start (2026-11-04)
+
+Turn setup can preopen Perspicax before the person's cloud environment is
+ready. If its idle session expires before the engine's first `initialize`,
+`PerspicaxMcp.relayFrame` reopens once through the entry's single flight and
+returns the fresh initialize result with the engine's request id. Reopening
+retains the same person, bot and generation, clears the old catalogue and
+restores a selected role. It never replays a tool call. Regression:
+`server/perspicax/perspicax-mcp.test.ts`.
+
+## Codex Perspicax discovery (2026-11-04)
+
+Codex 0.166 uses incremental tools instead of hosted `tool_search`. Its
+account Perspicax mount uses the private searched MCP gate with core tool
+pins and `search_tools` / `describe_tool` / `call_tool` for live discovery.
+The original mount keeps its existing approval mode. Gate configuration
+accepts scope or search; upstream credentials stay in its private record.
+Wrapped calls retain the target tool and arguments for grants and approval
+rules, and role changes invalidate the catalogue before returning.
+Verification: `server/drivers/codex.test.ts`, `server/mcp-gate.test.ts`.
+
 ## Peer approvals return to the human chat (2026-11-04)
 
 `server/approvals/origin-approvals.ts` links a delegated turn's actionable
@@ -42,8 +63,15 @@ refuses a model the bot's engine does not list. Tests:
 Flow readiness calls `flow_run` on the account's main Perspicax connection
 with the run-as person's routine delegation. It never selects a bot profile
 or identity. A prompt without a named recipe checks the connection and
-catalogue only, leaving the recipe choice to the model. A named recipe opens
-a shadow run and checks the first plan with the prompt's explicit inputs.
+catalogue only, leaving the recipe choice to the model. Recipe names come
+only from explicit JSON, a `--routine` flag, a quoted name or a marked
+`routine: name`; prose such as "routine Flow jusqu'à" is not a name.
+A named recipe checks shadow init and checks a plan only when the prompt
+supplies an explicit plan command and arguments. It never fabricates units
+or a plan check before the model discovers its inputs. Plan calls name both
+the recipe and run id so concurrent probes cannot select another claim.
+Each probe names a distinct MCP client with its bot, recipe and a fresh id,
+separate from business turns and other probes on the same person's account.
 Cleanup calls `release {routine, run_id}` only for a successful init with an
 identified run, using an independent signal; it never finishes a business
 run or releases an unnamed claim after an init timeout. An `already_running`

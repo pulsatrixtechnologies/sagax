@@ -239,9 +239,9 @@ beforeAll(async () => {
       // stops mid-turn to ask the person a question no rule may answer —
       // the card that has to reach a human even from a peer-opened thread
       curious: {
-        driver: "grokAgent",
+        driver: "geminiAgent",
         displayName: "Curious fixture",
-        environment: { FAKE_ACP_MODE: "question" },
+        environment: { GEMINI_API_KEY: "gemini-test-key", FAKE_ACP_MODE: "question" },
         config: { cli: FAKE_ACP, fullAuto: true },
       },
     },
@@ -651,7 +651,7 @@ describe("coordinate_bots on a teammate", () => {
     }
   }, 60_000);
 
-  it("still buzzes when a coordinated thread asks the person a question, deep-linked to that thread", async () => {
+  it("brings a coordinated thread's question back to the person's initiating chat", async () => {
     const pm = await createBot("Pam", "gated");
     const sage = await createBot("Sage", "curious", "fake-model");
     const stream = await openSse(`${base}/api/events`);
@@ -660,13 +660,15 @@ describe("coordinate_bots on a teammate", () => {
       const opened = await coordinated(token, sage.id, "Which colour?");
       release(pm.threadId);
       const frame = await stream.until(
-        (candidate) => candidate.kind === "notify" && candidate.notification?.botId === sage.id,
+        (candidate) => candidate.kind === "notify" && candidate.notification?.kind === "question" && candidate.notification?.threadId === pm.threadId,
         20_000,
       );
-      expect(frame.notification).toMatchObject({ kind: "question", botId: sage.id, threadId: opened.threadId });
+      expect(frame.notification).toMatchObject({ kind: "question", botId: pm.id, threadId: pm.threadId });
       expect(frame.notification.threadId).not.toBe(sage.threadId);
       const card = (await messages(opened.threadId)).findLast((message) => message.kind === "options" && Boolean(message.card));
       expect(card?.card).toMatchObject({ title: "Your bot has a question" });
+      const view = (await messages(pm.threadId)).find((message) => message.card?.requestId === frame.notification.requestId);
+      expect(view?.card?.approvalOrigin).toMatchObject({ threadId: opened.threadId, messageId: card.id, requestId: card.card.requestId });
     } finally {
       stream.close();
       await cleanup([pm.id, sage.id]);

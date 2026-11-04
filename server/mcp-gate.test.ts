@@ -147,6 +147,25 @@ describe("mcp-gate", () => {
     });
   });
 
+  it("starts an unscoped searched gate from its private record", async () => {
+    const key = `SAGAX_GATE_CONFIG_${"a".repeat(64)}`;
+    const settings = {
+      SAGAX_GATE_NAME: "shop",
+      SAGAX_GATE_SPILL_DIR: join(scratch, "spill"),
+      SAGAX_GATE_BUDGET: "0",
+      SAGAX_GATE_UPSTREAM: JSON.stringify({
+        command: process.execPath,
+        args: [join(scratch, "upstream.cjs")],
+        env: { SCRIPT: join(scratch, "reply.json"), UPSTREAM_ONLY: "yes" },
+      }),
+      SAGAX_GATE_SEARCH: JSON.stringify({ pinned: ["read"], maxTools: 0 }),
+    };
+    start({}, { [key]: JSON.stringify(settings) }, SCOPED_UPSTREAM, ["--config-env", key]);
+    send({ jsonrpc: "2.0", id: 7, method: "tools/list" });
+    expect(JSON.parse(await nextLine()).result.tools.map((tool: { name: string }) => tool.name))
+      .toEqual(["read", "search_tools", "describe_tool", "call_tool"]);
+  });
+
   it("leaves a small tool result exactly as the server sent it", async () => {
     const result = { content: [{ type: "text", text: JSON.stringify({ cart: { total: 131 } }) }] };
     start(result);
@@ -369,7 +388,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   const PROFILE_UPSTREAM = `
 const { createInterface } = require("node:readline");
 const send = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\\n");
-const names = ["api_search", "api_describe", "api_result_query", "api_list", "cw_psa_query", "cw_psa_write", "cw_psa_action", "backup_query",
+const names = ["api_search", "api_describe", "api_result_query", "api_list", "identity_switch", "memory_find", "flow_run", "cw_psa_query", "cw_psa_write", "cw_psa_action", "backup_query",
   ...Array.from({ length: 14 }, (_, i) => "cw_psa_find_thing_" + i)];
 createInterface({ input: process.stdin }).on("line", (line) => {
   const msg = JSON.parse(line);
@@ -380,12 +399,11 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 `;
 
   it("#1935: a searched profile catalog still lists its query, write and action tools whole", async () => {
-    start({}, { SAGAX_GATE_SEARCH: JSON.stringify({ pinned: ["api_describe", "api_result_query", "api_search"], pinnedSuffixes: ["_action", "_query", "_write"] }) }, PROFILE_UPSTREAM);
+    start({}, { SAGAX_GATE_SEARCH: JSON.stringify({ pinned: ["api_describe", "api_list", "api_result_query", "api_search", "flow_run", "identity_switch", "memory_find"], pinnedSuffixes: ["_action", "_query", "_write"] }) }, PROFILE_UPSTREAM);
     send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
     const listed = JSON.parse(await nextLine()).result.tools.map((tool: { name: string }) => tool.name);
-    expect(listed).toEqual(expect.arrayContaining(["api_search", "api_describe", "api_result_query", "cw_psa_query", "cw_psa_write", "cw_psa_action", "backup_query", "search_tools", "describe_tool", "call_tool"]));
+    expect(listed).toEqual(expect.arrayContaining(["api_search", "api_describe", "api_list", "api_result_query", "identity_switch", "memory_find", "flow_run", "cw_psa_query", "cw_psa_write", "cw_psa_action", "backup_query", "search_tools", "describe_tool", "call_tool"]));
     expect(listed).not.toContain("cw_psa_find_thing_0");
-    expect(listed).not.toContain("api_list");
     // a pinned tool runs by its own name; the rest stays behind call_tool
     expect((await callWith("cw_psa_query", { resource: "service.tickets" }, 2)).result.content[0].text).toBe("ran cw_psa_query");
     expect((await callWith("call_tool", { name: "cw_psa_find_thing_3", arguments: {} }, 3)).result.content[0].text).toBe("ran cw_psa_find_thing_3");

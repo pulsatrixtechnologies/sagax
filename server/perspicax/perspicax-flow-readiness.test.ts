@@ -5,7 +5,7 @@ import { routineFlowInput } from "../routines/routine-flow-input.ts";
 
 interface Frame { id?: string; method: string; params?: { name?: string; clientInfo?: { name: string }; arguments?: { command?: string; args?: Record<string, unknown> } } }
 interface Call { frame?: Frame; signal?: AbortSignal | null; session: string | null; method?: string }
-function fixture(options: { call?(command: string, signal?: AbortSignal | null): unknown | Promise<unknown>; tools?: string[]; rpcError?: boolean; text?: boolean } = {}) {
+function fixture(options: { call?(command: string, signal?: AbortSignal | null, args?: Record<string, unknown>): unknown | Promise<unknown>; tools?: string[]; rpcError?: boolean; text?: boolean } = {}) {
   const calls: Call[] = [];
   const revoke = vi.fn(async () => true);
   const subjectToken = vi.fn(async () => ({ ok: false, error: "no_session" } as const));
@@ -26,14 +26,14 @@ function fixture(options: { call?(command: string, signal?: AbortSignal | null):
       if (frame?.method === "tools/list") result = { tools: (options.tools ?? ["flow_run"]).map(name => ({ name })) };
       if (frame?.method === "tools/call") {
         const command = frame.params!.arguments!.command;
-        const value = await options.call?.(command!, init?.signal) ?? { status: "ok", run_id: "shadow-1" };
+        const value = await options.call?.(command!, init?.signal, frame.params!.arguments!.args) ?? { status: "ok", run_id: "shadow-1" };
         if (options.rpcError && command === "plan") return new Response(JSON.stringify({ jsonrpc: "2.0", id: frame.id, error: value }));
         result = options.text ? { content: [{ type: "text", text: JSON.stringify(value) }] } : { structuredContent: value };
       }
       return new Response(JSON.stringify({ jsonrpc: "2.0", id: frame?.id, result }), { headers: { "mcp-session-id": "fixture-session" } });
     }, log: () => {},
   });
-  const routine = { id: "morning", botId: "osprey", runAs: "pr_osprey", prompt: 'Run Flow routine inbox-review. flow_run {"command":"plan","args":{"units":[{"id":42}],"since":"2026-11-04T10:00:00Z"}}' };
+  const routine = { id: "morning", botId: "osprey", runAs: "pr_osprey", prompt: 'Run Flow routine `inbox-review`. flow_run {"command":"plan","args":{"units":[{"id":42}],"since":"2026-11-04T10:00:00Z"}}' };
   const deps: RoutineReadinessDeps = {
     engine: () => undefined, skills: () => undefined, mcp: () => undefined,
     flow: (routine, run, signal) => mcp.probeFlowReadiness(run.runAs ?? routine.runAs!, run.botId, routineFlowInput(run.prompt ?? routine.prompt), signal),
@@ -50,10 +50,10 @@ describe("Flow shadow readiness through the bot's routine MCP connection (#1991)
     expect(await h.check()).toMatchObject({ ok: true, checks: expect.arrayContaining([{ kind: "flow", ok: true, code: "ready", params: { kind: "flow" }, line: expect.any(String) }]) });
     expect(h.commands()).toEqual([
       { command: "run.init", args: { shadow: true, routine: "inbox-review" } },
-      { command: "plan", args: { units: [{ id: 42 }], since: "2026-11-04T10:00:00Z", run_id: "shadow-1" } },
+      { command: "plan", args: { units: [{ id: 42 }], since: "2026-11-04T10:00:00Z", routine: "inbox-review", run_id: "shadow-1" } },
       { command: "release", args: { routine: "inbox-review", run_id: "shadow-1" } },
     ]);
-    expect(h.calls[0]?.frame?.params?.clientInfo?.name).toBe("Pulsa Bot (osprey)");
+    expect(h.calls[0]?.frame?.params?.clientInfo?.name).toMatch(/^Sagax Flow check \(osprey; inbox-review; [a-f0-9-]{36}\)$/);
     expect(h.delegation).toHaveBeenCalledWith("pr_osprey");
     expect(h.subjectToken).not.toHaveBeenCalled();
     expect(h.exchange).toHaveBeenCalledWith("fixture-subject");
@@ -84,6 +84,62 @@ describe("Flow shadow readiness through the bot's routine MCP connection (#1991)
     expect(h.commands()).toEqual([]);
     expect(h.calls.some(call => call.frame?.method === "tools/list")).toBe(true);
     expect(h.delegation).toHaveBeenCalledWith("pr_wren");
+  });
+  it.each(["run", "check"] as const)("checks named recipe init without planning undiscovered units in %s mode", async mode => {
+    const h = fixture({ call: command => command === "plan" ? { status: "failed", output: { error: "missing_reads" } } : undefined });
+    h.routine.prompt = "Passe Pulsatrix Flow `inbox-review`. Suis la routine Flow jusqu'à `run close` avec running-px-flow.";
+    expect((await h.check(mode)).ok).toBe(true);
+    expect(h.commands()).toEqual([
+      { command: "run.init", args: { shadow: true, routine: "inbox-review" } },
+      { command: "release", args: { routine: "inbox-review", run_id: "shadow-1" } },
+    ]);
+  });
+  it("uses a fresh client for repeated unnamed probes of the same person's bot", async () => {
+    const h = fixture();
+    await Promise.all([0, 1].map(() => h.mcp.probeFlowReadiness("pr_osprey", "osprey", {}, AbortSignal.timeout(5_000))));
+    const clients = h.calls.filter(call => call.frame?.method === "initialize").map(call => call.frame!.params!.clientInfo!.name);
+    expect(clients).toHaveLength(2);
+    expect(new Set(clients).size).toBe(2);
+    for (const name of clients) expect(name).toMatch(/^Sagax Flow check \(osprey; catalogue; [a-f0-9-]{36}\)$/);
+    expect(h.commands()).toEqual([]);
+  });
+  it("keeps an explicit empty plan subject to the real missing-input refusal", async () => {
+    const h = fixture({ call: command => command === "plan" ? { status: "failed", output: { error: "missing_reads" } } : undefined });
+    h.routine.prompt = 'Passe Pulsatrix Flow `inbox-review`. flow_run {"command":"plan","args":{}}';
+    expect((await h.check()).ok).toBe(false);
+    expect(h.commands().find(call => call.command === "plan")).toEqual({ command: "plan", args: { routine: "inbox-review", run_id: "shadow-1" } });
+  });
+  it("pins concurrent probes of the same bot to their named recipe and run", async () => {
+    const runs = new Map<string, string>();
+    let lastRoutine: string | undefined;
+    let bothOpened!: () => void;
+    const opened = new Promise<void>(resolve => { bothOpened = resolve; });
+    const h = fixture({ call: async (command, _signal, args) => {
+      if (command === "run.init") {
+        const routine = String(args!.routine);
+        runs.set(routine, `shadow-${routine}`);
+        lastRoutine = routine;
+        if (runs.size === 2) bothOpened();
+        await opened;
+        return { status: "ok", run_id: runs.get(routine) };
+      }
+      if (command === "plan") {
+        const routine = String(args!.routine ?? lastRoutine);
+        return runs.get(routine) === args!.run_id ? { status: "ok" } : { status: "blocked", reason: "run_not_yours" };
+      }
+      return { status: "ok" };
+    } });
+    const names = ["morning-review", "hourly-review"];
+    const results = await Promise.all(names.map(routine => h.mcp.probeFlowReadiness("pr_osprey", "osprey",
+      routineFlowInput(h.routine.prompt.replace("inbox-review", routine)), AbortSignal.timeout(5_000))));
+    expect(results).toEqual([{}, {}]);
+    const clients = h.calls.filter(call => call.frame?.method === "initialize").map(call => call.frame!.params!.clientInfo!.name);
+    expect(new Set(clients).size).toBe(2);
+    for (const routine of names) {
+      expect(clients).toContainEqual(expect.stringMatching(new RegExp(`^Sagax Flow check \\(osprey; ${routine}; [a-f0-9-]{36}\\)$`)));
+      expect(h.commands()).toContainEqual({ command: "plan", args: { units: [{ id: 42 }], since: "2026-11-04T10:00:00Z", routine, run_id: `shadow-${routine}` } });
+      expect(h.commands()).toContainEqual({ command: "release", args: { routine, run_id: `shadow-${routine}` } });
+    }
   });
   it.each(["run", "check"] as const)("never releases another run when the run.init response is lost in %s mode", async (mode) => {
     const h = fixture({ call: command => { if (command === "run.init") throw new Error("init response lost"); } });

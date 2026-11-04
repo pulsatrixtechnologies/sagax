@@ -10,6 +10,10 @@ const everything: CatalogProfile = {
   voiceNotes: true, cloudHome: false, memoryEnabled: true, groupMemory: true, chief: true, claims: true, botId: "bot-1",
 };
 
+// These Agent API entries run only for a person's AI client. A bot caller is
+// refused by the server and uses its native setup/routine tools below.
+const PERSON_CLIENT_TOOLS = new Set(["update_agent_model", "update_agent_settings", "update_routine"]);
+
 /** Every tool the agents catalog can show, across the profiles that change it. */
 function catalogNames(): string[] {
   const names = new Set<string>();
@@ -36,11 +40,24 @@ function catalogNames(): string[] {
 describe("member tool scope on an organization server", () => {
   it("classifies every agents tool exactly once: the member's own scope or the admin gate", () => {
     const invalid = catalogNames().flatMap((name) => {
+      if (PERSON_CLIENT_TOOLS.has(name)) return [];
       const own = Object.hasOwn(MEMBER_OWN_SCOPE_AGENT_TOOLS, name);
       const host = HOST_LEVEL_AGENT_TOOLS.has(name);
       return own !== host ? [] : [{ name, own, host }];
     });
     expect(invalid, "Every agents tool must be classified exactly once").toEqual([]);
+  });
+
+  it("keeps person-client writes separate from the bot's native own-environment operations", () => {
+    for (const name of PERSON_CLIENT_TOOLS) {
+      expect(memberOwnScopeTool(`agents__${name}`), name).toBeNull();
+      expect(HOST_LEVEL_AGENT_TOOLS.has(name), name).toBe(false);
+    }
+    const native = availableTools(everything).map((tool) => tool.name);
+    for (const name of ["propose_team_setup", "propose_routine_action", "manage_settings", "act"]) {
+      expect(native, name).toContain(name);
+      expect(memberOwnScopeTool(`agents__${name}`), name).toBe("own-setup");
+    }
   });
 
   it("lets the reads and the bot's own work run without an admin, in every engine's spelling", () => {

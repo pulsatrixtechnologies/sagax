@@ -4,7 +4,7 @@
 //   prompt carrying [gate:NAME] holds its reply until the test drops that
 //   gate, and a steered message carrying a marker makes it call
 //   route_message, as the model reading it mid-turn would;
-// - the fake ACP CLI (grokAgent, echo-gated), which cannot take words live:
+// - the fake ACP CLI (geminiAgent, echo-gated), which cannot take words live:
 //   the server classifies instead, a parallel task or the queue, never an
 //   error.
 //
@@ -90,9 +90,9 @@ posixOnly("busy sends routed by the bot e2e", () => {
           },
           config: { cli: FAKE_CLAUDE, permissionMode: "bypassPermissions" },
         },
-        grok: {
-          driver: "grokAgent",
-          environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: acpGate },
+        gemini: {
+          driver: "geminiAgent",
+          environment: { GEMINI_API_KEY: "gemini-test-key", FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: acpGate },
           config: { cli: FAKE_ACP, fullAuto: true },
         },
       },
@@ -184,7 +184,7 @@ posixOnly("busy sends routed by the bot e2e", () => {
 
   it("an engine that cannot steer: the server routes, parallel or the queue, never an error", async () => {
     if (existsSync(acpGate)) rmSync(acpGate);
-    const bot = await busyBot("grok", "audit the September invoices");
+    const bot = await busyBot("gemini", "audit the September invoices");
     // depends on the running work: queued behind it
     const dependent = await auto(bot, "Ensuite, envoie le rapport au client");
     expect(dependent.status).toBe(202);

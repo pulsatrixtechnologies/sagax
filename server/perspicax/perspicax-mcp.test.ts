@@ -623,6 +623,8 @@ function sessionServer(tools?: unknown[]) {
   const mcp = ({ headers, body, method }: { headers: Record<string, string>; body: any; method: string }): Response => {
     if (method === "DELETE") return new Response(null, { status: 204 });
     if (body.method === "initialize") {
+      const previous = headers["mcp-session-id"];
+      if (previous && !live.has(previous)) return new Response("Not Found: Session not found", { status: 404 });
       const id = `s-${++opened}`;
       live.add(id);
       return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { protocolVersion: "2025-06-18", capabilities: { tools: {} } } }), {
@@ -750,6 +752,26 @@ describe("PerspicaxMcp: a session Perspicax dropped", () => {
     await relay(call("memory_search", 6));
     expect(h.mcpCalls.at(-1)!.headers["mcp-session-id"]).toBe("s-2");
     expect(server.opened()).toBe(2);
+  });
+
+  it("cold engine initialize replaces the prewarmed session Perspicax expired", async () => {
+    const server = sessionServer();
+    const h = harness({ mcp: server.mcp });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    // Turn setup opens and lists beside a slow Cloud boot. Perspicax closes
+    // that idle session before Codex starts its real MCP client.
+    await h.mcp.ensureTurnSessions(turn.threadId, turn.generation);
+    expect(server.opened()).toBe(1);
+    server.forget();
+
+    const answer = await h.mcp.relay({ ...turn, botId: "x", frame: { ...init, id: 41 } });
+
+    expect(answer).toMatchObject({ status: 200, body: { id: 41, result: { protocolVersion: "2025-06-18" } } });
+    expect(server.opened()).toBe(2);
+    const initializeCalls = h.mcpCalls.filter((call) => call.body?.method === "initialize");
+    expect(initializeCalls).toHaveLength(3);
+    expect(initializeCalls.at(-1)?.headers["mcp-session-id"]).toBeUndefined();
+    expect(h.mcpCalls.at(-1)).toMatchObject({ body: { method: "notifications/initialized" }, headers: { "mcp-session-id": "s-2" } });
   });
 
   it("404 on a write: opens a new session but never replays the write", async () => {

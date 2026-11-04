@@ -1,12 +1,12 @@
-// The gate's own tool search (#1276): a compact prompt for a local model.
+// The gate's own tool search (#1276): a compact, stable MCP catalog.
 //
-// A local model reads every tool definition of every turn before its first
-// token, and a server with a big catalog (the Perspicax account lists about 150
-// tools, 40,000 tokens) makes a new conversation wait minutes. With
-// SAGAX_GATE_SEARCH the gate stands in for such a catalog with the three
-// directory tools (mcp-directory.ts: search_tools, describe_tool,
-// call_tool) plus the tools this bot actually uses, listed whole and called
-// by their own names as before. A small catalog is listed as it is.
+// A local model reads every tool definition before its first token, while an
+// engine with incremental discovery may omit account controls it needs to
+// reach the rest. A server with a big catalog (the Perspicax account lists
+// about 150 tools, 40,000 tokens) therefore gets the three directory tools
+// (mcp-directory.ts: search_tools, describe_tool, call_tool) plus its stable
+// controls and the tools this bot actually uses, listed whole and called by
+// their own names as before. A small catalog is listed as it is.
 //
 // Pure helpers only; the gate (mcp-gate.ts) runs them.
 import { isDirectoryTool, searchesCatalog, type CatalogTool } from "./mcp-directory.ts";
@@ -36,11 +36,23 @@ const SUFFIXES_MAX = 8;
 export const SUFFIX_PINNED_MAX = 16;
 
 /** #1935: what the Perspicax account bridge lists whole in a searched
- * catalog. The gateway's own finding tools by name (the server's
- * instructions point to them), each product's query, write and action tool
- * by suffix; the rest of the profile stays behind search_tools. */
+ * catalog. Account role selection, memory, Flow and the gateway's own
+ * finding tools by name; each product's query, write and action tool by
+ * suffix. The rest of every held role stays reachable through search_tools. */
 export const PERSPICAX_BRIDGE_PINS = {
-  pinned: ["api_describe", "api_result_query", "api_search"],
+  pinned: [
+    "api_describe",
+    "api_list",
+    "api_result_query",
+    "api_search",
+    "flow",
+    "flow_action",
+    "flow_run",
+    "identity_switch",
+    "memory_find",
+    "memory_recall",
+    "memory_search",
+  ],
   pinnedSuffixes: ["_action", "_query", "_write"],
 } as const;
 

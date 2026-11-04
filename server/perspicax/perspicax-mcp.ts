@@ -20,6 +20,7 @@
 //     a fresh subject; when that fails the call answers "Perspicax access
 //     for this turn ended" (a disabled person mid-turn, S5-10);
 //   - no token is ever logged or put in an error.
+import { randomUUID } from "node:crypto";
 import { guardToolCall, type GuardOptions } from "../mcp/mcp-permissions.ts";
 import { telephonyRefusal, voiceToolCall } from "../telephony-guard.ts";
 import { placeArgsFromVoiceCall } from "../../shared/outbound-call.ts";
@@ -314,7 +315,7 @@ interface Entry {
   /** The MCP server name the engine sees the main connection under. */
   mount?: string;
   /** One re-initialize at a time (relay, a session Perspicax dropped). */
-  reopening?: Promise<boolean>;
+  reopening?: Promise<ReopenedSession | null>;
   /** The person is out, or the access could not be renewed: every call ends. */
   ended?: boolean;
   renewing?: Promise<boolean>;
@@ -339,6 +340,8 @@ type SentFrame =
   | "ended"
   | "unreachable"
   | "selection_unavailable";
+
+interface ReopenedSession { body: Json }
 
 /** The answer of a Perspicax tool the harness calls itself (callTool): the
  * tool's structured result and whether it is a tool error, or why no call
@@ -527,8 +530,8 @@ async function readBounded(
   return text + decoder.decode();
 }
 
-/** Rebind a cached tools/list JSON-RPC result to the caller's request id. */
-function rewriteToolsListId(body: unknown, id: unknown): unknown {
+/** Rebind a cached or internally reopened JSON-RPC result to the caller's request id. */
+function rewriteResponseId(body: unknown, id: unknown): unknown {
   if (!isObject(body)) return body;
   return { ...body, id };
 }
@@ -788,7 +791,7 @@ export class PerspicaxMcp {
     }
   }
 
-  /** Shadow the first Flow plan on a private account connection backed by
+  /** Check Flow init and an explicit plan on a private account connection backed by
    * the run-as person's routine delegation. Flow is supplied by the active
    * organization pack, never by a bot profile or a stored role choice. */
   async probeFlowReadiness(principalId: string, botId: string, input: RoutineFlowInput, signal: AbortSignal): Promise<ReadinessFlow> {
@@ -849,7 +852,7 @@ export class PerspicaxMcp {
       return { step, error: `${typeof code === "object" ? "flow_error" : code} ${message}`.trim() };
     };
     try {
-      await rpc("initialize", { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: `Pulsa Bot (${botId})`, version: this.options.version } });
+      await rpc("initialize", { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: `Sagax Flow check (${botId}; ${input.routine ?? "catalogue"}; ${randomUUID()})`, version: this.options.version } });
       await rpc("notifications/initialized", {});
       const listed = await rpc("tools/list", {});
       if (!isObject(listed.result) || !Array.isArray(listed.result.tools)) throw new Error("Perspicax Flow tools could not be listed.");
@@ -871,7 +874,9 @@ export class PerspicaxMcp {
             const runId = typeof value.run_id === "string" && value.run_id.trim() ? value.run_id : undefined;
             if (!runId) throw new Error("Perspicax Flow check opened no identifiable shadow run.");
             ownedRun = { id: runId, routine: input.routine };
-            result = failure(await call("plan", { ...input.plan, run_id: runId }), "plan") ?? {};
+            result = input.plan
+              ? failure(await call("plan", { ...input.plan, routine: input.routine, run_id: runId }), "plan") ?? {}
+              : {};
           }
         }
       }
@@ -1152,7 +1157,7 @@ export class PerspicaxMcp {
       // lease or an earlier engine list): serve that body. Invalidation is
       // reopen, identity clear/invalidate, list_changed, retire.
       if (frame.method === "tools/list" && entry.toolsListBody !== undefined && entry.mcpSessionId) {
-        return { status: 200, body: rewriteToolsListId(entry.toolsListBody, id) };
+        return { status: 200, body: rewriteResponseId(entry.toolsListBody, id) };
       }
     }
     const usedSession = entry.mcpSessionId;
@@ -1167,6 +1172,18 @@ export class PerspicaxMcp {
     }
     if (sent === "unreachable") return notification ? { status: 202 } : { status: 200, body: rpcError(id, -32000, "Perspicax is unavailable") };
     let { response, text } = sent;
+    if (frame.method === "initialize" && perspicaxSessionLost(response.status, text)) {
+      // Turn setup may prewarm the remote session before a cold Cloud
+      // environment is ready. Perspicax closes an idle session after 120 s,
+      // so the real engine initialize can arrive with that expired id. Open
+      // one fresh session from the initialize we just remembered and return
+      // its result under the engine's id. This retry is bounded by reopen's
+      // single flight and never replays a tool call.
+      const reopened = await this.reopen(link, entry);
+      this.log(`perspicax mcp: prewarmed session expired before client initialize (HTTP ${response.status}); ${reopened ? "a fresh one is open" : "a fresh one could not be opened"}`);
+      if (!reopened) return { status: 200, body: rpcError(id, -32000, `Perspicax answered HTTP ${response.status}`) };
+      return { status: 200, body: rewriteResponseId(reopened.body, id) };
+    }
     if (frame.method !== "initialize" && perspicaxSessionLost(response.status, text)) {
       // Perspicax dropped the session (idle past its keep-alive, a restart):
       // initialize again, once; send a read again, never a write.
@@ -1564,14 +1581,14 @@ export class PerspicaxMcp {
   }
 
   /** Open a new MCP session for the entry (initialize, then initialized),
-   * one at a time; true when Perspicax named a session. */
-  private reopen(link: PerspicaxMcpLink, entry: Entry): Promise<boolean> {
+   * one at a time; returns its initialize answer when Perspicax named a session. */
+  private reopen(link: PerspicaxMcpLink, entry: Entry): Promise<ReopenedSession | null> {
     entry.reopening ??= this.reopenOnce(link, entry).finally(() => { entry.reopening = undefined; });
     return entry.reopening;
   }
 
-  private async reopenOnce(link: PerspicaxMcpLink, entry: Entry): Promise<boolean> {
-    if (entry.ended) return false;
+  private async reopenOnce(link: PerspicaxMcpLink, entry: Entry): Promise<ReopenedSession | null> {
+    if (entry.ended) return null;
     entry.mcpSessionId = undefined;
     entry.initialized = false;
     this.clearToolCatalog(entry);
@@ -1587,17 +1604,17 @@ export class PerspicaxMcp {
     };
     const id = `sagax-reopen-${++this.reopens}`;
     const opened = await this.send(link, entry, { jsonrpc: "2.0", id, method: "initialize", params });
-    if (typeof opened === "string" || !opened.response.ok) return false;
+    if (typeof opened === "string" || !opened.response.ok) return null;
     const body = parseMcpBody(opened.text, id);
-    if (!isObject(body) || !isObject(body.result)) return false;
+    if (!isObject(body) || !isObject(body.result)) return null;
     entry.initialized = true;
     const done = await this.send(link, entry, { jsonrpc: "2.0", method: "notifications/initialized" });
-    if (typeof done === "string") return false;
+    if (typeof done === "string") return null;
     // A dropped remote session forgot its profile_use choice. Restore the
     // choice before any replay so both the vendor surface and write-once key
     // still describe the role the caller selected in this generation.
-    if (entry.profileChoice && !await this.restoreProfileChoice(link, entry)) return false;
-    return true;
+    if (entry.profileChoice && !await this.restoreProfileChoice(link, entry)) return null;
+    return { body };
   }
 
   /** Put a remembered profile_use choice on the current token/session.

@@ -628,7 +628,7 @@ describe("no separate Ongoing activities rail beside the bot", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const app = readFileSync(join(here, "../../App.tsx"), "utf8");
     expect(app).not.toMatch(/BackgroundWorkPanel/);
-    expect(app).toMatch(/: bot \? \(\s*<ChatView (?:key=\{\w+\} )?bot=\{bot\} \/>/);
+    expect(app).toMatch(/: bot \? \(\s*<BotSurface key=\{uiLocale\} id=\{bot.id\}>\{\(current\) => <ChatView bot=\{current\} \/>\}<\/BotSurface>/);
     expect(existsSync(join(here, "../BackgroundWorkPanel.tsx"))).toBe(false);
   });
 });

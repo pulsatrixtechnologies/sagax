@@ -1669,7 +1669,13 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
       process.env.FAKE_CODEX_DUMP = dump;
       await instance.adapter.sendTurn({ threadId: "t-plan-call", text: "go", model: "gpt-6.1-sol", integrations: { custom: { whop } } });
       const opened = await recorder.until((event) => event.type === "request.opened");
-      expect(opened).toMatchObject({ requestType: "permission", tool: "payments_list", summary: 'Allow the whop MCP server to run tool "payments_list"?' });
+      expect(opened).toMatchObject({
+        requestType: "permission",
+        tool: "payments_list",
+        mcpTool: "whop__payments_list",
+        input: JSON.stringify({ company_id: "biz_1" }),
+        summary: 'Allow the whop MCP server to run tool "payments_list"?',
+      });
       await instance.adapter.respondToRequest("t-plan-call", opened.requestId!, { behavior: "allow" });
       await recorder.until((event) => event.type === "turn.completed");
       expect(JSON.parse(readFileSync(dump, "utf8")).decision).toEqual({ action: "accept", content: {} });
@@ -1735,7 +1741,7 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(seen.env.SAGAX_TOOL_SERVER).toBeUndefined();
   });
 
-  it("mounts the account Perspicax bridge without printing or sharing its capability", async () => {
+  it("mounts the account Perspicax bridge behind its searched private catalog", async () => {
     await create();
     const dump = join(scratch, "perspicax-bridge.json");
     process.env.FAKE_CODEX_DUMP = dump;
@@ -1767,10 +1773,17 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(seen.env.SAGAX_PERSPICAX_TOKEN).toBeUndefined();
     expect(seen.env.SAGAX_PERSPICAX_TOKEN_FILE).toBeUndefined();
     expect(seen.env.SAGAX_HARNESS_URL).toBeUndefined();
-    const stem = `SAGAX_MCP_ENV_${createHash("sha256").update("perspicax").digest("hex").toUpperCase()}__`;
-    expect(seen.env[`${stem}SAGAX_PERSPICAX_TOKEN`]).toBe("token-main");
-    expect(seen.env[`${stem}SAGAX_PERSPICAX_TOKEN_FILE`]).toBe(tokenFile);
-    expect(argv).toContain(`"SAGAX_PROXY_ENV_PREFIX" = "${stem}"`);
+    const record = `SAGAX_GATE_CONFIG_${createHash("sha256").update("perspicax").digest("hex")}`;
+    const gate = JSON.parse(seen.env[record]);
+    const upstream = JSON.parse(gate.SAGAX_GATE_UPSTREAM);
+    expect(upstream.env.SAGAX_PERSPICAX_TOKEN).toBe("token-main");
+    expect(upstream.env.SAGAX_PERSPICAX_TOKEN_FILE).toBe(tokenFile);
+    expect(JSON.parse(gate.SAGAX_GATE_SEARCH)).toMatchObject({
+      pinned: expect.arrayContaining(["api_list", "flow_run", "identity_switch", "memory_find"]),
+      pinnedSuffixes: ["_action", "_query", "_write"],
+    });
+    expect(upstream.args).toEqual([SPAWNED_PROXIES.perspicax]);
+    expect(argv).toContain(SPAWNED_PROXIES.mcpGate);
     expect(argv).toContain('mcp_servers.perspicax.default_tools_approval_mode="prompt"');
     expect(argv).not.toContain("SAGAX_PERSPICAX_PROFILE");
   });

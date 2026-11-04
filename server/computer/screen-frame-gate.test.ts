@@ -55,7 +55,7 @@ describe("screenTouchingTool", () => {
     expect(screenTouchingTool("computer__computer_status")).toBe(false);
   });
 
-  it.each(["local_vm", "computer-use", "vm2", `v${"m".repeat(31)}`])(
+  it.each(["local_vm", "computer-use", "vm2", `v${"m".repeat(39)}`])(
     "accepts the valid %s namespace in both mounted spellings",
     (namespace) => {
       for (const prefix of [`mcp__${namespace}__`, `${namespace}__`]) {
@@ -73,7 +73,7 @@ describe("screenTouchingTool", () => {
     expect(screenTouchingTool("mcp__legacy.server__screenshot")).toBe(true);
     expect(screenTouchingTool("MCP__LOCAL_VM__SCREENSHOT")).toBe(true);
     expect(screenTouchingTool("legacy.server__screenshot")).toBe(false);
-    expect(screenTouchingTool(`${"v".repeat(33)}__screenshot`)).toBe(false);
+    expect(screenTouchingTool(`${"v".repeat(41)}__screenshot`)).toBe(false);
     expect(screenTouchingTool("2vm__screenshot")).toBe(false);
   });
 

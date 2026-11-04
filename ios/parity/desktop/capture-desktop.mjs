@@ -485,7 +485,7 @@ async function main() {
         if (!item.surface.noShell && !(await page.eval(`Boolean(document.querySelector("[data-app-shell]") && document.body.innerText.trim().length > 0)`))) {
           throw new Error("blank page at capture time");
         }
-        writeFileSync(join(REFS, `${file}.png`), await page.screenshot());
+        writeFileSync(join(REFS, `${file}.png`), await page.screenshot({ fromSurface: !item.surface.keepPointer }));
         // --text also shows the end of a scrolled dialog: one more shot
         // (<file>-end.png) when its content runs past the window.
         if (withText) {

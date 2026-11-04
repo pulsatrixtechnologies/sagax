@@ -139,8 +139,11 @@ export class Page {
     }
   }
 
-  async screenshot() {
-    const r = await this.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false, fromSurface: true });
+  /** `fromSurface: false` repaints the page for the shot: a resting
+   * pointer's :hover only shows that way in headless Chrome (the surface
+   * copy is the last composited frame, from before the hover). */
+  async screenshot({ fromSurface = true } = {}) {
+    const r = await this.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false, fromSurface });
     return Buffer.from(r.data, "base64");
   }
 

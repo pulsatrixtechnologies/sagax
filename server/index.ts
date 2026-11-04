@@ -10844,8 +10844,7 @@ async function botOverview(bot: BotRecord): Promise<BotOverview> {
         schedule: routine.schedule,
         nextRunAt: routine.nextRunAt
       })),
-    runs: routines!.listRuns()
-      .filter((run) => run.botId === bot.id)
+    runs: routines!.listRunsForBot(bot.id)
       .map((run) => ({
         routineId: run.routineId,
         status: run.status,
@@ -33650,7 +33649,7 @@ ROUTES.push(createBotActivityRoutes({
     const bot = store.bot(botId);
     return Boolean(bot) && botThreadReadable(bot!, threadId, viewerId, "thread.post");
   },
-  runs: (botId) => routines?.listRuns().filter((run) => run.botId === botId && run.target !== "room-goal") ?? [],
+  runs: (botId) => (routines?.listRunsForBot(botId) ?? []).filter((run) => run.target !== "room-goal"),
   runSeen: (run, viewerId) => !viewerId || routineSeenBy(run, viewerId),
   messages: (threadId, limit) => {
     const page = store.messagesTail(threadId, limit);
@@ -43238,7 +43237,8 @@ ROUTES.push(createTeamComputersRoutes({
 // ROUTES-ANCHOR:routines-http
 ROUTES.push(createRoutinesHttpRoutes({
   listRoutines: () => routines!.listRoutines(),
-  listRuns: (from, to) => routines!.listRuns(from, to),
+  // Serialize immediately; skip the cloneRun pass listRuns() does for mutable callers.
+  listRuns: (from, to) => [...routines!.listRunsRaw(from, to)] as ReturnType<NonNullable<typeof routines>["listRuns"]>,
   listFolders: () => routines!.listFolders(),
   create: (body, request, opts) => routines!.create(body as never, request, opts as never),
   wakeHold: () => routines!.wakeHold(),

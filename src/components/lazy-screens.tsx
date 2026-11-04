@@ -9,20 +9,28 @@ export { lazyScreen, type LazyScreen } from "./lazy-screen";
 export { NewBotDialog };
 
 export const AchievementsScreen = lazyScreen("AchievementsScreen", async () => (await import("./achievements/AchievementsScreen")).AchievementsScreen);
+export const ArtifactsHost = lazyScreen("ArtifactsHost", async () => (await import("./artifacts/ArtifactsHost")).ArtifactsHost);
 export const BotCatalogModal = lazyScreen("BotCatalogModal", async () => (await import("./bot-catalog/BotCatalogModal")).BotCatalogModal);
 /** Browse Bots inside Connect apps' window (the same chunk as the modal). */
 export const BotCatalogPane = lazyScreen("BotCatalogPane", async () => (await import("./bot-catalog/BotCatalogModal")).BotCatalogPane);
 export const ActivityPanel = lazyScreen("ActivityPanel", async () => (await import("./ActivityPanel")).ActivityPanel);
 export const BulkEditBotsDialog = lazyScreen("BulkEditBotsDialog", async () => (await import("./BulkEditBotsDialog")).BulkEditBotsDialog);
 export const BotSettingsDialog = lazyScreen("BotSettingsDialog", async () => (await import("./BotSettingsDialog")).BotSettingsDialog);
+export const BotWizard = lazyScreen("BotWizard", async () => (await import("./bot-wizard/BotWizard")).BotWizard);
 export const CodePage = lazyScreen("CodePage", async () => (await import("./code/CodePage")).CodePage);
+export const CommandPalette = lazyScreen("CommandPalette", async () => (await import("./CommandPalette")).CommandPalette);
 export const ApprovalsPage = lazyScreen("ApprovalsPage", async () => (await import("./approvals/ApprovalsPage")).ApprovalsPage);
 export const RemoteSessionsAdminPage = lazyScreen("RemoteSessionsAdminPage", async () => (await import("./remote-session/RemoteSessionsAdminPage")).RemoteSessionsAdminPage);
 export const ComputerPanel = lazyScreen("ComputerPanel", async () => (await import("./ComputerPanel")).ComputerPanel);
 export const InspectorPanel = lazyScreen("InspectorPanel", async () => (await import("./InspectorPanel")).InspectorPanel);
 export const KeyboardShortcutsModal = lazyScreen("KeyboardShortcutsModal", async () => (await import("./KeyboardShortcutsModal")).KeyboardShortcutsModal);
 export const LocalVmWorkspace = lazyScreen("LocalVmWorkspace", async () => (await import("./LocalVmWorkspace")).LocalVmWorkspace);
+export const MemoryManagerPanel = lazyScreen("MemoryManagerPanel", async () => (await import("./memory-manager/MemoryManagerPanel")).MemoryManagerPanel);
+export const OrgImportDialog = lazyScreen("OrgImportDialog", async () => (await import("./OrgImportDialog")).OrgImportDialog);
+export const StagedOrgImport = lazyScreen("StagedOrgImport", async () => (await import("./OrgImportDialog")).StagedOrgImport);
 export const PersonaEditorModal = lazyScreen("PersonaEditorModal", async () => (await import("./persona/PersonaEditorModal")).PersonaEditorModal);
+export const PersonPanel = lazyScreen("PersonPanel", async () => (await import("./PersonPanel")).PersonPanel);
+export const PluginsPanel = lazyScreen("PluginsPanel", async () => (await import("./PluginsPanel")).PluginsPanel);
 export const RemoteAgentSettingsPanel = lazyScreen("RemoteAgentSettingsPanel", async () => (await import("./RemoteAgentSettingsPanel")).RemoteAgentSettingsPanel);
 export const RemoteDesktopPanel = lazyScreen("RemoteDesktopPanel", async () => (await import("./remote-desktop-panel")).RemoteDesktopPanel);
 export const RoutinesPage = lazyScreen("RoutinesPage", async () => (await import("./RoutinesPage")).RoutinesPage);
@@ -31,8 +39,8 @@ export const TeamMapPage = lazyScreen("TeamMapPage", async () => (await import("
 export const TriggersPanel = lazyScreen("TriggersPanel", async () => (await import("./TriggersPanel")).TriggersPanel);
 
 const SCREENS = [
-  AchievementsScreen, ActivityPanel, ApprovalsPage, BotCatalogModal, BotCatalogPane, BotSettingsDialog, BulkEditBotsDialog, CodePage, ComputerPanel, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace, NewBotDialog,
-  PersonaEditorModal, RemoteAgentSettingsPanel, RemoteDesktopPanel, RemoteSessionsAdminPage, RoutinesPage, SettingsModal, TeamMapPage, TriggersPanel,
+  AchievementsScreen, ActivityPanel, ApprovalsPage, ArtifactsHost, BotCatalogModal, BotCatalogPane, BotSettingsDialog, BotWizard, BulkEditBotsDialog, CodePage, CommandPalette, ComputerPanel, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace, MemoryManagerPanel, NewBotDialog,
+  OrgImportDialog, PersonaEditorModal, PersonPanel, PluginsPanel, RemoteAgentSettingsPanel, RemoteDesktopPanel, RemoteSessionsAdminPage, RoutinesPage, SettingsModal, StagedOrgImport, TeamMapPage, TriggersPanel,
 ];
 
 // A window opened onto Settings (?desktop-settings=…: the desktop app's

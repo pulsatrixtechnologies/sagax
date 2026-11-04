@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { DiffFile, DiffLine } from "../../../shared/code-runs.ts";
 import { highlightCodeLines, type CodeToken } from "../ChatMarkdown";
-import { foldContext } from "../code/DiffView";
+import { foldContext } from "../code/diff-fold";
 import { languageOf } from "@/lib/coding-chat";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";

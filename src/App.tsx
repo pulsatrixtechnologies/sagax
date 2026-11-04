@@ -16,18 +16,15 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { ChatView } from "@/components/ChatView";
 import { GroupView } from "@/components/GroupView";
 import { SplitWorkspace, useBotPanelBot } from "@/components/SplitWorkspace";
-import { PersonPanel } from "@/components/PersonPanel";
-import { MemoryManagerPanel } from "@/components/memory-manager/MemoryManagerPanel";
 import { SideThreadPanel } from "@/components/SideThreadPanel";
 import { ComposeToPicker } from "@/components/ComposeToPicker";
-import { BotWizard } from "@/components/bot-wizard/BotWizard";
-import { PluginsPanel } from "@/components/PluginsPanel";
 import {
-  AchievementsScreen, ActivityPanel, ApprovalsPage, BotCatalogModal, BotSettingsDialog, CodePage, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace,
-  PersonaEditorModal, preloadScreens, RemoteAgentSettingsPanel, RemoteDesktopPanel, RemoteSessionsAdminPage, RoutinesPage, SettingsModal, TeamMapPage,
+  AchievementsScreen, ActivityPanel, ApprovalsPage, ArtifactsHost, BotCatalogModal, BotSettingsDialog, BotWizard, CodePage, CommandPalette, InspectorPanel, KeyboardShortcutsModal, LocalVmWorkspace,
+  MemoryManagerPanel, OrgImportDialog, PersonaEditorModal, PersonPanel, PluginsPanel, preloadScreens, RemoteAgentSettingsPanel, RemoteDesktopPanel, RemoteSessionsAdminPage, RoutinesPage, SettingsModal, StagedOrgImport, TeamMapPage,
 } from "@/components/lazy-screens";
+import { openCommandPalette } from "@/lib/command-palette-open";
 import { ArchivedBotsPanel } from "@/components/Sidebar";
-import { WorkspaceBackupRecovery } from "@/components/WorkspaceBackupSettings";
+import { WorkspaceBackupRecovery } from "@/components/workspace-backup-recovery";
 import { AboutPrompt } from "@/components/AboutDialog";
 import { ReleaseNotesPrompt } from "@/components/ReleaseNotesPrompt";
 import { TermsGate } from "@/components/TermsGate";
@@ -38,9 +35,6 @@ import { WindowCaptionButtons } from "@/components/WindowCaptionButtons";
 import { NoEngines } from "@/components/NoEngines";
 import { OrgEngineNotice } from "@/components/OrgEngineSetup";
 
-import { CommandPalette, openCommandPalette } from "@/components/CommandPalette";
-import { ArtifactsHost } from "@/components/artifacts/ArtifactsHost";
-import { OrgImportDialog, StagedOrgImport } from "@/components/OrgImportDialog";
 import { RetroAssistantHost } from "@/components/RetroAssistantHost";
 import { AchievementToaster } from "@/components/achievements/AchievementToaster";
 import { MyChromeIndicator } from "@/components/MyChromeIndicator";

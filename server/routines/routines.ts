@@ -1840,9 +1840,26 @@ export class RoutineManager {
     return due === undefined ? { hold: false } : { hold: true, reason: "due", at: due };
   }
 
-  listRuns(from?: number, to?: number): RoutineRun[] {
+  /** Sorted runs in [from, to] without cloning. GET /api/routines serializes
+   * straight to JSON; cloning every journal row first was pure CPU on cold
+   * start (measured: thousands of cloneRun calls before the listing filter).
+   * Callers that keep or mutate the result must use listRuns(). */
+  listRunsRaw(from?: number, to?: number): readonly RoutineRun[] {
     return this.runs
       .filter((r) => (from == null || r.scheduledFor >= from) && (to == null || r.scheduledFor <= to))
+      .sort((a, b) => b.scheduledFor - a.scheduledFor);
+  }
+
+  listRuns(from?: number, to?: number): RoutineRun[] {
+    return this.listRunsRaw(from, to).map(cloneRun);
+  }
+
+  /** One bot's runs only. The activity panel used to call listRuns() (clone
+   * every journal row) then filter by botId; with a few thousand runs that
+   * repeated JSON-shaped clone work on every poll. */
+  listRunsForBot(botId: string): RoutineRun[] {
+    return this.runs
+      .filter((r) => r.botId === botId)
       .sort((a, b) => b.scheduledFor - a.scheduledFor)
       .map(cloneRun);
   }

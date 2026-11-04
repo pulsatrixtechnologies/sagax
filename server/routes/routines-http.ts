@@ -119,6 +119,9 @@ export function createRoutinesHttpRoutes(deps: RoutinesHttpDeps): RouteHandler {
       const caller = deps.scopeCaller(auth, viewerId);
       const refusal = routineScopeRefusal(caller, query.scope);
       if (refusal) return json(res, 403, refusal);
+      // listRuns deps may return raw journal rows (listRunsRaw): this handler
+      // JSON.stringifies and drops them, so a full cloneRun pass is wasted CPU
+      // on cold start when the client hydrates /api/routines with no window.
       const listing = scopedRoutineListing(
         query,
         caller,

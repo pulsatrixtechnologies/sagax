@@ -54,14 +54,9 @@ import {
   type PaletteAction,
   type PaletteItem,
 } from "@/lib/palette-commands";
+import { OPEN_PALETTE_EVENT } from "@/lib/command-palette-open";
 
-/** Dispatched on window to open the palette from a control (the sidebar's
- * search field) rather than the ⌘K chord. */
-export const OPEN_PALETTE_EVENT = "omb:open-palette";
-
-export function openCommandPalette(): void {
-  window.dispatchEvent(new Event(OPEN_PALETTE_EVENT));
-}
+export { OPEN_PALETTE_EVENT, openCommandPalette } from "@/lib/command-palette-open";
 
 const ICONS: Record<PaletteAction["kind"], LucideIcon> = {
   bot: BotIcon,

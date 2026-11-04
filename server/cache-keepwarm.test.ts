@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   BUSY_RETRY_MS,
   CACHE_TTL_MS,
+  COLD_PAUSE_MS,
   createCacheKeepWarm,
   MIN_CONTEXT_TOKENS,
   PING_AFTER_MS,
@@ -112,6 +113,37 @@ describe("cache keep-warm", () => {
       expect(h.keepWarm.status("t1")).toMatchObject({ state: "stopped", stopped: expect.stringContaining("the cache was already gone") });
       expect(h.holds.at(-1)).toBeNull();
     }
+  });
+
+  it("pauses keep-warm for a bot after two cold pings in a row, and server-wide after three, until a day passes", async () => {
+    const COLD = { ...WARM, cacheRead: 0, cacheWrite: 120_000 } as KeepWarmPingResult;
+    const h = harness();
+    h.reply(COLD, COLD, COLD, COLD);
+    for (const threadId of ["t1", "t2"]) {
+      h.keepWarm.noteTurnCompleted({ ...T, threadId }, BIG);
+      await h.advance(3 * 60 * MIN);
+    }
+    expect(h.pings).toHaveLength(2);
+    // a third big turn of the same bot arms nothing: no third paid miss
+    h.keepWarm.noteTurnCompleted({ ...T, threadId: "t3" }, BIG);
+    await h.advance(3 * 60 * MIN);
+    expect(h.pings).toHaveLength(2);
+    expect(h.keepWarm.status("t3")).toMatchObject({ state: "stopped", stopped: expect.stringContaining("paused for this bot") });
+    // another bot pays one more miss, then the whole server pauses
+    h.keepWarm.noteTurnCompleted({ ...T, botId: "b2", threadId: "u1" }, BIG);
+    await h.advance(3 * 60 * MIN);
+    expect(h.pings).toHaveLength(3);
+    h.keepWarm.noteTurnCompleted({ ...T, botId: "b3", threadId: "v1" }, BIG);
+    await h.advance(3 * 60 * MIN);
+    expect(h.pings).toHaveLength(3);
+    expect(h.keepWarm.status("v1")).toMatchObject({ state: "stopped", stopped: expect.stringContaining("paused on this server") });
+    // a day later, a window arms again, and a warm ping clears the count
+    await h.advance(COLD_PAUSE_MS);
+    h.reply(WARM, WARM);
+    h.keepWarm.noteTurnCompleted({ ...T, threadId: "t4" }, BIG);
+    await h.advance(PING_AFTER_MS);
+    expect(h.pings).toHaveLength(4);
+    expect(h.keepWarm.status("t4")).toMatchObject({ state: "warm" });
   });
 
   it("stops on a failed ping and on the account's usage limit, booking nothing", async () => {

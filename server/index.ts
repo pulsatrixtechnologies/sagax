@@ -221,6 +221,7 @@ import {
   type ProactiveWakeBatch
 } from "./proactive/proactive-wake.ts";
 import {
+  botActConsoleRouteError,
   actorForTurn,
   botActFrameAllowed,
   fillPluginBot,
@@ -35655,6 +35656,11 @@ async function performBotActRoute(actor: PerformActor, target: RouteTarget, maxC
   if (target.path === "/api/internal" || target.path.startsWith("/api/internal/") || target.path === "/api/testing" || target.path.startsWith("/api/testing/")) {
     return { status: 400, text: "That path is not available." };
   }
+  // #1993: the console/member APIs accept assertions minted by Perspicax
+  // for one request, never the opaque Sagax session delegated below. Keep
+  // their signature, audience, actor and replay checks intact.
+  const consoleError = botActConsoleRouteError(target.path);
+  if (consoleError) return { status: 400, text: consoleError };
   const headers = new Headers();
   headers.set("accept", "application/json");
   // narrows only: a remote session upload then keeps to the transfer folder

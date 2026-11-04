@@ -1,5 +1,30 @@
 # Sagax agent notes
 
+## Local act and Perspicax assertions (#1993, 2026-11-04)
+
+`act` delegates an opaque Sagax session, never a Perspicax console JWS.
+`botActConsoleRouteError` (`shared/bot-act.ts`) explains `/api/org/admin`
+and `/api/org/member` before scope checks or approval; `performBotActRoute`
+also checks before delegating a session for a planned replay. Console calls
+go through the person's Perspicax profile; local bots and routines use
+`/api/bots`, `/api/routines` and `/api/routines/runs` with the existing
+person checks. Never accept a Sagax bearer at the assertion gate.
+Regression: `server/member-own-act.e2e.test.ts` (isolated organization,
+admin and member replays) and `shared/bot-act.test.ts`.
+
+## Obsolete bot Flow tenant copies (#1993, 2026-11-04)
+
+The capabilities resolver reports `supersededBy: { tenant, version }` on
+an older bot tenant copy when the installed signed organization Flow pack
+already supplies it. Use the loaded tenant version, not the declaration's
+advertised version or the product version. Installed shows that replacement
+in en/fr and offers Remove directly through the bot's existing plugin DELETE
+route to anyone who may change that bot. Removal refreshes the resolved
+inventory, keeps the organization pack, and reports failure in place.
+Tests: `capabilities.test.ts`, `PluginsPanel.modal.dom.test.ts`.
+Headless journey: `scripts/capture/flow-superseded.mjs`; recipe and limits:
+`docs/verification/flow-superseded.md`.
+
 ## Routine readiness and failover (#1986, 2026-11-04)
 
 Routine pre-flight uses `limitFailover.backupFor` to check the same backup

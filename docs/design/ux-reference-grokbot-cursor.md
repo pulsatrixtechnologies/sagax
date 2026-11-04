@@ -341,6 +341,11 @@ dessous (« écran de » suivi du nom du bot).
   éteinte).
 - Installés : même rangée, sous-titre de contenu (« 1 connecteur · 27 skills »,
   « 4 comptes »).
+- Dans la portée d'un bot, une ancienne copie du plugin tenant que le pack Flow
+  signé fournit déjà dit « Remplacé par le pack Flow de l'organisation
+  (osprey 0.1.41) ». La version est celle du tenant installé. « Retirer » enlève
+  cette copie en un clic et garde le pack de l'organisation. Le bouton reste
+  désactivé pendant la suppression; un échec laisse la copie et affiche l'erreur.
 - Recherche : une seule, flottante en bas sur iPhone (« chercher dans les apps et les
   skills »), sous le titre sur le bureau ; elle couvre tous les onglets de Sagax
   (Découvrir, Bots, Installés, Fournisseurs, Pages, Sources).

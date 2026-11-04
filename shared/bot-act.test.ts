@@ -37,6 +37,15 @@ describe("actorForTurn", () => {
 });
 
 describe("decideBotAct", () => {
+  it.each(["/api/org/admin", "/api/org/admin/routines", "/api/org/admin/routines/wren/runs", "/api/org/member", "/api/org/member/bots"])("#1993: explains the assertion transport for %s before replay or approval", (path) => {
+    for (const method of ["GET", "HEAD", "POST"]) {
+      for (const mode of ["ask", "auto", "full"] as const) {
+        const result = decideBotAct({ raw: { method, path }, mode, scopes: ["client", "admin"], neededScope: client });
+        expect(result).toMatchObject({ ok: false, status: 400, error: expect.stringContaining("Connect a Perspicax profile to this bot") });
+      }
+    }
+  });
+
   it("refuses an internal path, a testing path, and an internal frame", () => {
     expect(decideBotAct({ raw: { method: "GET", path: "/api/internal/agents" }, mode: "full", scopes: ["admin"], neededScope: client }).ok).toBe(false);
     expect(decideBotAct({ raw: { method: "POST", path: "/api/testing/internal-capability" }, mode: "full", scopes: ["admin"], neededScope: client }).ok).toBe(false);

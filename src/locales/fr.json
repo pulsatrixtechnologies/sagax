@@ -12422,6 +12422,7 @@
   "capabilities.state.notServed": "Non servie par ce moteur",
   "capabilities.state.reserved": "Nom réservé",
   "capabilities.state.unverifiable": "Non vérifiable",
+  "capabilities.installed.supersededByFlow": "Remplacé par le pack Flow de l'organisation ({tenant} {version})",
   "capabilities.reason.nameTaken": "Un autre serveur de ce bot porte déjà ce nom : il est laissé de côté.",
   "capabilities.reason.notSelected": "La liste de serveurs de ce bot ne le comprend pas.",
   "capabilities.reason.hostCommand": "Un serveur par commande ne roule jamais sur le serveur d'une organisation.",

@@ -801,8 +801,9 @@ export class PerspicaxMcp {
     const exchanged = await link.exchangeToken(source.token);
     if (!exchanged.ok) throw new Error(`Perspicax routine account exchange failed: ${exchanged.error}`);
     let session: string | null = null;
-    let finish = false;
-    let runId: string | undefined;
+    /** A run this probe proved it created. Never release an unnamed or
+     * already-live run on the same account connection. */
+    let ownedRun: { id: string; routine: string } | undefined;
     let result: ReadinessFlow | undefined;
     let problem: unknown;
     const rpc = async (method: string, params: Json, callSignal = signal): Promise<Json> => {
@@ -854,28 +855,35 @@ export class PerspicaxMcp {
       if (!isObject(listed.result) || !Array.isArray(listed.result.tools)) throw new Error("Perspicax Flow tools could not be listed.");
       if (!listed.result.tools.some(tool => isObject(tool) && tool.name === "flow_run")) {
         result = { step: "tools/list", error: "tool_missing flow_run is not available on this account connection." };
+      } else if (!input.routine) {
+        // The model may choose a recipe during the real turn. With no
+        // explicit recipe there is no honest plan to shadow: connection and
+        // catalogue readiness are the complete pre-flight.
+        result = {};
       } else {
-        finish = true;
-        const init = await call("run.init", { shadow: true, ...(input.routine ? { routine: input.routine } : {}) });
+        const init = await call("run.init", { shadow: true, routine: input.routine });
         const value = isObject(init.value) ? init.value : {};
         if (value.reason === "already_running" || value.code === "already_running") {
-          finish = false;
           result = { live: true };
         } else {
-          runId = typeof value.run_id === "string" ? value.run_id : undefined;
-          if (value.status === "blocked" || value.status === "failed" || value.ok === false || init.isError) finish = false;
           result = failure(init, "run.init");
-          if (result) finish = false; // A refused init acquired no lease.
-          else result = failure(await call("plan", { ...input.plan, ...(runId ? { run_id: runId } : {}) }), "plan") ?? {};
+          if (!result) {
+            const runId = typeof value.run_id === "string" && value.run_id.trim() ? value.run_id : undefined;
+            if (!runId) throw new Error("Perspicax Flow check opened no identifiable shadow run.");
+            ownedRun = { id: runId, routine: input.routine };
+            result = failure(await call("plan", { ...input.plan, run_id: runId }), "plan") ?? {};
+          }
         }
       }
     } catch (error) { problem = error; }
     finally {
-      if (finish) {
+      if (ownedRun) {
         try {
-          // A timed-out probe still closes its run with a fresh cleanup signal.
-          const closed = failure(await call("run.finish", runId ? { run_id: runId } : {}, AbortSignal.timeout(1_000)), "run.finish");
-          if (!result?.error && closed) result = closed;
+          // A readiness plan is deliberately not an executed recipe: release
+          // its exact lease without asking Flow's business close to accept a
+          // plan that has no journal.pass lines.
+          const released = failure(await call("release", { routine: ownedRun.routine, run_id: ownedRun.id }, AbortSignal.timeout(1_000)), "release");
+          if (!result?.error && released) result = released;
         } catch (error) { if (!result?.error) problem ??= error; }
       }
       if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${exchanged.token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(() => {});

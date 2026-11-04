@@ -131,9 +131,9 @@ function matchesFacts(query: RoutineScopeQuery, botId: string, facts: RoutineSco
   return true;
 }
 
-const REDACTED_ROUTINE_FIELDS = ["prompt", "attachments", "sourceThreadId", "resultsThreadId"] as const;
+const REDACTED_ROUTINE_FIELDS = ["requires", "prompt", "attachments", "sourceThreadId", "resultsThreadId"] as const;
 const REDACTED_RUN_FIELDS = [
-  "prompt", "attachments", "output", "attention", "denials",
+  "requires", "readiness", "readinessEngine", "prompt", "attachments", "output", "attention", "denials",
   "executionThreadId", "sourceThreadId", "resultsThreadId", "threadId", "webhookId", "deliveryId",
   // what the organization memory told the person it runs as
   "memoryHint",

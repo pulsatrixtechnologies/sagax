@@ -1,3 +1,4 @@
+import { RoutineReadinessList, routineReadinessLine } from "./RoutineReadiness";
 import { RunActivityState } from "./RunActivityState";
 export { useRunActivity } from "./RunActivityState";
 // One routine run, the way a person reads it (2026-10-29): a state header
@@ -129,7 +130,8 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
   // 2026-11-03: a blocked run says why in one plain line (its row's line);
   // any other error in plain words, never a lone "{".
   const blocked = run.status === "blocked";
-  const errorText = blocked ? routineRunBlockedLine(run) : run.error ? routineResultText(routineRunError(run.error)).text || routineRunError(run.error) : undefined;
+  const readinessBlocker = run.readiness?.find(check => !check.ok);
+  const errorText = blocked && readinessBlocker ? routineReadinessLine(readinessBlocker) : blocked ? routineRunBlockedLine(run) : run.error ? routineResultText(routineRunError(run.error)).text || routineRunError(run.error) : undefined;
   const readable = reported ? routineResultText(run.output) : null;
   const canReply = Boolean(onReply && live && threadId && editable && !run.redacted);
 
@@ -183,6 +185,7 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
       {run.status === "queued" && (run.attention || queuePlace) && <div data-run-deferred className="rounded-xl border border-accent/30 bg-accent/10 px-3.5 py-2.5 text-[12.5px] text-accent-text"><span className="font-medium">{t("routineRun.deferred")}</span>{run.attention && <> · {run.attention}</>}{queuePlace && <> · <span data-run-queue-position>{queuePlace}</span></>}</div>}
       {problems && <div data-run-problems role="status" className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-2.5 text-[12.5px] leading-relaxed text-warning"><CircleAlert size={15} className="mt-0.5 shrink-0" aria-hidden="true" /><span className="min-w-0 whitespace-pre-wrap"><span className="font-medium">{t("routines.status.completedWithProblems")}</span>{"\n"}{problems}</span></div>}
       {run.status !== "waiting" && errorText && <div data-run-error={blocked ? "blocked" : "failed"} role="alert" className={cn("flex items-start gap-2 rounded-xl border px-3.5 py-2.5 text-[12.5px] leading-relaxed", blocked ? "border-warning/30 bg-warning/10 text-warning" : "border-danger/30 bg-danger/10 text-danger")}><CircleAlert size={15} className="mt-0.5 shrink-0" aria-hidden="true" /><span className="min-w-0 whitespace-pre-wrap">{errorText}</span></div>}
+      {run.readiness && !run.redacted && <Fold id="readiness" label={t("routineReadiness.action")}><RoutineReadinessList checks={run.readiness} /></Fold>}
       {run.handedTo && run.handedTo.length > 0 && !run.redacted && <TeammateThreadLinks handedTo={run.handedTo} onOpenThread={onOpenThread} />}
       {run.autoPaused && <div data-run-auto-paused className="flex flex-wrap items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-2.5 text-[12.5px] text-warning"><span className="font-medium">{routineAutoPausedText(run.autoPaused.failures)}</span>{onResume && <button type="button" data-routine-resume onClick={onResume} disabled={working} className="inline-flex items-center gap-1 rounded-md bg-warning/15 px-2 py-0.5 font-medium hover:bg-warning/25 disabled:opacity-50"><CirclePlay size={11} aria-hidden="true" />{t("routines.autoPause.resume")}</button>}</div>}
       {detail?.note && run.status !== "waiting" && !errorText && <p className="rounded-lg bg-warning/10 px-3 py-2 text-[12.5px] text-ink">{detail.note}</p>}

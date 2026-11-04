@@ -279,13 +279,13 @@ describe("an unattended run only its owner can fix", () => {
     ]);
   });
 
-  it("fails an out-of-credit refusal at once with what to do", async () => {
+  it("blocks an out-of-credit refusal at once with what to do (#1946)", async () => {
     const h = harness();
     const credits = "Your xAI account is out of credits (xAI says: \"Your team has run out of credits\"). Add credits with xAI, then run it again.";
     const run = await h.start(h.routine("maus-1").id);
     h.fail("thread-1", credits, { stopReason: "rpc_error" });
-    expect(h.run(run.id)).toMatchObject({ status: "failed", error: credits });
-    expect(h.failed[0]!.alert).toEqual({ detail: "This bot's engine account is out of credit. Add credit with the provider, or choose another engine for this bot." });
+    expect(h.run(run.id)).toMatchObject({ status: "blocked", error: credits });
+    expect(h.failed[0]!.alert).toEqual({ detail: `Inbox sweep: "${credits}" This bot's engine account is out of credit. Add credit with the provider, or choose another engine for this bot.` });
 
   });
 
@@ -439,21 +439,21 @@ describe("an unattended run only its owner can fix", () => {
     expect(h.started.map((turn) => turn.threadId)).toEqual(["thread-1", "thread-1"]);
     expect(h.started[1]!.prompt).toContain(retryNote("usage_limit"));
     h.fail("thread-1", limit, { stopReason: "quota", limitResetsAt: START + 5 * 3_600_000 });
-    expect(h.run(run.id)).toMatchObject({ status: "failed", error: limit });
+    expect(h.run(run.id)).toMatchObject({ status: "blocked", error: limit });
     expect(h.failed[0]!.alert).toBeNull();
     expect(h.deferred).toHaveLength(1);
   });
 
-  it("fails a usage limit with no reset time, or one too far off, and tells the owner", async () => {
+  it("blocks a usage limit with no reset time, or one too far off, and tells the owner (#1946)", async () => {
     const h = harness();
     const run = await h.start(h.routine("maus-1").id);
     h.fail("thread-1", "You've hit your weekly limit · resets Oct 12 at 2:30pm (Asia/Calcutta)", { stopReason: "quota" });
-    expect(h.run(run.id).status).toBe("failed");
+    expect(h.run(run.id).status).toBe("blocked");
     const far = await h.start(h.routine("maus-2").id);
     h.fail(far.threadId!, "This Claude account has reached its weekly limit.", { stopReason: "quota", limitResetsAt: START + 13 * 3_600_000 });
-    expect(h.run(far.id).status).toBe("failed");
+    expect(h.run(far.id).status).toBe("blocked");
     const action = "This bot's engine reached its usage limit. Its routines work again once it resets, or choose another engine for this bot now.";
-    expect(h.failed.map(({ alert }) => alert)).toEqual([{ detail: action }, { detail: action }]);
+    expect(h.failed.map(({ alert }) => alert)).toEqual(h.failed.map(({ run }) => ({ detail: `${run.routineName}: "${run.error}" ${action}` })));
     expect(h.deferred).toEqual([]);
   });
 });

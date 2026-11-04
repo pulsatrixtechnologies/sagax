@@ -558,6 +558,9 @@ function EventEditorBody({
   const [intervalTimeoutDefaultApplied, setIntervalTimeoutDefaultApplied] = useState(Boolean(template));
   const [overlap, setOverlap] = useState<"skip" | "queue">(template?.overlap ?? "skip");
   // 2026-10-26: failed runs in a row that pause this routine (0 never).
+  const [requiredSkills, setRequiredSkills] = useState(template?.requires?.skills?.join(", ") ?? "");
+  const [requiredMcp, setRequiredMcp] = useState(template?.requires?.mcpServers?.join(", ") ?? "");
+  const [requiresComputer, setRequiresComputer] = useState(template?.requires?.computer ?? false);
   const [autoPauseAfter, setAutoPauseAfter] = useState(() => template ? routineAutoPauseAfter(template) : ROUTINE_AUTO_PAUSE_DEFAULT);
   const [continuity, setContinuity] = useState(Boolean(template?.continuity));
   // Only when I'm here (server/routines/routine-away.ts): off unless chosen.
@@ -806,6 +809,11 @@ function EventEditorBody({
           timeoutMinutes,
           overlap,
           autoPauseAfter,
+          requires: requiredSkills.trim() || requiredMcp.trim() || requiresComputer ? {
+            skills: requiredSkills.split(",").map(name => name.trim()).filter(Boolean),
+            mcpServers: requiredMcp.split(",").map(name => name.trim()).filter(Boolean),
+            computer: requiresComputer,
+          } : null,
           // Room goals can't carry a report yet, and a one-time run has no next run.
           continuity: routineTarget === "bot" && repeatsOnClock && continuity,
           onlyWhenPresent,
@@ -923,6 +931,9 @@ function EventEditorBody({
     recurrence === "interval" && intervalWindow === "custom" ? t("routineEditor.summary.intervalHours") : null,
     recurrence === "interval" && intervalEnd === "on-date" ? t("routineEditor.summary.intervalEnds", { date: intervalEndDate }) : null,
     watchAllowed && watchDraft.on ? t("routineWatch.title") : null,
+    requiredSkills.trim() ? t("routineReadiness.requiresSkills") : null,
+    requiredMcp.trim() ? t("routineReadiness.requiresMcp") : null,
+    requiresComputer ? t("routineReadiness.requiresComputer") : null,
     timeoutMinutes != null ? t("routineCalendar.stopsAfter", { duration: durationLabel(timeoutMinutes) }) : null,
     repeatsOnClock && overlap === "queue" ? t("routines.overlapQueue") : null,
     repeatsOnClock && autoPauseAfter !== ROUTINE_AUTO_PAUSE_DEFAULT ? routineAutoPauseOption(autoPauseAfter) : null,
@@ -937,7 +948,7 @@ function EventEditorBody({
     setMoreOpen(open);
     rememberRoutineEditorMoreOpen(open);
   };
-  const editorSnapshot = JSON.stringify([kind, name, description, recurrence, limitReset, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
+  const editorSnapshot = JSON.stringify([requiredSkills, requiredMcp, requiresComputer, kind, name, description, recurrence, limitReset, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
   const openedSnapshot = useRef(editorSnapshot);
   const dirty = editorSnapshot !== openedSnapshot.current;
   const requestClose = async () => {
@@ -1317,6 +1328,13 @@ function EventEditorBody({
                 options={[{ value: "", label: t("settings.card.noLimit") }, ...EVENT_DURATION_OPTIONS.map((minutes) => ({ value: String(minutes), label: durationLabel(minutes) })), ...(timeoutMinutes != null && !EVENT_DURATION_OPTIONS.includes(timeoutMinutes) ? [{ value: String(timeoutMinutes), label: durationLabel(timeoutMinutes) }] : [])]} />
               {repeatsOnClock && <PanelSelect<"skip" | "queue"> data-routine-overlap="" label={t("routines.overlapLabel")} hint={t("routineEditor.hint.overlap")} help={t(overlap === "queue" ? "routines.overlapQueueHelp" : "routines.overlapSkipHelp")} viewing={viewing} value={overlap} onChange={setOverlap}
                 options={[{ value: "skip", label: t("routines.overlapSkip") }, { value: "queue", label: t("routines.overlapQueue") }]} />}
+              <PanelRow label={t("routineReadiness.requiresSkills")} help={t("routineReadiness.requiresHelp")}>
+                {viewing ? <PanelValue>{requiredSkills || t("routineEditor.none")}</PanelValue> : <input aria-label={t("routineReadiness.requiresSkills")} className={cn(PANEL_INPUT, "w-full")} value={requiredSkills} onChange={event => setRequiredSkills(event.target.value)} />}
+              </PanelRow>
+              <PanelRow label={t("routineReadiness.requiresMcp")} help={t("routineReadiness.requiresHelp")}>
+                {viewing ? <PanelValue>{requiredMcp || t("routineEditor.none")}</PanelValue> : <input aria-label={t("routineReadiness.requiresMcp")} className={cn(PANEL_INPUT, "w-full")} value={requiredMcp} onChange={event => setRequiredMcp(event.target.value)} />}
+              </PanelRow>
+              <PanelToggle label={t("routineReadiness.requiresComputer")} viewing={viewing} checked={requiresComputer} onChange={setRequiresComputer} />
               {repeatsOnClock && <PanelSelect data-routine-auto-pause="" label={t("routines.autoPause.label")} hint={t("routineEditor.hint.autoPause")} help={t("routines.autoPause.help")} viewing={viewing} value={String(autoPauseAfter)} onChange={(value) => setAutoPauseAfter(Number(value))}
                 options={routineAutoPauseChoices(autoPauseAfter).map((count) => ({ value: String(count), label: routineAutoPauseOption(count) }))} />}
               {!isRoomGoal && repeatsOnClock && <PanelToggle data-routine-continuity="" label={t("routines.continuityLabel")} hint={t("routineEditor.hint.continuity")} help={t("routines.continuityHelp")} viewing={viewing} checked={continuity} onChange={setContinuity} />}

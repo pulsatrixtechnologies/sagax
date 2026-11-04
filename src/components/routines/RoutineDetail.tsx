@@ -1,3 +1,4 @@
+import { RoutineCheckButton, RoutineReadinessList, useRoutineReadiness, type RoutineReadinessControl } from "./RoutineReadiness";
 // A routine's page (2026-10-29), the way the Automations page and the bot
 // panel open it: who runs it and what state it is in (active, paused, paused
 // by itself after failures, suspended, finished, running right now), when it
@@ -105,7 +106,7 @@ function TriggerRow({ routine, bot, editable, onPatch }: { routine: Routine; bot
   </PanelRow>;
 }
 
-export function RoutineDetail({ routine, runs, bots, groups = [], now = Date.now(), compact = false, editable = true, canRun = false, inFlight = false, starting = false, working = false, error, onOpenRun, onRunNow, onToggle, onEdit, onDelete, onOpenGroup, onPatch, onClearRuns, actions = true }: {
+export function RoutineDetail({ routine, runs, bots, groups = [], now = Date.now(), compact = false, editable = true, canRun = false, inFlight = false, starting = false, working = false, error, onOpenRun, onRunNow, onToggle, onEdit, onDelete, onOpenGroup, onPatch, onClearRuns, actions = true, readiness: externalReadiness }: {
   routine: Routine;
   /** Every run kept for this routine, any order. */
   runs: RoutineRun[];
@@ -134,7 +135,10 @@ export function RoutineDetail({ routine, runs, bots, groups = [], now = Date.now
   onClearRuns?: () => void;
   /** Draw the action row (the bot panel draws its own bar). */
   actions?: boolean;
+  readiness?: RoutineReadinessControl;
 }) {
+  const ownReadiness = useRoutineReadiness(routine.id);
+  const readiness = externalReadiness ?? ownReadiness;
   const bot = bots.find((candidate) => candidate.id === routine.botId);
   const isRoomGoal = routine.target === "room-goal";
   const group = groups.find((candidate) => candidate.id === routine.groupId);
@@ -161,6 +165,9 @@ export function RoutineDetail({ routine, runs, bots, groups = [], now = Date.now
           {routine.autoPaused && !routine.enabled && <p data-routine-auto-paused={routine.autoPaused.failures} className="text-[11.5px] text-warning">{t("routineDetail.autoPausedAt", { date: routineDateTime(routine.autoPaused.at) })}</p>}
           {routine.deleteWhenFinished && <p data-routine-delete-when-finished="" className="text-[11.5px] text-ink-secondary">{t("routines.deleteWhenFinished.willDelete")}</p>}
           {error && <div role="alert" className="rounded-lg bg-danger/10 px-3 py-2 text-[11.5px] text-danger">{error}</div>}
+          {readiness.checking && <p role="status" className="text-[12px] text-ink-secondary">{t("routineReadiness.checking")}</p>}
+          {readiness.error && <p role="alert" className="text-[12px] text-danger">{readiness.error}</p>}
+          {readiness.answer && <RoutineReadinessList checks={readiness.answer.checks} checkedAt={readiness.answer.checkedAt} />}
           <div className="flex items-center justify-between gap-2 pt-1">
             <h3 className="flex items-center gap-1.5 text-[12px] font-medium text-ink-secondary">{t("routineDetail.runs")}{history.length > 0 && <span className="rounded-full bg-raised px-1.5 text-[10.5px]">{history.length}</span>}</h3>
             {onClearRuns && history.length > 0 && <button type="button" data-routine-clear-runs onClick={onClearRuns} aria-label={t("routineDetail.clearRuns")} title={t("routineDetail.clearRuns")} className="flex size-7 items-center justify-center rounded-full text-ink-tertiary hover:bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"><Eraser size={14} aria-hidden="true" /></button>}
@@ -175,6 +182,7 @@ export function RoutineDetail({ routine, runs, bots, groups = [], now = Date.now
       {actions && (
         <div data-routine-actions className="flex flex-wrap items-center gap-2 border-t border-hairline/40 px-4 py-3">
           {canRun && onRunNow && <button type="button" data-run-now onClick={onRunNow} disabled={working || inFlight} title={inFlight ? t("routines.runNow.inFlight") : t("routines.runNow")} className={cn(PRIMARY_PILL, "gap-1.5")}>{starting ? <Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Play size={13} fill="currentColor" aria-hidden="true" />}{starting ? t("routines.runNow.starting") : t("routines.runNow")}</button>}
+          {canRun && <RoutineCheckButton control={readiness} disabled={working} />}
           {editable && onEdit && <button type="button" data-routine-edit onClick={onEdit} title={t("routines.edit")} className={cn(PILL, "gap-1.5")}><Pencil size={13} aria-hidden="true" />{t("routines.edit")}</button>}
           {editable && onToggle && <button type="button" data-routine-toggle onClick={onToggle} disabled={working} title={routine.enabled ? t("routines.disable") : t("routines.enable")} className={cn(PILL, "gap-1.5")}>{routine.enabled ? <Pause size={13} aria-hidden="true" /> : <CirclePlay size={13} aria-hidden="true" />}{routine.enabled ? t("routines.disable") : t("routines.enable")}</button>}
           {isRoomGoal && onOpenGroup && <button type="button" onClick={onOpenGroup} title={t("routineCalendar.openGroup")} className={cn(PILL, "gap-1.5")}><ExternalLink size={13} aria-hidden="true" />{t("routineCalendar.openGroup")}</button>}

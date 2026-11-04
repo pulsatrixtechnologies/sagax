@@ -739,6 +739,49 @@ export class PerspicaxMcp {
     } finally { await this.close(entry); }
   }
 
+  /** Cheap read on a separate, short-lived routine connection. No turn or identity switch. */
+  async probeReadiness(principalId: string, profiles: readonly string[], signal: AbortSignal): Promise<{ refused?: boolean; profile?: string; detail?: string } | undefined> {
+    const link = this.options.link();
+    if (!link || !profiles.length) return undefined;
+    const subject = this.options.subjectOf(principalId);
+    if (!subject || subject.disabled) return undefined;
+    for (const profileId of profiles) {
+      if (signal.aborted) return { detail: "Perspicax readiness timed out; admission will retry reachability." };
+      const profile = link.profileCatalog().find(profile => profile.id === profileId);
+      let token: string | undefined;
+      let session: string | null = null;
+      try {
+        const source = await this.subjectFor("delegation", principalId, subject);
+        if (!source.ok) return { detail: "Perspicax routine access is not available yet; admission will retry." };
+        const exchanged = await link.exchangeToken(source.token, profileId);
+        if (!exchanged.ok) return { refused: exchanged.error === "subject" || exchanged.error === "not_held", profile: profile?.slug ?? profileId, detail: exchanged.error };
+        token = exchanged.token;
+        const post = async (frame: Json) => {
+          const response = await this.fetcher(link.mcpEndpoint(), { method: "POST", redirect: "error", signal,
+            headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${token}`, ...(session ? { "mcp-session-id": session } : {}) }, body: JSON.stringify(frame) });
+          session = response.headers.get("mcp-session-id") ?? session;
+          const text = await response.text();
+          return { response, text };
+        };
+        const init = await post({ jsonrpc: "2.0", id: "readiness-init", method: "initialize", params: { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: "Sagax routine check", version: this.options.version } } });
+        if (init.response.status === 401 || init.response.status === 403) return { refused: true, profile: profile?.slug ?? profileId, detail: `${init.response.status} invalid_token` };
+        if (!init.response.ok) return { detail: `Perspicax readiness HTTP ${init.response.status}; admission will retry reachability.` };
+        await post({ jsonrpc: "2.0", method: "notifications/initialized" });
+        const listed = await post({ jsonrpc: "2.0", id: "readiness-list", method: "tools/list" });
+        if (listed.response.status === 401 || listed.response.status === 403) return { refused: true, profile: profile?.slug ?? profileId, detail: `${listed.response.status} invalid_token` };
+        if (!listed.response.ok) return { detail: `Perspicax readiness HTTP ${listed.response.status}; admission will retry reachability.` };
+      } catch {
+        return { detail: "Perspicax readiness is unreachable; admission will retry reachability." };
+      } finally {
+        if (token) {
+          if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(() => {});
+          void link.revokeExchanged(token).catch(() => {});
+        }
+      }
+    }
+    return {};
+  }
+
   /** Exchange the speaker's access for each profile of the bot, before the
    * engine starts. Never throws. */
   async prepareTurn(input: {

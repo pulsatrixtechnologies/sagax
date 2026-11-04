@@ -7367,7 +7367,6 @@ async function perspicaxTurnPrepare(input: {
   // Handshake beside setup: open/verify the MCP session and identity lease
   // now, so the engine's later tools/list hits the same-session cache.
   if (plan.mounted.length) await perspicaxMcp.ensureTurnSessions(input.threadId, input.generation);
-  if (plan.mounted.length && !input.quiet) recordPerspicaxWork(live, input.threadId, input.speaker, speakerPrincipalId, plan.mounted.map((profile) => profile.name));
   if (plan.mounted.length) void perspicaxMcp?.refreshApiNames({ threadId: input.threadId, generation: input.generation, botId: live.id });
   return { live, speakerPrincipalId, routine, plan };
 }
@@ -7388,6 +7387,9 @@ async function perspicaxTurnIntegration(input: {
   const early = input.prepared ? await input.prepared : await perspicaxTurnPrepare(input);
   if (!early || !perspicaxMcp) return none;
   const { live, speakerPrincipalId, routine, plan } = early;
+  // The organization's work row is written where it always was: once the
+  // turn's setup reached the mounts, never for a turn cancelled before that.
+  if (plan.mounted.length && !input.quiet) recordPerspicaxWork(live, input.threadId, input.speaker, speakerPrincipalId, plan.mounted.map((profile) => profile.name));
   // Mount naming needs `taken` (custom MCP names already attached): sequential
   // after attachCustomMcp, never in parallel with it.
   const custom: Record<string, McpServerSpec> = {};

@@ -179,7 +179,10 @@ internal fun RoutineEditorSheet(
     // once is [AgentChoice.applied], which is saved — a later fleet frame and a
     // restored form both leave a deliberate "Choose an agent" alone.
     LaunchedEffect(Unit) {
-        agent = agent.withDefault(session.state.value.bots.firstOrNull { it.hidden != true }?.id)
+        val preferred = opened.preferredBotId
+            ?: opened.seed?.botId
+        val fallback = session.state.value.bots.firstOrNull { it.hidden != true }?.id
+        agent = agent.withDefault(preferred ?: fallback)
     }
     LaunchedEffect(Unit) {
         availability = session.loadRoutineRunAvailability()
@@ -246,6 +249,7 @@ internal fun RoutineEditorSheet(
                                     schedule = schedule,
                                     durationMinutes = legacyDurationMinutes,
                                     timeoutMinutes = timeoutMinutes,
+                                    groupId = opened.groupId ?: opened.seed?.groupId,
                                 ),
                                 opened.routineId,
                             )

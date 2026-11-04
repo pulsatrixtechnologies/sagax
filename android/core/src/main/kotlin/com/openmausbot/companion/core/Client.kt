@@ -311,6 +311,9 @@ class CompanionClient(
 
     suspend fun config(): ConfigStatus = send(makeRequest("GET", "/api/config"))
 
+    /** `GET /api/auth/session`: who this phone is signed in as. */
+    suspend fun authSession(): AuthSession = send(makeRequest("GET", "/api/auth/session"))
+
     /**
      * The engine is a setting, not a secret, so it rides the ordinary config
      * write — the same one `VoiceSettings.tsx` sends from its Voice engine
@@ -620,6 +623,22 @@ class CompanionClient(
     suspend fun groupMemory(groupId: String): GroupMemoryView = send(
         makeRequest("GET", "/api/groups/${segment(groupId)}/memory"),
     )
+
+    /** `GET /api/threads/:id/files`: newest first. */
+    suspend fun threadFiles(threadId: String): List<ThreadFile> = send<ThreadFilesResponse>(
+        makeRequest("GET", "/api/threads/${segment(threadId)}/files"),
+    ).files
+
+    /** `POST /api/threads/:id/files/:fileId/pin`: pin or unpin in the Library. */
+    suspend fun setThreadFilePin(threadId: String, fileId: String, pinned: Boolean) {
+        sendUnit(
+            makeRequest(
+                "POST",
+                "/api/threads/${segment(threadId)}/files/${segment(fileId)}/pin",
+                body = buildJsonObject { put("pinned", pinned) },
+            ),
+        )
+    }
 
     /**
      * The owner's edit (`{text, expectedHash}`), overwrite (`{text}`) or
@@ -1253,6 +1272,7 @@ class CompanionClient(
             put("botId", input.botId)
             put("runOn", input.runOn)
             input.enabled?.let { put("enabled", it) }
+            input.groupId?.takeIf { it.isNotBlank() }?.let { put("groupId", it) }
             put("schedule", buildJsonObject {
                 put("type", input.schedule.type.name.lowercase())
                 input.schedule.at?.let { put("at", it) }

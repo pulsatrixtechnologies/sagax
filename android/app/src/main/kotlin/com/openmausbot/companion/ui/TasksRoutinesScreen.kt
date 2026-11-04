@@ -290,15 +290,34 @@ internal data class RoutineEditorTarget(
     /** An edit must send the flag back unchanged; a new routine sends none. */
     val enabled: Boolean?,
     val seed: Routine?,
+    /** Team goal: room id when creating from the group panel. */
+    val groupId: String? = null,
+    /** Preferred bot for a new team goal (the group's lead when known). */
+    val preferredBotId: String? = null,
 ) {
-    val stateKey: String get() = "routine-editor:${routineId ?: "new"}"
+    val stateKey: String
+        get() = "routine-editor:${routineId ?: "new"}:${groupId.orEmpty()}"
 
     companion object {
-        fun new(): RoutineEditorTarget =
-            RoutineEditorTarget(routineId = null, enabled = null, seed = null)
+        fun new(
+            groupId: String? = null,
+            preferredBotId: String? = null,
+        ): RoutineEditorTarget =
+            RoutineEditorTarget(
+                routineId = null,
+                enabled = null,
+                seed = null,
+                groupId = groupId,
+                preferredBotId = preferredBotId,
+            )
 
         fun edit(routine: Routine): RoutineEditorTarget =
-            RoutineEditorTarget(routineId = routine.id, enabled = routine.enabled, seed = routine)
+            RoutineEditorTarget(
+                routineId = routine.id,
+                enabled = routine.enabled,
+                seed = routine,
+                groupId = routine.groupId,
+            )
 
         /** An empty save is the closed sheet; restoring it runs the init instead. */
         val Saver: Saver<RoutineEditorTarget?, Any> = listSaver(
@@ -306,7 +325,12 @@ internal data class RoutineEditorTarget(
                 if (target == null) {
                     emptyList()
                 } else {
-                    listOf(target.routineId ?: "", target.enabled?.toString() ?: "")
+                    listOf(
+                        target.routineId ?: "",
+                        target.enabled?.toString() ?: "",
+                        target.groupId ?: "",
+                        target.preferredBotId ?: "",
+                    )
                 }
             },
             restore = { saved ->
@@ -317,6 +341,8 @@ internal data class RoutineEditorTarget(
                         routineId = saved[0].ifEmpty { null },
                         enabled = saved[1].toBooleanStrictOrNull(),
                         seed = null,
+                        groupId = saved.getOrNull(2)?.ifEmpty { null },
+                        preferredBotId = saved.getOrNull(3)?.ifEmpty { null },
                     )
                 }
             },

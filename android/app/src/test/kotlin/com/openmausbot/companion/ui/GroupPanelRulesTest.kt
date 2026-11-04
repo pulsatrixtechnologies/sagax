@@ -156,4 +156,31 @@ class GroupPanelRulesTest {
             ).map { it.id },
         )
     }
+
+    @Test
+    fun `signed-in principal owns their organization room`() {
+        val bots = listOf(bot("wren", owner = "pr_wren"))
+        val room = room(members = listOf("wren"), ownerId = "pr_wren")
+        val viewer = RoomViewer.from(
+            com.openmausbot.companion.core.AuthSession(
+                principalId = "pr_wren",
+                email = "wren@example.test",
+                role = "member",
+            ),
+        )
+        val access = GroupPanelRules.access(room, bots, viewer, organization = true)
+        assertTrue(access.editable)
+        assertFalse(access.readOnlyNote)
+        assertEquals("pr_wren", viewer.actorId)
+    }
+
+    @Test
+    fun `people ids keep listed humans and personLabel keeps the id`() {
+        val room = room().copy(humanIds = listOf(" pr_wren ", "", "pr_osprey"))
+        assertEquals(listOf("pr_wren", "pr_osprey"), GroupPanelRules.peopleIds(room))
+        assertEquals("pr_wren", GroupPanelRules.personLabel("pr_wren"))
+        assertEquals("Lead", GroupPanelRules.LEAD_BADGE)
+        assertEquals("Make lead", GroupPanelRules.MAKE_LEAD)
+        assertEquals("Advanced", GroupPanelRules.ADVANCED)
+    }
 }

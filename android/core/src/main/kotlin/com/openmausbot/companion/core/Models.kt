@@ -1207,6 +1207,8 @@ data class RoutineInput(
     val timeoutMinutes: Int? = null,
     /** Interpreted by CompanionClient as an explicit JSON null. */
     @kotlinx.serialization.Transient val clearTimeout: Boolean = false,
+    /** Team goal: the room this routine belongs to. */
+    val groupId: String? = null,
 )
 
 @Serializable

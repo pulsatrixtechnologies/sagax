@@ -194,6 +194,11 @@ async function start() {
       SAGAX_PERSPICAX_DIRECTORY_SECONDS: "5",
       SAGAX_ROUTINE_RENEW_SECONDS: String(RENEW_SECONDS),
       SAGAX_ORG_NAME: "Acme",
+      // e3f51c658 keeps profile leases while the engine is warm. Exercise the
+      // real idle close on a bounded fixture window, then assert revocation.
+      SAGAX_CLAUDE_SESSION_IDLE_MS: "10000",
+      // The pool reaps on MemoryWatch ticks, not the driver's idle timer.
+      SAGAX_MEMORY_WATCH_MS: "100",
       // its checks read the message database raw (docs/content-encryption.md)
       SAGAX_CONTENT_ENCRYPTION: "off",
     },

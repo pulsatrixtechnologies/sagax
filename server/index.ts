@@ -17315,7 +17315,7 @@ bus.subscribe((event: RuntimeEvent) => {
         try { engine.adapter.releaseWarmSession?.(threadId); } catch { /* already closed */ }
         // engine idle timer (or pool eviction): stop Perspicax keep-alive (#1955)
         perspicaxMcp?.noteEngineCold(threadId);
-      }));
+      }), idleEngineTtl(engine.driverKind));
       perspicaxMcp?.noteEngineWarm(threadId);
     } else {
       idleEngines.forget(event.threadId);
@@ -18514,6 +18514,9 @@ const runningTurnEngines = new Map<string, NonNullable<ReturnType<typeof registr
  * instead of the server. */
 const memoryGuard = memoryGuardSettings();
 const ROUTINE_MEMORY_WAIT_MS = 10 * 60_000;
+function idleEngineTtl(driverKind: string | undefined): number {
+  return sessionIdlePolicy(driverKind === "claudeAgent" ? "CLAUDE" : driverKind === "codex" ? "CODEX" : "ACP").idleMs;
+}
 const idleEngines = new IdleEnginePool({
   maxIdle: memoryGuard.maxIdle,
   ttlMs: sessionIdlePolicy("CLAUDE").idleMs,
@@ -21913,7 +21916,7 @@ function prewarmThread(botId: string, threadId: string, person: string, opts: Pr
             releaseWarmEngine(threadId);
             perspicaxMcp?.noteEngineCold(threadId);
           });
-        });
+        }, idleEngineTtl(registry.get(store.projectBotForTask(botId, threadId)?.modelSelection.instanceId ?? "")?.driverKind));
         resolve();
       }
     }).catch((error) => {

@@ -14,6 +14,7 @@ export const REFRESH_TICK_MS = 5_000;
 export const WATCH_LEASE_MS = 90_000;
 export const RUN_TIMEOUT_MS = 30_000;
 export const MAX_CONCURRENT_RUNS = 2;
+export const OPEN_STALE_MS = 30_000;
 
 export interface ArtifactRefresher {
   /** A viewer has these artifacts on screen: each gets a lease. */
@@ -37,6 +38,12 @@ export function createArtifactRefresher(options: {
   timeoutMs?: number;
   concurrency?: number;
   log?: (line: string) => void;
+  /** 2026-11-04: a source that runs as soon as its artifact opens (a new
+   * lease), not on the next interval: one whose runner keeps its own short
+   * cache, so opening it again and again costs nothing (dispatch_kpi). */
+  refreshOnOpen?: (artifact: Artifact) => boolean;
+  /** No run on open when the last one is more recent than this. */
+  openStaleMs?: number;
 }): ArtifactRefresher {
   const now = options.now ?? Date.now;
   const leaseMs = options.leaseMs ?? WATCH_LEASE_MS;
@@ -99,7 +106,15 @@ export function createArtifactRefresher(options: {
   return {
     watch(ids) {
       const until = now() + leaseMs;
+      const opened = options.refreshOnOpen ? ids.filter((id) => !leased(id)) : [];
       for (const id of ids) leases.set(id, until);
+      for (const id of opened) {
+        const artifact = options.store.get(id);
+        if (!artifact?.source || artifact.refresh.state === "paused" || running.has(id) || !options.refreshOnOpen!(artifact)) continue;
+        if (now() - (artifact.refresh.lastRunAt ?? 0) < (options.openStaleMs ?? OPEN_STALE_MS)) continue;
+        if (running.size >= concurrency) continue;
+        void runOne(artifact).catch(() => {});
+      }
     },
     async refreshNow(id) {
       const current = options.store.get(id);

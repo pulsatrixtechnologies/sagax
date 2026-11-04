@@ -16289,14 +16289,23 @@ const limitFailoverStore = new LimitFailoverStore({ file: join(DATA_DIR, "limit-
  * know of stays a `recovery:` row in the chat. */
 function limitFailoverRow(threadId: string, line: LimitFailoverLine): NonNullable<Message["tool"]> {
   const quiet = line.kind === "switched" || line.kind === "back";
+  // #1942: consecutive limits with nothing left is a failed turn, not a soft recovery.
+  const failed = line.kind === "exhausted";
   const words = line.kind === "switched" && line.to === "Auto" && line.reason !== "model"
     ? `${line.from} reached its usage limit during this turn: Auto continued the same turn on another model that works, with the steps already taken; ${line.from} is picked again once its limit resets (around ${limitClockText(line.resetsAt)}).`
     : limitFailoverText(line, limitClockText);
   if (quiet) {
     console.info(`[limit-failover] ${threadId}: ${words}`);
     bus.publish({ eventId: newId(), provider: "harness" as RuntimeEvent["provider"], threadId, createdAt: new Date().toISOString(), type: "runtime.notice", message: words });
+  } else if (failed) {
+    console.warn(`[limit-failover] ${threadId}: ${words}`);
+    bus.publish({ eventId: newId(), provider: "harness" as RuntimeEvent["provider"], threadId, createdAt: new Date().toISOString(), type: "runtime.notice", message: words });
   }
-  return { name: `${quiet ? "notice:" : "recovery:"} ${words}`, ok: true, limitFailover: line };
+  return {
+    name: `${failed ? "error:" : quiet ? "notice:" : "recovery:"} ${words}`,
+    ok: !failed,
+    limitFailover: line,
+  };
 }
 /** The person's message again, with what the turn a usage limit stopped had
  * already done; the message alone when it had done nothing yet. */
@@ -16381,13 +16390,22 @@ const limitFailover = createLimitFailoverHost({
   },
   replaceFailure: (threadId, turnId, line, since) => {
     const tool = limitFailoverRow(threadId, line);
+    // #1942: exhausted failover is a failed turn (readers must not treat empty as done).
+    const failed = line.kind === "exhausted";
     // The engine's own error row for this turn becomes the line: one row,
     // not two. A runtime.error row may carry no turn id: then the last one
     // written since the turn was dispatched.
     const failure = store.messagesFor(threadId).findLast((message) => message.kind === "activity" && message.tool !== undefined &&
       failedTurnCause(message.tool.name) !== null && (turnId && message.turnId ? message.turnId === turnId : message.at >= since));
-    if (failure) store.patchMessage(threadId, failure.id, { tool });
-    else store.appendMessage(threadId, { role: "bot", kind: "activity", tool });
+    if (failure) store.patchMessage(threadId, failure.id, { tool, ...(failed ? { turnSucceeded: false } : {}) });
+    else store.appendMessage(threadId, { role: "bot", kind: "activity", tool, ...(failed ? { turnSucceeded: false } : {}) });
+    // Plain words in the chat so the person sees what happened (not only a chip).
+    if (failed) {
+      store.appendMessage(threadId, {
+        role: "bot", kind: "text", text: limitFailoverText(line, limitClockText), turnSucceeded: false,
+        ...(turnId ? { turnId } : {}),
+      });
+    }
   },
   request: (threadId) => directRequestOwners.get(threadId),
   autoRefuse: (threadId, payer, until) => {

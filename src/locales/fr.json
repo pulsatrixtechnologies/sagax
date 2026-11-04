@@ -13084,5 +13084,9 @@
   "routineReadiness.flow_profile": "Cette routine Flow a besoin d’un profil Perspicax sur son bot pour accéder aux skills Flow. Choisis-en un dans Connecter des apps du bot.",
   "approval.pending.expiredNote": "Cette approbation a expiré après {days} jours sans réponse; redemandez-la si elle est encore nécessaire.",
   "settings.org.pendingApprovalExpireDays": "Les approbations en attente expirent après (jours)",
-  "settings.me.pendingApprovalExpireDays": "Mes approbations en attente expirent après (jours)"
+  "settings.me.pendingApprovalExpireDays": "Mes approbations en attente expirent après (jours)",
+  "limitFailover.exhausted": "Limites atteintes sur {tried} : aucun autre moteur n'a pu répondre. Choisissez un autre modèle, ajoutez du crédit, ou réessayez à la réinitialisation (vers {time}).",
+  "limitFailover.ownerExhausted": "Le propriétaire de ce bot a atteint ses limites sur {tried} : aucun autre moteur n'a pu répondre. Choisissez un autre modèle, ajoutez du crédit, ou réessayez à la réinitialisation (vers {time}).",
+  "limitFailover.exhaustedNoTime": "Limites atteintes sur {tried} : aucun autre moteur n'a pu répondre. Choisissez un autre modèle, ajoutez du crédit, ou réessayez plus tard.",
+  "limitFailover.ownerExhaustedNoTime": "Le propriétaire de ce bot a atteint ses limites sur {tried} : aucun autre moteur n'a pu répondre. Choisissez un autre modèle, ajoutez du crédit, ou réessayez plus tard."
 }

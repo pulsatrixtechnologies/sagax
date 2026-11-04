@@ -45,4 +45,14 @@ describe("the usage-limit line", () => {
       tool: { name: `recovery: ${limitFailoverText(switched, (at) => resetClockText(at, "en-US"))}`, ok: true, limitFailover: switched } } as Message;
     expect(statusActivity(message)).toEqual({ kind: "recovery", text: expect.stringContaining("je continue sur Codex") });
   });
+
+  it("names consecutive limits as exhausted (#1942)", () => {
+    setLocale("en");
+    const exhausted: LimitFailoverLine = { kind: "exhausted", tried: ["Grok", "OpenAI-compatible"], resetsAt: AT };
+    expect(limitFailoverLineText(exhausted, NOW)).toContain("Grok, OpenAI-compatible");
+    expect(limitFailoverLineText(exhausted, NOW)).toContain("no other engine could answer");
+    expect(limitFailoverText(exhausted, (at) => resetClockText(at, "en-US", undefined, NOW))).toContain("Grok, OpenAI-compatible");
+    setLocale("fr");
+    expect(limitFailoverLineText(exhausted, NOW)).toContain("aucun autre moteur n'a pu répondre");
+  });
 });

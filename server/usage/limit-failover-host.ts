@@ -259,26 +259,59 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       if (!refused) {
         // #1696: stay on the backup (no return after a reset). A usage limit
         // still records the failover so the thread goes back after the reset.
+        let fromName = deps.engineName(dispatch.engine.instanceId);
+        const toName = deps.engineName(backup.instanceId);
         if (exhausted) {
           deps.replaceFailure(threadId, turnId, {
-            kind: "switched", from: deps.engineName(dispatch.engine.instanceId), to: deps.engineName(backup.instanceId),
+            kind: "switched", from: fromName, to: toName,
             resetsAt: deps.now(), reason: "model",
             ...(dispatch.owner ? { owner: true as const } : {}),
           }, dispatch.at);
         } else {
           const kept = store.record({ botId: dispatch.botId, threadId, from: dispatch.selection, to: backup, resetsAt, at: deps.now() });
+          fromName = deps.engineName(kept.from.instanceId);
           deps.replaceFailure(threadId, turnId, {
-            kind: "switched", from: deps.engineName(kept.from.instanceId), to: deps.engineName(backup.instanceId), resetsAt: kept.resetsAt,
+            kind: "switched", from: fromName, to: toName, resetsAt: kept.resetsAt,
             ...(dispatch.owner ? { owner: true as const } : {}),
           }, dispatch.at);
         }
-        await deps.resend(dispatch.botId, threadId, own.messageId, dispatch.speaker, dispatch.trigger, turnId ? { turnId } : {});
+        const resent = await deps.resend(dispatch.botId, threadId, own.messageId, dispatch.speaker, dispatch.trigger, turnId ? { turnId } : {});
+        // #1942: a silent switch with a failed resend must never end the turn
+        // as done with an empty reply.
+        if (!resent) {
+          console.warn(`[limit-failover] ${threadId}: switch to ${backup.instanceId} recorded but resend did not start`);
+          deps.replaceFailure(threadId, turnId, {
+            kind: "exhausted",
+            tried: [...new Set([fromName, toName].filter(Boolean))],
+            resetsAt: homeReset,
+            ...(dispatch.owner ? { owner: true as const } : {}),
+          }, dispatch.at);
+        }
         return;
       }
       console.warn(`[limit-failover] ${threadId}: could not move to ${backup.instanceId}: ${refused}`);
     }
     // Exhausted with no backup: leave the engine's own error (choose another model).
     if (exhausted) return;
+    // #1942: already failed over once and nothing further can take over: mark
+    // the turn failed with the engines that refused (never silent empty done).
+    if (home) {
+      const tried = [...new Set([
+        deps.engineName(home.from.instanceId),
+        deps.engineName(dispatch.engine.instanceId),
+        deps.engineName(home.to.instanceId),
+      ].filter(Boolean))];
+      console.warn(`[limit-failover] ${threadId}: exhausted after ${tried.join(" -> ")}`);
+      deps.replaceFailure(threadId, turnId, {
+        kind: "exhausted", tried, resetsAt: homeReset, ...(dispatch.owner ? { owner: true as const } : {}),
+      }, dispatch.at);
+      if (store.schedule({
+        kind: "message", botId: dispatch.botId, threadId, messageId: own.messageId, engine: homeEngine.instanceId,
+        at: homeReset + store.afterResetMs, ...(dispatch.speaker !== undefined ? { speaker: dispatch.speaker } : {}),
+        ...(dispatch.trigger !== undefined ? { trigger: dispatch.trigger } : {}),
+      })) arm();
+      return;
+    }
     // Nothing can take over: the message goes again once the limit resets, once.
     if (!store.schedule({
       kind: "message", botId: dispatch.botId, threadId, messageId: own.messageId, engine: homeEngine.instanceId,

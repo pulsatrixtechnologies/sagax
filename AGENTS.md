@@ -42,8 +42,15 @@ refuses a model the bot's engine does not list. Tests:
 Flow readiness calls `flow_run` on the account's main Perspicax connection
 with the run-as person's routine delegation. It never selects a bot profile
 or identity. A prompt without a named recipe checks the connection and
-catalogue only, leaving the recipe choice to the model. A named recipe opens
-a shadow run and checks the first plan with the prompt's explicit inputs.
+catalogue only, leaving the recipe choice to the model. Recipe names come
+only from explicit JSON, a `--routine` flag, a quoted name or a marked
+`routine: name`; prose such as "routine Flow jusqu'à" is not a name.
+A named recipe checks shadow init and checks a plan only when the prompt
+supplies an explicit plan command and arguments. It never fabricates units
+or a plan check before the model discovers its inputs. Plan calls name both
+the recipe and run id so concurrent probes cannot select another claim.
+Each probe names a distinct MCP client with its bot, recipe and a fresh id,
+separate from business turns and other probes on the same person's account.
 Cleanup calls `release {routine, run_id}` only for a successful init with an
 identified run, using an independent signal; it never finishes a business
 run or releases an unnamed claim after an init timeout. An `already_running`

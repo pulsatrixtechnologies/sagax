@@ -20,6 +20,7 @@
 //     a fresh subject; when that fails the call answers "Perspicax access
 //     for this turn ended" (a disabled person mid-turn, S5-10);
 //   - no token is ever logged or put in an error.
+import { randomUUID } from "node:crypto";
 import { guardToolCall, type GuardOptions } from "../mcp/mcp-permissions.ts";
 import { telephonyRefusal, voiceToolCall } from "../telephony-guard.ts";
 import { placeArgsFromVoiceCall } from "../../shared/outbound-call.ts";
@@ -788,7 +789,7 @@ export class PerspicaxMcp {
     }
   }
 
-  /** Shadow the first Flow plan on a private account connection backed by
+  /** Check Flow init and an explicit plan on a private account connection backed by
    * the run-as person's routine delegation. Flow is supplied by the active
    * organization pack, never by a bot profile or a stored role choice. */
   async probeFlowReadiness(principalId: string, botId: string, input: RoutineFlowInput, signal: AbortSignal): Promise<ReadinessFlow> {
@@ -849,7 +850,7 @@ export class PerspicaxMcp {
       return { step, error: `${typeof code === "object" ? "flow_error" : code} ${message}`.trim() };
     };
     try {
-      await rpc("initialize", { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: `Pulsa Bot (${botId})`, version: this.options.version } });
+      await rpc("initialize", { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: `Sagax Flow check (${botId}; ${input.routine ?? "catalogue"}; ${randomUUID()})`, version: this.options.version } });
       await rpc("notifications/initialized", {});
       const listed = await rpc("tools/list", {});
       if (!isObject(listed.result) || !Array.isArray(listed.result.tools)) throw new Error("Perspicax Flow tools could not be listed.");
@@ -871,7 +872,9 @@ export class PerspicaxMcp {
             const runId = typeof value.run_id === "string" && value.run_id.trim() ? value.run_id : undefined;
             if (!runId) throw new Error("Perspicax Flow check opened no identifiable shadow run.");
             ownedRun = { id: runId, routine: input.routine };
-            result = failure(await call("plan", { ...input.plan, run_id: runId }), "plan") ?? {};
+            result = input.plan
+              ? failure(await call("plan", { ...input.plan, routine: input.routine, run_id: runId }), "plan") ?? {}
+              : {};
           }
         }
       }

@@ -1,4 +1,4 @@
-# PR visual proofs (`pr-assets`)
+# PR visual proofs (`pr-assets/shared`)
 
 This is an **orphan branch**. It holds visual proof media that pull request
 bodies link by a **branch-name** ref (`main`, `feat/…`, …). Product branches
@@ -21,19 +21,19 @@ bodies link by a **branch-name** ref (`main`, `feat/…`, …). Product branches
 From a throwaway worktree on this branch:
 
 ```sh
-git fetch origin pr-assets
-git worktree add /tmp/sagax-pr-assets pr-assets
+git fetch origin pr-assets/shared
+git worktree add /tmp/sagax-pr-assets pr-assets/shared
 # copy the media to the same docs/… path, commit, push
 git -C /tmp/sagax-pr-assets add docs/screenshots/example.webp
 git -C /tmp/sagax-pr-assets commit -m "pr-assets: add example proof"
-# JC pushes: git -C /tmp/sagax-pr-assets push origin pr-assets
+git -C /tmp/sagax-pr-assets push origin pr-assets/shared
 ```
 
 Point the PR body at:
 
-`https://raw.githubusercontent.com/pulsatrixtechnologies/sagax/pr-assets/docs/screenshots/example.webp`
+`https://raw.githubusercontent.com/pulsatrixtechnologies/sagax/pr-assets/shared/docs/screenshots/example.webp`
 
-or the `blob/pr-assets/…?raw=true` form.
+or the `blob/pr-assets/shared/…?raw=true` form.
 
 ## Related
 

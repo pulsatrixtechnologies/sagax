@@ -65,6 +65,12 @@ function harness(overrides: Partial<BrowserEngineRouteDeps> = {}) {
 }
 
 describe("GET /api/health", () => {
+  it("exposes aggregate warm-resource usage, caps and evictions to a signed-in reader", async () => {
+    const { sent } = await harness().call("/api/health");
+    expect(sent.body).toMatchObject({ warmResources: { count: 0, memoryBytes: 0, evictions: 0,
+      limits: { count: expect.any(Number), bytes: expect.any(Number), personCount: expect.any(Number), personBytes: expect.any(Number) } } });
+    expect(JSON.stringify((sent.body as any).warmResources)).not.toMatch(/principalId|threadId|token/);
+  });
   it("answers 503 while shutting down", async () => {
     const h = harness({ isShuttingDown: () => true });
     const { sent } = await h.call("/api/health");

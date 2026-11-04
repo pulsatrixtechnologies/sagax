@@ -193,7 +193,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
 
   const releaseWarm = (threadId: string) => {
     warmThreads.delete(threadId);
-    void warmToolSessions.release(threadId);
+    if (!active.has(threadId)) void warmToolSessions.release(threadId);
     if (warmThreads.size === 0) stopWarmPing();
   };
 

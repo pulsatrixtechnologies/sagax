@@ -11,8 +11,59 @@ import {
   withWarmTokens,
 } from "./openai-chat-tools-warm.ts";
 import { commsTokenFile } from "./spawn-contract.ts";
+import { MiB, WarmResourceBudget } from "../resources/warm-resources.ts";
 
 describe("openai-chat tools warm cache", () => {
+  const fixtureSession = () => ({ definitions: [], skipped: [], validate() {}, view() { return { title: "Fixture", input: {}, ask: false }; },
+    async execute() { return { text: "ok", ok: true }; }, async close() {} });
+
+  it("uses the shared LRU and never evicts mounts claimed by an active turn", async () => {
+    const budget = new WarmResourceBudget({ intervalMs: 0, limits: { count: 1, bytes: 1000 * MiB, personCount: 10, personBytes: 1000 * MiB } });
+    const cache = createWarmToolSessions({ budget });
+    const active = fixtureSession(), idle = fixtureSession();
+    cache.set("active", "same", active, { person: "osprey", active: true });
+    cache.keep("idle", idle, "same", { person: "wren" });
+    await budget.settled(); expect(cache.get("active", "same", "osprey")).toBe(active); expect(cache.has("idle")).toBe(false);
+    cache.keep("active", active, "same", { person: "osprey" });
+    await cache.releaseAll(); expect(budget.stats().resources).toBe(0);
+  });
+
+  it("never returns a mount to another person on the same thread and fingerprint", async () => {
+    const budget = new WarmResourceBudget({ intervalMs: 0 }); const cache = createWarmToolSessions({ budget });
+    cache.keep("shared-ids", fixtureSession(), "same", { person: "osprey" });
+    expect(cache.get("shared-ids", "same", "wren")).toBeUndefined();
+    await cache.releaseAll(); expect(budget.stats().resources).toBe(0);
+  });
+
+  it("keeps capability files separate for people sharing a payer, thread and bot", () => {
+    const turn = { threadId: "same-thread", botId: "same-bot", text: "", access: { via: "org-key" as const, identity: "shared-payer" } };
+    const mount = (principalId: string, token: string) => withWarmTokens({ ...turn, principalId,
+      integrations: { agents: { command: "node", args: [], env: { SAGAX_COMMS_TOKEN: token } } } }, turn.threadId);
+    const a = mount("osprey", "fixture-osprey"), b = mount("wren", "fixture-wren");
+    const first = a.integrations!.agents!.env.SAGAX_COMMS_TOKEN_FILE!, second = b.integrations!.agents!.env.SAGAX_COMMS_TOKEN_FILE!;
+    try {
+      expect(first).not.toBe(second); expect(readFileSync(first, "utf8")).toBe("fixture-osprey"); expect(readFileSync(second, "utf8")).toBe("fixture-wren");
+    } finally { rmSync(dirname(first), { recursive: true, force: true }); rmSync(dirname(second), { recursive: true, force: true }); }
+  });
+
+  it("skips prewarming before a changed fingerprint can touch an active mount", async () => {
+    const budget = new WarmResourceBudget({ intervalMs: 0 }); const cache = createWarmToolSessions({ budget });
+    const session = fixtureSession(); cache.set("active", "old", session, { person: "osprey", active: true });
+    expect(await cache.prewarm({ threadId: "active", principalId: "wren", text: "", integrations: {} }, { computerUse: false, driverKind: "fixture" })).toBe("skipped");
+    expect(cache.get("active", "old", "osprey")).toBe(session); await cache.releaseAll();
+  });
+
+  it("a slow prewarm cannot replace a mount adopted by a real turn during its handshake", async () => {
+    const budget = new WarmResourceBudget({ intervalMs: 0 });
+    let ready!: (session: ReturnType<typeof fixtureSession>) => void;
+    const mounted = new Promise<ReturnType<typeof fixtureSession>>(resolve => { ready = resolve; });
+    const cache = createWarmToolSessions({ budget, mount: async () => mounted });
+    const warming = cache.prewarm({ threadId: "racing", principalId: "osprey", text: "", integrations: {} }, { computerUse: false, driverKind: "fixture" });
+    const active = fixtureSession(); cache.set("racing", "real", active, { person: "osprey", active: true });
+    const slow = fixtureSession(); let closes = 0; slow.close = async () => { closes++; }; ready(slow);
+    expect(await warming).toBe("skipped"); expect(closes).toBe(1);
+    expect(cache.get("racing", "real", "osprey")).toBe(active); await cache.releaseAll();
+  });
   it("writes the comms token file so a kept agents process can change turns", () => {
     const turn = {
       threadId: `thread-warm-${process.pid}-${Date.now()}`,
@@ -159,7 +210,7 @@ rl.on("line", (line) => {
       computerUse: false,
       driverKind: "openai-compat",
       person: "person-osprey",
-    })).toBe("kept");
+    })).toBe("skipped"); // A claimed mount belongs to the active turn.
     await cache.releaseAll();
     cleanup();
   });

@@ -1,10 +1,11 @@
 /** Shared retention budget. A budget never interrupts a running turn.
  * Resource owners keep their existing identity checks and idle timeouts. */
 import type { SendTurnInput } from "../contracts.ts";
+import { createHash } from "node:crypto";
 import { processMemory, resourceMemory, type ProcessMemory } from "./process-memory.ts";
 
 export const MiB = 1024 * 1024;
-export type WarmResourceKind = "codex" | "acp" | "http-mcp" | "perspicax";
+export type WarmResourceKind = "codex" | "acp" | "claude" | "pi" | "http-mcp" | "perspicax";
 export type WarmResourceLimits = { count: number; bytes: number; personCount: number; personBytes: number };
 
 export function warmResourceLimits(env: NodeJS.ProcessEnv = process.env): WarmResourceLimits {
@@ -13,7 +14,7 @@ export function warmResourceLimits(env: NodeJS.ProcessEnv = process.env): WarmRe
     count: value("SAGAX_WARM_MAX_COUNT", 64),
     bytes: value("SAGAX_WARM_MAX_BYTES", 2048 * MiB),
     personCount: value("SAGAX_WARM_PERSON_MAX_COUNT", 12),
-    personBytes: value("SAGAX_WARM_PERSON_MAX_BYTES", 768 * MiB),
+    personBytes: value("SAGAX_WARM_PERSON_MAX_BYTES", 1024 * MiB),
   };
 }
 
@@ -21,6 +22,13 @@ export function warmResourceLimits(env: NodeJS.ProcessEnv = process.env): WarmRe
  * Never use botId here: one person can own many bots. */
 export function warmResourcePerson(turn: Pick<SendTurnInput, "principalId" | "access">): string {
   return turn.principalId ?? turn.access?.identity ?? "solo";
+}
+
+/** Old retained proxies cannot read another speaker's next capability,
+ * including while asynchronous teardown is still running. */
+export function warmResourceTokenThread(turn: Pick<SendTurnInput, "threadId" | "principalId" | "access">): string {
+  if (!turn.principalId && !turn.access?.identity) return turn.threadId;
+  return `${turn.threadId}-person-${createHash("sha256").update(warmResourcePerson(turn)).digest("hex").slice(0, 32)}`;
 }
 
 export interface WarmResourceSpec {
@@ -41,9 +49,11 @@ export interface WarmResourceLease {
   active(): boolean;
   idle(): void;
   touch(): void;
+  /** Owner already started its ordinary teardown. Keep charges until exit. */
+  retiring(): void;
   forget(): void;
 }
-type Entry = WarmResourceSpec & { state: "active" | "idle" | "closing"; used: number; rss: number; pending: boolean };
+type Entry = WarmResourceSpec & { state: "active" | "idle" | "closing"; used: number; rss: number; reserved: number; units: number; pending: boolean };
 type Totals = { count: number; memoryBytes: number; sampledRssBytes: number; active: number; idle: number; closing: number };
 const empty = (): Totals => ({ count: 0, memoryBytes: 0, sampledRssBytes: 0, active: 0, idle: 0, closing: 0 });
 
@@ -66,7 +76,8 @@ export class WarmResourceBudget {
   } = {}) { this.options = options; }
 
   register(spec: WarmResourceSpec): WarmResourceLease {
-    const entry: Entry = { ...spec, state: "active", used: ++this.clock, rss: 0, pending: false };
+    const entry: Entry = { ...spec, state: "active", used: ++this.clock, rss: 0, reserved: 0, units: 1, pending: false };
+    this.measure(entry);
     this.entries.add(entry);
     if (!this.timer && this.options.intervalMs !== 0) {
       this.timer = setInterval(() => { void this.refresh(); }, this.options.intervalMs ?? 15_000);
@@ -84,9 +95,11 @@ export class WarmResourceBudget {
         if (!this.entries.has(entry) || entry.state === "closing") return;
         entry.state = "idle";
         entry.used = ++this.clock;
+        this.measure(entry);
         this.enforce();
       },
       touch: () => { if (this.entries.has(entry)) entry.used = ++this.clock; },
+      retiring: () => { if (this.entries.has(entry)) entry.state = "closing"; },
       forget: () => this.remove(entry),
     };
   }
@@ -97,10 +110,15 @@ export class WarmResourceBudget {
   }
 
   private add(total: Totals, entry: Entry): void {
-    total.count += Math.max(1, entry.count?.() ?? 1);
-    total.memoryBytes += Math.max(entry.rss, typeof entry.bytes === "function" ? entry.bytes() : entry.bytes);
+    total.count += entry.units;
+    total.memoryBytes += Math.max(entry.rss, entry.reserved);
     total.sampledRssBytes += entry.rss;
     total[entry.state] += 1;
+  }
+
+  private measure(entry: Entry): void {
+    entry.units = Math.max(1, entry.count?.() ?? 1);
+    entry.reserved = Math.max(0, typeof entry.bytes === "function" ? entry.bytes() : entry.bytes);
   }
 
   private totals(includeClosing = true): { total: Totals; people: Map<string, Totals> } {
@@ -161,8 +179,13 @@ export class WarmResourceBudget {
       const rows = await (this.options.sample ?? processMemory)().catch(() => []);
       const roots = new Set([...this.entries].flatMap(e => e.pids?.() ?? []));
       const memory = resourceMemory(rows, roots);
+      const observed = new Set(rows.map(row => row.pid));
       for (const entry of this.entries) {
-        entry.rss = (entry.pids?.() ?? []).reduce((sum, pid) => sum + (memory.get(pid) ?? 0), 0);
+        this.measure(entry);
+        const pids = entry.pids?.() ?? [];
+        // A failed/partial process-table read cannot prove that a live
+        // resource shrank. Keep its last reading until a complete sample.
+        if (pids.every(pid => observed.has(pid))) entry.rss = pids.reduce((sum, pid) => sum + (memory.get(pid) ?? 0), 0);
         if (entry.state === "closing") this.close(entry);
       }
       this.enforce();

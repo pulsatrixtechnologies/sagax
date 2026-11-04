@@ -76,6 +76,13 @@ describe("shared warm resource budget", () => {
     await budget.refresh(); await budget.settled(); await budget.refresh(); await budget.settled();
     expect(budget.stats()).toMatchObject({ count: 0, evictions: 1, closeFailures: 2 });
   });
+  it("does not evict healthy resources while an ordinary owner teardown is already freeing room", async () => {
+    const f = fixture({ count: 2 });
+    f.add("healthy"); const closing = f.add("outdated"); closing.retiring(); f.add("replacement");
+    await f.budget.settled(); expect(f.closed).toEqual([]);
+    expect(f.budget.stats()).toMatchObject({ count: 3, closing: 1, evictions: 0 });
+    closing.forget(); expect(f.budget.stats()).toMatchObject({ count: 2, overBudget: false }); f.cleanup();
+  });
   it("reclaims global idle capacity even when another person's active usage exceeds their cap", async () => {
     const f = fixture({ personCount: 1, count: 2 });
     f.add("active-one", "osprey", 10, true); f.add("active-two", "osprey", 10, true); f.add("idle", "wren");
@@ -92,6 +99,16 @@ describe("shared warm resource budget", () => {
     const budget = new WarmResourceBudget({ limits: limits(), intervalMs: 0, sample: async () => { throw new Error("fixture"); } });
     const lease = budget.register({ person: "osprey", kind: "http-mcp", bytes: 90, count: () => 3, pids: () => [21, 22, 23], evict() {} });
     lease.idle(); await budget.refresh(); expect(budget.stats()).toMatchObject({ count: 3, resources: 1, memoryBytes: 90 }); lease.forget();
+  });
+  it("preserves a large last-known RSS through a failed sample before the turn goes idle", async () => {
+    let failed = false;
+    const close = vi.fn();
+    const budget = new WarmResourceBudget({ limits: limits({ bytes: 50 }), intervalMs: 0,
+      sample: async () => { if (failed) throw new Error("fixture"); return [{ pid: 20, parent: 1, bytes: 80 }]; } });
+    const lease = budget.register({ person: "osprey", kind: "codex", bytes: 10, pids: () => [20], evict: close });
+    await budget.refresh(); failed = true; await budget.refresh();
+    expect(budget.stats().sampledRssBytes).toBe(80); expect(close).not.toHaveBeenCalled();
+    lease.idle(); await budget.settled(); expect(close).toHaveBeenCalledOnce();
   });
   it("bounds 50 people by three threads across mixed resource families", async () => {
     const f = fixture({ count: 12, bytes: 120, personCount: 2, personBytes: 20 });

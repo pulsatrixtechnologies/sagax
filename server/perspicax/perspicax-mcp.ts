@@ -25,6 +25,7 @@
 //     for this turn ended" (a disabled person mid-turn, S5-10);
 //   - no token is ever logged or put in an error.
 import { guardToolCall, type GuardOptions } from "../mcp/mcp-permissions.ts";
+import { MiB, warmResources, type WarmResourceBudget, type WarmResourceLease } from "../resources/warm-resources.ts";
 import { telephonyRefusal, voiceToolCall } from "../telephony-guard.ts";
 import { placeArgsFromVoiceCall } from "../../shared/outbound-call.ts";
 import type { SubjectTokenOutcome } from "../auth/idp-session.ts";
@@ -83,6 +84,7 @@ export interface PerspicaxMcpLink {
 }
 
 export interface PerspicaxMcpOptions {
+  warmBudget?: WarmResourceBudget;
   /** SAGAX_PERSPICAX_ISSUER; a speaker's subject must come from it. */
   issuer: string;
   /** 2026-10-26: the GO a Perspicax server guard asks for during a call (MCP
@@ -280,6 +282,7 @@ export function perspicaxSessionLost(status: number, text: string): boolean {
 }
 
 interface Entry {
+  budget?: WarmResourceLease;
   threadId: string;
   generation: string;
   botId: string;
@@ -849,7 +852,8 @@ export class PerspicaxMcp {
       for (const profileId of known) {
         const at = warmKey(input.threadId, profileId, principalId, source);
         const kept = this.warm.get(at);
-        if (kept && !kept.ended && kept.botId === input.bot.id && kept.expiresAt - this.now() >= PERSPICAX_TOKEN_MIN_LIFE_MS) {
+        if (kept && !kept.ended && kept.botId === input.bot.id && kept.expiresAt - this.now() >= PERSPICAX_TOKEN_MIN_LIFE_MS
+            && (kept.budget?.active() ?? true)) {
           this.warm.delete(at);
           kept.generation = input.generation;
           const wanted = input.bot.perspicaxActAs?.slug;
@@ -936,6 +940,16 @@ export class PerspicaxMcp {
       };
       this.setIdentity(entry, input.bot.perspicaxActAs?.slug);
       this.entries.set(at, entry);
+      entry.budget = (this.options.warmBudget ?? warmResources).register({
+        person: entry.principalId, kind: "perspicax",
+        bytes: () => MiB + Buffer.byteLength(JSON.stringify(entry.toolsListBody ?? null)),
+        protected: () => entry.keepAlivePing === true,
+        evict: () => {
+          const at = warmKey(entry.threadId, entry.profileId, entry.principalId, entry.source);
+          if (this.warm.get(at) === entry) this.warm.delete(at);
+          return this.close(entry);
+        },
+      });
       const profile = catalog.get(profileId)!;
       plan.mounted.push({ profileId, slug: profile.slug, name: profile.name || profile.slug || profileId });
     }
@@ -1530,6 +1544,7 @@ export class PerspicaxMcp {
         if (previous && previous !== entry) done.push(this.close(previous));
         this.warm.set(warm, entry);
         if (engineKeep && entry.mcpSessionId) this.touchKeepAlive(entry);
+        entry.budget?.idle();
         continue;
       }
       done.push(this.close(entry));
@@ -1629,6 +1644,7 @@ export class PerspicaxMcp {
   private end(entry: Entry): void {
     if (entry.ended) return;
     entry.ended = true;
+    entry.budget?.forget();
     this.disarmKeepAlive(entry);
     void entry.identity?.clear();
     void this.revoke(entry.token);
@@ -1650,6 +1666,7 @@ export class PerspicaxMcp {
       }).then((response) => { void response.body?.cancel().catch(() => {}); }, () => {});
     }
     await this.revoke(entry.token);
+    entry.budget?.forget();
   }
 
   private async revoke(token: string): Promise<void> {

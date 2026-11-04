@@ -1,4 +1,5 @@
 /** Claude turn prepare: MCP mounts, env, spawn contract (#1383). */
+import { warmResourceTokenThread } from "../../resources/warm-resources.ts";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -87,7 +88,7 @@ if (turn.integrations?.agents) {
   // teammate's reply resuming this turn reuses this process.
   // Never rewritten under a turn still running on this thread's process.
   if (turn.integrations.agents.env?.SAGAX_COMMS_TOKEN && !sessions.get(threadId)?.turn) {
-    mcpServers.agents = { ...turn.integrations.agents, env: warmCommsEnv(threadId, botId, agentsEnv), alwaysLoad: true };
+    mcpServers.agents = { ...turn.integrations.agents, env: warmCommsEnv(warmResourceTokenThread(turn), botId, agentsEnv), alwaysLoad: true };
   }
   allowed.push(...agentsAllowedTools(turn.integrations.agents.env));
   // The finding tools run nothing; call_tool and use_tool ask as the
@@ -162,7 +163,7 @@ for (const [name, server] of Object.entries(turn.integrations?.custom ?? {})) {
   // Never rewritten under a turn still running on this thread's process.
   const serverEnv = (server as { env?: Record<string, string> }).env;
   mcpServers[name] = serverEnv?.[PERSPICAX_TOKEN_ENV] && !sessions.get(threadId)?.turn
-    ? { ...server, env: warmPerspicaxEnv(threadId, botId, serverEnv) }
+    ? { ...server, env: warmPerspicaxEnv(warmResourceTokenThread(turn), botId, serverEnv) }
     : { ...server };
   botOwned.add(name);
 }
@@ -362,6 +363,7 @@ const contract = {
   compact: turn.compactPrompt ? { memoryDir: turn.compactPrompt.memoryDir ?? null } : null,
   // Slice 4: another person's credentials never reuse this process.
   access: turn.access?.identity ?? null,
+  person: turn.principalId ?? null,
   // A changed command variable starts a fresh process (a digest only).
   commandEnv: commandVariablesDigest(turn.commandEnvironment),
   // Rotating an account's key/helper must not reuse the old process.

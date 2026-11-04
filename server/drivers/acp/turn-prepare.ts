@@ -19,6 +19,8 @@ import { skipSubscriptionAuthForLocalInject } from "./helpers.ts";
 import { newTurnLatency } from "./turn-latency.ts";
 import type { AcpSession } from "./types.ts";
 import type { SendTurnDeps } from "./turn-deps.ts";
+import { MiB, warmResourcePerson, warmResourceTokenThread, warmResources } from "../../resources/warm-resources.ts";
+import { killCliTree } from "../../procs.ts";
 
 export type PrepareEarly = { kind: "early"; result: { turnId: string; reused?: boolean } };
 export type PrepareReady = { kind: "ready" } & Record<
@@ -137,7 +139,7 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
       ? turn.integrations.agents : undefined;
     const withAgentsEnv = (agentsEnv: Record<string, string>): SendTurnInput =>
       ({ ...turn, integrations: { ...turn.integrations, agents: { ...callAgents!, env: agentsEnv } } });
-    const callAgentsEnv = callAgents ? warmCommsEnv(threadId, turn.botId, callAgents.env) : undefined;
+    const callAgentsEnv = callAgents ? warmCommsEnv(warmResourceTokenThread(turn), turn.botId, callAgents.env) : undefined;
     // Rebound once, before the prompt, when a fallbackModel support swaps
     // a model this session does not offer for one it does.
     let cliTurn =
@@ -217,6 +219,7 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
     // turn gets the same process whatever the mode: an approval change
     // is one RPC, not a cold start.
     const contractKey = JSON.stringify([
+      warmResourcePerson(turn), turn.botId ?? null,
       launch.command, launch.args ?? [], spawnArgs, cwd,
       support.sessionScopedApproval ? null : turnConfig.fullAuto === true, envFingerprint,
       support.spawnFingerprint?.(spawnEnv, turnConfig) ?? null,
@@ -237,6 +240,15 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
     const launchSession = () => {
       const opened = openSession(threadId, launch, [...(launch.args ?? []), ...spawnArgs], launchEnv, cwd, contractKey);
       opened.launchModel = launchModel;
+      opened.budget = warmResources.register({
+        person: warmResourcePerson(turn), kind: "acp", bytes: 256 * MiB,
+        pids: () => opened.child.pid ? [opened.child.pid] : [],
+        protected: () => Boolean(opened.current) || active.has(threadId) || warming.has(threadId),
+        evict: () => {
+          if (sessions.get(threadId) === opened) closeSession(threadId, "warm budget");
+          return killCliTree(opened.child);
+        },
+      });
       launchedThisTurn = true;
       return opened;
     };
@@ -271,6 +283,7 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
       }
     }
     if (pooled && !pooled.dead && !pooled.closing && pooled.contractKey === contractKey
+        && (pooled.budget?.active() ?? true)
         && (!support.restartOnMcpChange || pooled.sessionKey === sessionKey)) {
       // adoption cancels the idle countdown — a running turn is not quiet
       if (pooled.idleTimer) clearTimeout(pooled.idleTimer);

@@ -11,13 +11,14 @@ import { whopLikeCatalog } from "../testing/whop-like-catalog.ts";
 
 // Port de OpenMausBot #3150 : the real kill always runs (cleanup); the probe
 // can only force its verdict and records the budget it was given.
-const killProbe = vi.hoisted(() => ({ override: false, stopped: false, budgets: [] as number[] }));
+const killProbe = vi.hoisted(() => ({ override: false, deferOnce: false, stopped: false, budgets: [] as number[] }));
 vi.mock("../procs.ts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../procs.ts")>();
   return {
     ...actual,
     killCliTree: (child: Parameters<typeof actual.killCliTree>[0], budget = 5_000) => {
       killProbe.budgets.push(budget);
+      if (killProbe.deferOnce) { killProbe.deferOnce = false; return Promise.resolve(false); }
       const run = actual.killCliTree(child, budget);
       return killProbe.override ? run.then(() => killProbe.stopped) : run;
     },
@@ -422,6 +423,17 @@ describe("Chat MCP shutdown verdict (port de OpenMausBot #3150)", () => {
       await expect(session.close()).resolves.toBeUndefined();
       expect(warn).toHaveBeenCalledWith(expect.stringContaining("no call was in flight"));
     } finally { warn.mockRestore(); }
+  });
+
+  it("retries process teardown after an unconfirmed idle close", async () => {
+    const f = fixture(); const session = await f.mount(); const pid = f.read().pid;
+    killProbe.deferOnce = true;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await session.close(); expect(alive(pid)).toBe(true);
+      killProbe.override = false;
+      await session.close(); expect(alive(pid)).toBe(false);
+    } finally { killProbe.override = false; warn.mockRestore(); }
   });
 
   it("an unconfirmed shutdown still fails when a call was in flight", async () => {

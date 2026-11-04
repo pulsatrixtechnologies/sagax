@@ -277,7 +277,18 @@ function context(page, viewport, fixture) {
     async hover(selector) {
       const c = await center(selector);
       await mouse("mouseMoved", c.x, c.y, { button: "none" });
+      ctx.lastPointer = c;
       await sleep(250);
+    },
+    /** keepPointer: one more move to the resting point, so an element
+     * re-rendered under it since (the sidebar after the engines arrive)
+     * takes :hover again; headless Chrome does not refresh it on its own. */
+    async restPointer() {
+      const c = ctx.lastPointer;
+      if (!c) return;
+      await mouse("mouseMoved", c.x + 1, c.y, { button: "none" });
+      await mouse("mouseMoved", c.x, c.y, { button: "none" });
+      await sleep(200);
     },
     async moveAway() {
       await mouse("mouseMoved", viewport.width - 2, viewport.height - 2, { button: "none" });
@@ -467,6 +478,8 @@ async function main() {
           break;
         }
         if (!item.surface.keepPointer) await ctx.moveAway();
+        // before settle: the hover's own transitions then finish with the rest
+        if (item.surface.keepPointer) await ctx.restPointer();
         await settle(page, item.surface.settleMs ?? 0);
         // a remount between the surface and the shot draws a blank page: retry
         if (!item.surface.noShell && !(await page.eval(`Boolean(document.querySelector("[data-app-shell]") && document.body.innerText.trim().length > 0)`))) {

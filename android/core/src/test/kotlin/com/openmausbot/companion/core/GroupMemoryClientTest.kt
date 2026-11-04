@@ -33,7 +33,7 @@ class GroupMemoryClientTest {
     }
 
     @Test
-    fun memoryReadSaveAndConflict() = runBlocking {
+    fun memoryReadSaveAndConflict() = runBlocking<Unit> {
         server.enqueue(json(fixtureText("group-memory")))
 
         val read = client.groupMemory("g-1")
@@ -66,7 +66,7 @@ class GroupMemoryClientTest {
     }
 
     @Test
-    fun patchSendsOnlyTheFieldsSet() = runBlocking {
+    fun patchSendsOnlyTheFieldsSet() = runBlocking<Unit> {
         server.enqueue(json(fixtureText("group-patched")))
         val updated = client.patchRoom("g-1", RoomPatch(name = "Renamed"))
         val request = server.takeRequest()
@@ -99,13 +99,14 @@ class GroupMemoryClientTest {
         assertEquals("", cleared["section"]?.jsonPrimitive?.content)
         assertEquals(0, cleared["humanIds"]?.jsonArray?.size)
 
+        // segment() rejects bare "." / ".." (same guard as markBotRead).
         assertFailsWith<APIError.BadUrl> {
-            client.patchRoom("../x", RoomPatch(name = "n"))
+            client.patchRoom("..", RoomPatch(name = "n"))
         }
     }
 
     @Test
-    fun deleteAndLeave() = runBlocking {
+    fun deleteAndLeave() = runBlocking<Unit> {
         server.enqueue(MockResponse().setResponseCode(200).setBody("{}"))
         client.deleteRoom("g-1")
         val delete = server.takeRequest()
@@ -119,7 +120,7 @@ class GroupMemoryClientTest {
         assertEquals("/api/groups/g-1/leave", leave.path)
 
         assertFailsWith<APIError.BadUrl> {
-            client.deleteRoom("../x")
+            client.deleteRoom("..")
         }
     }
 

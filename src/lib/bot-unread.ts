@@ -73,3 +73,10 @@ export function toggleSelected(selection: readonly string[], id: string): string
 export function iconUnreadDotPosition(badged: boolean): string {
   return badged ? "top-1.5 right-1.5" : "bottom-1.5 right-1.5";
 }
+
+/** The conversations waiting on the person's answer, across their visible
+ * bots: the Approvals dot of the profile row. A routine run's hidden task
+ * counts too (2026-11-04): its card waits on the person like any other. */
+export function waitingOnPersonCount(bots: ReadonlyArray<{ hidden?: boolean; tasks?: ReadonlyArray<{ activity?: string }> | null }>): number {
+  return bots.filter((bot) => !bot.hidden).reduce((total, bot) => total + (bot.tasks ?? []).filter((task) => task.activity === "waiting-on-you").length, 0);
+}

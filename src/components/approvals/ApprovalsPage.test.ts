@@ -259,4 +259,23 @@ describe("ApprovalsPage", () => {
     expect(items()).toHaveLength(1);
     expect(location.hash).toBe("#approvals?tab=history&q=bob");
   });
+
+  // 2026-11-04: a routine run's card (its hidden task) was only on the phone
+  it("names a routine run's card by its bot and its routine, and answers it in the run's thread", async () => {
+    fixture.payload = {
+      pending: [permission("r", "b1", "Nova", 2, "git fetch", { threadId: "t-run", key: "t-run:req-r", routineName: "Morning sweep", threadTitle: "Morning sweep · Nov 4, 9:00 AM", risk: "read" })],
+      history: [],
+      scopes: { org: false, team: false },
+    };
+    await render();
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]!.textContent).toContain("Nova");
+    expect(rows()[0]!.textContent).toContain("Routine: Morning sweep");
+    expect(host.querySelector("[data-approval-detail]")?.textContent).toContain("Routine: Morning sweep");
+    await key("y");
+    expect(fixture.dispatch).toContainEqual(expect.objectContaining({ type: "decideRequest", threadId: "t-run", requestId: "req-r", behavior: "allow" }));
+    setLocale("fr");
+    await render();
+    expect(rows()[0]?.textContent ?? host.textContent).toContain("Routine : Morning sweep");
+  });
 });

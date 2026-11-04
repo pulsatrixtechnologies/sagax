@@ -25058,7 +25058,25 @@ routines = new RoutineManager({
     }
     const bot = store.bot(run.botId);
     // null: the owner was already told about this cause for this bot.
-    if (!bot || alert === null) return;
+    if (!bot) return;
+    // Pre-flight can refuse before an execution thread exists. Keep the
+    // payer's actionable card and its audience on the existing results thread.
+    if (IDENTITY.kind === "perspicax" && run.status === "blocked" && run.readiness?.some(check => check.code === "engine_signed_out")) {
+      const routine = routines?.getRoutine(run.routineId);
+      const planned = routine ? routineReadinessBot(routine, run) ?? bot : bot;
+      const instance = registry.get(planned.modelSelection.instanceId);
+      const refusal = instance && orgEngineRefusal(planned, instance, routineRunSpeaker(run), planned.modelSelection.model);
+      const threadId = run.threadId ?? run.resultsThreadId ?? run.sourceThreadId;
+      if (instance && refusal && threadId) {
+        const engine = engineDisplayName(instance);
+        const access = accessCardFor(planned, refusal, engine);
+        store.appendMessage(threadId, { role: "bot", kind: "access", access });
+        if (alert !== null) notifyAccess(deliverableNotification("turn-failed", bot, threadId, engineAccessNotice(refusal.reason, engine, refusal), { avatarUrl: bot.avatarUrl }), access, run.id);
+        console.error(`[routine] bot=${bot.id} refused: ${refusal.reason}${refusal.cause ? `/${refusal.cause}` : ""} (${instance.instanceId})`);
+        return;
+      }
+    }
+    if (alert === null) return;
     const said = alert?.detail ?? run.error;
     const detail = run.status === "blocked" && alert ? alert.detail : said ? `${run.routineName}: ${said}` : run.routineName;
     const notificationBot = routineSourceOwner(run)?.bot ?? bot;
@@ -34192,7 +34210,7 @@ ROUTES.push(createDevPullRoutes({
  * threads leaves (the bot's owner reads the card of a run that ran as
  * another person, never that person's thread). */
 function routineRunAccessCard(run: RoutineRun, viewerId: string | undefined): WireAccessCard | undefined {
-  if (run.status !== "failed") return undefined;
+  if (run.status !== "failed" && run.status !== "blocked") return undefined;
   const from = run.createdAt;
   const until = (run.finishedAt ?? Date.now()) + 5_000;
   const threads = [...new Set([run.threadId, run.resultsThreadId, run.sourceThreadId].filter((id): id is string => Boolean(id)))];

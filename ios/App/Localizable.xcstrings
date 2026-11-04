@@ -242,6 +242,16 @@
         }
       }
     },
+    "%@ / %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ / %@"
+          }
+        }
+      }
+    },
     "%@ / %@ lines · %@ / %@": {
       "localizations": {
         "fr": {
@@ -31984,6 +31994,22 @@
         }
       }
     },
+    "Forgotten": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oublié"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esquecido"
+          }
+        }
+      }
+    },
     "Format with AI": {
       "localizations": {
         "fr": {
@@ -46980,6 +47006,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pas de réponse"
+          }
+        }
+      }
+    },
+    "No app is connected. The queue stays empty.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune app n'est branchée. La file reste vide."
           }
         }
       }
@@ -96900,6 +96936,22 @@
         }
       }
     },
+    "created %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "créé %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "criado %@"
+          }
+        }
+      }
+    },
     "crossed out %lld contradicted notes": {
       "localizations": {
         "en": {
@@ -97998,6 +98050,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "fields: status, priority"
+          }
+        }
+      }
+    },
+    "file last used %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "last used %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "dernière utilisation %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "último uso %@"
           }
         }
       }
@@ -101644,6 +101718,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "não selecionado"
+          }
+        }
+      }
+    },
+    "not used yet": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "pas encore utilisé"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ainda não usado"
           }
         }
       }

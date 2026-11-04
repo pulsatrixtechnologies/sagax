@@ -550,6 +550,9 @@ private struct PersonaBotFolderBody: View {
         var load: String?
         var bytes: Int?
         var modifiedAt: Double?
+        var createdAt: Double? = nil
+        var lastUsedAt: Double? = nil
+        var forgotten = false
         var editable: Bool
         var markdown: Bool
         /// SOUL.md, from the listing's own entry: it opens the Personality page.
@@ -564,7 +567,8 @@ private struct PersonaBotFolderBody: View {
         var all: [Row] = []
         if let soul = listing.soul {
             all.append(Row(path: soul.path ?? "SOUL.md", isDirectory: false, load: soul.load ?? "every-turn", bytes: soul.bytes,
-                           modifiedAt: nil, editable: false, markdown: true, soul: true))
+                           modifiedAt: soul.modifiedAt, createdAt: soul.createdAt, lastUsedAt: soul.lastUsedAt,
+                           editable: false, markdown: true, soul: true))
         }
         let listedDirs = Set(listing.entries.filter(\.isDirectory).map(\.path))
         for entry in listing.entries where entry.path != (listing.soul?.path ?? "SOUL.md") {
@@ -576,7 +580,8 @@ private struct PersonaBotFolderBody: View {
             }
             guard visible else { continue }
             all.append(Row(path: entry.path, isDirectory: entry.isDirectory, load: entry.load, bytes: entry.bytes,
-                           modifiedAt: entry.modifiedAt, editable: entry.editable == true, markdown: entry.markdown == true, soul: false))
+                           modifiedAt: entry.modifiedAt, createdAt: entry.createdAt, lastUsedAt: entry.lastUsedAt, forgotten: entry.forgotten == true,
+                           editable: entry.editable == true, markdown: entry.markdown == true, soul: false))
         }
         return all
     }
@@ -656,7 +661,18 @@ private struct PersonaBotFolderBody: View {
                     } else {
                         openButton(row)
                     }
-                    loadChip(row.load ?? "on-demand")
+                    if row.forgotten {
+                        // `data-forgotten-badge`: no use in 30 days
+                        Text(verbatim: L("Forgotten"))
+                            .font(theme.font(11))
+                            .foregroundStyle(theme.warning)
+                            .padding(.horizontal, 8)
+                            .frame(height: 20)
+                            .background(theme.warning.opacity(0.15), in: Capsule())
+                            .fixedSize()
+                            .accessibilityIdentifier("persona-folder.forgotten.\(row.path)")
+                    }
+                    if !row.isDirectory { loadChip(row.load ?? "on-demand") }
                 }
                 rowMenu(row)
             }
@@ -774,12 +790,17 @@ private struct PersonaBotFolderBody: View {
     /// `entryDetails`: size or budget, dates (Advanced only).
     private func details(_ row: Row) -> String {
         var parts: [String] = []
-        if row.path == "MEMORY.md", let index = memoryModel.overview?.index {
+        if row.soul, let maxBytes = listing?.soul?.budget?.maxBytes {
+            // budgetBytes: "372 B / 23.4 KB"
+            parts.append(LF("%@ / %@", folderBytes(row.bytes ?? 0), folderBytes(maxBytes)))
+        } else if row.path == "MEMORY.md", let index = memoryModel.overview?.index {
             parts.append(LF("%@ / %@ lines · %@ / %@", "\(index.lines)", "\(index.maxLines)", folderBytes(index.bytes), folderBytes(index.maxBytes)))
         } else {
             parts.append(folderBytes(row.bytes ?? 0))
         }
+        if let created = row.createdAt { parts.append(LF("created %@", BotAdvancedWording.ago(created))) }
         if let modified = row.modifiedAt { parts.append(LF("modified %@", BotAdvancedWording.ago(modified))) }
+        parts.append(row.lastUsedAt.map { LF("file last used %@", BotAdvancedWording.ago($0)) } ?? L("not used yet"))
         return parts.joined(separator: " · ")
     }
 
@@ -1097,6 +1118,9 @@ struct PersonaAccessPage: View {
     @State private var folder = ""
     @State private var saving = false
     @State private var moreOpen = false
+    /// BackgroundBriefCard's GET /api/bots/:id/background-brief.
+    @State private var brief: BotBackgroundBrief?
+    @State private var briefError: String?
 
     private var canEdit: Bool { session.surfaceGate.allows(.botAccessEdit, bot: bot) }
     private func edits(_ field: String) -> Bool { canEdit && session.canEditBotField(bot, field) }
@@ -1131,6 +1155,9 @@ struct PersonaAccessPage: View {
             instances = await DesktopModelCatalog.shared.instances(session)
         }
         .task(id: bot.id) {
+            if let client = session.profileClient ?? session.settingsClient {
+                brief = try? await client.botBackgroundBrief(botId: bot.id)
+            }
             await loadServers()
             if let client = session.profileClient {
                 webhooks = (try? await client.webhooks())?.of(botId: bot.id) ?? []
@@ -1278,42 +1305,81 @@ struct PersonaAccessPage: View {
 
     // MARK: Background brief
 
-    /// `BackgroundBriefCard`. The iPad has no client route for
-    /// /api/bots/:id/background-brief yet: the card is drawn as the desktop
-    /// draws it, its controls held until that route reaches CompanionCore.
+    /// `BackgroundBriefCard` (GET / PUT /api/bots/:id/background-brief):
+    /// on with its daily time, the line about the connected apps, the link.
     private var briefSection: some View {
-        FolderPaneSection(title: L("Background brief"), identifier: "persona-access.brief") {
+        let on = brief?.settings.enabled ?? false
+        return FolderPaneSection(title: L("Background brief"), identifier: "persona-access.brief") {
             HStack(spacing: 8) {
-                PanelSwitch(label: LocalizedStringKey(L("Send the brief every day at")), isOn: false, disabled: true, onColor: switchColor) { _ in }
-                    .accessibilityIdentifier("persona-access.brief-switch")
+                PanelSwitch(label: LocalizedStringKey(L("Send the brief every day at")), isOn: on, disabled: brief == nil, onColor: switchColor) { value in
+                    saveBrief(enabled: value)
+                }
+                .accessibilityIdentifier("persona-access.brief-switch")
                 Text(verbatim: L("Send the brief every day at")).font(theme.font(12.5)).foregroundStyle(theme.ink)
-                Text(verbatim: briefTime)
-                    .font(theme.font(12.5))
-                    .foregroundStyle(theme.ink)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline40, lineWidth: 1))
-                    .opacity(0.5)
+                DatePicker("", selection: briefTime, displayedComponents: .hourAndMinute)
+                    .labelsHidden()
+                    .datePickerStyle(.compact)
+                    .disabled(brief == nil || !on)
                     .accessibilityLabel(Text(verbatim: L("Time of the daily brief")))
+                    .accessibilityIdentifier("persona-access.brief-time")
                 Spacer(minLength: 0)
             }
             .padding(.bottom, 8)
-            Text(verbatim: L("Read connectors and MCP servers"))
-                .font(theme.font(12.5))
-                .underline()
-                .foregroundStyle(theme.inkSecondary)
-                .opacity(0.5)
-                .padding(.top, 8)
+            if brief?.notice == "no_apps" {
+                DesktopText(verbatim: L("No app is connected. The queue stays empty."), size: 15, weight: .medium, line: 22)
+            }
+            if let briefError {
+                DesktopText(verbatim: briefError, size: 12, line: 16, color: \.danger)
+            }
+            Button { readBrief() } label: {
+                Text(verbatim: L("Read connectors and MCP servers"))
+                    .font(theme.font(12.5))
+                    .underline()
+                    .foregroundStyle(theme.inkSecondary)
+            }
+            .buttonStyle(.plain)
+            .padding(.top, 8)
         }
     }
 
-    private var briefTime: String {
-        var parts = DateComponents()
-        parts.hour = 8
-        parts.minute = 0
-        guard let date = Calendar.current.date(from: parts) else { return "08:00" }
-        return date.formatted(Date.FormatStyle(date: .omitted, time: .shortened))
+    /// `at` (HH:MM, the brief's time zone shown as the device's).
+    private var briefTime: Binding<Date> {
+        Binding(get: {
+            let parts = (brief?.settings.at ?? "08:00").split(separator: ":").compactMap { Int($0) }
+            var components = DateComponents()
+            components.hour = parts.first ?? 8
+            components.minute = parts.count > 1 ? parts[1] : 0
+            return Calendar.current.date(from: components) ?? Date()
+        }, set: { date in
+            let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+            saveBrief(at: String(format: "%02d:%02d", parts.hour ?? 8, parts.minute ?? 0))
+        })
+    }
+
+    /// `read()`: one pass over the connected apps, then the card reloads.
+    private func readBrief() {
+        guard let client = session.profileClient ?? session.settingsClient else { return }
+        let botId = bot.id
+        briefError = nil
+        Task {
+            do {
+                try await client.runBotBackgroundBriefPass(botId: botId)
+                brief = try? await client.botBackgroundBrief(botId: botId)
+            } catch {
+                briefError = error.localizedDescription
+            }
+        }
+    }
+
+    private func saveBrief(enabled: Bool? = nil, at: String? = nil) {
+        guard let client = session.profileClient ?? session.settingsClient else { return }
+        let botId = bot.id
+        Task {
+            let zone = at == nil ? nil : TimeZone.current.identifier
+            if let saved = try? await client.setBotBackgroundBrief(botId: botId, enabled: enabled, at: at, timeZone: zone) {
+                brief?.settings = saved
+            }
+        }
     }
 
     // MARK: Browser

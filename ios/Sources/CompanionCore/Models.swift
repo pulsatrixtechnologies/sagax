@@ -1061,6 +1061,16 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
     /// which only an organization server sends.
     public var turnPayer: String? = nil
     public var turnPayerDefault: String? = nil
+    /// Email draft cards (Permissions); absent or true is on.
+    public var emailDrafts: Bool? = nil
+    /// The loop guard for this bot's turns; absent or true is on.
+    public var loopGuard: Bool? = nil
+    /// Prompt-cache keep-warm: true or false overrides the workspace setting,
+    /// absent follows it.
+    public var cacheKeepWarm: Bool? = nil
+    /// Automatic recovery for this bot (`automaticRecovery`); absent is the
+    /// server default.
+    public var automaticRecovery: BotAutomaticRecovery? = nil
 
     /// #1137: who pays now (its own choice, else the default), or nil on a
     /// solo server.
@@ -1120,6 +1130,17 @@ public struct Bot: Codable, Hashable, Identifiable, Sendable {
             view.hasMore = nil
         }
         return view
+    }
+}
+
+/// `WireBot.automaticRecovery`: on, and its backup model.
+public struct BotAutomaticRecovery: Codable, Hashable, Sendable {
+    public var enabled: Bool
+    public var backup: ModelSelection?
+
+    public init(enabled: Bool, backup: ModelSelection? = nil) {
+        self.enabled = enabled
+        self.backup = backup
     }
 }
 

@@ -297,7 +297,15 @@ struct PersonaOwnerRulesGroup: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            DesktopText(behavior(rule.behavior), size: 12.5, line: 18, color: tone(rule.behavior))
+            // the rule's behavior, changed in place (PATCH /api/approval-rules/:id)
+            Menu {
+                ForEach(["allow", "ask", "deny"], id: \.self) { raw in
+                    Button { Task { await setBehavior(rule, raw) } } label: { behavior(raw) }
+                }
+            } label: {
+                DesktopText(behavior(rule.behavior), size: 12.5, line: 18, color: tone(rule.behavior))
+            }
+            .accessibilityIdentifier("persona-rules.behavior")
             Button { removing = rule } label: {
                 DesktopSettingsIconView(icon: .trash2, size: 14)
                     .foregroundStyle(theme.inkSecondary)
@@ -329,6 +337,17 @@ struct PersonaOwnerRulesGroup: View {
         }
     }
 
+    private func setBehavior(_ rule: OwnerApprovalRule, _ raw: String) async {
+        guard raw != rule.behavior, let client = session.settingsClient else { return }
+        do {
+            try await client.updateApprovalRule(id: rule.id, behavior: raw)
+            error = nil
+            await load()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
     /// `rulesForBot`: its own first, then the ones for all my bots.
     private func load() async {
         guard let client = session.settingsClient, let all = try? await client.approvalRules() else {
@@ -357,46 +376,94 @@ struct PersonaOwnerRulesGroup: View {
 // MARK: - Automatic recovery
 
 /// BotRecoverySettings: Use a backup model, Backup provider, Backup model,
-/// Save. The bot's own value (PATCH /api/bots/:id/runtime-settings) has no
-/// iPad call yet: the group shows the workspace's value, its controls held.
+/// Save (GET / PATCH /api/bots/:id/runtime-settings {automaticRecovery});
+/// until the bot has its own value it shows the workspace's.
 struct PersonaRecoveryGroup: View {
     @Environment(\.desktopTheme) private var theme
+    @EnvironmentObject private var session: Session
     let bot: Bot
     let instances: [Instance]
     let workspace: Bool?
 
+    @State private var stored: BotAutomaticRecovery?
+    @State private var draft: BotAutomaticRecovery?
+    @State private var saving = false
+    @State private var error: String?
+
+    private var value: BotAutomaticRecovery {
+        draft ?? stored ?? bot.automaticRecovery ?? BotAutomaticRecovery(enabled: workspace == true)
+    }
+
     var body: some View {
-        let enabled = workspace == true
+        let value = value
         let engines = instances.filter { $0.snapshot.isAvailable }
+        let engine = engines.first { $0.instanceId == value.backup?.instanceId }
+        let models = engine?.models.options.filter { engine?.snapshot.authenticated != false || $0.custom == true } ?? []
         DesktopSettingsGroup(Text("Automatic recovery"),
                              accessory: AnyView(DesktopHelpTip(help: Text("Applies to direct bot threads, including Primary Bot and delegated work. Channels are not included. Only this thread switches; bot defaults stay unchanged."))),
                              identifier: "botRecovery") {
             DesktopDescribedRow(Text("Use a backup model"),
                                 help: Text("If an ACP model provider (such as Qwen or OpenCode) fails before starting, try a backup once. Work that may have already run is not replayed."),
                                 identifier: "botRecoveryEnabled") {
-                PanelSwitch(label: "Use a backup model", isOn: enabled, disabled: true,
-                            onColor: BubbleColors.user(botColor: bot.color)?.fill.color) { _ in }
+                PanelSwitch(label: "Use a backup model", isOn: value.enabled, disabled: saving,
+                            onColor: BubbleColors.user(botColor: bot.color)?.fill.color) { next in
+                    draft = BotAutomaticRecovery(enabled: next, backup: value.backup)
+                }
+                .accessibilityIdentifier("persona-recovery.enabled")
             }
             DesktopCompactRow(Text("Backup provider"), identifier: "botRecoveryEngine") {
                 DesktopPillSelect(options: [("", AppStrings.localized("Choose a provider"))] + engines.map { ($0.instanceId, HumanID.readable($0.displayName, $0.instanceId, or: AppStrings.localized("Removed engine"))) },
-                                  selection: "", label: Text("Backup provider"), identifier: "persona-recovery.engine", disabled: true) { _ in }
+                                  selection: value.backup?.instanceId ?? "", label: Text("Backup provider"), identifier: "persona-recovery.engine",
+                                  disabled: !value.enabled) { next in
+                    draft = BotAutomaticRecovery(enabled: value.enabled, backup: next.isEmpty ? nil : ModelSelection(instanceId: next, model: ""))
+                }
             }
             DesktopDescribedRow(Text("Backup model"),
                                 help: Text("Permissions stay unchanged; some provider switches need confirmation. Using the backup can incur charges from its provider."),
                                 identifier: "botRecoveryModel") {
-                DesktopPillSelect(options: [("", AppStrings.localized("Choose a model"))], selection: "",
-                                  label: Text("Backup model"), identifier: "persona-recovery.model", disabled: true) { _ in }
+                DesktopPillSelect(options: [("", AppStrings.localized("Choose a model"))] + models.map { ($0.id, $0.label) },
+                                  selection: value.backup?.model ?? "", label: Text("Backup model"), identifier: "persona-recovery.model",
+                                  disabled: !value.enabled || engine == nil) { next in
+                    guard let engine else { return }
+                    draft = BotAutomaticRecovery(enabled: value.enabled, backup: ModelSelection(instanceId: engine.instanceId, model: next))
+                }
+            }
+            if let error {
+                DesktopText(verbatim: error, size: 12, line: 16, color: \.danger)
+                    .padding(.horizontal, 14)
             }
             HStack {
                 Spacer(minLength: 0)
-                Button("Save") {}
+                Button("Save") { save() }
                     .buttonStyle(DesktopButtonStyle(kind: .control, height: 28, radius: 14))
-                    .disabled(true)
+                    .disabled(draft == nil || saving)
+                    .accessibilityIdentifier("persona-recovery.save")
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
         }
+        .task(id: bot.id) {
+            draft = nil
+            stored = (try? await session.settingsClient?.botRuntimeSettings(botId: bot.id))?.automaticRecovery
+        }
         .accessibilityIdentifier("persona-model.recovery")
+    }
+
+    private func save() {
+        guard let draft, let client = session.settingsClient else { return }
+        let botId = bot.id
+        saving = true
+        Task {
+            do {
+                let saved = try await client.setBotAutomaticRecovery(botId: botId, draft)
+                stored = saved.automaticRecovery ?? draft
+                self.draft = nil
+                error = nil
+            } catch {
+                self.error = error.localizedDescription
+            }
+            saving = false
+        }
     }
 }
 

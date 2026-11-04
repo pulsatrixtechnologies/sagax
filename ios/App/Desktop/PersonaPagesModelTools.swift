@@ -148,7 +148,7 @@ struct PersonaModelPage: View {
     /// `KeepWarmRow`: follow Settings, or this bot's own On / Off
     /// (PATCH /api/bots/:id {cacheKeepWarm}).
     private var keepWarmCard: some View {
-        let value = keepWarm ?? "follow"
+        let value = keepWarm ?? (bot.cacheKeepWarm.map { $0 ? "on" : "off" } ?? "follow")
         // the workspace's switch is on unless Settings turned it off
         // (cacheKeepWarmSettings); the iPad's config does not carry it yet
         let follow = String(format: AppStrings.localized("Same as Settings (%@)"), AppStrings.localized("On"))
@@ -196,6 +196,7 @@ struct PersonaPermissionsPage: View {
     @State private var notice: String?
     @State private var emailDrafts: Bool?
     @State private var loopGuard: Bool?
+    @State private var hooks: BotLifecycleHooks?
     @State private var moreOpen = false
     @State private var allowlist = false
     @State private var grants = false
@@ -252,6 +253,9 @@ struct PersonaPermissionsPage: View {
             loopGuard = nil
             notice = nil
         }
+        .task(id: bot.id) {
+            hooks = try? await session.settingsClient?.botLifecycleHooks(botId: bot.id)
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("persona-page.permissions")
     }
@@ -304,7 +308,7 @@ struct PersonaPermissionsPage: View {
             PersonaRecipientsRow(bot: bot)
         }
         if mode.advanced, edits("emailDrafts") {
-            let on = emailDrafts ?? true
+            let on = emailDrafts ?? bot.emailDrafts ?? true
             DesktopDescribedRow(Text("Email drafts"),
                                 description: on ? nil : Text("Drafts are off for this bot."),
                                 help: Text("When off, this bot does not write email draft cards."),
@@ -316,7 +320,7 @@ struct PersonaPermissionsPage: View {
             }
         }
         if mode.advanced, edits("loopGuard") {
-            let on = loopGuard ?? true
+            let on = loopGuard ?? bot.loopGuard ?? true
             DesktopDescribedRow(Text("Loop guard"),
                                 description: on ? nil : Text("Loop guard is off for this bot."),
                                 help: Text("When off, this bot is not steered or stopped for a repeating shell failure."),
@@ -328,13 +332,18 @@ struct PersonaPermissionsPage: View {
             }
         }
         if edits("allowedRecipients") {
-            // GET/PUT /api/bots/:id/lifecycle-hooks has no iPad call yet:
-            // the row is drawn as the desktop draws it, its switch off
+            // LifecycleHooksRow: GET / PUT /api/bots/:id/lifecycle-hooks
             DesktopDescribedRow(Text("Lifecycle hooks"),
-                                description: Text("No plugin hooks installed."),
+                                description: hooks.map { $0.events.isEmpty ? Text("No plugin hooks installed.") : Text(verbatim: $0.events.joined(separator: ", ")) }
+                                    ?? Text("No plugin hooks installed."),
                                 help: Text("Plugin hooks run on the bot's computer (sandbox, VM or PC), never on the server. They stay off until you turn them on."),
                                 identifier: "lifecycleHooks") {
-                PanelSwitch(label: "Lifecycle hooks", isOn: false, disabled: true, onColor: tint) { _ in }
+                PanelSwitch(label: "Lifecycle hooks", isOn: hooks?.enabled ?? false, disabled: hooks == nil, onColor: tint) { next in
+                    guard let client = session.settingsClient else { return }
+                    let botId = bot.id
+                    Task { if let saved = try? await client.setBotLifecycleHooks(botId: botId, enabled: next) { hooks = saved } }
+                }
+                .accessibilityIdentifier("persona-permissions.lifecycle-hooks")
             }
         }
     }

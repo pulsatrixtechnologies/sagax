@@ -1540,5 +1540,11 @@
   "Each bot’s own folder": "room.folder.own",
   "Each bot’s own folder, or an absolute path": "room.folder.placeholder",
   "Fixed for this thread after its first turn. Start a new thread to work somewhere else.": "room.folder.locked",
-  "Only an organization admin can change the working folder.": "groupPanel.folderAdminOnly"
+  "Only an organization admin can change the working folder.": "groupPanel.folderAdminOnly",
+  "No app is connected. The queue stays empty.": "brief.noApps",
+  "created %@": "persona.files.created",
+  "file last used %@": "persona.files.lastUsed",
+  "not used yet": "persona.files.neverUsed",
+  "Forgotten": "persona.files.forgotten",
+  "%@ / %@": "persona.files.budgetBytes"
 }

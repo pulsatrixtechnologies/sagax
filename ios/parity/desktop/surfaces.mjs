@@ -104,10 +104,19 @@ const S = [];
 const add = (surface) => S.push(surface);
 
 // first run
-add({ id: "onboarding-welcome", phase: "welcome", note: "first run: welcome flow, step 1",
-  open: async (ctx) => { await ctx.waitFor(`/Welcome to/.test(document.body.innerText)`, { timeoutMs: 15_000 }); } });
-add({ id: "onboarding-tour", phase: "tour", note: "guided tour, first spotlight (composer)",
-  open: async (ctx) => { await ctx.waitFor(`/Step 1 of/.test(document.body.innerText)`, { timeoutMs: 15_000 }); } });
+// 2026-11-04: a local first run is GuidedFirstRun (WelcomeGate.tsx: "Your
+// model providers", step 1 of 3, under the once-per-account terms); the
+// "Welcome to" flow and its hand-off to the guided tour are a hosted
+// workspace's only. The tour itself opens from Settings or the command
+// palette (`toggleTour`).
+add({ id: "onboarding-welcome", phase: "welcome", note: "first run: guided first run, step 1 (model providers)",
+  open: async (ctx) => { await ctx.waitFor(`/Step 1 of/.test(document.body.innerText)`, { timeoutMs: 20_000 }); await ctx.sleep(600); } });
+add({ id: "onboarding-tour", phase: "tour", note: "guided tour, first spotlight (composer), replayed",
+  open: async (ctx) => {
+    await ctx.dispatch({ type: "toggleTour", open: true });
+    await ctx.waitFor(`/Step 1 of/.test(document.body.innerText)`, { timeoutMs: 15_000 });
+    await ctx.sleep(600);
+  } });
 
 // the main window
 add({ id: "main", phase: "main", skins: "all", note: "main window: sidebar (comfortable) + Ara's chat", open: async () => {} });
@@ -176,16 +185,31 @@ add({ id: "chat-composer-slash", phase: "main", note: "composer slash-command po
   open: async (ctx) => { await ctx.click('textarea, [contenteditable="true"]'); await ctx.type("/"); await ctx.sleep(500); } });
 add({ id: "chat-export-menu", phase: "main", note: "chat header: More options menu (Copy as Markdown, Export, Inspector)",
   open: async (ctx) => { await ctx.click('[aria-label="More options"]'); } });
-add({ id: "chat-model-picker", phase: "main", note: "composer + menu: Attach files and the Model row (2026-10-18: no model chip)",
-  open: async (ctx) => { await ctx.click('[data-composer-plus]'); await ctx.sleep(500); } });
+// 2026-11-04: the composer has no model control left (its + menu is Attach
+// files and Teach a task; the headless menu has no trigger). The model picker
+// is the model window (ModelWindowHost, src/lib/model-window.ts), the one the
+// persona's Model tab and an access card open: opened on Ara here.
+add({ id: "chat-model-picker", phase: "main", note: "the model window on Ara (ModelWindowHost: engines and models)",
+  open: async (ctx) => {
+    const ara = await ctx.bot("Ara");
+    await ctx.eval(`import("/src/lib/model-window.ts").then((m) => m.openModelWindow(${JSON.stringify(ara.id)}))`);
+    await ctx.waitFor(`Boolean(document.querySelector("[data-model-menu], [role=dialog]"))`, { timeoutMs: 10_000 });
+    await ctx.sleep(800);
+  } });
 add({ id: "chat-approval-mode", phase: "main", note: "composer approval-mode menu",
   open: async (ctx) => {
     const trigger = 'button[aria-haspopup="menu"][aria-label$=" for Fixture engine"]';
     if (!(await ctx.exists(trigger))) return { skip: "approval-mode control not in the composer at this width" };
     await ctx.click(trigger);
   } });
-add({ id: "chat-where-menu", phase: "main", note: "composer 'where this conversation works' menu",
-  open: async (ctx) => { await ctx.click('[aria-label^="Where this conversation works"]'); } });
+// 2026-11-04: the composer's "where this conversation works" chip and menu
+// are gone; `place.chipAria` is now only the badge on a busy room member's
+// face (GroupView.tsx), not a menu. The surface stays listed (its iPad id).
+add({ id: "chat-where-menu", phase: "main", note: "composer 'where this conversation works' menu (removed from the desktop)",
+  open: async (ctx) => {
+    if (!(await ctx.exists('[aria-label^="Where this conversation works"]'))) return { skip: "the desktop composer has no 'where this conversation works' menu any more (2026-11)" };
+    await ctx.click('[aria-label^="Where this conversation works"]');
+  } });
 add({ id: "chat-find", phase: "main", note: "find in conversation (Cmd-F)",
   open: async (ctx) => { await ctx.click({ text: /^Fais une sauvegarde/ }); await ctx.key("f", ["Meta"]); await ctx.type("sauvegarde"); await ctx.sleep(400); } });
 add({ id: "chat-threads", phase: "main", localStorage: { "omb-show-threads": "1" }, note: "thread (task) picker (Appearance > Show threads on)",

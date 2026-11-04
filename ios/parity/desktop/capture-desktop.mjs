@@ -274,13 +274,23 @@ function context(page, viewport, fixture) {
       await mouse("mouseReleased", c.x, c.y, { button: "right" });
       await sleep(300);
     },
+    // Chrome recomputes :hover on the frame after a move: a second move a
+    // frame later makes sure the shot sees the pointer where it now is
+    // (one move left 21's bar off, and a pointer that had crossed the
+    // transcript left a stray bar on 16 and 17).
     async hover(selector) {
       const c = await center(selector);
       await mouse("mouseMoved", c.x, c.y, { button: "none" });
+      await sleep(120);
+      await mouse("mouseMoved", c.x + 1, c.y, { button: "none" });
       await sleep(250);
     },
     async moveAway() {
-      await mouse("mouseMoved", viewport.width - 2, viewport.height - 2, { button: "none" });
+      // the header's empty left end: no row, no button, no hover state
+      for (const dx of [0, 1]) {
+        await mouse("mouseMoved", Math.round(viewport.width * 0.42) + dx, 6, { button: "none" });
+        await sleep(120);
+      }
     },
     /** key("k", ["Meta"]) */
     async key(key, modifiers = []) {

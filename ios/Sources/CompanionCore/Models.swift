@@ -1620,6 +1620,9 @@ public struct Instance: Codable, Hashable, Identifiable, Sendable {
     /// brand or a custom image; absent, the driver's own mark.
     public var icon: InstanceIcon? = nil
     public var access: String? = nil
+    /// How to install the engine (`InstanceInfo.install`): present on the
+    /// engines the welcome flow lists.
+    public var install: InstanceInstall? = nil
 
     public var id: String { instanceId }
 }
@@ -1794,6 +1797,8 @@ public struct ConfigStatus: Codable, Sendable {
     /// Stable <instance>/<model> ids, off at organization then person level.
     public var disabledModels: [String]? = nil
     public var myDisabledModels: [String]? = nil
+    /// The welcome flow and the guided tour (`OnboardingStatus` in shared/wire.ts).
+    public var onboarding: OnboardingStatus? = nil
 
     /// `jevRoomRoutingOn`: an Auto room with Jev off answers like a lead room.
     public var jevRoomRoutingOn: Bool {

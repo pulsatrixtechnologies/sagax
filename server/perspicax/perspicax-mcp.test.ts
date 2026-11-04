@@ -421,6 +421,30 @@ describe("PerspicaxMcp", () => {
     expect(h.revoked).toEqual(["pxlo1.B.mcp-P1-1"]);
   });
 
+  it("an engine that goes cold while its generation is retired still gets its token revoked", async () => {
+    const engineWarm = new Set(["t1"]);
+    let h: ReturnType<typeof harness>;
+    h = harness({
+      engineWarm,
+      mcp: ({ method, body }) => {
+        if (method === "DELETE") {
+          // the pool reaps the engine while the session is being closed
+          engineWarm.delete("t1");
+          h.mcp.noteEngineCold("t1");
+          return new Response(null, { status: 204 });
+        }
+        if (body.id === undefined) return new Response(null, { status: 202 });
+        return new Response(`event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { tools: [] } })}\n\n`, {
+          status: 200, headers: { "content-type": "text/event-stream", "mcp-session-id": "sess-1" },
+        });
+      },
+    });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    await h.mcp.endGeneration("t1", "g1");
+    expect(h.revoked).toEqual(["pxlo1.B.mcp-P1-1"]);
+  });
+
   it("off a call, a turn's token is revoked when its generation ends", async () => {
     const h = harness({ onCall: new Set() });
     await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });

@@ -205,6 +205,10 @@ export interface FakeOidcProvider {
   /** The profile's /mcp catalog; absent: one small api_list (a measurement
    * serves a catalog as big as a real organization's, #1276). */
   mcpTools?: unknown[];
+  /** 0.8.44: refuse the account connection (no profile in the resource) with
+   * invalid_target to a person who holds no profile, as a Perspicax that
+   * gives such a person no MCP access does. Off: anyone signed in gets it. */
+  accountNeedsProfile?: boolean;
   exchanges: Array<{ sub: string | null; profile: string | null; ok: boolean; error?: string; token?: string }>;
   exchangeRevoked: string[];
   mcpRequests: FakeMcpRequest[];
@@ -624,6 +628,10 @@ export async function startFakeOidcProvider(options: { clientId?: string; user?:
               profile = target.searchParams.get("profile");
             }
           } catch { /* not a URL */ }
+          if (accountTarget && provider.accountNeedsProfile && held(subject.sub).length === 0) {
+            provider.exchanges.push({ sub: subject.sub, profile: null, ok: false, error: "invalid_target" });
+            return send(res, 400, { error: "invalid_target" });
+          }
           if (!accountTarget && (!profile || !provider.profiles.some((entry) => entry.id === profile) || !held(subject.sub).includes(profile))) return fail(400, "invalid_target", subject.sub, profile);
           const token = `pxlo1.${subject.sub}.${randomBytes(16).toString("hex")}`;
           const expiresIn = Math.min(900, Math.floor((subject.exp - Date.now()) / 1000));
@@ -786,7 +794,7 @@ export async function startFakeOidcProvider(options: { clientId?: string; user?:
           : frame.method === "tools/list"
             ? { tools: provider.mcpTools ?? [{ name: "api_list", description: "List the APIs of this profile", inputSchema: { type: "object" } }] }
             : frame.method === "tools/call"
-              ? { content: [{ type: "text", text: `profile ${entry.profile} for ${entry.sub}` }] }
+              ? { content: [{ type: "text", text: entry.profile ? `profile ${entry.profile} for ${entry.sub}` : `account for ${entry.sub}` }] }
               : {};
         res.writeHead(200, headers);
         res.end(`event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: frame.id, result })}\n\n`);

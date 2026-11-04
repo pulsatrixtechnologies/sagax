@@ -1709,6 +1709,13 @@ export class PerspicaxMcp {
       entry.profileChoiceRestoreFailed = false;
       if (keep && !entry.ended && entry.expiresAt - this.now() >= PERSPICAX_TOKEN_MIN_LIFE_MS) {
         await this.closeSession(entry);
+        // The engine (or the call) may have gone cold while the role and the
+        // session were cleared: its noteEngineCold found nothing parked yet,
+        // so a token parked now would outlive the turn until it expires.
+        if (entry.ended || !this.sessionShouldStay(threadId)) {
+          done.push(this.close(entry));
+          continue;
+        }
         const warm = warmKey(entry.threadId, entry.principalId, entry.source);
         const previous = this.warm.get(warm);
         if (previous && previous !== entry) done.push(this.close(previous));

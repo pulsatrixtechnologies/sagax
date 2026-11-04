@@ -1,14 +1,17 @@
 // Slice 5 of the Perspicax organization through the real server: MCP for the
 // person who speaks. The fake provider (server/testing/fake-oidc-provider.ts)
-// lists MCP profiles in its directory, answers the RFC 8693 exchange
-// authenticated by the link, revokes exchanged tokens and serves a small /mcp;
+// lists MCP profiles in its directory, answers the RFC 8693 exchange for the
+// account connection (0.8.44: one `perspicax` server per turn, no per-bot
+// profile) authenticated by the link, revokes exchanged tokens and serves a
+// small /mcp;
 // the fake Claude CLI really talks to the stdio servers of its --mcp-config
 // (FAKE_CLAUDE_MCP_CALLS).
 //
 //   scenario E  bob speaks to alice's bot: the calls reach Perspicax with
 //               bob's exchanged token and clientInfo "Pulsa Bot (<bot id>)"
-//   E negative  carol does not hold the profile: no server is mounted, the
-//               system prompt says why, and the thread shows an activity row
+//   E negative  Perspicax refuses carol the account connection (she holds
+//               no profile): no server is mounted, the system prompt says
+//               why, and the thread shows an activity row
 //   routine     slice 6: a routine run without its person's delegation is
 //               refused and paused; with it, the routine and everything it
 //               starts (a room goal routine, a bot a routine asks, a thread
@@ -202,6 +205,8 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     ];
     idp.profilesBySub.set(ALICE.sub, [PROFILE.id]);
     idp.profilesBySub.set(BOB.sub, [PROFILE.id]);
+    // carol holds no profile: Perspicax refuses her the account connection
+    idp.accountNeedsProfile = true;
     idp.directoryPeople = [ALICE, BOB, CAROL].map((user) => idp.personOf(user));
     PORT = await freePortBlock([0, 1]);
     BASE = `http://127.0.0.1:${PORT}`;
@@ -227,8 +232,8 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
               { server: "agents", tool: "coordinate_bots", arguments: { bot_ids: ["Xavier"], mode: "consult", message: "ping from Rita" }, when: "ASK-XAVIER" },
               { server: "agents", tool: "start_thread", arguments: { title: "Own job", message: "ping own job" }, when: "OPEN-OWN" },
               { server: "agents", tool: "coordinate_bots", arguments: { bot_ids: ["Xavier"], message: "check the board for the person", request_key: "bob-hop" }, when: "COORD-XAVIER" },
-              { server: "perspicax_*", tool: "api_list", arguments: {} },
-              { server: "perspicax_*", tool: "flow_stats", arguments: { values: [1.5, 2.25, 10, 0.1] } },
+              { server: "perspicax", tool: "api_list", arguments: {} },
+              { server: "perspicax", tool: "flow_stats", arguments: { values: [1.5, 2.25, 10, 0.1] } },
               ...[
                 "plugins/private-owner/skills/check/SKILL.md",
                 "/workspace/sagax-plugins/private-owner/skills/check/SKILL.md",
@@ -309,41 +314,37 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     expect(JSON.stringify(calls)).not.toContain("Instructions from private-owner.");
   }, 90_000);
 
-  it("the bot editor offers the profiles alice holds, and saves them", async () => {
-    const got = await api("GET", `/api/bots/${x.id}/perspicax`, alice);
-    expect(got.status, got.text).toBe(200);
-    // c0abaf804 adds optional per-bot identities; this older provider has none.
-    expect(got.body).toEqual({ selected: [], available: [PROFILE], canEdit: true, actsAs: null, identities: { profiles: [], supported: false }, identityUnavailable: false });
-    const saved = await api("PUT", `/api/bots/${x.id}/perspicax`, alice, { profiles: [PROFILE.id] });
-    expect(saved.status, saved.text).toBe(200);
-    expect(saved.body.selected).toEqual([{ ...PROFILE, heldByMe: true }]);
-    // bob uses the bot, he does not change it; the wire never carries the list
-    const bob = await signIn(BOB);
-    expect(await api("PUT", `/api/bots/${x.id}/perspicax`, bob, { profiles: [] })).toMatchObject({ status: 403, body: { code: "needs_edit" } });
-    expect((await api("GET", `/api/bots/${x.id}/perspicax`, bob)).body).toMatchObject({ canEdit: false, selected: [{ id: PROFILE.id, heldByMe: true }] });
-    expect(JSON.stringify((await api("GET", "/api/bots", alice)).body)).not.toContain("\"perspicax\"");
-  });
+  /** Every account token exchanged so far is revoked: the warm engine of an
+   * earlier turn (e3f51c658) has gone idle, so the next turn exchanges anew. */
+  async function warmTokensGone(): Promise<void> {
+    await waitFor(async () => idp.exchanges.every((e) => !e.ok || idp.exchangeRevoked.includes(e.token!)), 40_000);
+  }
 
   it("scenario E: bob's turn reaches Perspicax as bob, named Pulsa Bot (<bot id>); his tokens are revoked after it", async () => {
+    await warmTokensGone();
     const bob = await signIn(BOB);
     const exchangesBefore = idp.exchanges.length;
     const callsBefore = idp.mcpRequests.length;
     const reply = await turn(bob, x, "ping");
     expect(reply).toContain("mcp:api_list:ok");
     const mcp = JSON.parse(readFileSync(mcpDump, "utf8")) as { servers: string[]; calls: Array<{ server: string; tool: string; listed: boolean; ok: boolean; text: string }> };
-    expect(mcp.servers).toContain("perspicax_dispatch");
-    // Compute is relayed to the same authenticated profile as every Flow
+    // one account connection, whatever roles bob holds; the bot keeps no profile
+    expect(mcp.servers).toContain("perspicax");
+    expect(mcp.servers.filter((name) => name.startsWith("perspicax_"))).toEqual([]);
+    // the wire carries no per-bot profile list or saved role (legacy fields are cleaned)
+    expect(JSON.stringify((await api("GET", "/api/bots", bob)).body)).not.toMatch(/"perspicax(ActAs)?":\s*[[{]/);
+    // Compute is relayed to the same authenticated connection as every Flow
     // tool. Sagax has no local arithmetic server or fallback implementation.
     expect(mcp.servers).not.toContain("sagax-flow");
     expect(mcp.calls).toEqual([
-      { server: "perspicax_dispatch", tool: "api_list", listed: true, ok: true, text: `profile ${PROFILE.id} for ${BOB.sub}` },
-      { server: "perspicax_dispatch", tool: "flow_stats", listed: true, ok: true, text: `profile ${PROFILE.id} for ${BOB.sub}` },
+      { server: "perspicax", tool: "api_list", listed: true, ok: true, text: `account for ${BOB.sub}` },
+      { server: "perspicax", tool: "flow_stats", listed: true, ok: true, text: `account for ${BOB.sub}` },
     ]);
     const exchanges = idp.exchanges.slice(exchangesBefore);
-    expect(exchanges.map((e) => ({ sub: e.sub, profile: e.profile, ok: e.ok }))).toEqual([{ sub: BOB.sub, profile: PROFILE.id, ok: true }]);
+    expect(exchanges.map((e) => ({ sub: e.sub, profile: e.profile, ok: e.ok }))).toEqual([{ sub: BOB.sub, profile: null, ok: true }]);
     const calls = idp.mcpRequests.slice(callsBefore).filter((r) => r.method === "POST");
     expect(calls.length).toBeGreaterThanOrEqual(3);
-    expect(calls.every((r) => r.sub === BOB.sub && r.profile === PROFILE.id)).toBe(true);
+    expect(calls.every((r) => r.sub === BOB.sub && r.profile === null)).toBe(true);
     const init = calls.find((r) => r.rpcMethod === "initialize")!;
     expect(init.clientInfo).toEqual({ name: `Pulsa Bot (${x.id})`, version: PACKAGE_VERSION });
     expect(init.sessionId).toBeNull();
@@ -355,6 +356,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
   }, 90_000);
 
   it("a voice call keeps bob's Perspicax tools from turn to turn: one exchange, revoked when the call ends", async () => {
+    await warmTokensGone();
     const bob = await signIn(BOB);
     const threadId = await ownThread(bob, x.id);
     const callId = "call-orgmcp-000001";
@@ -366,13 +368,13 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
       const added = idp.exchanges.slice(exchangesBefore);
       return added.length === 0 ? null : added;
     });
-    expect(warmed.map((entry) => ({ sub: entry.sub, profile: entry.profile, ok: entry.ok }))).toEqual([{ sub: BOB.sub, profile: PROFILE.id, ok: true }]);
+    expect(warmed.map((entry) => ({ sub: entry.sub, profile: entry.profile, ok: entry.ok }))).toEqual([{ sub: BOB.sub, profile: null, ok: true }]);
     expect(await turn(bob, x, "first thing on the call")).toContain("mcp:api_list:ok");
     expect(await turn(bob, x, "second thing on the call")).toContain("mcp:api_list:ok");
     expect(await turn(bob, x, "third thing on the call")).toContain("mcp:api_list:ok");
     const exchanges = idp.exchanges.slice(exchangesBefore);
     // the call's quick turns share one token: no exchange per sentence
-    expect(exchanges.map((e) => ({ sub: e.sub, profile: e.profile, ok: e.ok }))).toEqual([{ sub: BOB.sub, profile: PROFILE.id, ok: true }]);
+    expect(exchanges.map((e) => ({ sub: e.sub, profile: e.profile, ok: e.ok }))).toEqual([{ sub: BOB.sub, profile: null, ok: true }]);
     expect(idp.exchangeRevoked).not.toContain(exchanges[0]!.token);
     // the words were marked as said on the call (typed path, server state)
     const users = (await threadMessages(bob, threadId)).filter((m: any) => m.role === "user" && String(m.text).endsWith("on the call"));
@@ -385,7 +387,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
   it("T1: no sign-in or Perspicax token reaches the engine's argv, environment or MCP configuration", async () => {
     const engine = JSON.parse(readFileSync(dump, "utf8")) as { argv: string[]; env: Record<string, string>; mcpConfig: unknown; systemPrompt: string };
     const seen = JSON.stringify([engine.argv, engine.env, engine.mcpConfig, engine.systemPrompt, readFileSync(mcpDump, "utf8")]);
-    expect(seen).toContain("perspicax_dispatch");
+    expect(Object.keys((engine.mcpConfig as { mcpServers: Record<string, unknown> }).mcpServers)).toContain("perspicax");
     expect(seen).not.toMatch(/pxlo1\./);
     expect(seen).not.toContain(idp.linkToken);
     // nor where the link token lives, nor the issuer to use it with
@@ -396,26 +398,26 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
       expect(log).not.toContain(token);
     }
     const servers = (engine.mcpConfig as { mcpServers: Record<string, { env?: Record<string, string> }> }).mcpServers;
-    expect(JSON.stringify(servers.perspicax_dispatch)).toContain("SAGAX_PERSPICAX_TOKEN");
+    expect(JSON.stringify(servers.perspicax)).toContain("SAGAX_PERSPICAX_TOKEN");
   });
 
-  it("scenario E negative: carol, who does not hold the profile, gets no server, a note and an activity row", async () => {
+  it("scenario E negative: carol, refused the account connection, gets no server, a note and an activity row", async () => {
     const carol = await signIn(CAROL);
     const exchangesBefore = idp.exchanges.length;
     const callsBefore = idp.mcpRequests.length;
     const reply = await turn(carol, x, "ping");
     expect(reply).toContain("mcp:absent");
     const engine = JSON.parse(readFileSync(dump, "utf8")) as { mcpConfig: { mcpServers: Record<string, unknown> }; systemPrompt: string };
-    expect(Object.keys(engine.mcpConfig.mcpServers).some((name) => name.startsWith("perspicax_"))).toBe(false);
+    expect(Object.keys(engine.mcpConfig.mcpServers).some((name) => name.startsWith("perspicax"))).toBe(false);
     // no Perspicax tools mounted, so no Flow compute either
     expect(Object.keys(engine.mcpConfig.mcpServers)).not.toContain("sagax-flow");
-    expect(engine.systemPrompt).toContain('Perspicax tools of profile "Dispatch" are not available in this turn: the person speaking does not hold this profile in Perspicax.');
+    expect(engine.systemPrompt).toContain("Perspicax tools are not available in this turn: Perspicax did not authorize the account's main MCP connection.");
     // its own paragraph, never glued to the section before it
-    expect(engine.systemPrompt).toMatch(/\n\nPerspicax tools of profile "Dispatch"/);
-    expect(idp.exchanges.slice(exchangesBefore)).toEqual([{ sub: CAROL.sub, profile: PROFILE.id, ok: false, error: "invalid_target" }]);
+    expect(engine.systemPrompt).toMatch(/\n\nPerspicax tools are not available in this turn/);
+    expect(idp.exchanges.slice(exchangesBefore)).toEqual([{ sub: CAROL.sub, profile: null, ok: false, error: "invalid_target" }]);
     expect(idp.mcpRequests.slice(callsBefore)).toEqual([]);
     const row = (await threadMessages(carol, await ownThread(carol, x.id))).find((m) => m.kind === "activity" && m.tool?.name.startsWith("Perspicax:"));
-    expect(row?.tool).toEqual({ name: "Perspicax: Dispatch unavailable for Carol (not_held)", ok: false });
+    expect(row?.tool).toEqual({ name: "Perspicax: Perspicax unavailable for Carol (not_held)", ok: false });
   }, 90_000);
 
   it("a routine run acts in its person's name with no consent: never paused, no card (slice 6, 2026-10-08)", async () => {
@@ -467,11 +469,15 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     await waitFor(async () => idp.exchanges.length - exchangesBefore >= count, 60_000);
     await allIdle(alice);
     const exchanges = idp.exchanges.slice(exchangesBefore);
-    expect(exchanges.map((e) => ({ sub: e.sub, profile: e.profile, ok: e.ok }))).toEqual(Array.from({ length: exchanges.length }, () => ({ sub: ALICE.sub, profile: PROFILE.id, ok: true })));
+    expect(exchanges.map((e) => ({ sub: e.sub, profile: e.profile, ok: e.ok }))).toEqual(Array.from({ length: exchanges.length }, () => ({ sub: ALICE.sub, profile: null, ok: true })));
     const calls = idp.mcpRequests.slice(callsBefore).filter((r) => r.method === "POST");
     expect(calls.length, readFileSync(mcpDump, "utf8")).toBeGreaterThan(0);
     expect(calls.every((r) => r.sub === ALICE.sub)).toBe(true);
-    await waitFor(async () => exchanges.every((e) => idp.exchangeRevoked.includes(e.token!)), 20_000);
+    try {
+      await waitFor(async () => exchanges.every((e) => idp.exchangeRevoked.includes(e.token!)), 20_000);
+    } catch (error) {
+      throw new Error(`not revoked: ${JSON.stringify(exchanges.map((e) => idp.exchangeRevoked.includes(e.token!)))} at ${JSON.stringify(exchanges.map((e) => idp.exchanges.indexOf(e)))}\n${error instanceof Error ? error.message : String(error)}`);
+    }
     const added = [...(await perspicaxRows(alice)).entries()].filter(([at]) => !before.has(at)).map(([, name]) => name);
     expect(added, added.join("\n")).toEqual([]);
   }
@@ -500,8 +506,8 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     const routine = await api("POST", "/api/routines", alice, { name: "Ask Xavier", botId: rita.id, prompt: "ASK-XAVIER about the board.", enabled: false,
       schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 86_400_000 } });
     expect(routine.status, routine.text).toBe(201);
-    // Rita lists no profile: the one exchange is Xavier's, for the hop
-    await routineLineageUsesDelegation(routine.body.routine.id, 1);
+    // Rita's run and Xavier's hop each mount alice's account connection
+    await routineLineageUsesDelegation(routine.body.routine.id, 2);
   }, 120_000);
 
   it("a thread a routine opens on its own bot reaches Perspicax through the delegation", async () => {
@@ -526,7 +532,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     const callsBefore = idp.mcpRequests.length;
     const sent = await api("POST", `/api/bots/${y.id}/messages`, bob, { text: "COORD-XAVIER about the board" });
     expect(sent.status, sent.text).toBe(202);
-    // Yves lists no profile: the only exchange is Xavier's, for the hop
+    // Yves's own turn and Xavier's hop each mount bob's account connection
     await waitFor(async () => idp.exchanges.length > exchangesBefore, 60_000);
     // wait for the hop's Perspicax call itself, not only for the exchange: the
     // token is minted when the turn starts (and again for the engine warm-up
@@ -535,14 +541,14 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     // the hop runs in bob's threads (private threads): only bob sees them work
     await allIdle(bob);
     await allIdle(alice);
-    // every exchange of the hop is Bob's, for his profile: how many turns
+    // every exchange of the hop is Bob's account connection: how many turns
     // (the hop, its warm-up, the follow-up) mint one is not the point
     const exchanges = idp.exchanges.slice(exchangesBefore);
     expect(exchanges.length).toBeGreaterThan(0);
-    expect(exchanges.map((e) => ({ sub: e.sub, profile: e.profile, ok: e.ok }))).toEqual(exchanges.map(() => ({ sub: BOB.sub, profile: PROFILE.id, ok: true })));
+    expect(exchanges.map((e) => ({ sub: e.sub, profile: e.profile, ok: e.ok }))).toEqual(exchanges.map(() => ({ sub: BOB.sub, profile: null, ok: true })));
     const calls = idp.mcpRequests.slice(callsBefore).filter((r) => r.method === "POST");
     expect(calls.length).toBeGreaterThan(0);
-    expect(calls.every((r) => r.sub === BOB.sub && r.profile === PROFILE.id)).toBe(true);
+    expect(calls.every((r) => r.sub === BOB.sub && r.profile === null)).toBe(true);
     const added = [...(await perspicaxRows(bob)).entries()].filter(([at]) => !before.has(at)).map(([, name]) => name);
     expect(added.filter((name) => name.includes("unknown")), added.join("\n")).toEqual([]);
   }, 120_000);

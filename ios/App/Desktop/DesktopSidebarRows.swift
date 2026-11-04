@@ -345,10 +345,10 @@ struct DesktopSidebarRow: View {
 
     private func textContent(selected: Bool, hovered: Bool) -> some View {
         let compact = density == .compact
-        // comfortable: the reference window's 44 pt portrait at x 4 (pl-1),
-        // 6 pt before the name, rows 56 tall (py-1.5)
-        let avatarSize: CGFloat = compact ? 28 : 44
-        let leading: CGFloat = showThreads ? 24 : (compact ? 8 : 4)
+        // BotListItem: the 36 pt portrait (28 compact) at pl-2, gap-2
+        // before the name; comfortable rows h-[54px] (py-2)
+        let avatarSize: CGFloat = compact ? 28 : 36
+        let leading: CGFloat = showThreads ? 24 : 8
         // comfortable pr-2, compact pr-9, pr-[64px] while New thread and
         // "⋯" show (hover, touch), pr-9 for the select check; a group row
         // keeps pr-2
@@ -361,7 +361,7 @@ struct DesktopSidebarRow: View {
         let unread = chat.unread && !chat.busy
         let quietStatus = status != .idle
         // compact with Show threads: gap-1.5 py-1
-        return HStack(spacing: compact && !showThreads ? 8 : 6) {
+        return HStack(spacing: showThreads && compact ? 6 : 8) {
             avatar(size: avatarSize)
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 6) {
@@ -369,8 +369,10 @@ struct DesktopSidebarRow: View {
                         DesktopIconView(icon: .pin, size: 12)
                             .foregroundStyle(theme.sidebarInkSecondary)
                     }
+                    // a group's name is semibold while it is selected or unread (GroupListItem)
                     DesktopLineText(text: PeopleDirectory.shared.name(chat, session: session), size: 14,
-                                 weight: .medium, color: theme.sidebarInk, lineHeight: 20)
+                                 weight: isRoom && (chat.unread || (selected && !threadsOpen)) ? .semibold : .medium,
+                                 color: theme.sidebarInk, lineHeight: 20)
                         .layoutPriority(2)
                     // BotRoleTag: the bot's role beside its name, 6 pt after it
                     if let title = chat.desktopTitle, !title.isEmpty {
@@ -403,8 +405,10 @@ struct DesktopSidebarRow: View {
         }
         .padding(.leading, leading)
         .padding(.trailing, trailing)
-        .padding(.vertical, compact ? (showThreads ? 4 : 6) : 6)
-        .frame(maxWidth: .infinity, minHeight: compact ? (showThreads ? 36 : 40) : 56, alignment: .leading)
+        .padding(.vertical, compact ? (showThreads ? 4 : 6) : 8)
+        // compact 42, comfortable 56: the 1376x1032 references' row pitch
+        // (2026-11-03 sweeps 2 and 3)
+        .frame(maxWidth: .infinity, minHeight: compact ? (showThreads ? 36 : 42) : 56, alignment: .leading)
         .contentShape(Rectangle())
     }
 
@@ -612,35 +616,75 @@ struct DesktopStackedMauses: View {
     let members: [Bot]
     let density: DesktopSidebarDensity
 
+    /// `StackedMauses` (Sidebar.tsx): the box a bot row's avatar takes (36
+    /// comfortable, 28 compact; 40 in the rail, 48 for a single face there),
+    /// up to three faces (20, 16, 22) overlapped at the top left, bottom
+    /// left and bottom right, no ring; each face a SidebarMascotAvatar, so
+    /// a shape fills its box.
     var body: some View {
-        let slot: CGFloat = density == .icons ? 40 : (density == .compact ? 28 : 44)
-        let face: CGFloat = density == .icons ? 22 : (density == .compact ? 16 : 24)
-        let single: CGFloat = density == .icons ? 44 : (density == .compact ? 28 : 44)
-        ZStack(alignment: .topLeading) {
-            if members.count <= 1 {
+        let icons = density == .icons
+        let slot: CGFloat = icons ? 40 : (density == .compact ? 28 : 36)
+        let face: CGFloat = icons ? 22 : (density == .compact ? 16 : 20)
+        let single: CGFloat = icons ? 44 : (density == .compact ? 28 : 36)
+        if members.count <= 1 {
+            Group {
                 if let bot = members.first {
-                    BotMascotView(bot: bot, size: single, state: .happy, animated: false, sidebarTapReact: true)
-                        .frame(width: slot, height: slot)
+                    BotMascotView(bot: bot, size: single, state: .happy, animated: false, sidebarTapReact: true, fillBox: true)
+                        .frame(width: single, height: single)
+                } else {
+                    DesktopIconView(icon: .users, size: 24).foregroundStyle(Color.secondary)
                 }
-            } else {
-                let shown = Array(members.prefix(3))
-                // the faces' positions in the DOM dumps (03, 04, 05)
-                let three: [CGPoint] = density == .icons
-                    ? [CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 11), CGPoint(x: 18, y: 11)]
-                    : density == .compact
-                        ? [CGPoint(x: 0, y: 1), CGPoint(x: 0, y: 5), CGPoint(x: 12, y: 5)]
-                        : [CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 9), CGPoint(x: 16, y: 9)]
-                let spots: [CGPoint] = shown.count == 2
-                    ? [CGPoint(x: 0, y: 2), CGPoint(x: slot - face, y: slot - face)]
-                    : three
+            }
+            .frame(width: icons ? 48 : slot, height: icons ? 48 : slot)
+        } else {
+            let shown = Array(members.prefix(3))
+            let far = slot - face
+            let spots: [CGPoint] = shown.count == 2
+                ? [CGPoint(x: 0, y: 2), CGPoint(x: far, y: far)]
+                : [CGPoint(x: 0, y: 0), CGPoint(x: 0, y: far), CGPoint(x: far, y: far)]
+            ZStack(alignment: .topLeading) {
                 ForEach(Array(shown.enumerated()), id: \.offset) { index, bot in
-                    BotMascotView(bot: bot, size: face, state: .idle, animated: false, sidebarTapReact: true)
+                    BotMascotView(bot: bot, size: face, state: .idle, animated: false, sidebarTapReact: true, fillBox: true)
                         .frame(width: face, height: face)
                         .offset(x: spots[index].x, y: spots[index].y)
                 }
             }
+            .frame(width: slot, height: slot, alignment: .topLeading)
         }
-        .frame(width: slot, height: slot, alignment: .topLeading)
+    }
+}
+
+/// `GroupAvatarStack` (GroupPanel.tsx): a group's avatar in the chat
+/// header's pill and the group panel: up to three faces (56 % of the box,
+/// 62 % for two) at the top left, the right 18 % down, and 22 % in at the
+/// bottom, the later ones over the earlier.
+struct DesktopGroupAvatarStack: View {
+    let members: [Bot]
+    let size: CGFloat
+
+    var body: some View {
+        let shown = Array(members.prefix(3))
+        Group {
+            if shown.count <= 1 {
+                if let bot = shown.first {
+                    BotMascotView(bot: bot, size: size, state: .happy, animated: false)
+                }
+            } else {
+                let face = (size * (shown.count == 2 ? 0.62 : 0.56)).rounded()
+                let spots: [CGPoint] = shown.count == 2
+                    ? [CGPoint(x: 0, y: 0), CGPoint(x: size - face, y: size - face)]
+                    : [CGPoint(x: 0, y: 0), CGPoint(x: size - face, y: size * 0.18), CGPoint(x: size * 0.22, y: size - face)]
+                ZStack(alignment: .topLeading) {
+                    ForEach(Array(shown.enumerated()), id: \.offset) { index, bot in
+                        BotMascotView(bot: bot, size: face, state: .happy, animated: false)
+                            .frame(width: face, height: face)
+                            .offset(x: spots[index].x, y: spots[index].y)
+                    }
+                }
+            }
+        }
+        .frame(width: size, height: size, alignment: .topLeading)
+        .accessibilityHidden(true)
     }
 }
 

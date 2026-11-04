@@ -66,12 +66,13 @@ enum DesktopMenuStyle {
         switch self {
         case .standard: 228
         case .section: 220
-        case .profile: 259
+        case .profile: 228 // min-w-[228px] (SidebarProfileMenu.tsx), measured on 11
         case .new: 240
         }
     }
 
-    var rowHeight: CGFloat { self == .profile ? 32 : 30 }
+    // the account menu: 32 pt a row with the 2 pt gap, as measured on 11
+    var rowHeight: CGFloat { 30 }
     var iconSize: CGFloat {
         switch self {
         case .profile: 18

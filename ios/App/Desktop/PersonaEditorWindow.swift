@@ -236,7 +236,9 @@ struct PersonaEditorWindow: View {
         switch page {
         case .slack: reachable(.slack)
         case .sharing: reachable(.sharing)
-        case .visibility: reachable(.visibility) && !reachable(.sharing)
+        // showBotVisibility (bot-capabilities.ts): only on a page the server
+        // serves in a browser, never in the desktop app; the iPad is an app
+        case .visibility: false
         default: true
         }
     }

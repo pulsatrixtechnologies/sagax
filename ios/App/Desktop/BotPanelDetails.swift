@@ -162,7 +162,10 @@ struct BotPanelDetails: View {
     private var showsActivity: Bool { session.surfaceGate.allows(.botActivity) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        // `flex-col gap-6`: a section that draws nothing (the task list
+        // while the bot keeps none) takes no gap, as a flex gap skips an
+        // empty child's box only when it is not rendered at all
+        PanelSectionStack(spacing: 24) {
             // Details > Suggestions (SuggestionsSection.tsx); the routines are just below
             DesktopBotSuggestionsCard(bot: bot, setup: suggestionsSetup) { action in
                 switch action {
@@ -733,5 +736,43 @@ struct DesktopBotSuggestionsCard: View {
         let format = String(localized: String.LocalizationValue(item.subtitle))
         guard let argument = item.argument else { return format }
         return String(format: format, argument)
+    }
+}
+
+/// A vertical stack that puts `spacing` only between children that have a
+/// height, so a section that hides itself (an empty VStack that still owns
+/// its `.task`) leaves no gap.
+struct PanelSectionStack: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width
+        var height: CGFloat = 0
+        var maxWidth: CGFloat = 0
+        var placed = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
+            guard size.height > 0.5 else { continue }
+            height += (placed > 0 ? spacing : 0) + size.height
+            maxWidth = max(maxWidth, size.width)
+            placed += 1
+        }
+        return CGSize(width: width ?? maxWidth, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        var placed = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
+            if size.height <= 0.5 {
+                subview.place(at: CGPoint(x: bounds.minX, y: y), proposal: ProposedViewSize(width: bounds.width, height: 0))
+                continue
+            }
+            if placed > 0 { y += spacing }
+            subview.place(at: CGPoint(x: bounds.minX, y: y), proposal: ProposedViewSize(width: bounds.width, height: size.height))
+            y += size.height
+            placed += 1
+        }
     }
 }

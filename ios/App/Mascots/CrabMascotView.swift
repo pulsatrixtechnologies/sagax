@@ -101,10 +101,11 @@ enum CrabRenderer {
             ctx.scaleBy(x: box / b.width, y: box / b.height)
             ctx.translateBy(x: -b.minX, y: -b.minY)
         } else {
-            // the desktop crab's footprint (#340): small, standing on the box's floor
-            let k = CrabRig.scale
-            ctx.translateBy(x: box * (1 - k) / 2, y: box * (1 - k))
-            ctx.scaleBy(x: box * k / 100, y: box * k / 100)
+            // `crabViewBox`: the whole 100 x 100 sprite fills the box, as
+            // CrabMascot draws it everywhere (the gallery tiles, the
+            // editor's stage, the avatars). The 0.6 footprint
+            // (`CRAB_DESKTOP_SCALE`) is only the desktop's floating bot.
+            ctx.scaleBy(x: box / 100, y: box / 100)
         }
 
         func loop(_ frames: CSSKeyframes, _ duration: Double, delay: Double = 0, rest: [Double], alternate: Bool = false) -> [Double] {

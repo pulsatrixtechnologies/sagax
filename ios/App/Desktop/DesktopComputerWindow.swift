@@ -102,7 +102,8 @@ struct DesktopComputerWindowView: View {
                 #if DEBUG
                 // the reference is the gallery page (computer-screens.html
                 // ?modal=sandbox, `noShell`): its column of captions behind
-                if floating, Self.parityGallery { DesktopComputerGalleryBackdrop() }
+                // behind the veil's `backdrop-blur-[2px]`, as the shell is
+                if floating, Self.parityGallery { DesktopComputerGalleryBackdrop().blur(radius: 2) }
                 #endif
                 if floating {
                     Color.black.opacity(0.6)

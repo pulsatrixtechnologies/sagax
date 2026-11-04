@@ -1,3 +1,4 @@
+import type { RoutineReadinessAnswer } from "../../shared/routine-readiness.ts";
 /**
  * Public routines and routine-runs HTTP routes (#1388 wave 2 P2):
  * /api/routines*, /api/routine-runs*.
@@ -10,6 +11,7 @@ import type { RequestAuth } from "../auth/request-auth.ts";
 import type { RunAsChooser, RunAsPerson } from "../routines/routine-run-as.ts";
 import { runAsOptions } from "../routines/routine-run-as.ts";
 import {
+  redactRun,
   parseRoutineScopeQuery,
   routineRunClearable,
   routineRunsSeenAnswer,
@@ -33,6 +35,7 @@ export interface RoutinesHttpVisible {
 
 export interface RoutinesHttpDeps {
   listRoutines(): Routine[];
+  check?(routine: Routine): Promise<RoutineReadinessAnswer>;
   listRuns(from?: number, to?: number): RoutineRun[];
   listFolders(): Record<string, string[]>;
   create(
@@ -178,6 +181,12 @@ export function createRoutinesHttpRoutes(deps: RoutinesHttpDeps): RouteHandler {
           permission: "routines.runNowAny",
         });
       }
+      const body = await readBody(req) as { action?: unknown; check?: unknown } | null;
+      if (body?.action === "check" || body?.check === true) {
+        if (!target) return json(res, 404, { error: "no such routine" });
+        if (!deps.check) return json(res, 503, { error: "Routine checks are unavailable" });
+        return json(res, 200, await deps.check(target));
+      }
       const current = target ? deps.inFlightRun(target.id) : undefined;
       if (target && current) {
         const standing = deps.runStanding(current.id);
@@ -243,6 +252,27 @@ export function createRoutinesHttpRoutes(deps: RoutinesHttpDeps): RouteHandler {
           },
         } : {}),
       });
+    }
+
+    const checkMatch = path.match(/^\/api\/routines\/([\w-]+)\/check$/);
+    const detailMatch = path.match(/^\/api\/routines\/([\w-]+)$/);
+    if ((checkMatch && method === "POST") || (detailMatch && method === "GET")) {
+      const id = (checkMatch ?? detailMatch)![1]!;
+      const target = deps.listRoutines().find(candidate => candidate.id === id);
+      const visible = deps.visible(auth, path);
+      const viewerId = deps.viewerId(auth);
+      if (!target || !deps.routineVisible(target, visible) || (viewerId && !deps.routineSeenBy(target, viewerId))) return json(res, 404, { error: "no such routine" });
+      if (checkMatch) {
+        if (deps.needsRun(auth, target.botId)) return json(res, 403, deps.needsRunBody);
+        if (!deps.mayRunNow(auth, target)) return json(res, 403, { error: "Only the bot's owner, the person this routine runs as or an admin can check it.", code: "run_now_not_allowed", permission: "routines.runNowAny" });
+        if (!deps.check) return json(res, 503, { error: "Routine checks are unavailable" });
+        res.setHeader("cache-control", "no-store");
+        return json(res, 200, await deps.check(target));
+      }
+      const latest = deps.listRuns().filter(run => run.routineId === target.id).sort((a, b) => b.createdAt - a.createdAt)[0];
+      const scope = deps.scopeDeps(auth, visible, viewerId);
+      const lastRun = latest && (scope.mine(latest) ? latest : redactRun(latest));
+      return json(res, 200, { routine: deps.onWire(target), lastRun, readiness: lastRun?.readiness });
     }
 
     routineMatch = path.match(/^\/api\/routines\/([\w-]+)$/);

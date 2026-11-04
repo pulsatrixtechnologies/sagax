@@ -1,3 +1,4 @@
+import type { RoutineReadinessAnswer } from "../../shared/routine-readiness.ts";
 // POST /api/internal/routine-run: the run_routine tool starts one of the
 // calling bot's routines now. Behind the agents capability (see
 // internal-route.ts).
@@ -39,6 +40,7 @@ export interface RoutineRunInternalDeps<R extends { id: string; botId: string },
   speaker(threadId: string): string | undefined;
   /** routineRunNowAllowed for that person (undefined: nobody speaks). */
   mayRunNow(principalId: string | undefined, routine: R): boolean;
+  check?(routine: R): Promise<RoutineReadinessAnswer>;
   inFlight(routineId: string): boolean;
   /** The run of this routine that is queued, running or waiting, if any:
    * run_routine answers with it instead of refusing (one pass at a time). */
@@ -113,6 +115,10 @@ export function createRoutineRunInternalRoutes<R extends { id: string; botId: st
     const speaker = deps.speaker(capability.threadId);
     if (!deps.mayRunNow(speaker, target)) {
       return json(res, 403, { error: "Only the bot's owner, the person this routine runs as or an admin can run it now.", code: "run_now_not_allowed", permission: "routines.runNowAny" });
+    }
+    if (body.action === "check" || body.check === true) {
+      if (!deps.check) return json(res, 503, { error: "Routine checks are unavailable" });
+      return json(res, 200, await deps.check(target));
     }
     if (deps.inFlight(target.id)) {
       const current = deps.inFlightRun?.(target.id);

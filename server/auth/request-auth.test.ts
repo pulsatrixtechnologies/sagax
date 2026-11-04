@@ -140,7 +140,7 @@ describe("scopes", () => {
       // #1786: leaving a group is the member's own membership, not an admin act
       ["POST", "/api/groups/g/leave"],
       ["PATCH", "/api/bots/x"], ["PATCH", "/api/bots/x/profile"], ["POST", "/api/attachments"],
-      ["GET", "/api/attachments/a.png"], ["POST", "/api/routines"], ["POST", "/api/routines/r/run"],
+      ["GET", "/api/attachments/a.png"], ["POST", "/api/routines"], ["POST", "/api/routines/r/run"], ["POST", "/api/routines/r/check"], ["GET", "/api/routines/r"],
       ["POST", "/api/routines/watch-check"], // #1202 Check now: the handler applies the routine save's rights
       ["POST", "/api/routines/folders"], // routine folders: the handler applies the routine edit rights
       // Limit-reset: Continue card, near-limit banner, calendar markers (person's own bots)

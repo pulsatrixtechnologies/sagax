@@ -1,3 +1,7 @@
+import { checkRoutineReadiness, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun } from "./routines/routine-readiness.ts";
+import { noteEngineRefusal, clearEngineRefusal } from "./engines/engine-refusals.ts";
+import { classifyRoutineFailure as readinessFailureClass } from "./routines/routine-recovery.ts";
+import { canUseMcpServer } from "../shared/tool-scope.ts";
 import { createBotAvatarGenerateRoutes } from "./routes/bot-avatar-generate.ts";
 import { createBotObservabilityRoutes } from "./routes/bot-observability.ts";
 import { createFleetRoutes } from "./routes/fleet.ts";
@@ -20047,6 +20051,15 @@ bus.subscribe((event: RuntimeEvent) => {
       console.info(`[notice] ${event.threadId}: ${redactSecretsInText(event.message.slice(0, 240))}`);
       break;
     case "runtime.error": {
+      if (bot) {
+        const instance = registry.get(event.providerInstanceId ?? bot.modelSelection.instanceId);
+        const access = turnAccessByThread.get(event.threadId);
+        const verdict = readinessFailureClass(event.message, { setup: event.setup, stalled: event.stalled, limitResetsAt: event.limitResetsAt, limitScope: event.limitScope === "model" ? "model" : undefined });
+        if (instance && verdict.kind === "owner" && verdict.cause !== "setup") noteEngineRefusal({ engine: instance.instanceId,
+          account: refusalAccount(access?.via ?? "server", access?.payerPrincipalId, turnSlotFor(bot, instance)), cause: verdict.cause,
+          resetsAt: verdict.resetsAt, at: Date.now() });
+      }
+
       // A stop the person asked for is not a row in the chat.
       if (event.message.trim() === "turn stopped") break;
       // A client abort is a quiet stop with retry, not a failure (shared/client-cancel.ts).
@@ -20129,6 +20142,12 @@ bus.subscribe((event: RuntimeEvent) => {
       }
       break;
     case "turn.completed": {
+      if (event.ok && bot) {
+        const instance = registry.get(event.providerInstanceId ?? bot.modelSelection.instanceId);
+        const access = turnAccessByThread.get(event.threadId);
+        if (instance) clearEngineRefusal(instance.instanceId, refusalAccount(access?.via ?? "server", access?.payerPrincipalId, turnSlotFor(bot, instance)));
+      }
+
       safePoints.clear(event.threadId);
       turnReplyRepeats.settle(event.threadId, event.turnId);
       autoApprovals.clear(event.threadId);
@@ -24365,7 +24384,104 @@ const directChatOf = (botId: string, threadId: string): boolean => {
   const source = connectorThread(botId, threadId);
   return source !== null && !source.group;
 };
+/** Resolve the same worker Auto pick and account plan as routine startTurn. */
+function routineReadinessEngine(routine: ReadinessRoutine, run: ReadinessRun) {
+  const original = run.threadId ? botForThread(run.botId, run.threadId) : store.bot(run.botId);
+  if (!original) return undefined;
+  const speaker = routineRunSpeaker({ botId: run.botId, runAs: run.runAs ?? routine.runAs });
+  const pick = autoPickForTurn({ bot: original, threadId: run.threadId ?? "", speaker, role: "worker", text: run.prompt ?? routine.prompt });
+  const bot = pick ? { ...original, modelSelection: pick.pick.selection } : original;
+  const instance = registry.get(bot.modelSelection.instanceId);
+  if (!instance) return undefined;
+  const plan = resolveEngineAccess(orgEngineInput(bot, instance, speaker));
+  const account = refusalAccount(plan.ok ? plan.via : "subscription", plan.payerPrincipalId, turnSlotFor(bot, instance));
+  const signedIn = IDENTITY.kind === "perspicax" ? (!plan.ok ? false : plan.via === "subscription" ? true : undefined)
+    : engineProbes.get(instance.instanceId)?.ready;
+  return { engine: instance.instanceId, name: engineDisplayName(instance), account, signedIn,
+    ...(IDENTITY.kind !== "perspicax" ? { signedInAt: engineProbes.get(instance.instanceId)?.at } : {}),
+    ...(!plan.ok ? { detail: plan.cause ?? plan.reason } : {}) };
+}
+function refusalAccount(via: string, principal?: string, slot = "primary"): string {
+  return JSON.stringify([via === "owner-key" || via === "speaker-key" ? "key" : via, principal ?? "organization", slot]);
+}
+function routineReadinessProfiles(bot: BotRecord, principal: string): readonly string[] {
+  if (bot.perspicax?.profiles.length) return bot.perspicax.profiles;
+  if (!bot.perspicaxActAs) return [];
+  const subject = principals.byId(principal)?.subject;
+  const held = subject ? perspicaxDirectory?.profilesOf(subject.sub) : undefined;
+  return held?.[0] ? [held[0]] : [];
+}
+const routineReadinessDeps: RoutineReadinessDeps = {
+  cacheKey: (routine, run) => {
+    const bot = store.bot(run.botId);
+    const engine = routineReadinessEngine(routine, run);
+    return JSON.stringify([engine, bot?.modelSelection, bot?.mcpServers, bot?.toolScope, bot?.assignedSkills, bot?.perspicax, bot?.computer, bot?.remoteHosts]);
+  },
+  engine: (routine, run) => routineReadinessEngine(routine, run),
+  skills: (_routine, run) => {
+    const bot = store.bot(run.botId);
+    if (!bot) return undefined;
+    const inventory = scopedSkillInventory(bot, registry.get(bot.modelSelection.instanceId), run.runAs);
+    // Partial discovery cannot prove that an unlisted skill is absent.
+    return inventory.incomplete ? undefined : inventory.rows.filter(row => row.enabled).map(row => row.name);
+  },
+  mcp: (_routine, run) => {
+    const bot = store.bot(run.botId);
+    if (!bot) return undefined;
+    const principal = effectiveRunAs(run) ?? localPrincipalId();
+    const plugins = scopedPluginMcp(bot, principal);
+    const personal = IDENTITY.kind === "perspicax" && principal ? personConnections.servers(principal) : {};
+    const catalog = perspicaxDirectory?.profileCatalog() ?? [];
+    const profileNames = catalog.map(profile => ({ id: profile.id, name: perspicaxServerName(profile.slug || profile.id, new Set<string>()) }));
+    const held = principals.byId(principal)?.subject;
+    const profiles = routineReadinessProfiles(bot, principal);
+    const defaultProfile = profileNames.find(profile => profiles.includes(profile.id)) ?? profileNames.find(profile => held && perspicaxDirectory?.profilesOf(held.sub).includes(profile.id));
+    const known = [...Object.keys(cfg.mcpServers ?? {}), ...plugins.map(server => server.name), ...Object.keys(personal), ...profileNames.map(profile => profile.name)];
+    const enabled = [...Object.keys(engineMcpServers(bot)), ...plugins.map(server => server.name),
+      ...Object.entries(personal).filter(([, server]) => server.enabled).map(([name]) => name),
+      ...profileNames.filter(profile => profiles.includes(profile.id)).map(profile => profile.name)].filter(name => canUseMcpServer(bot.toolScope, name));
+    return { known, enabled, ...(IDENTITY.kind === "perspicax" ? { profileServer: defaultProfile?.name ?? "perspicax", toolPrefixes: { cw_psa: defaultProfile?.name ?? "perspicax" } } : {}) };
+  },
+  perspicax: async (_routine, run, signal) => {
+    if (IDENTITY.kind !== "perspicax" || !perspicaxMcp) return undefined;
+    const bot = store.bot(run.botId);
+    const principal = effectiveRunAs(run);
+    if (!bot || !principal) return undefined;
+    return perspicaxMcp.probeReadiness(principal, routineReadinessProfiles(bot, principal), signal);
+  },
+  computers: async (routine, run, signal) => {
+    const bot = store.bot(run.botId);
+    if (!bot) return undefined;
+    const principal = effectiveRunAs(run) ?? localPrincipalId();
+    const rows = sharedComputers.status(principal).map(row => ({ name: row.name, online: row.online }));
+    if (bot.remoteHosts?.length) {
+      const listed = await remoteBotHosts.available(principal);
+      if (listed.available) for (const host of listed.hosts.filter(host => bot.remoteHosts?.includes(host.hostId))) {
+        rows.push({ name: host.hostname ?? "Computer", online: host.state === "enrolled" && Boolean(host.lastSeenAt && Date.now() - Date.parse(host.lastSeenAt) < 120_000) });
+      }
+    }
+    const surface = (run.runOn ?? routine.runOn) === "cloud" ? "cloud" : bot.computer ?? (routine.requires?.computer && IDENTITY.kind === "perspicax" && userSandbox ? "cloud" : undefined);
+    if (surface && surface !== "off" && surface !== "browser") {
+      if (surface === "cloud" && IDENTITY.kind === "perspicax" && userSandbox && principal) {
+        let status = await userSandbox.status(principal, bot.id);
+        const until = Date.now() + 3_500;
+        while (status.state !== "running" && (status.starting || status.waking) && !signal.aborted && Date.now() < until) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          if (!signal.aborted) status = await userSandbox.status(principal, bot.id);
+        }
+        rows.push({ name: "Cloud computer", online: status.state === "running" });
+      } else {
+        const option = (await selectableComputers(bot)).find(option => option.surface === surface);
+        if (option) rows.push({ name: option.label, online: option.ready });
+      }
+      return rows.map(row => ({ ...row, needed: row.name === "Cloud computer" || row.name === surfaceLabel(surface) }));
+    }
+    return rows;
+  },
+};
 routines = new RoutineManager({
+  readiness: (routine, run) => checkRoutineReadiness(routine, run, routineReadinessDeps),
+  engineForRun: (run) => routineReadinessEngine({ botId: run.botId, prompt: run.prompt ?? "" }, run),
   botName: (botId) => store.bot(botId)?.name,
   evaluateWatch: (routine, watch) => routineWatchEvaluator(routine, watch),
   forgetWatch: (routineId) => routineWatchStates.forget(routineId),
@@ -24693,7 +24809,7 @@ routines = new RoutineManager({
     const said = alert?.detail ?? run.error;
     const detail = said ? `${run.routineName}: ${said}` : run.routineName;
     const notificationBot = routineSourceOwner(run)?.bot ?? bot;
-    notify(deliverableNotification("routine-failed", notificationBot, routineSourceThread(run) ?? run.threadId ?? bot.threadId, detail));
+    notify(deliverableNotification(run.status === "blocked" ? "routine-deferred" : "routine-failed", notificationBot, routineSourceThread(run) ?? run.threadId ?? bot.threadId, detail, run.status === "blocked" ? { title: "Routine blocked" } : {}));
     // 2026-10-30: the bot may look into its own failed run (never a failed wake of its own)
     // 2026-11-01: nor a restart's cut or a missed occurrence (runFailureWakesBot)
     if (runFailureWakesBot(run)) offerProactive({
@@ -31015,6 +31131,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     routines: () => routines?.listRoutines() ?? [],
     speaker: (threadId) => safetyPrincipal(threadId).principalId,
     mayRunNow: speakerMayRunRoutineNow,
+    check: (routine) => routines!.checkReadiness(routine),
     inFlight: routineRunInFlight,
     inFlightRun: routineInFlightRun,
     runNow: (routineId, startedBy) => routines?.runNow(routineId, undefined, startedBy),
@@ -43261,6 +43378,7 @@ ROUTES.push(createRoutinesHttpRoutes({
   create: (body, request, opts) => routines!.create(body as never, request, opts as never),
   wakeHold: () => routines!.wakeHold(),
   runNow: (id, request, startedBy) => routines!.runNow(id, request, startedBy),
+  check: (routine) => routines!.checkReadiness(routine),
   runStanding: (runId) => routines!.runStanding(runId),
   markAllSeen: (allow) => routines!.markAllSeen(allow),
   clearRuns: (allow) => routines!.clearRuns(allow),

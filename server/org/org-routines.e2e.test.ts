@@ -329,9 +329,14 @@ posixOnly("Perspicax organization, slice 6: routines in their person's name", ()
     expect(run.runAs).toBe(ids.alice);
     expect(engineEnv().ANTHROPIC_API_KEY).toBe(ALICE_KEY);
     const exchanges = idp.exchanges.slice(exchangesBefore);
-    expect(exchanges.map((e) => ({ sub: e.sub, ok: e.ok }))).toEqual([{ sub: ALICE.sub, ok: true }]);
+    // the run's own exchange, plus the readiness probe's (0.8.40, #1945:
+    // initialize and tools/list on her profile before the first turn); both
+    // hers, both granted, both revoked once used
+    expect(exchanges.length).toBeGreaterThanOrEqual(1);
+    expect(exchanges.length).toBeLessThanOrEqual(2);
+    expect(exchanges.every((e) => e.sub === ALICE.sub && e.ok)).toBe(true);
     expect(idp.mcpRequests.filter((r) => r.method === "POST" && r.sub === ALICE.sub).length).toBeGreaterThan(0);
-    await waitFor(async () => idp.exchangeRevoked.includes(exchanges[0]!.token!));
+    await waitFor(async () => exchanges.every((e) => idp.exchangeRevoked.includes(e.token!)));
     // within the renewal window: nothing refreshed
     expect(idp.refreshes.slice(refreshesBefore).filter((r) => r.delegation)).toEqual([]);
     alice = await signIn(ALICE);
@@ -412,7 +417,8 @@ posixOnly("Perspicax organization, slice 6: routines in their person's name", ()
     const exchangesBefore = idp.exchanges.length;
     const ran = await runNow(bob, r2);
     expect(ran.status, ran.error).toBe("completed");
-    expect(idp.exchanges.slice(exchangesBefore).map((e) => e.sub)).toEqual([BOB.sub]);
+    // the run's exchange and the readiness probe's (#1945): bob's only
+    expect([...new Set(idp.exchanges.slice(exchangesBefore).map((e) => e.sub))]).toEqual([BOB.sub]);
     expect(engineEnv().ANTHROPIC_API_KEY).toBe(ALICE_KEY);
     expect(engineEnv().CLAUDE_CONFIG_DIR ?? "").not.toContain(ids.bob!);
     expect(idp.resolveRequests.at(-1)).toEqual({ sub: ALICE.sub, provider: "anthropic" });

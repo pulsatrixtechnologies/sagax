@@ -7,6 +7,7 @@
 // Diagnostics export, Defaults for new bots, which opens the full New Bot
 // editor) are not on the iPad.
 import SwiftUI
+import UniformTypeIdentifiers
 import UIKit
 import CompanionCore
 
@@ -815,11 +816,13 @@ struct DesktopUsageSettings: View {
     @StateObject private var personal = PersonalUsageModel()
 
     var body: some View {
-        DesktopSettingsCard(Text("Cost"), identifier: "usage.cost") {
-            AnyView(cost)
+        DesktopSettingsGroup(Text("Cost"), identifier: "cost") {
+            AnyView(cost).padding(.horizontal, 14).padding(.vertical, 10)
         }
         .task(id: session.connection?.id) { await personal.load(session.settingsClient) }
+        if personal.usage != nil { AnyView(DesktopSpendCapGroup()) }
         AnyView(DesktopPlanUsageCard())
+        AnyView(DesktopUsageTraces())
         if let usage = personal.usage, !usage.isEmpty {
             DesktopSettingsCard(Text("By bot and by model"), summary: Text("This month"), open: false, identifier: "usage.breakdown") {
                 VStack(alignment: .leading, spacing: 16) {
@@ -859,6 +862,162 @@ struct DesktopUsageSettings: View {
         } else {
             ProgressView().controlSize(.small)
         }
+    }
+}
+
+/// Spending limit (SpendCapCard): the person's own monthly limit; a reached
+/// limit stops new turns until it is raised. Hidden where the server does
+/// not know the route.
+struct DesktopSpendCapGroup: View {
+    @Environment(\.desktopTheme) private var theme
+    @EnvironmentObject private var session: Session
+    @State private var data: PersonalSpendCap?
+    @State private var text = ""
+    @State private var busy = false
+    @State private var failed: String?
+    @State private var confirmRemove = false
+
+    var body: some View {
+        Group {
+            if let data, data.supported {
+                let parsed = PersonalSpendCap.parse(text, minUsd: data.minUsd)
+                DesktopSettingsGroup(Text("Spending limit"), identifier: "spendCap") {
+                    DesktopDescribedRow(Text("Monthly limit (USD)"), description: description(data), identifier: "cap-state") {
+                        if data.cap != nil {
+                            Button(confirmRemove ? "Confirm removal" : "Remove limit") {
+                                if confirmRemove { Task { await save(nil) } } else { confirmRemove = true }
+                            }
+                            .buttonStyle(DesktopButtonStyle(kind: .control))
+                            .disabled(busy)
+                        }
+                    }
+                    HStack(spacing: 8) {
+                        TextField(text: $text, prompt: Text(data.cap == nil ? "e.g. 50" : "New limit").foregroundColor(theme.inkSecondary)) { Text("Monthly limit (USD)") }
+                            .font(theme.font(13))
+                            .keyboardType(.decimalPad)
+                            .padding(.horizontal, 10)
+                            .frame(width: 160, height: 32)
+                            .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+                            .accessibilityIdentifier("desktop-settings.spend-cap")
+                        Button(data.cap == nil ? "Set limit" : "Change limit") { if let parsed { Task { await save(parsed) } } }
+                            .buttonStyle(DesktopButtonStyle(kind: .accent))
+                            .disabled(busy || parsed == nil)
+                            .accessibilityIdentifier("desktop-settings.spend-cap-save")
+                    }
+                    .padding(.horizontal, 14).padding(.bottom, 10)
+                    if !text.isEmpty && parsed == nil {
+                        DesktopText(verbatim: String(format: AppStrings.localized("Enter an amount of %@ or more, like 25 or 25.50."), PersonalUsageModel.cost(data.minUsd)), size: 12, line: 16, color: \.danger)
+                            .padding(.horizontal, 14).padding(.bottom, 10)
+                    }
+                    if let failed {
+                        DesktopText(verbatim: failed, size: 12, line: 16, color: \.danger).padding(.horizontal, 14).padding(.bottom, 10)
+                    }
+                    DesktopText(Text("Counts every bot turn and voice request on this computer this month (voice is estimated). The limit stops the next turn; a turn already running can finish and go past it. You are notified at 80% and at the limit."),
+                                size: 12, line: 16, color: \.inkSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 14).padding(.bottom, 10)
+                }
+            }
+        }
+        Color.clear.frame(height: 0)
+            .task { data = try? await session.settingsClient?.spendCap() }
+    }
+
+    private func description(_ data: PersonalSpendCap) -> Text {
+        guard let cap = data.cap else { return Text("No limit is set. Your bots spend freely.") }
+        let line = DesktopSettingsSummary.spend(cap.spentUsd, of: cap.monthlyUsd)
+        let state = cap.exceeded ? AppStrings.localized("Limit reached: the next turns are refused until you raise it.")
+            : cap.warn ? AppStrings.localized("Nearing the limit") : AppStrings.localized("Within the limit")
+        return Text(verbatim: line + "\n" + state)
+    }
+
+    private func save(_ value: Double?) async {
+        guard let client = session.settingsClient else { return }
+        busy = true
+        failed = nil
+        confirmRemove = false
+        defer { busy = false }
+        do {
+            data = try await client.setSpendCap(value)
+            text = ""
+        } catch { failed = error.localizedDescription }
+    }
+}
+
+/// Usage traces (UsageTraces.tsx): where each of the person's own jobs spent
+/// its time and money this month, ten a page, newest first.
+struct DesktopUsageTraces: View {
+    @Environment(\.desktopTheme) private var theme
+    @EnvironmentObject private var session: Session
+    @State private var list: UsageTraceList?
+    @State private var failed = false
+    @State private var offset = 0
+    private let pageSize = 10
+
+    var body: some View {
+        DesktopSettingsGroup(Text("Usage traces"), plain: true, identifier: "usage-traces") {
+            DesktopText(Text("Where each of your jobs spent its time and its money, from the usage ledger. Counters, time and cost only; no message content."),
+                        size: 12, line: 17, color: \.inkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 4)
+            VStack(alignment: .leading, spacing: 0) {
+                if failed {
+                    DesktopText(Text("Couldn't load the usage traces."), size: 12, color: \.inkSecondary).padding(12)
+                } else if let list {
+                    if list.jobs.isEmpty && (list.total?.jobs ?? 0) == 0 {
+                        DesktopText(Text("No job recorded for this period yet."), size: 12, color: \.inkSecondary).padding(12)
+                    } else {
+                        if let total = list.total {
+                            HStack {
+                                DesktopText(Text("Period total"), size: 12, color: \.inkSecondary)
+                                Spacer(minLength: 0)
+                                DesktopText(verbatim: [total.costUsd.map(PersonalUsageModel.cost), String(format: AppStrings.localized("%@ jobs"), "\(total.jobs)")].compactMap { $0 }.joined(separator: " · "), size: 12, color: \.inkSecondary)
+                            }
+                            .padding(12)
+                        }
+                        ForEach(list.jobs) { job in
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    DesktopText(verbatim: job.botName, weight: .medium).lineLimit(1)
+                                    DesktopText(verbatim: job.triggerLabel + " · " + String(format: AppStrings.localized("%@ turns"), "\(job.turns)"), size: 12, line: 16, color: \.inkSecondary).lineLimit(1)
+                                }
+                                Spacer(minLength: 0)
+                                DesktopText(verbatim: (job.costUsd ?? job.estimatedUsd).map(PersonalUsageModel.cost) ?? "—", size: 12).monospacedDigit()
+                            }
+                            .padding(.horizontal, 12).padding(.vertical, 8)
+                            .overlay(alignment: .top) { Rectangle().fill(theme.border).frame(height: 0.5) }
+                        }
+                        let total = list.total?.jobs ?? list.jobs.count
+                        if total > pageSize {
+                            HStack(spacing: 8) {
+                                Spacer(minLength: 0)
+                                DesktopText(verbatim: "\(offset + 1)–\(min(offset + pageSize, total)) / \(total)", size: 12, color: \.inkSecondary)
+                                Button { offset = max(0, offset - pageSize) } label: { DesktopSettingsIconView(icon: .chevronDown, size: 13).rotationEffect(.degrees(90)) }
+                                    .buttonStyle(DesktopButtonStyle(kind: .ghost)).disabled(offset == 0)
+                                Button { offset += pageSize } label: { DesktopSettingsIconView(icon: .chevronRight, size: 13) }
+                                    .buttonStyle(DesktopButtonStyle(kind: .ghost)).disabled(offset + pageSize >= total)
+                            }
+                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .overlay(alignment: .top) { Rectangle().fill(theme.border).frame(height: 0.5) }
+                        }
+                    }
+                } else {
+                    DesktopText(Text("Loading usage traces…"), size: 12, color: \.inkSecondary).padding(12)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(theme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .desktopHairlineBox(radius: 12)
+        }
+        .task(id: offset) { await load() }
+    }
+
+    private func load() async {
+        guard let client = session.settingsClient else { return }
+        let month = PersonalUsagePeriods().month
+        do { list = try await client.myUsageTraces(from: month.from, to: month.to, limit: pageSize, offset: offset); failed = false }
+        catch { failed = true }
     }
 }
 
@@ -943,47 +1102,158 @@ struct DesktopBackupsSettings: View {
     @State private var error: String?
     @State private var shared: DesktopSharedFile?
 
-    @State private var includedOpen = false
+    @State private var open: String?
+    @State private var choosing = false
+    @State private var file: URL?
+    @State private var importPassword = ""
+    @State private var preview: WorkspaceBackupPreview?
+    @State private var typed = ""
+    @State private var restoring = false
+    @State private var restored = false
 
-    /// Backups in one card (#518, `WorkspaceBackupSettings`): what a backup
-    /// is, what it includes, the export, and where a restore happens.
+    /// Full backup (WorkspaceBackupSettings.tsx): its help, then the two
+    /// rows, Export a backup and Restore a backup, each opening its form.
     var body: some View {
-        DesktopSettingsCard(
-            Text("Full backup"),
-            subtitle: Text("An encrypted copy of your bots, conversations and files, to restore here or on another computer."),
-            identifier: "backups.full"
-        ) {
-            VStack(alignment: .leading, spacing: 12) {
-                DesktopDisclosure(title: Text("What is included"), open: $includedOpen) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        DesktopText("A password-protected backup of this installation: bots, conversations, instructions, local files, and non-secret settings.", color: \.inkSecondary)
-                        DesktopText("Saved account credentials and connections are not included. Reconnect your accounts on a new machine; existing credentials on the destination stay unchanged. External CLI sign-ins and remote VM disks are not included.", color: \.inkSecondary)
-                        DesktopText("Chats, drafts, and user files are not automatically redacted and may contain pasted secrets. Keep this backup private and save its password safely; it cannot be recovered.", color: \.warning)
-                    }
-                }
-                DesktopText("Use a password of at least 12 characters. You will need it to import this backup.", size: 12.5, line: 17, color: \.inkSecondary)
-                passwordField(Text("Backup password"), text: $password, identifier: "desktop-settings.backup-password")
-                passwordField(Text("Confirm backup password"), text: $confirm, identifier: "desktop-settings.backup-confirm")
-                let ready = password.count >= 12 && password == confirm && !exporting
-                Button(action: export) {
-                    HStack(spacing: 8) {
-                        if exporting { ProgressView().controlSize(.small) } else { DesktopSettingsIconView(icon: .download, size: 15) }
-                        Text(exporting ? "Creating encrypted backup…" : "Export full backup")
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(DesktopBackupButtonStyle(ready: ready))
-                .disabled(!ready)
-                .accessibilityIdentifier("desktop-settings.backup-export")
-                if let error {
-                    DesktopText(verbatim: error, size: 12, line: 17, color: \.danger)
-                }
-                DesktopText("Restoring replaces this installation and restarts it. Restore from Sagax on the computer, where the backup file is.",
-                            size: 12, line: 17, color: \.inkSecondary)
+        DesktopSettingsGroup(Text("Full backup"), accessory: AnyView(DesktopHelpTip(help: Text(verbatim: [
+            AppStrings.localized("A password-protected backup of this installation: bots, conversations, instructions, local files, and non-secret settings. Drafts and preferences from this browser are included."),
+            AppStrings.localized("Saved account credentials and connections are not included. Reconnect your accounts on a new machine; existing credentials on the destination stay unchanged. External CLI sign-ins and remote VM disks are not included."),
+            AppStrings.localized("Chats, drafts, and user files are not automatically redacted and may contain pasted secrets. Keep this backup private and save its password safely; it cannot be recovered."),
+        ].joined(separator: "\n\n")))), identifier: "backups") {
+            DesktopDescribedRow(Text("Export a backup"), description: Text("An encrypted copy of your bots, conversations and files, to restore here or on another computer."), identifier: "backupExport") {
+                Button("Export") { open = open == "export" ? nil : "export" }
+                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .accessibilityIdentifier("desktop-settings.backup-export-open")
+            } below: {
+                if open == "export" { exportForm.padding(.top, 8) }
+            }
+            DesktopDescribedRow(Text("Restore a backup"), description: Text("Replaces everything here, once the file is checked."), identifier: "backupRestore") {
+                Button("Restore") { open = open == "import" ? nil : "import" }
+                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .accessibilityIdentifier("desktop-settings.backup-restore-open")
+            } below: {
+                if open == "import" { restoreForm.padding(.top, 8) }
             }
         }
         .sheet(item: $shared) { file in
             DesktopShareSheet(url: file.url)
+        }
+        .fileImporter(isPresented: $choosing, allowedContentTypes: [.data]) { result in
+            if case let .success(url) = result { file = url; preview = nil }
+        }
+    }
+
+    private var exportForm: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            passwordField(Text("Backup password"), text: $password, identifier: "desktop-settings.backup-password")
+            passwordField(Text("Confirm backup password"), text: $confirm, identifier: "desktop-settings.backup-confirm")
+            DesktopText("Use a password of at least 12 characters. You will need it to import this backup.", size: 12, line: 16, color: \.inkSecondary)
+            DesktopText("Chats, drafts, and user files are not automatically redacted and may contain pasted secrets. Keep this backup private and save its password safely; it cannot be recovered.", size: 12, line: 16, color: \.warning)
+                .fixedSize(horizontal: false, vertical: true)
+            let ready = password.count >= 12 && password == confirm && !exporting
+            HStack {
+                Spacer(minLength: 0)
+                Button(action: export) {
+                    HStack(spacing: 6) {
+                        if exporting { ProgressView().controlSize(.mini) } else { DesktopSettingsIconView(icon: .download, size: 13) }
+                        Text(exporting ? "Creating encrypted backup…" : "Export full backup")
+                    }
+                }
+                .buttonStyle(DesktopButtonStyle(kind: .accent))
+                .disabled(!ready)
+                .accessibilityIdentifier("desktop-settings.backup-export")
+            }
+            if let error { DesktopText(verbatim: error, size: 12, line: 16, color: \.danger) }
+        }
+    }
+
+    private var restoreForm: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                DesktopText(Text("Backup file"), size: 12, color: \.inkSecondary)
+                Button(file?.lastPathComponent ?? AppStrings.localized("Choose a file")) { choosing = true }
+                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .accessibilityIdentifier("desktop-settings.backup-file")
+            }
+            if let preview {
+                VStack(alignment: .leading, spacing: 4) {
+                    DesktopText(Text("Validated backup"), size: 14, weight: .medium)
+                    DesktopText(verbatim: [
+                        preview.summary.appVersion.map { AppStrings.localized("App version") + " " + $0 },
+                        "\(AppStrings.localized("Bots")): \(preview.summary.bots)",
+                        "\(AppStrings.localized("Groups")): \(preview.summary.groups)",
+                        "\(AppStrings.localized("Threads")): \(preview.summary.threads)",
+                        "\(AppStrings.localized("Messages")): \(preview.summary.messages)",
+                        "\(AppStrings.localized("Files")): \(preview.summary.files)",
+                    ].compactMap { $0 }.joined(separator: " · "), size: 12, line: 16, color: \.inkSecondary)
+                }
+                DesktopText("This replaces everything in this installation; it does not merge. A recoverable safety backup of the current installation is kept before replacement. Restart is required.", size: 12, line: 16, color: \.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+                DesktopText("Only restore backups you trust: instructions, skills, and bot permissions are restored too. Reconnect accounts as needed. Routines, webhooks, and calendar calls arrive paused; pending work is not resumed.", size: 12, line: 16, color: \.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 4) {
+                    DesktopText(Text("Type REPLACE to confirm"), size: 12, color: \.inkSecondary)
+                    TextField("", text: $typed)
+                        .font(theme.font(13))
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .padding(.horizontal, 10).frame(height: 32)
+                        .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+                        .accessibilityIdentifier("desktop-settings.backup-replace-confirm")
+                }
+                HStack {
+                    Spacer(minLength: 0)
+                    Button { Task { await restore() } } label: {
+                        Text(restoring ? "Preparing replacement…" : "Replace installation").foregroundStyle(Color.white)
+                    }
+                    .buttonStyle(DesktopDangerButtonStyle())
+                    .disabled(restoring || !WorkspaceRestore.ready(typed))
+                    .accessibilityIdentifier("desktop-settings.backup-replace")
+                }
+            } else {
+                passwordField(Text("Password for this backup"), text: $importPassword, identifier: "desktop-settings.backup-import-password")
+                HStack {
+                    Spacer(minLength: 0)
+                    Button("Validate backup") { Task { await check() } }
+                        .buttonStyle(DesktopButtonStyle(kind: .accent))
+                        .disabled(restoring || file == nil || importPassword.isEmpty)
+                        .accessibilityIdentifier("desktop-settings.backup-check")
+                }
+            }
+            if let error { DesktopText(verbatim: error, size: 12, line: 16, color: \.danger) }
+        }
+    }
+
+    private func check() async {
+        guard let client = model.client, let file else { return }
+        restoring = true
+        error = nil
+        defer { restoring = false }
+        do {
+            let scoped = file.startAccessingSecurityScopedResource()
+            defer { if scoped { file.stopAccessingSecurityScopedResource() } }
+            let data = try Data(contentsOf: file)
+            let id = try await client.uploadWorkspaceBackup(data)
+            preview = try await client.previewWorkspaceBackup(id: id, password: importPassword)
+            importPassword = ""
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func restore() async {
+        guard let client = model.client, let preview, WorkspaceRestore.ready(typed) else { return }
+        restoring = true
+        error = nil
+        defer { restoring = false }
+        do {
+            try await client.restoreWorkspaceBackup(id: preview.id)
+            restored = true
+            self.preview = nil
+            typed = ""
+            file = nil
+        } catch {
+            self.error = error.localizedDescription
         }
     }
 

@@ -669,6 +669,36 @@ extension DesktopSettingsNotice where Action == EmptyView {
     }
 }
 
+/// `CountPill` ("12 ⌄"): how many items a row holds, and the button that
+/// unfolds them under the row (`h-7 rounded-full px-2.5 gap-1`).
+struct DesktopCountPill: View {
+    @Environment(\.desktopTheme) private var theme
+    var count: Int? = nil
+    let open: Bool
+    let label: Text
+    var identifier: String = ""
+    let toggle: () -> Void
+
+    var body: some View {
+        Button(action: toggle) {
+            HStack(spacing: 4) {
+                if let count { DesktopText(verbatim: "\(count)").monospacedDigit() }
+                DesktopSettingsIconView(icon: .chevronDown, size: 13)
+                    .foregroundStyle(theme.inkSecondary)
+                    .rotationEffect(.degrees(open ? 180 : 0))
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background(open ? theme.hover : .clear, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityValue(open ? Text("Expanded") : Text("Collapsed"))
+        .accessibilityIdentifier(identifier)
+    }
+}
+
 /// A native checkbox as Chrome draws it (13 pt, a 3 pt radius).
 struct DesktopCheckbox: View {
     @Environment(\.desktopTheme) private var theme

@@ -192,7 +192,8 @@ export function gateServer(input: {
   /** node flags the harness spawns its own helpers with */
   nodeEnv?: Record<string, string>;
   execPath?: string;
-  /** Private per-mount configuration for engines that share one child env. */
+  /** Private per-mount configuration for engines that share one child env.
+   * Supported when a scope or searched catalog makes this gate mandatory. */
   configEnvName?: string;
   /** The engine cannot search tools itself: a URL server's big catalog is
    * searched instead of listed (mcpStdioServer's `directory`), and the gate
@@ -257,7 +258,7 @@ export function gateServer(input: {
     SAGAX_GATE_MISUSE_MODE: process.env.SAGAX_MISUSE_GUARDRAILS?.trim() || "shadow",
     ...(search ? { SAGAX_GATE_SEARCH: search } : {}),
   };
-  if (input.configEnvName && (!scoped || !/^SAGAX_GATE_CONFIG_[a-f0-9]{64}$/.test(input.configEnvName))) {
+  if (input.configEnvName && ((!scoped && !search) || !/^SAGAX_GATE_CONFIG_[a-f0-9]{64}$/.test(input.configEnvName))) {
     throw new Error("Invalid private MCP gate configuration.");
   }
   return {

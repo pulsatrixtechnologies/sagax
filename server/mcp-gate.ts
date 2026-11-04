@@ -50,8 +50,11 @@ function gateEnvironment(): NodeJS.ProcessEnv {
     const key = process.argv[3];
     if (process.argv.length !== 4 || process.argv[2] !== "--config-env" || !key || !/^SAGAX_GATE_CONFIG_[a-f0-9]{64}$/.test(key)) throw new Error();
     const value = JSON.parse(process.env[key] ?? "");
+    const scoped = typeof value?.SAGAX_GATE_TOOL_SCOPE === "string" && value.SAGAX_GATE_TOOL_SCOPE.length > 0;
+    const searched = typeof value?.SAGAX_GATE_SEARCH === "string" && value.SAGAX_GATE_SEARCH.length > 0;
     if (!value || typeof value !== "object" || Array.isArray(value)
-      || !["SAGAX_GATE_NAME", "SAGAX_GATE_UPSTREAM", "SAGAX_GATE_TOOL_SCOPE"].every(name => typeof value[name] === "string")
+      || !["SAGAX_GATE_NAME", "SAGAX_GATE_UPSTREAM"].every(name => typeof value[name] === "string")
+      || (!scoped && !searched)
       || !Object.entries(value).every(([name, setting]) => GATE_ENV_KEYS.includes(name) && typeof setting === "string")) throw new Error();
     return value;
   } catch {

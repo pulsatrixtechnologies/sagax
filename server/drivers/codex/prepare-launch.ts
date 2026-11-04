@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import type { McpServerSpec, StdioMcpSpec } from "../../contracts.ts";
 import { canUseMcpServer } from "../../../shared/tool-scope.ts";
 import { gateServer, mcpStdioServer } from "../../mcp/mcp-gate-config.ts";
+import { compactGateSearch } from "../../mcp/mcp-gate-search.ts";
 import { codexConfigMcpServerNames, mountedMcpServerName } from "../codex-mcp-names.ts";
 import { codexHostToolArgs } from "../host-tools.ts";
 import { codexLocalProviderArgs } from "../local-inject.ts";
@@ -76,12 +77,18 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
   const mountedNames = new Set<string>();
   const selectedMcp = new Map<string, StdioMcpSpec>();
   const selectedApprovals = new Map<string, McpApprovalMode>();
-  /** Mounts whose big catalog is searched (plan turns' URL servers). */
+  /** Mounts whose big catalog is searched (URL directories and the account bridge). */
   const directoryMounts = new Set<string>();
   /** Each mount's settings that are not secret (mountMcpServer's literalEnv). */
   const literalEnvs = new Map<string, Record<string, string>>();
   const scopedServer = (name: string, mountName: string, server: McpServerSpec): StdioMcpSpec | null => {
     if (!canUseMcpServer(turn.toolScope, name)) return null;
+    // Codex 0.166 no longer has the old feature-gated hosted tool_search;
+    // its incremental suggestion can expose only a few tools from a large
+    // MCP catalog. Keep the account controls deterministic and every held
+    // role's vendor tools reachable through search_tools/call_tool. The
+    // gate invalidates that directory when identity_switch changes tools.
+    const search = isSagaxPerspicaxBridge(server) ? compactGateSearch([], true) : undefined;
     // Every URL server is reached through Sagax's remote proxy,
     // on every Codex login, never by Codex's own MCP client: the proxy
     // opens the connection with the same minimal handshake as Settings
@@ -94,18 +101,20 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
     // listed 100+ tools. The proxy also speaks SSE, which Codex does not.
     // A plan turn has no tool_search (chatgptPlanCodexArgs): its URL
     // servers are also searched through the proxy's tool directory.
-    // Own-login and Company turns keep Codex's hosted tool_search, so
-    // their catalog passes through whole.
+    // Other own-login and Company catalogs pass through whole.
     const directory = plan && "url" in server;
-    if (turn.toolScope === undefined && !("url" in server)) return server;
+    if (turn.toolScope === undefined && !("url" in server) && !search) return server;
     const hash = createHash("sha256").update(mountName).digest("hex");
     // A proxy's network settings come from the environment Codex runs
     // with: Codex itself starts MCP children with only a few names.
     const proxy = turn.toolScope === undefined
-      ? mcpStdioServer(server, { nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, ...(directory ? { directory: { name } } : {}), configEnvName: `SAGAX_REMOTE_MCP_CONFIG_${hash}`, sourceEnv: env })
+      ? search
+        ? gateServer({ name, server, threadId: turn.threadId, budget: 0, nodeEnv: { ELECTRON_RUN_AS_NODE: "1" },
+          configEnvName: `SAGAX_GATE_CONFIG_${hash}`, search, sourceEnv: env })
+        : mcpStdioServer(server, { nodeEnv: { ELECTRON_RUN_AS_NODE: "1" }, ...(directory ? { directory: { name } } : {}), configEnvName: `SAGAX_REMOTE_MCP_CONFIG_${hash}`, sourceEnv: env })
       : gateServer({ name, server, threadId: turn.threadId, budget: 0, toolScope: turn.toolScope, nodeEnv: { ELECTRON_RUN_AS_NODE: "1" },
-        configEnvName: `SAGAX_GATE_CONFIG_${hash}`, directory, sourceEnv: env });
-    if (proxy && directory) directoryMounts.add(mountName);
+        configEnvName: `SAGAX_GATE_CONFIG_${hash}`, directory, ...(search ? { search } : {}), sourceEnv: env });
+    if (proxy && (directory || search)) directoryMounts.add(mountName);
     if (!proxy) return null;
     // The proxy's own network switches go in its env table, so the
     // shell keeps the person's NO_PROXY and never gets the switch. A
@@ -119,6 +128,7 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
     return { command: proxy.command, args: proxy.args ?? [], env: shared };
   };
   const mountSelected = (name: string, mountName: string, server: McpServerSpec, approval: McpApprovalMode = "auto") => {
+    const accountPerspicax = isSagaxPerspicaxBridge(server);
     let selected = scopedServer(name, mountName, server);
     if (selected) {
       // A selected gate already encapsulates its upstream's env in a
@@ -132,7 +142,7 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
       selectedMcp.set(mountName, selected);
       selectedApprovals.set(mountName, approval);
       mountMcpServer(appServerArgs, env, mountName, selected, approval, literalEnvs.get(mountName), mountedNames);
-      if ((turn.toolScope !== undefined || directPerspicax) && approval === "prompt") appServerArgs.push("-c", `mcp_servers.${mountName}.default_tools_approval_mode="prompt"`);
+      if ((turn.toolScope !== undefined || accountPerspicax) && approval === "prompt") appServerArgs.push("-c", `mcp_servers.${mountName}.default_tools_approval_mode="prompt"`);
     }
   };
   if (turn.integrations?.agents) {

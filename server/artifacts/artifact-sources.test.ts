@@ -133,4 +133,16 @@ describe("reading what a source answered", () => {
     expect(perspicaxReadTool("mcp__px__cw_psa_write")).toBeNull();
     expect(perspicaxReadTool("my_cw_psa_query")).toBeNull();
   });
+
+  it("runs dispatch_kpi through its own computation, only with Perspicax", async () => {
+    const seen: string[] = [];
+    const { run } = deps({ dispatchKpi: async ({ args }) => { seen.push(JSON.stringify(args)); return { ok: true, value: { tickets: [] } }; } });
+    expect(await run(artifact({ kind: "tool", tool: "dispatch_kpi", args: { place: "team:a" } }), signal)).toEqual({ ok: true, value: { tickets: [] } });
+    expect(await run(artifact({ kind: "tool", tool: "mcp__agents__dispatch_kpi", args: {} }), signal)).toMatchObject({ ok: true });
+    expect(seen).toEqual(["{\"place\":\"team:a\"}", "{}"]);
+    const off = deps();
+    expect(await off.run(artifact({ kind: "tool", tool: "dispatch_kpi", args: {} }), signal)).toEqual({ ok: false, blocked: true, error: SOURCE_BLOCKED.dispatchKpi });
+    const noProfile = deps({ dispatchKpi: async () => ({ ok: true, value: 1 }), bot: () => ({ id: "bot-a" }) });
+    expect(await noProfile.run(artifact({ kind: "tool", tool: "dispatch_kpi", args: {} }), signal)).toMatchObject({ blocked: true });
+  });
 });

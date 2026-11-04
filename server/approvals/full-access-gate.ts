@@ -119,7 +119,7 @@ export const FULL_ACCESS_SURFACES = {
   /** An outbound send or email draft the bot writes (index.ts). */
   "send": "server/index.ts outbound and email draft cards",
   /** The chat-completions engines answer their own tool gate under Full. */
-  "chat-engine": "server/drivers/openai-chat.ts tool gate",
+  "chat-engine": "server/drivers/openai-chat-turn.ts tool gate",
   /** A permission request an engine bridge emits: it is judged in
    * request.opened, never answered or held where it is emitted. */
   "engine-bridge": "server/drivers and runners emitting request.opened",

@@ -96,7 +96,7 @@ import { ultracodeFromSelection } from "@/lib/ultracode-chrome";
 import { StatusDot } from "./StatusDot";
 import { nextRename } from "@/lib/rename";
 import { useDesktopCapabilities } from "./DesktopCapabilities";
-import { openCommandPalette } from "./CommandPalette";
+import { openCommandPalette } from "@/lib/command-palette-open";
 import { APP_NAME } from "@/lib/app-links";
 import { isBotFloating, subscribeFloatingBots, toggleFloatingBot } from "@/lib/floating-bots";
 import { isMacPlatform, SHORTCUT_GROUPS, shortcutKeysForPlatform } from "@/lib/keyboard-shortcuts";

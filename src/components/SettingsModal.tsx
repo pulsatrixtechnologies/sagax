@@ -21,9 +21,6 @@ import { DecisionModelSettings } from "./DecisionModelSettings";
 import { GeneralAdvancedSettings, generalAdvancedShown, isSoloDesktop } from "./settings/AdvancedSettings";
 import { useUpdaterState } from "@/lib/updater";
 import { openUpdatePrompt, requestUpdateCheck } from "@/lib/update-prompt";
-import { EnginesSettings, VoiceSettingsPage } from "./EnginesSettings";
-import { ProvidersSettings } from "./settings/ProvidersSettings";
-import { LocalComputerSection } from "./LocalComputerSection";
 import { peopleListServed, readMembership } from "../lib/membership";
 import { useOwnerOrAdmin } from "@/lib/use-owner-or-admin";
 import { canEditConfig, canManageBackups, canManageComputers, canManageExperimental, viewerCan } from "@/lib/viewer";
@@ -32,14 +29,22 @@ import { CompactRow, PillSelect, type PillOption, requestSettingsCard, SettingRo
 import { OrgMemorySettings } from "./OrgMemorySettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { TimeZoneRows } from "./settings/TimeZoneSettings";
-import { AppearanceSettings } from "./settings/AppearanceSettings";
-import { ExperimentalSettings } from "./settings/ExperimentalSettings";
+import {
+  AppearanceSettings,
+  CredentialsSettings,
+  EnginesSettings,
+  ExperimentalSettings,
+  ImportSettings,
+  LocalComputerSection,
+  ProvidersSettings,
+  UsageSection,
+  VoiceSettingsPage,
+  WorkspaceBackupSettings,
+} from "./lazy-settings-sections";
 import { currentSettingsSection, isMovedOrganizationCard } from "@/lib/settings-sections";
 import { openSettings } from "@/lib/settings-link";
 
 import { shortcutLabel } from "./ShortcutHint";
-import { UsageSection } from "./UsageSection";
-import { CredentialsSettings } from "./settings/CredentialsSettings";
 import { workspacesAvailable } from "./WorkspacesSection";
 import { AboutMeEditor, aboutMeFirstLine } from "./AboutMeSettings";
 import { SettingsSubPage, SettingsSubPageRow } from "./SettingsSubPage";
@@ -47,8 +52,6 @@ import { AccountCard } from "./settings/AccountCard";
 import { requestAbout } from "@/lib/about-ui";
 import { AvatarCropPage } from "./settings/OwnAvatarField";
 import { OpenAtLoginRow } from "./OpenAtLoginOffer";
-import { WorkspaceBackupSettings } from "./WorkspaceBackupSettings";
-import { ImportSettings } from "./settings/ImportSettings";
 import { SecurityKeySettings } from "./SecurityKeySettings";
 import { MyApprovalRules } from "./settings/MyApprovalRules";
 import { MyToolGrants } from "./settings/MyToolGrants";

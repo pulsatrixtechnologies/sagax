@@ -183,7 +183,7 @@ it("words said while a turn is being stopped wait for the next turn and get an a
     await expect.poll(t.busy, { timeout: 15_000 }).toBe(true);
     // the barge-in stops the turn; the new words arrive while it stops
     const stopping = t.api("POST", `/api/bots/${t.bot.id}/interrupt`, { threadId: t.thread });
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await expect.poll(async () => (await t.messages()).find((m) => m.role === "user" && m.text === "[gate:never] tell me a long story")?.requestCancelled, { timeout: 10_000 }).toBe(true);
     const sent = await t.send({ text: "what about the weather", voiceCall: { callId: CALL_ID, interrupted: true } });
     // never folded into the turn being stopped (it would be withdrawn with it)
     expect(sent.steered).toBeUndefined();

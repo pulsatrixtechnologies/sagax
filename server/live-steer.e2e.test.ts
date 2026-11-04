@@ -75,9 +75,9 @@ posixOnly("messages read mid-turn e2e", () => {
           environment: { FAKE_CLAUDE_MODE: "slow", FAKE_CLAUDE_GATE_DIR: join(home, "gates"), FAKE_CLAUDE_STEER_RECEIVED: join(home, "steer-received") },
           config: { cli: FAKE_CLAUDE, permissionMode: "bypassPermissions" },
         },
-        grok: {
-          driver: "grokAgent",
-          environment: { FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: join(home, "acp-gate"), FAKE_ACP_HONOR_CANCEL: "1", FAKE_ACP_STARTED_FILE: join(home, "acp-started") },
+        gemini: {
+          driver: "geminiAgent",
+          environment: { GEMINI_API_KEY: "gemini-test-key", FAKE_ACP_MODE: "echo-gated", FAKE_ACP_GATE_FILE: join(home, "acp-gate"), FAKE_ACP_HONOR_CANCEL: "1", FAKE_ACP_STARTED_FILE: join(home, "acp-started") },
           config: { cli: FAKE_ACP, fullAuto: true },
         },
       },
@@ -132,7 +132,7 @@ posixOnly("messages read mid-turn e2e", () => {
   ])("an engine that cannot steer: %s is answered at once, not after the turn", async (_label, auto) => {
     rmSync(join(home, "acp-started"), { force: true });
     rmSync(join(home, "acp-gate"), { force: true });
-    const bot = await busyBot("grok", "audit the September invoices");
+    const bot = await busyBot("gemini", "audit the September invoices");
     rmSync(join(home, "acp-started"), { force: true });
     const started = Date.now();
     const text = "actually only the paid ones";

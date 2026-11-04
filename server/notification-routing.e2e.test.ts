@@ -156,15 +156,15 @@ beforeAll(async () => {
       // asks before running a command: the approval an AI client's
       // conversation must still bring to the person
       asking: {
-        driver: "grokAgent",
+        driver: "geminiAgent",
         displayName: "Asking fixture",
-        environment: { FAKE_ACP_MODE: "permission" },
+        environment: { GEMINI_API_KEY: "gemini-test-key", FAKE_ACP_MODE: "permission" },
         config: { cli: FAKE_ACP },
       },
       curious: {
-        driver: "grokAgent",
+        driver: "geminiAgent",
         displayName: "Curious fixture",
-        environment: { FAKE_ACP_MODE: "question" },
+        environment: { GEMINI_API_KEY: "gemini-test-key", FAKE_ACP_MODE: "question" },
         config: { cli: FAKE_ACP, fullAuto: true },
       },
     },
@@ -652,7 +652,8 @@ describe("an approval in an AI client's conversation", () => {
       expect(card).toBeTruthy();
       expect(card.expired).toBeFalsy();
       expect(card.plain?.title).toBeTruthy();
-      expect(card.expiresAt).toBeUndefined();
+      expect(card.expiresAt).toBeGreaterThan(Date.now());
+      expect(card.expiresAt).toBeLessThanOrEqual(Date.now() + 7 * 86_400_000);
       const decisions = (await api("GET", "/api/decisions")).body.decisions as Array<{ requestId?: string; source: string }>;
       expect(decisions.some((row) => row.requestId === requestId && row.source === "expired")).toBe(false);
       // the person's own answer still settles it
@@ -686,7 +687,7 @@ describe("an approval in an AI client's conversation", () => {
       // answered, not expired: a person's decline is not a timeout
       const card = openCard(await botState(bot.id));
       expect(card?.expired).toBeFalsy();
-      expect(card?.expiresAt).toBeUndefined();
+      expect(card?.expiresAt).toBeGreaterThan(Date.now());
     } finally {
       stream.close();
       await cleanup([], [bot.id]);

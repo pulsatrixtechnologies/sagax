@@ -246,7 +246,7 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     // the interim attach window (none here). The org's GitHub OAuth App
     // (none) and the plugin marketplace policy (any, the default).
     expect((await api("GET", "/api/org", alice)).body.settings).toEqual({
-      orgKeyConfigured: true, allowFullAccess: true, allowVaultExport: true, memberEnvironmentAutonomy: true, confidentialThreadsByDefault: false, memberAutoApproval: true, interimAttach: { until: null, people: 0 },
+      orgKeyConfigured: true, allowFullAccess: true, allowVaultExport: true, memberEnvironmentAutonomy: true, confidentialThreadsByDefault: false, memberAutoApproval: true, pendingApprovalExpireDays: 7, interimAttach: { until: null, people: 0 },
       github: { clientId: null, fromEnvironment: false }, pluginMarketplaces: { mode: "any" },
       // 84841aeed (capabilities lot 4): this older directory keeps local policy.
       pluginMarketplacesOwner: "local",
@@ -326,7 +326,9 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     const mine = (await api("GET", "/api/me/engines", bob)).body.engines as Array<{ instanceId: string; orgKey: boolean; orgKeyNotGiven?: boolean; myTurns: string }>;
     expect(mine.find((engine) => engine.instanceId === "claude")).toMatchObject({ orgKey: false, orgKeyNotGiven: true, myTurns: "none" });
     setBob(undefined);
-    await signIn(BOB);
+    const restored = await signIn(BOB);
+    // The directory poll restores the grant asynchronously after this login.
+    await waitFor(async () => ((await api("GET", "/api/me/engines", restored)).body.engines as Array<{ instanceId: string; orgKey: boolean }>).find((engine) => engine.instanceId === "claude")?.orgKey === true);
   }, 60_000);
 
   it("S3-5 (C): removing bob's grant ends his stream and the bot is gone for him at once", async () => {
@@ -359,7 +361,7 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
       return bot?.messages.find((m) => m.kind === "access") ?? null;
     });
     // bob spoke: the card is his to act on (his subscription, his key)
-    expect(card.access).toMatchObject({ reason: "no_access", engine: "Claude", botId: shared.id, payer: "speaker", payerPrincipalId: bobId, cause: "no_credentials", subscriptionSignIn: true, keysUrl: `${idp.issuer}/console/credentials?kind=model` });
+    expect(card.access).toMatchObject({ reason: "no_access", engine: "Claude", botId: shared.id, payer: "speaker", payerPrincipalId: bobId, cause: "server_engine_not_allowed", subscriptionSignIn: true, keysUrl: `${idp.issuer}/console/credentials?kind=model` });
     expect(readFileSync(dump, "utf8")).toBe(before);
     // private threads: bob hears his own thread's failure; alice, the bot's
     // owner, hears nothing of bob's conversation

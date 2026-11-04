@@ -155,7 +155,7 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
 }
 
 /** The bar under a routine's page in the bot panel (2026-11-03, JC):
- * exactly [Run now] [Edit] [Disable or Enable] [Delete]; Delete asks first.
+ * [Run now] [Check routine] [Edit] [Disable or Enable] [Delete]; Delete asks first.
  * Duplicate is in Edit > Advanced; the logs are the Automations page's Logs. */
 export function RoutinePanelActions({ routine, bot, onStarted, onToggle, onEdit, onDelete, readiness: externalReadiness }: {
   routine: Routine;

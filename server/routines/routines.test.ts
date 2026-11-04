@@ -3152,7 +3152,7 @@ describe("RoutineManager", () => {
     if (error) h.manager.handleRuntimeEvent({ ...base, eventId: "runtime-error", type: "runtime.error", message: error });
     h.manager.handleRuntimeEvent({ ...base, eventId: "turn-completed", type: "turn.completed", ok: false, stopReason });
 
-    expect(h.manager.listRuns()[0]).toMatchObject({ status: "failed", error: expected });
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: error?.includes("out of credits") ? "blocked" : "failed", error: expected });
     expect(h.failed).toMatchObject([{ error: expected }]);
   });
 

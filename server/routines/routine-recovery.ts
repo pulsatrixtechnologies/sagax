@@ -37,7 +37,7 @@ export type RoutineFailureClass =
 /** A failure notification's own words; null stays quiet because the owner was already told. */
 export interface RoutineAlert { detail: string }
 
-export interface RoutineOwnerNotice { botId: string; cause: RoutineOwnerCause | "skill_missing" | "mcp_missing" | "perspicax_profile" | "computer_offline" | "probe_error"; at: number }
+export interface RoutineOwnerNotice { botId: string; cause: RoutineOwnerCause | "skill_missing" | "flow_profile" | "mcp_missing" | "perspicax_profile" | "computer_offline" | "probe_error"; at: number }
 
 export type RoutineRecovery =
   | { queued: true; alert?: RoutineAlert }
@@ -55,7 +55,7 @@ const AFTER_RESET_MS = 60_000;
 const WEEK_MS = 7 * 24 * 60 * 60_000;
 /** startTurn's codes for a bot or thread that is busy for now. */
 const BUSY_CODES = new Set(["thread_busy", "thread_limit", "workspace_busy", "settling"]);
-const OWNER_CAUSES = new Set<string>(["signed_out", "credits", "usage_limit", "setup", "skill_missing", "mcp_missing", "perspicax_profile", "computer_offline", "probe_error"]);
+const OWNER_CAUSES = new Set<string>(["signed_out", "credits", "usage_limit", "setup", "skill_missing", "flow_profile", "mcp_missing", "perspicax_profile", "computer_offline", "probe_error"]);
 
 /** Codex's ChatGPT workspace routing lookup: passing, unlike its "unauthorized" variant (a sign-in problem). */
 const ROUTING_LOOKUP = /\bworkspace routing discovery (?:failed|timed out)\b/i;
@@ -82,6 +82,8 @@ const FIRST_START: Record<RoutineRetryCause, string> = {
 export function classifyRoutineFailure(failure: string, facts: RoutineFailureFacts = {}): RoutineFailureClass {
   if (facts.cause === "busy") return { kind: "busy" };
   if (facts.cause === "stalled" || facts.stalled) return { kind: "retry", cause: "stalled" };
+  // The run's own step cap takes precedence over a generic provider quota token (#1946).
+  if (/^Stopped after \d+ (?:steps|tool calls) without a final answer\b/i.test(failure)) return { kind: "final" };
   // reasoning_only / empty model: one automatic retry of the same turn.
   if (facts.stopReason === "reasoning_only" || facts.stopReason === "empty_turn" || isEngineEmptyFailure(failure)) {
     return { kind: "retry", cause: "empty_response" };

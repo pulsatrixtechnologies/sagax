@@ -13063,8 +13063,8 @@
   "routineReadiness.pass": "Ready",
   "routineReadiness.fail": "Blocked",
   "routineReadiness.error": "The routine check could not finish. Try again.",
-  "routineReadiness.engine_credits": "{engine}'s account is out of credit (the provider refused at {at}). Add credit with the provider, or choose another engine for this bot.",
-  "routineReadiness.engine_limit": "{engine} reached its usage limit until {until}. Wait for the reset, or choose another engine for this bot.",
+  "routineReadiness.engine_credits": "{engine}'s account is out of credit (provider's last refusal: {at}). Add credit with the provider, or choose another engine for this bot.",
+  "routineReadiness.engine_limit": "{engine} reached its usage limit (reset: {until}). Wait for the reset, or choose another engine for this bot.",
   "routineReadiness.engine_signed_out": "{engine} is signed out for this bot. Reconnect it in Settings > Model providers.",
   "routineReadiness.skill_missing": "Skill `{skill}` is not among this bot’s skills. Install its plugin for this bot (Connect apps > Sources) or assign the skill to it.",
   "routineReadiness.mcp_missing": "MCP server `{server}` is not connected for this bot. Connect it in the bot’s Connect apps.",
@@ -13080,5 +13080,6 @@
   "routineReadiness.requiresMcp": "Required MCP servers",
   "routineReadiness.requiresComputer": "Computer required",
   "routineReadiness.requiresHelp": "Names separated by commas, up to 20 names of 100 characters each.",
-  "routines.failures.grouped": "Failed routine runs ({count})"
+  "routines.failures.grouped": "Failed routine runs ({count})",
+  "routineReadiness.flow_profile": "This Flow routine needs a Perspicax profile on its bot to reach the Flow skills. Choose one in the bot’s Connect apps."
 }

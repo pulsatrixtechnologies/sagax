@@ -16,7 +16,7 @@ function fixture(over: Partial<RoutineManagerOptions> = {}) {
   const onRunFailed = vi.fn();
   const probes: RoutineReadinessDeps = { now: () => now, engine: () => ({ engine: dir, name: "Grok", signedIn: true }), skills: () => [], mcp: () => undefined };
   const options: RoutineManagerOptions = { file: join(dir, "routines.json"), now: () => now, botState: () => "ready", createTask, startTurn,
-    readiness: (routine, run) => checkRoutineReadiness(routine, run, probes), engineForRun: () => ({ engine: dir }), onRunFailed, ...over };
+    readiness: (routine, run, mode) => checkRoutineReadiness(routine, run, probes, mode), engineForRun: () => ({ engine: dir }), onRunFailed, ...over };
   const manager = new RoutineManager(options);
   const routine = manager.create({ name: "Inbox review", prompt: "Read the inbox.", botId: "osprey", schedule: { type: "interval", everyMinutes: 60, anchorAt: now }, autoPauseAfter: 1 });
   const flush = async () => { for (let i = 0; i < 10; i++) { await manager.tick(); await new Promise(resolve => setTimeout(resolve, 0)); } };
@@ -37,11 +37,26 @@ describe("routine reliability in an isolated journal", () => {
     expect(h.createTask).not.toHaveBeenCalled(); expect(h.startTurn).not.toHaveBeenCalled();
     expect(h.manager.getRoutine(h.routine.id)?.enabled).toBe(true);
     expect(h.manager.listRoutines()[0]?.failureStreak).toBeUndefined();
-    expect(h.onRunFailed.mock.calls[0]?.[1]).toMatchObject({ detail: expect.stringContaining("inbox-review") });
+    const blocked = h.manager.listRuns()[0]!;
+    expect(h.onRunFailed.mock.calls[0]?.[1]).toEqual({ detail: `Inbox review: "${blocked.error}"` });
     h.manager.runNow(h.routine.id); await h.flush();
     expect(h.onRunFailed.mock.calls.at(-1)?.[1]).toBeNull();
+    const other = h.manager.create({ name: "Wren review", prompt: "Read the inbox.", botId: "osprey", schedule: { type: "webhook" }, requires: { skills: ["inbox-review"] } });
+    h.manager.runNow(other.id); await h.flush();
+    expect(h.onRunFailed.mock.calls.at(-1)?.[1]).toBeNull();
+    h.manager.update(other.id, { requires: { computer: true } });
+    h.probes.computers = () => [{ name: "Wren computer", online: false, needed: true }];
+    h.manager.runNow(other.id); await h.flush();
+    expect(h.onRunFailed.mock.calls.at(-1)?.[1]).toEqual({ detail: `Wren review: "${h.onRunFailed.mock.calls.at(-1)?.[0].error}"` });
     const reloaded = new RoutineManager(h.options);
     expect(reloaded.listRuns()[0]?.readiness).toEqual(h.manager.listRuns()[0]?.readiness);
+    reloaded.runNow(other.id);
+    for (let i = 0; i < 10; i++) { await reloaded.tick(); await new Promise(resolve => setTimeout(resolve, 0)); }
+    expect(h.onRunFailed.mock.calls.at(-1)?.[1]).toBeNull();
+    const wren = reloaded.create({ name: "Wren inbox", prompt: "Read the inbox.", botId: "wren", schedule: { type: "webhook" }, requires: { skills: ["inbox-review"] } });
+    reloaded.runNow(wren.id);
+    for (let i = 0; i < 10; i++) { await reloaded.tick(); await new Promise(resolve => setTimeout(resolve, 0)); }
+    expect(h.onRunFailed.mock.calls.at(-1)?.[1]).toEqual({ detail: `Wren inbox: "${h.onRunFailed.mock.calls.at(-1)?.[0].error}"` });
   });
   it("does not reserve or warm a task for an unready upcoming routine", async () => {
     const reserveTask = vi.fn(() => ({ threadId: "reserved" }));
@@ -62,7 +77,9 @@ describe("routine reliability in an isolated journal", () => {
     h.manager.runNow(h.routine.id); await h.flush();
     h.manager.failThread("t-1", "Grok refused this turn: 402 Payment Required, usage balance used up");
     h.advance(5 * 60_000);
-    // Failed runs can pause a routine, but manual checks and starts remain available.
+    expect(h.manager.getRoutine(h.routine.id)?.enabled).toBe(true);
+    expect(h.manager.listRoutines()[0]?.failureStreak).toBeUndefined();
+    expect(h.manager.listRuns().find(run => run.threadId === "t-1")?.status).toBe("blocked");
     h.manager.runNow(h.routine.id); await h.flush();
     expect(h.manager.listRuns()[0]).toMatchObject({ status: "blocked", error: expect.stringContaining("out of credit") });
     expect(h.startTurn).toHaveBeenCalledTimes(1);
@@ -77,6 +94,27 @@ describe("routine reliability in an isolated journal", () => {
     expect(activeEngineRefusal(h.engine, undefined, h.now())).toBeDefined();
     h.manager.handleRuntimeEvent({ eventId: "done", provider: "fake", threadId: "t-3", createdAt: new Date(h.now()).toISOString(), type: "turn.completed", ok: true });
     expect(activeEngineRefusal(h.engine, undefined, h.now())).toBeUndefined();
+  });
+  it.each(["manual", "schedule", "webhook"] as const)("lets a %s run start after probe errors, while Check routine reports them (#1945)", async (trigger) => {
+    const h = fixture();
+    h.probes.skills = () => { throw new Error("inventory unavailable"); };
+    if (trigger === "manual") h.manager.runNow(h.routine.id);
+    else if (trigger === "schedule") h.advance(60 * 60_000);
+    else {
+      h.manager.update(h.routine.id, { schedule: { type: "webhook" } });
+      h.manager.enqueueWebhook({ webhookId: "inbox", webhookName: "Inbox", prompt: "Read the inbox.", botId: "osprey", runOn: "maus", deliveryId: "probe-error", receivedAt: h.now(), routineId: h.routine.id });
+    }
+    await h.flush();
+    expect(h.startTurn).toHaveBeenCalledTimes(1);
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "running", readiness: expect.arrayContaining([expect.objectContaining({ code: "probe_error", ok: true, detail: "inventory unavailable" })]) });
+    expect(await h.manager.checkReadiness(h.routine)).toMatchObject({ ok: false, checks: expect.arrayContaining([expect.objectContaining({ code: "probe_error", ok: false })]) });
+    expect(h.onRunFailed).not.toHaveBeenCalled();
+  });
+  it("fails open when the readiness callback throws before returning rows", async () => {
+    const h = fixture({ readiness: async () => { throw new Error("probe failed"); } });
+    h.manager.runNow(h.routine.id); await h.flush();
+    expect(h.startTurn).toHaveBeenCalledTimes(1);
+    expect((await h.manager.checkReadiness(h.routine)).ok).toBe(false);
   });
   it("never waits for a slow bot probe inside the scheduler pass", async () => {
     const h = fixture({ readiness: () => new Promise(() => {}) });

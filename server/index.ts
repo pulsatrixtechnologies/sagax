@@ -1,4 +1,4 @@
-import { checkRoutineReadiness, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer } from "./routines/routine-readiness.ts";
+import { checkRoutineReadiness, routineFlowSkills, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer } from "./routines/routine-readiness.ts";
 import { noteEngineRefusal, clearEngineRefusal } from "./engines/engine-refusals.ts";
 import { classifyRoutineFailure as readinessFailureClass } from "./routines/routine-recovery.ts";
 import { canUseMcpServer } from "../shared/tool-scope.ts";
@@ -24436,6 +24436,12 @@ const routineReadinessDeps: RoutineReadinessDeps = {
     // Partial discovery cannot prove that an unlisted skill is absent.
     return inventory.incomplete ? undefined : inventory.rows.filter(row => row.enabled && row.kind === "skill").map(row => row.name);
   },
+  flowSkills: (_routine, run) => {
+    const bot = store.bot(run.botId);
+    if (!bot) return undefined;
+    return routineFlowSkills(IDENTITY.kind === "perspicax", perspicaxDirectory?.flowPlugins(),
+      routineReadinessProfiles(bot, effectiveRunAs(run) ?? localPrincipalId()), orgFlowPlugins.status());
+  },
   mcp: (_routine, run) => {
     const bot = store.bot(run.botId);
     if (!bot) return undefined;
@@ -24492,7 +24498,7 @@ const routineReadinessDeps: RoutineReadinessDeps = {
   },
 };
 routines = new RoutineManager({
-  readiness: (routine, run) => checkRoutineReadiness(routine, run, routineReadinessDeps),
+  readiness: (routine, run, mode) => checkRoutineReadiness(routine, run, routineReadinessDeps, mode),
   engineForRun: (run) => routineReadinessEngine({ botId: run.botId, prompt: run.prompt ?? "" }, run),
   botName: (botId) => store.bot(botId)?.name,
   evaluateWatch: (routine, watch) => routineWatchEvaluator(routine, watch),
@@ -24819,7 +24825,7 @@ routines = new RoutineManager({
     // null: the owner was already told about this cause for this bot.
     if (!bot || alert === null) return;
     const said = alert?.detail ?? run.error;
-    const detail = said ? `${run.routineName}: ${said}` : run.routineName;
+    const detail = run.status === "blocked" && alert ? alert.detail : said ? `${run.routineName}: ${said}` : run.routineName;
     const notificationBot = routineSourceOwner(run)?.bot ?? bot;
     notify(deliverableNotification(run.status === "blocked" ? "routine-deferred" : "routine-failed", notificationBot, routineSourceThread(run) ?? run.threadId ?? bot.threadId, detail, run.status === "blocked" ? { title: "Routine blocked" } : {}));
     // 2026-10-30: the bot may look into its own failed run (never a failed wake of its own)

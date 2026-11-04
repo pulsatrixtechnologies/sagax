@@ -10245,7 +10245,16 @@ independent timeouts below five seconds and a 60-second bot/account cache.
 Reservations and engine prewarm use the same checks before creating a task.
 Unknown facts pass; explicit refusals block. `requires` names bounded explicit
 skills, MCP servers and a computer requirement. Run snapshots retain checks
-and stable codes for EN/FR rendering. `POST /api/routines/:id/check`,
+and stable codes for EN/FR rendering.
+Probe errors pass for a run and remain not ready in an on-demand check. On an
+organization server with a Flow declaration, a Flow routine reads its product
+skills through its bot's Perspicax profile even when the local install is held
+back; no local skill copy is required. A missing profile is explained directly.
+Readiness timestamp params carry ISO UTC; the viewer formats the local time
+and includes the date outside today. Blocked owner notices quote the reason
+and name the routine, once per bot and cause. Engine refusals, including the
+first refusal, never count toward the automatic pause (issues #1945 to #1948).
+`POST /api/routines/:id/check`,
 `run_routine` with `action: "check"`, and the internal routine bridge share
 Run now authorization and create no run. The run HTTP endpoint also accepts
 `action: "check"` for clients forwarding routine tools.

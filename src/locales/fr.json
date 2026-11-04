@@ -13063,8 +13063,8 @@
   "routineReadiness.pass": "Prêt",
   "routineReadiness.fail": "Bloqué",
   "routineReadiness.error": "La vérification de la routine n’a pas pu finir. Réessaie.",
-  "routineReadiness.engine_credits": "Le compte {engine} n’a plus de crédits (refus du fournisseur à {at}). Ajoute des crédits chez le fournisseur ou choisis un autre engine pour ce bot.",
-  "routineReadiness.engine_limit": "{engine} a atteint sa limite d’utilisation jusqu’à {until}. Attends le reset ou choisis un autre engine pour ce bot.",
+  "routineReadiness.engine_credits": "Le compte {engine} n’a plus de crédits (dernier refus du fournisseur : {at}). Ajoute des crédits chez le fournisseur ou choisis un autre engine pour ce bot.",
+  "routineReadiness.engine_limit": "{engine} a atteint sa limite d’utilisation (reset : {until}). Attends le reset ou choisis un autre engine pour ce bot.",
   "routineReadiness.engine_signed_out": "{engine} est déconnecté pour ce bot. Reconnecte-le dans Réglages > Fournisseurs de modèles.",
   "routineReadiness.skill_missing": "Le skill `{skill}` ne fait pas partie des skills de ce bot. Installe son plugin pour ce bot (Connecter des apps > Sources) ou assigne-lui le skill.",
   "routineReadiness.mcp_missing": "Le serveur MCP `{server}` n’est pas connecté pour ce bot. Connecte-le dans Connecter des apps du bot.",
@@ -13080,5 +13080,6 @@
   "routineReadiness.requiresMcp": "Serveurs MCP requis",
   "routineReadiness.requiresComputer": "Ordinateur requis",
   "routineReadiness.requiresHelp": "Noms séparés par des virgules, jusqu’à 20 noms de 100 caractères chacun.",
-  "routines.failures.grouped": "Exécutions de routine en échec ({count})"
+  "routines.failures.grouped": "Exécutions de routine en échec ({count})",
+  "routineReadiness.flow_profile": "Cette routine Flow a besoin d’un profil Perspicax sur son bot pour accéder aux skills Flow. Choisis-en un dans Connecter des apps du bot."
 }

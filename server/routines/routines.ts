@@ -640,7 +640,7 @@ export interface RoutineManagerOptions {
   /** Account selected for refusal memory, resolved with the same worker pick as dispatch. */
   engineForRun?: (run: RoutineRun) => { engine: string; account?: string } | undefined;
   /** Readiness probes run beside the pass, after admission and before createTask. */
-  readiness?: (routine: Routine, run: RoutineRun) => Promise<RoutineReadinessResult>;
+  readiness?: (routine: Routine, run: RoutineRun, mode: "run" | "check") => Promise<RoutineReadinessResult>;
   /** Replaces the pure pre-check evaluator (tests, later wired checks). It
    * runs under ROUTINE_PRECHECK_TIMEOUT_MS; a throw or timeout fails the run. */
   evaluatePrecheck?: (precheck: RoutinePrecheck, facts: RoutinePrecheckFacts) => Promise<RoutinePrecheckVerdict> | RoutinePrecheckVerdict;
@@ -2914,7 +2914,7 @@ export class RoutineManager {
     const entry: { key: string; result?: RoutineReadinessAnswer } = { key };
     this.warmReadiness.set(routine.id, entry);
     if (this.warmReadiness.size > 2_000) this.warmReadiness.delete(this.warmReadiness.keys().next().value!);
-    void this.checkReadiness(routine, run).then(result => {
+    void this.checkReadiness(routine, run, "run").then(result => {
       if (this.warmReadiness.get(routine.id) !== entry) return;
       entry.result = result;
       this.tickInBackground();
@@ -3315,7 +3315,7 @@ export class RoutineManager {
               const blocker = readiness.checks.find(check => !check.ok)!;
               const cause = blocker.code === "engine_credits" ? "credits" : blocker.code === "engine_limit" ? "usage_limit"
                 : blocker.code === "engine_signed_out" ? "signed_out" : blocker.code === "ready" ? "probe_error" : blocker.code;
-              const alert = firstOwnerNotice(this.ownerNotices, run.botId, cause, this.now()) ? { detail: blocker.line } : null;
+              const alert = firstOwnerNotice(this.ownerNotices, run.botId, cause, this.now()) ? { detail: `${routine.name}: "${blocker.line}"` } : null;
               this.blockRun(run, blocker.line, alert);
               continue;
             }
@@ -3762,7 +3762,10 @@ export class RoutineManager {
       this.options.onRunRequeued?.(cloneRun(run));
       if (recovery.alert) this.options.onRunDeferred?.(cloneRun(run), recovery.alert);
     } else if ("error" in recovery) {
-      this.failRun(run, recovery.error, recovery.alert);
+      if (refusal.kind === "owner" && refusal.cause !== "setup") {
+        const routineName = this.routines.find(routine => routine.id === run.routineId)?.name ?? run.routineName;
+        this.blockRun(run, recovery.error, recovery.alert ? { detail: `${routineName}: "${recovery.error}" ${recovery.alert.detail}` } : null);
+      } else this.failRun(run, recovery.error, recovery.alert);
     }
     queueMicrotask(() => this.tickInBackground());
   }
@@ -4019,14 +4022,16 @@ export class RoutineManager {
   }
 
   /** A check never creates a run or task. The caller applies Run now authorization. */
-  async checkReadiness(routine: Routine, run?: RoutineRun): Promise<RoutineReadinessAnswer> {
+  async checkReadiness(routine: Routine, run?: RoutineRun, mode: "run" | "check" = "check"): Promise<RoutineReadinessAnswer> {
     const checkedAt = this.now();
     const context = run ?? { botId: routine.botId, runAs: routine.runAs, runOn: routine.runOn } as RoutineRun;
     try {
-      const result = await this.options.readiness?.(cloneRoutine(routine), context) ?? { ok: true, checks: [] };
-      return { ...result, checks: loadRoutineReadiness(result.checks) ?? [], checkedAt };
+      const result = await this.options.readiness?.(cloneRoutine(routine), context, mode) ?? { ok: true, checks: [] };
+      const checks = (loadRoutineReadiness(result.checks) ?? []).map(check =>
+        mode === "run" && check.code === "probe_error" ? { ...check, ok: true } : check);
+      return { ok: checks.every(check => check.ok), checks, checkedAt };
     } catch (error) {
-      return { ok: false, checkedAt, checks: [{ kind: "engine", ok: false, code: "probe_error", params: { kind: "engine" },
+      return { ok: mode === "run", checkedAt, checks: [{ kind: "engine", ok: mode === "run", code: "probe_error", params: { kind: "engine" },
         line: "The readiness check could not finish. Check the routine again.", detail: redactSecretsInText(String(error)).slice(0, 500) }] };
     }
   }
@@ -4082,8 +4087,7 @@ export class RoutineManager {
     this.options.onRunFailed?.(cloneRun(run), alert);
   }
 
-  /** Facts from the routine's own receipts, then the evaluator under its
-   * hard timeout. Never throws: an error is a failed run, never a pass. */
+  /** Probes run beside the scheduler. Only an explicit blocker holds a run. */
   private readinessEngines = new Map<string, { engine: string; account?: string }>();
   private readinessPending = new Set<string>();
   private readinessSettled = new Map<string, RoutineReadinessAnswer>();
@@ -4091,7 +4095,7 @@ export class RoutineManager {
   private startReadiness(routine: Routine, run: RoutineRun): void {
     if (this.readinessPending.has(run.id)) return;
     this.readinessPending.add(run.id);
-    void this.checkReadiness({ ...routine, requires: run.requires }, cloneRun(run)).then(result => {
+    void this.checkReadiness({ ...routine, requires: run.requires }, cloneRun(run), "run").then(result => {
       this.readinessPending.delete(run.id);
       if (run.status !== "queued") return;
       this.readinessSettled.set(run.id, result);

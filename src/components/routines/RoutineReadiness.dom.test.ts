@@ -51,4 +51,12 @@ describe("routine readiness in the detail", () => {
     flushSync(() => root.render(createElement(RoutineDetail, { routine, runs: [], bots: [], canRun: false, onOpenRun: () => {} })));
     expect(host.querySelector("[data-routine-check]")).toBeNull();
   });
+  it.each(["en", "fr"])("shows an unfinished on-demand probe as not ready in %s", async (lang) => {
+    await loadLocale(lang);
+    flushSync(() => root.render(createElement(RoutineDetail, { routine, runs: [], bots: [], canRun: true, onRunNow: () => {}, onOpenRun: () => {} })));
+    await act(async () => host.querySelector<HTMLButtonElement>("[data-routine-check]")!.click());
+    await act(async () => fixture.resolve!({ ok: false, checkedAt: Date.UTC(2026, 10, 4), checks: [{ kind: "computer", ok: false, code: "probe_error", line: "Wire error", params: { kind: "computer" }, detail: "Probe timed out." }] }));
+    expect(host.querySelector("[data-readiness-ok]")?.getAttribute("data-readiness-ok")).toBe("false");
+    expect(host.textContent).toContain(lang === "en" ? "could not finish" : "n’a pas pu finir");
+  });
 });

@@ -601,6 +601,51 @@ class CompanionClient(
         return send<CreatedRoom>(makeRequest("POST", "/api/groups", body = body)).group
     }
 
+    /** `patchGroup`: the room as the computer kept it. */
+    suspend fun patchRoom(groupId: String, patch: RoomPatch): Room = send<RoomResponse>(
+        makeRequest("PATCH", "/api/groups/${segment(groupId)}", body = patch.toJsonObject()),
+    ).group
+
+    /** #1480: the signed-in person leaves the group. */
+    suspend fun leaveRoom(groupId: String) {
+        sendUnit(makeRequest("POST", "/api/groups/${segment(groupId)}/leave"))
+    }
+
+    /** `deleteGroup`: the room, its messages and threads; its bots stay. */
+    suspend fun deleteRoom(groupId: String) {
+        sendUnit(makeRequest("DELETE", "/api/groups/${segment(groupId)}"))
+    }
+
+    /** GET /api/groups/:id/memory. */
+    suspend fun groupMemory(groupId: String): GroupMemoryView = send(
+        makeRequest("GET", "/api/groups/${segment(groupId)}/memory"),
+    )
+
+    /**
+     * The owner's edit (`{text, expectedHash}`), overwrite (`{text}`) or
+     * switch (`{enabled}`). A 409 is [GroupMemoryConflict].
+     */
+    suspend fun putGroupMemory(
+        groupId: String,
+        text: String? = null,
+        expectedHash: String? = null,
+        enabled: Boolean? = null,
+    ): GroupMemoryView {
+        val body = buildJsonObject {
+            text?.let { put("text", it) }
+            expectedHash?.let { put("expectedHash", it) }
+            enabled?.let { put("enabled", it) }
+        }
+        return try {
+            send(
+                makeRequest("PUT", "/api/groups/${segment(groupId)}/memory", body = body),
+            )
+        } catch (error: APIError.Status) {
+            if (error.code == 409) throw GroupMemoryConflict()
+            throw error
+        }
+    }
+
     suspend fun sendToBot(
         botId: String,
         text: String,

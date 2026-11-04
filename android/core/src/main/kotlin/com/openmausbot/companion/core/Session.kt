@@ -1554,6 +1554,79 @@ class Session(
         }
     }
 
+    /** `patchGroup`: true when the computer kept it. */
+    suspend fun patchRoom(room: Room, patch: RoomPatch): Boolean {
+        val activeClient = client ?: return false
+        return try {
+            val updated = activeClient.patchRoom(room.id, patch)
+            currentCoroutineContext().ensureActive()
+            _state.update { it.apply(Frame.Room(updated)) }
+            true
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            _actionError.value = error.message
+            false
+        }
+    }
+
+    /** `deleteGroup`: the room, its messages and threads go; its bots stay. */
+    suspend fun deleteRoom(room: Room): Boolean {
+        val activeClient = client ?: return false
+        return try {
+            activeClient.deleteRoom(room.id)
+            currentCoroutineContext().ensureActive()
+            _state.update { it.apply(Frame.RoomDeleted(room.id)) }
+            true
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            _actionError.value = error.message
+            false
+        }
+    }
+
+    /** #1480 `leaveGroup`: the person leaves; the room leaves this device. */
+    suspend fun leaveRoom(room: Room): Boolean {
+        val activeClient = client ?: return false
+        return try {
+            activeClient.leaveRoom(room.id)
+            currentCoroutineContext().ensureActive()
+            _state.update { it.apply(Frame.RoomDeleted(room.id)) }
+            true
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            _actionError.value = error.message
+            false
+        }
+    }
+
+    suspend fun loadGroupMemory(room: Room): GroupMemoryView? {
+        val activeClient = client ?: return null
+        return try {
+            activeClient.groupMemory(room.id)
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            _actionError.value = error.message
+            null
+        }
+    }
+
+    suspend fun saveGroupMemory(
+        room: Room,
+        text: String? = null,
+        expectedHash: String? = null,
+        enabled: Boolean? = null,
+    ): GroupMemoryView? {
+        val activeClient = client ?: return null
+        return try {
+            activeClient.putGroupMemory(room.id, text = text, expectedHash = expectedHash, enabled = enabled)
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            if (error is GroupMemoryConflict) throw error
+            _actionError.value = error.message
+            null
+        }
+    }
+
     /**
      * Create or extend a derived sidebar section in one server transaction.
      * The desktop has no standalone section resource yet, so we merge the

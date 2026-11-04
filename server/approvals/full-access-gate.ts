@@ -118,8 +118,10 @@ export const FULL_ACCESS_SURFACES = {
   "proposal": "server/*-requests.ts cards, applied under Full (fullAccessForSource)",
   /** An outbound send or email draft the bot writes (index.ts). */
   "send": "server/index.ts outbound and email draft cards",
-  /** The chat-completions engines answer their own tool gate under Full. */
-  "chat-engine": "server/drivers/openai-chat-turn.ts tool gate",
+  /** Retired: chat-completions used to short-circuit MCP asks at Full
+   * (#1982). Those asks now emit request.opened as engine-bridge. Kept so
+   * an old marker in a long-lived branch still passes the guard scan. */
+  "chat-engine": "server/drivers/openai-chat-turn.ts (retired short-circuit; MCP asks are engine-bridge)",
   /** A permission request an engine bridge emits: it is judged in
    * request.opened, never answered or held where it is emitted. */
   "engine-bridge": "server/drivers and runners emitting request.opened",

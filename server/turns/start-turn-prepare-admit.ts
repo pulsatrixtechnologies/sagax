@@ -59,6 +59,7 @@ export function createPrepareAdmitStartTurn(
     remoteComputerForTurn,
     repeatsShownFailure,
     resolveTurnSpeaker,
+    routineModelForTurn,
     routineLineage,
     sandboxPrincipalForTurn,
     settleInputRequests,
@@ -162,11 +163,18 @@ export function createPrepareAdmitStartTurn(
   // wherever it works: a cloud computer is a tool it mounts, never a reason
   // to swap the engine (the provider_not_configured incident).
   state.model = state.bot.modelSelection.model;
+  // 2026-11-04: a routine run uses its routine's model on the bot's own
+  // engine (a limit takeover wins). Chat on the bot keeps the bot's model.
+  const routineModel = state.warmOnly ? null : routineModelForTurn?.(state.bot.id, state.threadId, state.instance);
+  if (routineModel && "model" in routineModel) {
+    state.model = routineModel.model;
+    state.routineModel = routineModel.model;
+  }
   const askedEffort = state.bot.modelSelection.effort;
-  state.variant = state.bot.modelSelection.variant;
+  state.variant = state.routineModel ? undefined : state.bot.modelSelection.variant;
   // What this turn runs on, kept for the bot text it writes (a quiet line
   // under the reply shows it). A warm-up writes no reply.
-  if (!state.warmOnly) turnRunByThread.set(state.threadId, turnRunFor(state.bot.modelSelection, turnModelRequested.get(state.threadId)));
+  if (!state.warmOnly) turnRunByThread.set(state.threadId, turnRunFor(state.routineModel ? { ...state.bot.modelSelection, model: state.routineModel } : state.bot.modelSelection, turnModelRequested.get(state.threadId)));
   assertModelVariantSupported({ variant: state.variant, effort: askedEffort }, state.instance.adapter.capabilities);
   // A selection can be persisted while its engine is offline. Re-check when
   // the engine returns so an old or unsupported value never reaches a CLI.
@@ -178,7 +186,7 @@ export function createPrepareAdmitStartTurn(
   }
   // The engine takes it but this model may not (shared/model-capabilities.ts):
   // then nothing is sent and the model runs at its own default.
-  state.effort = effortForModel(askedEffort, state.instance.models.options.find((option: any) => option.id === state.bot.modelSelection.model),
+  state.effort = effortForModel(askedEffort, state.instance.models.options.find((option: any) => option.id === state.model),
     state.instance.adapter.capabilities.effortLevels);
 
   // an edit hands us its already-branched user message; a plain send appends
@@ -325,7 +333,7 @@ export function createPrepareAdmitStartTurn(
   // card continuations resume a turn already admitted.
   const freshHop = Boolean(state.opts.coordination && !state.opts.coordination.resumed);
   const accessRefusal = state.opts.cardContinuation && !state.opts.compactOnly && !freshHop ? null
-    : orgEngineRefusal(state.bot, state.instance, state.speaker, state.bot.modelSelection.model) ?? ownerModelOfflineRefusal(state.bot, state.instance, state.speaker, state.bot.modelSelection.model);
+    : orgEngineRefusal(state.bot, state.instance, state.speaker, state.routineModel ?? state.bot.modelSelection.model) ?? ownerModelOfflineRefusal(state.bot, state.instance, state.speaker, state.routineModel ?? state.bot.modelSelection.model);
   if (accessRefusal) {
     if (state.warmOnly) {
       console.error(`[voice-call] warm skipped: ${accessRefusal.reason}`);

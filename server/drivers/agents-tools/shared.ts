@@ -176,6 +176,11 @@ export const ROUTINE_FIELDS_SCHEMA = {
     maxLength: 60,
     description: "Folder of this bot's Routines list to file it in, such as Reports or Home. A new name makes the folder; reuse a name from list_routines to group with others. null in an update takes it out of its folder. Do not put the folder in the name as a [Prefix].",
   },
+  model: {
+    type: ["string", "null"],
+    maxLength: 200,
+    description: "Only if asked: a model id of this bot's engine for its runs and sub-agents; chat keeps the bot's. null resets.",
+  },
   delete_when_finished: {
     type: "boolean",
     description: "Delete this routine automatically once its schedule has no more runs and the last run has settled (completed, failed, cancelled or missed). Only for a one-time routine or an interval with an end date. Defaults to false. Past runs stay in the calendar and the run log. Set false in an update to keep it listed after it ends.",
@@ -536,6 +541,11 @@ export function routineFields(args: Json): { fields: Json; error?: string } {
   // 2026-10-28: the bot's folder to file it in (null: out of its folder).
   if (args.folder !== undefined) fields.folder = args.folder;
   if (typeof deleteWhenFinished === "boolean") fields.deleteWhenFinished = deleteWhenFinished;
+  // 2026-11-04: the routine's model (shared/routine-model.ts), checked by the service.
+  if (args.model !== undefined) {
+    if (args.model !== null && typeof args.model !== "string") return { fields, error: "model must be a model id, or null for the bot's model." };
+    fields.model = args.model;
+  }
   return { fields };
 }
 

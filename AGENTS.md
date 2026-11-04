@@ -1,5 +1,21 @@
 # Sagax agent notes
 
+## Routine model override (2026-11-04)
+
+`Routine.model` (`shared/routine-model.ts`) is the model its runs use on the
+bot's own engine; absent means the bot's model. Runs snapshot it
+(`RoutineRun.model`). `routineModelForTurn` (server/index.ts) applies it per
+turn in `start-turn-prepare-admit.ts`, never on the thread, so chat keeps the
+bot's model. A limit takeover (a failover row for the thread) or another
+engine wins; a model the engine does not offer or that is turned off is
+ignored with one `notice:` row per run. Claude turns pass `subagentModel`,
+which sets `CLAUDE_CODE_SUBAGENT_MODEL` and is part of the spawn contract.
+Writes: POST/PATCH `/api/routines` with `model` (null or "" clears), and the
+`model` field of `propose_routine` / `propose_routine_action`; `checkModel`
+refuses a model the bot's engine does not list. Tests:
+`shared/routine-model.test.ts`, `routines.test.ts`, `claude.test.ts`,
+`RoutineCalendarPage.test.ts`.
+
 ## Flow routine shadow readiness (#1991, 2026-11-04)
 
 Flow readiness calls `flow_run` on the bot's own profile with the run-as

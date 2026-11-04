@@ -2971,6 +2971,19 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(seen.argv).not.toContain("--dangerously-skip-permissions");
   });
 
+  it("runs a routine turn's sub-agents on its model, and a chat turn never reuses that process (2026-11-04)", async () => {
+    const dump = join(scratch, "subagent-model.json");
+    await create(undefined, { FAKE_CLAUDE_DUMP: dump });
+    const routine = await instance.adapter.sendTurn({ threadId: "t-subagent-model", text: "hi", model: "fast-model", subagentModel: "fast-model" });
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === routine.turnId);
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.env.CLAUDE_CODE_SUBAGENT_MODEL).toBe("fast-model");
+    const chat = await instance.adapter.sendTurn({ threadId: "t-subagent-model", text: "again", model: "fast-model" });
+    expect(chat.reused).not.toBe(true);
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === chat.turnId);
+    expect(JSON.parse(readFileSync(dump, "utf8")).env.CLAUDE_CODE_SUBAGENT_MODEL).toBeUndefined();
+  });
+
   it("lets a Bash call ask for up to ten minutes, unless the person set their own cap", async () => {
     const dump = join(scratch, "bash-timeout.json");
     await create(undefined, { FAKE_CLAUDE_DUMP: dump });

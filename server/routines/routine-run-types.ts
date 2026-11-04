@@ -44,6 +44,9 @@ export interface RoutineRun {
   prompt?: string;
   /** Snapshot of the legacy calendar/display length. */
   durationMinutes?: number;
+  /** 2026-11-04: snapshot of the routine's model (shared/routine-model.ts).
+   * Absent: the turn runs on the bot's model. */
+  model?: string;
   /** Snapshot of the optional active-work safety cap. */
   timeoutMinutes?: number;
   attachments?: RoutineContextAttachment[];

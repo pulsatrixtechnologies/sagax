@@ -54,6 +54,8 @@ export interface InternalRequestsRoutine {
   name: string;
   prompt: string;
   folder?: string;
+  /** 2026-11-04: the routine's model (shared/routine-model.ts). */
+  model?: string;
   enabled: boolean;
   runOn: string;
   durationMinutes: number;
@@ -256,6 +258,7 @@ function agentRoutine(routine: InternalRequestsRoutine, latestRun?: InternalRequ
     id: routine.id,
     name: safeName,
     ...(routine.folder ? { folder: redactSecretsInText(routine.folder) } : {}),
+    ...(routine.model ? { model: routine.model } : {}),
     instructions: safeInstructions.slice(0, 2_000),
     instructionsTruncated: safeInstructions.length > 2_000,
     continuity: routine.continuity === true,

@@ -41,6 +41,20 @@ struct CompanionApp: App {
             liveRoot
             #endif
         }
+        // The desktop's ⌘B (the sidebar) and ⌘I (the message field): the
+        // menu bar's Format > Bold and Italic took them first. The fields
+        // are plain text, so the format commands have nothing to format.
+        // Both live in the menu bar's View menu, which outranks a view's
+        // own shortcuts (DesktopKeyCommands listens for the sidebar one).
+        .commands {
+            CommandGroup(replacing: .textFormatting) {}
+            CommandGroup(after: .sidebar) {
+                Button("Collapse or expand the sidebar") { DesktopKeyCommands.postToggleSidebar() }
+                    .keyboardShortcut("b", modifiers: .command)
+                Button("Go to the message field") { DesktopComposerCommand.post(.focus) }
+                    .keyboardShortcut("i", modifiers: .command)
+            }
+        }
         // The bot's computer in its own window (lot 6): iPadOS opens it as a
         // second scene (UIApplicationSupportsMultipleScenes in Info.plist);
         // where it cannot, the shell draws the same panel in the app.

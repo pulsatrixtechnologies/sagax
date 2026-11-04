@@ -45,9 +45,8 @@ struct DesktopKeyCommands: View {
                 model.menu = DesktopMenuRequest(kind: .new, anchor: newAnchor)
             }
             command("Keyboard shortcuts", key: "/") { model.modal = .shortcuts }
-            command("Collapse or expand the sidebar", key: "b") { model.toggleCollapsed() }
+            // ⌘B and ⌘I are the menu bar's (CompanionApp.swift `.commands`)
             command("Toggle sidebar", key: "\\") { model.toggleCollapsed() }
-            command("Go to the message field", key: "i") { DesktopComposerCommand.post(.focus) }
             command("Quote the selected text in the message", key: "l") { DesktopComposerCommand.post(.quote) }
             command("Dictate into the message field (again to stop)", key: "d") { DesktopComposerCommand.post(.dictate) }
         }
@@ -56,7 +55,12 @@ struct DesktopKeyCommands: View {
         .accessibilityHidden(true)
         // Put on the desktop opens its window through the shell's openWindow
         .onAppear { DesktopFloatingBots.shared.openWindow = openWindow }
+        .onReceive(NotificationCenter.default.publisher(for: Self.toggleSidebar)) { _ in model.toggleCollapsed() }
     }
+
+    /// ⌘B from the menu bar.
+    static let toggleSidebar = Notification.Name("sagax.desktop.toggleSidebar")
+    static func postToggleSidebar() { NotificationCenter.default.post(name: toggleSidebar, object: nil) }
 
     /// Under the round New button (brand row, or the rail's second circle).
     private var newAnchor: CGPoint {

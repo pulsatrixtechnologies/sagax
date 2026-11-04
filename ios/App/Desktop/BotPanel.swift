@@ -5,9 +5,9 @@
 // Library (Files, Skills, Plugins: BotPanelLibrary.swift), Computer; no More
 // tab. Edit bot is a pencil on the mascot and the first entry of the
 // bot's one "..." menu (`BotActionsMenu.tsx`, #518), which also holds
-// Rename, the Primary Bot, the export and Archive. It opens Edit bot in a
-// sheet (BotEditIPad.swift): the Grok Bot layout of `BotEditTree`, the same
-// tree as the iPhone, with the desktop's own section views one level in. The name and label are edited where they
+// Rename, the Primary Bot, the export and Archive. Edit bot is the
+// desktop's centred window (PersonaEditorWindow.swift, 2026-11-03), on
+// Identity from the menu and on Appearance from a tap on the mascot. The name and label are edited where they
 // show, under the mascot (`InlineEditableText.tsx`). Which tabs and sections a pairing shows is
 // `DesktopPanelTab` / `DesktopPanelSection` / `DesktopPersonaEditor`
 // (CompanionCore), from `SurfaceGate`.
@@ -97,26 +97,7 @@ private struct BotPanelContent: View {
         .overlay(alignment: docked ? .leading : .trailing) {
             Rectangle().fill(theme.hairlineWeak).frame(width: 1)
         }
-        .overlay {
-            if model.avatarEditorOpen {
-                // a tap outside the editor closes it
-                Color.black.opacity(0.001)
-                    .onTapGesture { withAnimation(.easeOut(duration: 0.15)) { model.avatarEditorOpen = false } }
-                    .accessibilityHidden(true)
-            }
-        }
-        .overlay(alignment: docked ? .topTrailing : .topLeading) {
-            if model.avatarEditorOpen {
-                AnyView(BotAvatarEditorLayer(bot: current, docked: docked))
-            }
-        }
         .sheet(item: $sharedFile) { file in ActivityShareSheet(items: [file.url]) }
-        .sheet(isPresented: $model.personaOpen, onDismiss: { model.panelSection = nil }) {
-            BotEditIPadSheet(bot: current, slackURL: slackURL)
-                .environmentObject(session)
-                .environmentObject(model)
-                .environment(\.desktopTheme, theme)
-        }
         .task(id: session.connection?.id) {
             async let config = session.configStatus()
             if session.surfaceGate.allows(.botSlack) {
@@ -189,7 +170,8 @@ private struct BotPanelContent: View {
             zipExport: gate.scope != .sidecar && (session.canAdminister || PrimaryBotRules.viewerOwns(current, viewerId: session.roomViewer.actorId)),
             inspector: true,
             activeBotCount: session.state.bots.filter { $0.hidden != true }.count,
-            wizard: true
+            wizard: true,
+            editBot: true
         )
     }
 
@@ -360,7 +342,8 @@ private struct BotPanelIdentity: View {
         VStack(spacing: 0) {
             ZStack(alignment: .topTrailing) {
                 Button {
-                    withAnimation(.easeOut(duration: 0.15)) { model.avatarEditorOpen.toggle() }
+                    // the desktop's avatar click: Edit bot on Appearance
+                    model.showAppearance()
                 } label: {
                     // BotProfileAvatarCard: the 144 pt mascot in the panel, pt-5
                     BotMascotView(bot: bot, size: 144, state: MausState.forChat(.bot(bot), in: session.state), animated: true, owlHandle: owlHandle)

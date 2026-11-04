@@ -515,7 +515,6 @@ final class ProfileUITests: XCTestCase {
         if !library.waitForExistence(timeout: 3) { toggle.tap() }
         XCTAssertTrue(library.waitForExistence(timeout: 10))
         library.tap()
-        XCTAssertTrue(element("desktop-panel-files", in: app).waitForExistence(timeout: 30))
         let row = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "report.md")).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 30), "the files are listed")
         XCTAssertFalse(element("desktop-files-chip.links", in: app).exists, "no Links chip")

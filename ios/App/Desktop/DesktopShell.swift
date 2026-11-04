@@ -90,12 +90,12 @@ final class DesktopShellModel: ObservableObject {
     @Published var page: DesktopPage?
     @Published var panelOpen = false
     @Published var panelTab: BotPanelTab = .details
-    /// The persona editor sheet over the panel ("Edit persona").
+    /// The Edit bot window over the shell (PersonaEditorWindow.swift).
     @Published var personaOpen = false
-    /// The persona editor's open section; nil shows its list.
+    /// The section a deep link asked for (kept for the panel's callers).
     @Published var panelSection: DesktopPanelSection?
-    /// The character editor over the panel (the mascot's Edit avatar).
-    @Published var avatarEditorOpen = false
+    /// The Edit bot window's open page.
+    @Published var personaPage: DesktopPersonaPage = .overview
     /// A move the editor asks the panel's owl to play.
     @Published var avatarMove: OwlWingMove?
     /// A Shapes move the editor asks the panel's shape to play.
@@ -224,7 +224,6 @@ final class DesktopShellModel: ObservableObject {
 
     func togglePanel() {
         withAnimation(.easeOut(duration: 0.2)) { panelOpen.toggle() }
-        if !panelOpen { avatarEditorOpen = false }
     }
 
     /// Opens the panel on a tab.
@@ -237,8 +236,15 @@ final class DesktopShellModel: ObservableObject {
     /// (a deep link such as the allowlist's Permissions).
     func showPersona(_ section: DesktopPanelSection? = nil) {
         panelSection = section
+        personaPage = DesktopPersonaPage(section: section)
         if !panelOpen { togglePanel() }
         personaOpen = true
+    }
+
+    /// A click on the bot's avatar: Edit bot on Appearance (`openPersonaEditor`).
+    func showAppearance() {
+        showPersona()
+        personaPage = .appearance
     }
 
     /// The panel's Inspector button (`toggleInspector`): the Inspector takes
@@ -419,6 +425,12 @@ struct DesktopShell: View {
                     }
                 ))
                 .transition(.opacity)
+            }
+            // Edit bot, the desktop's centred window (PersonaEditorModal.tsx)
+            if model.personaOpen, let bot = selectedBot {
+                AnyView(PersonaEditorWindow(bot: bot) { model.personaOpen = false; model.panelSection = nil })
+                    .transition(.opacity)
+                    .zIndex(4)
             }
             // lot 6: the bot's computer window where no second scene exists
             if let botId = model.computerWindow {
@@ -699,9 +711,8 @@ private struct DesktopShellRouting: ViewModifier {
                 model.open(.bot(ara))
                 model.panelOpen = screen.opensBotPanel
                 if let tab = screen.panelTab { model.panelTab = tab }
-                model.panelSection = screen.panelSection
-                model.personaOpen = screen.opensPersonaEditor
-                model.avatarEditorOpen = screen == .panelAvatarEditor
+                if screen == .panelAvatarEditor { model.showAppearance() }
+                else if screen.opensPersonaEditor { model.showPersona(screen.panelSection) }
                 model.applyParityModals(screen)
                 model.page = screen.parityPage
                 if screen == .keyboardShortcuts { model.modal = .shortcuts }

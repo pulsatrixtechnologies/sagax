@@ -162,7 +162,7 @@ async function handle(msg: Json) {
       }
       if (SEARCHED && SEARCHED.tools.length && isDirectoryTool(name)) {
         if (name === SEARCH_TOOL) return ok(id, await SEARCHED.search(args));
-        // #1935: a Perspicax profile tool (api_search named it) is not here:
+        // #1935: a Perspicax account tool (api_search named it) is not here:
         // say which server runs it rather than "No tool named ...".
         const target = typeof args.name === "string" ? args.name : "";
         if ((name === DESCRIBE_TOOL || name === CALL_TOOL) && target && !SEARCHED.has(target) && !AVAILABLE_TOOLS.some((t) => t.name === target)) {

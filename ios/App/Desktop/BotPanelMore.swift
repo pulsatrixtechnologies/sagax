@@ -30,7 +30,6 @@ extension DesktopPanelSection {
         case .voice: "Voice options"
         case .visibility: "Who can see it"
         case .sharing: "Shared with"
-        case .perspicax: "Perspicax Profiles"
         case .history: "Changes"
         case .usage: "Usage"
         }
@@ -51,7 +50,6 @@ extension DesktopPanelSection {
         case .voice: String(localized: "Voice options")
         case .visibility: String(localized: "Who can see it")
         case .sharing: String(localized: "Shared with")
-        case .perspicax: String(localized: "Perspicax Profiles")
         case .history: String(localized: "Changes")
         case .usage: String(localized: "Usage")
         }
@@ -72,7 +70,6 @@ extension DesktopPanelSection {
         case .voice: "mic"
         case .visibility: "eye"
         case .sharing: "person.2"
-        case .perspicax: "powerplug"
         case .history: "clock.arrow.circlepath"
         case .usage: "dollarsign.circle"
         }
@@ -243,7 +240,6 @@ struct BotPanelMore: View {
         case .history: BotPanelHistory(bot: bot)
         case .visibility: BotPanelPhoneSection { BotVisibilitySection(bot: bot) }
         case .sharing: BotPanelPhoneSection { BotSharingSection(bot: bot) }
-        case .perspicax: BotPanelPhoneSection { BotPerspicaxSection(bot: bot) }
         case .slack:
             if let slackURL { BotPanelPhoneSection { BotSlackSection(url: slackURL) } }
         }

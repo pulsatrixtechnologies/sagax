@@ -31,6 +31,48 @@ load evidence and limits: `docs/verification/warm-resource-budget.md`.
 
 # Sagax agent notes
 
+## MCP after a cold cloud start (2026-11-04)
+
+Turn setup can preopen Perspicax before the person's cloud environment is
+ready. If its idle session expires before the engine's first `initialize`,
+`PerspicaxMcp.relayFrame` reopens once through the entry's single flight and
+returns the fresh initialize result with the engine's request id. Reopening
+retains the same person, bot and generation, clears the old catalogue and
+restores a selected role. It never replays a tool call. Regression:
+`server/perspicax/perspicax-mcp.test.ts`.
+
+## Codex Perspicax discovery (2026-11-04)
+
+Codex 0.166 uses incremental tools instead of hosted `tool_search`. Its
+account Perspicax mount uses the private searched MCP gate with core tool
+pins and `search_tools` / `describe_tool` / `call_tool` for live discovery.
+The original mount keeps its existing approval mode. Gate configuration
+accepts scope or search; upstream credentials stay in its private record.
+Wrapped calls retain the target tool and arguments for grants and approval
+rules, and role changes invalidate the catalogue before returning.
+Verification: `server/drivers/codex.test.ts`, `server/mcp-gate.test.ts`.
+
+## Peer approvals return to the human chat (2026-11-04)
+
+`server/approvals/origin-approvals.ts` links a delegated turn's actionable
+cards to the proven human runtime root, through nested handoffs. Each view
+has a unique request id and a durable backlink to the exact source thread,
+message and provider request. Legacy grant keys have distinct view keys too,
+so two peers asking for the same tool never share a grant. HTTP, Live and
+security-key answers resolve that address before the source's existing
+authorization and resolver gates.
+Source patches mirror settlement; views create no inbox or journal decision
+and never expire the source independently. Same answerer and current read
+access are rechecked; confidential threads never relay. Background work
+without a proven human root keeps the existing route.
+Human room rounds retain their admitted message id on the runtime root,
+including nested work. Their linked cards keep the source answerer's audience;
+room membership grants no approval rights. This routing proof does not change
+the room work's provenance or permission level. Deleting the destination
+withdraws its notice and removes the source backlink. A late model review
+re-reads the live address and falls back to the original execution thread.
+Verification: `docs/verification/peer-approvals.md`.
+
 ## Routine model override (2026-11-04)
 
 `Routine.model` (`shared/routine-model.ts`) is the model its runs use on the
@@ -49,17 +91,62 @@ refuses a model the bot's engine does not list. Tests:
 
 ## Flow routine shadow readiness (#1991, 2026-11-04)
 
-Flow readiness calls `flow_run` on the bot's own profile with the run-as
-person's routine delegation and the usual MCP bot identity. It opens a
-shadow run, checks the first plan with the prompt's explicit server inputs,
-then finishes its run in `finally`, with an independent cleanup signal.
-An `already_running` answer keeps the live lease and reports that the plan
-was not checked. Actual Flow refusals are `flow_plan`; transport errors and
+Flow readiness calls `flow_run` on the account's main Perspicax connection
+with the run-as person's routine delegation. It never selects a bot profile
+or identity. A prompt without a named recipe checks the connection and
+catalogue only, leaving the recipe choice to the model. Recipe names come
+only from explicit JSON, a `--routine` flag, a quoted name or a marked
+`routine: name`; prose such as "routine Flow jusqu'à" is not a name.
+A named recipe checks shadow init and checks a plan only when the prompt
+supplies an explicit plan command and arguments. It never fabricates units
+or a plan check before the model discovers its inputs. Plan calls name both
+the recipe and run id so concurrent probes cannot select another claim.
+Each probe names a distinct MCP client with its bot, recipe and a fresh id,
+separate from business turns and other probes on the same person's account.
+Cleanup calls `release {routine, run_id}` only for a successful init with an
+identified run, using an independent signal; it never finishes a business
+run or releases an unnamed claim after an init timeout. An `already_running`
+answer keeps the live lease and reports that the plan was not checked. Actual Flow refusals are `flow_plan`; transport errors and
 timeouts remain `probe_error`, passing in run mode. The Flow probe runs
 beside the fast probes with its own 45-second budget and a per-routine,
 per-input cache. Tests: `perspicax-flow-readiness.test.ts`,
 `routine-flow-input.test.ts`, `routine-readiness.test.ts`,
 `routine-reliability.test.ts`.
+
+## Routine readiness and failover (#1986, 2026-11-04)
+
+Routine pre-flight uses `limitFailover.backupFor` to check the same backup
+order and access rules as dispatch. Account refusals stay live outside the
+probe cache. `RoutineManager.prepareTurn` applies the failover before
+capturing the run's engine account, so a backup's success never clears the
+primary's refusal. Credits keep the 30-minute refusal TTL, including in the
+failover store; a thread returns through the existing reset path.
+Tests: `routine-readiness.test.ts`, `routine-reliability.test.ts`,
+`limit-failover-host.test.ts`.
+
+## Skills follow the dispatched engine (#1987, 2026-11-04)
+
+Real turns project the scoped inventory into their private task folder's
+native skill directories (`server/skills/turn-skill-links.ts`), including
+organization Flow, personal and bot plugins on a limit backup. Claude keeps
+its native plugin loader; other file engines retain the same prompt paths
+alongside native discovery. Organization turns await the selected plugin
+copies in the person's environment before dispatch, on every engine.
+Readiness resolves the thread override and Auto choice for both the engine
+and skill probes (`server/routines/routine-readiness-target.ts`). Previews
+and receipts remain reads. Regressions: `turn-skill-links.test.ts` and
+`start-turn-computer-workspace.test.ts` (temporary files and fake dispatch).
+
+## Native Claude artifact tools (#1990, 2026-11-04)
+
+Organization Claude turns keep `Artifact`, `ArtifactData` and `ArtifactComments`
+in `CLAUDE_ORG_TOOLS`, with no host deny on their parent. The driver opts print
+sessions into `CLAUDE_CODE_ARTIFACT` and `CLAUDE_CODE_ARTIFACT_TOOLSET` by default.
+Native ToolSearch remains available on compact turns; their Sagax MCP directory
+stays compact. Explicit engine settings and Claude account eligibility still
+apply. Routine readiness uses the resolved driver and payer access to explain
+artifact dependencies on API accounts or another engine before creating a task.
+Evidence and configuration matrix: `docs/verification/claude-artifacts.md`.
 
 ## Local act and Perspicax assertions (#1993, 2026-11-04)
 
@@ -67,7 +154,7 @@ per-input cache. Tests: `perspicax-flow-readiness.test.ts`,
 `botActConsoleRouteError` (`shared/bot-act.ts`) explains `/api/org/admin`
 and `/api/org/member` before scope checks or approval; `performBotActRoute`
 also checks before delegating a session for a planned replay. Console calls
-go through the person's Perspicax profile; local bots and routines use
+go through the person's Perspicax account connection; local bots and routines use
 `/api/bots`, `/api/routines` and `/api/routines/runs` with the existing
 person checks. Never accept a Sagax bearer at the assertion gate.
 Regression: `server/member-own-act.e2e.test.ts` (isolated organization,
@@ -100,40 +187,6 @@ child exit and pid checks). Fixture launches and restarts retain the run's
 Local VM namespace; gateway-only fixtures explicitly turn computers off.
 MCP fixtures finish with words after their calls and require lease revocation
 after the configured engine idle close, including after warm voice sessions.
-
-## Routine readiness and failover (#1986, 2026-11-04)
-
-Routine pre-flight uses `limitFailover.backupFor` to check the same backup
-order and access rules as dispatch. Account refusals stay live outside the
-probe cache. `RoutineManager.prepareTurn` applies the failover before
-capturing the run's engine account, so a backup's success never clears the
-primary's refusal. Credits keep the 30-minute refusal TTL, including in the
-failover store; a thread returns through the existing reset path.
-Tests: `routine-readiness.test.ts`, `routine-reliability.test.ts`,
-`limit-failover-host.test.ts`.
-## Skills follow the dispatched engine (#1987, 2026-11-04)
-
-Real turns project the scoped inventory into their private task folder's
-native skill directories (`server/skills/turn-skill-links.ts`), including
-organization Flow, personal and bot plugins on a limit backup. Claude keeps
-its native plugin loader; other file engines retain the same prompt paths
-alongside native discovery. Organization turns await the selected plugin
-copies in the person's environment before dispatch, on every engine.
-Readiness resolves the thread override and Auto choice for both the engine
-and skill probes (`server/routines/routine-readiness-target.ts`). Previews
-and receipts remain reads. Regressions: `turn-skill-links.test.ts` and
-`start-turn-computer-workspace.test.ts` (temporary files and fake dispatch).
-
-## Native Claude artifact tools (#1990, 2026-11-04)
-
-Organization Claude turns keep `Artifact`, `ArtifactData` and `ArtifactComments`
-in `CLAUDE_ORG_TOOLS`, with no host deny on their parent. The driver opts print
-sessions into `CLAUDE_CODE_ARTIFACT` and `CLAUDE_CODE_ARTIFACT_TOOLSET` by default.
-Native ToolSearch remains available on compact turns; their Sagax MCP directory
-stays compact. Explicit engine settings and Claude account eligibility still
-apply. Routine readiness uses the resolved driver and payer access to explain
-artifact dependencies on API accounts or another engine before creating a task.
-Evidence and configuration matrix: `docs/verification/claude-artifacts.md`.
 
 ## Blocking decisions are cards (#1984, 2026-11-04)
 
@@ -193,19 +246,19 @@ The profile foot selects counts, not whole run or bot lists.
 Render regression: src/components/StoreSubscriptions.renders.dom.test.ts
 (real desktop, scoped store, neutral fixture, no network or visible window).
 
-## Perspicax identities (2026-11-03)
+## Perspicax account roles and shared Flow (2026-11-04)
 
-`perspicaxActAs` is an explicit per-bot profile choice (slug and human name),
-absent by default. Settings lists the person's held profiles through a
-short-lived `identity_switch {}` connection. `server/perspicax/perspicax-identity.ts`
-holds the turn's identity lease on the existing Perspicax MCP connection:
-switch before tools, re-list, renew before expiry, re-switch after a parent
-token refresh or `act_as_expired` and retry the refused call once, clear on
-turn end (including warm calls). A switch failure reports plain words and
-serves only reads for that turn. An older server without the tool stays
-unchanged. Never automatically choose an explicit-only/redacted profile.
-Tool and Twilio catalogues belong to an entry, never a global profile cache.
-Tests: `server/perspicax/perspicax-identity.test.ts` (fake MCP, no network).
+The signed-in account holds roles. Every bot uses that account's main MCP;
+no bot profile checkboxes, default `perspicaxActAs`, profile settings page or
+Flow binding configures access. When a task or recipe calls for a role, use
+live `identity_switch` to list held `profiles` and `can`, select a returned
+slug and refresh discovery. No OAuth checkbox is needed. Actual vendor
+permissions, organization Refuse/Ask first rules and isolation between people
+still apply. A refused permission is reported, never bypassed through another
+host or credential. Generic Flow recipes are shared; the tenant supplies
+organization facts and schedules. Claims prevent overlap and follow the
+owner and bot independently of the selected role. Legacy stored fields are
+inert compatibility data and never restore configuration controls.
 
 Before every merge (and before every push, through the pre-push hook), run
 `pnpm verify:merge`: the local gate (lint, typecheck, locale catalogs, source
@@ -223,16 +276,17 @@ isolated fixture; never verify mutations against the user's live app or data.
 
 UI work: read docs/design/ux-reference-grokbot-cursor.md first; do not re-scan Grok Bot unless the doc lacks the surface, then extend the doc.
 
-## Perspicax profile servers on Claude and Codex (#1935, 2026-11-03)
+## Perspicax account MCP on Claude and Codex (#1935, 2026-11-03)
 
 An MCP server name is at most 40 characters everywhere (`MCP_SERVER_NAME`,
-`shared/tool-scope.ts`), the cap of `perspicaxServerName`. Never narrow it
-back to 32: a longer profile server vanished from the Claude and Codex
-config while the prompt listed it. On a compact prompt a profile bridge
-lists its core whole (`compactGateSearch`, `server/mcp/mcp-gate-search.ts`).
-A forwarded gateway answer names the profile server (`PerspicaxMcp.toolHome`,
-set by `setMount` in `perspicaxTurnIntegration`); the agents server sends a
-call of a profile tool there (`{ locate }` on `/api/internal/perspicax/tool`).
+`shared/tool-scope.ts`). Never narrow the general limit back to 32. Perspicax
+itself is one fixed `perspicax` account mount; a role switch changes that
+connection's live catalog, never its server name. On a compact prompt the
+bridge lists its core whole (`compactGateSearch`,
+`server/mcp/mcp-gate-search.ts`). A forwarded gateway answer names the same
+account server (`PerspicaxMcp.toolHome`, set by `setMount` in
+`perspicaxTurnIntegration`); the agents server sends its tool calls there
+(`{ locate }` on `/api/internal/perspicax/tool`).
 `docs/mcp-tool-names.md`, last section.
 
 ## A call is a realtime voice session (2026-11-02)
@@ -436,17 +490,18 @@ ingress, dispatcher, broker and a peer, in an isolated home.
 
 ## Codex mounts the internal Perspicax bridge (2026-10-30)
 
-Perspicax profile bridges reach Codex through `integrations.custom`, but are
-harness-owned: identify the exact `process.execPath` command and the single
-`SPAWNED_PROXIES.perspicax` argument, never a server-name prefix alone.
-Their reserved routing variables do not trigger the third-party env guard.
-Keep the normal mount rename, `canUseMcpServer`, tool selection and approval
-path. A direct bridge gets variables prefixed by the hash of its final mount
-name, with values only in the child environment; the bridge restores them
-before reading its URL, profile or turn token. A selected gate already holds
-the upstream env in its private per-mount record and keeps that path.
-Never fix this by removing the reserved-variable guard for custom servers or
-sharing plain `SAGAX_PERSPICAX_*` values between profiles.
+The one Perspicax account bridge reaches Codex through
+`integrations.custom`, but is harness-owned: identify the exact
+`process.execPath` command and the single `SPAWNED_PROXIES.perspicax`
+argument, never a server-name prefix alone. Its reserved routing variables
+do not trigger the third-party env guard. Keep the normal mount rename,
+`canUseMcpServer`, tool selection and approval path. The direct bridge gets
+variables prefixed by the hash of its fixed mount name, with values only in
+the child environment; it restores them before reading its URL and turn
+token. A selected gate already holds the upstream env in its private
+per-mount record and keeps that path. Never fix this by removing the
+reserved-variable guard for custom servers or sharing plain
+`SAGAX_PERSPICAX_*` values with another server.
 
 ## Where work goes
 
@@ -860,12 +915,13 @@ sheet). Keep these rules, covered by `server/capabilities/capabilities.test.ts`,
 - The list and the turn use the same functions (`server/turns/turn-mounts.ts`):
   `engineServerMcp` and `serverMcpAsPerson` (this installation's servers,
   `engineMcpServers` / `mcpServersAsPerson`), `personalMcpPrecheck` (the
-  person's own servers, `mountPersonalMcp`), `perspicaxServerName`,
-  `turnPluginDirs` and `turnPluginPromptDirs` (`pluginDirsFor`,
-  `turnCapabilityPrompt`). The test "a turn mounts exactly what the list
-  says" checks, for Claude, Codex and Grok, that the MCP names and plugin
-  folders a turn gets equal the list's capabilities that are on (or
-  imposed) and received. Change one, change both through these functions.
+  person's own servers, `mountPersonalMcp`), `turnPluginDirs` and
+  `turnPluginPromptDirs` (`pluginDirsFor`, `turnCapabilityPrompt`). The fixed
+  `perspicax` account mount is added by the turn and capabilities paths. The
+  test "a turn mounts exactly what the list says" checks, for Claude, Codex
+  and Grok, that the MCP names and plugin folders a turn gets equal the
+  list's capabilities that are on (or imposed) and received. Change one,
+  change both through these functions.
 - The viewer stands in for the speaker of a turn: their own MCP servers,
   their GitHub connection, the Roles they hold (`not_held` otherwise, C-5).
 - What used to be silent is a row with a reason: a personal server whose
@@ -1181,7 +1237,7 @@ answering: the wake had run on its fast model, #1694, on another engine,
 and the failover skipped it because the turn's model was not the thread's).
 Before the run fails, `RoutineManager` asks the limit failover
 (`usageLimit`, wired to `limitFailover.routineLimit`,
-`server/limit-failover-host.ts`), which reads the turn it saw dispatched:
+`server/usage/limit-failover-host.ts`), which reads the turn it saw dispatched:
 the engine and model that really refused, the reset (said or estimated) and
 who takes the run over: the conversation's own model when only a fast
 detour refused, else a backup as for a person's message (`pickLimitBackup`
@@ -1298,12 +1354,12 @@ gave no reset time instead of passing the estimate off as one
 (`LimitFailoverLine.estimated`, `limitFailover.*NoReset`). A conversation a
 backup standing in for its engine moved on goes back at its own engine's
 reset, never at the later reset of that backup. Tests:
-`server/limit-failover-runs.test.ts`, `server/limit-failover-runs.e2e.test.ts`
+`server/usage/limit-failover-runs.test.ts`, `server/usage/limit-failover-runs.e2e.test.ts`
 (a wake on another engine's fast model, and a wake nothing could take with
 its notification and incident, end to end),
-`server/routines/routine-limit-words.test.ts`, `server/limit-failover-host.test.ts`,
+`server/routines/routine-limit-words.test.ts`, `server/usage/limit-failover-host.test.ts`,
 `server/routines/routine-recovery.test.ts`, `server/notify.test.ts`,
-`server/incidents.test.ts`, `server/plan-usage.test.ts`,
+`server/peers/incidents.test.ts`, `server/usage/plan-usage.test.ts`,
 `src/lib/limit-failover.test.ts`, `src/lib/routine-display.test.ts`.
 
 ## A reply is never an error (2026-10-29)
@@ -1327,8 +1383,7 @@ the turn instead of a raw "HTTP 400" card. Gallery
 
 The sidebar's selection bar has an Edit button (`data-sidebar-select-edit`,
 "Edit N selected bots") that opens `BulkEditBotsDialog`: the bot editor's
-own sections (Model, Shared with, Workspace, Access, Voice, Permissions,
-Perspicax Profiles), not copies of them.
+own sections (Model, Shared with, Workspace, Access, Voice, Permissions).
 
 - Each section is "Do not change" until opened. Opened, the real section
   component edits a draft bot in a scoped store and transport
@@ -1340,11 +1395,11 @@ Perspicax Profiles), not copies of them.
   fields start empty / indeterminate (`mixedFields` on the editor context),
   not on the first bot's settings (#1701); only fields that differ from the
   opening baseline enter the change (`dirtyPatch`).
-- Lists (Shared with, Access's MCP servers, Perspicax Profiles): Add, Remove
+- Lists (Shared with, Access's MCP servers): Add, Remove
   or Replace with; Replace starts from what every bot has.
 - Review shows one line ("3 bots · Workspace → Cloud · ..."), Apply runs
   `runBulkEdit` (`src/lib/bulk-bot-edit.ts`): bot by bot, through the
-  editor's own routes (`persistBotUpdate`, the grants and Perspicax routes),
+  editor's own routes (`persistBotUpdate` and the grants routes),
   only the fields that differ for that bot. Each change is that bot's own
   edit (its Changes, the journal) and refused for its own reasons; the
   result lists each bot (changed, already set, or why it refused). A section
@@ -3368,7 +3423,7 @@ The maintainer's GO on points 1 and 2 of the bot quality diagnostic. Rules:
   scheduled or manual routine, a hop from their own bot speaking for them;
   never the operator, a webhook, another person or a routine hop):
   destructive calls, ask rules, security keys and holds keep their card.
-  Perspicax reads on Sagax's own `perspicax_*` mount (`perspicaxSelfAnswer`)
+  Perspicax reads on Sagax's fixed `perspicax` mount (`perspicaxSelfAnswer`)
   run unasked for the owner's own work at Auto/Edits/Full; leases (`claim`,
   `claim_renew`, `claim_release`) never ask; the owner's deny and ask rules
   come first. A lineage hop runs in the owner's cloud computer unasked only
@@ -4646,11 +4701,12 @@ them with the link token (`server/memory/perspicax-memory.ts`, `linkPostJson` in
 `server/memory/perspicax-memory.test.ts` (a fake Perspicax over HTTP) and
 `server/routines/routines.test.ts` ("the organization memory before a run"):
 
-- A turn that mounts Perspicax profiles (`perspicaxTurnIntegration`, not a
+- A turn that mounts the Perspicax account connection
+  (`perspicaxTurnIntegration`, not a
   quiet call warm) queues one `POST /api/v1/memory/work` row: the person's
   Perspicax user id, `actor_kind` `bot` for routine lineage and peers else
   `person`, `action` `run` or `turn`, `result` `partial` (just started), an
-  intent built from the bot's and profiles' names only (never the message),
+  intent built from the bot and connection names only (never the message),
   objects `sagax:bot:<id>` and `sagax:thread:<id>`, and the thread link.
   Rows are batched (50 at most, Perspicax's cap), one batch in flight, at
   most 500 waiting; a refused or failed batch is dropped and logged once.
@@ -5167,7 +5223,7 @@ rules, covered by `server/approvals/owner-approval.test.ts`,
   (`memberBotAdminApproval`): a server command, a file outside the bot's
   workspace, a host-level `agents` tool or built-in MCP server (`computer`,
   `browser`, `shell`...), an unknown server or tool. A remote or personal MCP
-  server, Sagax's own `perspicax_*` mounts and a web search are
+  server, Sagax's fixed `perspicax` mount and a web search are
   the owner's (`ownerScopedTool`, `ownerScopedMcpServerFor`).
 - On the owner route, the owner's rules then the bot's mode answer before a
   card (`ownerDecision`): deny wins, then ask, then allow. A rule is one
@@ -10642,7 +10698,7 @@ locale aligned with `App/Localizable.xcstrings`; Base is the English fallback.
 ## Routine readiness and interruption recovery (2026-11-04)
 
 Every defined routine checks its engine/account, scoped skills, MCP mounts,
-Perspicax profile and required computer before creating an execution task.
+Perspicax account connection and required computer before creating an execution task.
 `server/routines/routine-readiness.ts` probes beside the scheduler pass, with
 independent timeouts below five seconds and a 60-second bot/account cache.
 Reservations and engine prewarm use the same checks before creating a task.
@@ -10651,8 +10707,8 @@ skills, MCP servers and a computer requirement. Run snapshots retain checks
 and stable codes for EN/FR rendering.
 Probe errors pass for a run and remain not ready in an on-demand check. On an
 organization server with a Flow declaration, a Flow routine reads its product
-skills through its bot's Perspicax profile even when the local install is held
-back; no local skill copy is required. A missing profile is explained directly.
+skills through the account's main Perspicax MCP even when the local install is held
+back; no local skill copy is required. Role selection uses the live held roles.
 Readiness timestamp params carry ISO UTC; the viewer formats the local time
 and includes the date outside today. Blocked owner notices quote the reason
 and name the routine, once per bot and cause. Engine refusals, including the

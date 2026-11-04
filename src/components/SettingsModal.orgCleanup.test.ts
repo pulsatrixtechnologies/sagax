@@ -60,6 +60,8 @@ afterEach(() => {
 
 const render = async () => {
   const { SettingsModal } = await import("./SettingsModal");
+  const { AppearanceSettings, LocalComputerSection, UsageSection } = await import("./lazy-settings-sections");
+  await Promise.all([AppearanceSettings.preload(), LocalComputerSection.preload(), UsageSection.preload()]);
   return renderToStaticMarkup(createElement(SettingsModal));
 };
 const ORG = { org: { name: "Example", identity: { kind: "perspicax" as const, issuer: "https://px.example.test" } } };

@@ -70,6 +70,7 @@ Use only mapped, tested commands:
 - [Engines and Doctor](engines.md)
 - [Cline engine and native loopback qualification](cline.md)
 - [Claude coordination and turn-scoped tools](claude-tool-lifecycle.md)
+- [Native Claude artifacts](claude-artifacts.md)
 - [Codex bot instructions](codex-instructions.md)
 - [Codex process reuse, lifecycle and latency](codex-warm-process.md)
 - [Shared warm-resource caps and 50-person retention load](warm-resource-budget.md)

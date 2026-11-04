@@ -1,8 +1,8 @@
 // Harness-held Perspicax MCP bridge (slice 5).
 //
-// The engine sees one stdio MCP server per Perspicax profile of its bot. Every
+// The engine sees one stdio MCP server for the account's main connection. Every
 // JSON-RPC frame it writes is forwarded, unchanged, to the harness
-// (POST <harness>/api/internal/perspicax/mcp?profile=<id>) with this turn's
+// (POST <harness>/api/internal/perspicax/mcp) with this turn's
 // capability; the harness exchanges the speaker's sign-in for a short MCP
 // token, relays to Perspicax /mcp and answers. No Perspicax token ever
 // reaches this process, its environment or the engine's transcript: the
@@ -45,7 +45,6 @@ function turnToken(): string {
     return LAUNCH_TOKEN;
   }
 }
-const PROFILE = process.env.SAGAX_PERSPICAX_PROFILE ?? "";
 const BOT_ID = process.env.SAGAX_BOT_ID ?? "";
 const THREAD_ID = process.env.SAGAX_THREAD_ID ?? "";
 const RELAY_TIMEOUT_MS = 10 * 60_000 + 30_000;
@@ -80,10 +79,10 @@ async function readBounded(response: Response): Promise<string> {
 async function forward(message: Json): Promise<void> {
   const id = message.id;
   const url = new URL(`${HARNESS}/api/internal/perspicax/mcp`);
-  url.searchParams.set("profile", PROFILE);
   if (BOT_ID) url.searchParams.set("botId", BOT_ID);
   if (THREAD_ID) url.searchParams.set("fromThreadId", THREAD_ID);
   let text: string;
+  let toolsChanged = false;
   try {
     const response = await fetch(url, {
       method: "POST",
@@ -91,6 +90,7 @@ async function forward(message: Json): Promise<void> {
       body: JSON.stringify(message),
       signal: AbortSignal.timeout(RELAY_TIMEOUT_MS),
     });
+    toolsChanged = response.headers.get("x-sagax-mcp-tools-changed") === "1";
     text = await readBounded(response);
     if (!response.ok && response.status !== 202) {
       if (id !== undefined) send(unavailable(id));
@@ -100,6 +100,7 @@ async function forward(message: Json): Promise<void> {
     if (id !== undefined) send(unavailable(id));
     return;
   }
+  if (toolsChanged) send({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
   const trimmed = text.trim();
   if (!trimmed) return;
   let parsed: unknown;
@@ -114,7 +115,7 @@ async function forward(message: Json): Promise<void> {
 
 const input = readline.createInterface({ input: process.stdin, terminal: false });
 // Frames are answered in the order they are handled; the harness runs them
-// one after another per profile anyway (one MCP session).
+// one after another on the one MCP session.
 let queue: Promise<void> = Promise.resolve();
 input.on("line", (line) => {
   const trimmed = line.trim();

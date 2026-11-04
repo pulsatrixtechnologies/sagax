@@ -219,10 +219,10 @@ add({ id: "panel-more", phase: "main", note: "bot panel: Edit persona (searchabl
 // tools and Works on: a server signed in with Perspicax (the organization
 // pass draws them on one server). Who can see it: an admin on a served page
 // of a server that is not an organization's.
-const MORE_WHERE = { slack: { org: true }, worksOn: { org: true }, sharing: { org: true }, perspicax: { org: true }, visibility: { served: true } };
+const MORE_WHERE = { slack: { org: true }, worksOn: { org: true }, sharing: { org: true }, visibility: { served: true } };
 // sections the persona editor folds into another category (persona-sections.ts FOLDED_INTO)
 const PERSONA_CATEGORY = { worksOn: "access", slack: "access", visibility: "overview", sharing: "overview" };
-for (const section of ["overview", "slack", "soul", "skills", "memory", "access", "worksOn", "model", "permissions", "voice", "visibility", "sharing", "perspicax", "history", "usage"]) {
+for (const section of ["overview", "slack", "soul", "skills", "memory", "access", "worksOn", "model", "permissions", "voice", "visibility", "sharing", "history", "usage"]) {
   const where = MORE_WHERE[section] ?? {};
   add({ id: `panel-more-${section.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`, phase: "main", note: `bot panel: Edit persona > ${section}${where.org ? " (organization server)" : where.served ? " (served page)" : ""}`, ...where,
     open: async (ctx) => {
@@ -331,9 +331,9 @@ add({ id: "settings-myConnections", phase: "main", note: "Settings > myConnectio
 // The simplification pass (2026-10-12): the persona categories the loop
 // above does not name, every Settings section the page can list, and the
 // same on the organization server (where Organization, People, Mail and
-// the persona's Perspicax profiles have their content). Appended so the
+// the organization pages have their content). Appended so the
 // earlier numbers stay put.
-const PERSONA_ALL = ["overview", "appearance", "soul", "rules", "skills", "memory", "files", "access", "model", "permissions", "voice", "perspicax", "history", "usage"];
+const PERSONA_ALL = ["overview", "appearance", "soul", "rules", "skills", "memory", "files", "access", "model", "permissions", "voice", "history", "usage"];
 // a deep link opens the persona editor on the category (store: toggleSettings)
 const openPersona = async (ctx, category) => {
   await ctx.dispatch({ type: "toggleSettings", open: true, section: category });
@@ -346,7 +346,7 @@ const openPersona = async (ctx, category) => {
 for (const category of PERSONA_ALL) {
   add({ id: `persona-${category}`, phase: "main", note: `persona editor > ${category}`, open: (ctx) => openPersona(ctx, category) });
 }
-for (const category of ["overview", "appearance", "soul", "rules", "skills", "memory", "files", "access", "model", "permissions", "voice", "perspicax", "history", "usage"]) {
+for (const category of ["overview", "appearance", "soul", "rules", "skills", "memory", "files", "access", "model", "permissions", "voice", "history", "usage"]) {
   add({ id: `org-persona-${category}`, phase: "main", org: true, note: `persona editor > ${category} (organization server)`, open: (ctx) => openPersona(ctx, category) });
 }
 for (const section of ["memory", "privacy", "notifications"]) {

@@ -19,7 +19,10 @@ describe("compact gate search pins (#1935)", () => {
 
   it("the setting survives the environment round trip, and a bad suffix fails closed", () => {
     const parsed = parseGateSearch(gateSearchEnv(compactGateSearch([], true)), fail)!;
-    expect(parsed.pinned).toEqual(["api_describe", "api_result_query", "api_search"]);
+    expect(parsed.pinned).toEqual([
+      "api_describe", "api_list", "api_result_query", "api_search", "flow", "flow_action", "flow_run",
+      "identity_switch", "memory_find", "memory_recall", "memory_search",
+    ]);
     expect(parsed.pinnedSuffixes).toEqual(["_action", "_query", "_write"]);
     expect(parseGateSearch(gateSearchEnv({ pinned: ["x"] }), fail)!.pinnedSuffixes).toEqual([]);
     expect(() => parseGateSearch(JSON.stringify({ pinned: [], pinnedSuffixes: ["a b"] }), fail)).toThrow(/suffixes/);

@@ -112,6 +112,7 @@ export function view(a: Assignment, parent?: Assignment): HandoffView {
   if (a.startedAt !== undefined) node.startedAt = a.startedAt;
   const origin = legacyOrigin(a.origin);
   if (origin) node.origin = origin;
+  if (a.request !== undefined) node.request = a.request;
   if (a.restart !== undefined) node.restart = a.restart;
   if (a.relay) node.relay = true;
   if (a.reply === "none") node.oneWay = true;

@@ -38,7 +38,6 @@ vi.mock("../computer/WorksOnSetting", () => ({ WorksOnSetting: marker("worksOn")
 vi.mock("../bot-settings/ModelSection", () => ({ ModelSection: marker("model") }));
 vi.mock("../bot-settings/PermissionsSection", () => ({ PermissionsSection: marker("permissions") }));
 vi.mock("../bot-settings/VoiceSection", () => ({ VoiceSection: marker("voice") }));
-vi.mock("../bot-settings/PerspicaxSection", () => ({ PerspicaxSection: marker("perspicax") }));
 vi.mock("../bot-settings/SharingSection", () => ({ SharingSection: marker("sharing") }));
 vi.mock("../bot-settings/VisibilitySection", () => ({ VisibilitySection: marker("visibility") }));
 vi.mock("../bot-settings/HistorySection", () => ({ HistorySection: marker("history") }));
@@ -100,7 +99,7 @@ const bodiesOf = (html: string) => [...html.matchAll(/data-section-body="(\w+)"/
 const shownBodies = (html: string, page: string) => bodiesOf(pageHtml(html, page).html);
 const visiblePages = (html: string) => [...html.matchAll(/data-persona-section="(\w+)"( hidden="")?/g)].filter((match) => !match[2]).map((match) => match[1]);
 
-const ALL_PAGES = ["overview", "appearance", "sharing", "summary", "soul", "rules", "skills", "files", "model", "worksOn", "access", "voice", "permissions", "perspicax", "usage", "history"];
+const ALL_PAGES = ["overview", "appearance", "sharing", "summary", "soul", "rules", "skills", "files", "model", "worksOn", "access", "voice", "permissions", "usage", "history"];
 const SIMPLE_PAGES = ["overview", "appearance", "sharing", "summary", "soul", "rules", "files", "model", "voice", "permissions"];
 const ALL_GROUPS = ["profile", "instructions", "modelTools", "security", "activity"];
 
@@ -148,7 +147,7 @@ describe("persona editor shell", () => {
     fixture.advanced = false;
     expect(groupsOf(render("overview"))).toEqual(["profile", "instructions", "modelTools", "security"]);
     // Instructions without Skills, Model and tools without Workspace and
-    // Access, Security without the Perspicax profiles, no Activity
+    // Access, no Activity
     expect(subPagesOf(render("soul"))).toEqual(SIMPLE_PAGES);
     // a link to a hidden page lands on its group's home
     const skills = render("skills");
@@ -175,7 +174,6 @@ describe("persona editor pages", () => {
     ["access", "modelTools", ["access"]],
     ["voice", "modelTools", ["voice"]],
     ["permissions", "security", ["permissions"]],
-    ["perspicax", "security", ["perspicax"]],
     ["usage", "activity", ["usage"]],
     ["history", "activity", ["history"]],
   ];
@@ -230,7 +228,6 @@ describe("persona editor pages", () => {
     expect(personaGroupOf("files")).toBe("instructions");
     expect(personaGroupOf("worksOn")).toBe("modelTools");
     expect(personaGroupOf("slack")).toBe("modelTools");
-    expect(personaGroupOf("perspicax")).toBe("security");
     expect(personaGroupOf("voice")).toBe("modelTools");
     expect(personaGroupOf("usage")).toBe("activity");
     expect(personaGroupOf("history")).toBe("activity");
@@ -271,11 +268,13 @@ describe("persona editor pages", () => {
     expect(html).not.toContain("data-persona-action");
   });
 
-  it("perspicax says where it applies on a server without Perspicax", () => {
-    fixture.perspicax = null;
-    const html = render("perspicax");
-    expect(html).not.toContain('data-section-body="perspicax"');
-    expect(html).toContain("Perspicax profiles are offered on a server signed in with Perspicax.");
+  it("offers no Perspicax profile configuration on either server type", () => {
+    for (const org of [fixture.perspicax, null]) {
+      fixture.perspicax = org;
+      const html = render("overview");
+      expect(html).not.toContain('data-section-body="perspicax"');
+      expect(html).not.toContain("Perspicax Profiles");
+    }
   });
 
   it("names Soul Personality, Skills Compétences and History Changements in French", () => {

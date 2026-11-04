@@ -76,7 +76,7 @@ export function switchesCover(live: Record<string, boolean> | undefined, want: R
   return Object.entries(want).every(([key, on]) => !on || live?.[key] === true);
 }
 
-/** The turn capability of a Perspicax profile bridge
+/** The turn capability of the Perspicax main bridge
  * (server/perspicax-mcp-bridge.ts). It is minted per turn; the Perspicax
  * tokens themselves never leave the harness. */
 export const PERSPICAX_TOKEN_ENV = "SAGAX_PERSPICAX_TOKEN";
@@ -189,12 +189,10 @@ export function warmCommsEnv(threadId: string, botId: string | undefined, env: R
     : { ...env, SAGAX_COMMS_TOKEN_FILE: tokenPath, SAGAX_TURN_DEPTH_FILE: `${tokenPath}.depth` };
 }
 
-/** Where a Perspicax profile bridge of a kept process reads the current
- * turn's capability: beside the thread's comms token, one file per profile,
- * 0600, rewritten every turn. */
-export function perspicaxTokenFile(threadId: string, botId: string | undefined, profileId: string): string {
-  const profile = createHash("sha256").update(profileId).digest("hex").slice(0, 16);
-  return `${commsTokenFile(threadId, botId)}.px-${profile}`;
+/** Where the Perspicax bridge of a kept process reads the current turn's
+ * capability: beside the thread's comms token, 0600, rewritten every turn. */
+export function perspicaxTokenFile(threadId: string, botId: string | undefined): string {
+  return `${commsTokenFile(threadId, botId)}.px-main`;
 }
 
 /** Write this turn's Perspicax bridge capability where the bridge reads it
@@ -206,9 +204,8 @@ export function perspicaxTokenFile(threadId: string, botId: string | undefined, 
  * stale capability). */
 export function warmPerspicaxEnv(threadId: string, botId: string | undefined, env: Record<string, string>): Record<string, string> {
   const token = env[PERSPICAX_TOKEN_ENV];
-  const profileId = env.SAGAX_PERSPICAX_PROFILE;
-  if (!token || !profileId) return env;
-  const tokenPath = perspicaxTokenFile(threadId, botId, profileId);
+  if (!token) return env;
+  const tokenPath = perspicaxTokenFile(threadId, botId);
   try {
     mkdirSync(dirname(tokenPath), { recursive: true, mode: 0o700 });
     writeFileAtomic(tokenPath, token, { mode: 0o600 });

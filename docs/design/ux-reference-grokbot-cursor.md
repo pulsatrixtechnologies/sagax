@@ -185,6 +185,10 @@ Détails sont des cartes groupées ; un compteur bleu à droite du titre de sect
 
 ### 2.4 Pages d'édition du bot
 
+- Décision de JC du 2026-11-04 : aucun réglage de profil Perspicax par bot,
+  sur bureau, iPhone ou iPad, ni dans le bulk edit. Le compte détient les rôles;
+  le MCP principal choisit celui requis par la tâche avec `identity_switch` live.
+  Les recettes Flow sont partagées, sans liaison de compte ni allowlist de profils.
 - Création rapide (référence iPhone) : une feuille avec × rond, titre centré, l'aperçu
   de la mascotte en très grand, un champ nom centré, la grille des formes, la rangée
   des couleurs (la choisie entourée d'un anneau), et un seul gros bouton Créer en bas,
@@ -724,20 +728,20 @@ besoin d'elle.
 
 ---
 
-### 2.23 Identité Perspicax du bot
+### 2.23 Connexion Perspicax du compte
 
-Ajouté le 2026-11-03, décision produit de JC. Dans les profils Perspicax du
-bot, un select natif « Agit comme (profil Perspicax) » montre les noms humains
-des profils détenus, avec « Identité par défaut » choisi au départ. Un profil
-explicite ou avec attribution au bot ne se choisit jamais automatiquement.
-Le choix partage le bouton Enregistrer de la section. L'en-tête du chat porte
-une petite puce « comme {nom} » dans le bouton du bot. Un ancien Perspicax
-sans cette fonction ne montre pas le select. Une lecture échouée offre de
-réessayer; un refus de switch paraît en mots dans l'activité du tour.
+Décision remplacée le 2026-11-04 par JC. Un bot n'a plus de profils Perspicax
+à configurer et l'éditeur n'affiche ni select « Agit comme », ni puce de rôle.
+Chaque harness reçoit le mount fixe `perspicax`, échangé pour le compte de la
+personne qui parle. Le compte peut détenir plusieurs rôles; `identity_switch`
+et `profile_use` permettent de choisir un rôle pendant le travail, selon les
+permissions réelles de Perspicax. La sélection et son catalogue d'outils sont
+réinitialisés à chaque frontière de génération, puis rafraîchis après un
+changement de rôle.
 
-Surface web et desktop; le réglage et la puce iOS restent à porter.
-Code : `PerspicaxSection.tsx`, `BotHeaderPill.tsx`. Tests DOM avec données
-synthétiques, aucun compte réel.
+Code : `server/perspicax/perspicax-mcp.ts`,
+`server/perspicax-mcp-bridge.ts` et les adapters de harness. Tests avec un
+transport synthétique, aucun compte réel.
 
 ### 2.24 Chat de code (une tâche de code ouverte)
 

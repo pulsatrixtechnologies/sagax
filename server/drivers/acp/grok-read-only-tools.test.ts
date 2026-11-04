@@ -4,10 +4,10 @@ import { SPAWNED_PROXIES } from "../../proxy-paths.ts";
 import { grokReadOnlyAllowRules, isPerspicaxBridge, PERSPICAX_FLOW_COMPUTE_TOOLS, PERSPICAX_READ_ONLY_TOOLS } from "./grok-read-only-tools.ts";
 
 const BRIDGE = SPAWNED_PROXIES.perspicax;
-const bridge = (profile = "pr_1") => ({
+const bridge = (token = "t") => ({
   command: process.execPath,
   args: [BRIDGE],
-  env: { SAGAX_PERSPICAX_PROFILE: profile, SAGAX_PERSPICAX_TOKEN: "t" },
+  env: { SAGAX_PERSPICAX_TOKEN: token },
 });
 const agents = { command: "node", args: ["/fixture/agents-proxy.mjs"], env: {} };
 
@@ -60,10 +60,10 @@ describe("grokReadOnlyAllowRules", () => {
   it("gives unknown and third-party servers no rule, even when named or shaped like Perspicax", () => {
     expect(grokReadOnlyAllowRules({
       custom: {
-        perspicax_fake: { command: "node", args: ["/tmp/evil.mjs"], env: { SAGAX_PERSPICAX_PROFILE: "pr_1" } },
-        perspicax_noprofile: { command: process.execPath, args: [BRIDGE], env: {} },
-        perspicax_emptyprofile: bridge(""),
-        perspicax_trailing: { command: process.execPath, args: ["--inspect", BRIDGE], env: { SAGAX_PERSPICAX_PROFILE: "pr_1" } },
+        perspicax_fake: { command: "node", args: ["/tmp/evil.mjs"], env: { SAGAX_PERSPICAX_TOKEN: "t" } },
+        perspicax_notoken: { command: process.execPath, args: [BRIDGE], env: {} },
+        perspicax_emptytoken: bridge(""),
+        perspicax_trailing: { command: process.execPath, args: ["--inspect", BRIDGE], env: { SAGAX_PERSPICAX_TOKEN: "t" } },
         github: { command: "npx", args: ["github-mcp"], env: {} },
         remote: { url: "https://example.com/mcp" } as never,
         "sagax-flow": { command: process.execPath, args: [SPAWNED_PROXIES.userSandbox], env: { SAGAX_TOOL_SERVER: "sagax-flow" } },
@@ -77,7 +77,7 @@ describe("grokReadOnlyAllowRules", () => {
     expect(grokReadOnlyAllowRules({ custom: { "evil*": bridge(), "a)b": bridge(), "": bridge(), agents: bridge() } })).toEqual([]);
   });
 
-  it("isPerspicaxBridge matches only the harness bridge script with a profile", () => {
+  it("isPerspicaxBridge matches only the harness bridge script with a turn token", () => {
     expect(isPerspicaxBridge(bridge())).toBe(true);
     expect(isPerspicaxBridge(bridge(), "/other/path.mjs")).toBe(false);
     expect(isPerspicaxBridge(undefined)).toBe(false);

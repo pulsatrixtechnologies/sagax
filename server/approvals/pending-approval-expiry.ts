@@ -109,7 +109,7 @@ export interface PendingExpiryDeps {
 }
 
 function cardOpen(card: Message["card"] | undefined): card is NonNullable<Message["card"]> {
-  return Boolean(card?.requestId && !card.answered && !card.dismissed && !card.expired);
+  return Boolean(card?.requestId && !card.approvalOrigin && !card.answered && !card.dismissed && !card.expired);
 }
 
 function createdAtOf(message: Message, card: NonNullable<Message["card"]>): number {

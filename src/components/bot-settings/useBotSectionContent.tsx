@@ -38,7 +38,6 @@ import { HistorySection, type HistoryRow } from "./HistorySection";
 import { UsageSection } from "./UsageSection";
 import { VisibilitySection } from "./VisibilitySection";
 import { SharingSection } from "./SharingSection";
-import { PerspicaxSection } from "./PerspicaxSection";
 import { TeamBotVaultSection } from "./TeamBotVaultSection";
 import { AppearancePane } from "../appearance/AppearancePane";
 import type { PromptPreviewData } from "./PromptPreview";
@@ -48,8 +47,8 @@ import type { PromptPreviewData } from "./PromptPreview";
  * organisation workspace). Who can see a bot matters only where several
  * people sign in: a browser on a served workspace, and there to an admin
  * or to the bot's own owner (#1098, showBotVisibility). A server signed in
- * with Perspicax shares a bot person by person (Sharing) and offers its MCP
- * profiles; the audience setting does not apply there. */
+ * with Perspicax shares a bot person by person (Sharing); its main MCP
+ * account connection is automatic. The audience setting does not apply there. */
 export function useBotSectionAvailability(botId: string) {
   const config = useStoreSelector((current) => current.config);
   const bot = useStoreSelector((current) => current.bots.find((candidate) => candidate.id === botId));
@@ -59,7 +58,7 @@ export function useBotSectionAvailability(botId: string) {
   const available = (id: BotSettingsSection): boolean =>
     id === "slack" ? slackUrl !== null
       : id === "visibility" ? Boolean(bot) && showBotVisibility(config, bot!, { served: servedPage(), ownerOrAdmin, perspicaxOrg: perspicaxOrg !== null })
-        : id === "sharing" || id === "perspicax" ? perspicaxOrg !== null
+        : id === "sharing" ? perspicaxOrg !== null
           : true;
   return { available, slackUrl, perspicaxOrg };
 }
@@ -322,8 +321,6 @@ export function useBotSectionContent(bot: Bot, {
             )}
           </>
         );
-      case "perspicax":
-        return <PerspicaxSection bot={bot} />;
       case "history":
         if (!historyAllowed) return null;
         return historyRows === null && historyError ? (

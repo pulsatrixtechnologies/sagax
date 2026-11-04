@@ -19,7 +19,7 @@ Reading the table:
   shown.
 - **covered (bridge)**: a Perspicax tool the agents catalog does not list
   natively but a bot reaches through the Perspicax bridge
-  (`server/perspicax/perspicax-mcp.ts`, a profile mounted on the turn). The relay judges
+  (`server/perspicax/perspicax-mcp.ts`, the account connection mounted on the turn). The relay judges
   it with the same permission, so enforce never refuses it by omission.
 - **MISSING**: no MCP tool.
 - Tool names are the ones Perspicax 1.8.28 serves (connector
@@ -219,6 +219,6 @@ mode still decide. Perspicax's own Sagax tools (`sagax_bots`, `sagax_send`,
 (`PERSPICAX_TOOLS`: the memory tools, the `api_*` meta-tools, `identity`,
 `flow`, `flow_action`, the `remote_support_*` tools, `review_write`) are listed only on an organization
 server linked to Perspicax (`SAGAX_PERSPICAX_TOOLS`) and forwarded by
-`/api/internal/perspicax/tool` to the profile mounted in the turn, after the
+`/api/internal/perspicax/tool` to the account connection mounted in the turn, after the
 misuse and safety review. Reading the Perspicax catalog to vet resource names
 at turn time (`ApiCatalog`) is not wired yet.

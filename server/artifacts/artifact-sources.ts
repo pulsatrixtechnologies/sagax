@@ -35,7 +35,6 @@ export interface ArtifactSourceBot {
   /** The person who owns the bot. At Auto a command runs only for an
    * artifact of that person (unknown: blocked). */
   ownerPrincipalId?: string;
-  perspicaxProfiles?: readonly string[];
 }
 
 export interface ArtifactSourceDeps {
@@ -79,7 +78,7 @@ export const SOURCE_BLOCKED = {
   command: "A command refreshes alone only on the bot's own Local VM while the bot is in Approve for me or Full access, for its owner's own artifact. Ask the bot to use a read tool instead.",
   tool: "This tool needs your approval each time, so it cannot refresh alone. Allow it always for this bot, or ask the bot to use a read tool.",
   disabled: "This tool is turned off for this workspace.",
-  dispatchKpi: "dispatch_kpi reads through Perspicax: this bot needs a Perspicax profile on an organization server.",
+  dispatchKpi: "dispatch_kpi reads through Perspicax: this organization server needs the person's account connection.",
   unknown: "This source is not one Sagax can run alone: workspace_read, dispatch_kpi, a Perspicax read tool, an allowed tool of one of the bot's MCP servers, or a command on its Local VM.",
 } as const;
 
@@ -185,12 +184,12 @@ export function createArtifactSourceRunner(deps: ArtifactSourceDeps): (artifact:
     }
 
     if (isDispatchKpi(source.tool)) {
-      if (!deps.dispatchKpi || !bot.perspicaxProfiles?.length) return blocked(SOURCE_BLOCKED.dispatchKpi);
+      if (!deps.dispatchKpi) return blocked(SOURCE_BLOCKED.dispatchKpi);
       return deps.dispatchKpi({ artifact, bot, args: source.args, signal });
     }
 
     const perspicaxTool = perspicaxReadTool(source.tool);
-    if (perspicaxTool && deps.perspicax && bot.perspicaxProfiles?.length) {
+    if (perspicaxTool && deps.perspicax) {
       const result = await deps.perspicax.call({ artifact, bot, tool: perspicaxTool, args: source.args, signal });
       return "error" in result ? { ok: false, error: result.error } : answer(result);
     }

@@ -1,11 +1,11 @@
 // Edit N bots (the home selection's Edit button): the sections of a bot's
-// own settings (Model, Shared with, Workspace, Access, Voice, Permissions,
-// Perspicax Profiles) for every selected bot at once. Every field reads
+// own settings (Model, Shared with, Workspace, Access, Voice, Permissions)
+// for every selected bot at once. Every field reads
 // "Do not change" until it is touched; a value the bots share shows as it
 // is, else "Mixed values" with each bot's own. Lists change by Add, Remove
 // or Replace with. Apply sends, bot by bot, only what differs for that bot,
-// through the bot editor's own routes (PATCH /api/bots/:id, its grants, its
-// Perspicax profiles): each bot is journaled and refused for its own
+// through the bot editor's own routes (PATCH /api/bots/:id and its grants):
+// each bot is journaled and refused for its own
 // reasons, and its result is shown. The values before are kept: "Undo the
 // last bulk change" puts them back the same way. Rules live in
 // CompanionCore/BulkBotEdit.swift (shared/bulk-bot-edit.ts).
@@ -39,7 +39,6 @@ final class BulkEditBotsModel: ObservableObject {
     @Published var instances: [Instance] = []
     @Published var grants: [String: [WireGrant]] = [:]
     @Published var grantsFailed: Set<String> = []
-    @Published var profiles: [String: PerspicaxAnswer] = [:]
     @Published var directory: OrgShareDirectory?
 
     // The draft: nil is "Do not change"
@@ -52,7 +51,6 @@ final class BulkEditBotsModel: ObservableObject {
     @Published var approval: ApprovalLevel?
     @Published var mcp: BulkListEdit?
     @Published var shared: BulkGrantEdit?
-    @Published var perspicax: BulkListEdit?
 
     @Published var phase: Phase = .editing
     @Published var outcomes: [BulkBotOutcome] = []
@@ -73,10 +71,10 @@ final class BulkEditBotsModel: ObservableObject {
         if let speakReplies { fields["speakReplies"] = .bool(speakReplies) }
         if let voice { fields["voice"] = .string(voice) }
         if let approval { fields["approvalMode"] = .string(approval.rawValue) }
-        return BulkBotEditPlan(fields: fields, mcpServers: mcp, grants: shared, profiles: perspicax)
+        return BulkBotEditPlan(fields: fields, mcpServers: mcp, grants: shared)
     }
 
-    func load(session: Session, bots: [Bot], sharing: Bool, perspicaxOn: Bool) async {
+    func load(session: Session, bots: [Bot], sharing: Bool) async {
         guard let client = session.profileClient else { return }
         async let status = session.configStatus()
         async let voiceList = session.voiceOptions()
@@ -89,11 +87,6 @@ final class BulkEditBotsModel: ObservableObject {
             directory = try? await client.orgShareDirectory()
             for bot in bots {
                 do { grants[bot.id] = try await client.botGrants(botId: bot.id).grants } catch { grantsFailed.insert(bot.id) }
-            }
-        }
-        if perspicaxOn {
-            for bot in bots {
-                if let answer = try? await client.botPerspicax(botId: bot.id) { profiles[bot.id] = answer }
             }
         }
     }
@@ -124,14 +117,6 @@ final class BulkEditBotsModel: ObservableObject {
 
     /// The server's own words for a refusal.
     nonisolated static let reason: @Sendable (Error) -> String = { error in
-        if let refusal = (error as? PerspicaxRefusalError)?.refusal {
-            switch refusal {
-            case .profileNotHeld: return String(localized: "You can only add a profile you hold in Perspicax.")
-            case .needsEdit: return String(localized: "Changing these profiles needs edit access to this bot.")
-            case .unknownProfile: return String(localized: "Perspicax no longer lists this profile.")
-            case .failed: return String(localized: "The change could not be saved.")
-            }
-        }
         return error.localizedDescription
     }
 }
@@ -156,7 +141,6 @@ struct BulkEditBotsSheet: View {
     private var bots: [Bot] { model.botIds.compactMap { session.state.bot($0) } }
     private var gate: SurfaceGate { session.surfaceGate }
     private var showsSharing: Bool { gate.allows(.botSharing) }
-    private var showsPerspicax: Bool { gate.allows(.botPerspicax) }
 
     /// Offered when the bot editor would offer it for at least one bot; the
     /// server answers for each of the others.
@@ -191,7 +175,7 @@ struct BulkEditBotsSheet: View {
             }
         }
         .task {
-            await model.load(session: session, bots: bots, sharing: showsSharing, perspicaxOn: showsPerspicax)
+            await model.load(session: session, bots: bots, sharing: showsSharing)
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-parity-bulk-edit-draft") {
                 model.voice = ""
@@ -221,7 +205,6 @@ struct BulkEditBotsSheet: View {
             accessSection
             voiceSection
             permissionsSection
-            if showsPerspicax { perspicaxSection }
             Section {
                 Button {
                     reviewing = true
@@ -430,44 +413,6 @@ struct BulkEditBotsSheet: View {
         }
     }
 
-    // MARK: Perspicax
-
-    private var perspicaxSection: some View {
-        Section {
-            let lists = bots.map { BulkBotValue(botId: $0.id, value: (model.profiles[$0.id]?.selectedIds ?? []).sorted()) }
-            let all = profileCatalog
-            BulkListEditor(
-                title: String(localized: "Perspicax Profiles"),
-                current: BulkBotEdit.commonValue(lists),
-                bots: bots,
-                edit: $model.perspicax,
-                options: all.map { BulkListOption(id: $0.id, label: $0.name) },
-                common: BulkBotEdit.commonListItems(bots.map { model.profiles[$0.id]?.selectedIds ?? [] }),
-                editable: model.profiles.values.contains { $0.canEdit } || model.profiles.isEmpty,
-                identifier: "bulk-edit-perspicax",
-                describe: { id in all.first { $0.id == id }?.name ?? id }
-            ) { option in
-                if let profile = all.first(where: { $0.id == option.id }) { PerspicaxProfileLabel(profile: profile) }
-            }
-        } header: {
-            Text("Perspicax Profiles")
-        } footer: {
-            Text("You can only add a profile you hold in Perspicax.")
-        }
-    }
-
-    /// Every profile the person holds or a selected bot carries.
-    private var profileCatalog: [PerspicaxProfile] {
-        var seen = Set<String>()
-        var out: [PerspicaxProfile] = []
-        for answer in model.botIds.compactMap({ model.profiles[$0] }) {
-            for profile in answer.available + answer.selected.map(\.profile) where seen.insert(profile.id).inserted {
-                out.append(profile)
-            }
-        }
-        return out
-    }
-
     // MARK: Review, progress, results
 
     private var summaryLines: [BulkSummaryLine] {
@@ -488,11 +433,6 @@ struct BulkEditBotsSheet: View {
         if let on = model.speakReplies { lines.append(.init(field: String(localized: "Read replies aloud"), value: onOff(on))) }
         if let voice = model.voice { lines.append(.init(field: String(localized: "Voice"), value: describeVoice(.string(voice)))) }
         if let level = model.approval { lines.append(.init(field: String(localized: "Approval level"), value: describeLevel(.string(level.rawValue)))) }
-        if let profiles = model.perspicax {
-            let all = profileCatalog
-            lines.append(.init(field: String(localized: "Perspicax Profiles"),
-                               value: BulkSummary.listValue(profiles, label: { id in all.first { $0.id == id }?.name ?? id }, none: String(localized: "none"))))
-        }
         return lines
     }
 
@@ -664,7 +604,7 @@ extension BulkListMode {
     }
 }
 
-/// A list (MCP servers, Perspicax Profiles): Do not change, Add, Remove or
+/// A list (MCP servers): Do not change, Add, Remove or
 /// Replace with, then the items. Replace starts from what every bot has.
 struct BulkListEditor<Row: View>: View {
     let title: String

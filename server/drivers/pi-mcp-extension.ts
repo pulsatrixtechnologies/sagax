@@ -202,6 +202,9 @@ export class StdioMcp {
    * whole tools/list share one longer budget. Others keep 8 s for each. */
   private readonly remote: boolean;
   private listDeadline: number | undefined;
+  private catalogVersion = 0;
+
+  toolsVersion(): number { return this.catalogVersion; }
 
   constructor(def: McpServerDef) {
     this.remote = def.directory === true;
@@ -275,8 +278,7 @@ export class StdioMcp {
           return;
         }
       }
-      // Notifications (e.g. notifications/tools/list_changed) are intentionally
-      // ignored for this single-shot mount.
+      if (msg.method === "notifications/tools/list_changed") this.catalogVersion += 1;
     }
     if (Buffer.byteLength(this.buf, "utf8") > MCP_MAX_FRAME_BYTES) {
       this.closeWithError(new Error(`MCP frame exceeded ${MCP_MAX_FRAME_BYTES} bytes without a newline`));
@@ -355,7 +357,8 @@ export class StdioMcp {
   async listTools(): Promise<McpTool[]> {
     const tools: McpTool[] = [];
     const seenCursors = new Set<string>();
-    const deadline = this.listDeadline ?? Date.now() + MCP_STARTUP_TIMEOUT_MS;
+    const deadline = this.listDeadline ?? Date.now() + (this.remote ? REMOTE_MCP_STARTUP_MS : MCP_STARTUP_TIMEOUT_MS);
+    this.listDeadline = undefined;
     let cursor: string | undefined;
     for (let page = 0; page < MCP_MAX_LIST_PAGES; page += 1) {
       const remainingMs = Math.max(1, deadline - Date.now());
@@ -708,6 +711,8 @@ export default async function (pi: PiExtensionApi): Promise<void> {
   const directoryTools = new Map<string, string>();
   let enforcementFailed = false;
   const clients: StdioMcp[] = [];
+  const turnCatalogs: Array<() => Promise<void>> = [];
+  let intersectTools: (() => unknown) | undefined;
   const serverEntries = Object.entries(config.mcpServers ?? {}).filter(([name]) => scope === undefined || canUseMcpServer(scope, name));
 
   if (scope !== undefined) {
@@ -733,6 +738,7 @@ export default async function (pi: PiExtensionApi): Promise<void> {
         throw error;
       }
     };
+    intersectTools = intersect;
     for (const event of ["session_start", "session_switch", "model_select", "before_agent_start", "context"]) pi.on(event, () => { intersect(); });
     pi.on("tool_call", (event) => !enforcementFailed && typeof event?.toolName === "string" && allowed(event.toolName) ? undefined : { block: true, reason: "Tool selection excludes this tool" });
     // Providers serialize tools before this hook. Filter that final payload as
@@ -813,77 +819,123 @@ export default async function (pi: PiExtensionApi): Promise<void> {
     // it (Codex #1977 pattern). Never skip the gate here at Full.
     const gated = def.scope === "local-computer" || def.scope === "custom" || def.scope === "approval";
     let registered = 0;
-
-    for (const tool of tools) {
-      if (!tool || typeof tool.name !== "string" || !tool.name.trim()) {
-        process.stderr.write(`[openmausbot-pi-mcp] ${serverName}: skipped a tool with no valid name\n`);
-        continue;
-      }
-      const toolName = tool.name;
-      const identity: ToolIdentity = { kind: "mcp", server: serverName, name: toolName };
-      const directoryTool = (def.directory === true || def.searched === true) && isDirectoryTool(toolName);
-      if (scope !== undefined && !directoryTool && !allowsTool(scope, identity)) continue;
-      const name = allocateToolName(serverName, toolName, used);
-      try {
-        const parameters = toTypebox(tool.inputSchema);
-        pi.registerTool({
-          name,
-          label: `${serverName}:${toolName}`,
-          description: typeof tool.description === "string" ? tool.description : `${toolName} (MCP tool from ${serverName})`,
-          parameters,
-          async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-            // The upstream tool this call runs: call_tool's target on a
-            // searched server, nothing for its catalog reads.
-            const target = directoryTool ? directoryCallTarget(toolName, params) : toolName;
-            if (scope !== undefined && (enforcementFailed
-              || (target !== undefined && !allowsTool(scope, { kind: "mcp", server: serverName, name: target })))) {
-              throw new Error("Tool selection excludes this tool");
-            }
-            // Host tools ask first, using pi's native permission card
-            // (ctx.ui.confirm → extension_ui_request → Allow/Deny card). This
-            // mirrors ACP's session/request_permission and Codex's elicitation.
-            // Searching a catalog runs no tool, so it asks nothing.
-            if (gated && target !== undefined) {
-              const shown = target;
-              const detail = summarizeParams(directoryTool && toolName === CALL_TOOL ? (params as { arguments?: unknown } | undefined)?.arguments : params);
-              const allowed = await ctx.ui.confirm(
-                def.scope === "local-computer" ? `Allow ${shown} on your computer?` : `Allow ${serverName}:${shown}?`,
-                detail || `Run ${serverName}:${shown}`,
-              );
-              if (!allowed) {
-                return { content: [{ type: "text", text: "Blocked by the user." }], details: {} };
+    const allocated = new Map<string, string>();
+    const signatures = new Map<string, string>();
+    let advertised = new Set<string>();
+    let listedVersion = client?.toolsVersion() ?? 0;
+    let refreshing: Promise<void> | undefined;
+    const refreshCatalog = (force = false): Promise<void> => {
+      if (!force && client?.toolsVersion() === listedVersion) return Promise.resolve();
+      refreshing ??= (async () => {
+        const live = await connected();
+        const version = live.toolsVersion();
+        const next = await live.listTools();
+        registerTools(next, true);
+        listedVersion = version;
+      })().finally(() => { refreshing = undefined; });
+      return refreshing;
+    };
+    const registerTools = (catalog: McpTool[], activate = false): void => {
+      const previous = advertised;
+      advertised = new Set<string>();
+      for (const tool of catalog) {
+        if (!tool || typeof tool.name !== "string" || !tool.name.trim()) {
+          process.stderr.write(`[openmausbot-pi-mcp] ${serverName}: skipped a tool with no valid name\n`);
+          continue;
+        }
+        const toolName = tool.name;
+        const identity: ToolIdentity = { kind: "mcp", server: serverName, name: toolName };
+        const directoryTool = (def.directory === true || def.searched === true) && isDirectoryTool(toolName);
+        if (scope !== undefined && !directoryTool && !allowsTool(scope, identity)) continue;
+        const name = allocated.get(toolName) ?? allocateToolName(serverName, toolName, used);
+        try {
+          const parameters = toTypebox(tool.inputSchema);
+          const definition: PiToolDefinition = {
+            name,
+            label: `${serverName}:${toolName}`,
+            description: typeof tool.description === "string" ? tool.description : `${toolName} (MCP tool from ${serverName})`,
+            parameters,
+            async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+              // The upstream tool this call runs: call_tool's target on a
+              // searched server, nothing for its catalog reads.
+              const target = directoryTool ? directoryCallTarget(toolName, params) : toolName;
+              if (scope !== undefined && (enforcementFailed
+                || (target !== undefined && !allowsTool(scope, { kind: "mcp", server: serverName, name: target })))) {
+                throw new Error("Tool selection excludes this tool");
               }
-            }
-            const res = await (await connected()).callTool(toolName, params, signal);
-            if (res.isError) {
-              const message = res.content
-                .filter((item): item is { type: "text"; text: string } => item.type === "text")
-                .map((item) => item.text)
-                .join("\n");
-              // Pi marks a custom tool as failed only when execute throws;
-              // returning error-looking text incorrectly produces isError=false.
-              throw new Error(message || `MCP tool ${serverName}:${toolName} returned an error`);
-            }
-            return { content: res.content, details: {} };
-          },
-        });
-        used.add(name);
-        identities.set(name, identity);
-        if (directoryTool) directoryTools.set(name, serverName);
-        registered += 1;
-      } catch (err) {
-        // One malformed tool must not dispose the client behind tools that
-        // were already registered from the same server.
-        const message = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`[openmausbot-pi-mcp] ${serverName}:${toolName}: ${message}\n`);
+              // Host tools ask first, using pi's native permission card
+              // (ctx.ui.confirm → extension_ui_request → Allow/Deny card). This
+              // mirrors ACP's session/request_permission and Codex's elicitation.
+              // Searching a catalog runs no tool, so it asks nothing.
+              if (gated && target !== undefined) {
+                const shown = target;
+                const detail = summarizeParams(directoryTool && toolName === CALL_TOOL ? (params as { arguments?: unknown } | undefined)?.arguments : params);
+                const allowed = await ctx.ui.confirm(
+                  def.scope === "local-computer" ? `Allow ${shown} on your computer?` : `Allow ${serverName}:${shown}?`,
+                  detail || `Run ${serverName}:${shown}`,
+                );
+                if (!allowed) {
+                  return { content: [{ type: "text", text: "Blocked by the user." }], details: {} };
+                }
+              }
+              const res = await (await connected()).callTool(toolName, params, signal);
+              // A role switch changes the remote surface before its answer.
+              // Register that surface before Pi builds the next model request.
+              try { await refreshCatalog(); } catch {
+                // Discovery failing after a completed operation must not turn
+                // its success into an apparent failure that invites a repeat.
+                res.content.push({ type: "text", text: "Tool discovery could not refresh after this call. Its result still applies; do not repeat the operation just to refresh tools." });
+              }
+              if (res.isError) {
+                const message = res.content
+                  .filter((item): item is { type: "text"; text: string } => item.type === "text")
+                  .map((item) => item.text)
+                  .join("\n");
+                // Pi marks a custom tool as failed only when execute throws;
+                // returning error-looking text incorrectly produces isError=false.
+                throw new Error(message || `MCP tool ${serverName}:${toolName} returned an error`);
+              }
+              return { content: res.content, details: {} };
+            },
+          };
+          const signature = JSON.stringify([tool.description, tool.inputSchema]);
+          if (signatures.get(toolName) !== signature) {
+            pi.registerTool(definition);
+            signatures.set(toolName, signature);
+          }
+          used.add(name);
+          allocated.set(toolName, name);
+          advertised.add(name);
+          identities.set(name, identity);
+          if (directoryTool) directoryTools.set(name, serverName);
+          registered += 1;
+        } catch (err) {
+          // One malformed tool must not dispose the client behind tools that
+          // were already registered from the same server.
+          const message = err instanceof Error ? err.message : String(err);
+          process.stderr.write(`[openmausbot-pi-mcp] ${serverName}:${toolName}: ${message}\n`);
+        }
       }
-    }
+      if (activate && pi.getActiveTools && pi.setActiveTools) {
+        const active = pi.getActiveTools().filter((name) => !previous.has(name) || advertised.has(name));
+        pi.setActiveTools([...new Set([...active, ...advertised])]);
+      }
+    };
+    registerTools(tools);
+    // The main connection starts each generation under the person's default
+    // roles, even when Pi keeps its process and tool declarations warm.
+    if (serverName === "perspicax") turnCatalogs.push(() => refreshCatalog(true));
 
     if (mount.client) {
       if (registered > 0) clients.push(mount.client);
       else mount.client.dispose();
     }
   }
+
+  if (turnCatalogs.length) pi.on("before_agent_start", async () => {
+    await Promise.all(turnCatalogs.map((refresh) => refresh()));
+    intersectTools?.();
+  });
 
   pi.on("session_shutdown", () => {
     for (const c of clients) c.dispose();

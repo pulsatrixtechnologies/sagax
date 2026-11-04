@@ -27,6 +27,9 @@ export function expireApprovalsAfterRestart(deps: ExpireDeps): number {
     const card = message.card;
     if (!card?.requestId || card.requestType !== "permission" || card.answered || card.dismissed || card.expired) continue;
     deps.patch(threadId, message.id, { ...card, answered: "deny", expired: true, options: [] });
+    // A linked view is closed too, including an interrupted two-write link,
+    // but only the source call records a decision.
+    if (card.approvalOrigin) continue;
     deps.decide({ threadId, requestId: card.requestId, tool: card.tool, summary: card.subtitle });
     expired++;
   }

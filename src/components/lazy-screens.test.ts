@@ -14,11 +14,12 @@ import { createElement, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BotCatalogPane } from "./lazy-bot-catalog";
 
 const screens = await import("./lazy-screens");
 const { lazyScreen, preloadScreens } = screens;
 /** Every deferred screen's preload, stubbed so no test fetches a real chunk. */
-const stubPreloads = () => Object.values(screens)
+const stubPreloads = () => [...Object.values(screens), BotCatalogPane]
   .filter((value): value is ReturnType<typeof lazyScreen> => typeof value === "function" && "preload" in value)
   .map((screen) => vi.spyOn(screen, "preload").mockResolvedValue(() => null));
 

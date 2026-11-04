@@ -80,6 +80,12 @@ export function chatToolsTurnLimit(
 /** Concurrent prewarmed mounts one person may hold at once (#1975). */
 export const PREWARM_MCP_PER_PERSON = 2;
 
+/** A closed session, or one whose account Perspicax mount failed to start,
+ * is not kept: the next turn mounts again (0.8.45: an expired preloaded
+ * session reopens instead of serving a turn without its tools). */
+const reusable = (session: ChatToolSession) => !session.isClosed?.()
+  && !session.skipped.some(row => row.server === "perspicax");
+
 /** Bounded per-thread MCP session cache for createOpenAIChatRuntime. */
 export function createWarmToolSessions(options?: { maxPerPerson?: number; budget?: WarmResourceBudget; mount?: typeof mountChatTools }) {
   const sessions = new Map<string, WarmToolSession>();
@@ -112,7 +118,7 @@ export function createWarmToolSessions(options?: { maxPerPerson?: number; budget
     get(threadId: string, fingerprint: string, person?: string): ChatToolSession | undefined {
       const row = sessions.get(threadId);
       if (!row) return undefined;
-      if (row.fingerprint !== fingerprint || (person !== undefined && row.person !== person)) {
+      if (row.fingerprint !== fingerprint || (person !== undefined && row.person !== person) || !reusable(row.session)) {
         void evict(threadId);
         return undefined;
       }
@@ -137,6 +143,13 @@ export function createWarmToolSessions(options?: { maxPerPerson?: number; budget
       meta?: { person?: string; prewarmed?: boolean; active?: boolean },
     ): void {
       const previous = sessions.get(threadId);
+      // A turn's own fresh mount stays owned by the cache while it runs;
+      // its end-of-turn keep (not active) drops it then.
+      if (!reusable(session) && meta?.active !== true) {
+        void evict(threadId);
+        if (previous?.session !== session) void session.close().catch(() => {});
+        return;
+      }
       if (previous && previous.session !== session) {
         void closeRow(previous);
       }

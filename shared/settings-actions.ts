@@ -323,11 +323,6 @@ add({
   write: (ids, v) => typeof v === "string" && /^[\w-]+$/.test(v) ? { method: "POST", path: `/api/bots/${enc(ids.target!)}/memory/journal/${enc(v)}/revert`, body: {} } : "value is a change's id (get bot.memoryUndo).",
 });
 add({
-  key: "bot.perspicaxProfiles", family: "bot", target: "bot", value: "array", label: "Perspicax tools (profiles)", where: "Bot editor > Perspicax", classes: selfReach,
-  read: (ids) => ({ path: `/api/bots/${enc(ids.target!)}/perspicax` }),
-  write: (ids, v) => ({ method: "PUT", path: `/api/bots/${enc(ids.target!)}/perspicax`, body: { profiles: v } }),
-});
-add({
   key: "bot.skill", family: "bot", target: "bot", value: "object", label: "A skill on or off ({name, enabled})", where: "Bot editor > Skills",
   read: (ids) => ({ path: `/api/bots/${enc(ids.target!)}/skills` }),
   write: (ids, v) => {
@@ -349,7 +344,8 @@ add({
 });
 // 2026-10-30 (Capabilities, lot 1a): the one resolved list of what a bot
 // receives (server/capabilities/capabilities.ts), read only; the actions that change it
-// are bot.plugin, bot.skill, bot.mcpServers and bot.perspicaxProfiles
+// are bot.plugin, bot.skill and bot.mcpServers. Perspicax belongs to the
+// signed-in account and is mounted automatically.
 add({
   key: "bot.capabilities", family: "bot", target: "bot", value: "object",
   label: "What the bot receives on top of its engine, read only: one list of its plugins, skills, MCP servers, account connectors, Perspicax Roles and Flow, each with its scope (bot, me, organization, installation, account), its state and what its engine receives",
@@ -370,7 +366,7 @@ add({
       ...(r.promptIndex ? { promptIndex: r.promptIndex } : {}),
     };
   } }),
-  write: () => "bot.capabilities is read only: bot.plugin, bot.skill, bot.mcpServers and bot.perspicaxProfiles change what it lists.",
+  write: () => "bot.capabilities is read only: bot.plugin, bot.skill and bot.mcpServers change what it lists.",
 });
 // 2026-10-29: plugins of a configured marketplace, as Capabilities installs
 // them: For <bot> (/api/bots/:id/plugins) or Everyone (/api/marketplaces)

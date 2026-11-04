@@ -420,7 +420,7 @@ const definitions = [
   },
   // Defensive security work (EDR triage and the like). A member default
   // since 2026-10-27 (#1098): talking about security tools is conversation,
-  // so a member holds it unless a Perspicax profile leaves it out. It does
+  // so a member holds it unless their live Perspicax permissions leave it out. It does
   // not lift the misuse blocks for escape, malware, destruction or platform
   // files.
   {

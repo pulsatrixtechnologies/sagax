@@ -17,7 +17,7 @@ describe("simple visibility", () => {
   });
 
   it("hides engine plumbing in the bot panel and keeps the everyday sections", () => {
-    for (const id of ["access", "worksOn", "perspicax", "usage", "history", "skills"] as const) {
+    for (const id of ["access", "worksOn", "usage", "history", "skills"] as const) {
       expect(simpleHidesBotSection(id), id).toBe(true);
     }
     for (const id of ["overview", "soul", "memory", "routines", "model", "permissions", "voice", "visibility", "sharing", "slack", "details"] as const) {

@@ -24,6 +24,17 @@ describe("MCP scope configuration", () => {
 });
 
 describe("tool directory configuration", () => {
+  it("keeps an unscoped searched command server in one private gate record", () => {
+    const record = `SAGAX_GATE_CONFIG_${"a".repeat(64)}`;
+    const searched = gateServer({ ...input, search: { pinned: ["identity_switch"] }, configEnvName: record })!;
+    expect(searched.args.slice(1)).toEqual(["--config-env", record]);
+    expect(Object.keys(searched.env)).toEqual([record]);
+    const settings = JSON.parse(searched.env[record]!);
+    expect(JSON.parse(settings.SAGAX_GATE_SEARCH).pinned).toEqual(["identity_switch"]);
+    expect(JSON.parse(settings.SAGAX_GATE_UPSTREAM)).toEqual(server);
+    expect(searched.args.join(" ")).not.toContain("disposable-test-token");
+  });
+
   it("asks the remote proxy for a directory only when the caller does", () => {
     expect(mcpStdioServer(remote)!.env).not.toHaveProperty("SAGAX_REMOTE_MCP_DIRECTORY");
     const scope = { allow: ["mcp:whop:*"], deny: ["mcp:whop:payments_create"] };

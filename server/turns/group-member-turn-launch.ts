@@ -415,16 +415,16 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     attachCustomMcp(integrations, mounted.servers, cfg);
     roomGithubWithheld = mounted.githubWithheld;
   }
-  // Slice 5: the bot's Perspicax profiles, as the person who speaks in the room.
+  // The account's main Perspicax connection, as the person who speaks in the room.
   let roomPerspicaxPrompt = "";
-  if (IDENTITY.kind === "perspicax" && instance.adapter.capabilities.customMcp === true && (store.bot(bot.id) ?? bot).perspicax?.profiles.length) {
+  if (IDENTITY.kind === "perspicax" && instance.adapter.capabilities.customMcp === true) {
     // A room turn with no person behind it (a goal routine, any other
     // automation) is never the owner speaking for MCP.
     const perspicax = await perspicaxTurnIntegration({
       bot,
       threadId,
       generation: internalGeneration,
-      speaker: roomSpeakerId ? { origin: "person", principalId: roomSpeakerId, groupId } : roomRoutineSpeaker(threadId) ?? { origin: "owner-routine" },
+      speaker: roomAccessSpeaker,
       taken: Object.keys(integrations.custom ?? {}),
       from: { botId: bot.id, name: bot.name, color: bot.color }
     });

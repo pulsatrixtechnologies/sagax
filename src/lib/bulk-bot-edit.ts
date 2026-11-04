@@ -5,7 +5,6 @@
 // bot by bot, through the routes the bot's own editor uses, so every change
 // is journaled as that bot's own edit and refused for that bot's reasons.
 import {
-  applyListEdit,
   botLevelPatch,
   BULK_CONSENT_KEYS,
   commonListItems,
@@ -27,11 +26,11 @@ import type { Bot } from "@/state/store";
 import { readableError } from "./plain-error";
 
 /** The bot editor's sections a bulk change offers, in the dialog's order. */
-export const BULK_SECTIONS = ["model", "sharing", "worksOn", "access", "voice", "permissions", "perspicax"] as const;
+export const BULK_SECTIONS = ["model", "sharing", "worksOn", "access", "voice", "permissions"] as const;
 export type BulkSectionId = typeof BULK_SECTIONS[number];
 
 /** The bot fields each section shows (what "Mixed values" compares). Access
- * also has its MCP servers, a list; Shared with and Perspicax are lists. */
+ * also has its MCP servers, a list; Shared with is a list. */
 export const BULK_SECTION_FIELDS: Record<BulkSectionId, readonly string[]> = {
   model: ["modelSelection", "fallback"],
   sharing: [],
@@ -39,7 +38,6 @@ export const BULK_SECTION_FIELDS: Record<BulkSectionId, readonly string[]> = {
   access: ["cloudBackend", "autoStartVps", "browser", "cwd", "toolScope", "mcpAccounts"],
   voice: ["voice", "speakReplies", "notifications"],
   permissions: ["approvalMode", "proactiveMode", "outbound", "chiefOfStaff", "managedSections", "approvePeerComms", "peers"],
-  perspicax: [],
 };
 
 const CONSENT = new Set<string>(BULK_CONSENT_KEYS);
@@ -119,8 +117,6 @@ export interface BulkSectionChange {
   mcpServers?: BulkListEdit;
   /** Shared with: the people and teams with the level chosen for each. */
   grants?: { mode: BulkListMode; grants: BulkGrant[] };
-  /** Perspicax Profiles: profile ids. */
-  perspicax?: BulkListEdit;
 }
 
 export type BulkChanges = Partial<Record<BulkSectionId, BulkSectionChange>>;
@@ -134,7 +130,7 @@ export function listActive(edit: { mode: BulkListMode; items?: readonly unknown[
 
 export function sectionTouched(change: BulkSectionChange | undefined): boolean {
   if (!change) return false;
-  return patchFields(change.patch).length > 0 || listActive(change.mcpServers) || listActive(change.grants) || listActive(change.perspicax);
+  return patchFields(change.patch).length > 0 || listActive(change.mcpServers) || listActive(change.grants);
 }
 
 /** Every bot field the change sets (all sections together). */
@@ -248,7 +244,6 @@ export interface BulkBefore {
   botId: string;
   patch?: Record<string, unknown>;
   grants?: { before: BulkGrant[]; after: BulkGrant[] };
-  perspicax?: string[];
 }
 
 export interface BulkRun {
@@ -270,8 +265,6 @@ export interface BulkDeps {
 }
 
 const reasonOf = (error: unknown) => (readableError(error)) || "Refused";
-
-type Profiles = { selected?: Array<{ id: string }> };
 
 /** Apply the change to each bot in turn. A bot that refuses one part keeps
  * the parts it took; its outcome lists why. */
@@ -347,25 +340,9 @@ export async function runBulkEdit(bots: readonly Bot[], changes: BulkChanges, de
       }
     }
 
-    // Perspicax Profiles: the bot's profile list
-    const profileEdit = changes.perspicax?.perspicax;
-    if (profileEdit && listActive(profileEdit) && allowed("perspicax")) {
-      try {
-        const current = ((await deps.request<Profiles>(`/api/bots/${bot.id}/perspicax`)).selected ?? []).map((profile) => profile.id);
-        const next = applyListEdit(current, profileEdit);
-        if (next.length !== current.length || next.some((id, index) => id !== current[index])) {
-          await deps.request(`/api/bots/${bot.id}/perspicax`, { method: "PUT", body: JSON.stringify({ profiles: next }) });
-          kept.perspicax = current;
-          changed = true;
-        }
-      } catch (error) {
-        reasons.push(reasonOf(error));
-      }
-    }
-
     const unique = [...new Set(reasons)];
     outcomes.push({ botId: bot.id, ok: unique.length === 0, ...(changed || unique.length ? {} : { skipped: true }), ...(unique.length ? { reasons: unique } : {}) });
-    if (kept.patch || kept.grants || kept.perspicax) before.push(kept);
+    if (kept.patch || kept.grants) before.push(kept);
   }
   return { outcomes, before };
 }
@@ -391,9 +368,6 @@ export async function undoBulkEdit(bots: readonly Bot[], before: readonly BulkBe
       for (const target of steps.remove) {
         try { await deps.request(`/api/bots/${bot.id}/grants/${encodeURIComponent(target)}`, { method: "DELETE" }); } catch (error) { reasons.push(reasonOf(error)); }
       }
-    }
-    if (kept.perspicax) {
-      try { await deps.request(`/api/bots/${bot.id}/perspicax`, { method: "PUT", body: JSON.stringify({ profiles: kept.perspicax }) }); } catch (error) { reasons.push(reasonOf(error)); }
     }
     const unique = [...new Set(reasons)];
     outcomes.push({ botId: bot.id, ok: unique.length === 0, ...(unique.length ? { reasons: unique } : {}) });

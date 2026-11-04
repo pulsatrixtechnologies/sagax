@@ -22,17 +22,8 @@ function click(state: AppState): AppState {
 }
 
 describe("chat header bot pill", () => {
-  it("shows only the chosen profile's human name, with no chip for the default", () => {
+  it("shows the bot without a configured Perspicax identity chip", () => {
     expect(pill(false)).not.toContain("data-perspicax-identity");
-    const html = renderToStaticMarkup(createElement(BotHeaderPill, { name: "Pepper", panelOpen: false, onToggle: () => {}, avatar: null, actsAs: "Service desk" }));
-    expect(html).toContain("as Service desk");
-    expect(html).toContain("data-perspicax-identity");
-  });
-
-  it("removes the identity chip's value when a complete bot frame returns to default", () => {
-    const withIdentity = { ...base, bots: [{ ...bot, perspicaxActAs: { slug: "redacted", name: "Bot attribution" } }] };
-    const cleared = reducer(withIdentity, { type: "botPatched", bot });
-    expect(cleared.bots[0]!.perspicaxActAs).toBeUndefined();
   });
 
   it("shows the mascot, the name, then a chevron, as a button", () => {

@@ -1669,7 +1669,13 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
       process.env.FAKE_CODEX_DUMP = dump;
       await instance.adapter.sendTurn({ threadId: "t-plan-call", text: "go", model: "gpt-6.1-sol", integrations: { custom: { whop } } });
       const opened = await recorder.until((event) => event.type === "request.opened");
-      expect(opened).toMatchObject({ requestType: "permission", tool: "payments_list", summary: 'Allow the whop MCP server to run tool "payments_list"?' });
+      expect(opened).toMatchObject({
+        requestType: "permission",
+        tool: "payments_list",
+        mcpTool: "whop__payments_list",
+        input: JSON.stringify({ company_id: "biz_1" }),
+        summary: 'Allow the whop MCP server to run tool "payments_list"?',
+      });
       await instance.adapter.respondToRequest("t-plan-call", opened.requestId!, { behavior: "allow" });
       await recorder.until((event) => event.type === "turn.completed");
       expect(JSON.parse(readFileSync(dump, "utf8")).decision).toEqual({ action: "accept", content: {} });
@@ -1735,51 +1741,51 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     expect(seen.env.SAGAX_TOOL_SERVER).toBeUndefined();
   });
 
-  it("mounts two internal Perspicax bridges without sharing a capability or printing it", async () => {
+  it("mounts the account Perspicax bridge behind its searched private catalog", async () => {
     await create();
-    const dump = join(scratch, "perspicax-bridges.json");
+    const dump = join(scratch, "perspicax-bridge.json");
     process.env.FAKE_CODEX_DUMP = dump;
-    const bridge = (profile: string, token: string) => ({
-      command: process.execPath,
-      args: [SPAWNED_PROXIES.perspicax],
-      env: {
-        ELECTRON_RUN_AS_NODE: "1",
-        SAGAX_HARNESS_URL: "http://127.0.0.1:8799",
-        SAGAX_PERSPICAX_TOKEN: token,
-        SAGAX_PERSPICAX_PROFILE: profile,
-        SAGAX_BOT_ID: "bot1",
-        SAGAX_THREAD_ID: "t-px-bridges",
-      },
-    });
+    const tokenFile = join(scratch, "px-main-token");
     await instance.adapter.sendTurn({
-      threadId: "t-px-bridges",
+      threadId: "t-px-bridge",
       text: "go",
       integrations: {
         custom: {
-          perspicax_alpha: bridge("alpha", "token-alpha"),
-          perspicax_beta: bridge("beta", "token-beta"),
+          perspicax: {
+            command: process.execPath,
+            args: [SPAWNED_PROXIES.perspicax],
+            env: {
+              ELECTRON_RUN_AS_NODE: "1",
+              SAGAX_HARNESS_URL: "http://127.0.0.1:8799",
+              SAGAX_PERSPICAX_TOKEN: "token-main",
+              SAGAX_PERSPICAX_TOKEN_FILE: tokenFile,
+              SAGAX_BOT_ID: "bot1",
+              SAGAX_THREAD_ID: "t-px-bridge",
+            },
+          },
         },
       },
     });
     await recorder.until((event) => event.type === "turn.completed");
     const seen = JSON.parse(readFileSync(dump, "utf8"));
     const argv = seen.argv.join(" ");
-    expect(argv).not.toContain("token-alpha");
-    expect(argv).not.toContain("token-beta");
+    expect(argv).not.toContain("token-main");
     expect(seen.env.SAGAX_PERSPICAX_TOKEN).toBeUndefined();
-    expect(seen.env.SAGAX_PERSPICAX_PROFILE).toBeUndefined();
+    expect(seen.env.SAGAX_PERSPICAX_TOKEN_FILE).toBeUndefined();
     expect(seen.env.SAGAX_HARNESS_URL).toBeUndefined();
-    const stem = (name: string) => `SAGAX_MCP_ENV_${createHash("sha256").update(name).digest("hex").toUpperCase()}__`;
-    const alpha = stem("perspicax_alpha");
-    const beta = stem("perspicax_beta");
-    expect(alpha).not.toBe(beta);
-    expect(seen.env[`${alpha}SAGAX_PERSPICAX_TOKEN`]).toBe("token-alpha");
-    expect(seen.env[`${beta}SAGAX_PERSPICAX_TOKEN`]).toBe("token-beta");
-    expect(seen.env[`${alpha}SAGAX_PERSPICAX_PROFILE`]).toBe("alpha");
-    expect(seen.env[`${beta}SAGAX_PERSPICAX_PROFILE`]).toBe("beta");
-    expect(argv).toContain(`"SAGAX_PROXY_ENV_PREFIX" = "${alpha}"`);
-    expect(argv).toContain(`"SAGAX_PROXY_ENV_PREFIX" = "${beta}"`);
-    expect(argv).toContain('mcp_servers.perspicax_alpha.default_tools_approval_mode="prompt"');
+    const record = `SAGAX_GATE_CONFIG_${createHash("sha256").update("perspicax").digest("hex")}`;
+    const gate = JSON.parse(seen.env[record]);
+    const upstream = JSON.parse(gate.SAGAX_GATE_UPSTREAM);
+    expect(upstream.env.SAGAX_PERSPICAX_TOKEN).toBe("token-main");
+    expect(upstream.env.SAGAX_PERSPICAX_TOKEN_FILE).toBe(tokenFile);
+    expect(JSON.parse(gate.SAGAX_GATE_SEARCH)).toMatchObject({
+      pinned: expect.arrayContaining(["api_list", "flow_run", "identity_switch", "memory_find"]),
+      pinnedSuffixes: ["_action", "_query", "_write"],
+    });
+    expect(upstream.args).toEqual([SPAWNED_PROXIES.perspicax]);
+    expect(argv).toContain(SPAWNED_PROXIES.mcpGate);
+    expect(argv).toContain('mcp_servers.perspicax.default_tools_approval_mode="prompt"');
+    expect(argv).not.toContain("SAGAX_PERSPICAX_PROFILE");
   });
 
   it("still refuses a server that only resembles the Perspicax bridge", async () => {
@@ -1787,12 +1793,12 @@ process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result})+'\\n');});`)
     const almost = {
       command: process.execPath,
       args: [SPAWNED_PROXIES.perspicax, "--extra"],
-      env: { SAGAX_PERSPICAX_PROFILE: "alpha", SAGAX_PERSPICAX_TOKEN: "token-alpha", SAGAX_HARNESS_URL: "http://127.0.0.1:9" },
+      env: { SAGAX_PERSPICAX_TOKEN: "token-alpha", SAGAX_HARNESS_URL: "http://127.0.0.1:9" },
     };
     await expect(instance.adapter.sendTurn({
       threadId: "t-px-almost",
       text: "go",
-      integrations: { custom: { perspicax_alpha: almost } },
+      integrations: { custom: { perspicax: almost } },
     })).rejects.toThrow(/reserved environment variable/i);
   });
 

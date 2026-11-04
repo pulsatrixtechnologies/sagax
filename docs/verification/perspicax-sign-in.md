@@ -2,7 +2,7 @@
 
 Local bot `act` uses a delegated Sagax session, not a Perspicax assertion.
 Calls to `/api/org/admin/*` and `/api/org/member/*` therefore return an
-actionable 400 before replay: use a Perspicax profile's console tools, or
+actionable 400 before replay: use the Perspicax account connection's console tools, or
 the local `/api/bots`, `/api/routines` and `/api/routines/runs` routes for
 the person's own environment. No assertion verification rules change.
 Regression #1993: `pnpm exec vitest run shared/bot-act.test.ts
@@ -396,68 +396,66 @@ By hand on an isolated organization server (port 19092 below):
 the same with a signed-in cookie or `Authorization: Bearer omb_sess_...`
 lists `engines`.
 
-## Slice 5: Perspicax MCP per bot, as the person who speaks
+## Slice 5: one Perspicax account connection, as the person who speaks
 
 ### Automated (fake provider)
 
 ```sh
-pnpm exec vitest run server/perspicax/perspicax-mcp.test.ts server/perspicax-mcp-bridge.test.ts server/bots/bot-perspicax.test.ts \
-  server/perspicax/perspicax-link.test.ts server/auth/idp-session.test.ts server/auth/oidc-rp.test.ts server/auth/request-auth.test.ts \
-  server/org/org-mcp.e2e.test.ts server/org/org-sharing.e2e.test.ts server/oidc-session.e2e.test.ts \
-  src/components/bot-settings/PerspicaxSection.test.ts
-pnpm -s i18n:check
+pnpm exec vitest run server/perspicax/perspicax-mcp.test.ts server/perspicax/perspicax-identity.test.ts \
+  server/perspicax/perspicax-link.test.ts server/perspicax/perspicax-claims.test.ts \
+  server/perspicax-mcp-bridge.test.ts server/routes/internal-integrations.test.ts \
+  server/routes/mcp-internal.test.ts server/drivers/chat-mcp-tools.test.ts \
+  server/drivers/pi-mcp-extension.test.ts
+pnpm typecheck
 ```
 
 The fake provider now answers the RFC 8693 token exchange at its token
 endpoint (Basic auth with the link token, `subject_token` = the speaker's
-sign-in access token, `resource` = its `/mcp`), lists `profiles` per person
-in the directory, and serves a small `/mcp` that records who called which
-tool. The fake Claude CLI calls MCP tools from `FAKE_CLAUDE_MCP_CALLS`
-(for example `[{"server":"perspicax_*","tool":"api_list","arguments":{}}]`)
-and writes what it saw to `FAKE_CLAUDE_MCP_DUMP`.
+sign-in access token, canonical `resource` = its `/mcp`, with no profile in
+the exchange), lists the account's held roles, and serves a small `/mcp` that
+records who called which tool. Every harness mounts that connection as the
+fixed server `perspicax`.
 
 - `server/perspicax/perspicax-mcp.test.ts`: who speaks for a turn (the Direct's
   person, a hop through `ask_bot` or `coordinate_bots`, a room member, a
-  routine's person), the exchange per profile, `invalid_target` for a
-  profile not held, the per-turn tokens revoked after the turn, no cache
-  across people.
+  routine's person), one account exchange, the fixed mount, token renewal and
+  revocation, and no cache across people.
+- `server/perspicax/perspicax-identity.test.ts`: explicit `identity_switch`
+  and `profile_use`, role-dependent tool discovery, restoration after token or
+  session renewal, generation reset, and no silent fallback to the default
+  role when restoration fails, including routine retry.
 - `server/perspicax-mcp-bridge.test.ts`: the stdio bridge the harness holds;
-  the engine sees only a turn capability, which answers 401 once the turn
-  ends.
-- `server/bots/bot-perspicax.test.ts`: `GET` and `PUT /api/bots/:id/perspicax`
-  (`available`, `profile_not_held`, `needs_edit`, `unknown_profile`).
-- `server/org/org-mcp.e2e.test.ts` (real server): the editor offers alice's
-  profiles, scenario E (bob's turn reaches Perspicax as bob, client
-  `pulsa-bot:<server id>`, `client_name` `Pulsa Bot (<bot id>)`, tokens
-  revoked after it), T1 (no sign-in or Perspicax token in the engine's argv,
-  environment or MCP configuration), the negative (carol holds no profile:
-  no server, a note in the prompt, an activity row), the `coordinate_bots`
-  hop, and the routine lineage cases below.
+  the engine sees only a turn capability, gets `tools/list_changed` before a
+  switch response, and receives 401 once the turn ends.
+- `server/drivers/chat-mcp-tools.test.ts` and
+  `server/drivers/pi-mcp-extension.test.ts`: a role switch re-lists tools and
+  replaces the model's registered catalogue without replaying a completed
+  vendor operation.
 
 ### Against a real Perspicax (manual)
 
 Isolated instances only. Build `pulsatrix-connector` from the slice 5 head
 (Perspicax 19091, Sagax 19092, webhook 19093) and start Sagax as in slice 4
 with `FAKE_CLAUDE_MCP_CALLS` and `FAKE_CLAUDE_MCP_DUMP=$S/mcp-dump.json`.
-Create profile P ("Dispatch", slug `dispatch`, meta tool `api_list`) held by
-alice and bob; carol and dave hold none. Then walk S5-1 to S5-12 of the
-slice 5 acceptance:
+Give alice and bob the roles Dispatch and Billing, and leave one additional
+role unheld. Then walk the slice 5 acceptance:
 
 1. Discovery lists the token-exchange grant; the directory shows each
-   person's `profiles`; `GET /api/bots/X/perspicax` as alice offers P.
+   person's held roles. There is no bot Perspicax profile setting or route.
 2. The exchange contract by curl: `expires_in` at most 900, no
-   `refresh_token`, the token lists only P's tools on `/mcp`; the subject
-   token itself, a missing Basic header, a console `pxat1.`, an ordinary
-   `/mcp` token, a profile not held and a foreign resource are refused with
-   the codes in the plan; `token_exchanged` in auth_events.
-3. The "Profils Perspicax" section of bot settings in headless Chrome at
-   1280 and 390 px; the edit rules above by API.
+   `refresh_token`, `resource` is exactly `/mcp`, and no profile selector is
+   sent. The subject token itself, a missing Basic header, a console `pxat1.`,
+   an ordinary `/mcp` token and a foreign resource are refused with the codes
+   in the plan; `token_exchanged` appears in auth_events.
+3. `tools/list` on mount `perspicax` exposes role controls. Switch from
+   Dispatch to Billing, list again, and verify that each role's real tool
+   surface is used. An unheld role is refused by Perspicax.
 4. Scenario E: bob (`use` on X) sends "ping"; the reply has
    `mcp:api_list:ok`; Perspicax's journal has the rows under bob, none
    under alice; `token_revoked` within 10 s after the turn.
-5. carol gets `mcp:absent`, the note naming Dispatch and the activity row;
-   granting P to her team T turns it on within one directory period, and
-   removing her from T turns it off at once.
+5. End the generation after selecting Billing, start a warm generation, and
+   verify that it opens a new MCP session on the account default. No selected
+   role or role-specific tool catalogue crosses the boundary.
 6. No `pxlo1.` in `claude-dump.json`, `mcp-dump.json`, the Sagax log or
    `ps -Eww` during a turn; a person disabled mid-turn gets an MCP error on
    the next call, never a result.

@@ -292,12 +292,12 @@ describe("buildMcpServers", () => {
     expect(servers.agents!.env.KEEP).toBe("1");
     expect(JSON.parse(servers.ops!.env.SAGAX_GATE_SEARCH!).pinned).toEqual(["get_ticket"]);
     expect(JSON.parse(servers.ops!.env.SAGAX_GATE_SEARCH!).pinnedSuffixes).toBeUndefined();
-    // #1935: a Perspicax profile bridge also lists its own core whole
+    // #1935: the Perspicax account bridge also lists its own core whole
     const bridged = buildMcpServers({ threadId: "compact-px", text: "Go", compactPrompt, integrations: {
-      custom: { perspicax_read_only_dispatch_view: { command: process.execPath, args: [SPAWNED_PROXIES.perspicax], env: { SAGAX_PERSPICAX_PROFILE: "P1" } } },
+      custom: { perspicax: { command: process.execPath, args: [SPAWNED_PROXIES.perspicax], env: { SAGAX_PERSPICAX_TOKEN: "synthetic-account-token", SAGAX_PERSPICAX_TOKEN_FILE: "/fake/px-main-token" } } },
     } }) as Record<string, { env: Record<string, string> }>;
-    const search = JSON.parse(bridged.perspicax_read_only_dispatch_view!.env.SAGAX_GATE_SEARCH!);
-    expect(search.pinned).toEqual(["api_describe", "api_result_query", "api_search"]);
+    const search = JSON.parse(bridged.perspicax!.env.SAGAX_GATE_SEARCH!);
+    expect(search.pinned).toEqual(["api_describe", "api_list", "api_result_query", "api_search", "flow", "flow_action", "flow_run", "identity_switch", "memory_find", "memory_recall", "memory_search"]);
     expect(search.pinnedSuffixes).toEqual(["_action", "_query", "_write"]);
     // without a compact prompt nothing changes
     const plain = buildMcpServers({ threadId: "plain", text: "Go", integrations: {

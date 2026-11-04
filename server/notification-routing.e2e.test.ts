@@ -162,16 +162,16 @@ beforeAll(async () => {
       // asks before running a command: the approval an AI client's
       // conversation must still bring to the person
       asking: {
-        driver: "grokAgent",
+        driver: "geminiAgent",
         displayName: "Asking fixture",
         // Use a write at Ask to exercise a pending approval and its notification.
-        environment: { FAKE_ACP_MODE: "permission", FAKE_ACP_PERMISSION_TOOL_CALL: JSON.stringify({ kind: "execute", rawInput: { command: "touch notification-fixture.txt" }, title: "touch notification-fixture.txt" }) },
+        environment: { GEMINI_API_KEY: "gemini-test-key", FAKE_ACP_MODE: "permission", FAKE_ACP_PERMISSION_TOOL_CALL: JSON.stringify({ kind: "execute", rawInput: { command: "touch notification-fixture.txt" }, title: "touch notification-fixture.txt" }) },
         config: { cli: FAKE_ACP },
       },
       curious: {
-        driver: "grokAgent",
+        driver: "geminiAgent",
         displayName: "Curious fixture",
-        environment: { FAKE_ACP_MODE: "question" },
+        environment: { GEMINI_API_KEY: "gemini-test-key", FAKE_ACP_MODE: "question" },
         config: { cli: FAKE_ACP, fullAuto: true },
       },
     },

@@ -4,7 +4,7 @@
 // One approval places one call:
 //   1. the bot calls place_phone_call: Sagax builds the call (fixed AI
 //      disclosure, the bot's words, no Url or Twiml of the bot's), checks it
-//      with a dry run of twilio_api_write on the person's Perspicax profile,
+//      with a dry run of twilio_api_write on the person's Perspicax account connection,
 //      and shows the card "Call +1 514 555 0142?" in the conversation;
 //   2. the person (or their Primary Bot, when they ask) answers Call or Do
 //      not call. There is no Always allow;

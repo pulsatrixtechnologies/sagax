@@ -166,7 +166,7 @@ posixOnly("routine modal: Runs as", () => {
           driver: "claudeAgent",
           environment: {
             FAKE_CLAUDE_DUMP: join(home, "claude-dump.json"),
-            FAKE_CLAUDE_MCP_CALLS: JSON.stringify([{ server: "perspicax_*", tool: "api_list", arguments: {} }]),
+            FAKE_CLAUDE_MCP_CALLS: JSON.stringify([{ server: "perspicax", tool: "api_list", arguments: {} }]),
             FAKE_CLAUDE_MCP_DUMP: join(home, "mcp-dump.json"),
           },
           config: { cli: FAKE_CLAUDE, fullAuto: true },
@@ -184,7 +184,6 @@ posixOnly("routine modal: Runs as", () => {
     expect(created.status, created.text).toBe(201);
     botId = created.body.bot.id;
     expect((await api("PATCH", `/api/bots/${botId}`, alice, { modelSelection: { instanceId: "claude", model: "fake-model" } })).status).toBe(200);
-    expect((await api("PUT", `/api/bots/${botId}/perspicax`, alice, { profiles: [PROFILE.id] })).status).toBe(200);
     for (const login of ["bob", "carol", "dave", "mia", "erin"]) {
       const shared = await api("PUT", `/api/bots/${botId}/grants`, alice, { target: `user:${ids[login]}`, level: "run" });
       expect(shared.status, shared.text).toBe(200);
@@ -286,12 +285,8 @@ posixOnly("routine modal: Runs as", () => {
     const run = await runNow(alice, bobRoutine);
     expect(run.status, run.error).toBe("completed");
     expect(run.runAs).toBe(ids.bob);
-    // 9e3630a72 probes the same person's profile before the engine turn.
-    const exchanges = idp.exchanges.slice(exchangesBefore);
-    expect(exchanges.map(exchange => ({ sub: exchange.sub, profile: exchange.profile, ok: exchange.ok }))).toEqual([
-      { sub: BOB.sub, profile: PROFILE.id, ok: true },
-      { sub: BOB.sub, profile: PROFILE.id, ok: true },
-    ]);
+    // Readiness and execution each use this person's account exchange.
+    expect(idp.exchanges.slice(exchangesBefore).map((exchange) => exchange.sub)).toEqual([BOB.sub, BOB.sub]);
   }, 90_000);
 
   it("Run now: the person it runs as may, someone else with run may not; one run in flight; audited as manual; a paused routine stays paused", async () => {

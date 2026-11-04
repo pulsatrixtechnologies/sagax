@@ -366,21 +366,18 @@ const FLOW_ENTRY_SKILLS = ["using-px-flow", "running-px-flow"] as const;
  * pulsatrix-flow as an alias of that install, so the turn had no Flow skill
  * at all and nothing said where they were; the bot searched skills_list, the
  * workspace and the catalog, then gave up. In server mode the active pack
- * serves every product file through the routine's Flow lease, so a turn of a
- * bot that reaches Perspicax is told how to read them there. Empty when the
- * product plugin is loaded for this turn, when Perspicax declares nothing,
- * or for a bot without a Perspicax profile. */
+ * serves every product file through the routine's Flow lease, so every active
+ * member is told how to read them there. Empty when the product plugin is
+ * loaded for this turn or when Perspicax declares nothing. */
 export function flowSkillsNote(input: {
   declaration: FlowPluginsDeclaration | undefined;
   /** the turn's organization Flow folders (OrgFlowPlugins.dirsFor) */
   loadedDirs: readonly string[];
-  /** the bot reaches Perspicax through at least one profile */
-  perspicaxBot: boolean;
   /** the person whose turn this is is an active member */
   member: boolean;
 }): string {
   const { declaration } = input;
-  if (!declaration || !input.perspicaxBot || !input.member) return "";
+  if (!declaration || !input.member) return "";
   const product = declaration.plugins.find((plugin) => !plugin.tenant)?.name ?? "pulsatrix-flow";
   if (input.loadedDirs.some((dir) => basename(dir) === product)) return "";
   const why = !declaration.enabled
@@ -393,7 +390,7 @@ export function flowSkillsNote(input: {
     "",
     "",
     `Pulsatrix Flow skills (${FLOW_ENTRY_SKILLS.join(", ")} and the other ${product} skills) are not loaded on this turn: ${why}.`,
-    "They are not in skills_list, the workspace or a marketplace, so do not look for them there. The active Flow pack serves them through your Perspicax profile:",
+    "They are not in skills_list, the workspace or a marketplace, so do not look for them there. The active Flow pack serves them through your main Perspicax connection:",
     `after flow_run run.init, read one with flow_run ${read(FLOW_ENTRY_SKILLS[0])}`,
     "(one part per call: follow the answer's next, adding \"--part\", \"<n>\" to argv, until next is null).",
     "A routine that says to load a Flow skill is done this way, and a missing local copy alone never stops the pass.",

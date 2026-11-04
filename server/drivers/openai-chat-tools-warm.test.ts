@@ -335,5 +335,46 @@ rl.on("line", (line) => {
       driverKind: "openai-compat",
     })).toBe("skipped");
   });
-});
 
+  it("remounts after failed discovery closes a cached tool session", async () => {
+    const cache = createWarmToolSessions();
+    let closed = false;
+    const session = {
+      definitions: [], skipped: [],
+      validate() {},
+      view() { return { title: "t", input: {}, ask: false }; },
+      async execute() { return { text: "write completed", ok: true }; },
+      isClosed() { return closed; },
+      async close() { closed = true; },
+    };
+    cache.keep("thread-1", session, "fp");
+    expect(cache.get("thread-1", "fp")).toBe(session);
+    await session.close();
+    // finally must not keep a session closed by a post-write refresh either.
+    cache.keep("thread-1", session, "fp");
+    expect(cache.get("thread-1", "fp")).toBeUndefined();
+    const replacement = { ...session, isClosed: () => false };
+    cache.keep("thread-1", replacement, "fp");
+    expect(cache.get("thread-1", "fp")).toBe(replacement);
+    await cache.releaseAll();
+  });
+
+  it("retries the account MCP next turn when its initial mount was temporarily unavailable", async () => {
+    const cache = createWarmToolSessions();
+    let closed = false;
+    const session = {
+      definitions: [], skipped: [{server:"perspicax",reason:"temporarily unavailable"}],
+      validate() {},
+      view() { return { title: "t", input: {}, ask: false }; },
+      async execute() { return { text: "ok", ok: true }; },
+      async close() { closed = true; },
+    };
+    cache.keep("thread-1", session, "fp");
+    expect(cache.get("thread-1", "fp")).toBeUndefined();
+    expect(closed).toBe(true);
+    const recovered = { ...session, skipped: [] };
+    cache.keep("thread-1", recovered, "fp");
+    expect(cache.get("thread-1", "fp")).toBe(recovered);
+    await cache.releaseAll();
+  });
+});

@@ -21,16 +21,15 @@ export function routineEngineRefusal(engine: ReadinessEngine, now: number): Engi
   return engine.signedIn === false ? { engine: engine.engine, account: engine.account, cause: "signed_out", at: now }
     : activeEngineRefusal(engine.engine, engine.account, now);
 }
-export interface ReadinessMcp { known: string[]; enabled: string[]; profileServer?: string; toolPrefixes?: Record<string, string> }
+export interface ReadinessMcp { known: string[]; enabled: string[]; toolPrefixes?: Record<string, string> }
 export interface ReadinessComputer { name: string; online?: boolean; needed?: boolean; detail?: string }
 export interface ReadinessFlow { step?: string; error?: string; live?: boolean }
-interface ReadinessFlowSkills { hasProfile: boolean; installation: string }
+interface ReadinessFlowSkills { installation: string }
 /** A held local install does not disable the pack's remote product documents (#1945). */
-export function routineFlowSkills(organization: boolean, declaration: FlowPluginsDeclaration | undefined, profiles: readonly string[], status: OrgFlowPluginsStatus): ReadinessFlowSkills | undefined {
+export function routineFlowSkills(organization: boolean, declaration: FlowPluginsDeclaration | undefined, status: OrgFlowPluginsStatus): ReadinessFlowSkills | undefined {
   if (!organization || !declaration) return undefined;
   const states = status.plugins.map(plugin => plugin.state).join(", ");
-  return { hasProfile: profiles.length > 0,
-    installation: status.reason ? `${status.mode}/${status.reason}` : status.error ?? (states ? `${status.mode}/${states}` : status.mode) };
+  return { installation: status.reason ? `${status.mode}/${status.reason}` : status.error ?? (states ? `${status.mode}/${states}` : status.mode) };
 }
 export type RoutineReadinessMode = "run" | "check";
 export interface RoutineReadinessDeps {
@@ -44,7 +43,7 @@ export interface RoutineReadinessDeps {
   /** Organization declaration present: the active pack serves product skills remotely. */
   flowSkills?(routine: ReadinessRoutine, run: ReadinessRun): ReadinessFlowSkills | undefined;
   mcp(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): ReadinessMcp | undefined | Promise<ReadinessMcp | undefined>;
-  perspicax?(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): Promise<{ refused?: boolean; profile?: string; detail?: string } | undefined>;
+  perspicax?(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): Promise<{ refused?: boolean; detail?: string } | undefined>;
   computers?(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): Promise<ReadinessComputer[] | undefined> | ReadinessComputer[] | undefined;
   flow?(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): Promise<ReadinessFlow | undefined>;
 }
@@ -83,7 +82,7 @@ function boundedProbe(work: (signal: AbortSignal) => unknown, timeoutMs = ROUTIN
 /** Bound checks at persistence boundaries as well as at probe creation. */
 export function loadRoutineReadiness(value: unknown): RoutineReadinessCheck[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const codes = new Set(["engine_credits", "engine_limit", "engine_signed_out", "engine_artifacts", "skill_missing", "flow_profile", "flow_plan", "mcp_missing", "perspicax_profile", "computer_offline", "ready", "probe_error"]);
+  const codes = new Set(["engine_credits", "engine_limit", "engine_signed_out", "engine_artifacts", "skill_missing", "flow_plan", "mcp_missing", "perspicax_profile", "computer_offline", "ready", "probe_error"]);
   return value.slice(0, 100).filter((check): check is RoutineReadinessCheck => Boolean(check && kinds.includes(check.kind) && codes.has(check.code) && typeof check.ok === "boolean" && typeof check.line === "string")).map(check => ({
     kind: check.kind, ok: check.ok, code: check.code, line: clean(check.line),
     ...(typeof check.detail === "string" ? { detail: clean(check.detail) } : {}),
@@ -129,9 +128,7 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
       if (pack) {
         // A Flow routine reads all its product skills from the active pack,
         // including skills absent from the local discovery inventory (#1945).
-        checks.push(pack.hasProfile
-          ? ready(kind, `Flow skills are served by the active Flow pack through Perspicax (organization install: ${clean(pack.installation)})`)
-          : { kind, ok: false, code: "flow_profile", line: "This Flow routine needs a Perspicax profile on its bot to reach the Flow skills. Choose one in the bot's Connect apps." });
+        checks.push(ready(kind, `Flow skills are served by the active Flow pack through Perspicax (organization install: ${clean(pack.installation)})`));
         continue;
       }
       if (probe.error) { checks.push({ kind, ok: mode === "run", code: "probe_error", params: { kind }, line: `The ${kind} check could not finish. Check the routine again.`, detail: probe.error }); continue; }
@@ -176,13 +173,12 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
           for (const [prefix, server] of Object.entries(prefixes)) {
             if (prompt.match(/[a-zA-Z][a-zA-Z0-9_-]*/g)?.some(word => word.startsWith(`${prefix}_`))) needed.add(server);
           }
-          if (isFlowRoutine(prompt) && servers.profileServer) needed.add(servers.profileServer);
           for (const server of [...needed].slice(0, 40)) if (!servers.enabled.includes(server)) checks.push({ kind, ok: false, code: "mcp_missing", params: { server }, line: `MCP server \`${server}\` is not connected for this bot. Connect it in the bot's Connect apps.` });
         }
       } else if (kind === "perspicax") {
-        const profile = probe.value as { refused?: boolean; profile?: string; detail?: string } | undefined;
-        if (profile?.refused) checks.push({ kind, ok: false, code: "perspicax_profile", params: { profile: profile.profile ?? "Perspicax" }, line: "Perspicax refused this person's profile (401/403 invalid_token). Choose the profile again in Settings > Perspicax.", ...(profile.detail ? { detail: clean(profile.detail) } : {}) });
-        else if (profile?.detail) checks.push(ready(kind, clean(profile.detail)));
+        const connection = probe.value as { refused?: boolean; detail?: string } | undefined;
+        if (connection?.refused) checks.push({ kind, ok: false, code: "perspicax_profile", params: { profile: "Perspicax" }, line: "Perspicax refused this person's account connection (401/403 invalid_token). Reconnect the account in Settings.", ...(connection.detail ? { detail: clean(connection.detail) } : {}) });
+        else if (connection?.detail) checks.push(ready(kind, clean(connection.detail)));
       } else if (kind === "flow") {
         const result = probe.value as ReadinessFlow | undefined;
         if (result?.error) {

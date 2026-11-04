@@ -289,7 +289,7 @@ Comment Sagax obtient les droits, en réutilisant le mécanisme existant
 
 | Situation | Identité utilisée | Mécanisme |
 | --- | --- | --- |
-| La personne parle au bot dans l'app (et lui demande, par exemple, de la rappeler) | La personne connectée | Échange RFC 8693 de son jeton de connexion contre un jeton MCP court par profil, par tour (déjà en place) |
+| La personne parle au bot dans l'app (et lui demande, par exemple, de la rappeler) | La personne connectée | Échange RFC 8693 de son jeton de connexion contre le jeton court de sa connexion MCP de compte, par tour (déjà en place) |
 | Une routine appelle ou texte | La personne pour qui la routine roule (`runAs`) | Délégation de routine de cette personne (déjà en place, `routine-run-as.ts`) |
 | Un appel ou un SMS **entrant** | L'appelant, une fois authentifié (5.1) | **Délégation de routine** de la personne (R2, voir plus bas) |
 | Les opérations du service téléphonique lui-même (répondre au webhook, purger après 30 jours) | Le titulaire de la ligne (la personne qui a branché le numéro) | Délégation de routine du titulaire |
@@ -300,8 +300,8 @@ téléphonie réutilise donc la **délégation de routine** que la personne dét
 déjà (émise automatiquement à sa connexion depuis #149,
 `server/routines/routine-run-as.ts`). Aucun nouveau type de délégation, aucun
 changement de délégation côté Perspicax. Pendant l'appel, elle sert aux
-outils Twilio de la ligne et aux tours du bot (les autres profils Perspicax du
-bot, exactement comme une routine). Elle n'est utilisable qu'après
+outils Twilio de la ligne et aux tours du bot (la même connexion de compte
+centrale que pour une routine). Elle n'est utilisable qu'après
 l'authentification de l'appelant (5.1). L'activation « Me joindre par
 téléphone » dans l'app reste un consentement explicite et daté, propre à la
 téléphonie, mais il ne crée pas de délégation : il autorise Sagax à se servir
@@ -309,7 +309,7 @@ de la délégation de routine pour les appels et SMS. Sans délégation de routi
 active (personne jamais connectée, délégation révoquée), la ligne répond
 « service indisponible » et la personne est notifiée.
 
-**Ce que le profil doit permettre.** Lire et écrire `Calls` et `Messages`,
+**Ce que les permissions Twilio utilisées doivent permettre.** Lire et écrire `Calls` et `Messages`,
 lire `IncomingPhoneNumbers`, modifier les URL de webhook du numéro partagé
 (une seule fois, à la mise en service), lire l'usage. La validation des
 signatures de Twilio exige le **jeton d'authentification** du compte (une clé

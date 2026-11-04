@@ -7,7 +7,7 @@
 /** Where a connector comes from.
  * - claude: a connector of the person's own Claude account (claude.ai)
  * - grok: the person's own grok.com connectors (a catalog managed there)
- * - perspicax: a Perspicax profile of the bot, as the person speaking
+ * - perspicax: the speaking person's Perspicax account connection
  * - personal: the person's own MCP server (Settings, My connections)
  * - server: an MCP server of this Sagax server (the organization's on an
  *   organization server, Capabilities > Installed on a personal one)

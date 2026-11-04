@@ -510,7 +510,7 @@ posixOnly("Perspicax console: the Sagax admin routes", () => {
     const logs = await admin("GET", "logs?limit=500", ALICE);
     expect(logs.status, logs.text).toBe(200);
     expect(logs.body.lines.length).toBeGreaterThan(0);
-    expect(logs.body.lines[0]).toEqual({ seq: expect.any(Number), at: expect.any(Number), level: expect.any(String), area: expect.anything(), message: expect.any(String) });
+    expect(logs.body.lines[0]).toEqual({ seq: expect.any(Number), at: expect.any(Number), level: expect.any(String), area: expect.toBeOneOf([null, expect.any(String)]), message: expect.any(String) });
     expect(logs.text).not.toContain(ORG_KEY);
     expect(logs.text).not.toContain(idp.linkToken);
     expect((await admin("GET", "logs?level=error", ALICE)).body.lines.every((line: { level: string }) => line.level === "error")).toBe(true);

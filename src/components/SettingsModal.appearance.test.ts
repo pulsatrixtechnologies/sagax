@@ -1,12 +1,13 @@
 import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@/lib/i18n";
 import type { SendKey } from "@/lib/send-key";
 import { en, locales } from "@/locales";
 import type { AppSettingsSection } from "@/state/store";
 import type { Switch } from "./SettingsPrimitives";
 import { chooseThreadsView, SECTIONS, sectionMatches, SettingsModal } from "./SettingsModal";
+import { AppearanceSettings, WorkspaceBackupSettings } from "./lazy-settings-sections";
 
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: () => {} }));
 
@@ -94,6 +95,11 @@ vi.mock("./SettingsPrimitives", async (importOriginal) => {
       return createElement(original.Switch, props);
     },
   };
+});
+
+// Static rendering does not run the effects that load the selected page.
+beforeAll(async () => {
+  await Promise.all([AppearanceSettings.preload(), WorkspaceBackupSettings.preload()]);
 });
 
 beforeEach(() => {

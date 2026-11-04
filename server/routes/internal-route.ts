@@ -31,8 +31,6 @@ export interface InternalCapabilityView {
   turnStartedAt?: number;
   /** attach_file calls this turn has made. Mutable on the live capability. */
   attachedFiles?: number;
-  /** Perspicax profile mounted for this turn (I6 /api/internal/perspicax/mcp). */
-  perspicaxProfile?: string;
   /** Browser session id mounted for this turn (I1 /api/internal/browser/mcp). */
   browserSession?: string;
   /** Team computer id when this turn uses a shared team computer (I1 computer-control). */

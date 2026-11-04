@@ -80,10 +80,12 @@ describe("ownerModeForTurn", () => {
 describe("perspicaxSelfAnswer", () => {
   it("knows the reads and the leases of Sagax's own Perspicax mount", () => {
     for (const tool of ["api_list", "api_search", "memory_recall", "memory_search", "flow", "list_agents", "claim_list", "work_search"]) {
+      expect(perspicaxSelfAnswer(`mcp__perspicax__${tool}`)).toBe("read");
       expect(perspicaxSelfAnswer(`mcp__perspicax_quasar_agent__${tool}`)).toBe("read");
       expect(perspicaxSelfAnswer(`perspicax_pulsatrix_flow_owner__${tool}`)).toBe("read");
     }
     for (const tool of ["claim", "claim_renew", "claim_release"]) {
+      expect(perspicaxSelfAnswer(`mcp__perspicax__${tool}`)).toBe("lease");
       expect(perspicaxSelfAnswer(`mcp__perspicax_quasar_agent__${tool}`)).toBe("lease");
     }
   });

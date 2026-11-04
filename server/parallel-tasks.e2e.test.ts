@@ -86,7 +86,7 @@ posixOnly("parallel tasks e2e", () => {
           config: { cli: FAKE_CLAUDE, permissionMode: "bypassPermissions" },
         },
         // every turn asks the person to approve a command, then replies
-        askFirst: { driver: "grokAgent", environment: { FAKE_ACP_MODE: "permission" }, config: { cli: FAKE_ACP, fullAuto: false } },
+        askFirst: { driver: "geminiAgent", environment: { GEMINI_API_KEY: "gemini-test-key", FAKE_ACP_MODE: "permission" }, config: { cli: FAKE_ACP, fullAuto: false } },
       },
     }));
     const port = await freePortBlock([0, 1]);

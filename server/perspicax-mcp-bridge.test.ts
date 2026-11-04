@@ -1,4 +1,4 @@
-// Slice 5: the stdio bridge an engine mounts per Perspicax profile
+// The stdio bridge an engine mounts for the account's main Perspicax connection
 // (server/perspicax-mcp-bridge.ts), against a fake harness.
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";
@@ -39,6 +39,17 @@ function nextJson(lines: readline.Interface) {
   });
 }
 
+function nextJsons(lines: readline.Interface, count: number) {
+  return new Promise<Array<Record<string, any>>>((resolve, reject) => {
+    const out: Array<Record<string, any>> = [];
+    const onLine = (line: string) => {
+      try { out.push(JSON.parse(line)); } catch (error) { lines.off("line", onLine); reject(error); return; }
+      if (out.length === count) { lines.off("line", onLine); resolve(out); }
+    };
+    lines.on("line", onLine);
+  });
+}
+
 afterEach(async () => {
   child?.kill("SIGKILL");
   child = null;
@@ -64,13 +75,13 @@ describe("Perspicax MCP bridge", () => {
         response.end(JSON.stringify({ jsonrpc: "2.0", id: frame.id, result: { tools: [{ name: "api_list" }] } }));
       });
     });
-    const lines = start({ SAGAX_HARNESS_URL: harness, SAGAX_PERSPICAX_TOKEN: "turn-capability", SAGAX_PERSPICAX_PROFILE: "P1", SAGAX_BOT_ID: "bot1", SAGAX_THREAD_ID: "th1" });
+    const lines = start({ SAGAX_HARNESS_URL: harness, SAGAX_PERSPICAX_TOKEN: "turn-capability", SAGAX_BOT_ID: "bot1", SAGAX_THREAD_ID: "th1" });
     child!.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
     child!.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 7, method: "tools/list" })}\n`);
     expect(await nextJson(lines)).toEqual({ jsonrpc: "2.0", id: 7, result: { tools: [{ name: "api_list" }] } });
     expect(received).toHaveLength(2);
     expect(received[1]).toEqual({
-      url: "/api/internal/perspicax/mcp?profile=P1&botId=bot1&fromThreadId=th1",
+      url: "/api/internal/perspicax/mcp?botId=bot1&fromThreadId=th1",
       authorization: "Bearer turn-capability",
       body: { jsonrpc: "2.0", id: 7, method: "tools/list" },
     });
@@ -91,7 +102,7 @@ describe("Perspicax MCP bridge", () => {
         response.end(JSON.stringify({ jsonrpc: "2.0", id: frame.id, result: {} }));
       });
     });
-    const lines = start({ SAGAX_HARNESS_URL: harness, SAGAX_PERSPICAX_TOKEN: "launch-cap", SAGAX_PERSPICAX_TOKEN_FILE: file, SAGAX_PERSPICAX_PROFILE: "P1" });
+    const lines = start({ SAGAX_HARNESS_URL: harness, SAGAX_PERSPICAX_TOKEN: "launch-cap", SAGAX_PERSPICAX_TOKEN_FILE: file });
     child!.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" })}\n`);
     await nextJson(lines);
     writeFileSync(file, "turn-cap");
@@ -102,6 +113,25 @@ describe("Perspicax MCP bridge", () => {
     await nextJson(lines);
     expect(seen).toEqual(["Bearer warm-cap", "Bearer turn-cap", "Bearer launch-cap"]);
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("forwards tools/list_changed before the switch response", async () => {
+    const harness = await listen((request, response) => {
+      let body = "";
+      request.on("data", (chunk) => { body += chunk; });
+      request.on("end", () => {
+        const frame = JSON.parse(body);
+        response.writeHead(200, { "content-type": "application/json", "x-sagax-mcp-tools-changed": "1" });
+        response.end(JSON.stringify({ jsonrpc: "2.0", id: frame.id, result: { structuredContent: { in_use: "dispatch", changed: true } } }));
+      });
+    });
+    const lines = start({ SAGAX_HARNESS_URL: harness, SAGAX_PERSPICAX_TOKEN: "turn-capability" });
+    const messages = nextJsons(lines, 2);
+    child!.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "profile_use", arguments: { profile: "dispatch" } } })}\n`);
+    expect(await messages).toEqual([
+      { jsonrpc: "2.0", method: "notifications/tools/list_changed" },
+      { jsonrpc: "2.0", id: 8, result: { structuredContent: { in_use: "dispatch", changed: true } } },
+    ]);
   });
 
   it("restores one Codex mount prefix before it reads the turn capability", async () => {
@@ -119,17 +149,15 @@ describe("Perspicax MCP bridge", () => {
       SAGAX_PROXY_ENV_PREFIX: stem,
       [`${stem}SAGAX_HARNESS_URL`]: harness,
       [`${stem}SAGAX_PERSPICAX_TOKEN`]: "prefixed-capability",
-      [`${stem}SAGAX_PERSPICAX_PROFILE`]: "P9",
       [`${stem}SAGAX_BOT_ID`]: "bot9",
       [`${stem}SAGAX_THREAD_ID`]: "th9",
       SAGAX_MCP_ENV_OTHER__SAGAX_PERSPICAX_TOKEN: "other-capability",
       SAGAX_PERSPICAX_TOKEN: "plain-capability",
-      SAGAX_PERSPICAX_PROFILE: "plain",
     });
     child!.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" })}\n`);
     await nextJson(lines);
     expect(received).toEqual([{
-      url: "/api/internal/perspicax/mcp?profile=P9&botId=bot9&fromThreadId=th9",
+      url: "/api/internal/perspicax/mcp?botId=bot9&fromThreadId=th9",
       authorization: "Bearer prefixed-capability",
     }]);
   });
@@ -142,11 +170,11 @@ describe("Perspicax MCP bridge", () => {
         response.end(JSON.stringify({ error: "unauthorized" }));
       });
     });
-    const lines = start({ SAGAX_HARNESS_URL: harness, SAGAX_PERSPICAX_TOKEN: "expired", SAGAX_PERSPICAX_PROFILE: "P1" });
+    const lines = start({ SAGAX_HARNESS_URL: harness, SAGAX_PERSPICAX_TOKEN: "expired" });
     child!.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "api_list" } })}\n`);
     expect(await nextJson(lines)).toEqual({ jsonrpc: "2.0", id: 1, error: { code: -32000, message: "Perspicax is unavailable" } });
     child!.kill("SIGKILL");
-    const closed = start({ SAGAX_HARNESS_URL: "http://127.0.0.1:9", SAGAX_PERSPICAX_TOKEN: "x", SAGAX_PERSPICAX_PROFILE: "P1" });
+    const closed = start({ SAGAX_HARNESS_URL: "http://127.0.0.1:9", SAGAX_PERSPICAX_TOKEN: "x" });
     child!.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: "a", method: "tools/list" })}\n`);
     expect(await nextJson(closed)).toEqual({ jsonrpc: "2.0", id: "a", error: { code: -32000, message: "Perspicax is unavailable" } });
   });

@@ -44,11 +44,11 @@ describe("spawn contract", () => {
     expect(switchesCover(undefined, turnSwitches({}))).toBe(true);
   });
 
-  it("keeps a pre-warmed process across turns for a Perspicax profile bridge: the capability rides a file", () => {
+  it("keeps a pre-warmed process across turns for the Perspicax account bridge: the capability rides a file", () => {
     const thread = `th-${process.pid}-${Date.now()}`;
-    const bridge = (token: string) => ({ command: "node", args: ["bridge"], env: { SAGAX_PERSPICAX_TOKEN: token, SAGAX_PERSPICAX_PROFILE: "P1", SAGAX_THREAD_ID: thread } });
+    const bridge = (token: string) => ({ command: "node", args: ["bridge"], env: { SAGAX_PERSPICAX_TOKEN: token, SAGAX_THREAD_ID: thread } });
     const warm = { px: { ...bridge("warm-cap"), env: warmPerspicaxEnv(thread, "bot1", bridge("warm-cap").env) } };
-    const file = perspicaxTokenFile(thread, "bot1", "P1");
+    const file = perspicaxTokenFile(thread, "bot1");
     expect(warm.px.env.SAGAX_PERSPICAX_TOKEN_FILE).toBe(file);
     expect(readFileSync(file, "utf8")).toBe("warm-cap");
     if (process.platform !== "win32") expect(statSync(file).mode & 0o777).toBe(0o600);
@@ -59,8 +59,8 @@ describe("spawn contract", () => {
     // the file now holds this turn's capability, which the bridge reads per frame
     expect(readFileSync(file, "utf8")).toBe("turn-cap");
     expect(turnFiles(turn)).toEqual([file]);
-    // another profile, another file
-    expect(perspicaxTokenFile(thread, "bot1", "P2")).not.toBe(file);
+    // another bot, another file
+    expect(perspicaxTokenFile(thread, "bot2")).not.toBe(file);
     // without a file the value stays in the contract (a relaunch, never a stale capability)
     expect(JSON.stringify(withoutTurnTokens({ px: bridge("one") }))).not.toBe(JSON.stringify(withoutTurnTokens({ px: bridge("two") })));
   });

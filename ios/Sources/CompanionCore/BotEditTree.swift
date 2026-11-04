@@ -30,8 +30,8 @@ public enum BotEditItem: String, CaseIterable, Hashable, Sendable {
     case callVoice, callSpeed, callLanguage, voiceAlerts
     // Personality (on the root after lot 2)
     case soul, skills, memory
-    // Tools and apps (Access is opened by toolsApps; computer / profiles / Slack stay as rows)
-    case computer, access, perspicaxProfiles, slack
+    // Tools and apps (Access is opened by toolsApps; computer / Slack stay as rows)
+    case computer, access, slack
     // Sharing
     case sharedWith, whoCanSee
     // Advanced
@@ -61,7 +61,6 @@ public enum BotEditItem: String, CaseIterable, Hashable, Sendable {
         case .skills: .skills
         case .memory: .memory
         case .computer: .worksOn
-        case .perspicaxProfiles: .perspicax
         case .slack: .slack
         case .sharedWith: .sharing
         case .whoCanSee: .visibility
@@ -116,7 +115,7 @@ public enum BotEditTree {
                 [.avatar],
                 [.callVoice, .callSpeed, .callLanguage],
                 [.voiceAlerts],
-                [.soul, .skills, .memory, .model, .approvals, .toolsApps, .computer, .perspicaxProfiles, .slack, .routines, .sharing],
+                [.soul, .skills, .memory, .model, .approvals, .toolsApps, .computer, .slack, .routines, .sharing],
                 [.advanced],
                 [.archive],
             ]
@@ -135,7 +134,7 @@ public enum BotEditTree {
             all = [[.soul], [.skills, .memory]]
         case .toolsApps:
             // Intermediate page retired (lot 2): Access opens from the root
-            // Tools and apps row; computer / profiles / Slack are root rows.
+            // Tools and apps row; computer / Slack are root rows.
             all = []
         case .sharing:
             all = [[.sharedWith, .whoCanSee]]

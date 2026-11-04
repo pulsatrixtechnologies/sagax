@@ -857,7 +857,7 @@ public struct BotGrantRecord: Codable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey { case target, level }
 }
 
-// MARK: - Perspicax profiles (BA16, PerspicaxSection.tsx)
+// MARK: - Legacy Perspicax response decoding (no editor or writer)
 
 public struct PerspicaxProfile: Decodable, Hashable, Sendable, Identifiable {
     public var id: String
@@ -923,58 +923,6 @@ public struct PerspicaxAnswer: Decodable, Hashable, Sendable {
     private enum CodingKeys: String, CodingKey { case selected, available, canEdit }
 
     public var selectedIds: [String] { selected.map(\.profile.id) }
-}
-
-public struct PerspicaxRow: Hashable, Sendable, Identifiable {
-    public var profile: PerspicaxProfile
-    public var checked: Bool
-    /// Selected, but the viewer does not hold it: checked and disabled.
-    public var notHeld: Bool
-    public var disabled: Bool
-
-    public var id: String { profile.id }
-}
-
-public enum PerspicaxRules {
-    /// `perspicaxRows`: every profile the viewer holds, then the selected
-    /// ones they do not hold.
-    public static func rows(_ answer: PerspicaxAnswer, draft: [String]) -> [PerspicaxRow] {
-        let checked = Set(draft)
-        var rows = answer.available.map {
-            PerspicaxRow(profile: $0, checked: checked.contains($0.id), notHeld: false, disabled: !answer.canEdit)
-        }
-        let shown = Set(answer.available.map(\.id))
-        for selected in answer.selected where !shown.contains(selected.profile.id) && !selected.heldByMe {
-            rows.append(PerspicaxRow(profile: selected.profile, checked: checked.contains(selected.profile.id), notHeld: true, disabled: true))
-        }
-        return rows
-    }
-
-    /// The draft after a switch (the desktop appends a newly checked id).
-    public static func toggled(_ draft: [String], id: String, on: Bool) -> [String] {
-        on ? draft.filter { $0 != id } + [id] : draft.filter { $0 != id }
-    }
-
-    /// Order matters, as the desktop compares.
-    public static func changed(_ draft: [String], from answer: PerspicaxAnswer) -> Bool {
-        draft != answer.selectedIds
-    }
-
-    public enum Refusal: String, Sendable {
-        case profileNotHeld = "profile_not_held"
-        case needsEdit = "needs_edit"
-        case unknownProfile = "unknown_profile"
-        case failed
-    }
-
-    /// The message for a refused save (`perspicaxErrorKey`).
-    public static func refusal(code: String?) -> Refusal {
-        code.flatMap(Refusal.init(rawValue:)) ?? .failed
-    }
-}
-
-struct PerspicaxPutBody: Encodable {
-    var profiles: [String]
 }
 
 /// A refused write's `code`, when the server sends one.

@@ -18,12 +18,12 @@ final class DesktopBotPanelTests: XCTestCase {
         )
     }
 
-    func testOrganizationServerSwapsVisibilityForSharingAndPerspicax() throws {
+    func testOrganizationServerSwapsVisibilityForSharingWithoutProfileConfiguration() throws {
         let org = SurfaceGate(scope: .serverAdmin, organization: true)
         let sections = DesktopPanelSection.visible(gate: org, slack: true)
         XCTAssertFalse(sections.contains(.visibility))
         XCTAssertTrue(sections.contains(.sharing))
-        XCTAssertTrue(sections.contains(.perspicax))
+        XCTAssertFalse(sections.contains { $0.rawValue == "perspicax" })
         XCTAssertEqual(sections[1], .slack)
         // Works on is its own item there, right after Access
         let access = try XCTUnwrap(sections.firstIndex(of: .access))

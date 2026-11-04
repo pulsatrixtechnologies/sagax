@@ -18,10 +18,10 @@ const held: FlowPluginsDeclaration = {
     { name: "pulsatrix-flow-acme", version: "0.1.36", tenant: true },
   ],
 };
-const base = { declaration: held, loadedDirs: [] as string[], perspicaxBot: true, member: true };
+const base = { declaration: held, loadedDirs: [] as string[], member: true };
 
 describe("flowSkillsNote", () => {
-  it("tells a held Perspicax bot to read the Flow skills through flow_run read doc", () => {
+  it("tells an active member to read the Flow skills through flow_run read doc", () => {
     const note = flowSkillsNote(base);
     expect(note).toContain("using-px-flow, running-px-flow");
     expect(note).toContain("flow_guard_uncovered");
@@ -44,9 +44,8 @@ describe("flowSkillsNote", () => {
     expect(flowSkillsNote({ ...base, loadedDirs: ["/data/org-flow-plugins/load/pulsatrix-flow-acme"] })).not.toBe("");
   });
 
-  it("says nothing without a declaration, a Perspicax profile or an active member", () => {
+  it("says nothing without a declaration or an active member", () => {
     expect(flowSkillsNote({ ...base, declaration: undefined })).toBe("");
-    expect(flowSkillsNote({ ...base, perspicaxBot: false })).toBe("");
     expect(flowSkillsNote({ ...base, member: false })).toBe("");
   });
 });

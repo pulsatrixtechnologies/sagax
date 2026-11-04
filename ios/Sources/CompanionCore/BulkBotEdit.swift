@@ -2,9 +2,9 @@
 // phone's mirror of `shared/bulk-bot-edit.ts`. Every field is "do not
 // change" until it is touched; only touched fields are sent, bot by bot,
 // through the same routes as the bot's own editor (PATCH /api/bots/:id, the
-// grants and Perspicax routes), so each bot is journaled as an individual
+// grants route), so each bot is journaled as an individual
 // edit and refused for its own reasons. A list (Shared with, the MCP servers
-// of Access, Perspicax Profiles) changes by Add, Remove or Replace with. The
+// of Access) changes by Add, Remove or Replace with. The
 // bots' values before are kept so the last bulk change can be undone the
 // same way.
 import Foundation
@@ -381,18 +381,14 @@ public struct BulkBotEditPlan: Hashable, Sendable {
     public var mcpServers: BulkListEdit?
     /// Shared with: each person or team with the level chosen for it.
     public var grants: BulkGrantEdit?
-    /// Perspicax Profiles.
-    public var profiles: BulkListEdit?
 
-    public init(fields: BulkPatch = [:], mcpServers: BulkListEdit? = nil, grants: BulkGrantEdit? = nil,
-                profiles: BulkListEdit? = nil) {
+    public init(fields: BulkPatch = [:], mcpServers: BulkListEdit? = nil, grants: BulkGrantEdit? = nil) {
         self.fields = fields
         self.mcpServers = mcpServers
         self.grants = grants
-        self.profiles = profiles
     }
 
-    public var isEmpty: Bool { fields.isEmpty && mcpServers == nil && grants == nil && profiles == nil }
+    public var isEmpty: Bool { fields.isEmpty && mcpServers == nil && grants == nil }
 
     /// The PATCH body for one bot: the touched fields it does not already
     /// have, the MCP list it ends with, and the consents they need.
@@ -445,8 +441,6 @@ public protocol BulkBotEditAPI: Sendable {
     func botGrants(botId: String) async throws -> BotGrants
     func putGrant(botId: String, target: String, level: GrantLevel) async throws -> BotGrants
     func removeGrant(botId: String, target: String) async throws -> BotGrants
-    func botPerspicax(botId: String) async throws -> PerspicaxAnswer
-    func setBotPerspicax(botId: String, profiles: [String]) async throws -> PerspicaxAnswer
 }
 
 extension CompanionClient: BulkBotEditAPI {
@@ -470,19 +464,17 @@ public struct BulkBotUndo: Hashable, Sendable {
     public var patch: BulkPatch
     public var grantsBefore: [BotGrantRecord]?
     public var grantsAfter: [BotGrantRecord]?
-    public var profilesBefore: [String]?
 
     public init(botId: String, threadId: String? = nil, patch: BulkPatch = [:], grantsBefore: [BotGrantRecord]? = nil,
-                grantsAfter: [BotGrantRecord]? = nil, profilesBefore: [String]? = nil) {
+                grantsAfter: [BotGrantRecord]? = nil) {
         self.botId = botId
         self.threadId = threadId
         self.patch = patch
         self.grantsBefore = grantsBefore
         self.grantsAfter = grantsAfter
-        self.profilesBefore = profilesBefore
     }
 
-    public var isEmpty: Bool { patch.isEmpty && grantsBefore == nil && profilesBefore == nil }
+    public var isEmpty: Bool { patch.isEmpty && grantsBefore == nil }
 }
 
 /// The result of a bulk change: one outcome per bot, the bots as the server
@@ -500,8 +492,8 @@ public struct BulkBotEditResult: Sendable {
 }
 
 public enum BulkBotEditRunner {
-    /// Applies the plan in series, bot by bot: the PATCH, then the grants,
-    /// then the Perspicax profiles. A bot that refuses one step keeps the
+    /// Applies the plan in series, bot by bot: the PATCH, then the grants.
+    /// A bot that refuses one step keeps the
     /// others' results; its outcome carries every reason.
     public static func apply(
         _ plan: BulkBotEditPlan, bots: [Bot], enabledServers: [String], api: BulkBotEditAPI,
@@ -547,19 +539,6 @@ public enum BulkBotEditRunner {
                     reasons.append(reason(error))
                 }
             }
-            if let edit = plan.profiles {
-                do {
-                    let before = try await api.botPerspicax(botId: bot.id).selectedIds
-                    let next = BulkBotEdit.applyListEdit(before, edit)
-                    if next != before {
-                        _ = try await api.setBotPerspicax(botId: bot.id, profiles: next)
-                        undo.profilesBefore = before
-                        changed = true
-                    }
-                } catch {
-                    reasons.append(reason(error))
-                }
-            }
             if !undo.isEmpty { result.undo.append(undo) }
             result.outcomes.append(BulkBotOutcome(botId: bot.id, ok: reasons.isEmpty, skipped: reasons.isEmpty && !changed, reasons: reasons))
         }
@@ -567,7 +546,7 @@ public enum BulkBotEditRunner {
     }
 
     /// Puts each bot back as it was before the last bulk change, through the
-    /// same routes: the fields, the grants, the profiles.
+    /// same routes: the fields and grants.
     public static func undo(_ steps: [BulkBotUndo], api: BulkBotEditAPI, reason: @Sendable (Error) -> String) async -> BulkBotEditResult {
         var result = BulkBotEditResult()
         for step in steps {
@@ -586,10 +565,6 @@ public enum BulkBotEditRunner {
                     do { _ = try await api.removeGrant(botId: step.botId, target: target) }
                     catch { reasons.append(reason(error)) }
                 }
-            }
-            if let profiles = step.profilesBefore {
-                do { _ = try await api.setBotPerspicax(botId: step.botId, profiles: profiles) }
-                catch { reasons.append(reason(error)) }
             }
             result.outcomes.append(BulkBotOutcome(botId: step.botId, ok: reasons.isEmpty, reasons: reasons))
         }

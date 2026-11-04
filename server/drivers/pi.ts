@@ -526,7 +526,7 @@ export function buildMcpServers(turn: SendTurnInput): Record<string, unknown> | 
     // listing whole only the tools the person's bots use.
     const botOwned = name in (turn.integrations?.custom ?? {});
     // a server may be named like an Object property ("constructor"): own keys only
-    // #1935: a Perspicax profile bridge also lists its own core whole.
+    // #1935: the Perspicax account bridge also lists its own core whole.
     const search = turn.compactPrompt && botOwned && !directory
       ? compactGateSearch(Object.hasOwn(turn.compactPrompt.pinned, name) ? turn.compactPrompt.pinned[name]! : [], isPerspicaxBridge(turn.integrations!.custom![name]))
       : undefined;

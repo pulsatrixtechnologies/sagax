@@ -118,7 +118,7 @@ final class BotCapabilitiesTests: XCTestCase {
         XCTAssertEqual(items[1].toggle, .installationServer(name: "docs"))
         XCTAssertNil(items[2].toggle, "a server the installation turned off has no switch")
         XCTAssertNil(items[3].toggle, "canToggle false")
-        XCTAssertEqual(items[5].toggle, .role(id: "p2"))
+        XCTAssertNil(items[5].toggle, "legacy role rows never configure a bot")
         XCTAssertEqual(items[6].toggle, .skill(name: "notes"))
         XCTAssertNil(items[7].toggle, "library off: the library routes refuse")
         XCTAssertNil(items[8].toggle)
@@ -142,10 +142,6 @@ final class BotCapabilitiesTests: XCTestCase {
         XCTAssertEqual(BotCapabilityRules.mcpServersAfter(nil, list: list, name: "docs", on: false), ["off-one", "pack-a"])
         XCTAssertEqual(BotCapabilityRules.mcpServersAfter(["pack-a"], list: list, name: "docs", on: true), ["pack-a", "docs"])
         XCTAssertEqual(BotCapabilityRules.mcpServersAfter(["docs"], list: list, name: "docs", on: true), ["docs"])
-    }
-
-    func testRolesAfterRemovingOne() throws {
-        XCTAssertEqual(BotCapabilityRules.rolesAfter(try list(), removing: "p2"), ["1f0e2c1a-0000-4000-8000-000000000001"])
     }
 
     func testRequestsMatchTheServerRoutes() throws {

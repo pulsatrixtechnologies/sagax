@@ -57,7 +57,9 @@ const settings = () => renderToStaticMarkup(createElement(SettingsModal));
 const access = () => renderToStaticMarkup(createElement(BotAccess, { bot }));
 const panel = (browser: boolean) => renderToStaticMarkup(createElement(ConfirmProvider, null, createElement(ComputerPanel, { bot: { ...bot, browser } })));
 
-beforeEach(() => {
+beforeEach(async () => {
+  const { ExperimentalSettings } = await import("./lazy-settings-sections");
+  await ExperimentalSettings.preload();
   fixture.config = { features: { browser: false }, browserEngine: { kind: "unavailable", installable: true } };
   fixture.browserMcp = true;
   fixture.dispatch.mockClear();

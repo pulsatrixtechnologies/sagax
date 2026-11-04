@@ -1,5 +1,5 @@
 // Claims through Perspicax (server/perspicax/perspicax-claims.ts): the native tools are
-// listed only while a Perspicax profile is mounted, the dispatcher posts to
+// listed only while the Perspicax account connection is mounted, the dispatcher posts to
 // the harness route, the harness pins the holder to the bot and calls
 // Perspicax with the speaker's exchanged token (PerspicaxMcp.callTool), and a
 // refusal comes back as a result with the current holder.
@@ -12,8 +12,6 @@ import { CLAIM_TOOL_NAMES, claimArguments, claimHolder, runClaimTool, withClaims
 import { PerspicaxMcp, type PerspicaxMcpLink } from "./perspicax-mcp.ts";
 
 const ISS = "https://px.example.test";
-const CATALOG = [{ id: "P1", slug: "dispatch", name: "Dispatch", description: "" }];
-
 /** A Perspicax that keeps leases: the user is the token's subject, the
  * holder is the user plus the `holder` argument. */
 function fakePerspicax() {
@@ -55,10 +53,9 @@ function fakePerspicax() {
 function perspicax(fetcher: typeof fetch) {
   let n = 0;
   const link: PerspicaxMcpLink = {
-    exchangeToken: async (subjectToken, profileId): Promise<ExchangeResult> => ({ ok: true, token: `pxlo1.${subjectToken.split(".")[1]}.mcp-${profileId}-${++n}`, expiresAt: Date.now() + 900_000 }),
+    exchangeToken: async (subjectToken): Promise<ExchangeResult> => ({ ok: true, token: `pxlo1.${subjectToken.split(".")[1]}.mcp-main-${++n}`, expiresAt: Date.now() + 900_000 }),
     revokeExchanged: async () => true,
     mcpEndpoint: () => "http://perspicax:8787/mcp",
-    profileCatalog: () => CATALOG,
   };
   const subjects: Record<string, { iss: string; sub: string; disabled: boolean }> = {
     pr_ann: { iss: ISS, sub: "ANN", disabled: false },
@@ -69,7 +66,7 @@ function perspicax(fetcher: typeof fetch) {
     link: () => link,
     subjectOf: (id) => subjects[id] ?? null,
     subjectToken: async (subject) => ({ ok: true, token: `pxlo1.${subject.sub}.signin`, expiresAt: Date.now() + 3_600_000 }),
-    botProfiles: () => ["P1"],
+    botExists: () => true,
     version: "0.1.0",
     fetch: fetcher,
     log: () => {},
@@ -77,7 +74,7 @@ function perspicax(fetcher: typeof fetch) {
 }
 
 async function mount(mcp: PerspicaxMcp, botId: string, threadId: string, speaker: string) {
-  await mcp.prepareTurn({ threadId, generation: "g1", bot: { id: botId, perspicax: { profiles: ["P1"] } }, speakerPrincipalId: speaker, speakerOrigin: "person" });
+  await mcp.prepareTurn({ threadId, generation: "g1", bot: { id: botId }, speakerPrincipalId: speaker, speakerOrigin: "person" });
 }
 
 describe("claims", () => {
@@ -90,7 +87,7 @@ describe("claims", () => {
     expect(claimArguments("claim_list", { holder: "x" }, "b1")).toEqual({});
   });
 
-  it("lists the native tools only while a Perspicax profile is mounted, never to an external runtime", () => {
+  it("lists the native tools only while the Perspicax account connection is mounted, never to an external runtime", () => {
     const names = (env: Record<string, string>) => availableTools(catalogProfileFromEnv(env)).map((tool) => tool.name);
     expect(names({}).filter((name) => (CLAIM_TOOL_NAMES as readonly string[]).includes(name))).toEqual([]);
     expect(names({ SAGAX_CLAIMS: "1" }).filter((name) => (CLAIM_TOOL_NAMES as readonly string[]).includes(name))).toEqual([...CLAIM_TOOL_NAMES]);
@@ -108,7 +105,7 @@ describe("claims", () => {
     const posted: Array<{ path: string; body: unknown }> = [];
     const answers: Array<{ ok: boolean; status: number; body: Record<string, unknown> }> = [
       { ok: true, status: 200, body: { result: { ok: false, claimed: false, reason: "held_by_other" }, isError: false } },
-      { ok: false, status: 409, body: { error: "Claims need a Perspicax profile mounted in this turn; this bot has none for the person speaking.", code: "profile_not_mounted" } },
+      { ok: false, status: 409, body: { error: "Claims need the Perspicax account connection mounted in this turn for the person speaking.", code: "profile_not_mounted" } },
       { ok: true, status: 200, body: { result: { code: "params_invalid" }, isError: true } },
     ];
     const context = (externalRuntime = false): ToolCallContext => ({
@@ -122,7 +119,7 @@ describe("claims", () => {
       },
     });
     expect(await callTool("claim", { name: "dispatch", purpose: "p" }, context())).toEqual({ text: JSON.stringify({ ok: false, claimed: false, reason: "held_by_other" }) });
-    expect(await callTool("claim_renew", { name: "dispatch" }, context())).toEqual({ text: "Claims need a Perspicax profile mounted in this turn; this bot has none for the person speaking.", isError: true });
+    expect(await callTool("claim_renew", { name: "dispatch" }, context())).toEqual({ text: "Claims need the Perspicax account connection mounted in this turn for the person speaking.", isError: true });
     expect(await callTool("claim_list", {}, context())).toEqual({ text: JSON.stringify({ code: "params_invalid" }), isError: true });
     expect(await callTool("claim", { name: "dispatch" }, context(true))).toEqual({ text: "Unknown tool: claim", isError: true });
     expect(posted).toEqual([
@@ -137,7 +134,7 @@ describe("claims", () => {
     const mcp = perspicax(fetcher);
     expect(mcp.hasMounted("t1", "g1", "b1")).toBe(false);
     expect(await runClaimTool(mcp, { threadId: "t1", generation: "g1", botId: "b1", tool: "claim", args: { name: "dispatch" } }))
-      .toEqual({ status: 409, body: { error: "Claims need a Perspicax profile mounted in this turn; this bot has none for the person speaking.", code: "profile_not_mounted" } });
+      .toEqual({ status: 409, body: { error: "Claims need the Perspicax account connection mounted in this turn for the person speaking.", code: "profile_not_mounted" } });
 
     await mount(mcp, "b1", "t1", "pr_ann");
     await mount(mcp, "b2", "t2", "pr_ann");
@@ -149,7 +146,7 @@ describe("claims", () => {
     expect(first).toEqual({ status: 200, body: { isError: false, result: { ok: true, claimed: true, claim: { name: "dispatch", holder: { user_id: "ANN", agent: "sagax:b1" } } } } });
     // The first call opened a session (initialize, initialized), then called.
     expect(calls.map((call) => call.body?.method)).toEqual(["initialize", "notifications/initialized", "tools/call"]);
-    expect(calls[2]!.headers).toMatchObject({ authorization: "Bearer pxlo1.ANN.mcp-P1-1", "mcp-session-id": "sess-1" });
+    expect(calls[2]!.headers).toMatchObject({ authorization: "Bearer pxlo1.ANN.mcp-main-1", "mcp-session-id": "sess-1" });
     expect(calls[2]!.body.params).toEqual({ name: "claim", arguments: { name: "dispatch", purpose: "run", holder: "sagax:b1" } });
 
     // The same person's other bot is another holder: refused, told who holds it.

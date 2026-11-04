@@ -6,7 +6,7 @@ export type ProcessMemory = { pid: number; parent: number; bytes: number };
 export function processMemory(): Promise<ProcessMemory[]> {
   if (process.platform === "win32") return Promise.resolve([]);
   return new Promise(resolve => {
-    execFile("ps", ["-axo", "pid=,ppid=,rss="], { timeout: 3_000, maxBuffer: 16 * 1024 * 1024, windowsHide: true }, (error, stdout) => {
+    execFile("ps", ["-axo", "pid=,ppid=,rss="], { timeout: 3_000, killSignal: "SIGKILL", maxBuffer: 16 * 1024 * 1024, windowsHide: true }, (error, stdout) => {
       if (error) return resolve([]);
       resolve(parseProcessMemory(stdout));
     });

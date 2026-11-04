@@ -42,6 +42,8 @@ registered root, without charging a separately registered child twice. Failed
 or partial snapshots preserve the last known RSS. Windows uses reservations
 when process RSS sampling is unavailable. The sampler stops when the registry
 empties and its timer never keeps the server alive.
+Each process-table probe has a three-second hard timeout, including a stuck
+probe that ignores TERM; a failed probe preserves prior RSS and reservations.
 
 An active turn always keeps its resource, even when active usage alone exceeds
 the caps. Such excess is explicit in metrics and is reclaimed when resources

@@ -339,9 +339,11 @@ struct PersonaEditorWindow: View {
         return Button { model.personaPage = item } label: {
             HStack(spacing: 9) {
                 PersonaIconView(icon: item.icon, size: 15)
+                // `min-w-0 flex-1 truncate`: the label takes the row's room
                 DesktopText(verbatim: item.label)
                     .lineLimit(1)
-                Spacer(minLength: 0)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(1)
                 if isLocked {
                     PersonaIconView(icon: .lock, size: 12, strokeWidth: 2)
                         .foregroundStyle(theme.inkTertiary)

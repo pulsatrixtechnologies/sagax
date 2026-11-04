@@ -115,7 +115,16 @@ add({ id: "main-compact", phase: "main", density: "compact", note: "sidebar dens
 add({ id: "main-collapsed", phase: "main", density: "icons", note: "sidebar collapsed to the 80 pt icon rail", open: async () => {} });
 add({ id: "main-threads", phase: "main", localStorage: { "omb-show-threads": "1" }, note: "Appearance > Show threads on: the sidebar's thread tree", open: async () => {} });
 add({ id: "sidebar-row-hover", phase: "main", keepPointer: true, note: "pointer over a sidebar row: its actions appear",
-  open: async (ctx) => { await ctx.hover({ text: /^Aurora/, tag: "[role=button],button,a,div[data-sidebar-row],li" }); } });
+  open: async (ctx) => {
+    // the row itself (BotListItem's data-sidebar-bot-row), approached in
+    // two moves so the pointer enters it as a hand would
+    const aurora = await ctx.bot("Aurora");
+    const row = `[data-sidebar-bot-row="${aurora.id}"]`;
+    await ctx.waitFor(`Boolean(document.querySelector(${jsLiteral(row)}))`, { timeoutMs: 8_000 });
+    await ctx.hover("[data-sidebar-row-name]");
+    await ctx.hover(row);
+    await ctx.sleep(400);
+  } });
 add({ id: "sidebar-bot-menu", phase: "main", note: "a bot row's actions menu (the same items as its context menu)",
   open: async (ctx) => { await ctx.hover('[aria-label="Actions for Aurora"]'); await ctx.click('[aria-label="Actions for Aurora"]'); } });
 add({ id: "sidebar-bot-context-menu", phase: "main", note: "right-click on a bot row",
@@ -200,7 +209,7 @@ add({ id: "inspector", phase: "main", note: "Inspector panel (chat header bug ic
 add({ id: "group-chat", phase: "main", note: "group / room chat (Peer Managers)",
   open: async (ctx) => { await ctx.selectGroup("Peer Managers"); await ctx.sleep(600); } });
 add({ id: "group-panel", phase: "main", note: "room panel (header profile button)",
-  open: async (ctx) => { await ctx.selectGroup("Peer Managers"); await ctx.sleep(500); await ctx.click('[aria-label="Open agent profile"]'); await ctx.sleep(500); } });
+  open: async (ctx) => { await ctx.selectGroup("Peer Managers"); await ctx.sleep(500); await ctx.click("[data-bot-header-pill]"); await ctx.sleep(600); } });
 
 // the bot panel
 add({ id: "panel-details", phase: "main", note: "bot panel: Details tab (Coding, Activity, Routines)", open: async (ctx) => { await openPanel(ctx); } });
@@ -213,28 +222,37 @@ add({ id: "panel-computer", phase: "main", note: "bot panel: Computer tab",
 // The desktop dropped the More tab for the persona editor (Edit persona,
 // PersonaEditorModal.tsx); the surfaces keep their panel-more ids, which the
 // iOS parity screens name.
-add({ id: "panel-more", phase: "main", note: "bot panel: Edit persona (searchable section list)",
-  open: async (ctx) => { await openPanel(ctx); await ctx.click("[data-edit-persona]"); await ctx.sleep(400); } });
+// Edit bot (PersonaEditorModal.tsx) opens from the panel's "..." menu or
+// the mascot: the store's openPersonaEditor, on the selected bot.
+async function openEditBot(ctx, section) {
+  await openPanel(ctx);
+  const botId = await ctx.eval(`__parity.state().selectedId ?? null`);
+  await ctx.dispatch({ type: "openPersonaEditor", botId, ...(section ? { section } : {}) });
+  await ctx.waitFor(`Boolean(document.querySelector("[data-persona-modal]"))`, { timeoutMs: 8_000 });
+  await ctx.sleep(700);
+}
+add({ id: "panel-more", phase: "main", note: "Edit bot window, on Identity",
+  open: async (ctx) => { await openEditBot(ctx); } });
 // Slack: a hosted workspace's link to its Admin; Shared with, Perspicax
 // tools and Works on: a server signed in with Perspicax (the organization
 // pass draws them on one server). Who can see it: an admin on a served page
 // of a server that is not an organization's.
+// persona-sections.ts FOLDED_INTO: the memory is managed in the Bot folder
+const PERSONA_FOLDED = { memory: "files" };
 const MORE_WHERE = { slack: { org: true }, worksOn: { org: true }, sharing: { org: true }, perspicax: { org: true }, visibility: { served: true } };
-// sections the persona editor folds into another category (persona-sections.ts FOLDED_INTO)
-const PERSONA_CATEGORY = { worksOn: "access", slack: "access", visibility: "overview", sharing: "overview" };
 for (const section of ["overview", "slack", "soul", "skills", "memory", "access", "worksOn", "model", "permissions", "voice", "visibility", "sharing", "perspicax", "history", "usage"]) {
   const where = MORE_WHERE[section] ?? {};
   add({ id: `panel-more-${section.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`, phase: "main", note: `bot panel: Edit persona > ${section}${where.org ? " (organization server)" : where.served ? " (served page)" : ""}`, ...where,
     open: async (ctx) => {
-      await openPanel(ctx);
-      await ctx.click("[data-edit-persona]");
-      await ctx.sleep(300);
-      const category = PERSONA_CATEGORY[section] ?? section;
-      const selector = `[data-persona-category="${category}"]`;
+      // the store's deep link, as the panel's links open a page (a page
+      // folded into another one, Memory into Bot folder, opens that one)
+      await openEditBot(ctx, section);
+      const page = PERSONA_FOLDED[section] ?? section;
+      const selector = `[data-persona-page="${page}"]`;
       // these rows wait for the server's answer (the organization, the Slack link, the viewer)
       if (where.org || where.served) await ctx.waitFor(`Boolean(document.querySelector(${jsLiteral(selector)}))`, { timeoutMs: 8_000 }).catch(() => {});
-      if (!(await ctx.exists(selector))) return { skip: `section ${section} not listed for this bot` };
-      await ctx.click(selector);
+      if (!(await ctx.exists(selector))) return { skip: `page ${section} not listed for this bot` };
+      if (!(await ctx.exists(`${selector}[aria-current="page"]`))) { await ctx.click(selector); await ctx.sleep(300); }
       await ctx.sleep(900);
     } });
 }
@@ -310,15 +328,11 @@ add({ id: "settings-general-scrolled", phase: "main", note: "Settings > General,
 // I-sync (current renderer): appended so the earlier numbers stay put.
 // Library's Skills and Plugins views (LibraryTab.tsx), and Settings > My
 // connections, a person's own on an organization server.
+// Retired 2026-11-04: the desktop's Library is the list alone (LibraryTab.tsx,
+// no Skills or Plugins view). The slots keep their numbers so the later
+// surfaces' file names stay put; neither side captures them.
 for (const view of ["skills", "plugins"]) {
-  add({ id: `panel-library-${view}`, phase: "main", note: `bot panel: Library > ${view}`,
-    open: async (ctx) => {
-      await openPanel(ctx);
-      await ctx.click('[data-panel-tab="library"]');
-      await ctx.sleep(300);
-      await ctx.click({ text: view === "skills" ? "Skills" : "Plugins", tag: "[role=tab]", within: "[data-library-view]" });
-      await ctx.sleep(900);
-    } });
+  add({ id: `panel-library-${view}`, retired: "the desktop Library has no Skills or Plugins view any more" });
 }
 add({ id: "settings-myConnections", phase: "main", note: "Settings > myConnections (organization server)", org: true,
   open: async (ctx) => {
@@ -335,12 +349,13 @@ add({ id: "settings-myConnections", phase: "main", note: "Settings > myConnectio
 // earlier numbers stay put.
 const PERSONA_ALL = ["overview", "appearance", "soul", "rules", "skills", "memory", "files", "access", "model", "permissions", "voice", "perspicax", "history", "usage"];
 // a deep link opens the persona editor on the category (store: toggleSettings)
+// (2026-11-04: Edit bot's deep link, openPersonaEditor; data-persona-page)
 const openPersona = async (ctx, category) => {
-  await ctx.dispatch({ type: "toggleSettings", open: true, section: category });
-  const selector = `[data-persona-category="${category}"]`;
+  await openEditBot(ctx, category);
+  const selector = `[data-persona-page="${PERSONA_FOLDED[category] ?? category}"]`;
   await ctx.waitFor(`Boolean(document.querySelector(${jsLiteral(selector)}))`, { timeoutMs: 8_000 }).catch(() => {});
   if (!(await ctx.exists(selector))) return { skip: `category ${category} not listed for this bot` };
-  await ctx.click(selector);
+  if (!(await ctx.exists(`${selector}[aria-current="page"]`))) await ctx.click(selector);
   await ctx.sleep(1200);
 };
 for (const category of PERSONA_ALL) {
@@ -441,4 +456,4 @@ export const NOT_CAPTURED = [
 ];
 
 let nn = 0;
-export const SURFACES = S.map((surface) => ({ ...surface, nn: String(++nn).padStart(2, "0") }));
+export const SURFACES = S.map((surface) => ({ ...surface, nn: String(++nn).padStart(2, "0") })).filter((surface) => !surface.retired);

@@ -2604,7 +2604,7 @@ public enum PulsatrixSignIn {
 
     /// `<server origin>/auth/oidc/start?client=phone[&return=sagax]`, or nil
     /// for an address that is not http(s).
-    public static func startURL(base: URL, returnScheme: String = callbackScheme) -> URL? {
+    public static func startURL(base: URL, returnScheme: String = callbackScheme, fresh: Bool = false) -> URL? {
         guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false),
               let scheme = components.scheme?.lowercased(), scheme == "https" || scheme == "http",
               components.host != nil
@@ -2614,6 +2614,8 @@ public enum PulsatrixSignIn {
         components.fragment = nil
         var items = [URLQueryItem(name: "client", value: "phone")]
         if returnScheme == callbackScheme { items.append(URLQueryItem(name: "return", value: callbackScheme)) }
+        // "Sign in again" (oidc-login.ts): Perspicax asks for the factors even when signed in
+        if fresh { items.append(URLQueryItem(name: "fresh", value: "1")) }
         components.queryItems = items
         return components.url
     }

@@ -22,6 +22,7 @@ struct DesktopSecuritySettings: View {
     @State private var name = ""
     @State private var busy = false
     @State private var notice: String?
+    @StateObject private var webSignIn = PulsatrixWebSignIn()
 
     private var httpsServer: Bool { session.settingsClient?.connection.baseURL?.scheme == "https" }
 
@@ -61,7 +62,16 @@ struct DesktopSecuritySettings: View {
                             ? Text("For your safety, the first key needs a Pulsatrix sign-in from the last 15 minutes, with your password or passkey. An email code does not count. You come back to this page afterwards.")
                             : Text("This server offers no Pulsatrix sign-in, and an email code does not count. Add your first key from the Sagax desktop app."),
                         identifier: "security-keys-reauth"
-                    ) { EmptyView() }
+                    ) {
+                        // CredentialsTransfer / SecuritySettings: a fresh Pulsatrix sign-in
+                        // (`fresh=1`) whose invite renews this iPad's session, then the key
+                        if session.surfaceGate.organization, let origin = session.connection?.baseURL {
+                            Button("Sign in again") { signInAgain(origin) }
+                                .buttonStyle(DesktopButtonStyle(kind: .accent))
+                                .disabled(busy || webSignIn.running)
+                                .accessibilityIdentifier("desktop-settings.security.sign-in-again")
+                        }
+                    }
                 } else {
                     DesktopDescribedRow(
                         Text("Add a security key or a passkey"),
@@ -160,6 +170,23 @@ struct DesktopSecuritySettings: View {
 
     /// Add a key (`registerSecurityKey`): the server's ceremony page in the
     /// system's web sheet, where iPadOS offers the passkey or the key.
+    private func signInAgain(_ origin: URL) {
+        error = nil
+        webSignIn.start(origin: origin, scheme: PulsatrixSignIn.callbackScheme, fresh: true) { outcome in
+            guard case let .invite(invite) = outcome else {
+                if let failure = OrgConnectError.from(outcome) { error = failure.localizedMessage }
+                return
+            }
+            Task {
+                do {
+                    try await session.pair(with: invite.connection, credential: invite.credential,
+                                           deviceName: PairingView.deviceName(), pairRequestId: UUID().uuidString)
+                    await load()
+                } catch { self.error = error.localizedDescription }
+            }
+        }
+    }
+
     private func addKey() async {
         guard let client = session.settingsClient, !busy else { return }
         busy = true
@@ -547,6 +574,9 @@ struct DesktopImportSettings: View {
     @State private var staged = ""
     @State private var copied = false
     @State private var grokError: String?
+    /// A share link's public card (GrokImportBox.tsx `card`).
+    @State private var card: GrokTemplateCard?
+    @State private var readingLink = false
     @State private var choosingFile = false
 
     private var primary: Bot? { session.state.bots.first { $0.chiefOfStaff == true } }
@@ -576,10 +606,26 @@ struct DesktopImportSettings: View {
                         .submitLabel(.go)
                         .onSubmit { readLink() })
                         .accessibilityIdentifier("desktop-settings.import.link")
-                    Button("Read the link") { readLink() }
+                    Button(readingLink ? "Reading..." : "Read the link") { readLink() }
                         .buttonStyle(DesktopButtonStyle(kind: .control, size: 12))
-                        .disabled(link.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(link.trimmingCharacters(in: .whitespaces).isEmpty || readingLink)
                         .accessibilityIdentifier("desktop-settings.import.grok")
+                }
+                if let card {
+                    VStack(alignment: .leading, spacing: 2) {
+                        DesktopText(Text(verbatim: card.name), size: 13, weight: .medium, line: 18)
+                        if let creator = card.creator { DesktopText(Text("by \(creator)"), size: 12, line: 16, color: \.inkSecondary) }
+                        if !card.description.isEmpty {
+                            DesktopText(Text(verbatim: card.description), size: 12, line: 18, color: \.inkSecondary).padding(.top, 4)
+                        }
+                        Button("Start from the description") { staged = card.starterReply; marketplaceSlug = nil; importing = true }
+                            .buttonStyle(DesktopButtonStyle(kind: .control, size: 12))
+                            .padding(.top, 8)
+                            .accessibilityIdentifier("desktop-settings.import.from-description")
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(theme.raised.opacity(0.3), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
@@ -707,7 +753,13 @@ struct DesktopImportSettings: View {
         } else if GrokLink.shareId(value) == nil {
             grokError = AppStrings.localized("Paste a Grok Bot link, like https://x.ai/bot/... or a Grok Bot marketplace page.")
         } else {
-            grokError = "1. " + AppStrings.localized("Copy the export prompt and send it to your own Grok Bot.")
+            // the share page's public card, then its description or the export prompt
+            readingLink = true
+            Task {
+                defer { readingLink = false }
+                do { card = try await session.profileClient?.grokCard(url: value) }
+                catch { grokError = error.localizedDescription }
+            }
         }
     }
 

@@ -60146,6 +60146,16 @@
         }
       }
     },
+    "Reading...": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lecture..."
+          }
+        }
+      }
+    },
     "Reads how many recent conversation names Sagax can see. It never logs message content.": {
       "localizations": {
         "en": {
@@ -70839,7 +70849,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Se reconnecter"
+            "value": "Me reconnecter"
           }
         },
         "pt-BR": {
@@ -72874,6 +72884,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Partir d'un modèle"
+          }
+        }
+      }
+    },
+    "Start from the description": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partir de la description"
           }
         }
       }
@@ -94622,6 +94642,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Non"
+          }
+        }
+      }
+    },
+    "by %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "par %@"
           }
         }
       }

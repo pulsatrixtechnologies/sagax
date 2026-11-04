@@ -1205,5 +1205,9 @@
   "Replace installation": "backup.replace",
   "Preparing replacement…": "backup.restoring",
   "Review the preference lines": "prefImport.preview",
-  "Preference lines": "prefImport.lines"
+  "Preference lines": "prefImport.lines",
+  "Reading...": "grokImport.loading",
+  "by %@": "grokImport.by",
+  "Start from the description": "grokImport.fromDescription",
+  "Sign in again": "security.reauth.button"
 }

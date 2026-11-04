@@ -632,6 +632,7 @@ import {
 import { reviewedSkillSha256 } from "../shared/skill-request.ts";
 import { checkPersonQuote, personWordsForTurn } from "../shared/primary-request.ts";
 import { sessionIdlePolicy } from "./drivers/session-idle.ts";
+import { wireCodexSessionLifecycle } from "./drivers/codex/lifecycle.ts";
 import { serveStaticUi } from "./static-ui.ts";
 import { PageLive } from "./pages/page-live.ts";
 import { commentsForModel } from "../shared/page-threads.ts";
@@ -13618,6 +13619,7 @@ const groupWithThread = (group: GroupRecord, viewer?: ApprovalViewer) => {
  * answered (who answered, the receipt), the phones hear it once. */
 const withdrawnApprovalNotices = new Set<string>();
 const sentThreads = new Map<string, string>();
+wireCodexSessionLifecycle(store, () => registry.instances());
 for (const record of [...store.bots, ...store.groups]) sentThreads.set(record.id, record.threadId);
 function pageIfThreadChanged(id: string, threadId: string) {
   if (sentThreads.get(id) === threadId) return {};

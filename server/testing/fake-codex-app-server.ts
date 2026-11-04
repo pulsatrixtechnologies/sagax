@@ -117,8 +117,12 @@ if (process.argv[2] === "--version") {
   process.stdout.write(`${updated ? "codex-cli 0.162.1" : process.env.FAKE_CODEX_VERSION ?? "codex-cli 0.147.0"}\n`);
   process.exit(0);
 }
+if (process.argv[2] === "logout") {
+  if (process.env.FAKE_CODEX_SIGNOUT_FILE) writeFileSync(process.env.FAKE_CODEX_SIGNOUT_FILE, "1");
+  process.exit(0);
+}
 if (process.argv[2] === "login" && process.argv[3] === "status") {
-  if (mode === "logged-out") {
+  if (mode === "logged-out" || (process.env.FAKE_CODEX_SIGNOUT_FILE && existsSync(process.env.FAKE_CODEX_SIGNOUT_FILE))) {
     process.stderr.write("Not logged in\n");
     process.exit(1);
   }
@@ -162,7 +166,8 @@ let experimentalApi = false;
 
 const out = (obj: unknown) => process.stdout.write(JSON.stringify(obj) + "\n");
 let nativeThreadId = "codex-thread-1";
-const nativeTurnId = "turn-1";
+let nativeTurnId = "turn-1";
+let turnsStarted = 0;
 const notify = (method: string, params: any) => out({
   jsonrpc: "2.0", method,
   params: {
@@ -269,7 +274,7 @@ const threadReply = (response: unknown) => {
   const restored = {
     jsonrpc: "2.0", method: "thread/tokenUsage/updated",
     params: { threadId: nativeThreadId, turnId: nativeTurnId,
-      tokenUsage: { total: { inputTokens: 100, cachedInputTokens: 50, outputTokens: 10 } } },
+      tokenUsage: { total: { inputTokens: 100 + 7 * turnsStarted, cachedInputTokens: 50 + 4 * turnsStarted, outputTokens: 10 + 3 * turnsStarted } } },
   };
   process.stdout.write(`${JSON.stringify(response)}\n${JSON.stringify(restored)}\n`);
 };
@@ -347,7 +352,7 @@ const finishTurn = () => {
   // per-turn figure must still come out as 7/4/3.
   const carried = process.env.FAKE_CODEX_RESTORED_USAGE ? { inputTokens: 100, cachedInputTokens: 50, outputTokens: 10 } : { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 };
   notify("thread/tokenUsage/updated", { tokenUsage: {
-    total: { inputTokens: carried.inputTokens + 7, cachedInputTokens: carried.cachedInputTokens + 4, outputTokens: carried.outputTokens + 3 },
+    total: { inputTokens: carried.inputTokens + 7 * turnsStarted, cachedInputTokens: carried.cachedInputTokens + 4 * turnsStarted, outputTokens: carried.outputTokens + 3 * turnsStarted },
     last: { inputTokens: 7, cachedInputTokens: 4, outputTokens: 3 },
     modelContextWindow: 272000,
   } });
@@ -400,6 +405,11 @@ process.stdin.on("data", (chunk) => {
       continue;
     }
 
+    if (msg.id === 102 && (msg.result !== undefined || msg.error !== undefined)) {
+      decision = msg.result ?? { error: msg.error };
+      dump();
+      continue;
+    }
     // response to our own server->client request (approval decision)
     if ((msg.id === 100 || msg.id === 101) && (msg.result !== undefined || msg.error !== undefined)) {
       decision = msg.result ?? { error: msg.error };
@@ -546,7 +556,7 @@ process.stdin.on("data", (chunk) => {
           threadReply({ jsonrpc: "2.0", id: msg.id, result: { thread: { id: msg.params?.threadId }, sandbox: resolvedSandbox(msg.params ?? {}) } });
         } else if (msg.params?.permissions && (!experimentalApi || mode === "config-profile-unsupported")) {
           out({ jsonrpc: "2.0", id: msg.id, error: { code: -32602, message: "experimental API required for permissions" } });
-        } else if (mode === "resume" || mode === "review-events" || mode === "helper-events" || mode === "instructions-unsupported" || mode === "config-profile" || mode === "config-profile-unsupported" ||
+        } else if (mode === "voice" || mode === "resume" || mode === "review-events" || mode === "helper-events" || mode === "instructions-unsupported" || mode === "config-profile" || mode === "config-profile-unsupported" ||
             (mode === "resume-then-missing" && !existsSync(process.env.FAKE_CODEX_STATE ?? ""))) {
           threadReply({ jsonrpc: "2.0", id: msg.id, result: { thread: { id: msg.params?.threadId }, sandbox: resolvedSandbox(msg.params ?? {}) } });
         } else {
@@ -606,6 +616,17 @@ process.stdin.on("data", (chunk) => {
         }
         break;
       case "turn/start": {
+        nativeTurnId = `turn-${++turnsStarted}`;
+        if (process.env.FAKE_CODEX_CRASH_ONCE && !existsSync(process.env.FAKE_CODEX_CRASH_ONCE)) {
+          writeFileSync(process.env.FAKE_CODEX_CRASH_ONCE, "1");
+          if (process.env.FAKE_CODEX_CRASH_PHASE !== "before-ack") {
+            out({ jsonrpc: "2.0", id: msg.id, result: { turn: { id: nativeTurnId } } });
+            notify("item/started", { item: { id: "crash-step", type: "commandExecution", command: "echo fixture" } });
+            notify("item/completed", { item: { id: "crash-step", type: "commandExecution", status: "completed", aggregatedOutput: "fixture" } });
+          }
+          setTimeout(() => process.exit(1), 25);
+          break;
+        }
         dump();
         logStartup("turn/start");
         if (mode === "voice") {
@@ -874,6 +895,11 @@ process.stdin.on("data", (chunk) => {
         if (mode === "early-turn-events") finishTurn();
         out({ jsonrpc: "2.0", id: msg.id, result: { turn: { id: nativeTurnId } } });
         if (mode === "early-turn-events") break;
+        if (process.env.FAKE_CODEX_STALE_REQUEST && turnsStarted > 1) {
+          out({ jsonrpc: "2.0", id: 102, method: "execCommandApproval", params: {
+            threadId: nativeThreadId, turnId: `turn-${turnsStarted - 1}`, command: "stale fixture action",
+          } });
+        }
         if (mode === "helper-events") {
           // Interleave child and stale-parent traffic with the active parent.
           // A child completion must not kill the process or answer for the parent.

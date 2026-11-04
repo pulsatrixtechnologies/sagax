@@ -15,7 +15,7 @@ export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstanc
   const {
     instanceId, input, config, plan, planUnavailable, planAuth, childEnv,
     refreshModels, startupModelRefresh, authentication, loginMark, loginAccepted, loginRejected,
-    active, listeners, sendTurn, turnReviewers,
+    active, sessions, listeners, sendTurn, turnReviewers,
   } = bag;
 
     const versionOf = cliVersionReader(config.cli);
@@ -67,6 +67,7 @@ export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstanc
   startAuthentication: async () => {
     if (planUnavailable) throw new Error(planUnavailable);
     if (bag.planSigningOut || bag.disposed) throw new Error("This account is being disconnected. Wait before signing in again.");
+    await sessions.closeAll();
     return (planAuth ?? authentication).start();
   },
   getAuthentication: async (flowId) => {
@@ -78,15 +79,21 @@ export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstanc
   cancelAuthentication: () => (planAuth ?? authentication).cancel(),
   signOut: async () => {
     if (!planAuth) {
-      const mark = loginMark();
-      await authentication.signOut();
-      loginAccepted(mark);
+      bag.planSigningOut = true;
+      bag.planGeneration += 1;
+      try {
+        const stopped = [...await sessions.closeAll(), ...await Promise.all([...active.values()].map(({ stop }: any) => stop()))];
+        if (stopped.some(value => !value)) throw new Error("A Codex task could not stop. Stop the task before signing out.");
+        const mark = loginMark();
+        await authentication.signOut();
+        loginAccepted(mark);
+      } finally { bag.planSigningOut = false; }
       return;
     }
     bag.planSigningOut = true;
     bag.planGeneration += 1;
     try {
-      const stopped = await Promise.all([...active.values()].map(({ stop }) => stop()));
+      const stopped = [...await sessions.closeAll(), ...await Promise.all([...active.values()].map(({ stop }) => stop()))];
       if (stopped.some(value => !value)) throw new Error("A ChatGPT task could not stop safely. Stop the task before signing out.");
       bag.models = { default: "", options: [] };
       await planAuth.signOut();
@@ -127,6 +134,7 @@ export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstanc
     sendTurn,
     interruptTurn: async (threadId) => {
       await active.get(threadId)?.stop();
+      await sessions.close(threadId);
     },
     // #1373: a change among Ask, Edits and Auto applies to the running
     // turn's next request when Sagax answers its requests (it reads the
@@ -149,9 +157,13 @@ export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstanc
       finish(decision.behavior, decision.message, "user");
       return decision.behavior === "allow" ? "allowed-once" : decision.behavior === "answer" ? "answered" : "rejected";
     },
-    hasSession: (threadId) => active.has(threadId),
+    hasSession: (threadId) => active.has(threadId) || sessions.has(threadId),
+    releaseWarmSession: (threadId) => {
+      if (!active.has(threadId)) void sessions.close(threadId);
+    },
     stopAll: async () => {
       await Promise.all([...active.values()].map(({ stop }) => stop()));
+      await sessions.closeAll();
     },
     onEvent: (listener) => {
       listeners.add(listener);
@@ -177,6 +189,7 @@ export function buildCodexInstanceApi(bag: Record<string, any>): ProviderInstanc
     await authentication.dispose();
     await planAuth?.dispose();
     await Promise.all([...active.values()].map(({ stop }) => stop()));
+    await sessions.closeAll();
     listeners.clear();
   },
     };

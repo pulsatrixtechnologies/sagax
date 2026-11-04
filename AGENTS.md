@@ -1,5 +1,22 @@
 # Sagax agent notes
 
+## Codex retains one app-server per conversation (#1969, 2026-11-04)
+
+`server/drivers/codex/sessions.ts` owns the per-instance, per-thread process
+pool, with the shared `sessionIdlePolicy("CODEX")` (10 minutes by default).
+The contract includes the person independently of the payer, bot, account,
+model, effort, permissions, cwd, MCP mounts, command variables and stable
+instructions. Changed volatile context and file-backed turn capabilities
+reuse the process. Native Codex ignores instruction overrides on an already
+loaded thread, so changed stable instructions require a new process.
+`principalId` travels on direct and room turns even without an MCP mount.
+`codex/lifecycle.ts` retires idle sessions on model, engine, ownership and
+deletion changes. Stop, sign-out and disposal close the owned process tree.
+A crash gets one replacement within the same logical turn; after ACK it
+resumes native history with a continuation and received steps. Stop wins.
+Tests: `codex.test.ts`, `codex/sessions.test.ts`, `codex/lifecycle.test.ts`.
+Recipe and measurements: `docs/verification/codex-warm-process.md`.
+
 ## Desktop store subscriptions
 
 Shell selects routing and chrome; BotSurface and GroupSurface subscribe to

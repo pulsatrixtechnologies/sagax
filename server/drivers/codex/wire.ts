@@ -10,6 +10,8 @@ import type { SteerOutcome } from "../../contracts.ts";
 
 export function wireCodexSession(s: CodexSession): void {
   const turn = s.input;
+  const sameNativeThread = !turn.sessionReset && Boolean(s.previous?.codexThreadId)
+    && turn.resumeCursor === s.previous?.codexThreadId;
 s.abandoned = false;
 s.codexThreadId= null;
 s.codexTurnId= null;
@@ -35,12 +37,13 @@ s.state = {
   // whatever the process already carried before turn/start (a resumed
   // thread may restore earlier usage), banked on settle.
   usage: undefined as { input: number; output: number; cachedInput?: number } | undefined,
-  usageBaseline: undefined as { input: number; output: number; cachedInput: number } | undefined,
+  usageBaseline: sameNativeThread ? s.previous?.lastUsage : undefined,
 };
 
 s.asks = new Map<string, (behavior: "allow" | "deny" | "answer", message?: string, source?: "user" | "timeout" | "system") => void>();
-s.nextId = 1;
-s.sensitiveResponseIds = new Set<number>();
+s.nextId = s.previous?.nextId ?? 1;
+s.sensitiveResponseIds = s.previous?.sensitiveResponseIds ?? new Set<number>();
+s.lastUsage = sameNativeThread ? s.previous?.lastUsage : undefined;
 s.rpcPending = new Map<number, {
   resolve: (v: any) => void;
   reject: (e: Error) => void;
@@ -155,6 +158,12 @@ s.settle = async (ok: boolean, stopReason: string | null) => {
     s.emit({ ...s.base(s.threadId, s.turnId), type: "turn.completed", ok, stopReason, cost: null, ...(s.state.usage ? { usage: s.state.usage } : {}) });
   };
   s.completeStoppedTurn = complete;
+  if (ok && !s.stopRequested && !s.abandoned && s.child.exitCode === null && s.child.signalCode === null) {
+    s.sessions.park(s);
+    complete();
+    return;
+  }
+  s.sessions.forget(s);
   if (await s.stop()) return;
   s.emit({ ...s.base(s.threadId, s.turnId), type: "runtime.error", message: "codex did not shut down after termination was requested" });
   await keepStopping(s.terminate, () => s.active.get(s.threadId)?.stop === s.stop);
@@ -167,6 +176,7 @@ s.relaunch = async (reason: string, failure: string, failedStop: string) => {
   s.attempt++;
   s.emit({ ...s.base(s.threadId, s.turnId), type: "turn.retrying", attempt: s.attempt, delayMs, reason });
   s.abandoned = true;
+  s.sessions.forget(s);
   s.releaseSlot();
   const exited = s.child.exitCode !== null || s.child.signalCode !== null;
   if (!exited && !(await s.terminate()) && !(await waitForExit(s.child, RELAUNCH_EXIT_WAIT_MS))) {
@@ -184,6 +194,7 @@ s.relaunch = async (reason: string, failure: string, failedStop: string) => {
 // the person sees nothing; Events gets contextRenewedNotice on start.
 s.renewContext = async () => {
   s.abandoned = true;
+  s.sessions.forget(s);
   s.releaseSlot();
   const exited = s.child.exitCode !== null || s.child.signalCode !== null;
   if (!exited && !(await s.terminate()) && !(await waitForExit(s.child, RELAUNCH_EXIT_WAIT_MS))) {

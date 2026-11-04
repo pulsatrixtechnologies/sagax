@@ -118,7 +118,7 @@ struct DesktopSkinFamilies: View {
             // ring-offset-2`: a 2 pt gap, then the ring, outside the swatch
             .overlay(Circle().strokeBorder(theme.hairline, lineWidth: 1).opacity(selected ? 0 : 1))
             .overlay(Circle().stroke(theme.accentBorder, lineWidth: 2).frame(width: 28, height: 28).opacity(selected ? 1 : 0))
-            .padding(.vertical, 3)
+            .padding(.vertical, 5)
             .contentShape(Circle())
         }
         .buttonStyle(.plain)

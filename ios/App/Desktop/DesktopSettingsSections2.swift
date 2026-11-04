@@ -197,7 +197,7 @@ struct DesktopConnectServerCard: View {
                                 DesktopText(Text("Memory"), color: \.inkSecondary)
                             }
                         }
-                        .padding(.vertical, 6)
+                        .padding(.vertical, 8)
                         .overlay(alignment: .top) {
                             if index > 0 { Rectangle().fill(theme.hairline.opacity(0.4)).frame(height: 1) }
                         }

@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import { chosenComputer, computerChoices, type DesktopBridgeStatus } from "@/lib/desktop-bridge";
 import { localVmView, parseLocalVmAnswer, runtimeSummaryKey, type DesktopLocalVmStatus } from "@/lib/desktop-local-vm";
-import { formatBytes, powerState, type ServerEnvironmentStatus } from "@/lib/server-environment";
+import { formatPanelBytes, powerState, type ServerEnvironmentStatus } from "@/lib/server-environment";
 import { Globe, Laptop, Server } from "lucide-react";
 import { BOT_SECTIONS } from "../bot-settings/sections";
 import { OrgComputerSettings } from "../settings/OrgComputerSettings";
@@ -408,7 +408,7 @@ describe("the Local VM's view", () => {
     expect(activeComputer(bridge(true, "computer"), "browser")).toEqual({ source: "server", reason: "none" });
     expect(powerState("missing", null)).toBe("off");
     expect(powerState("stopped", "start")).toBe("starting");
-    expect(formatBytes(1536 * 1024 * 1024)).toBe("1.5 GiB");
+    expect(formatPanelBytes(1536 * 1024 * 1024)).toBe("1.5 GiB");
   });
 });
 

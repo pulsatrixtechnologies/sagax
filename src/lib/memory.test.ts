@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   capacityStatus,
   fileManagerLabel,
-  formatBytes,
+  formatMemoryBytes,
   journalSource,
   journalSummary,
   relativeTime,
@@ -145,8 +145,8 @@ describe("small helpers", () => {
   });
 
   it("formats bytes the way the rest of settings does", () => {
-    expect(formatBytes(120)).toBe("120 B");
-    expect(formatBytes(2_048)).toBe("2 KB");
+    expect(formatMemoryBytes(120)).toBe("120 B");
+    expect(formatMemoryBytes(2_048)).toBe("2 KB");
   });
 
   it("turns a typed topic name into a file name the server accepts", () => {

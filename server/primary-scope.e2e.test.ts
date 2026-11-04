@@ -47,7 +47,14 @@ it("the Primary Bot sees every bot of its person, archives idempotently, and thr
     let comms = "";
     await expect.poll(() => {
       if (!existsSync(dump)) return false;
-      try { comms = JSON.parse(readFileSync(dump, "utf8")).mcpConfig.mcpServers.agents.env.SAGAX_COMMS_TOKEN; } catch { return false; }
+      try {
+        const run = JSON.parse(readFileSync(dump, "utf8"));
+        const env = run.mcpConfig.mcpServers.agents.env;
+        // All fixture bots share this dump. Only this requested turn's
+        // receipt may supply its capability, never a peer or a warm-up.
+        if (env.SAGAX_BOT_ID !== botId || env.SAGAX_THREAD_ID !== threadId || !JSON.stringify(run.prompt).includes(text)) return false;
+        comms = env.SAGAX_COMMS_TOKEN;
+      } catch { return false; }
       return Boolean(comms);
     }, { timeout: 20_000 }).toBe(true);
     return comms;
@@ -119,6 +126,7 @@ it("the Primary Bot sees every bot of its person, archives idempotently, and thr
     // ── archive: an ordinary bot, twice ────────────────────────────────
     comms = await turn(quasar.id, quasar.threadId, "Archive Disk Saver.");
     const first = await settings({ action: "set", key: "bot.hidden", target: builtIn[3].id, value: true, quote: "Archive Disk Saver" });
+    expect(first.status, JSON.stringify(first.body)).toBe(200);
     expect(first.body.text, JSON.stringify(first.body)).toMatch(/^Done/);
     const second = await settings({ action: "set", key: "bot.hidden", target: builtIn[3].id, value: true, quote: "Archive Disk Saver" });
     expect(second.status, JSON.stringify(second.body)).toBe(200);

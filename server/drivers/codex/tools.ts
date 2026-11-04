@@ -115,7 +115,13 @@ s.handleServerRequest = (msg: any) => {
       : isAdditionalPermission
         ? { permissions: allow ? grantedPermissions(params.permissions) : {}, scope: "turn" }
         : { decision: allow ? (legacy ? "approved" : "accept") : legacy ? "denied" : "decline" };
-  if (s.autoAcceptPermissions && isPermission) {
+  // #1977: an MCP tool approval is never answered here, Full included: it
+  // goes to Sagax's gate (index.ts request.opened), where Full approves
+  // unless an organization or personal rule, the safety review or
+  // isolation holds it. Only Codex's own command, file and sandbox asks
+  // are Full's to accept in the driver (and an app-access form of
+  // Codex's own ChatGPT apps, mcpAppApprovalForm, as before).
+  if (s.autoAcceptPermissions && isPermission && !isLegacyMcpPermission) {
     return s.send({
       jsonrpc: "2.0",
       id: msg.id,

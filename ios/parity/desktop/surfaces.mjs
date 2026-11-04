@@ -405,9 +405,38 @@ add({ id: "routine-edit", phase: "main", note: "Automations list: a routine open
     await ctx.click({ text: /^Scan skills populaires mensuel/ });
     await ctx.sleep(1200);
   } });
+// Updates lists itself where the desktop app's updater answers
+// (window.ogb.updater): a stub that reports "up to date" on the stable
+// channel. The Vault is a person's: the page's own calls carry the paired
+// device's bearer (a person, as the iPad is), so it shows the signed-in vault.
+const STUB_UPDATER = `(() => {
+  const state = { status: "idle", channel: "stable", autoInstallWhenAway: false, installMode: "restart" };
+  window.ogb = { ...(window.ogb || {}), updater: {
+    onState(cb) { cb(state); return () => {}; }, check() {}, install() {},
+    setChannel() { return Promise.resolve(); }, setAutoInstallAway() { return Promise.resolve(); },
+  } };
+  return true;
+})()`;
+const personFetch = (token) => `(() => {
+  if (window.__parityPersonFetch) return true;
+  window.__parityPersonFetch = true;
+  const original = window.fetch.bind(window);
+  window.fetch = (input, init = {}) => {
+    const url = typeof input === "string" ? input : input.url;
+    if (String(url).includes("/api/me/credentials")) {
+      const headers = new Headers(init.headers || {});
+      headers.set("authorization", "Bearer " + ${JSON.stringify(token)});
+      init = { ...init, headers };
+    }
+    return original(input, init);
+  };
+  return true;
+})()`;
 for (const section of ["account", "voice", "updates", "about", "providers", "security", "credentials", "import"]) {
   add({ id: `settings-${section}`, phase: "main", note: `Settings > ${section}`,
     open: async (ctx) => {
+      if (section === "updates") await ctx.eval(STUB_UPDATER);
+      if (section === "credentials" && ctx.fixture?.token) await ctx.eval(personFetch(ctx.fixture.token));
       await openSettings(ctx, section, { retries: 3 });
       const current = await ctx.eval(`__parity.state().appSettingsSection ?? null`);
       if (current && current !== section) return { skip: `section ${section} not shown on this page (opened ${current})` };

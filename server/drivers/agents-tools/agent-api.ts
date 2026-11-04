@@ -12,7 +12,7 @@ const AGENT_CURSOR = { type: "string", description: "next_cursor of the previous
 export const AGENT_API_TOOLS = [
   {
     name: "list_agents",
-    description: "List the Sagax agents (bots) you may reach: id, name, description, status (running or idle), temporary, and owner ({principal_id, name} or null). Its ids are the only valid agent_id values. Pass owner.principal_id to sagax_nudge to reach that agent's owner.",
+    description: "List the Sagax agents (bots) you may reach: id, name, description, status (running or idle), temporary, owner ({principal_id, name} or null), and model (instance_id, model, effort, auto) when known. Its ids are the only valid agent_id values. Pass owner.principal_id to sagax_nudge to reach that agent's owner.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
   {
@@ -26,7 +26,7 @@ export const AGENT_API_TOOLS = [
   },
   {
     name: "get_agent",
-    description: "Read one agent's full profile for an audit: title, owner, instructions with their persona, rules, voice and anti-jobs sections, voice settings, whether it is temporary and when it expires, and a link to its sheet.",
+    description: "Read one agent's full profile for an audit: title, owner, model (instance_id, model, effort, auto), instructions with their persona, rules, voice and anti-jobs sections, voice settings, whether it is temporary and when it expires, and a link to its sheet.",
     inputSchema: { type: "object", additionalProperties: false, properties: { agent_id: AGENT_ID }, required: ["agent_id"] },
   },
   {
@@ -103,6 +103,76 @@ export const AGENT_API_TOOLS = [
     name: "read_transcript_cold",
     description: "Read the stored transcript, 50 entries per page from the newest, without touching the agent's live state.",
     inputSchema: { type: "object", additionalProperties: false, properties: { agent_id: AGENT_ID, cursor: AGENT_CURSOR }, required: ["agent_id"] },
+  },
+  {
+    name: "list_agent_models",
+    description: "List the engines and models you may pick as this agent's default (and its current model). Call before update_agent_model. Valid instance_id and model values come from this list only.",
+    inputSchema: { type: "object", additionalProperties: false, properties: { agent_id: AGENT_ID }, required: ["agent_id"] },
+  },
+  {
+    name: "update_agent_model",
+    description: "Change a reachable agent's default engine/model/effort, or turn Auto on (auto true). Same rights as Edit bot in Sagax: the owner, a person granted edit, or an admin. Pass instance_id (or engine), model, optional effort; or auto true (keeps the current engine/model as Auto's base when omitted). An invalid model is refused with the valid choices. Threads that follow the bot move on their next turn. Call list_agent_models first.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        agent_id: AGENT_ID,
+        instance_id: { type: "string", minLength: 1, maxLength: 120, description: "Engine instance id from list_agent_models." },
+        instance: { type: "string", minLength: 1, maxLength: 120, description: "Alias of instance_id." },
+        engine: { type: "string", minLength: 1, maxLength: 120, description: "Alias of instance_id (engine id or family name the server resolves)." },
+        model: { type: "string", minLength: 1, maxLength: 200, description: "Model id on that engine, from list_agent_models." },
+        effort: { type: "string", minLength: 1, maxLength: 40, description: "Optional effort level the model accepts." },
+        auto: { type: "boolean", description: "true turns Auto on for this agent (uses list_agent_models / auto-model)." },
+      },
+      required: ["agent_id"],
+    },
+  },
+  {
+    name: "update_agent_settings",
+    description: "Partial patch of an agent's Edit bot fields (name, title, description, soul, notifications, avatarUrl, requireAvailableModel, look fields). Same rights as the UI. Returns changed and refused (each with a plain reason). Model changes use update_agent_model.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        agent_id: AGENT_ID,
+        name: { type: "string", minLength: 1, maxLength: 80 },
+        title: { type: "string", maxLength: 120 },
+        description: { type: "string", maxLength: 1000 },
+        soul: { type: "string", maxLength: 24000, description: "Standing instructions." },
+        notifications: {},
+        avatarUrl: { type: ["string", "null"] },
+        requireAvailableModel: { type: "boolean" },
+        unread: { type: "boolean" },
+        pinned: { type: "boolean" },
+        pinnedMessageId: { type: ["string", "null"] },
+        color: { type: "string" },
+        mascotExpression: { type: "string" },
+        mascotBody: { type: "string" },
+        mascotSkin: { type: "string" },
+        mascotLook: {},
+        avatarCrop: {},
+        avatarZoom: { type: "number" },
+        avatarFocusX: { type: "number" },
+        avatarFocusY: { type: "number" },
+      },
+      required: ["agent_id"],
+    },
+  },
+  {
+    name: "update_routine",
+    description: "Enable, disable or edit a routine you may change (name, instructions, schedule). Same as the Automations editor / member PATCH: your own routines, without a proposal card. Pass routine_id from sagax_routines or list_routines.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        routine_id: { type: "string", minLength: 1, description: "Routine id from sagax_routines or list_routines." },
+        enabled: { type: "boolean", description: "true resumes it; false pauses it." },
+        name: { type: "string", minLength: 1, maxLength: 120 },
+        instructions: { type: "string", minLength: 1, maxLength: 32000 },
+        schedule: { type: "object", description: "cron, daily, interval, once, webhook or event schedule object." },
+      },
+      required: ["routine_id"],
+    },
   },
 ].map((tool) => {
   const annotations = agentToolAnnotations(tool.name);

@@ -41774,16 +41774,29 @@ function agentTurnState(agentId: string, threadId: string): TurnState {
   // 2026-11-03: a question card that outlived its turn (ask_choice where nobody watches) waits on the person
   return openQuestionCard(threadId) ? "waiting" : "idle";
 }
+function agentModelSummary(bot: BotRecord): { instance_id: string; model: string; effort?: string; auto?: boolean } | null {
+  const selection = bot.modelSelection;
+  if (!selection?.instanceId) return null;
+  return {
+    instance_id: selection.instanceId,
+    model: selection.model ?? "",
+    ...(selection.effort ? { effort: selection.effort } : {}),
+    ...(selection.auto === true ? { auto: true } : {}),
+  };
+}
+
 function agentSummary(bot: BotRecord): AgentSummary {
   // Same owner source as profile() / get_agent: no per-agent profile call.
   const ownerId = bot.temporary?.ownerPrincipalId ?? (recordedBotOwner(bot) ?? null);
+  const model = agentModelSummary(bot);
   return {
     id: bot.id,
     name: bot.name,
     description: (bot.description || bot.title || "").slice(0, 600),
     status: bot.busy || store.tasks(bot.id).some((task) => threadBusy(bot.id, task.threadId)) ? "running" : "idle",
     ...(bot.temporary ? { temporary: true } : {}),
-    owner: ownerId ? { principal_id: ownerId, name: adminPerson(ownerId).name } : null
+    owner: ownerId ? { principal_id: ownerId, name: adminPerson(ownerId).name } : null,
+    ...(model ? { model } : {}),
   };
 }
 /** The bots a bot may reach: its team, the teams it was allowed, its allow-list.
@@ -42248,7 +42261,8 @@ const agentApi = createAgentApi({
         expires_at: temporary.pinned ? null : Math.max(temporary.lastActiveAt, botLastActivity(bot)) + temporary.idleHours * 3_600_000,
         pinned: Boolean(temporary.pinned)
       } : null,
-      profile_url: IDENTITY.kind === "perspicax" ? `${IDENTITY.issuer.replace(/\/+$/, "")}/console/sagax/bots/${encodeURIComponent(bot.id)}` : null
+      profile_url: IDENTITY.kind === "perspicax" ? `${IDENTITY.issuer.replace(/\/+$/, "")}/console/sagax/bots/${encodeURIComponent(bot.id)}` : null,
+      model: agentModelSummary(bot),
     };
   },
   async deleteAgent(caller, agentId) {
@@ -42269,6 +42283,174 @@ const agentApi = createAgentApi({
     const archived = archiveMark(actor.kind === "person" ? { kind: "person", principalId: actor.principalId } : { kind: "bot", botId: actor.botId }, "deleted", Date.now());
     store.setBotTemporary(bot.id, { ...temporary, archived });
     return { archived_at: archived.at, purge_at: archived.purgeAt };
+  },
+  // Fleet writes (#1944): person's AI client reuses the same PATCH routes as
+  // the Edit bot window and Automations editor (performAsMember).
+  async listModels(caller, agentId) {
+    const bot = store.bot(agentId);
+    if (!bot) return agentRefuse(404, "unknown_agent", "No such agent.");
+    if (caller.kind !== "person") {
+      return agentRefuse(403, "forbidden_caller", "list_agent_models is for a person's AI client. A bot uses list_team_setup.");
+    }
+    const listed = await performAsMember(memberForAgentCaller(caller), { method: "GET", path: "/api/instances" });
+    if (listed.status < 200 || listed.status >= 300) {
+      return agentRefuse(listed.status >= 400 ? listed.status : 502, "not_listed", String((listed.body as { error?: unknown })?.error ?? "The model list could not be read."));
+    }
+    const instances = ((listed.body as { instances?: Array<Record<string, unknown>> })?.instances ?? []);
+    const models = instances.flatMap((instance) => {
+      const instanceId = String(instance.instanceId ?? "").trim();
+      if (!instanceId) return [];
+      const label = String(instance.displayName ?? instance.driverKind ?? instanceId);
+      const modelBag = instance.models && typeof instance.models === "object" ? instance.models as { options?: Array<{ id?: string; label?: string }>; default?: string } : null;
+      const options = Array.isArray(modelBag?.options)
+        ? modelBag!.options!.filter((option) => typeof option?.id === "string" && option.id.trim()).map((option) => ({
+          id: String(option.id).trim(),
+          label: String(option.label ?? option.id).trim(),
+        }))
+        : [];
+      const caps = instance.capabilities && typeof instance.capabilities === "object" ? instance.capabilities as { effortLevels?: unknown } : null;
+      const effortLevels = Array.isArray(caps?.effortLevels) ? caps!.effortLevels!.filter((level): level is string => typeof level === "string") : undefined;
+      return [{
+        instance_id: instanceId,
+        label,
+        models: options,
+        ...(effortLevels?.length ? { effort_levels: effortLevels } : {}),
+        auto: true,
+      }];
+    });
+    return { models, current: agentModelSummary(bot) };
+  },
+  async updateModel(caller, agentId, selection) {
+    const bot = store.bot(agentId);
+    if (!bot) return agentRefuse(404, "unknown_agent", "No such agent.");
+    if (caller.kind !== "person") {
+      return agentRefuse(403, "forbidden_caller", "update_agent_model is for a person's AI client (Perspicax). A bot changes models with propose_team_setup or asks the person in Sagax.");
+    }
+    const current = bot.modelSelection;
+    let instanceId = selection.instanceId?.trim() || current?.instanceId || "";
+    let model = selection.model?.trim() || current?.model || "";
+    // Resolve a short engine family name (claude, grok, …) to an instance id.
+    if (selection.instanceId && !registry.get(instanceId)) {
+      const needle = selection.instanceId.trim().toLowerCase();
+      const match = registry.instances().find((entry) => {
+        const id = entry.instanceId.toLowerCase();
+        const kind = String(entry.driverKind ?? "").toLowerCase();
+        const name = String(entry.displayName ?? "").toLowerCase();
+        return id === needle || kind === needle || kind.startsWith(needle) || name === needle || name.includes(needle);
+      });
+      if (match) instanceId = match.instanceId;
+    }
+    if (!instanceId || (!model && selection.auto !== true)) {
+      const choices = await (async () => {
+        const listed = await performAsMember(memberForAgentCaller(caller), { method: "GET", path: "/api/instances" });
+        const instances = ((listed.body as { instances?: Array<{ instanceId?: string; models?: { options?: Array<{ id?: string }> } }> })?.instances ?? []);
+        return instances.slice(0, 12).map((instance) => {
+          const id = String(instance.instanceId ?? "");
+          const models = (instance.models?.options ?? []).map((option) => option.id).filter(Boolean).slice(0, 8);
+          return `${id}${models.length ? ` (${models.join(", ")})` : ""}`;
+        }).join("; ");
+      })();
+      return agentRefuse(400, "bad_request", `instance_id and model are required (or auto true with a current model). Valid choices: ${choices || "call list_agent_models"}.`);
+    }
+    if (!model && selection.auto === true) model = current?.model || "auto";
+    const modelSelection: Record<string, unknown> = {
+      instanceId,
+      model,
+      ...(selection.effort ? { effort: selection.effort } : {}),
+      ...(selection.auto === true ? { auto: true } : {}),
+    };
+    const patched = await performAsMember(memberForAgentCaller(caller), {
+      method: "PATCH",
+      path: `/api/bots/${encodeURIComponent(agentId)}`,
+      body: { modelSelection },
+    });
+    if (patched.status >= 300) {
+      const message = String((patched.body as { error?: unknown; message?: unknown })?.error
+        ?? (patched.body as { message?: unknown })?.message
+        ?? "The model could not be changed.");
+      const listed = await performAsMember(memberForAgentCaller(caller), { method: "GET", path: "/api/instances" });
+      const instances = ((listed.body as { instances?: Array<{ instanceId?: string; models?: { options?: Array<{ id?: string }> } }> })?.instances ?? []);
+      const hint = instances.slice(0, 8).map((instance) => {
+        const id = String(instance.instanceId ?? "");
+        const models = (instance.models?.options ?? []).map((option) => option.id).filter(Boolean).slice(0, 6);
+        return `${id}: ${models.join(", ") || "(no models)"}`;
+      }).join("; ");
+      return agentRefuse(patched.status >= 400 ? patched.status : 502, "model_refused", message, {
+        hint: hint ? `Valid choices from list_agent_models: ${hint}.` : "Call list_agent_models for valid instance_id and model values.",
+      });
+    }
+    const fresh = store.bot(agentId) ?? bot;
+    const summary = agentModelSummary(fresh);
+    if (!summary) return agentRefuse(502, "not_updated", "The model change did not stick.");
+    return { model: summary, agent: agentSummary(fresh) };
+  },
+  async updateSettings(caller, agentId, fields) {
+    const bot = store.bot(agentId);
+    if (!bot) return agentRefuse(404, "unknown_agent", "No such agent.");
+    if (caller.kind !== "person") {
+      return agentRefuse(403, "forbidden_caller", "update_agent_settings is for a person's AI client. A bot uses propose_team_setup or asks the person in Sagax.");
+    }
+    const changed: string[] = [];
+    const refused: Array<{ field: string; reason: string }> = [];
+    // Try the whole patch first (same as the Edit bot save). On a field
+    // refusal, retry one field at a time so the answer names what landed.
+    const whole = await performAsMember(memberForAgentCaller(caller), {
+      method: "PATCH",
+      path: `/api/bots/${encodeURIComponent(agentId)}`,
+      body: fields,
+    });
+    if (whole.status >= 200 && whole.status < 300) {
+      return { changed: Object.keys(fields), refused: [], agent: agentSummary(store.bot(agentId) ?? bot) };
+    }
+    for (const [field, value] of Object.entries(fields)) {
+      const one = await performAsMember(memberForAgentCaller(caller), {
+        method: "PATCH",
+        path: `/api/bots/${encodeURIComponent(agentId)}`,
+        body: { [field]: value },
+      });
+      if (one.status >= 200 && one.status < 300) {
+        changed.push(field);
+      } else {
+        refused.push({
+          field,
+          reason: String((one.body as { error?: unknown; message?: unknown })?.error
+            ?? (one.body as { message?: unknown })?.message
+            ?? `Field ${field} was refused.`),
+        });
+      }
+    }
+    if (!changed.length && refused.length) {
+      return agentRefuse(whole.status >= 400 ? whole.status : 403, "settings_refused", refused[0]!.reason, {
+        refused,
+        hint: "Only fields the Edit bot window lets you change on this agent are accepted; ownership and grants apply as in Sagax.",
+      });
+    }
+    return { changed, refused, agent: agentSummary(store.bot(agentId) ?? bot) };
+  },
+  async updateRoutine(caller, routineId, patch) {
+    if (caller.kind !== "person") {
+      return agentRefuse(403, "forbidden_caller", "update_routine is for a person's AI client. A bot uses propose_routine_action.");
+    }
+    const body: Record<string, unknown> = {};
+    if (patch.enabled !== undefined) body.enabled = patch.enabled;
+    if (patch.name !== undefined) body.name = patch.name;
+    if (patch.instructions !== undefined) body.prompt = patch.instructions;
+    if (patch.schedule !== undefined) body.schedule = patch.schedule;
+    const patched = await performAsMember(memberForAgentCaller(caller), {
+      method: "PATCH",
+      path: `/api/routines/${encodeURIComponent(routineId)}`,
+      body,
+    });
+    if (patched.status >= 300) {
+      return agentRefuse(patched.status >= 400 ? patched.status : 502, "routine_refused", String(
+        (patched.body as { error?: unknown; message?: unknown })?.error
+        ?? (patched.body as { message?: unknown })?.message
+        ?? "The routine could not be updated.",
+      ));
+    }
+    const routine = (patched.body as { routine?: Record<string, unknown> })?.routine
+      ?? (patched.body as Record<string, unknown>);
+    return { routine: routine && typeof routine === "object" ? routine : { id: routineId, ...body } };
   },
   threads(caller, agentId) {
     const agent = store.bot(agentId);

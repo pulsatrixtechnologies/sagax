@@ -8,7 +8,7 @@ import { createHmac } from "node:crypto";
 import {
   AGENT_TOOL_NAMES, AGENT_TOOL_POLICY, agentPromptWithFiles, AWAIT_RECOMMENDED_WAIT_MS, AWAIT_TIMEOUT_MS_DEFAULT, AWAIT_TIMEOUT_MS_MAX, COLD_PAGE_SIZE, createAgentApi, ENTRY_TEXT_MAX, decodeCursor, encodeCursor, FIND_LIMIT_MAX,
   HANDLE_TTL_MS, matchScore, SEND_FILES_MAX, signHandle, signTurnHandle, turnLabel, verifyHandle,
-  type AgentApiDeps, type AgentCaller, type AgentScope, type AgentSummary, type AuditEntry, type FileInput, type StoredMessage, type TurnState,
+  type AgentApiDeps, type AgentCaller, type AgentModelChoice, type AgentModelSummary, type AgentRoutinePatch, type AgentScope, type AgentSettingsResult, type AgentSummary, type AuditEntry, type FileInput, type StoredMessage, type TurnState,
 } from "./agent-api.ts";
 import { PRIORITY_DOWNGRADED_NOTE, resetPriorityWakeForTests, type PriorityDelivery } from "./proactive/priority-wake.ts";
 
@@ -21,10 +21,18 @@ function world(options: { replyAfterPolls?: number; reply?: (prompt: string) => 
   let clock = 1_791_500_000_000;
   let ids = 0;
   const agents: AgentSummary[] = [
-    { id: "bot-a", name: "Alpha", description: "Answers questions about invoices", status: "idle", owner: null },
-    { id: "bot-b", name: "Beta", description: "Dispatch and scheduling of technicians", status: "idle", owner: null },
-    { id: "bot-c", name: "Gamma Reports", description: "Writes weekly reports", status: "running", owner: null },
+    { id: "bot-a", name: "Alpha", description: "Answers questions about invoices", status: "idle", owner: null, model: { instance_id: "claude", model: "claude-sonnet", effort: "high" } },
+    { id: "bot-b", name: "Beta", description: "Dispatch and scheduling of technicians", status: "idle", owner: null, model: { instance_id: "grok", model: "grok-3" } },
+    { id: "bot-c", name: "Gamma Reports", description: "Writes weekly reports", status: "running", owner: null, model: { instance_id: "codex", model: "gpt-5" } },
   ];
+  const modelCatalog: AgentModelChoice[] = [
+    { instance_id: "claude", label: "Claude", models: [{ id: "claude-sonnet", label: "Sonnet" }, { id: "claude-opus", label: "Opus" }], effort_levels: ["low", "high"], auto: true },
+    { instance_id: "grok", label: "Grok", models: [{ id: "grok-3", label: "Grok 3" }, { id: "grok-4", label: "Grok 4" }], auto: true },
+  ];
+  const routines = new Map<string, { id: string; name: string; enabled: boolean; instructions: string; owner: string }>([
+    ["r-own", { id: "r-own", name: "Morning brief", enabled: true, instructions: "Summarise the inbox.", owner: "person:pr_1" }],
+    ["r-other", { id: "r-other", name: "Other brief", enabled: true, instructions: "Not yours.", owner: "person:pr_2" }],
+  ]);
   const threads = new Map<string, { agentId: string; owner: string; title: string; hidden: boolean }>();
   const messages = new Map<string, StoredMessage[]>();
   const state = new Map<string, TurnState>();
@@ -77,7 +85,82 @@ function world(options: { replyAfterPolls?: number; reply?: (prompt: string) => 
         } : null,
         temporary: agent.temporary ? { created_at: clock, idle_hours: 24, expires_at: clock + 86_400_000, pinned: false } : null,
         profile_url: `https://perspicax.example.test/console/sagax/bots/${agentId}`,
+        model: agent.model ?? null,
       };
+    },
+    async listModels(_caller, agentId) {
+      const agent = agents.find((candidate) => candidate.id === agentId);
+      if (!agent) return { status: 404, code: "unknown_agent", message: "No such agent." };
+      return { models: modelCatalog, current: agent.model ?? null };
+    },
+    async updateModel(caller, agentId, selection) {
+      const agent = agents.find((candidate) => candidate.id === agentId);
+      if (!agent) return { status: 404, code: "unknown_agent", message: "No such agent." };
+      if (caller.kind !== "person") {
+        return { status: 403, code: "forbidden_caller", message: "update_agent_model is for a person's AI client." };
+      }
+      const ownerKey = owners.get(agentId);
+      const isOwner = ownerKey === key(caller);
+      if (ownerKey && !isOwner && caller.admin !== true) {
+        return { status: 403, code: "forbidden_owner", message: "Only the owner or an organization admin changes this agent's model." };
+      }
+      const instanceId = selection.instanceId ?? agent.model?.instance_id;
+      const modelId = selection.model ?? agent.model?.model;
+      if (selection.auto !== true) {
+        const engine = modelCatalog.find((entry) => entry.instance_id === instanceId);
+        if (!engine || !engine.models.some((entry) => entry.id === modelId)) {
+          const hint = modelCatalog.map((entry) => `${entry.instance_id}: ${entry.models.map((m) => m.id).join(", ")}`).join("; ");
+          return { status: 400, code: "model_refused", message: `Unknown model ${modelId} on ${instanceId}.`, extra: { hint: `Valid choices: ${hint}.` } };
+        }
+      }
+      const next: AgentModelSummary = {
+        instance_id: instanceId!,
+        model: modelId!,
+        ...(selection.effort ? { effort: selection.effort } : {}),
+        ...(selection.auto === true ? { auto: true } : {}),
+      };
+      agent.model = next;
+      return { model: next, agent };
+    },
+    async updateSettings(caller, agentId, fields) {
+      const agent = agents.find((candidate) => candidate.id === agentId);
+      if (!agent) return { status: 404, code: "unknown_agent", message: "No such agent." };
+      if (caller.kind !== "person") {
+        return { status: 403, code: "forbidden_caller", message: "update_agent_settings is for a person's AI client." };
+      }
+      const ownerKey = owners.get(agentId);
+      if (ownerKey && ownerKey !== key(caller) && caller.admin !== true) {
+        return { status: 403, code: "forbidden_owner", message: "Only the owner or an organization admin edits this agent." };
+      }
+      const changed: string[] = [];
+      const refused: AgentSettingsResult["refused"] = [];
+      for (const [field, value] of Object.entries(fields)) {
+        if (field === "name" && typeof value === "string" && value.trim()) {
+          agent.name = value.trim();
+          changed.push(field);
+        } else if (field === "description" && typeof value === "string") {
+          agent.description = value;
+          changed.push(field);
+        } else if (field === "soul" || field === "title") {
+          changed.push(field);
+        } else {
+          refused.push({ field, reason: `Field ${field} is not editable in this fixture.` });
+        }
+      }
+      return { changed, refused, agent };
+    },
+    async updateRoutine(caller, routineId, patch: AgentRoutinePatch) {
+      if (caller.kind !== "person") {
+        return { status: 403, code: "forbidden_caller", message: "update_routine is for a person's AI client." };
+      }
+      const routine = routines.get(routineId);
+      if (!routine || routine.owner !== key(caller)) {
+        return { status: 404, code: "not_found", message: "No such routine." };
+      }
+      if (patch.enabled !== undefined) routine.enabled = patch.enabled;
+      if (patch.name !== undefined) routine.name = patch.name;
+      if (patch.instructions !== undefined) routine.instructions = patch.instructions;
+      return { routine: { ...routine } };
     },
     async deleteAgent(caller, agentId) {
       if (caller.admin !== true && owners.get(agentId) !== key(caller)) return { status: 403, code: "forbidden_owner", message: "Only this agent's owner or an organization admin can delete it." };
@@ -140,8 +223,8 @@ describe("send_prompt file prompt (#1169)", () => {
 });
 
 describe("agent API policy", () => {
-  it("declares twelve tools, each with a scope, an access level and a read-only flag", () => {
-    expect(AGENT_TOOL_NAMES).toHaveLength(12);
+  it("declares the agent tools, each with a scope, an access level and a read-only flag", () => {
+    expect(AGENT_TOOL_NAMES).toHaveLength(16);
     for (const name of AGENT_TOOL_NAMES) {
       const policy = AGENT_TOOL_POLICY[name];
       expect(policy.readOnly).toBe(policy.access === "read");
@@ -149,6 +232,8 @@ describe("agent API policy", () => {
     }
     expect(AGENT_TOOL_POLICY.create_agent.access).toBe("admin");
     expect(AGENT_TOOL_POLICY.send_prompt.scope).toBe("agents.send");
+    expect(AGENT_TOOL_POLICY.update_agent_model.scope).toBe("agents.send");
+    expect(AGENT_TOOL_POLICY.list_agent_models.readOnly).toBe(true);
   });
 
   it("refuses a tool whose scope the caller lacks, and audits the refusal", async () => {
@@ -195,7 +280,7 @@ describe("list_agents / find_agents", () => {
   it("list_agents answers id, name, description and status of reachable agents only", async () => {
     const w = world({ reachable: (caller, agent) => caller.id !== "outsider" || agent.id === "bot-b" });
     const r = await w.api.call(bot("bot-x"), "list_agents", {});
-    expect(r.body.agents).toEqual(w.agents.map(({ id, name, description, status, owner }) => ({ id, name, description, status, temporary: false, owner })));
+    expect(r.body.agents).toEqual(w.agents.map(({ id, name, description, status, owner, model }) => ({ id, name, description, status, temporary: false, owner, ...(model ? { model } : {}) })));
     const isolated = await w.api.call(bot("outsider"), "list_agents", {});
     expect((isolated.body.agents as AgentSummary[]).map((a) => a.id)).toEqual(["bot-b"]);
   });
@@ -992,5 +1077,100 @@ describe("one error envelope (audit 2026-10-29, B5)", () => {
     expect(Object.keys(bad.body).sort()).toEqual(["code", "details", "error", "hint", "message", "retryable"]);
     expect(bad.body.details).toEqual({ reason: "format", family: "bad_handle", status: 400, retryable: false });
     expect(bad.body.retryable).toBe(false);
+  });
+});
+
+describe("fleet tools (#1944)", () => {
+  it("get_agent and list_agents include the agent's model", async () => {
+    const w = world();
+    const listed = await w.api.call(person("pr_1"), "list_agents", {});
+    expect(listed.status).toBe(200);
+    expect((listed.body.agents as AgentSummary[]).find((a) => a.id === "bot-a")?.model).toEqual({
+      instance_id: "claude", model: "claude-sonnet", effort: "high",
+    });
+    const got = await w.api.call(person("pr_1"), "get_agent", { agent_id: "bot-a" });
+    expect(got.status).toBe(200);
+    expect(got.body.model).toEqual({ instance_id: "claude", model: "claude-sonnet", effort: "high" });
+    expect((got.body.agent as AgentSummary).model).toEqual(got.body.model);
+  });
+
+  it("owner changes own bot model; non-owner refused unless admin; invalid model hints choices", async () => {
+    const w = world();
+    w.owners.set("bot-a", "person:pr_1");
+    const owner = person("pr_1");
+    const other = person("pr_2");
+    const listed = await w.api.call(owner, "list_agent_models", { agent_id: "bot-a" });
+    expect(listed.status).toBe(200);
+    expect(listed.body.models).toHaveLength(2);
+    expect((listed.body.current as AgentModelSummary).instance_id).toBe("claude");
+
+    const changed = await w.api.call(owner, "update_agent_model", {
+      agent_id: "bot-a", instance_id: "grok", model: "grok-4",
+    });
+    expect(changed.status).toBe(200);
+    expect(changed.body.model).toEqual({ instance_id: "grok", model: "grok-4" });
+    expect(((await w.api.call(owner, "get_agent", { agent_id: "bot-a" })).body.model as AgentModelSummary).model).toBe("grok-4");
+
+    const refused = await w.api.call(other, "update_agent_model", {
+      agent_id: "bot-a", instance_id: "claude", model: "claude-opus",
+    });
+    expect(refused.status).toBe(403);
+    expect(refused.body.code).toBe("forbidden_owner");
+
+    const admin = person("pr_admin");
+    admin.admin = true;
+    expect((await w.api.call(admin, "update_agent_model", {
+      agent_id: "bot-a", instance_id: "claude", model: "claude-opus",
+    })).status).toBe(200);
+
+    const bad = await w.api.call(owner, "update_agent_model", {
+      agent_id: "bot-a", instance_id: "claude", model: "no-such-model",
+    });
+    expect(bad.status).toBe(400);
+    expect(String(bad.body.hint || bad.body.message)).toMatch(/claude-sonnet|Valid choices/i);
+  });
+
+  it("update_agent_settings patches editable fields and names refused ones", async () => {
+    const w = world();
+    w.owners.set("bot-a", "person:pr_1");
+    const ok = await w.api.call(person("pr_1"), "update_agent_settings", {
+      agent_id: "bot-a", name: "Osprey", description: "Fleet scout", color: "teal",
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.body.changed).toEqual(expect.arrayContaining(["name", "description"]));
+    expect(ok.body.refused).toEqual([{ field: "color", reason: expect.stringContaining("color") }]);
+    expect((ok.body.agent as AgentSummary).name).toBe("Osprey");
+
+    const other = await w.api.call(person("pr_2"), "update_agent_settings", {
+      agent_id: "bot-a", name: "Hijack",
+    });
+    expect(other.status).toBe(403);
+  });
+
+  it("update_routine enables and disables a routine the caller owns", async () => {
+    const w = world();
+    const paused = await w.api.call(person("pr_1"), "update_routine", {
+      routine_id: "r-own", enabled: false,
+    });
+    expect(paused.status).toBe(200);
+    expect((paused.body.routine as { enabled: boolean }).enabled).toBe(false);
+    const resumed = await w.api.call(person("pr_1"), "update_routine", {
+      routine_id: "r-own", enabled: true, name: "Morning brief (on)",
+    });
+    expect(resumed.status).toBe(200);
+    expect(resumed.body.routine).toMatchObject({ enabled: true, name: "Morning brief (on)" });
+    expect((await w.api.call(person("pr_1"), "update_routine", {
+      routine_id: "r-other", enabled: false,
+    })).status).toBe(404);
+  });
+
+  it("fleet writes need agents.send; list_agent_models needs agents.read", async () => {
+    const w = world();
+    expect((await w.api.call(person("pr_1", ["agents.read"]), "update_agent_model", {
+      agent_id: "bot-a", auto: true,
+    })).status).toBe(403);
+    expect((await w.api.call(person("pr_1", ["agents.read"]), "list_agent_models", {
+      agent_id: "bot-a",
+    })).status).toBe(200);
   });
 });

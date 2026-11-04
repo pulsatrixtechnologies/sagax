@@ -45,6 +45,13 @@ describe("the fixture's Code section environment", () => {
   });
 });
 
+describe("the fixture's turn-trace environment", () => {
+  it("forwards SAGAX_TURN_TRACE only when the parent set it", () => {
+    expect(childEnv({})).not.toHaveProperty("SAGAX_TURN_TRACE");
+    expect(childEnv({ SAGAX_TURN_TRACE: "1" }).SAGAX_TURN_TRACE).toBe("1");
+  });
+});
+
 describe("the fixture's video provider environment", () => {
   it("accepts only an explicit loopback fake tied to a valid test capability key", () => {
     const key = "synthetic-video-fixture-key-at-least-32";

@@ -56,6 +56,7 @@
     "bench:observation": "node --experimental-strip-types scripts/bench-observation.ts",
     "bench:persistence": "node --experimental-strip-types scripts/bench-persistence.ts",
     "bench:server-hot-paths": "node --experimental-strip-types scripts/bench-server-hot-paths.ts",
+    "bench:engine-warm": "node --experimental-strip-types scripts/bench-engine-warm.ts",
     "bench:routine-watch": "node --experimental-strip-types --expose-gc scripts/bench-routine-watch.ts",
     "test:watch": "vitest",
     "test:unit": "node scripts/testing/vitest-shards.mjs --group unit",

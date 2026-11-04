@@ -58,24 +58,40 @@ it("runs owner-authorized email and webhook routines at the chosen level while t
     });
   };
   try {
-    const full = (await api("POST", "/api/bots", { name: "Full email routine" }, 201)).bot;
-    const auto = (await api("POST", "/api/bots", { name: "Automatic webhook routine" }, 201)).bot;
-    const peer = (await api("POST", "/api/bots", { name: "Routine teammate" }, 201)).bot;
+    const full = (await api("POST", "/api/bots", { name: "Full email routine", computer: "off", browser: false }, 201)).bot;
+    const auto = (await api("POST", "/api/bots", { name: "Automatic webhook routine", computer: "off", browser: false }, 201)).bot;
+    const peer = (await api("POST", "/api/bots", { name: "Routine teammate", computer: "off", browser: false }, 201)).bot;
+    for (const bot of [full, auto, peer]) {
+      const configured = await api("PATCH", `/api/bots/${bot.id}`, { computer: "off", browser: false });
+      expect(configured.bot.computer).toBe("off");
+    }
     const routine = (await api("POST", "/api/routines", { name: "File incoming mail", botId: full.id, prompt: "Move the incoming message to my Archive folder.", enabled: true, schedule: { type: "webhook" } }, 201)).routine;
     const hook = (await api("GET", "/api/webhooks")).webhooks.find((entry: any) => entry.routineId === routine.id);
     expect(hook).toBeDefined();
     const wrapper = join(dataDir, "slow-routine.mjs");
     writeFileSync(wrapper, ["#!/usr/bin/env node", 'process.env.FAKE_CLAUDE_MODE = "slow";',
       'const { readFileSync } = await import("node:fs");',
-      'const config = JSON.parse(readFileSync(process.argv[process.argv.indexOf("--mcp-config") + 1], "utf8"));',
+      // Readiness also invokes --version/auth status. Only a real turn has MCP config.
+      'const configIndex = process.argv.indexOf("--mcp-config");',
+      'if (configIndex >= 0) {',
+      'const config = JSON.parse(readFileSync(process.argv[configIndex + 1], "utf8"));',
       `process.env.FAKE_CLAUDE_SLOW_FINISH_GATE = ${JSON.stringify(gate)} + "-" + config.mcpServers.agents.env.SAGAX_BOT_ID;`,
+      '}',
       `await import(${JSON.stringify(new URL("../testing/fake-claude-cli.ts", import.meta.url).href)});`].join("\n"), { mode: 0o700 });
     await api("PATCH", "/api/instances/claude", { cli: wrapper });
     await waitForExit(fixture.child, { signal: "SIGTERM" });
     // Full consent and a relayed mail event are seeded only while this owned
     // fixture is stopped. There is no production bypass flag or live data.
     const bots = JSON.parse(readFileSync(join(dataDir, "bots.json"), "utf8"));
-    Object.assign(bots.find((bot: any) => bot.id === full.id), { approvalMode: "full", autoApprove: false });
+    const fullBot = bots.find((bot: any) => bot.id === full.id);
+    Object.assign(fullBot, { approvalMode: "full", autoApprove: false });
+    // 08a13adf0b preserves explicit thread permissions. This consent fixture
+    // must not leave a saved Auto override on the routine's source thread.
+    for (const task of fullBot.tasks ?? []) {
+      delete task.approvalMode;
+      delete task.autoApprove;
+      delete task.approvalOwn;
+    }
     writeFileSync(join(dataDir, "bots.json"), JSON.stringify(bots));
     const hooks = JSON.parse(readFileSync(join(dataDir, "webhooks.json"), "utf8"));
     const saved = hooks.webhooks.find((entry: any) => entry.id === hook.id);
@@ -99,11 +115,14 @@ it("runs owner-authorized email and webhook routines at the chosen level while t
     closeSync(log);
     await waitForServerReady(restarted, url, () => readFileSync(logPath, "utf8"));
     const mailDump = await launchedFor(receipt.runId);
-    expect(mailDump.argv[mailDump.argv.indexOf("--permission-mode") + 1]).toBe("bypassPermissions");
+    const fullState = (await api("GET", "/api/bots?messages=0")).bots.find((bot: any) => bot.id === full.id);
+    expect(fullState.approvalMode).toBe("full");
+    // 818cc5e7b6 (#1982): Full keeps Sagax's broker; the call below must allow.
+    expect(mailDump.argv[mailDump.argv.indexOf("--permission-mode") + 1]).toBe("acceptEdits");
     expect((await runState(receipt.runId)).prompt).toContain("[UNTRUSTED BOTMAIL EVENT DATA ");
     expect((await runState(receipt.runId)).prompt).toContain("UNTRUSTED_FIXTURE");
     const mailAnswer = await approval(mailDump, "full-mail-move");
-    evidence.push({ case: "Full mail routine", mode: "bypassPermissions", guardrails: "enforce", data: "untrusted", answer: mailAnswer });
+    evidence.push({ case: "Full mail routine", mode: "acceptEdits", guardrails: "enforce", data: "untrusted", answer: mailAnswer });
     writeFileSync(`${logPath}.routine-full.json`, JSON.stringify(evidence, null, 2));
     expect(mailAnswer).toMatchObject({ t: "answer", behavior: "allow" });
     writeFileSync(`${gate}-${full.id}`, "done");

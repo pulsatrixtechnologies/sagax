@@ -44,7 +44,7 @@ struct DesktopSkinFamilies: View {
                     }
                 }
                 if state.place.variant.hasDepth {
-                    row(title: Text(LocalizedStringKey(SkinDepth.label))) {
+                    row(title: Text(LocalizedStringKey(SkinDepth.label)), pill: true) {
                         DesktopPillSelect(
                             options: SkinDepth.allCases.map { ($0, AppStrings.localized($0 == .full ? "Full (intensity)" : $0.name)) },
                             selection: depth,
@@ -54,7 +54,7 @@ struct DesktopSkinFamilies: View {
                     }
                 }
                 if state.place.family.id != .retro98 {
-                    row(title: Text(LocalizedStringKey(SkinTexture.label))) {
+                    row(title: Text(LocalizedStringKey(SkinTexture.label)), pill: true) {
                         DesktopPillSelect(
                             options: SkinTexture.allCases.map { ($0, AppStrings.localized($0.name)) },
                             selection: texture,
@@ -63,7 +63,7 @@ struct DesktopSkinFamilies: View {
                         ) { themes.chooseTexture($0, client: client) }
                     }
                 }
-                row(title: Text("Mode")) {
+                row(title: Text("Mode"), pill: true) {
                     let variant = state.place.variant
                     let modes: [SkinModeChoice] = selection.mode == .computer ? [.light, .dark] : SkinModeChoice.allCases
                     DesktopPillSelect(
@@ -89,8 +89,9 @@ struct DesktopSkinFamilies: View {
     }
 
     /// One setting under the cards: its name, then its control on the right.
-    private func row<Control: View>(title: Text, @ViewBuilder control: @escaping () -> Control) -> some View {
-        DesktopCompactRow(title, control: control)
+    private func row<Control: View>(title: Text, pill: Bool = false, @ViewBuilder control: @escaping () -> Control) -> some View {
+        // a PillSelect row measures 48 on the desktop (the 28 pt pill in `py-2.5`)
+        DesktopCompactRow(title, control: control).frame(minHeight: pill ? 48 : 0)
     }
 
     private func swatch(_ variant: SkinVariant, state: (place: SkinPlace, mode: SkinModeChoice)) -> some View {

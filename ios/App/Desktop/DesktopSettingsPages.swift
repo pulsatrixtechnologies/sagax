@@ -70,7 +70,7 @@ struct DesktopNewBotDefaults: View {
                         }
                         .accessibilityIdentifier("desktop-settings.share-preset")
                     Button("Edit") { editing = true }
-                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .buttonStyle(DesktopPillButtonStyle())
                         .accessibilityIdentifier("desktop-settings.defaults-edit")
                         .popover(isPresented: $editing) {
                             VStack(alignment: .leading, spacing: 8) {
@@ -116,6 +116,24 @@ struct DesktopBotModelsTable: View {
     @State private var selected: Set<String> = []
 
     private static let columns: [CGFloat] = [0.9, 1.8, 0.8, 0.9, 0.8]
+    /// `ROW_GRID`'s minimums: minmax(6rem, …), minmax(10rem, …), 6rem, 6.5rem, 5.5rem.
+    private static let minimums: [CGFloat] = [96, 160, 96, 104, 88]
+
+    /// CSS grid `minmax(min, fr)`: a column whose share is under its minimum
+    /// keeps the minimum, the others share what is left by their weights.
+    static func widths(_ total: CGFloat) -> [CGFloat] {
+        var fixed = Set<Int>()
+        while true {
+            let free = total - fixed.reduce(0) { $0 + minimums[$1] }
+            let weight = columns.indices.filter { !fixed.contains($0) }.reduce(0) { $0 + columns[$1] }
+            let unit = weight > 0 ? free / weight : 0
+            let under = columns.indices.filter { !fixed.contains($0) && columns[$0] * unit < minimums[$0] }
+            if under.isEmpty {
+                return columns.indices.map { fixed.contains($0) ? minimums[$0] : columns[$0] * unit }
+            }
+            fixed.formUnion(under)
+        }
+    }
 
     var body: some View {
         DesktopSettingsGroup(Text("Bot models"),
@@ -166,11 +184,10 @@ struct DesktopBotModelsTable: View {
         HStack(spacing: 10) {
             lead()
             GeometryReader { geometry in
-                let total = Self.columns.reduce(0, +)
-                let width = geometry.size.width - CGFloat(Self.columns.count - 1) * 10
+                let widths = Self.widths(geometry.size.width - CGFloat(Self.columns.count - 1) * 10)
                 HStack(spacing: 10) {
                     ForEach(cells.indices, id: \.self) { index in
-                        cells[index].frame(width: max(0, width * Self.columns[index] / total), alignment: .leading)
+                        cells[index].frame(width: widths[index], alignment: .leading)
                     }
                 }
                 .frame(maxHeight: .infinity)
@@ -190,7 +207,7 @@ struct DesktopBotModelsTable: View {
             AnyView(HStack(spacing: 8) {
                 ChatAvatarView(chat: .bot(bot), size: 24, state: MausState.forChat(.bot(bot), in: session.state), background: theme.panel)
                     .frame(width: 24, height: 24)
-                DesktopText(Text(verbatim: bot.name), weight: .medium).lineLimit(1)
+                DesktopText(Text(verbatim: bot.name), weight: .semibold).lineLimit(1)
             }),
             AnyView(Button { editing = bot } label: {
                 HStack(spacing: 6) {
@@ -198,11 +215,12 @@ struct DesktopBotModelsTable: View {
                         ProviderMarkView(driverKind: instances.first { $0.instanceId == bot.modelSelection.instanceId }?.driverKind ?? "", size: 13)
                             .frame(width: 14, height: 14)
                     }
-                    DesktopText(Text(verbatim: modelLabel(bot))).lineLimit(1)
-                    Spacer(minLength: 0)
+                    // ModelPicker listChip: the label, the chevron right after it
+                    DesktopText(Text(verbatim: modelLabel(bot)), weight: .medium).lineLimit(1).fixedSize()
                     DesktopSettingsIconView(icon: .chevronDown, size: 13).foregroundStyle(theme.inkSecondary)
+                    Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 8).frame(height: 32).contentShape(Rectangle())
+                .padding(.horizontal, 4).frame(height: 32).contentShape(Rectangle())
             }
             .buttonStyle(DesktopHoverFill(radius: 8))
             .disabled(!mayEdit)
@@ -348,7 +366,7 @@ struct DesktopVoiceSettings: View {
                             Text("Test the voice")
                         }
                     }
-                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .buttonStyle(DesktopPillButtonStyle())
                     .disabled(testing || speaking == nil || (status?.offeredTts.isEmpty ?? true))
                     .accessibilityIdentifier("desktop-settings.voice.test")
                 }
@@ -392,19 +410,19 @@ struct DesktopVoiceSettings: View {
                         Task { _ = await model.apply(.fishModel(value), key: "fishModel") }
                     }
                 }
-                DesktopDescribedRow(Text("Chatterbox server"), identifier: "chatterbox") {
-                    EmptyView()
-                } below: {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 6) {
-                            Circle().fill(model.config?.tts?.baseUrl?.isEmpty == false ? theme.accent : theme.raisedHover).frame(width: 6, height: 6)
-                            DesktopText(model.config?.tts?.baseUrl?.isEmpty == false ? Text("Saved") : Text("Any OpenAI-compatible server running Chatterbox works. No key is needed."),
-                                        size: 12, line: 16, color: \.inkSecondary)
-                            Link(destination: URL(string: "https://github.com/resemble-ai/chatterbox")!) {
-                                DesktopText(Text("How to run one locally"), size: 12, weight: .medium, line: 16, color: \.accentText)
-                            }
+                // DescribedRow with its grey line (`mt-0.5`) and the form below (`mt-2`)
+                VStack(alignment: .leading, spacing: 0) {
+                    DesktopText(Text("Chatterbox server"))
+                    HStack(spacing: 6) {
+                        Circle().fill(model.config?.tts?.baseUrl?.isEmpty == false ? theme.accent : theme.raisedHover).frame(width: 6, height: 6)
+                        DesktopText(model.config?.tts?.baseUrl?.isEmpty == false ? Text("Saved") : Text("Any OpenAI-compatible server running Chatterbox works. No key is needed."),
+                                    size: 12, line: 16, color: \.inkSecondary)
+                        Link(destination: URL(string: "https://github.com/resemble-ai/chatterbox")!) {
+                            DesktopText(Text("How to run one locally"), size: 12, weight: .medium, line: 16, color: \.accentText)
                         }
-                        .padding(.top, -6)
+                    }
+                    .padding(.top, 2)
+                    VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 8) {
                             field(Text(verbatim: "http://127.0.0.1:4123"), text: $serverURL, url: true)
                                 .accessibilityIdentifier("desktop-settings.voice.chatterbox-url")
@@ -414,14 +432,18 @@ struct DesktopVoiceSettings: View {
                                     Text("Save")
                                 }
                             }
-                            .buttonStyle(DesktopButtonStyle(kind: .control))
-                            .disabled(savingServer)
+                            .buttonStyle(DesktopPillButtonStyle())
+                            // `savingServer || !serverUrl.trim()`, as the desktop
+                            .disabled(savingServer || serverURL.trimmingCharacters(in: .whitespaces).isEmpty)
                         }
                         field(Text("Model id, default chatterbox-turbo"), text: $serverModel, url: false)
                         if let serverError { DesktopText(Text(verbatim: serverError), size: 12, line: 16, color: \.danger) }
                     }
                     .padding(.top, 8)
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 DesktopDescribedRow(Text("No em or en dashes in replies"),
                                     description: Text("Replaces them in the final text of bot replies: a range word between times and numbers, a colon after a list label, a comma elsewhere. On by default in French."),
                                     identifier: "voiceNoDashes") {
@@ -530,11 +552,35 @@ struct DesktopVoiceSettings: View {
 /// its pre-release channel are the Mac app's; the iPad updates through the
 /// App Store (TestFlight for internal builds).
 struct DesktopUpdatesSettings: View {
+    @Environment(\.openURL) private var openURL
+
+    /// Settings > Updates (SettingsModal.tsx): "This app", Updates with
+    /// Check for updates, Update channel and Update while I am away. On the
+    /// iPad the App Store (or TestFlight) installs updates: Check opens the
+    /// app's page there; the channel is the store build and away-install is
+    /// iPadOS's own, as each row's help says.
     var body: some View {
-        DesktopSettingsGroup {
-            DesktopSettingRow(title: Text("Version"), subtitle: Text("This iPad updates through the App Store, or TestFlight for test builds.")) {
-                DesktopText(Text(verbatim: "\(AboutPage.version) (\(AboutPage.build))"), color: \.inkSecondary)
-                    .accessibilityIdentifier("desktop-settings.updates.version")
+        DesktopSettingsGroup(Text("This app"), identifier: "updates") {
+            DesktopDescribedRow(Text("Updates"),
+                                description: Text(verbatim: "\(AppStrings.localized("Version")) \(AboutPage.version) (\(AboutPage.build)). " + AppStrings.localized("This iPad updates through the App Store, or TestFlight for test builds.")),
+                                identifier: "updates") {
+                Button("Check for updates") {
+                    if let url = URL(string: "itms-apps://apps.apple.com/app/id6818532985") { openURL(url) }
+                }
+                .buttonStyle(DesktopPillButtonStyle())
+                .accessibilityIdentifier("desktop-settings.updates.check")
+            }
+            .accessibilityIdentifier("desktop-settings.updates.version")
+            DesktopDescribedRow(Text("Update channel"), description: Text("Stable, or Nightly for versions still in testing."),
+                                help: Text("On the iPad, the App Store build is the stable channel and TestFlight carries the versions still in testing."),
+                                identifier: "updateChannel") {
+                DesktopPillSelect(options: [("stable", AppStrings.localized("Stable"))], selection: "stable",
+                                  label: Text("Update channel"), identifier: "desktop-settings.updates.channel", disabled: true) { _ in }
+            }
+            DesktopDescribedRow(Text("Update while I am away"), description: Text("Install a downloaded update when you are away and no bot is working."),
+                                help: Text("On the iPad, automatic updates are set in Settings > App Store."),
+                                identifier: "updatesAway") {
+                DesktopSwitch(isOn: false, label: Text("Update while I am away"), identifier: "desktop-settings.updates.away", disabled: true) {}
             }
         }
     }

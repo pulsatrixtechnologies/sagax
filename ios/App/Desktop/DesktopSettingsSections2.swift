@@ -65,12 +65,12 @@ struct DesktopOrganizationSettings: View {
                             .foregroundStyle(theme.inkSecondary)
                         } else {
                             Button("Switch") { session.switchComputer(to: computer.id) }
-                                .buttonStyle(DesktopButtonStyle(kind: .control))
+                                .buttonStyle(DesktopPillButtonStyle())
                                 .accessibilityLabel(Text(verbatim: String(format: AppStrings.localized("Switch to %@"), computer.name)))
                                 .accessibilityIdentifier("desktop-settings.use-computer")
                         }
                         Button("Forget") { pendingRemoval = computer }
-                            .buttonStyle(DesktopButtonStyle(kind: .control))
+                            .buttonStyle(DesktopPillButtonStyle())
                             .accessibilityLabel(Text(verbatim: String(format: AppStrings.localized("Forget %@"), computer.name)))
                     }
                     .padding(.vertical, 12)
@@ -83,7 +83,7 @@ struct DesktopOrganizationSettings: View {
                     DesktopText(Text("By its address or a pairing link from that server."), size: 12, line: 16, color: \.inkSecondary)
                     Spacer(minLength: 0)
                     Button("Connect") { session.beginPairing() }
-                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .buttonStyle(DesktopPillButtonStyle())
                         .accessibilityIdentifier("desktop-settings.connect-computer")
                 }
                 .padding(.vertical, 10)
@@ -168,7 +168,7 @@ struct DesktopConnectServerCard: View {
     private var joinBody: some View {
         let request = OrgJoin.request(bots, choices)
         return VStack(alignment: .leading, spacing: 12) {
-            DesktopText(Text("Copy your own bots into your organization's Sagax. They arrive private and yours, and they stay here too."), line: 20, color: \.inkSecondary)
+            DesktopText(Text("Copy your own bots into your organization's Sagax. They arrive private and yours, and they stay here too."), line: 21, color: \.inkSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             if bots.isEmpty {
                 DesktopText(Text("You have no bots of your own to copy."), color: \.inkSecondary)
@@ -181,14 +181,14 @@ struct DesktopConnectServerCard: View {
                                 DesktopCheckbox(checked: choice.copy, label: Text(verbatim: bot.name), identifier: "desktop-settings.join.\(bot.id)") {
                                     choices = OrgJoin.with(choices, bot: bot.id, copy: !choice.copy); preview = nil
                                 }
-                                DesktopText(verbatim: bot.name).lineLimit(1)
+                                DesktopText(Text(verbatim: bot.name)).lineLimit(1)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             HStack(spacing: 6) {
                                 DesktopCheckbox(checked: choice.copy && choice.threads, label: Text("Conversations"), disabled: !choice.copy) {
                                     choices = OrgJoin.with(choices, bot: bot.id, threads: !(choice.copy && choice.threads)); preview = nil
                                 }
-                                DesktopText(Text("Conversations"), color: \.inkSecondary)
+                                DesktopText(Text("Conversations"), color: \.inkSecondary).fixedSize()
                             }
                             HStack(spacing: 6) {
                                 DesktopCheckbox(checked: choice.copy && choice.memory, label: Text("Memory"), disabled: !choice.copy) {
@@ -209,7 +209,7 @@ struct DesktopConnectServerCard: View {
             DesktopText(Text("Never copied: keys, files, pictures, model settings, connections, computer and browser access. Secrets in messages and memory are removed."), size: 12, line: 16, color: \.inkSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button("See what will be copied") { Task { await runExport(request) } }
-                .buttonStyle(DesktopButtonStyle(kind: .control))
+                .buttonStyle(DesktopPillButtonStyle())
                 .disabled(busy || request.isEmpty)
             if let summary = preview?.summary {
                 VStack(alignment: .leading, spacing: 4) {
@@ -224,7 +224,7 @@ struct DesktopConnectServerCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Button("Download the copy file") { Task { await runExport(request, save: true) } }
-                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .buttonStyle(DesktopPillButtonStyle())
                         .disabled(busy || request.isEmpty)
                     if let file {
                         ShareLink(item: file) { DesktopText(verbatim: file.lastPathComponent, size: 12, color: \.accentText) }
@@ -972,7 +972,7 @@ struct DesktopThisDeviceCard: View {
         ) {
             HStack(spacing: 8) {
                 Button("Pair again") { session.beginPairing() }
-                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .buttonStyle(DesktopPillButtonStyle())
                     .accessibilityIdentifier("desktop-settings.pair-again")
                 if session.connection != nil {
                     Button("Forget this computer") { confirming = true }
@@ -1157,9 +1157,9 @@ struct DesktopEnginesSettings: View {
             HStack(spacing: 8) {
                 Spacer(minLength: 0)
                 if addStep != "choose" {
-                    Button("Back") { addStep = "choose" }.buttonStyle(DesktopButtonStyle(kind: .control))
+                    Button("Back") { addStep = "choose" }.buttonStyle(DesktopPillButtonStyle())
                 }
-                Button("Cancel") { adding = false }.buttonStyle(DesktopButtonStyle(kind: .control))
+                Button("Cancel") { adding = false }.buttonStyle(DesktopPillButtonStyle())
             }
         }
         .padding(8)
@@ -1284,11 +1284,11 @@ struct DesktopCloudAgentRow: View {
                 Spacer(minLength: 0)
                 if row.configured && !isEditing {
                     Button("Test connection") { run { try await $0.testCloudAgentProvider(row.provider, token: nil); return AppStrings.localized("Connection succeeded.") } }
-                        .buttonStyle(DesktopButtonStyle(kind: .control)).disabled(busy)
+                        .buttonStyle(DesktopPillButtonStyle()).disabled(busy)
                     Button("Replace") { editing = true; note = nil }
-                        .buttonStyle(DesktopButtonStyle(kind: .control)).disabled(busy)
+                        .buttonStyle(DesktopPillButtonStyle()).disabled(busy)
                     Button { run { try await $0.removeCloudAgentProvider(row.provider); return nil } } label: { Text("Remove").foregroundStyle(theme.danger) }
-                        .buttonStyle(DesktopButtonStyle(kind: .control)).disabled(busy)
+                        .buttonStyle(DesktopPillButtonStyle()).disabled(busy)
                 }
             }
             if isEditing {
@@ -1302,10 +1302,10 @@ struct DesktopCloudAgentRow: View {
                     .accessibilityIdentifier("desktop-settings.cloud-agent.\(row.provider).token")
                 HStack(spacing: 8) {
                     Button("Save key") { let value = token; run { try await $0.saveCloudAgentProvider(row.provider, token: value); return nil } }
-                        .buttonStyle(DesktopButtonStyle(kind: .accent))
+                        .buttonStyle(DesktopPillButtonStyle(primary: true))
                         .disabled(busy || token.trimmingCharacters(in: .whitespaces).isEmpty)
                     Button("Test connection") { let value = token; run { try await $0.testCloudAgentProvider(row.provider, token: value); return AppStrings.localized("Connection succeeded.") } }
-                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .buttonStyle(DesktopPillButtonStyle())
                         .disabled(busy || token.trimmingCharacters(in: .whitespaces).isEmpty)
                     if row.configured {
                         Button("Cancel") { editing = false; token = ""; note = nil }
@@ -1483,7 +1483,7 @@ struct DesktopEngineCard: View {
                         if let provider = engine.apiKeyProvider {
                             DesktopText("This provider runs on an API key saved on the computer.", color: \.inkSecondary)
                             Button("Open API keys") { openKeys(provider) }
-                                .buttonStyle(DesktopButtonStyle(kind: .control))
+                                .buttonStyle(DesktopPillButtonStyle())
                         } else if engine.ready {
                             DesktopText("Ready on the computer. Its sign-in and updates are managed in Sagax there.", color: \.inkSecondary)
                         } else {
@@ -1549,7 +1549,7 @@ struct DesktopEngineSetup: View {
                     keyFields
                     if !engine.interactiveSignIn, let provider = engine.apiKeyProvider {
                         Button("Open API keys") { openKeys(provider) }
-                            .buttonStyle(DesktopButtonStyle(kind: .control))
+                            .buttonStyle(DesktopPillButtonStyle())
                     }
                 }
             }
@@ -1560,7 +1560,7 @@ struct DesktopEngineSetup: View {
                         .textSelection(.enabled)
                         .foregroundStyle(theme.inkSecondary)
                     Button("Copy command") { UIPasteboard.general.string = command }
-                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .buttonStyle(DesktopPillButtonStyle())
                 } label: {
                     Text("Prefer a terminal?")
                 }
@@ -1588,7 +1588,7 @@ struct DesktopEngineSetup: View {
                         .foregroundStyle(theme.ink)
                     Spacer(minLength: 8)
                     Button("Copy code") { UIPasteboard.general.string = code }
-                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .buttonStyle(DesktopPillButtonStyle())
                 }
             }
             if method == "paste-code" {
@@ -1597,7 +1597,7 @@ struct DesktopEngineSetup: View {
                     .autocorrectionDisabled()
                     .textFieldStyle(.roundedBorder)
                 Button("Finish sign-in") { Task { await finish() } }
-                    .buttonStyle(DesktopButtonStyle(kind: .accent))
+                    .buttonStyle(DesktopPillButtonStyle(primary: true))
                     .disabled(busy || pasted.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             if let raw = auth?.authorizationUrl, let url = EngineSignInLink.allowed(raw) {
@@ -1605,14 +1605,14 @@ struct DesktopEngineSetup: View {
                     openedLink = true
                     openURL(url)
                 }
-                .buttonStyle(DesktopButtonStyle(kind: .accent))
+                .buttonStyle(DesktopPillButtonStyle(primary: true))
             }
             Button("Cancel sign-in") { Task { await cancel() } }
-                .buttonStyle(DesktopButtonStyle(kind: .control))
+                .buttonStyle(DesktopPillButtonStyle())
                 .disabled(busy)
         } else if auth?.phase != "succeeded" {
             Button(auth == nil && error == nil ? "Sign in" : "Try again") { Task { await start() } }
-                .buttonStyle(DesktopButtonStyle(kind: .accent))
+                .buttonStyle(DesktopPillButtonStyle(primary: true))
                 .disabled(busy)
         }
         if let error {
@@ -1643,11 +1643,11 @@ struct DesktopEngineSetup: View {
             .textFieldStyle(.roundedBorder)
         HStack(spacing: 8) {
             Button(keyBusy ? "Saving…" : "Save key") { Task { await saveKey(key) } }
-                .buttonStyle(DesktopButtonStyle(kind: .accent))
+                .buttonStyle(DesktopPillButtonStyle(primary: true))
                 .disabled(keyBusy || key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             if keyConfigured {
                 Button("Remove key") { Task { await saveKey("") } }
-                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .buttonStyle(DesktopPillButtonStyle())
                     .disabled(keyBusy)
             }
         }
@@ -1781,6 +1781,7 @@ struct DesktopComputerTopRows: View {
     @State private var freed: Double?
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
         if messages?.available == true {
             VStack(alignment: .leading, spacing: 0) {
                 Button { withAnimation(.easeOut(duration: 0.15)) { macOpen.toggle() } } label: {
@@ -1839,7 +1840,7 @@ struct DesktopComputerTopRows: View {
                                                       : Text("Moves the computer to the latest version now. Files and logins stay, installed apps and packages are removed."),
                                         icon: .rotateCcw, identifier: "computerRecover") {
                         Button(recover ? "Recover" : "Update") { confirming = recover ? "recover" : "update" }
-                            .buttonStyle(DesktopButtonStyle(kind: .control))
+                            .buttonStyle(DesktopPillButtonStyle())
                             .disabled(careBusy != nil)
                             .accessibilityIdentifier("desktop-settings.computer-recover")
                     }
@@ -1870,12 +1871,12 @@ struct DesktopComputerTopRows: View {
                             Text(preview == nil ? "Analyze" : "Analyze again")
                         }
                     }
-                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .buttonStyle(DesktopPillButtonStyle())
                     .disabled(careBusy == "scan" || careBusy == "clean")
                     .accessibilityIdentifier("desktop-settings.disk-saver")
                     if let preview, !selection.isEmpty {
                         Button(String(format: AppStrings.localized("Free %@"), Self.size(preview.bytes(of: selection)))) { confirming = "clean" }
-                            .buttonStyle(DesktopButtonStyle(kind: .control))
+                            .buttonStyle(DesktopPillButtonStyle())
                             .disabled(careBusy == "clean")
                     }
                 } below: {
@@ -1913,7 +1914,9 @@ struct DesktopComputerTopRows: View {
                 Button("Cancel", role: .cancel) { confirming = nil }
             }
         }
-        Color.clear.frame(height: 0).task { await load() }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .task { await load() }
     }
 
     static func action(_ status: ComputerStatus) -> String? {
@@ -2066,7 +2069,7 @@ struct DesktopComputerSettings: View {
                         Text("Re-check")
                     }
                 }
-                .buttonStyle(DesktopButtonStyle(kind: .control))
+                .buttonStyle(DesktopPillButtonStyle())
                 .disabled(loading || pending != nil)
                 .accessibilityIdentifier("desktop-settings.vm-recheck")
             } below: {

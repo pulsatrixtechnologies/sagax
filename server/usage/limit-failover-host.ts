@@ -7,6 +7,7 @@
 import type { LimitFailoverLine } from "../../shared/limit-failover.ts";
 import type { ModelSelection } from "../../shared/wire.ts";
 import { isEngineExhaustedRefusal } from "../drivers/openai-chat.ts";
+import { ENGINE_REFUSAL_TTL_MS, type EngineRefusal } from "../engines/engine-refusals.ts";
 import { limitBackupAllowed, pickLimitBackup, type LimitCandidate, type LimitEngine, type LimitFailoverStore } from "./limit-failover.ts";
 import { limitKindOf, limitResetFromText, limitResetOrEstimate } from "./limit-reset-time.ts";
 
@@ -51,6 +52,8 @@ export interface LimitFailoverHostDeps {
   preferred: (botId: string, threadId: string) => Array<{ instanceId: string; model?: string }>;
   config: (instanceId: string) => { environment?: Record<string, string>; access?: string } | undefined;
   payer: (botId: string, speaker: unknown) => string;
+  /** Account-scoped refusal, including the latest verified sign-in facts. */
+  refusal?: (botId: string, threadId: string, speaker: unknown, instanceId: string) => EngineRefusal | undefined;
   /** The bot owner's plan pays for a member's turn (J4). */
   ownerPays?: (botId: string, speaker: unknown) => boolean;
   /** The model the thread runs on now; null when it is gone. */
@@ -88,6 +91,8 @@ export interface LimitFailoverHostDeps {
 }
 
 export interface LimitFailoverHost {
+  /** Readiness uses the same selection as beforeTurn without moving a thread. */
+  backupFor(botId: string, threadId: string, speaker: unknown, from: string): Promise<ModelSelection | null>;
   /** The engines Auto must not pick for this payer now: one at its usage
    * limit, and any other sign-in to the same subscription engine
    * (limitBackupAllowed). */
@@ -118,7 +123,7 @@ export interface LimitFailoverHost {
    * or onto a backup while its engine is known to be at its limit (the
    * promise, to await before the turn reads its model). Null when nothing
    * is left to wait for, so an ordinary turn never yields. Never throws. */
-  beforeTurn(botId: string, threadId: string, speaker: unknown): Promise<void> | null;
+  beforeTurn(botId: string, threadId: string, speaker: unknown, resolvedSelection?: ModelSelection): Promise<void> | null;
   /** Runs what waits for a reset and arms the timer again. */
   tick(): Promise<void>;
   start(): void;
@@ -167,7 +172,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
     from,
     preferred: deps.preferred(botId, threadId),
     candidates: await deps.candidates(botId, threadId, speaker),
-    blocked: (instanceId) => store.blockedUntil(payer, instanceId) !== null,
+    blocked: (instanceId) => Boolean(deps.refusal?.(botId, threadId, speaker, instanceId)) || store.blockedUntil(payer, instanceId) !== null,
     config: deps.config,
   });
 
@@ -325,6 +330,11 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
   };
 
   const host: LimitFailoverHost = {
+    async backupFor(botId, threadId, speaker, from) {
+      if (!deps.enabled()) return null;
+      const engine = deps.engine(from);
+      return engine ? pick(botId, threadId, speaker, engine, deps.payer(botId, speaker)) : null;
+    },
     autoExcluded(payer, engines) {
       const out = new Set<string>();
       try {
@@ -388,7 +398,9 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         if (!kind && !exhausted) return false;
         const now = deps.now();
         const said = error?.resetsAt ?? limitResetFromText(cause, now) ?? limitResetFromText(error?.message, now);
-        const { resetsAt } = kind ? limitResetOrEstimate(kind, said, now) : { resetsAt: now };
+        const refusal = deps.refusal?.(dispatch.botId, threadId, dispatch.speaker, dispatch.engine.instanceId);
+        const { resetsAt } = refusal?.cause === "credits" ? { resetsAt: refusal.at + ENGINE_REFUSAL_TTL_MS }
+          : kind ? limitResetOrEstimate(kind, said, now) : { resetsAt: now };
         // Known from now on, whatever happens to this turn: no other turn of
         // this payer starts on it before the reset. A refusal that binds
         // only this model (its extra-usage credits, its own weekly window)
@@ -418,7 +430,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
       }
     },
 
-    beforeTurn(botId, threadId, speaker) {
+    beforeTurn(botId, threadId, speaker, resolvedSelection) {
       try {
         if (!deps.enabled()) return null;
         const payer = deps.payer(botId, speaker);
@@ -426,7 +438,7 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         if (row) {
           const current = deps.threadSelection(botId, threadId);
           if (!same(current, row.to)) store.forget(threadId);
-          else if (store.due(row) && store.blockedUntil(payer, row.from.instanceId) === null) {
+          else if (store.due(row) && store.blockedUntil(payer, row.from.instanceId) === null && !deps.refusal?.(botId, threadId, speaker, row.from.instanceId)) {
             const refused = deps.switchThread(botId, threadId, row.from);
             if (!refused) {
               store.forget(threadId);
@@ -439,9 +451,13 @@ export function createLimitFailoverHost(deps: LimitFailoverHostDeps): LimitFailo
         // The thread's engine is known to be at its limit for this payer: a
         // backup takes the turn before it is refused.
         const selection = deps.threadSelection(botId, threadId);
-        if (!selection || selection.auto === true) return null;
-        const until = store.blockedUntil(payer, selection.instanceId);
-        const from = until === null ? undefined : deps.engine(selection.instanceId);
+        if (!selection || (selection.auto === true && !resolvedSelection)) return null;
+        const instanceId = resolvedSelection?.instanceId ?? selection.instanceId;
+        const refusal = deps.refusal?.(botId, threadId, speaker, instanceId);
+        // Credits have no reset time. Their recorded refusal expires after its existing TTL.
+        const until = refusal ? refusal.cause === "usage_limit" && refusal.resetsAt !== undefined
+          ? refusal.resetsAt : refusal.at + ENGINE_REFUSAL_TTL_MS : store.blockedUntil(payer, instanceId);
+        const from = until === null ? undefined : deps.engine(instanceId);
         if (until === null || !from) return null;
         return pick(botId, threadId, speaker, from, payer).then((backup) => {
           // Nothing awaited after the pick: the thread is read again here.

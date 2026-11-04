@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ENGINE_REFUSAL_TTL_MS, type EngineRefusal } from "../engines/engine-refusals.ts";
 
 import type { LimitFailoverLine } from "../../shared/limit-failover.ts";
 import type { ModelSelection } from "../../shared/wire.ts";
@@ -29,6 +30,7 @@ function world(options: { allowed?: string[]; preferred?: Array<{ instanceId: st
   const allowed = options.allowed ?? ["claude", "codex", "grok"];
   const store = new LimitFailoverStore({ file: null, now: () => clock.now });
   const timers: Array<{ at: number; run: () => void; cancelled: boolean }> = [];
+  const refusals = new Map<string, EngineRefusal>();
   const deps: LimitFailoverHostDeps = {
     store,
     now: () => clock.now,
@@ -42,6 +44,7 @@ function world(options: { allowed?: string[]; preferred?: Array<{ instanceId: st
     preferred: () => options.preferred ?? [],
     config: () => undefined,
     payer: () => "server",
+    refusal: (_bot, _thread, _speaker, id) => refusals.get(id),
     threadSelection: () => state.selection,
     busy: () => state.busy,
     switchThread: (_bot, _thread, to) => {
@@ -75,7 +78,7 @@ function world(options: { allowed?: string[]; preferred?: Array<{ instanceId: st
     botId: "bot", engine: { instanceId: selection.instanceId, driverKind: DRIVERS[selection.instanceId]! }, selection, payer: "server", at: clock.now,
     ...(owner ? { owner: true } : {}),
   });
-  return { clock, state, store, host, dispatch, timers };
+  return { clock, state, store, host, dispatch, timers, refusals };
 }
 
 describe("a turn its engine's limit refused", () => {
@@ -398,6 +401,46 @@ describe("a turn its engine's limit refused", () => {
 });
 
 describe("the next turn", () => {
+  it("records credits with the refusal TTL instead of an estimated quota reset (#1986)", async () => {
+    const w = world();
+    const at = w.clock.now;
+    w.refusals.set(A.instanceId, { engine: A.instanceId, cause: "credits", at });
+    w.dispatch();
+    expect(w.host.turnFailed({ threadId: "thread", cause: "Credit balance is too low" })).toBe(true);
+    await w.host.idle();
+    expect(w.store.blockedUntil("server", A.instanceId)).toBe(at + ENGINE_REFUSAL_TTL_MS);
+  });
+  it("starts an Auto routine's resolved primary on a backup and preserves Auto for the return (#1986)", async () => {
+    const w = world();
+    const auto: ModelSelection = { ...A, auto: true };
+    w.state.selection = auto;
+    w.refusals.set(C.instanceId, { engine: C.instanceId, cause: "credits", at: w.clock.now });
+    await w.host.beforeTurn("bot", "thread", undefined, C);
+    expect(w.state.selection).toEqual(A);
+    expect(w.store.failover("bot", "thread")).toMatchObject({ from: auto, to: A });
+  });
+  it.each(["credits", "usage_limit"] as const)("starts directly on a ready backup for a recorded %s refusal (#1986)", async (cause) => {
+    const w = world({ preferred: [C, B] });
+    const at = w.clock.now;
+    const resetsAt = at + 2 * 3_600_000;
+    w.refusals.set(A.instanceId, { engine: A.instanceId, cause, at, resetsAt });
+    w.refusals.set(C.instanceId, { engine: C.instanceId, cause: "credits", at });
+    expect(await w.host.backupFor("bot", "thread", undefined, A.instanceId)).toEqual(B);
+    expect(w.state.switches).toEqual([]);
+    await w.host.beforeTurn("bot", "thread", undefined);
+    expect(w.state.selection).toEqual(B);
+    expect(w.state.resent).toEqual([]);
+    const until = cause === "credits" ? at + ENGINE_REFUSAL_TTL_MS : resetsAt;
+    expect(w.store.failover("bot", "thread")).toMatchObject({ from: A, to: B, resetsAt: until });
+    w.clock.now = until + w.store.afterResetMs;
+    // A renewed refusal must keep the thread on the backup.
+    w.refusals.set(A.instanceId, { engine: A.instanceId, cause, at: w.clock.now, resetsAt: w.clock.now + 60_000 });
+    await w.host.beforeTurn("bot", "thread", undefined);
+    expect(w.state.selection).toEqual(B);
+    w.refusals.delete(A.instanceId);
+    await w.host.beforeTurn("bot", "thread", undefined);
+    expect(w.state.selection).toEqual(A);
+  });
   it("goes back to the engine the thread was on once the reset has passed, with one line", async () => {
     const w = world();
     w.dispatch();

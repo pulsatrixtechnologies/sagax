@@ -1,5 +1,16 @@
 # Sagax agent notes
 
+## Routine readiness and failover (#1986, 2026-11-04)
+
+Routine pre-flight uses `limitFailover.backupFor` to check the same backup
+order and access rules as dispatch. Account refusals stay live outside the
+probe cache. `RoutineManager.prepareTurn` applies the failover before
+capturing the run's engine account, so a backup's success never clears the
+primary's refusal. Credits keep the 30-minute refusal TTL, including in the
+failover store; a thread returns through the existing reset path.
+Tests: `routine-readiness.test.ts`, `routine-reliability.test.ts`,
+`limit-failover-host.test.ts`.
+
 ## Codex retains one app-server per conversation (#1969, 2026-11-04)
 
 `server/drivers/codex/sessions.ts` owns the per-instance, per-thread process

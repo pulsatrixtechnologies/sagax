@@ -5,6 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { RoutineManager, PREWARM_ENGINE_LEAD_MS, ROUTINE_RESTARTED, type RoutineManagerOptions } from "./routines.ts";
 import { checkRoutineReadiness, type RoutineReadinessDeps } from "./routine-readiness.ts";
 import { activeEngineRefusal, noteEngineRefusal } from "../engines/engine-refusals.ts";
+import { createLimitFailoverHost } from "../usage/limit-failover-host.ts";
+import { LimitFailoverStore } from "../usage/limit-failover.ts";
+import type { ModelSelection } from "../../shared/wire.ts";
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 function fixture(over: Partial<RoutineManagerOptions> = {}) {
@@ -23,6 +26,42 @@ function fixture(over: Partial<RoutineManagerOptions> = {}) {
   return { manager, routine, options, probes, flush, createTask, startTurn, onRunFailed, advance: (ms: number) => { now += ms; }, now: () => now, engine: dir };
 }
 describe("routine reliability in an isolated journal", () => {
+  it.each(["credits", "usage_limit"] as const)("starts a run on its backup without dispatching the primary's recorded %s refusal (#1986)", async (cause) => {
+    const h = fixture();
+    const primary: ModelSelection = { instanceId: h.engine, model: "primary" };
+    const backup: ModelSelection = { instanceId: `${h.engine}-backup`, model: "backup" };
+    const selections = new Map<string, ModelSelection>();
+    const selection = (threadId?: string) => selections.get(threadId ?? "") ?? primary;
+    const store = new LimitFailoverStore({ file: null, now: h.now });
+    const failover = createLimitFailoverHost({ store, now: h.now, enabled: () => true,
+      engineName: id => id, engine: instanceId => ({ instanceId, driverKind: instanceId === primary.instanceId ? "grokAgent" : "codex" }),
+      candidates: async () => [{ instanceId: backup.instanceId, driverKind: "codex", models: [backup.model] }],
+      preferred: () => [backup], config: () => undefined, payer: () => "server",
+      refusal: (_bot, _thread, _speaker, id) => activeEngineRefusal(id, undefined, h.now()),
+      threadSelection: (_bot, threadId) => selection(threadId), busy: () => false,
+      switchThread: (_bot, threadId, to) => { selections.set(threadId, to); return null; },
+      note: vi.fn(), replaceFailure: vi.fn(), request: () => undefined, resend: async () => false, rerunRoutine: () => false });
+    h.probes.engine = (_routine, run) => ({ engine: selection(run.threadId).instanceId, name: "Primary" });
+    h.probes.backup = async (_routine, run, from) => {
+      const picked = await failover.backupFor(run.botId, run.threadId ?? "", undefined, from.engine);
+      return picked ? { engine: picked.instanceId, name: "Backup" } : undefined;
+    };
+    h.options.prepareTurn = async run => { await failover.beforeTurn(run.botId, run.threadId!, undefined); };
+    h.options.engineForRun = run => ({ engine: selection(run.threadId).instanceId });
+    const dispatched: ModelSelection[] = [];
+    h.options.startTurn = async (...args) => { dispatched.push(selection(args[1])); await h.startTurn(); };
+    noteEngineRefusal({ engine: h.engine, cause, at: h.now(), ...(cause === "usage_limit" ? { resetsAt: h.now() + 60_000 } : {}) });
+    h.manager.runNow(h.routine.id); await h.flush();
+    expect(dispatched).toEqual([backup]);
+    expect(h.manager.listRuns()[0]?.status).toBe("running");
+    expect(store.failover("osprey", "t-1")).toMatchObject({ from: primary, to: backup });
+    h.manager.handleRuntimeEvent({ eventId: "backup-done", provider: "fake", threadId: "t-1", createdAt: new Date(h.now()).toISOString(), type: "turn.completed", ok: true });
+    expect(activeEngineRefusal(h.engine, undefined, h.now())?.cause).toBe(cause);
+    h.advance(31 * 60_000);
+    h.manager.runNow(h.routine.id); await h.flush();
+    expect(dispatched).toEqual([backup, primary]);
+    failover.stop();
+  });
   it.each(["manual", "schedule", "webhook"] as const)("blocks missing skills before creating a task for %s and notifies once per bot and cause", async (trigger) => {
     const h = fixture();
     h.manager.update(h.routine.id, { requires: { skills: ["inbox-review"] } });

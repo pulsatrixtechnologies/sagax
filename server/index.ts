@@ -21908,7 +21908,7 @@ function prewarmThread(botId: string, threadId: string, person: string, opts: Pr
       ...(opts.commsDepth ? { commsDepth: opts.commsDepth } : {}),
       ...(opts.cardContinuation ? { cardContinuation: true } : {}),
       ...(opts.warmCoordination ? { warmCoordination: true } : {}),
-      onWarmSettled: (ok) => {
+      onWarmSettled: (ok, driverKind) => {
         // counted with the finished sessions, so the idle cap (#804) holds
         if (ok && !signal.aborted && !runningTurnEngines.has(threadId)) idleEngines.noteIdle(threadId, () => {
           threadPrewarm.cancel(threadId);
@@ -21916,7 +21916,7 @@ function prewarmThread(botId: string, threadId: string, person: string, opts: Pr
             releaseWarmEngine(threadId);
             perspicaxMcp?.noteEngineCold(threadId);
           });
-        }, idleEngineTtl(registry.get(store.projectBotForTask(botId, threadId)?.modelSelection.instanceId ?? "")?.driverKind));
+        }, idleEngineTtl(driverKind));
         resolve();
       }
     }).catch((error) => {
@@ -23982,7 +23982,7 @@ async function startTurn(
     warmSignal?: AbortSignal;
     /** Fired once the warm has released its claim, whether or not the
      * process is up. The call's first turn waits on this. */
-    onWarmSettled?: (ok: boolean) => void;
+    onWarmSettled?: (ok: boolean, driverKind?: string) => void;
   },
 ) {
   return (startTurnRunner as typeof startTurnRunner)(botId, text, opts);

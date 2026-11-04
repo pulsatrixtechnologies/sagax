@@ -2060,6 +2060,8 @@ import {
 import { pluginMetadataCacheRoot } from "./plugins/plugin-metadata-cache.ts";
 import { pluginTurnInventory } from "./turns/plugin-turn.ts";
 import { orderedSkillDiscovery, skillDiscoveryAvailable, type DiscoveredSkill } from "./skills/skill-discovery.ts";
+import { prepareTurnSkillLinks } from "./skills/turn-skill-links.ts";
+import { routineReadinessTarget } from "./routines/routine-readiness-target.ts";
 import {
   engineServerMcp,
   perspicaxServerName,
@@ -10251,9 +10253,9 @@ function scopedSkillInventory(bot: BotRecord, instance: { driverKind: string } |
 /** The selected skill and plugin instructions of one turn, budgeted per
  * capability (server/capabilities/capability-prompt.ts): file engines get readable paths,
  * engines without files the whole files, read through the same checks as
- * workspace_read. `syncNative` refreshes Claude's skill links on a real turn
+ * workspace_read. `syncNative` refreshes the active engine's links on a real turn
  * only: the preview and the receipt never touch them. */
-function scopedSkillsPrompt(bot: BotRecord, instance: { driverKind: string } | null | undefined, principal: string | undefined, options: { managedTools: boolean; fileAccess: boolean; syncNative?: boolean; indexOnly?: boolean }) {
+function scopedSkillsPrompt(bot: BotRecord, instance: { driverKind: string } | null | undefined, principal: string | undefined, options: { managedTools: boolean; fileAccess: boolean; syncNative?: boolean; nativeWorkspace?: string; indexOnly?: boolean }) {
   const kind = instance?.driverKind ?? "";
   const names = new Set(personalSkillInputs(bot, principal).filter((skill) => skill.enabled && !skill.shadowed).map((skill) => skill.name));
   if (options.syncNative) syncSkillLinks(bot.id, { excludeNames: names });
@@ -10279,6 +10281,12 @@ function scopedSkillsPrompt(bot: BotRecord, instance: { driverKind: string } | n
   const plugins = scopedPluginFolders(bot, person);
   const personalRoot = skillsLibraryEnabled(cfg) && person ? personalSkills.root(person) : undefined;
   const assigned = skillsLibraryEnabled(cfg) ? (store.bot(bot.id)?.assignedSkills ?? bot.assignedSkills) : undefined;
+  if (options.syncNative && options.nativeWorkspace && engineWorksInFiles(kind)) {
+    prepareTurnSkillLinks({ driverKind: kind, workspace: options.nativeWorkspace,
+      stateRoot: join(DATA_DIR, "skill-state", bot.id, "turn-links"), rows: inventory.rows, plugins, personalRoot,
+      skills: resolvedSkillFiles(bot.id, assigned).flatMap((skill) => skill.file ? [{ name: skill.name, file: skill.file }] : []),
+    });
+  }
   let library: Array<{ name: string; file: string }> | undefined;
   const read = (row: DiscoveredSkill): string | null => {
     if (!row.path) return null;
@@ -24585,12 +24593,17 @@ const directChatOf = (botId: string, threadId: string): boolean => {
   return source !== null && !source.group;
 };
 /** Resolve the same worker Auto pick and account plan as routine startTurn. */
-function routineReadinessEngine(routine: ReadinessRoutine, run: ReadinessRun) {
-  const original = run.threadId ? botForThread(run.botId, run.threadId) : store.bot(run.botId);
-  if (!original) return undefined;
+function routineReadinessBot(routine: ReadinessRoutine, run: ReadinessRun) {
   const speaker = routineRunSpeaker({ botId: run.botId, runAs: run.runAs ?? routine.runAs });
-  const pick = autoPickForTurn({ bot: original, threadId: run.threadId ?? "", speaker, role: "worker", text: run.prompt ?? routine.prompt });
-  const bot = pick ? { ...original, modelSelection: pick.pick.selection } : original;
+  return routineReadinessTarget(run, {
+    bot: (id, threadId) => threadId ? botForThread(id, threadId) : store.bot(id),
+    pick: (bot) => autoPickForTurn({ bot, threadId: run.threadId ?? "", speaker, role: "worker", text: run.prompt ?? routine.prompt })?.pick.selection,
+  });
+}
+function routineReadinessEngine(routine: ReadinessRoutine, run: ReadinessRun) {
+  const bot = routineReadinessBot(routine, run);
+  if (!bot) return undefined;
+  const speaker = routineRunSpeaker({ botId: run.botId, runAs: run.runAs ?? routine.runAs });
   const instance = registry.get(bot.modelSelection.instanceId);
   if (!instance) return undefined;
   const plan = resolveEngineAccess(orgEngineInput(bot, instance, speaker));
@@ -24618,10 +24631,10 @@ const routineReadinessDeps: RoutineReadinessDeps = {
     return JSON.stringify([engine, bot?.modelSelection, bot?.mcpServers, bot?.toolScope, bot?.assignedSkills, bot?.perspicax, bot?.computer, bot?.remoteHosts]);
   },
   engine: (routine, run) => routineReadinessEngine(routine, run),
-  skills: (_routine, run) => {
-    const bot = store.bot(run.botId);
+  skills: (routine, run) => {
+    const bot = routineReadinessBot(routine, run);
     if (!bot) return undefined;
-    const inventory = scopedSkillInventory(bot, registry.get(bot.modelSelection.instanceId), run.runAs);
+    const inventory = scopedSkillInventory(bot, registry.get(bot.modelSelection.instanceId), run.runAs ?? routine.runAs);
     // Partial discovery cannot prove that an unlisted skill is absent.
     return inventory.incomplete ? undefined : inventory.rows.filter(row => row.enabled && row.kind === "skill").map(row => row.name);
   },
@@ -46079,6 +46092,7 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   mountPersonalMcp,
   mountPluginMcp,
   mountUserSandbox,
+  syncPluginsForTurn,
   myChromePromptFor,
   namesEngine,
   noteBotRead,
@@ -46456,6 +46470,7 @@ const startTurnRunner = createStartTurn({
   mountPersonalMcp,
   mountPluginMcp,
   mountUserSandbox,
+  syncPluginsForTurn,
   myChromePromptFor,
   namedTeammates,
   namesEngine,

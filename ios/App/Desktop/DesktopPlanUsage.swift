@@ -76,7 +76,7 @@ struct DesktopPlanUsageCard: View {
                 VStack(alignment: .leading, spacing: 8) {
                     DesktopText(Text("Not signed in"), size: 12, line: 16, color: \.inkSecondary)
                     Button(String(format: AppStrings.localized("Connect %@"), provider.name)) { shell.settingsSection = .providers }
-                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .buttonStyle(DesktopPillButtonStyle())
                         .accessibilityIdentifier("desktop-settings.plan-connect.\(provider.id)")
                 }
             } else if provider.rowState == "error" {

@@ -45,7 +45,7 @@ struct DesktopSecuritySettings: View {
                                 Text("Remove")
                             }
                         }
-                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .buttonStyle(DesktopPillButtonStyle())
                         .disabled(busy)
                         .accessibilityLabel(Text(verbatim: String(format: AppStrings.localized("Remove %@"), key.name)))
                     }
@@ -67,7 +67,7 @@ struct DesktopSecuritySettings: View {
                         // (`fresh=1`) whose invite renews this iPad's session, then the key
                         if session.surfaceGate.organization, let origin = session.connection?.baseURL {
                             Button("Sign in again") { signInAgain(origin) }
-                                .buttonStyle(DesktopButtonStyle(kind: .accent))
+                                .buttonStyle(DesktopPillButtonStyle(primary: true))
                                 .disabled(busy || webSignIn.running)
                                 .accessibilityIdentifier("desktop-settings.security.sign-in-again")
                         }
@@ -90,7 +90,7 @@ struct DesktopSecuritySettings: View {
                             .disabled(busy)
                             .accessibilityIdentifier("desktop-settings.security.key-name")
                         Button("Add a key") { Task { await addKey() } }
-                            .buttonStyle(DesktopButtonStyle(kind: .accent))
+                            .buttonStyle(DesktopPillButtonStyle(primary: true))
                             .disabled(busy || !httpsServer)
                             .accessibilityIdentifier("desktop-settings.security.add-key")
                     }
@@ -305,7 +305,7 @@ struct DesktopVaultSettings: View {
                 }
                 Spacer(minLength: 0)
                 Button("Add an item") { managing = true }
-                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .buttonStyle(DesktopPillButtonStyle())
             }
             DesktopSettingsGroup {
                 let items = list.items.filter { filter == "all" || Self.kind($0.kind) == filter }
@@ -391,7 +391,7 @@ struct DesktopNotificationsSettings: View {
             if authorized != true {
                 DesktopCompactRow(Text("Let your bots notify you when something needs your attention"), identifier: "notificationInvite") {
                     Button("Enable") { Task { await enable() } }
-                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .buttonStyle(DesktopPillButtonStyle())
                         .accessibilityIdentifier("desktop-settings.notifications.enable")
                 }
             }
@@ -450,7 +450,7 @@ struct DesktopNotificationsSettings: View {
                 ForEach(session.blockedPeople, id: \.id) { person in
                     DesktopCompactRow(person.name.isEmpty ? Text("Someone") : Text(verbatim: person.name), identifier: "blocked-\(person.id)") {
                         Button("Unblock") { Task { _ = await session.unblock(person.id) } }
-                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .buttonStyle(DesktopPillButtonStyle())
                     }
                 }
             }
@@ -511,7 +511,7 @@ struct DesktopNotificationsSettings: View {
                             catch { reportsError = error.localizedDescription }
                         }
                     }
-                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .buttonStyle(DesktopPillButtonStyle())
                 } else {
                     DesktopText("Handled", size: 12, line: 16, color: \.inkSecondary)
                 }
@@ -612,7 +612,7 @@ struct DesktopImportSettings: View {
                         .onSubmit { readLink() })
                         .accessibilityIdentifier("desktop-settings.import.link")
                     Button(readingLink ? "Reading..." : "Read the link") { readLink() }
-                        .buttonStyle(DesktopButtonStyle(kind: .control, size: 12))
+                        .buttonStyle(DesktopPillButtonStyle())
                         .disabled(link.trimmingCharacters(in: .whitespaces).isEmpty || readingLink)
                         .accessibilityIdentifier("desktop-settings.import.grok")
                 }
@@ -624,7 +624,7 @@ struct DesktopImportSettings: View {
                             DesktopText(Text(verbatim: card.description), size: 12, line: 18, color: \.inkSecondary).padding(.top, 4)
                         }
                         Button("Start from the description") { staged = card.starterReply; marketplaceSlug = nil; importing = true }
-                            .buttonStyle(DesktopButtonStyle(kind: .control, size: 12))
+                            .buttonStyle(DesktopPillButtonStyle())
                             .padding(.top, 8)
                             .accessibilityIdentifier("desktop-settings.import.from-description")
                     }
@@ -641,7 +641,7 @@ struct DesktopImportSettings: View {
                                 Text(copied ? "Copied" : "Copy export prompt")
                             }
                         }
-                        .buttonStyle(DesktopButtonStyle(kind: .control, size: 12))
+                        .buttonStyle(DesktopPillButtonStyle())
                         .accessibilityIdentifier("desktop-settings.import.copy-prompt")
                     }
                     DesktopText(verbatim: "2. " + AppStrings.localized("Paste its reply below, or choose the .json file you saved it in."), size: 12.5, line: 20, color: \.inkSecondary)
@@ -653,7 +653,7 @@ struct DesktopImportSettings: View {
                         .scrollContentBackground(.hidden)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
-                        .frame(minHeight: 96)
+                        .frame(minHeight: 106)
                         .accessibilityLabel(Text("Grok Bot's reply"))
                         .accessibilityIdentifier("desktop-settings.import.reply")
                     if reply.isEmpty {
@@ -667,9 +667,21 @@ struct DesktopImportSettings: View {
                 .padding(.horizontal, 6).padding(.vertical, 2)
                 .background(theme.inset, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
+                // the textarea's resize grip (`rows={5}`, Chrome's two strokes)
+                .overlay(alignment: .bottomTrailing) {
+                    Canvas { context, size in
+                        var path = Path()
+                        path.move(to: CGPoint(x: size.width, y: 2)); path.addLine(to: CGPoint(x: 2, y: size.height))
+                        path.move(to: CGPoint(x: size.width, y: 6)); path.addLine(to: CGPoint(x: 6, y: size.height))
+                        context.stroke(path, with: .color(theme.inkSecondary), lineWidth: 1)
+                    }
+                    .frame(width: 9, height: 9)
+                    .padding(3)
+                    .allowsHitTesting(false)
+                }
                 HStack(spacing: 8) {
                     Button("Preview") { staged = reply; importing = true }
-                        .buttonStyle(DesktopButtonStyle(kind: .control, size: 12))
+                        .buttonStyle(DesktopPillButtonStyle())
                         .disabled(reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .accessibilityIdentifier("desktop-settings.import.preview")
                     Button { choosingFile = true } label: {
@@ -678,7 +690,7 @@ struct DesktopImportSettings: View {
                             Text("Choose a .json file")
                         }
                     }
-                    .buttonStyle(DesktopButtonStyle(kind: .control, size: 12))
+                    .buttonStyle(DesktopPillButtonStyle())
                     .accessibilityIdentifier("desktop-settings.import.file")
                 }
                 if let grokError { DesktopText(verbatim: grokError, size: 12, line: 16, color: \.danger) }

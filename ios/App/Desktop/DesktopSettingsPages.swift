@@ -70,7 +70,7 @@ struct DesktopNewBotDefaults: View {
                         }
                         .accessibilityIdentifier("desktop-settings.share-preset")
                     Button("Edit") { editing = true }
-                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .buttonStyle(DesktopPillButtonStyle())
                         .accessibilityIdentifier("desktop-settings.defaults-edit")
                         .popover(isPresented: $editing) {
                             VStack(alignment: .leading, spacing: 8) {
@@ -190,7 +190,7 @@ struct DesktopBotModelsTable: View {
             AnyView(HStack(spacing: 8) {
                 ChatAvatarView(chat: .bot(bot), size: 24, state: MausState.forChat(.bot(bot), in: session.state), background: theme.panel)
                     .frame(width: 24, height: 24)
-                DesktopText(Text(verbatim: bot.name), weight: .medium).lineLimit(1)
+                DesktopText(Text(verbatim: bot.name), weight: .semibold).lineLimit(1)
             }),
             AnyView(Button { editing = bot } label: {
                 HStack(spacing: 6) {
@@ -198,9 +198,10 @@ struct DesktopBotModelsTable: View {
                         ProviderMarkView(driverKind: instances.first { $0.instanceId == bot.modelSelection.instanceId }?.driverKind ?? "", size: 13)
                             .frame(width: 14, height: 14)
                     }
-                    DesktopText(Text(verbatim: modelLabel(bot))).lineLimit(1)
-                    Spacer(minLength: 0)
+                    // ModelPicker listChip: the label, the chevron right after it
+                    DesktopText(Text(verbatim: modelLabel(bot)), weight: .medium).lineLimit(1)
                     DesktopSettingsIconView(icon: .chevronDown, size: 13).foregroundStyle(theme.inkSecondary)
+                    Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 8).frame(height: 32).contentShape(Rectangle())
             }
@@ -348,7 +349,7 @@ struct DesktopVoiceSettings: View {
                             Text("Test the voice")
                         }
                     }
-                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .buttonStyle(DesktopPillButtonStyle())
                     .disabled(testing || speaking == nil || (status?.offeredTts.isEmpty ?? true))
                     .accessibilityIdentifier("desktop-settings.voice.test")
                 }
@@ -392,19 +393,19 @@ struct DesktopVoiceSettings: View {
                         Task { _ = await model.apply(.fishModel(value), key: "fishModel") }
                     }
                 }
-                DesktopDescribedRow(Text("Chatterbox server"), identifier: "chatterbox") {
-                    EmptyView()
-                } below: {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 6) {
-                            Circle().fill(model.config?.tts?.baseUrl?.isEmpty == false ? theme.accent : theme.raisedHover).frame(width: 6, height: 6)
-                            DesktopText(model.config?.tts?.baseUrl?.isEmpty == false ? Text("Saved") : Text("Any OpenAI-compatible server running Chatterbox works. No key is needed."),
-                                        size: 12, line: 16, color: \.inkSecondary)
-                            Link(destination: URL(string: "https://github.com/resemble-ai/chatterbox")!) {
-                                DesktopText(Text("How to run one locally"), size: 12, weight: .medium, line: 16, color: \.accentText)
-                            }
+                // DescribedRow with its grey line (`mt-0.5`) and the form below (`mt-2`)
+                VStack(alignment: .leading, spacing: 0) {
+                    DesktopText(Text("Chatterbox server"))
+                    HStack(spacing: 6) {
+                        Circle().fill(model.config?.tts?.baseUrl?.isEmpty == false ? theme.accent : theme.raisedHover).frame(width: 6, height: 6)
+                        DesktopText(model.config?.tts?.baseUrl?.isEmpty == false ? Text("Saved") : Text("Any OpenAI-compatible server running Chatterbox works. No key is needed."),
+                                    size: 12, line: 16, color: \.inkSecondary)
+                        Link(destination: URL(string: "https://github.com/resemble-ai/chatterbox")!) {
+                            DesktopText(Text("How to run one locally"), size: 12, weight: .medium, line: 16, color: \.accentText)
                         }
-                        .padding(.top, -6)
+                    }
+                    .padding(.top, 2)
+                    VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 8) {
                             field(Text(verbatim: "http://127.0.0.1:4123"), text: $serverURL, url: true)
                                 .accessibilityIdentifier("desktop-settings.voice.chatterbox-url")
@@ -414,14 +415,18 @@ struct DesktopVoiceSettings: View {
                                     Text("Save")
                                 }
                             }
-                            .buttonStyle(DesktopButtonStyle(kind: .control))
-                            .disabled(savingServer)
+                            .buttonStyle(DesktopPillButtonStyle())
+                            // `savingServer || !serverUrl.trim()`, as the desktop
+                            .disabled(savingServer || serverURL.trimmingCharacters(in: .whitespaces).isEmpty)
                         }
                         field(Text("Model id, default chatterbox-turbo"), text: $serverModel, url: false)
                         if let serverError { DesktopText(Text(verbatim: serverError), size: 12, line: 16, color: \.danger) }
                     }
                     .padding(.top, 8)
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 DesktopDescribedRow(Text("No em or en dashes in replies"),
                                     description: Text("Replaces them in the final text of bot replies: a range word between times and numbers, a colon after a list label, a comma elsewhere. On by default in French."),
                                     identifier: "voiceNoDashes") {

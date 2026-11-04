@@ -739,7 +739,7 @@ struct DesktopCheckbox: View {
         }
         .buttonStyle(.plain)
         .disabled(disabled)
-        .opacity(disabled ? 0.5 : 1)
+        // Chrome's disabled dark checkbox stays as legible as an enabled one
         .accessibilityLabel(label)
         .accessibilityValue(checked ? Text("On") : Text("Off"))
         .accessibilityIdentifier(identifier)
@@ -952,6 +952,28 @@ struct DesktopPillSelect<Value: Hashable>: View {
         .accessibilityLabel(label)
         .accessibilityValue(Text(verbatim: current))
         .accessibilityIdentifier(identifier)
+    }
+}
+
+/// `.ui-button` (styles.css): the 30 pt fully round pill, hover-grey with
+/// ink text; `.ui-button-primary` is the ink pill with the app colour as
+/// text. Disabled at half opacity (`PILL disabled:opacity-50`).
+struct DesktopPillButtonStyle: ButtonStyle {
+    @Environment(\.desktopTheme) private var theme
+    @Environment(\.isEnabled) private var enabled
+    var primary = false
+    var danger = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(theme.font(13))
+            .foregroundStyle(danger ? theme.danger : primary ? theme.app : theme.ink)
+            .padding(.horizontal, 13)
+            .frame(height: 30)
+            .background(primary ? theme.ink.opacity(configuration.isPressed ? 0.85 : 1)
+                        : (configuration.isPressed ? theme.selected : theme.hover), in: Capsule())
+            .opacity(enabled ? 1 : 0.5)
+            .contentShape(Capsule())
     }
 }
 

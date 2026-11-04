@@ -279,6 +279,7 @@ struct DesktopSettingsNav: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 16)
             }
+            ScrollViewReader { reader in
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(DesktopSettingsNavGroup.grouped(sections), id: \.group) { entry in
@@ -291,7 +292,16 @@ struct DesktopSettingsNav: View {
                             navRow(section)
                         }
                     }
+                    Color.clear.frame(height: 0).id(DesktopSettingsScroll.navBottom)
                 }
+            }
+            // settings-general-scrolled: the desktop scrolls every scroller of
+            // the dialog to its end, the rail too
+            .task {
+                guard DesktopSettingsScroll.parityScrollsToEnd else { return }
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                reader.scrollTo(DesktopSettingsScroll.navBottom, anchor: .bottom)
+            }
             }
             Spacer(minLength: 0)
         }
@@ -482,6 +492,7 @@ extension DesktopShellModel {
 /// settings-general-scrolled: the page scrolled to its end.
 enum DesktopSettingsScroll {
     static let bottom = "desktop-settings.bottom"
+    static let navBottom = "desktop-settings.nav-bottom"
 
     static var parityScrollsToEnd: Bool {
         #if DEBUG

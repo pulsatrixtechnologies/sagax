@@ -50,7 +50,8 @@ enum DesktopChatParity {
             let size = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.screen.bounds.size }.first ?? .zero
             let wide = max(size.width, size.height) > 1300
             let landscape = size.width > size.height
-            let bottom: CGFloat = wide ? (landscape ? 529 : 685) : (landscape ? 434 : 610.59)
+            // read from the reference (surfaces.mjs centres the bubble)
+            let bottom: CGFloat = wide ? (landscape ? 637 : 685) : (landscape ? 434 : 610.59)
             return ("Les deux captures de remplacement", bottom, true)
         default:
             return nil
@@ -187,7 +188,9 @@ extension ChatView {
             // "Voici les références" (its 12 pt gap, then the bubble) starts
             // at this window y. Again as late layout settles.
             guard let desired = DesktopChatParity.scrollTarget else { return }
-            follow.pause()
+            // the end must not re-arm the follow while the scroll leaves it:
+            // its content-size pin would pull the transcript back down
+            follow.hold()
             // the lazy transcript draws the row only once it is near the
             // screen: bring it there first, then set its exact edge
             // the row may be on an earlier page: read back until it is in
@@ -226,6 +229,7 @@ extension ChatView {
                 try? await Task.sleep(nanoseconds: 200_000_000)
                 follow.pause()
             }
+
         case .chatComposerDraft:
             // the simulator's software keyboard would cover the screen: the
             // draft without the focus (the reference hides its caret anyway)
@@ -303,5 +307,7 @@ struct ParityRowProbe: UIViewRepresentable {
         return UnitPoint(x: 0.5, y: a)
     }
 }
+
+
 #endif
 

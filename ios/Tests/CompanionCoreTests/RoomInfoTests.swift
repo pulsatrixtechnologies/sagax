@@ -361,4 +361,12 @@ final class RoomInfoTests: XCTestCase {
         XCTAssertFalse(off.jevRoomRoutingOn)
         XCTAssertFalse(try JSONDecoder().decode(ConfigStatus.self, from: Data("{}".utf8)).jevRoomRoutingOn)
     }
+
+    func testRoomCallWaitsForSpeechAndEveryVoice() {
+        XCTAssertTrue(RoomCallReadiness.ready(speechConfigured: true, memberVoices: ["ara", "helios"]))
+        XCTAssertFalse(RoomCallReadiness.ready(speechConfigured: false, memberVoices: ["ara", "helios"]))
+        XCTAssertFalse(RoomCallReadiness.ready(speechConfigured: true, memberVoices: ["ara", nil]))
+        XCTAssertFalse(RoomCallReadiness.ready(speechConfigured: true, memberVoices: ["ara", ""]))
+        XCTAssertFalse(RoomCallReadiness.ready(speechConfigured: true, memberVoices: []))
+    }
 }

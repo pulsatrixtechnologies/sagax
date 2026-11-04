@@ -485,7 +485,9 @@ struct MarkdownText: View {
                 }
             }
             MentionTint.apply(to: &attributed, peers: mentions, everyone: mentionEveryone)
-            if let desktop, let findHighlight { DesktopFindHighlight.apply(to: &attributed, needle: findHighlight, theme: desktop) }
+            if let desktop, let findHighlight, DesktopFindHighlight.holdsFirst(block: text, of: findHighlight, in: source) {
+                DesktopFindHighlight.apply(to: &attributed, needle: findHighlight, theme: desktop)
+            }
             styleFootnotes(&attributed)
             styleSpoilers(&attributed)
             return attributed

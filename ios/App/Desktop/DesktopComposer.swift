@@ -34,6 +34,8 @@ struct DesktopComposerPill: View {
     let listening: Bool
     let inputLocked: Bool
     let bot: Bot?
+    /// A group's call (GroupCallButton): its readiness sets the warning dot.
+    var room: Room? = nil
     /// The slash or mention popup, floated above the pill's leading edge.
     let popup: AnyView?
     let attachPhotos: () -> Void
@@ -51,6 +53,8 @@ struct DesktopComposerPill: View {
     /// The bot's realtime voice: false, the call button says "Calls need a
     /// realtime voice" and opens Settings > Voice (CallView.tsx, 2026-11-02).
     @State private var realtimeReady: Bool?
+    /// A room: text to speech is set up on the computer.
+    @State private var roomSpeechConfigured = false
     /// The model menu (#477, #478, #518), as the desktop chip opens it.
     @State private var modelMenuOpen = false
     @State private var menu: DesktopComposerMenu? = DesktopComposerPill.parityMenu
@@ -316,16 +320,37 @@ struct DesktopComposerPill: View {
         .opacity(blocked ? 0.45 : 1)
         .hoverEffect(.highlight)
         .accessibilityLabel(voiceLabel)
-        .accessibilityHint(realtimeReady == false ? Text("A call runs on the realtime voice, never text to speech. Add or fix the xAI key in Settings > Voice.") : Text(verbatim: ""))
+        .accessibilityHint(realtimeReady != false ? Text(verbatim: "")
+            : room == nil ? Text("A call runs on the realtime voice, never text to speech. Add or fix the xAI key in Settings > Voice.")
+            : roomSpeechConfigured ? Text("Give every group member a voice before starting a group call.")
+            : Text("Set up ElevenLabs, Fish Audio, Chatterbox, or a built-in Mac voice so the bot can speak during calls."))
         .accessibilityIdentifier("desktop-composer-voice")
-        .task(id: bot?.id) {
-            guard let id = bot?.id else { realtimeReady = nil; return }
-            realtimeReady = await session.voiceModeStatus(botId: id)?.realtimeCallReady
+        .task(id: bot?.id ?? room.map { "room:\($0.id):\($0.memberIds.joined(separator: ","))" }) {
+            if let id = bot?.id {
+                realtimeReady = await session.voiceModeStatus(botId: id)?.realtimeCallReady
+            } else if let room {
+                // a room call speaks with text to speech: speech set up and
+                // every member with its own voice (CallTargetButton)
+                let speech = await session.configStatus()?.tts?.configured == true
+                roomSpeechConfigured = speech
+                realtimeReady = RoomCallReadiness.ready(
+                    speechConfigured: speech,
+                    memberVoices: room.memberIds.map { session.state.bot($0)?.voice })
+            } else {
+                realtimeReady = nil
+            }
         }
     }
 
     /// `voiceMode.start` / `voiceMode.realtimeNeededLabel`.
     private var voiceLabel: Text {
+        if let room {
+            // CallTargetButton's labels for a group (requireExplicitVoices)
+            if realtimeReady == false {
+                return roomSpeechConfigured ? Text("Pick a voice in an agent profile to make calls") : Text("Set up a voice in an agent profile to make calls")
+            }
+            return Text("Call \(room.name)")
+        }
         if realtimeReady == false { return Text("Calls need a realtime voice") }
         if let bot { return Text("Talk with \(bot.name) (voice mode)") }
         return Text("Voice mode")

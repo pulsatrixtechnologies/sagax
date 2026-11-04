@@ -14348,6 +14348,16 @@
         }
       }
     },
+    "Call %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appeler %@"
+          }
+        }
+      }
+    },
     "Call %@?": {
       "localizations": {
         "en": {
@@ -31530,6 +31540,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Token do GitHub"
+          }
+        }
+      }
+    },
+    "Give every group member a voice before starting a group call.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Donnez une voix à chaque membre du groupe avant de lancer un appel de groupe."
           }
         }
       }
@@ -55194,6 +55214,16 @@
         }
       }
     },
+    "Pick a voice in an agent profile to make calls": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisissez une voix dans un profil d'agent pour passer des appels"
+          }
+        }
+      }
+    },
     "Pick an agent voice or configure a workspace default on your computer first.": {
       "localizations": {
         "fr": {
@@ -66680,6 +66710,16 @@
         }
       }
     },
+    "Set up ElevenLabs, Fish Audio, Chatterbox, or a built-in Mac voice so the bot can speak during calls.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurez ElevenLabs, Fish Audio, Chatterbox ou une voix Mac intégrée pour que le bot puisse parler pendant les appels."
+          }
+        }
+      }
+    },
     "Set up Messages on your Mac": {
       "localizations": {
         "en": {
@@ -66692,6 +66732,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Configurer Messages sur votre Mac"
+          }
+        }
+      }
+    },
+    "Set up a voice in an agent profile to make calls": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configurez une voix dans un profil d'agent pour passer des appels"
           }
         }
       }

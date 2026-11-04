@@ -153,6 +153,10 @@ final class DesktopChatSweepUITests: XCTestCase {
         let field = app.textViews["message-input"].exists ? app.textViews["message-input"] : app.textFields["message-input"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         XCTAssertTrue((field.placeholderValue ?? "").contains("responds"), "who responds: \(field.placeholderValue ?? "")")
+        // the fixture's members have no voice: the room call says so (the warning dot)
+        let voice = app.buttons["desktop-composer-voice"]
+        XCTAssertTrue(voice.exists)
+        XCTAssertTrue(voice.label.contains("voice in an agent profile"), "the room call's state: \(voice.label)")
     }
 
     /// A typed /loop writes a routine for this bot, never a message.

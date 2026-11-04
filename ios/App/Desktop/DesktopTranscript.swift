@@ -390,7 +390,7 @@ struct DesktopChipFlow: Layout {
         let width = proposal.width ?? .infinity
         var x: CGFloat = 0, y: CGFloat = 0, line: CGFloat = 0, widest: CGFloat = 0
         for view in subviews {
-            let size = view.sizeThatFits(ProposedViewSize(width: width, height: nil))
+            let size = Self.measure(view, width: width)
             if x > 0, x + size.width > width {
                 y += line + spacing
                 x = 0
@@ -403,10 +403,18 @@ struct DesktopChipFlow: Layout {
         return CGSize(width: min(widest, width), height: y + line)
     }
 
+    /// A chip's own width (`w-fit`), the row's width only when it is wider:
+    /// a view that fills what it is offered would otherwise take a line each.
+    static func measure(_ view: LayoutSubview, width: CGFloat) -> CGSize {
+        let ideal = view.sizeThatFits(.unspecified)
+        if ideal.width <= width { return ideal }
+        return view.sizeThatFits(ProposedViewSize(width: width, height: nil))
+    }
+
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         var x = bounds.minX, y = bounds.minY, line: CGFloat = 0
         for view in subviews {
-            let size = view.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
+            let size = Self.measure(view, width: bounds.width)
             if x > bounds.minX, x + size.width > bounds.maxX {
                 y += line + spacing
                 x = bounds.minX
@@ -932,19 +940,33 @@ extension EnvironmentValues {
 }
 
 enum DesktopFindHighlight {
-    /// Every occurrence of `needle` (case and accents ignored) in the run.
+    /// focus-message.ts `matchRange`: the first occurrence of `needle`
+    /// (case ignored, the words' own accents kept) in the message's text,
+    /// one range only.
+    static func range(of needle: String, in text: String) -> Range<String.Index>? {
+        let trimmed = needle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return text.range(of: trimmed, options: [.caseInsensitive])
+    }
+
+    /// Marks that one occurrence in the run (ink on the accent at 35 %).
     static func apply(to attributed: inout AttributedString, needle: String, theme: DesktopTheme) {
         let plain = String(attributed.characters)
-        var searchStart = plain.startIndex
-        while let found = plain.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive], range: searchStart..<plain.endIndex) {
-            let lower = plain.distance(from: plain.startIndex, to: found.lowerBound)
-            let length = plain.distance(from: found.lowerBound, to: found.upperBound)
-            let start = attributed.characters.index(attributed.characters.startIndex, offsetBy: lower)
-            let end = attributed.characters.index(start, offsetBy: length)
-            attributed[start..<end].backgroundColor = theme.accent.opacity(0.35)
-            attributed[start..<end].foregroundColor = theme.ink
-            searchStart = found.upperBound
-        }
+        guard let found = range(of: needle, in: plain) else { return }
+        let lower = plain.distance(from: plain.startIndex, to: found.lowerBound)
+        let length = plain.distance(from: found.lowerBound, to: found.upperBound)
+        let start = attributed.characters.index(attributed.characters.startIndex, offsetBy: lower)
+        let end = attributed.characters.index(start, offsetBy: length)
+        attributed[start..<end].backgroundColor = theme.accent.opacity(0.35)
+        attributed[start..<end].foregroundColor = theme.ink
+    }
+
+    /// The block of a message's markdown that holds the first occurrence:
+    /// only it is marked (the desktop marks one range in the whole reply).
+    static func holdsFirst(block: String, of needle: String, in source: String) -> Bool {
+        guard let first = range(of: needle, in: source), range(of: needle, in: block) != nil,
+              let place = source.range(of: block) else { return false }
+        return place.lowerBound <= first.lowerBound && first.lowerBound < place.upperBound
     }
 }
 
@@ -981,7 +1003,7 @@ struct DesktopFindProbe: UIViewRepresentable {
 
     /// The hit's place down its text, 0 at the top and 1 at the end.
     static func fraction(of needle: String, in text: String) -> CGFloat {
-        guard !text.isEmpty, let range = text.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive]) else { return 0.5 }
+        guard !text.isEmpty, let range = DesktopFindHighlight.range(of: needle, in: text) else { return 0.5 }
         return CGFloat(text.distance(from: text.startIndex, to: range.lowerBound)) / CGFloat(text.count)
     }
 }

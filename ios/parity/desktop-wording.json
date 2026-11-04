@@ -643,5 +643,10 @@
   "@ to bring a bot in": "composer.hint.mentions",
   "Jev picks who responds": "composer.hint.auto",
   "%@ responds": "composer.hint.responder",
-  "Lead": "composer.hint.lead"
+  "Lead": "composer.hint.lead",
+  "Pick a voice in an agent profile to make calls": "callView.pickVoice",
+  "Set up a voice in an agent profile to make calls": "callView.setupVoice",
+  "Call %@": "callView.callName",
+  "Give every group member a voice before starting a group call.": "callView.groupVoiceReason",
+  "Set up ElevenLabs, Fish Audio, Chatterbox, or a built-in Mac voice so the bot can speak during calls.": "callView.setupReason"
 }

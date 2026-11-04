@@ -263,6 +263,7 @@ extension ChatView {
                 listening: dictation.isListening,
                 inputLocked: dictation.isListening || dictation.isStarting || preparingAttachments || sendingMessage,
                 bot: current.isBot ? session.state.bot(current.id)?.projected(forThread: threadId) : nil,
+                room: { if case let .room(room) = current, room.dm != true { return room } else { return nil } }(),
                 popup: desktopComposerPopup,
                 attachPhotos: { showingPhotoPicker = true },
                 attachFiles: { showingFileImporter = true },

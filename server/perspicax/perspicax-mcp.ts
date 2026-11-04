@@ -25,6 +25,7 @@
 //     for this turn ended" (a disabled person mid-turn, S5-10);
 //   - no token is ever logged or put in an error.
 import { guardToolCall, type GuardOptions } from "../mcp/mcp-permissions.ts";
+import { keepAliveFetch } from "../mcp/mcp-keepalive-fetch.ts";
 import { telephonyRefusal, voiceToolCall } from "../telephony-guard.ts";
 import { placeArgsFromVoiceCall } from "../../shared/outbound-call.ts";
 import type { SubjectTokenOutcome } from "../auth/idp-session.ts";
@@ -521,7 +522,9 @@ export class PerspicaxMcp {
 
   constructor(options: PerspicaxMcpOptions) {
     this.options = options;
-    this.fetcher = options.fetch ?? fetch;
+    // Keep-alive Agent per Perspicax origin (mcp-keepalive-fetch): a turn's
+    // initialize / tools/list / identity_switch / tools/call reuse one socket.
+    this.fetcher = options.fetch ?? (keepAliveFetch as typeof fetch);
     this.now = options.now ?? Date.now;
     this.log = options.log ?? ((line) => console.log(line));
     this.routineRetryMs = options.routineRetryMs ?? PERSPICAX_ROUTINE_RETRY_MS;

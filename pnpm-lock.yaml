@@ -192,6 +192,9 @@ importers:
       tar:
         specifier: 7.5.22
         version: 7.5.22
+      undici:
+        specifier: 7.30.1
+        version: 7.30.1
       vega:
         specifier: 6.4.0
         version: 6.4.0
@@ -10157,8 +10160,7 @@ snapshots:
 
   undici@6.29.1: {}
 
-  undici@7.30.1:
-    optional: true
+  undici@7.30.1: {}
 
   unified@11.0.5:
     dependencies:

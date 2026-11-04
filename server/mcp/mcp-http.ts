@@ -9,6 +9,7 @@ import { request as httpsRequest } from "node:https";
 import { Readable } from "node:stream";
 
 import type { RemoteMcpSpec } from "../contracts.ts";
+import { keepAliveFetch } from "./mcp-keepalive-fetch.ts";
 import { guardedFetch } from "../public-fetch.ts";
 import { parseRetryAfter } from "../usage/rate-limit-retry.ts";
 
@@ -221,7 +222,9 @@ export class RemoteMcpClient {
 
   constructor(target: RemoteMcpSpec, options: { fetch?: typeof fetch; maxBytes?: number; onNotification?: (message: JsonRpcMessage) => void } = {}) {
     this.target = target;
-    this.fetchImpl = options.fetch ?? ((input, init) => guardedFetch(input, init ?? {}));
+    // Keep-alive pooled per origin so a turn's initialize + tools/list +
+    // calls do not pay a fresh TCP/TLS handshake each RPC.
+    this.fetchImpl = options.fetch ?? ((input, init) => guardedFetch(input, init ?? {}, keepAliveFetch));
     this.maxBytes = options.maxBytes ?? MAX_REMOTE_MCP_BYTES;
     this.onNotification = options.onNotification;
   }

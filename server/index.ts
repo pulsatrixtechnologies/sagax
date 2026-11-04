@@ -6034,6 +6034,9 @@ function coordinatorSlotUse(n: HandoffView): { used: number; max: number; hardBl
   // math, so host.busy admits it. Counted as {used 0, max 0}, every room
   // handoff and goal worker waited "for a free slot" forever (DEL-08).
   if (n.groupId) return undefined;
+  // DEL-08's slot admission bypasses host.busy, where queued work used to
+  // explain the person's card holding the last slot. Keep that receipt.
+  noteQueuedBehindPerson(n);
   const hardBlocked = threadBusy(n.botId, n.threadId) || Boolean(activeGroupTurnForBot(n.botId));
   return {
     used: botBusyThreadCount(n.botId),
@@ -12496,19 +12499,32 @@ function outstandingAssignmentsPrompt(threadId: string): string {
 /** The card that keeps queued work from starting: its teammate has no free
  * slot, and one of the threads holding one waits on the person. Only the
  * person frees that slot; every other wait frees itself. */
-function queuedBehindPerson(node: HandoffView): { threadId: string; kind: "approval" | "question" | "review"; title: string } | undefined {
+function queuedBehindPerson(node: HandoffView): { threadId?: string; kind: "approval" | "question" | "review"; title?: string } | undefined {
   if (node.groupId || node.status !== "queued" || threadBusy(node.botId, node.threadId) || !botAtThreadCapacity(node.botId)) return undefined;
+  const parent = node.parentId ? coordinator.node(node.parentId) : undefined;
+  const from = parent ? store.bot(parent.botId) : undefined;
+  const bot = store.bot(node.botId);
+  if (!parent || !from || !bot || roomHandoffProblem(node, parent)) return undefined;
+  // A private card's title and link belong only to the source thread's
+  // actual person, with current read access. A room shares its transcript;
+  // it cannot carry someone else's private conversation into that room.
+  const sourceTask = !parent.groupId ? store.taskByThread(from.id, parent.threadId) : undefined;
+  const viewer = sourceTask ? privateThreadOwner(sourceTask, effectiveBotOwner(from)) : undefined;
   for (const task of store.tasks(node.botId)) {
     if (task.threadId === node.threadId || task.activity !== "waiting-on-you") continue;
     const card = openPersonCard(task.threadId);
-    if (card) return { threadId: task.threadId, kind: card.kind, title: task.title };
+    if (!card) continue;
+    const visible = !roomHandoffProblem({ botId: bot.id, threadId: task.threadId }, parent) &&
+      (!privateThreads() || Boolean(viewer && botThreadReadable(bot, task.threadId, viewer, "thread.read")));
+    return visible ? { threadId: task.threadId, kind: card.kind, title: task.title } : { kind: card.kind };
   }
   return undefined;
 }
 
 function queuedStatus(node: HandoffView): string {
   const card = queuedBehindPerson(node);
-  return card ? `waiting for a free slot: that teammate is waiting on the person's ${card.kind === "question" ? "answer" : card.kind} in its thread ${JSON.stringify(card.title)}; tell the person to open it`
+  return card?.threadId ? `waiting for a free slot: that teammate is waiting on the person's ${card.kind === "question" ? "answer" : card.kind} in its thread ${JSON.stringify(card.title)}; tell the person to open it`
+    : card ? "waiting for a free slot: that teammate is waiting on a person"
     : "waiting for that teammate to be free";
 }
 
@@ -12531,8 +12547,9 @@ function noteQueuedBehindPerson(node: HandoffView): void {
     from: { botId: bot.id, name: bot.name, color: bot.color },
     // A notice, not a step: nothing settles it, so it must not read as
     // running (a spinner in chat, "running" in the run log) forever.
-    tool: { name: queuedBehindPersonText(bot.name, card.kind, card.title), ok: true },
-    threadRef: { botId: bot.id, threadId: card.threadId, title: card.title }
+    tool: { name: card.threadId && card.title !== undefined ? queuedBehindPersonText(bot.name, card.kind, card.title)
+      : `Queued for @${bot.name}, who's waiting on a person`, ok: true },
+    ...(card.threadId && card.title !== undefined ? { threadRef: { botId: bot.id, threadId: card.threadId, title: card.title } } : {})
   });
 }
 

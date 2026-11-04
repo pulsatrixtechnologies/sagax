@@ -650,16 +650,17 @@ struct DesktopMemoryTags: View {
         let free = counts
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Tags").font(theme.font(17, .semibold)).foregroundStyle(theme.ink)
-                    Text("The tags your notes carry, the most used, and those to tidy up.").font(theme.font(12)).foregroundStyle(theme.inkSecondary)
+                // MemoryTagsView.tsx: h2 20 semibold, the line 13 (mt-1)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Tags").font(theme.font(20, .semibold)).foregroundStyle(theme.ink)
+                    Text("The tags your notes carry, the most used, and those to tidy up.").font(theme.font(13)).foregroundStyle(theme.inkSecondary)
                 }
                 // No Perspicax tag namespaces here: the desktop's layout
                 // without them, the Free tags card then two cards side by side.
                 DesktopStatCard(title: Text("Free tags"), value: "\(free.count)", caption: Text("Outside every namespace"))
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .top, spacing: 16) {
                     section(Text("Free tags"), hint: Text("Tags outside every namespace, with their notes")) {
-                        if free.isEmpty { Text("No free tag.").font(theme.font(12.5)).foregroundStyle(theme.inkSecondary) }
+                        if free.isEmpty { Text("No free tag.").font(theme.font(13)).foregroundStyle(theme.inkSecondary).frame(height: 19.5) }
                         ForEach(free, id: \.tag) { item in
                             Button { filter(item.tag) } label: {
                                 HStack {
@@ -675,7 +676,7 @@ struct DesktopMemoryTags: View {
                     }
                     section(Text("Most used"), hint: nil) {
                         if free.isEmpty {
-                            Text("No tag on any note yet.").font(theme.font(12.5)).foregroundStyle(theme.inkSecondary)
+                            Text("No tag on any note yet.").font(theme.font(13)).foregroundStyle(theme.inkSecondary).frame(height: 19.5)
                         } else {
                             DesktopChipFlow(spacing: 6) {
                                 ForEach(free.prefix(30), id: \.tag) { item in
@@ -691,23 +692,27 @@ struct DesktopMemoryTags: View {
                     }
                 }
             }
-            .padding(20)
+            .padding(24)
         }
     }
 
+    /// `MemoryCard`: the title 14 semibold and its aside 12.5 (pt-4 pb-2),
+    /// the body px-4 pb-4, a hairline/50 border on the panel.
     private func section<Content: View>(_ title: Text, hint: Text?, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
-                title.font(theme.font(13, .semibold)).foregroundStyle(theme.ink)
+                title.font(theme.font(14, .semibold)).foregroundStyle(theme.ink).frame(height: 20)
                 Spacer(minLength: 8)
-                hint?.font(theme.font(12)).foregroundStyle(theme.inkSecondary)
+                hint?.font(theme.font(12.5)).foregroundStyle(theme.inkSecondary)
             }
+            .padding(.top, 16).padding(.bottom, 8)
             content()
+                .padding(.bottom, 16)
         }
-        .padding(14)
+        .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
     }
 }
 
@@ -766,7 +771,7 @@ struct DesktopMemoryQuality: View {
                         let weeks = weekly()
                         chart(title: Text("Active notes per tier, 26 weeks"), hint: weeks.isEmpty ? nil : Text("Today's notes by the week they were written.")) {
                             if weeks.isEmpty {
-                                Text("Nothing to chart yet.").font(theme.font(13)).foregroundStyle(theme.inkSecondary)
+                                Text("Nothing to chart yet.").font(theme.font(13)).foregroundStyle(theme.inkSecondary).frame(height: 19.5)
                             } else {
                                 Chart(weeks, id: \.id) { bar in
                                     BarMark(x: .value("Week", bar.week, unit: .weekOfYear), y: .value("Notes", bar.count))
@@ -779,7 +784,7 @@ struct DesktopMemoryQuality: View {
                         let written = writes()
                         chart(title: Text("Writes per week"), hint: nil) {
                             if written.isEmpty {
-                                Text("Nothing to chart yet.").font(theme.font(13)).foregroundStyle(theme.inkSecondary)
+                                Text("Nothing to chart yet.").font(theme.font(13)).foregroundStyle(theme.inkSecondary).frame(height: 19.5)
                             } else {
                                 Chart(written, id: \.week) { bar in
                                     BarMark(x: .value("Week", bar.week, unit: .weekOfYear), y: .value("Writes", bar.count))
@@ -811,7 +816,7 @@ struct DesktopMemoryQuality: View {
                 .background(theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
             }
-            .padding(20)
+            .padding(24)
         }
         .task { await loadJournal() }
     }
@@ -850,7 +855,7 @@ struct DesktopMemoryQuality: View {
     /// 14 semibold (pt-4, pb-2), the body px-4 pb-4.
     private func chart<Content: View>(title: Text, hint: Text?, @ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            title.font(theme.font(14, .semibold)).foregroundStyle(theme.ink)
+            title.font(theme.font(14, .semibold)).foregroundStyle(theme.ink).frame(height: 20)
                 .padding(.top, 16).padding(.bottom, 8)
             VStack(alignment: .leading, spacing: 4) {
                 content()
@@ -885,10 +890,10 @@ struct DesktopStatCard: View {
     var body: some View {
         // StatGrid's tile: px-4 py-3, 12 label, 22/28 semibold, 11.5 caption (mt-0.5)
         VStack(alignment: .leading, spacing: 0) {
-            title.font(theme.font(12)).foregroundStyle(theme.inkSecondary).lineLimit(1)
+            title.font(theme.font(12)).foregroundStyle(theme.inkSecondary).lineLimit(1).frame(height: 16)
             Text(verbatim: value).font(theme.font(22, .semibold)).foregroundStyle(theme.ink).monospacedDigit()
                 .frame(height: 28).padding(.top, 4)
-            caption?.font(theme.font(11.5)).foregroundStyle(theme.inkTertiary).lineLimit(1).padding(.top, 2)
+            caption?.font(theme.font(11.5)).foregroundStyle(theme.inkTertiary).lineLimit(1).frame(height: 16).padding(.top, 2)
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

@@ -122,7 +122,7 @@ struct DesktopNewBotModal: View {
             ShapeMascotView(shape: shape, skin: .plain, color: color, size: 120)
                 .frame(width: 120, height: 120)
                 .accessibilityLabel(Text(verbatim: name.trimmingCharacters(in: .whitespaces).isEmpty ? String(localized: "New bot") : name))
-            TextField(String(localized: "Name your bot"), text: $name)
+            TextField(text: $name, prompt: Text("Name your bot").foregroundColor(theme.inkTertiary)) { Text("Name your bot") }
                 .font(theme.font(16, .medium))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(theme.ink)
@@ -137,7 +137,8 @@ struct DesktopNewBotModal: View {
                 .accessibilityIdentifier("desktop-new-bot.name")
             VStack(spacing: 12) {
                 Text("Shape").font(theme.font(12, .medium)).foregroundStyle(theme.inkSecondary)
-                LazyVGrid(columns: Array(repeating: GridItem(.fixed(40), spacing: 8), count: 8), spacing: 8) {
+                // grid-cols-8 gap-2 in max-w-md: 49 pt columns, 40 pt tiles
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 8), spacing: 8) {
                     ForEach(Self.shapes, id: \.self) { id in
                         let on = shape == id
                         Button { shape = id } label: {
@@ -164,6 +165,8 @@ struct DesktopNewBotModal: View {
                         let on = color == id
                         Button { color = id } label: {
                             Circle().fill(MausPalette.color(id))
+                                // `swatchStyle`: a dark colour keeps a light inset ring
+                                .overlay(Circle().strokeBorder(Color.white.opacity(DesktopMemoryLinkMark.dark(id) ? 0.32 : 0), lineWidth: 1.5))
                                 .frame(width: 24, height: 24)
                                 .padding(2)
                                 .overlay(Circle().strokeBorder(on ? theme.ink : Color.clear, lineWidth: 2))
@@ -183,7 +186,7 @@ struct DesktopNewBotModal: View {
                     Text(busy ? "Creating…" : "Create")
                 }
                 .font(theme.font(15, .medium))
-                .foregroundStyle(canCreate || busy ? theme.accentInk : theme.ink.opacity(0.85))
+                .foregroundStyle(canCreate || busy ? theme.accentInk : theme.ink)
                 .frame(maxWidth: 384)
                 .padding(.vertical, 10)
                 // disabled: the desktop's 40 % button reads as a grey bar

@@ -332,29 +332,42 @@ struct DesktopReleaseMarkdown: View {
                 case let .paragraph(text):
                     inline(text)
                         .font(theme.font(13.5))
-                        .lineSpacing(4)
+                        .lineSpacing(3.5)
                         .foregroundStyle(theme.ink)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 4)
-                        .padding(.vertical, 8)
+                        .padding(.top, Self.gap(blocks, index))
                 case let .bullet(text):
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        // the list's disc, filled in the text's colour
-                        Circle().fill(theme.ink).frame(width: 5, height: 5)
+                    HStack(alignment: .firstTextBaseline, spacing: 0) {
+                        // `list-disc marker:text-ink-tertiary`: the list's own disc
+                        Circle().fill(theme.inkTertiary)
+                            .frame(width: 5, height: 5)
+                            .frame(width: 20, alignment: .center)
                             .alignmentGuide(.firstTextBaseline) { $0[.bottom] + 4 }
                         inline(text)
                             .font(theme.font(13.5))
-                            .lineSpacing(4)
+                            .lineSpacing(3.5)
                             .foregroundStyle(theme.ink)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    .padding(.leading, 12)
+                    .padding(.leading, 4)
                     .padding(.trailing, 4)
-                    .padding(.top, Self.isBullet(blocks, index - 1) ? 6 : 8)
+                    .padding(.top, Self.isBullet(blocks, index - 1) ? 6 : Self.gap(blocks, index))
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The `my-2` of a paragraph or a list, collapsed with the margin of
+    /// the block above (a section's `mb-1.5`, a title's `mb-1`).
+    private static func gap(_ blocks: [Block], _ index: Int) -> CGFloat {
+        guard index > 0 else { return 0 }
+        switch blocks[index - 1] {
+        case .section: return 2
+        case .title: return 4
+        default: return 8
+        }
     }
 
     private static func isBullet(_ blocks: [Block], _ index: Int) -> Bool {

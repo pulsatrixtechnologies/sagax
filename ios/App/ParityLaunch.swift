@@ -288,6 +288,7 @@ enum IPadParityScreen: String, CaseIterable {
              .sidebarBotContextMenu, .sidebarSectionMenu, .sidebarProfileMenu, .sidebarNewMenu, .newGroup: true
         default: isDesktopChat || opensBotPanel || isDesktopSettings || parityPage != nil || self == .keyboardShortcuts || self == .aboutDialog || self == .releaseNotesDialog
             || self == .sidebarSelect || self == .computerWindow || self == .newBot || self == .noticeThreadGone || self == .groupPanel
+            || self == .onboardingWelcome || self == .onboardingTour
         }
     }
 

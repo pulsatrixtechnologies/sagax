@@ -80,7 +80,12 @@ final class DesktopChatSweepUITests: XCTestCase {
     /// files offers the photo library and Files.
     @MainActor
     func testPlusMenuIsAttachAndTeach() throws {
-        let app = launch("chat-model-picker")
+        // chat-model-picker opens the model menu now (ModelPicker windowOnly):
+        // open the + menu by hand from the plain chat
+        let app = launch("chat-top")
+        let plus = element(app, "desktop-composer-plus")
+        XCTAssertTrue(plus.waitForExistence(timeout: 20), "the + button")
+        plus.tap()
         let attach = element(app, "desktop-composer-attach")
         XCTAssertTrue(attach.waitForExistence(timeout: 20), "Attach files")
         XCTAssertTrue(element(app, "desktop-composer-teach").exists, "Teach a task")

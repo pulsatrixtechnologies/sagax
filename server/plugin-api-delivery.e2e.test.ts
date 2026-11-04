@@ -166,7 +166,7 @@ it("delivers plugin skills on an API turn with tools, preserves bytes across swi
     expect((await control(["wait", "--bot", bot.id, "--task", bot.activeTaskId, "--timeout", "20"])).status).toBe("settled");
     const plain = requests[beforePlain]!;
     const first = delivered(plain);
-    expect(first.all).toContain("plugins/packing/skills/plugin-ship/SKILL.md");
+    expect(first.all).toContain("plugin-ship: Verify the synthetic plugin-ship.");
     expect(first.all).toMatch(/plugin-ship|packing/);
     expect(first.all).toContain("packing-track");
     expect(JSON.stringify(plain.tools?.map((tool) => tool.function.name) ?? [])).toMatch(/skills_list/);
@@ -175,8 +175,9 @@ it("delivers plugin skills on an API turn with tools, preserves bytes across swi
     const skillsStart = first.all.indexOf("Enabled skills and plugin references:");
     const skillsEnd = first.all.indexOf("\nContext from Sagax", skillsStart);
     const skillsBlock = first.all.slice(skillsStart, skillsEnd > skillsStart ? skillsEnd : undefined);
-    expect(skillsBlock).toContain("plugins/packing/");
-    expect(skillsBlock).toContain("capability-skills/me/skills/personal-review/SKILL.md");
+    expect(skillsBlock).toContain("plugin-ship:");
+    expect(skillsBlock).toContain("personal-review:");
+    expect(skillsBlock).not.toContain("Unique bytes");
     expect(skillsBlock).not.toMatch(/capability-plugins|bot-plugins|\/var\/folders|openmausbot-verify-data/);
 
     const afterPlain = await api("GET", "/api/bots");
@@ -215,7 +216,7 @@ it("delivers plugin skills on an API turn with tools, preserves bytes across swi
     const beforeRoom = requests.length;
     await control(["send-channel", "--channel", group.id, "--text", "Greet this room with packing available."]);
     expect((await control(["wait", "--channel", group.id, "--timeout", "20"])).status).toBe("settled");
-    expect(delivered(requests[beforeRoom]!).all).toContain("plugins/packing/skills/plugin-ship/SKILL.md");
+    expect(delivered(requests[beforeRoom]!).all).toContain("plugin-ship: Verify the synthetic plugin-ship.");
 
     // Denied skills_list (Q8 C): the whole files still reach the prompt by
     // name within the per-capability budget; no managed alias is offered.
@@ -230,7 +231,7 @@ it("delivers plugin skills on an API turn with tools, preserves bytes across swi
     expect(JSON.stringify(deniedReq.tools?.map((tool) => tool.function.name) ?? [])).not.toMatch(/skills_list/);
     expect(delivered(deniedReq).all).toContain("Unique bytes plugin-ship.");
     expect(delivered(deniedReq).all).not.toContain("plugins/packing/skills/plugin-ship/SKILL.md");
-    expect(delivered(deniedReq).all).toMatch(/Prompt budget: \d+\/\d+ files, at most 30 files and 4000 bytes per capability/);
+    expect(delivered(deniedReq).all).toMatch(/\d+\/\d+ references; \d+ omitted/);
     const deniedReceipt = await api("GET", `/api/bots/${bot.id}/capabilities`);
     expect(deniedReceipt.items.find((item: any) => item.form === "plugin" && /packing/i.test(String(item.name)))?.engine.skills).toBe("prompt");
     expect(Boolean(deniedReceipt.promptIndex)).toBe(true);

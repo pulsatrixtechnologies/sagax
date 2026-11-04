@@ -8,6 +8,7 @@ import { createInterface } from "node:readline";
 import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
 import { waitForExit } from "./testing/cleanup.ts";
+import { richOutputPrompt, ROUTINE_EXECUTION_PROMPT } from "./system-prompt.ts";
 
 it("answers sagax_help from the generated base in a real turn", async () => {
   const fixture = await launchVerificationServer({ FAKE_CLAUDE_MODE: "hang" });
@@ -47,6 +48,16 @@ it("answers sagax_help from the generated base in a real turn", async () => {
     expect(text).toContain("a person's own Sagax (solo, no organization)");
     expect(text).toContain("Automations");
     expect(text.length).toBeLessThan(4000);
+    // Reserved prompt-reference queries use this same authenticated MCP path,
+    // returning complete shipped text, including examples and output contracts.
+    for (const [id, expected] of [["rich-output", richOutputPrompt()], ["routine-execution", ROUTINE_EXECUTION_PROMPT]]) {
+      const reference = (await rpc("tools/call", { name: "sagax_help", arguments: { question: `prompt:${id}` } })).result;
+      expect(reference.isError).toBeFalsy();
+      expect(reference.content[0].text).toBe(expected);
+    }
+    const system = JSON.parse(readFileSync(dumpFile, "utf8")).systemPrompt as string;
+    expect(system).toContain('question "prompt:rich-output"');
+    expect(system).not.toContain(".card-header");
     // Without the turn's capability the route answers nothing.
     const refused = await fetch(`${fixture.info.url}/api/internal/self-knowledge`, { method: "POST",
       headers: { origin: fixture.info.url, "content-type": "application/json" }, body: JSON.stringify({ question: "x" }), signal: AbortSignal.timeout(10_000) });

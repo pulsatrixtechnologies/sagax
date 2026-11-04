@@ -5,6 +5,7 @@
 import { HELP_CALLS_PER_TURN, HelpCallCounter, helpAnswer, type HelpContext, type KnowledgeIndex } from "../self-knowledge.ts";
 import type { InternalRouteHandler } from "./internal-route.ts";
 import { PASS } from "./table.ts";
+import { systemPromptReference } from "../context/prompt-references.ts";
 
 export interface SelfKnowledgeInternalDeps {
   index(): Promise<KnowledgeIndex | null>;
@@ -24,6 +25,8 @@ export function createSelfKnowledgeInternalRoutes(deps: SelfKnowledgeInternalDep
     if (!calls.take(`${capability.threadId}:${capability.generation}`)) {
       return json(res, 429, { error: `sagax_help answered ${HELP_CALLS_PER_TURN} questions this turn; answer with what you have.` });
     }
+    const reference = systemPromptReference(question);
+    if (reference !== null) return json(res, 200, { text: reference });
     const index = await deps.index();
     if (!index) return json(res, 503, { error: "The knowledge base is not in this build; check your own tool list before you answer." });
     return json(res, 200, { text: helpAnswer(index, question, deps.context(capability.threadId)).text });

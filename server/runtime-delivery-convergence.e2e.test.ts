@@ -81,6 +81,14 @@ async function withFixture(test: (f: Fixture) => Promise<void>, options: { backu
       restart: async (env = options.env ?? {}) => { await stop(); await start(env); },
       stop,
     });
+  } catch (error) {
+    const evidencePath = `${logPath}.runtime-failure.json`;
+    const runs = await fetch(`${url}/api/routines`, { signal: AbortSignal.timeout(2_000) }).then(response => response.json()).catch(() => null);
+    try {
+      writeFileSync(evidencePath, JSON.stringify({ runs, nodes: readHandoffs(dataDir),
+        evidence: existsSync(`${planPath}.evidence.jsonl`) ? readFileSync(`${planPath}.evidence.jsonl`, "utf8") : "" }, null, 2));
+    } catch { /* diagnostics must never prevent owned-process cleanup */ }
+    throw new Error(`${error instanceof Error ? error.message : error}\nRuntime evidence: ${evidencePath}`, { cause: error });
   } finally {
     await waitForExit(server, { signal: "SIGTERM" });
     await session.close();

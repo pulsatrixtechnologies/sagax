@@ -20468,9 +20468,11 @@ bus.subscribe((event: RuntimeEvent) => {
       const failureCause = turnFailureCause(event);
       const usageLimitShaped = Boolean(limitKindOf(failureCause, event.stopReason));
       const routineForFailover = (() => {
-        if (!usageLimitShaped) return routineRun?.status === "failed" ? routineRun : null;
+        // A provider refusal now settles as blocked (routine reliability).
+        // Keep it on the routine rerun path, never as a direct resend.
+        if (!usageLimitShaped) return routineRun && ["failed", "blocked"].includes(routineRun.status) ? routineRun : null;
         const candidate = routineRun ?? routines?.runForThread(event.threadId);
-        return candidate && ["failed", "waiting", "queued"].includes(candidate.status) ? candidate : null;
+        return candidate && ["failed", "blocked", "waiting", "queued"].includes(candidate.status) ? candidate : null;
       })();
       const limitTaken = !event.ok && !stopped && !lazyClaimAlreadyReported && !computerParked && Boolean(bot) &&
         limitFailover.turnFailed({ threadId: event.threadId, turnId: completedTurnId, cause: failureCause, stopReason: event.stopReason,

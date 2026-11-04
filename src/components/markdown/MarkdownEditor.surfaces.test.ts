@@ -151,7 +151,7 @@ describe("markdown fields", () => {
 
   it("group instructions: mounts with the bulletin and saves it on blur", async () => {
     const group = { id: "room", name: "Ops", bulletin: "Be brief.", memberIds: [], messages: [], defaultResponder: { kind: "auto" } } as unknown as Group;
-    render(createElement(GroupPanel, { group, members: [], details: null, advanced: null, canEdit: true }));
+    render(createElement(GroupPanel, { group, members: [], roster: null, advanced: null, canEdit: true }));
     flushSync(() => button(document.body, t("groupPanel.tab.instructions"))!.click());
     const editor = await markdownEditorIn(document.body, "group-instructions");
     expect(markdownText(editor)).toBe("Be brief.");

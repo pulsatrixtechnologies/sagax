@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 /**
- * Headless screenshots that put the bot panel's header beside the group panel
+ * Headless screenshots that put the real bot panel beside the real group panel
  * (src/gallery/group-bot-panel-parity.html), light and dark, so the two right
- * panels can be read as one design. Headless Chromium only: no window opens.
+ * panels can be read as one design: each tab of the group panel (Members with
+ * Advanced folded, then opened) and each tab of the bot panel. Headless
+ * Chromium only: no window opens.
  * Usage: node scripts/capture/group-bot-panel-parity.mjs [--out DIR] [--port N]
  *   (SAGAX_VERIFY_BROWSER_CHROME=<chromium> to use an installed browser)
  */
@@ -14,7 +16,7 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const arg = (name) => { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : undefined; };
 const outDir = resolve(arg("--out") ?? join(root, "docs", "screenshots", "group-bot-panel-parity"));
-const port = Number(arg("--port") ?? 5291);
+const port = Number(arg("--port") ?? 5191);
 const skins = [{ id: "daylight", label: "light" }, { id: "pulsatrix", label: "dark" }];
 
 async function waitForServer(url, ms = 120_000) {
@@ -45,8 +47,27 @@ try {
     await page.waitForSelector("[data-parity-row]");
     await page.waitForTimeout(400);
     await page.locator("[data-parity-row]").screenshot({ path: join(outDir, `side-by-side-${label}.png`) });
-    await page.locator("[data-ref-group]").screenshot({ path: join(outDir, `group-${label}.png`) });
-    await page.locator("[data-ref-bot]").screenshot({ path: join(outDir, `bot-${label}.png`) });
+    const groupPanel = page.locator("[data-ref-group]");
+    const botPanel = page.locator("[data-ref-bot]");
+    for (const tab of ["details", "members", "instructions", "memory", "library", "computer"]) {
+      const button = groupPanel.locator(`[data-panel-tab="${tab}"]`);
+      if (!(await button.count())) continue;
+      await button.click();
+      await page.waitForTimeout(300);
+      await groupPanel.screenshot({ path: join(outDir, `group-${tab}-${label}.png`) });
+      if (tab === "members") {
+        await groupPanel.locator("[data-group-advanced-toggle]").click();
+        await page.waitForTimeout(200);
+        await groupPanel.screenshot({ path: join(outDir, `group-members-advanced-open-${label}.png`) });
+      }
+    }
+    for (const tab of ["details", "library", "computer"]) {
+      const button = botPanel.locator(`[data-panel-tab="${tab}"]`);
+      if (!(await button.count())) continue;
+      await button.click();
+      await page.waitForTimeout(300);
+      await botPanel.screenshot({ path: join(outDir, `bot-${tab}-${label}.png`) });
+    }
   }
   await browser.close();
   console.log(`screenshots in ${outDir}`);

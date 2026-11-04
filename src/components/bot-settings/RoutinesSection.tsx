@@ -155,7 +155,7 @@ export function RoutinesSection({ bot, routines, runs, defaultRunOn, grouped = f
  * Duplicate is in Edit > Advanced; the logs are the Automations page's Logs. */
 export function RoutinePanelActions({ routine, bot, onStarted, onToggle, onEdit, onDelete }: {
   routine: Routine;
-  bot: Bot;
+  bot: Bot | undefined;
   onStarted: (run: RoutineRun) => void;
   onToggle: () => void;
   onEdit: () => void;

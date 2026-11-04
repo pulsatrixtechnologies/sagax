@@ -16857,7 +16857,21 @@
       "codingChat.tests.skipped": "084189ee4cb4eeebfb2848c56a9e7631fa1730a7e4e1b1e12b606ee523d96da0",
       "codingChat.tests.skipped.one": "084189ee4cb4eeebfb2848c56a9e7631fa1730a7e4e1b1e12b606ee523d96da0",
       "codingChat.working": "a92f0449a9f7235bf69dc2e8ff7070bfae3f00ec8f8f26e5457a9beac53466ac",
-      "codingChat.workingOn": "22ca01193c51df9737da1c11e55a45fd3f4ed7a299282e7af8a6f5af982adccb"
+      "codingChat.workingOn": "22ca01193c51df9737da1c11e55a45fd3f4ed7a299282e7af8a6f5af982adccb",
+      "groupPanel.tab.members": "1044a4c056d0d685bf4f09174d2bc136137765d62916779fadcacf006a99ffac",
+      "groupPanel.lead.badge": "645978287991a6f40bcaf5840f5653b89b75b3bd1ea78cf9f39192e2400ac23e",
+      "groupPanel.lead.badgeTitle": "7fb4c4314e9214a7c4f2764441c8729ddfe69349869af01c8c78e12e616474f6",
+      "groupPanel.lead.make": "ae4c9700732d8e098d13f839d167d44eec46c3b1ec1e2189b6ac49c00adac6ce",
+      "groupPanel.lead.makeAria": "4ddb9e27c9aeca389182eba06e161c6100d942fac33fbd470c2cdd7f5ebcef62",
+      "groupPanel.suggestions.instructions.title": "a029da80fb547f40f8839a18f5d934f58f8cdc586be3b78ba9154f2adabd34e5",
+      "groupPanel.suggestions.instructions.subtitle": "7ba1e5e816631946f6ca926c11b396be7183b607d4f4dd14d1dd39586ad0cabc",
+      "groupPanel.suggestions.bots.title": "0e4ca60085e3cb4057e1707d5c1ab573bb23ad1062a1e68b2f496de728527eb9",
+      "groupPanel.suggestions.bots.subtitle": "be1c85280de4470211f6611d25f56727f74e18e23f6931c8c9af2094de720e69",
+      "groupPanel.suggestions.goal.title": "fa0a14ccd2149aef51579fa300809bdb75112bc0eee0b7a105cbf39a1046c159",
+      "groupPanel.suggestions.goal.subtitle": "4b9cc2df263c5bd79861634fde699fd9eaee283f2d1c0fccda9961812f6cd89f",
+      "groupPanel.routines.create": "bf93c873c89da4428711a078627e37b84eff0ab2f646725bdb83e53b2323d319",
+      "groupPanel.routines.hint": "bf4b96be05bbf6968b831829a2d992276e2b4c036f9368c0ef53f9bfe0d48184",
+      "groupPanel.computer.of": "1653e3c70ae7182c8b7024a9a1512cfeb99323e4a72fd5feded61fe560421021"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

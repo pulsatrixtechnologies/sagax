@@ -219,6 +219,9 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
           driver: "claudeAgent", access: "api",
           environment: {
             FAKE_CLAUDE_DUMP: dump,
+            // The MCP calls are real; finish with words after them. The fake's
+            // default Bash-after-text is deliberately an unfinished turn.
+            FAKE_CLAUDE_TOOL_CALLS: "[]",
             FAKE_CLAUDE_MCP_CALLS: JSON.stringify([
               // Runtime lot 3: a routine uses the native coordination tool for a consultation.
               { server: "agents", tool: "coordinate_bots", arguments: { bot_ids: ["Xavier"], mode: "consult", message: "ping from Rita" }, when: "ASK-XAVIER" },
@@ -297,7 +300,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     await turn(bob, x, "READ-CAPABILITY-FILES");
     const calls = (JSON.parse(readFileSync(mcpDump, "utf8")) as { calls: Array<{ tool: string; ok: boolean; text: string }> }).calls.filter((call) => call.tool === "workspace_read");
     // V4: a hidden or missing file is a successful exists:false answer, never its private bytes.
-    expect(calls.map((call) => call.ok)).toEqual([true, true, true, true, true, true]);
+    expect(calls.map((call) => call.ok), readFileSync(mcpDump, "utf8")).toEqual([true, true, true, true, true, true]);
     for (const index of [0, 1, 4]) expect(calls[index]!.text).toMatch(/^No such file:/);
     expect(calls[2]!.text).toContain("Instructions from personal-tools.");
     expect(calls[3]!.text).toContain("Instructions from organization-tools.");

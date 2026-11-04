@@ -242,7 +242,7 @@ posixOnly("Perspicax organization, slice 6: routines in their person's name", ()
           driver: "claudeAgent",
           environment: {
             FAKE_CLAUDE_DUMP: dump,
-            FAKE_CLAUDE_MCP_CALLS: JSON.stringify([{ server: "perspicax_*", tool: "api_list", arguments: {} }]),
+            FAKE_CLAUDE_TOOL_CALLS: "[]", FAKE_CLAUDE_MCP_CALLS: JSON.stringify([{ server: "perspicax_*", tool: "api_list", arguments: {} }]),
             FAKE_CLAUDE_MCP_DUMP: join(home, "mcp-dump.json"),
           },
           config: { cli: FAKE_CLAUDE, fullAuto: true },

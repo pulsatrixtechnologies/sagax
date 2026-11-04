@@ -17,6 +17,7 @@ import {
   TEXT_ONLY_ATTACHMENT_NOTE,
   noModelLeftMessage,
 } from "./openai-chat-shared.ts";
+import { createWarmToolSessions } from "./openai-chat-tools-warm.ts";
 
 export { ModelUnsupportedError } from "./openai-chat-completion.ts";
 
@@ -147,6 +148,8 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
    * There is no process to hold: Node's fetch idle timeout is a few seconds,
    * the call keepalive is minutes, so a ping while any thread is warm. */
   const warmThreads = new Set<string>();
+  /** MCP mounts kept across turns of the same thread (#1953 TTFT). */
+  const warmToolSessions = createWarmToolSessions();
   let warmPing: ReturnType<typeof setInterval> | null = null;
 
   const modelsUrl = () => `${options.apiUrl.replace(/\/$/, "")}/models`;
@@ -190,6 +193,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
 
   const releaseWarm = (threadId: string) => {
     warmThreads.delete(threadId);
+    void warmToolSessions.release(threadId);
     if (warmThreads.size === 0) stopWarmPing();
   };
 
@@ -295,6 +299,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
 
   const sendTurn = createOpenAIChatSendTurn({
     resolveKey, options, pingModels, rememberWarm, releaseWarm, active, warmThreads,
+    warmToolSessions,
     messagesFor, unsupportedModels, nextModel, sessionGrants, emit, base, complete,
     reasoningReplayRejected, refuseModel, seesImages,
   });
@@ -376,6 +381,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
         const turns = [...active.values()];
         for (const turn of turns) turn.abort.abort();
         await Promise.all(turns.map((turn) => turn.done));
+        await warmToolSessions.releaseAll();
       },
       onEvent: (listener) => {
         listeners.add(listener);

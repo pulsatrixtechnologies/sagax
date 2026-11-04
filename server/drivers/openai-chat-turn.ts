@@ -36,6 +36,7 @@ import {
   stoppedAfter,
 } from "./openai-chat-shared.ts";
 import { turnTrace } from "../turns/turn-trace.ts";
+import { chatToolsFingerprint, withWarmTokens, type WarmToolSessions } from "./openai-chat-tools-warm.ts";
 
 export type OpenAIChatActiveTurn = {
   abort: AbortController;
@@ -54,6 +55,7 @@ export type OpenAIChatSendTurnDeps<Config> = {
   releaseWarm: (threadId: string) => void;
   active: Map<string, OpenAIChatActiveTurn>;
   warmThreads: Set<string>;
+  warmToolSessions: WarmToolSessions;
   messagesFor: (turn: SendTurnInput) => OpenAIChatMessage[];
   unsupportedModels: Set<string>;
   nextModel: (tried: ReadonlySet<string>) => string | undefined;
@@ -68,7 +70,7 @@ export type OpenAIChatSendTurnDeps<Config> = {
 
 /** One OpenAI-compatible chat-completions turn (tools, steers, model fallback). */
 export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Config>, turn: SendTurnInput) {
-  const { resolveKey, options, pingModels, rememberWarm, releaseWarm, active, warmThreads, messagesFor, unsupportedModels, nextModel, sessionGrants, emit, base, complete, reasoningReplayRejected, refuseModel, seesImages } = deps;
+  const { resolveKey, options, pingModels, rememberWarm, releaseWarm, active, warmThreads, warmToolSessions, messagesFor, unsupportedModels, nextModel, sessionGrants, emit, base, complete, reasoningReplayRejected, refuseModel, seesImages } = deps;
     const apiKey = resolveKey(turn);
     if (!apiKey && !options.allowNoKey) throw new Error(options.missingKeyError);
     if (turn.warmOnly === true) {
@@ -164,6 +166,9 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
 
     void (async () => {
       let tools: ChatToolSession | undefined;
+      let mountIntegrations: SendTurnInput["integrations"] | undefined;
+      let toolsFp = "";
+      let toolsReused = false;
       const usage: Usage = { input: 0, output: 0 };
       let hasUsage = false;
       let ok = false;
@@ -189,7 +194,25 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
         // ask_user, added below, keeps its place within the limit.
         const toolLimit = (options.toolLimit ?? providerToolLimit(options.driverKind)) - (questionAllowed ? 1 : 0);
         turnTrace(turn.threadId, "tools-mount-start");
-        tools = await mountChatTools(options.tools === false ? undefined : turn.integrations, abort.signal, options.computerUse, scope, turn.mcpCallTimeoutMs, toolLimit);
+        // Per-turn tokens ride files (spawn-contract warmCommsEnv) so a kept
+        // agents MCP process serves the next turn of this thread without a
+        // cold spawn before first token (#1953).
+        const warmTurn = options.tools === false ? turn : withWarmTokens(turn, turn.threadId);
+        mountIntegrations = options.tools === false ? undefined : warmTurn.integrations;
+        toolsFp = chatToolsFingerprint(mountIntegrations, {
+          computerUse: Boolean(options.computerUse),
+          toolScope: turn.toolScope,
+          toolLimit,
+          callTimeoutMs: turn.mcpCallTimeoutMs,
+        });
+        const cached = mountIntegrations ? warmToolSessions.get(turn.threadId, toolsFp) : undefined;
+        if (cached) {
+          tools = cached;
+          toolsReused = true;
+          turnTrace(turn.threadId, "tools-reused");
+        } else {
+          tools = await mountChatTools(mountIntegrations, abort.signal, options.computerUse, scope, turn.mcpCallTimeoutMs, toolLimit);
+        }
         turnTrace(turn.threadId, "tools-mounted");
         for (const { server, reason } of tools.skipped) {
           // A technical detail for the logs, never a row in the chat.
@@ -526,12 +549,26 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
         turnEntry.ending = true;
         approval.close();
         let cleanupFailed = false;
-        try { await tools?.close(); }
-        catch {
+        try {
+          if (tools) {
+            // Keep the mount for the next turn of this thread when the
+            // fingerprint still matches (warmCommsEnv already rewrote the
+            // token files). An interrupted turn drops it so a half-dead
+            // MCP child is never reused.
+            if (!abort.signal.aborted && mountIntegrations) {
+              warmToolSessions.keep(turn.threadId, tools, toolsFp);
+            } else if (toolsReused) {
+              await warmToolSessions.release(turn.threadId);
+            } else {
+              await tools.close();
+            }
+          }
+        } catch {
           ok = false;
           stopReason = "error";
           cleanupFailed = true;
           failure = "Tool processes could not be stopped; their execution state is uncertain.";
+          await warmToolSessions.release(turn.threadId).catch(() => {});
         }
         if (abort.signal.aborted) { ok = false; stopReason = "interrupted"; }
         if (!ok && (unread.length || turnEntry.asides.length)) {

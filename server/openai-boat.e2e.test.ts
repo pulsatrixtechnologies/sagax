@@ -108,11 +108,20 @@ it("keeps the selected API model for direct, group and scheduled Boat turns and 
       // An unperformed call ends the turn without an error row in the thread
       // (#1108), so the turn reads settled in every scenario.
       expect(settled.status).toBe("settled");
-      expect(requests.slice(before)).toHaveLength(2);
+      // 1c1ddb0023 gives a failed/unperformed call one corrective round.
+      // The person's hold still executes nothing, and every round keeps
+      // this bot's selected API model.
+      expect(requests.slice(before), JSON.stringify({ scenario, models: requests.slice(before).map(request => request.model) }))
+        .toHaveLength(scenario === "held" ? 3 : 2);
       expect(requests.slice(before).every(request => request.model === "chosen-vision-model")).toBe(true);
       const followup = requests[before + 1].messages;
       if (scenario === "held") {
         expect(followup.at(-1).content).toContain("The person has handed this computer back. This call was NOT performed");
+        expect(requests[before + 2].messages.at(-1)).toMatchObject({ role: "user",
+          content: expect.stringContaining("[Sagax: a tool call in this turn failed") });
+        // The panel may refresh after release; the held model screenshot
+        // remains unperformed (boat.ts separates its .model.jpg frame).
+        expect(commands.slice(commandsBefore).filter(command => command.includes(".model.jpg"))).toEqual([]);
       } else {
         expect(followup.at(-1).content[1].type).toBe("image_url");
       }

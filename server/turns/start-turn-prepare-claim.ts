@@ -45,7 +45,7 @@ export function createPrepareClaimStartTurn(host: StartTurnHost) {
   } = host;
 
 
-  return async function(state: TurnState): Promise<PrepareResult> {
+  return function(state: TurnState): PrepareResult {
   // Admitted: every refusal above has passed and no other turn runs on this
   // thread, so this is the one moment the ledger's "who asked" may change.
   if (!state.warmOnly && state.opts?.trigger) turnTriggers.set(state.threadId, state.opts.trigger);

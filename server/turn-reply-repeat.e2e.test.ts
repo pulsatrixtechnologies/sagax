@@ -55,6 +55,9 @@ posixOnly("one turn repeating the same text e2e", () => {
         claude: {
           driver: "claudeAgent",
           environment: {
+            // 95e8f39e4 continues tool-only endings. Keep the tool, then
+            // finish with the scripted text instead of consuming turn 2.
+            FAKE_CLAUDE_TOOL_CALLS: JSON.stringify([{ name: "Bash", input: { command: "echo hi" }, ok: true, output: "hi" }]),
             FAKE_CLAUDE_REPLIES: JSON.stringify([
               [REPEATED, REPEATED, `  ${REPEATED}\n`, "Ticket 4242 is closed."],
               [REPEATED, "Ticket 4243 is open."],

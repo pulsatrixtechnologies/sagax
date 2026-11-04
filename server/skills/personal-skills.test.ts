@@ -81,9 +81,20 @@ describe("Me skills, one source referenced by all of the person's bots", () => {
     await api("alice", "PATCH", "/packing-list", { enabled: true });
     writeFileSync(join(skills.root("alice"), "skills", "packing-list", "SKILL.md"), text("Changed outside the app."));
     expect(skills.prompt("alice", true)).toBe("");
-    expect((await api("alice", "GET", "/packing-list")).status).toBe(409);
+    expect(skills.commands("alice")).toEqual([]);
+    // The person can inspect changed bytes in the editor (ad1bf11c0),
+    // while prompt/command delivery remains revoked until they review.
+    expect(await api("alice", "GET", "/packing-list")).toMatchObject({ status: 200, body: {
+      text: text("Changed outside the app."), changedAfterReview: true,
+      reviewedText: text(), enabled: false, editable: true, origin: "me",
+    } });
+    expect((await api("bob", "GET", "/packing-list")).status).toBe(404);
+    expect(skills.prompt("alice", true)).toBe("");
+    expect(skills.commands("alice")).toEqual([]);
     expect((await api("alice", "PUT", "/packing-list", { name: "packing-list", description: "Verify packing", instructions: "Reviewed replacement." })).status).toBe(200);
     expect(skills.prompt("alice", true)).toContain("packing-list");
+    expect(skills.commands("alice")[0]?.text).toContain("Reviewed replacement.");
+    expect(skills.commands("alice")[0]?.text).not.toContain("Changed outside the app.");
     expect((await api("alice", "DELETE", "/packing-list")).status).toBe(200);
     expect(capabilities.assignedSkills("alice")).toEqual([]);
     expect(skills.prompt("alice", true)).toBe("");

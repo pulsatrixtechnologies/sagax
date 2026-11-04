@@ -198,7 +198,8 @@ describe("achievements page body", () => {
     // rows, not cards: the shared row of the Automations list
     expect(html).not.toContain("achievement-card");
     const row = /<li class="([^"]*)" data-tier="[a-z]+" data-unlocked="" data-achievement="hello-bot"/.exec(html)?.[1] ?? "";
-    for (const name of ["achievement-row", "flex", "gap-2.5", "rounded-lg", "px-2", "hover:bg-hover"]) expect(row.split(" "), name).toContain(name);
+    // 2dfc4b2a0 put shared rows on the closed spacing scale: 8px gap/padding.
+    for (const name of ["achievement-row", "flex", "gap-2", "rounded-lg", "px-2", "py-2", "items-start", "hover:bg-hover"]) expect(row.split(" "), name).toContain(name);
     const hello = slice(html, 'data-achievement="hello-bot"');
     expect(hello).toContain("achievement-row-badge");
     expect(hello).toMatch(/data-achievement-row-points=""[^>]*>10<\/span>/);
@@ -313,7 +314,8 @@ describe("achievements page, a sister of Automations", () => {
     expect(actions).toContain('aria-label="Achievements menu"');
     // the body: the frame's card and the Automations column
     expect(html).toContain("content-card-body");
-    expect(html).toContain("mx-auto w-full max-w-4xl space-y-5 p-4 sm:p-6");
+    // 2dfc4b2a0 keeps the centred 4xl column with 16px section spacing.
+    expect(html).toContain("mx-auto w-full max-w-4xl space-y-4 p-4 sm:p-6");
   });
 
   it("puts the categories in Filters, each with its unlocked count, and the reward beside them", () => {

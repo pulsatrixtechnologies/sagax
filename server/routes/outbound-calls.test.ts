@@ -9,7 +9,7 @@ import { parseOutboundCall } from "../../shared/outbound-call.ts";
 import { json, readBody } from "../harness/http.ts";
 import { OutboundCalls, type OutboundCallRecord } from "../outbound/outbound-calls.ts";
 import { requiredScope, type RequestAuth } from "../auth/request-auth.ts";
-import { TOOL_POLICY_ROWS } from "../tool-policy.generated.ts";
+import { policyFor } from "../tools/tool-policy.ts";
 import { createOutboundCallRoutes } from "./outbound-calls.ts";
 import { dispatchRoutes } from "./table.ts";
 
@@ -85,14 +85,20 @@ describe("phone call routes", () => {
     expect(calls.get(id)?.via).toBe("Chef");
   });
 
-  it("is the person's own route: member scope, never an agent tool", () => {
+  it("keeps call creation and confirmation personal and unavailable as agent tools", () => {
     for (const path of ["/api/me/phone-calls", "/api/me/phone-calls/call_0123456789abcdef/answer"]) {
       expect(requiredScope("POST", path)).toBe("client");
       expect(requiredScope("GET", path)).toBe("admin");
     }
-    const rows = TOOL_POLICY_ROWS.filter((row) => row.route.includes("phone-calls"));
-    expect(rows.length).toBeGreaterThan(0);
-    for (const row of rows) expect(row).toMatchObject({ tier: "admin", defaultEnabled: false });
+    // 062d7c42e added hangup/recording routes and a broad prefix. Check the
+    // resolved policy: the specific confirmation route must stay protected.
+    const call = "/api/me/phone-calls/call_0123456789abcdef";
+    for (const path of ["/api/me/phone-calls", `${call}/answer`]) {
+      expect(policyFor("POST", path)).toMatchObject({ matched: true, tier: "admin", defaultEnabled: false });
+    }
+    expect(policyFor("POST", `${call}/hangup`)).toMatchObject({ matched: true, tier: "write", defaultEnabled: true });
+    expect(policyFor("GET", `${call}/recording`)).toMatchObject({ matched: true, tier: "read", defaultEnabled: true });
+    expect(policyFor("GET", "/api/org/phone-calls")).toMatchObject({ matched: true, tier: "admin", defaultEnabled: false });
   });
 
   it("needs the number confirmed on the card before Call", async () => {
@@ -104,6 +110,7 @@ describe("phone call routes", () => {
   it("an admin turns calls on, sets the callback number and the do-not-call list; nobody else", async () => {
     const member = await serve();
     expect(await member.call("/api/org/phone-calls", undefined, "GET")).toMatchObject({ status: 403 });
+    expect(await member.call("/api/org/phone-calls", { enabled: true }, "PUT")).toMatchObject({ status: 403 });
     const admin = await serve({ admin: true });
     expect(await admin.call("/api/org/phone-calls", { enabled: false, addDoNotCall: "514 555 0177" }, "PUT")).toMatchObject({ status: 200, body: { settings: { enabled: false, callbackNumber: "+14385550199", doNotCall: ["+15145550177"] } } });
     expect(await admin.call("/api/org/phone-calls", { callbackNumber: "bad" }, "PUT")).toMatchObject({ status: 400 });

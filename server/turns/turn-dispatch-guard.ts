@@ -187,16 +187,23 @@ export class PendingTurnCancellations {
   }
 }
 
-/** Apply the two-stage cancellation quarantine. While the unresolved
+/** Apply the cancellation quarantine. A late stop for another known turn
+ * cannot settle the current generation. While the unresolved
  * handshake owns the thread, every event is ignored and any stable provider
  * turn id it reveals is retired. After the bounded gate expires, that old id
  * remains ignored but an unrelated replacement id is admitted. */
 export function isTurnEventQuarantined(
   pending: PendingTurnCancellations,
   retired: RetiredTurnRegistry,
-  event: { threadId: string; turnId?: string },
+  event: { threadId: string; turnId?: string; type?: string; stopReason?: string | null },
+  currentTurnId?: string,
 ): boolean {
   if (retired.has(event.turnId)) return true;
+  if (event.type === "turn.completed" && (event.stopReason === "cancelled" || event.stopReason === "interrupted") &&
+      currentTurnId && event.turnId && event.turnId !== currentTurnId) {
+    retired.retire(event.turnId);
+    return true;
+  }
   if (!pending.has(event.threadId)) return false;
   if (event.turnId) retired.retire(event.turnId);
   return true;

@@ -20,9 +20,12 @@ export function createStartTurn(host: StartTurnHost) {
 
   const { finishCatch, finishFinally } = createFinishStartTurn(host);
   const streamStartTurn = createStreamStartTurn(host);
-  const prepareValidateStartTurn = createPrepareValidateStartTurn(host);
-  const prepareAdmitStartTurn = createPrepareAdmitStartTurn(host);
   const prepareClaimStartTurn = createPrepareClaimStartTurn(host);
+  // f7cf2ac53 split the monolith's atomic admission (43de239e0). Invoke
+  // the next leaf directly: only the original I/O waits may yield before
+  // the claim, so a queue sees this reservation before checking its next task.
+  const prepareAdmitStartTurn = createPrepareAdmitStartTurn(host, prepareClaimStartTurn);
+  const prepareValidateStartTurn = createPrepareValidateStartTurn(host, prepareAdmitStartTurn);
   const dispatchStartTurn = createDispatchStartTurn(host);
   const promptStartTurn = createPromptStartTurn(host);
   const setupStartTurn = createSetupStartTurn(host);
@@ -36,19 +39,18 @@ export function createStartTurn(host: StartTurnHost) {
     opts?: any,
   ) {
     const state = createTurnState({ botId, text, opts, startTurn });
+    state.enginesRead = host.enginesRead;
     {
-      const validated = await prepareValidateStartTurn(state);
-      if (validated.kind === "return") return validated.value;
-      const admitted = await prepareAdmitStartTurn(state);
-      if (admitted.kind === "return") return admitted.value;
-      const claimed = await prepareClaimStartTurn(state);
-      if (claimed.kind === "return") return claimed.value;
+      const prepared = await prepareValidateStartTurn(state);
+      if (prepared.kind === "return") return prepared.value;
     }
 
     void (async () => {
     state.warmOk = false;
     try {
-      await setupStartTurn(state);
+      // Setup can finish maintenance or an aborted warm without dispatch.
+      const setup = await setupStartTurn(state);
+      if (setup?.kind === "return") return;
 
       await computerWorkspaceStartTurn(state);
       await computerHelpersStartTurn(state);

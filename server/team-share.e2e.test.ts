@@ -5,6 +5,8 @@ import { expect, it } from "vitest";
 import { launchVerificationServer } from "../scripts/control-omb.ts";
 import { NEWER_PACKAGE_MESSAGE, parsePackageDocument } from "../shared/package-format.ts";
 import { includedSkills, requestedSkills, startingTicks } from "../src/lib/team-share-skills.ts";
+import { InstallationCapabilityStore } from "./capabilities/installation-capability-store.ts";
+import { resolveVaultKey } from "./mcp/mcp-oauth.ts";
 
 const FIXTURES = join(import.meta.dirname, "..", "shared", "package-fixtures");
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
@@ -100,7 +102,14 @@ it("shares one team whole (minus chat history) and imports it back as new, inert
     expect(servers.map((server) => server.name).sort()).toEqual([...beforeServers, "crm-2"].sort());
     expect(servers.find((server) => server.name === "crm-2")).toMatchObject({ enabled: false, headerKeys: ["Authorization"] });
     const config = JSON.parse(readFileSync(join(fixture.info.dataDir, "config.json"), "utf8"));
-    expect(config.mcpServers["crm-2"].headers).toEqual({ Authorization: "" });
+    // 9ede65b25 / f1db2ed59: installation MCP config lives in the sealed
+    // store; the imported connection still has exactly empty secret slots.
+    expect(config.mcpServers ?? {}).toEqual({});
+    expect(existsSync(join(fixture.info.dataDir, "mcp-oauth.key"))).toBe(true);
+    const installation = new InstallationCapabilityStore(fixture.info.dataDir, () => resolveVaultKey(fixture.info.dataDir, {}));
+    expect(installation.present()).toBe(true);
+    const importedServer = installation.read().mcpServers["crm-2"] as { headers: Record<string, string> };
+    expect(importedServer.headers).toEqual({ Authorization: "" });
     expect((await ok("GET", `/api/section-context?section=${encodeURIComponent("Sales desk")}`)).text).toBe("Quote list prices only.");
     expect((await ok("GET", `/api/bots/${copyLead.id}/memory/file?path=${encodeURIComponent("memory/pricing.md")}`)).text).toBe("List price 49.\n");
     expect(imported.body.groups[0]).toMatchObject({ name: "Deal desk", bulletin: "Cite sources.", defaultResponder: { kind: "member", botId: copyLead.id } });

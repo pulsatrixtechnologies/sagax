@@ -26,7 +26,7 @@ import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
 
-const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
+const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const FAKE_ACP = join(SERVER_DIR, "testing", "fake-acp-cli.ts");
 const FAKE_PI = join(SERVER_DIR, "testing", "fake-pi-cli.ts");
@@ -169,7 +169,8 @@ posixOnly("Perspicax organization: a routine whose engine fails says why", () =>
       anthropic: { key: "sk-ant-test-org-0000000000" },
       xai: { key: "xai-test-org-00000000000000" },
       instances: {
-        claude: { driver: "claudeAgent", config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        // fcce56775 (#1812): only this explicit API instance uses the organization key.
+        claude: { driver: "claudeAgent", access: "api", config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
         grok: {
           driver: "grokAgent",
           environment: { FAKE_ACP_GROK_VERSION: "1.0.50", FAKE_ACP_RPC_FAILURE_FILE: failureFile },

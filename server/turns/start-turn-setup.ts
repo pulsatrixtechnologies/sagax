@@ -78,11 +78,11 @@ export function createSetupStartTurn(host: StartTurnHost) {
     withUnseenMessages,
   } = host;
 
-  return async function setupStartTurn(state: TurnState): Promise<void> {
+  return async function setupStartTurn(state: TurnState): Promise<{ kind: "return" } | undefined> {
 
     if (state.warmOnly && state.opts?.warmSignal?.aborted) {
       state.instance.adapter.releaseWarmSession?.(state.threadId);
-      return;
+      return { kind: "return" };
     }
     if (state.enginesRead) {
       await state.enginesRead;
@@ -120,7 +120,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
       drainSecretResumes();
       drainTeamSetupResumes();
       drainDelegationWakes();
-      return;
+      return { kind: "return" };
     }
     }
     // Keep the full branch order for delivery bookkeeping, but select actual

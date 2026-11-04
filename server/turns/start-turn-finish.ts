@@ -30,6 +30,7 @@ export function createFinishStartTurn(host: StartTurnHost) {
     directFollowupSettlers,
     directRequestOwners,
     directTurnBots,
+    directTurnClaimIsCurrent,
     directTurnGenerationByThread,
     drainComputerResumes,
     drainDelegationWakes,

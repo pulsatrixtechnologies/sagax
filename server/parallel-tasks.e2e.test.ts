@@ -230,10 +230,15 @@ posixOnly("parallel tasks e2e", () => {
       expect(refused.status, JSON.stringify(refused.body)).toBe(409);
       expect(refused.body.code, JSON.stringify(refused.body)).toBe("parallel_limit");
       const q2 = second.body.parallel.threadId as string;
+      const q3 = third.body.parallel.threadId as string;
       await new Promise((r) => setTimeout(r, 500));
       expect((await tasks(bot.id)).find((task) => task.threadId === q2)?.busy).toBeFalsy();
       open("q1");
       await waitFor(async () => (await tasks(bot.id)).find((task) => task.threadId === q2)?.busy === true, "the queued task to start");
+      // Check capacity while q2 is inside its real driver. q3 stays
+      // queued even when both completion gates are then released.
+      await waitFor(async () => (await messages(bot.id, q2)).some((m) => m.kind === "activity" && m.tool?.name === "Bash"), "the second task's gated tool");
+      expect((await tasks(bot.id)).find((task) => task.threadId === q3)?.busy).toBe(false);
       open("q2");
       open("q3");
       open("main4");

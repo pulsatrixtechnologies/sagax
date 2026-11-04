@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -8,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { freePortBlock } from "./testing/ports.ts";
+import { readHandoffs } from "./testing/handoff-rows.ts";
 
 // An ordinary room round never skips a member who is busy in another
 // conversation: the round parks on them with one neutral note and they take
@@ -20,7 +22,6 @@ import { freePortBlock } from "./testing/ports.ts";
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(SERVER_DIR, "..");
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
-const TEST_CAPABILITY_KEY = "room-chat-wait-fixture-capability";
 
 const WAIT_CHIP = (name: string) => `${name} is finishing another conversation — will reply here when free`;
 
@@ -30,6 +31,11 @@ let base = "";
 let stderr = "";
 let penDump = "";
 let patientFinishGate = "";
+let legacy: {
+  pen: { id: string; threadId: string; name: string };
+  ink: { id: string; threadId: string; name: string };
+  channel: { id: string; threadId: string };
+};
 
 type StateMessage = {
   id: string;
@@ -38,6 +44,8 @@ type StateMessage = {
   text?: string;
   from?: { botId?: string; name?: string };
   tool?: { name?: string; ok?: boolean; spoken?: string };
+  roomRequest?: { id: string; phase: string };
+  turnId?: string;
 };
 
 const api = async (
@@ -85,14 +93,33 @@ beforeAll(async () => {
         FAKE_CLAUDE_REPLIES: JSON.stringify(["Let me pull in @Bee for this."]),
         FAKE_CLAUDE_REPLY_STATE: join(home, "summoner-replies.txt"),
       }),
-      // The dump proves the real per-turn token is mounted. An exact synthetic
-      // capability below drives ask_bot after this quick fake turn settles.
+      // The dump proves the real per-turn token is mounted. The standalone
+      // consultation later uses the real external-runtime poll capability.
       pen: fixture("Dumping fixture", { FAKE_CLAUDE_MODE: "happy", FAKE_CLAUDE_DUMP: penDump }),
     },
   }));
   const port = await freePortBlock([0, 1]);
   base = `http://127.0.0.1:${port}`;
-  child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
+  // 84841aeed / 40bbf12b7: ask_bot now opens runtime work, not a DM. The
+  // person's existing DM remains a supported conversation, so create that
+  // historical data through Store before the server loads its own instance.
+  // The preload runs in this same child with this disposable HOME only.
+  const legacyFile = join(home, "legacy-peer-channel.json");
+  const preload = join(home, "legacy-peer-channel.ts");
+  writeFileSync(preload, `
+import { writeFileSync } from "node:fs";
+import { Store } from ${JSON.stringify(new URL("./store.ts", import.meta.url).href)};
+const store = new Store(() => ({ instanceId: "quick", model: "claude-sonnet-5" }));
+const pen = store.createBot({ name: "Pen", modelSelection: { instanceId: "pen", model: "claude-sonnet-5" } }, { seedMessages: false });
+const ink = store.createBot({ name: "Ink", modelSelection: { instanceId: "patient", model: "claude-sonnet-5" } }, { seedMessages: false });
+store.patchBot(pen.id, { proactiveMode: "off" });
+store.patchBot(ink.id, { proactiveMode: "off" });
+const channel = store.createGroup("Pen ⇄ Ink", [pen.id, ink.id], true);
+store.appendMessage(channel.threadId, { role: "bot", kind: "text", from: { botId: pen.id, name: pen.name, color: pen.color }, text: "@Ink A question from the old conversation." });
+store.appendMessage(channel.threadId, { role: "bot", kind: "text", from: { botId: ink.id, name: ink.name, color: ink.color }, text: "An Ink answer kept from the old conversation." });
+writeFileSync(${JSON.stringify(legacyFile)}, JSON.stringify({ pen, ink, channel }));
+`);
+  child = spawn(process.execPath, ["--import", preload, join(SERVER_DIR, "index.ts")], {
     cwd: ROOT,
     env: {
       ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
@@ -102,7 +129,6 @@ beforeAll(async () => {
       SAGAX_PORT: String(port),
       SAGAX_WEBHOOK_PORT: String(port + 1),
       SAGAX_STATIC_DIR: staticDir,
-      SAGAX_TEST_INTERNAL_CAPABILITY_KEY: TEST_CAPABILITY_KEY,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -119,6 +145,7 @@ beforeAll(async () => {
     if (Date.now() >= deadline) throw new Error(`server never became healthy: ${stderr}`);
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+  legacy = JSON.parse(readFileSync(legacyFile, "utf8"));
 }, 30_000);
 
 afterAll(async () => {
@@ -276,9 +303,8 @@ describe("chat rooms wait for a member busy elsewhere", { timeout: 45_000 }, () 
   });
 
   it("waits for the peer of a bot⇄bot channel when the user chips in while that peer is busy", async () => {
-    const pen = await createBot("Pen", "pen");
-    const ink = await createBot("Ink", "patient");
-    let channelId: string | undefined;
+    const { pen, ink } = legacy;
+    const channelId = legacy.channel.id;
 
     try {
       // one direct turn hands the fake CLI its MCP config, which carries the
@@ -297,16 +323,15 @@ describe("chat rooms wait for a member busy elsewhere", { timeout: 45_000 }, () 
       await expect.poll(readToken, { timeout: 10_000 }).toBeTruthy();
       expect(readToken()).toMatch(/^[a-f0-9]{48}$/);
       await expect.poll(() => botBusy(pen.id)).toBe(false);
-      const minted = await api(
-        "POST",
-        "/api/testing/internal-capability",
-        { botId: pen.id, threadId: pen.threadId, kind: "agents" },
-        { "x-openmausbot-test-capability": TEST_CAPABILITY_KEY },
-      );
-      expect(minted.status).toBe(201);
-      const token = String(minted.body.token);
+      // A settled turn has no requester engine to resume. The external
+      // runtime owns completion and polls the real consultation instead.
+      const token = `room-chat-wait-runtime-${randomUUID()}`;
+      writeFileSync(join(home, ".sagax", "external-runtimes.json"), JSON.stringify({
+        [pen.id]: { token, threadId: pen.threadId },
+      }), { mode: 0o600 });
 
-      // ask_bot is what births the channel; the peer answers at once here
+      // The peer answers once on runtime work. It does not create another
+      // DM or copy private coordination into the retained old conversation.
       const asked = await api(
         "POST",
         "/api/internal/ask-bot",
@@ -315,12 +340,34 @@ describe("chat rooms wait for a member busy elsewhere", { timeout: 45_000 }, () 
       );
       expect(asked.status).toBe(200);
       expect(asked.body.botName).toBe("Ink");
-      const channel = (await api("GET", "/api/bots?messages=0")).body.groups.find((group: {
+      expect(asked.body.receipt).toMatchObject({ botId: ink.id, botName: "Ink", outcome: "injected" });
+      const tree = readHandoffs(join(home, ".sagax"));
+      const work = tree.filter(node => node.botId === ink.id && node.parentId);
+      expect(work).toHaveLength(1);
+      expect(work[0]).toMatchObject({ consult: true, status: "completed", executions: 1, text: "Ink, quick question" });
+      expect(tree.find(node => node.id === work[0]!.parentId)).toMatchObject({ botId: pen.id, threadId: pen.threadId });
+      const exchange: StateMessage[] = (await api("GET", `/api/threads/${work[0]!.threadId}/messages?limit=40`)).body.messages;
+      expect(exchange.filter(message => message.roomRequest?.phase === "request")).toEqual([
+        expect.objectContaining({ from: expect.objectContaining({ botId: pen.id, name: "Pen" }),
+          roomRequest: { id: work[0]!.id, phase: "request" }, text: "@Ink Ink, quick question" }),
+      ]);
+      const source: StateMessage[] = (await api("GET", `/api/threads/${pen.threadId}/messages?limit=40`)).body.messages;
+      expect(source.filter(message => message.roomRequest?.id === work[0]!.id && message.roomRequest.phase === "result")).toEqual([
+        expect.objectContaining({ from: expect.objectContaining({ botId: ink.id, name: "Ink" }), tool: expect.objectContaining({ ok: true }) }),
+      ]);
+      const channels = (await api("GET", "/api/bots?messages=0")).body.groups.filter((group: {
+        id: string;
         dm?: boolean;
         memberIds: string[];
       }) => group.dm === true && group.memberIds.includes(pen.id) && group.memberIds.includes(ink.id));
-      expect(channel).toBeTruthy();
-      channelId = channel.id;
+      expect(channels).toHaveLength(1);
+      const channel = channels[0];
+      expect(channel).toMatchObject({ id: channelId, dm: true, memberIds: [pen.id, ink.id] });
+      const before = (await snapshot(channel.id)).messages;
+      expect(before.map(message => ({ from: message.from?.name, text: message.text }))).toEqual([
+        { from: "Pen", text: "@Ink A question from the old conversation." },
+        { from: "Ink", text: "An Ink answer kept from the old conversation." },
+      ]);
       await expect.poll(() => botBusy(ink.id)).toBe(false);
       await holdBusy(ink.id, "Ink, finish this first");
       expect((await api("POST", `/api/groups/${channel.id}/messages`, { text: "@Ink one more thing" })).status).toBe(202);
@@ -329,7 +376,7 @@ describe("chat rooms wait for a member busy elsewhere", { timeout: 45_000 }, () 
       await expect.poll(async () => {
         const { room: current, messages } = await snapshot(channel.id);
         const { speakers: _speakers, ...summary } = roundSummary(messages, ink.id);
-        // Ink's earlier answer to Pen is already in the channel; the chip-in
+        // Ink's historical answer to Pen is already in the channel; the chip-in
         // must have produced a fresh Ink reply AFTER the wait note
         const waitAt = messages.findIndex((message) => message.tool?.name === WAIT_CHIP("Ink"));
         const inkRepliedAfterWait = waitAt !== -1 && messages.slice(waitAt + 1).some((message) =>
@@ -346,6 +393,15 @@ describe("chat rooms wait for a member busy elsewhere", { timeout: 45_000 }, () 
       });
 
       expect(await directReply(ink.id, "Ink, finish this first")).toBe(true);
+      expect(await botBusy(ink.id)).toBe(false);
+      const after = (await snapshot(channel.id)).messages;
+      const waitAt = after.findIndex(message => message.tool?.name === WAIT_CHIP("Ink"));
+      const replies = after.slice(waitAt + 1).filter(message => message.kind === "text" && message.role === "bot");
+      expect(replies.length).toBeGreaterThan(0);
+      expect(replies.every(message => message.from?.botId === ink.id && Boolean(message.turnId))).toBe(true);
+      expect(new Set(replies.map(message => message.turnId)).size).toBe(1);
+      // The person's chip-in is one room turn, not another peer dispatch.
+      expect(readHandoffs(join(home, ".sagax")).filter(node => node.botId === ink.id && node.parentId)).toEqual(work);
     } finally {
       await cleanup(channelId, [pen.id, ink.id]);
     }

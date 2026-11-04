@@ -14,7 +14,7 @@ import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
 
-const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
+const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const posixOnly = describe.skipIf(process.platform === "win32");
 const ALICE: FakeOidcUser = { sub: "01J9FOLDERALICE00000000000", email: "alice@example.test", name: "Alice", preferred_username: "alice", role: "admin", teams: [] };
 const BOB: FakeOidcUser = { sub: "01J9FOLDERBOB0000000000000", name: "Bob", preferred_username: "bob", role: "employee", teams: [] };

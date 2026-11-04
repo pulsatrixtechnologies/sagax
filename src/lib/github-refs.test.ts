@@ -65,12 +65,15 @@ describe("rendered references", () => {
     expect(html).toContain('href="https://github.com/b/web/issues/9"');
   });
 
-  it("keeps a link the bot wrote words for, and code, as they are", () => {
+  it("keeps a written link and inline code, with the code's path wrap point", () => {
     const html = render("[the drag fix](https://github.com/a/app/pull/7) and `a/app#8`");
     expect(html).toContain(">the drag fix</a>");
     expect(html).not.toContain("data-github-ref");
     expect(html).toContain("<code");
-    expect(html).toContain("a/app#8");
+    // 2318f1736 adds zero-width wrap points after inline path separators.
+    const code = /<code[^>]*>([\s\S]*?)<\/code>/.exec(html)?.[1];
+    expect(code).toBe("a/\u200Bapp#8");
+    expect(code?.replace(/\u200B/g, "")).toBe("a/app#8");
   });
 
   it("leaves other links plain", () => {

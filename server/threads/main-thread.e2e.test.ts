@@ -10,6 +10,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
+import { readHandoffs } from "../testing/handoff-rows.ts";
 
 /** An isolated server on the scripted fake engine, and what these tests read from it. */
 async function launch() {
@@ -114,7 +115,23 @@ it("stamps askedAt where a person writes, never for a routine, a webhook, start_
     const handoff = await thread(bot.id, "Hand-off");
     await replied(bot.id, handoff.threadId, "Hand-off done.");
     await idle(teammate.id);
-    expect((await said(handoff.threadId)).some((line) => line.startsWith("@Teammate: ") && line.includes("Take this over."))).toBe(true);
+    // 84841aeed: the runtime persists one roomRequest row with its sender
+    // and brief. Its provider-only envelope is not a stored user message.
+    // 0b5eaf85d: a one-way send carries a source link, without its transcript
+    // or any additional access to the source conversation.
+    const expectedBrief = `Take this over.\n\n[Source conversation](sagax://thread/${teammate.activeTaskId}?bot=${teammate.id}). This link grants no additional access and contains no copied transcript.`;
+    const tree = readHandoffs(dataDir);
+    const notices = tree.filter((node) => node.botId === bot.id && node.threadId === handoff.threadId && node.oneWay);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({ status: "completed", executions: 1, text: expectedBrief });
+    expect(tree.find((node) => node.id === notices[0]!.parentId)).toMatchObject({ botId: teammate.id, threadId: teammate.activeTaskId });
+    const exchange = (await api("GET", `/api/threads/${handoff.threadId}/messages?limit=50`)).messages;
+    const handed = exchange.filter((message: any) => message.roomRequest?.phase === "request");
+    expect(handed).toHaveLength(1);
+    expect(handed[0]).toMatchObject({ role: "bot", kind: "text",
+      roomRequest: { id: notices[0]!.id, phase: "request" },
+      from: { botId: teammate.id, name: teammate.name }, text: `@${bot.name} ${expectedBrief}` });
+    expect(JSON.stringify(exchange)).not.toContain("Hand this to Asker.");
 
     // Nothing since the person's one line stamped anything: not the side
     // job, the Slack thread, the routine's or webhook's run, or the hand-off.
@@ -177,10 +194,21 @@ it("moves no main thread for a teammate's work or results or a team incident; re
     expect((await wire(asker.id)).mainThreadId).toBe(asker.activeTaskId);
     expect((await wire(teammate.id)).mainThreadId).toBe(teammate.activeTaskId);
     expect((await wire(chief.id)).mainThreadId).toBe(chief.activeTaskId);
-    // The side job's results and the incident's report are news in their own
-    // threads, so an activity row reaches them while threads are hidden.
+    // The side job's review remains news in its own thread.
     expect((await tasks(asker.id)).find((task) => task.threadId === side.threadId).unread).toBe(true);
-    expect((await tasks(chief.id)).find((task) => task.threadId === incidents.threadId).unread).toBe(true);
+    // 55ab7d310 copies the incident answer into the person's conversation;
+    // 26dd37f25 keeps its working thread read so no hidden dot sticks on.
+    const copied = (await api("GET", `/api/threads/${chief.activeTaskId}/messages?limit=50`)).messages
+      .filter((message: any) => message.role === "bot" && message.text === "Incident noted.");
+    expect(copied).toHaveLength(1);
+    expect(copied[0].threadRef).toMatchObject({ botId: chief.id, threadId: incidents.threadId, title: "Team incidents" });
+    expect((await tasks(chief.id)).find((task) => task.threadId === chief.activeTaskId).unread).toBe(true);
+    expect((await tasks(chief.id)).find((task) => task.threadId === incidents.threadId).unread).toBe(false);
+    await api("POST", `/api/bots/${chief.id}/read`, { threadId: chief.activeTaskId });
+    expect((await tasks(chief.id)).find((task) => task.threadId === chief.activeTaskId).unread).toBe(false);
+    expect((await tasks(chief.id)).find((task) => task.threadId === incidents.threadId).unread).toBe(false);
+    expect((await wire(chief.id)).mainThreadId).toBe(chief.activeTaskId);
+    expect(stamps(chief.id)).toEqual({});
   } finally {
     await fixture.close();
   }

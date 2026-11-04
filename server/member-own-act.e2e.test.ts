@@ -101,7 +101,7 @@ posixOnly("organization server: a member's own act, hidden files and Full access
       organization: { memberBotsUseOrgKey: true },
       instances: {
         // A turn that waits, so the test speaks to its permission broker.
-        hold: { driver: "claudeAgent", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        hold: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_MODE: "hang", FAKE_CLAUDE_DUMP: join(home, "hold-dump.json") }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
       },
     }));
     child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {

@@ -118,6 +118,7 @@ export class BotCreationDraft {
       timeoutMinutes: input.timeoutMinutes ?? undefined,
       postResults: input.postResults ?? undefined,
       mailAlias: input.mailAlias || undefined,
+      model: input.model === undefined ? previous?.model : input.model || undefined,
       autoPauseAfter: input.autoPauseAfter ?? undefined,
       folder: input.folder === undefined ? previous?.folder : input.folder ?? undefined,
       durationMinutes: input.durationMinutes ?? previous?.durationMinutes ?? 30,

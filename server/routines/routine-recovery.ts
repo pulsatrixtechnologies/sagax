@@ -37,7 +37,7 @@ export type RoutineFailureClass =
 /** A failure notification's own words; null stays quiet because the owner was already told. */
 export interface RoutineAlert { detail: string }
 
-export interface RoutineOwnerNotice { botId: string; cause: RoutineOwnerCause | "skill_missing" | "mcp_missing" | "perspicax_profile" | "computer_offline" | "probe_error"; at: number }
+export interface RoutineOwnerNotice { botId: string; cause: RoutineOwnerCause | "engine_artifacts" | "skill_missing" | "flow_plan" | "mcp_missing" | "perspicax_profile" | "computer_offline" | "probe_error"; at: number }
 
 export type RoutineRecovery =
   | { queued: true; alert?: RoutineAlert }
@@ -55,7 +55,7 @@ const AFTER_RESET_MS = 60_000;
 const WEEK_MS = 7 * 24 * 60 * 60_000;
 /** startTurn's codes for a bot or thread that is busy for now. */
 const BUSY_CODES = new Set(["thread_busy", "thread_limit", "workspace_busy", "settling"]);
-const OWNER_CAUSES = new Set<string>(["signed_out", "credits", "usage_limit", "setup", "skill_missing", "mcp_missing", "perspicax_profile", "computer_offline", "probe_error"]);
+const OWNER_CAUSES = new Set<string>(["signed_out", "credits", "usage_limit", "setup", "engine_artifacts", "skill_missing", "flow_plan", "mcp_missing", "perspicax_profile", "computer_offline", "probe_error"]);
 
 /** Codex's ChatGPT workspace routing lookup: passing, unlike its "unauthorized" variant (a sign-in problem). */
 const ROUTING_LOOKUP = /\bworkspace routing discovery (?:failed|timed out)\b/i;

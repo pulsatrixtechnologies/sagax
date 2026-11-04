@@ -151,6 +151,7 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     mountPersonalMcp,
     mountPluginMcp,
     mountUserSandbox,
+    syncPluginsForTurn,
     myChromePromptFor,
     noteBotRead,
     notifyAccess,
@@ -850,6 +851,9 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
   const cwd = workspace && cloudGuestOpened(threadId)
     ? ensureTaskWorkspace(bot.id, threadId)
     : groupTurnCwd(workspace, () => store.pinGroupCwd(readyGroup.id, threadId));
+  if (IDENTITY.kind === "perspicax" && roomPrincipal) {
+    await syncPluginsForTurn(roomPrincipal, internalGeneration, bot.id);
+  }
   {
     const drift = checkSoulDrift(bot.id, bot.soul ?? "", bot.soulHash ?? "");
     if (drift.drift !== Boolean(bot.soulDrift)) store.patchBot(bot.id, { soulDrift: drift.drift });
@@ -938,7 +942,7 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     })() },
     // readyBot was captured before awaited setup work; an assignment PUT in
     // that window must still reach this turn's prompt.
-    { id: "skills", label: "Skills index", text: scopedSkillsPrompt(bot, instance, roomPrincipal ?? "", { managedTools: skillDiscoveryAvailable(Boolean(integrations.agents), roomToolScope), fileAccess: Boolean(workspace), syncNative: true })?.text ?? "" },
+    { id: "skills", label: "Skills index", text: scopedSkillsPrompt(bot, instance, roomPrincipal ?? "", { managedTools: skillDiscoveryAvailable(Boolean(integrations.agents), roomToolScope), fileAccess: Boolean(workspace), syncNative: true, nativeWorkspace: workspace ? ensureTaskWorkspace(bot.id, threadId) : undefined })?.text ?? "" },
     { id: "skill-instructions", label: "Skill instructions", text: renderSkillInstructions(selectedSkills, { includeRoot: Boolean(workspace) && roomServerFiles }) },
     { id: "playbooks", label: "Playbooks", text: installedPlaybookInstructions(text, bot.playbooks) },
   ];

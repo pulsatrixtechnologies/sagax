@@ -4567,6 +4567,38 @@ describe("postResults migration and per-routine choice (Owner 2026-10-22)", () =
     expect(() => h.manager.create({ name: "Bad", prompt: "Do it", botId: "maus-1", mailAlias: "a b",
       schedule: { type: "once", at: new Date(2026, 7, 18).getTime() } })).toThrow(/mail tag/i);
   });
+
+  it("stores a routine model, snapshots it on runs, keeps it when omitted, and clears it with null (2026-11-04)", async () => {
+    const h = harness();
+    const routine = h.manager.create({ name: "R", prompt: "Do it", botId: "maus-1", model: " fast-model ",
+      schedule: { type: "once", at: new Date(2026, 7, 18).getTime() } });
+    expect(routine.model).toBe("fast-model");
+    expect(h.manager.update(routine.id, { name: "R2" })?.model).toBe("fast-model");
+    h.manager.runNow(routine.id); await h.manager.tick();
+    expect(h.manager.listRuns().find((run) => run.routineId === routine.id)?.model).toBe("fast-model");
+    // survives a reload from disk
+    expect(new RoutineManager(h.options).listRoutines().find((row) => row.id === routine.id)?.model).toBe("fast-model");
+    expect(h.manager.update(routine.id, { model: null })?.model).toBeUndefined();
+    expect(h.manager.update(routine.id, { model: "other-model" })?.model).toBe("other-model");
+    expect(h.manager.update(routine.id, { model: "" })?.model).toBeUndefined();
+    expect(() => h.manager.create({ name: "Bad", prompt: "Do it", botId: "maus-1", model: "has space",
+      schedule: { type: "once", at: new Date(2026, 7, 18).getTime() } })).toThrow(RoutineInputError);
+  });
+
+  it("asks checkModel when a routine model is chosen and refuses what it refuses (2026-11-04)", () => {
+    const h = harness();
+    const asked: string[] = [];
+    const manager = new RoutineManager({ ...h.options, file: tempFile(),
+      checkModel: (botId, model) => { asked.push(`${botId}:${model}`); return model === "off-model" ? "That model is turned off." : null; } });
+    const at = new Date(2026, 7, 18).getTime();
+    const routine = manager.create({ name: "R", prompt: "Do it", botId: "maus-1", model: "fast-model", schedule: { type: "once", at } });
+    expect(asked).toEqual(["maus-1:fast-model"]);
+    // an edit that keeps the model does not ask again
+    manager.update(routine.id, { name: "R2" });
+    expect(asked).toHaveLength(1);
+    expect(() => manager.update(routine.id, { model: "off-model" })).toThrow(/turned off/);
+    expect(manager.listRoutines()[0]?.model).toBe("fast-model");
+  });
 });
 
 describe("auto-pause after failures in a row (2026-10-26)", () => {

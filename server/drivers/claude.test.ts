@@ -1599,6 +1599,30 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(String(seen.argv[seen.argv.indexOf("--disallowedTools") + 1]).split(",")).not.toContain("Bash");
   });
 
+  it.each([false, true])("keeps the native artifact family reachable on cloud turns (compact: %s, #1990)", async (compact) => {
+    await create();
+    const dump = join(scratch, "artifacts.json");
+    process.env.FAKE_CLAUDE_DUMP = dump;
+    const { turnId } = await instance.adapter.sendTurn({
+      threadId: "t-artifact-tools", text: "Use ArtifactData to read the saved state.",
+      withholdHostTools: true, approvalMode: "full",
+      ...(compact ? { compactPrompt: { agents: { core: "default", pinned: [] }, pinned: {} } } : {}),
+    });
+    await recorder.until((event) => event.type === "turn.completed" && event.turnId === turnId);
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    const tools = seen.argv[seen.argv.indexOf("--tools") + 1].split(",");
+    const denied = seen.argv[seen.argv.indexOf("--disallowedTools") + 1].split(",");
+    for (const tool of ["Artifact", "ArtifactData", "ArtifactComments"]) {
+      expect(tools).toContain(tool);
+      expect(denied).not.toContain(tool);
+    }
+    expect(tools).toContain("ToolSearch");
+    expect(denied).toContain("Bash");
+    expect(seen.env.CLAUDE_CODE_ARTIFACT).toBe("1");
+    expect(seen.env.CLAUDE_CODE_ARTIFACT_TOOLSET).toBe("1");
+    expect(seen.env.ENABLE_TOOL_SEARCH).toBe("true");
+  });
+
   it("hands a stricter level to the running CLI so its next tool call asks (#1373)", async () => {
     const log = join(scratch, "permission-modes.log");
     await create("hang", { FAKE_CLAUDE_PERMISSION_LOG: log });
@@ -1980,7 +2004,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(seen.mcpConfig.mcpServers.agents.env.SAGAX_MERGED_TOOLS).toBe("1");
   });
 
-  it("keeps tool search off and the catalog unmerged on a compact prompt", async () => {
+  it("keeps native tool search on and the catalog unmerged on a compact prompt", async () => {
     await create(undefined, { FAKE_CLAUDE_VERSION: "2.1.284" });
     const dump = join(scratch, "compact-dump.json");
     process.env.FAKE_CLAUDE_DUMP = dump;
@@ -1991,7 +2015,7 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     } as Parameters<typeof instance.adapter.sendTurn>[0]);
     await recorder.until((e) => e.type === "turn.completed");
     const seen = JSON.parse(readFileSync(dump, "utf8"));
-    expect(seen.env.ENABLE_TOOL_SEARCH).toBe("false");
+    expect(seen.env.ENABLE_TOOL_SEARCH).toBe("true");
     expect(seen.mcpConfig.mcpServers.agents.env.SAGAX_MERGED_TOOLS).toBeUndefined();
   });
 
@@ -2945,6 +2969,19 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(seen.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS).toBe("1");
     expect(seen.argv[seen.argv.indexOf("--permission-mode") + 1]).toBe("acceptEdits");
     expect(seen.argv).not.toContain("--dangerously-skip-permissions");
+  });
+
+  it("runs a routine turn's sub-agents on its model, and a chat turn never reuses that process (2026-11-04)", async () => {
+    const dump = join(scratch, "subagent-model.json");
+    await create(undefined, { FAKE_CLAUDE_DUMP: dump });
+    const routine = await instance.adapter.sendTurn({ threadId: "t-subagent-model", text: "hi", model: "fast-model", subagentModel: "fast-model" });
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === routine.turnId);
+    const seen = JSON.parse(readFileSync(dump, "utf8"));
+    expect(seen.env.CLAUDE_CODE_SUBAGENT_MODEL).toBe("fast-model");
+    const chat = await instance.adapter.sendTurn({ threadId: "t-subagent-model", text: "again", model: "fast-model" });
+    expect(chat.reused).not.toBe(true);
+    await recorder.until((e) => e.type === "turn.completed" && e.turnId === chat.turnId);
+    expect(JSON.parse(readFileSync(dump, "utf8")).env.CLAUDE_CODE_SUBAGENT_MODEL).toBeUndefined();
   });
 
   it("lets a Bash call ask for up to ten minutes, unless the person set their own cap", async () => {

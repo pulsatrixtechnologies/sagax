@@ -71,7 +71,7 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     }
     // Slice 4: this turn's credentials (an owner key is read now).
     // (solo mode takes no extra await: its dispatch timing is unchanged)
-    const turnAccess = IDENTITY.kind === "perspicax" ? await orgTurnAccess(state.threadId, state.bot, state.instance, state.speaker, state.bot.modelSelection.model) : undefined;
+    const turnAccess = IDENTITY.kind === "perspicax" ? await orgTurnAccess(state.threadId, state.bot, state.instance, state.speaker, state.routineModel ?? state.bot.modelSelection.model) : undefined;
     if (!state.warmOnly) turnTrace(state.threadId, "access");
     // An engine slash command typed by a person (or set in a routine)
     // reaches the engine verbatim (server/harness-commands.ts); a peer hop
@@ -153,6 +153,8 @@ export function createDispatchStartTurn(host: StartTurnHost) {
       toolScope: state.toolScope,
       ...(state.guestConfined ? { guestConfined: true, confinedWhy: confinedWhy(state.threadId) } : {}),
       model: state.model,
+      // 2026-11-04: a routine's model reaches its sub-agents too (Claude).
+      ...(state.routineModel ? { subagentModel: state.routineModel } : {}),
       effort: turnEffort,
       variant: state.variant,
       // a rewound thread never resumes the abandoned branch's session

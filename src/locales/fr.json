@@ -10825,6 +10825,8 @@
   "routines.deleteWhenFinished.help": "Quand cette routine a une fin connue (une seule fois, ou jusqu'à une date), elle est retirée d'Automatisations une fois sa dernière exécution réglée. Les exécutions passées restent dans le calendrier et le journal.",
   "routines.deleteWhenFinished.willDelete": "Sera supprimée une fois terminée",
   "routines.mailAlias.label": "Mot du courriel",
+  "routines.model.botDefault": "Modèle du bot",
+  "routines.model.label": "Modèle",
   "routines.mailAlias.placeholder": "rapports",
   "routines.mailAlias.help": "Ajouté après le + de l'adresse courriel du bot. Un courriel à nom+mot@ ne réveille que cette routine. Les envois partent toujours de l'adresse du connecteur.",
   "botPanel.email.label": "Adresse courriel",
@@ -12975,6 +12977,7 @@
   "routineEditor.hint.onlyPresent": "Saute les exécutions pendant votre absence.",
   "routineEditor.hint.deleteWhenFinished": "Après la fin de sa dernière exécution.",
   "routineEditor.hint.mailAlias": "Un courriel à nom+étiquette@ réveille seulement cette routine.",
+  "routineEditor.hint.model": "Ses exécutions et leurs sous-agents utilisent ce modèle. La conversation garde le modèle du bot.",
   "routineEditor.hint.watch": "Vérifie d'abord, n'exécute que s'il y a un changement.",
   "routineWebhook.hint": "Envoyez du JSON par POST avec cet en-tête pour lancer une exécution. Le corps est transmis à la routine.",
   "routineDetail.active": "Active",
@@ -13042,6 +13045,7 @@
   "routineReadiness.engine_credits": "Le compte {engine} n’a plus de crédits (dernier refus du fournisseur : {at}). Ajoute des crédits chez le fournisseur ou choisis un autre engine pour ce bot.",
   "routineReadiness.engine_limit": "{engine} a atteint sa limite d’utilisation (reset : {until}). Attends le reset ou choisis un autre engine pour ce bot.",
   "routineReadiness.engine_signed_out": "{engine} est déconnecté pour ce bot. Reconnecte-le dans Réglages > Fournisseurs de modèles.",
+  "routineReadiness.engine_artifacts": "Cette routine a besoin de {tool}, que {engine} ne peut pas offrir avec ce compte. Choisis Claude avec une connexion par abonnement claude.ai pour ce bot; les clés API et les autres moteurs ne fournissent pas les outils Artifacts de claude.ai.",
   "routineReadiness.skill_missing": "Le skill `{skill}` ne fait pas partie des skills de ce bot. Installe son plugin pour ce bot (Connecter des apps > Sources) ou assigne-lui le skill.",
   "routineReadiness.mcp_missing": "Le serveur MCP `{server}` n’est pas connecté pour ce bot. Connecte-le dans Connecter des apps du bot.",
   "routineReadiness.perspicax_profile": "Perspicax a refusé la connexion `{profile}` de cette personne (401/403 invalid_token). Vérifie sa connexion à Perspicax.",
@@ -13063,5 +13067,8 @@
   "limitFailover.exhausted": "Limites atteintes sur {tried} : aucun autre moteur n'a pu répondre. Choisissez un autre modèle, ajoutez du crédit, ou réessayez à la réinitialisation (vers {time}).",
   "limitFailover.ownerExhausted": "Le propriétaire de ce bot a atteint ses limites sur {tried} : aucun autre moteur n'a pu répondre. Choisissez un autre modèle, ajoutez du crédit, ou réessayez à la réinitialisation (vers {time}).",
   "limitFailover.exhaustedNoTime": "Limites atteintes sur {tried} : aucun autre moteur n'a pu répondre. Choisissez un autre modèle, ajoutez du crédit, ou réessayez plus tard.",
-  "limitFailover.ownerExhaustedNoTime": "Le propriétaire de ce bot a atteint ses limites sur {tried} : aucun autre moteur n'a pu répondre. Choisissez un autre modèle, ajoutez du crédit, ou réessayez plus tard."
+  "limitFailover.ownerExhaustedNoTime": "Le propriétaire de ce bot a atteint ses limites sur {tried} : aucun autre moteur n'a pu répondre. Choisissez un autre modèle, ajoutez du crédit, ou réessayez plus tard.",
+  "routineReadiness.flow_plan": "La vérification Flow en shadow a échoué à {step} : {error}",
+  "routineReadiness.ready.flow": "Le plan Flow en shadow n’a aucun blocage connu. Lance la routine quand tu es prêt.",
+  "routineReadiness.flow_live": "Un run Flow est actif, le plan n’a pas été vérifié."
 }

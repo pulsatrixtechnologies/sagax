@@ -4,6 +4,8 @@
 // A source runs alone only when it needs no approval, checked on every run:
 //   - workspace_read, the bot's reviewed read of a text file in its own
 //     workspace (a file it keeps up to date, say stats.json);
+//   - dispatch_kpi (2026-11-04), the dispatch KPI snapshot Sagax computes
+//     from fixed Perspicax reads (dispatch-kpi.ts), with no model turn;
 //   - a Perspicax tool reviewed as read-only (PERSPICAX_READ_ONLY_TOOLS), in
 //     the name of the person the artifact belongs to, through the delegated
 //     path a routine uses;
@@ -21,6 +23,7 @@
 import { PERSPICAX_READ_ONLY_TOOLS } from "../drivers/acp/grok-read-only-tools.ts";
 import type { McpServerSpec, RemoteMcpSpec } from "../contracts.ts";
 import { RemoteMcpClient } from "../mcp/mcp-http.ts";
+import { DISPATCH_KPI_TOOL } from "./dispatch-kpi.ts";
 import { parseToolId } from "../../shared/approval-describe.ts";
 import type { Artifact } from "../../shared/artifacts.ts";
 import type { ArtifactRun } from "./artifacts.ts";
@@ -55,6 +58,9 @@ export interface ArtifactSourceDeps {
   perspicax?: {
     call(input: { artifact: Artifact; bot: ArtifactSourceBot; tool: string; args: Record<string, unknown>; signal: AbortSignal }): Promise<ToolAnswer | { error: string }>;
   };
+  /** The dispatch KPI snapshot (dispatch-kpi.ts), computed by code from
+   * Perspicax reads in the artifact owner's name; absent off Perspicax. */
+  dispatchKpi?(input: { artifact: Artifact; bot: ArtifactSourceBot; args: Record<string, unknown>; signal: AbortSignal }): Promise<ArtifactRun>;
   vm: {
     /** running: a command can go; else why it waits. */
     state(botId: string): Promise<"running" | "stopped" | "held">;
@@ -72,7 +78,8 @@ export const SOURCE_BLOCKED = {
   command: "A command refreshes alone only on the bot's own Local VM while the bot is in Approve for me or Full access, for its owner's own artifact. Ask the bot to use a read tool instead.",
   tool: "This tool needs your approval each time, so it cannot refresh alone. Allow it always for this bot, or ask the bot to use a read tool.",
   disabled: "This tool is turned off for this workspace.",
-  unknown: "This source is not one Sagax can run alone: workspace_read, a Perspicax read tool, an allowed tool of one of the bot's MCP servers, or a command on its Local VM.",
+  dispatchKpi: "dispatch_kpi reads through Perspicax: this organization server needs the person's account connection.",
+  unknown: "This source is not one Sagax can run alone: workspace_read, dispatch_kpi, a Perspicax read tool, an allowed tool of one of the bot's MCP servers, or a command on its Local VM.",
 } as const;
 
 /** stdout as JSON when it is JSON, else its text. */
@@ -105,6 +112,11 @@ export function perspicaxReadTool(tool: string): string | null {
   const stripped = tool.replace(/^mcp__[A-Za-z0-9_.-]+?__/, "");
   if (stripped !== tool && PERSPICAX_READ_ONLY_TOOLS.has(stripped)) return stripped;
   return null;
+}
+
+/** Sagax's own dispatch KPI snapshot, bare or behind the agents server. */
+export function isDispatchKpi(tool: string): boolean {
+  return tool === DISPATCH_KPI_TOOL || tool === `mcp__agents__${DISPATCH_KPI_TOOL}` || tool === `mcp__sagax__${DISPATCH_KPI_TOOL}`;
 }
 
 /** The agents catalog's own workspace_read, bare or behind its server. */
@@ -169,6 +181,11 @@ export function createArtifactSourceRunner(deps: ArtifactSourceDeps): (artifact:
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : "The file could not be read." };
       }
+    }
+
+    if (isDispatchKpi(source.tool)) {
+      if (!deps.dispatchKpi) return blocked(SOURCE_BLOCKED.dispatchKpi);
+      return deps.dispatchKpi({ artifact, bot, args: source.args, signal });
     }
 
     const perspicaxTool = perspicaxReadTool(source.tool);

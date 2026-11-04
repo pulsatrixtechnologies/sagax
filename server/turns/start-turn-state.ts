@@ -38,6 +38,8 @@ export type TurnState = {
   line: any;
   maySelectComputer: any;
   model: any;
+  /** 2026-11-04: the routine's model this turn runs on (shared/routine-model.ts), else undefined. */
+  routineModel: any;
   notice: any;
   onCall: any;
   onDispatchError: any;
@@ -198,6 +200,7 @@ export function createTurnState(init: {
     line: undefined,
     maySelectComputer: undefined,
     model: undefined,
+    routineModel: undefined,
     notice: undefined,
     onCall: undefined,
     onDispatchError: undefined,

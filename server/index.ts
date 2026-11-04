@@ -1,4 +1,5 @@
-import { checkRoutineReadiness, routineFlowSkills, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer } from "./routines/routine-readiness.ts";
+import { checkRoutineReadiness, routineEngineRefusal, routineFlowSkills, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer } from "./routines/routine-readiness.ts";
+import { routineFlowInput } from "./routines/routine-flow-input.ts";
 import { noteEngineRefusal, clearEngineRefusal } from "./engines/engine-refusals.ts";
 import { classifyRoutineFailure as readinessFailureClass } from "./routines/routine-recovery.ts";
 import { canUseMcpServer } from "../shared/tool-scope.ts";
@@ -1244,6 +1245,7 @@ import type { RoutineScopeCaller, RoutineScopeDeps, RoutineScopeFacts } from "./
 import { recordRoutineChange, recordRoutineToggle, routineToggleForViewer } from "./routines/routine-chat-events.ts";
 import { botReplyQuoteId } from "./turns/reply-to-turn.ts";
 import { isTriggerSchedule } from "../shared/routines.ts";
+import { routineTurnModel } from "../shared/routine-model.ts";
 import {
   nextOccurrence,
   PREWARM_ENGINE_LEAD_MS,
@@ -2060,6 +2062,8 @@ import {
 import { pluginMetadataCacheRoot } from "./plugins/plugin-metadata-cache.ts";
 import { pluginTurnInventory } from "./turns/plugin-turn.ts";
 import { orderedSkillDiscovery, skillDiscoveryAvailable, type DiscoveredSkill } from "./skills/skill-discovery.ts";
+import { prepareTurnSkillLinks } from "./skills/turn-skill-links.ts";
+import { routineReadinessTarget } from "./routines/routine-readiness-target.ts";
 import {
   engineServerMcp,
   personalMcpPrecheck,
@@ -2281,7 +2285,8 @@ import {
   PHONE_TOOLS_FRAME,
   phoneToolsFrameAllowed
 } from "../shared/phone-tools.ts";
-import { createArtifactStore } from "./artifacts/artifacts.ts";
+import { createArtifactStore, type ArtifactRun } from "./artifacts/artifacts.ts";
+import type { Artifact } from "../shared/artifacts.ts";
 import { createPreferenceStore } from "./people/preference-import.ts";
 import { createPreferenceImportRoutes } from "./routes/preference-import.ts";
 import { createArtifactInternalRoutes, createArtifactRoutes } from "./routes/artifacts.ts";
@@ -2289,7 +2294,8 @@ import { createBotTaskInternalRoutes, createBotTaskRoutes } from "./routes/bot-t
 import { createBotTaskStore } from "./bots/bot-task-list.ts";
 import { botTasksFrameAllowed, sameBotTaskOwner } from "../shared/bot-task-list.ts";
 import { createArtifactRefresher } from "./artifacts/artifact-refresh.ts";
-import { createArtifactSourceRunner, toolResultValue, type ToolAnswer } from "./artifacts/artifact-sources.ts";
+import { createArtifactSourceRunner, isDispatchKpi, toolResultValue, type ToolAnswer } from "./artifacts/artifact-sources.ts";
+import { createDispatchKpiService, dispatchRoutineMatches, DISPATCH_KPI_TOOL, parseDispatchKpiArgs } from "./artifacts/dispatch-kpi.ts";
 import {
   createRoutineWatchEvaluator,
   RoutineWatchStates,
@@ -10239,9 +10245,9 @@ function scopedSkillInventory(bot: BotRecord, instance: { driverKind: string } |
 /** The selected skill and plugin instructions of one turn, budgeted per
  * capability (server/capabilities/capability-prompt.ts): file engines get readable paths,
  * engines without files the whole files, read through the same checks as
- * workspace_read. `syncNative` refreshes Claude's skill links on a real turn
+ * workspace_read. `syncNative` refreshes the active engine's links on a real turn
  * only: the preview and the receipt never touch them. */
-function scopedSkillsPrompt(bot: BotRecord, instance: { driverKind: string } | null | undefined, principal: string | undefined, options: { managedTools: boolean; fileAccess: boolean; syncNative?: boolean; indexOnly?: boolean }) {
+function scopedSkillsPrompt(bot: BotRecord, instance: { driverKind: string } | null | undefined, principal: string | undefined, options: { managedTools: boolean; fileAccess: boolean; syncNative?: boolean; nativeWorkspace?: string; indexOnly?: boolean }) {
   const kind = instance?.driverKind ?? "";
   const names = new Set(personalSkillInputs(bot, principal).filter((skill) => skill.enabled && !skill.shadowed).map((skill) => skill.name));
   if (options.syncNative) syncSkillLinks(bot.id, { excludeNames: names });
@@ -10266,6 +10272,12 @@ function scopedSkillsPrompt(bot: BotRecord, instance: { driverKind: string } | n
   const plugins = scopedPluginFolders(bot, person);
   const personalRoot = skillsLibraryEnabled(cfg) && person ? personalSkills.root(person) : undefined;
   const assigned = skillsLibraryEnabled(cfg) ? (store.bot(bot.id)?.assignedSkills ?? bot.assignedSkills) : undefined;
+  if (options.syncNative && options.nativeWorkspace && engineWorksInFiles(kind)) {
+    prepareTurnSkillLinks({ driverKind: kind, workspace: options.nativeWorkspace,
+      stateRoot: join(DATA_DIR, "skill-state", bot.id, "turn-links"), rows: inventory.rows, plugins, personalRoot,
+      skills: resolvedSkillFiles(bot.id, assigned).flatMap((skill) => skill.file ? [{ name: skill.name, file: skill.file }] : []),
+    });
+  }
   let library: Array<{ name: string; file: string }> | undefined;
   const read = (row: DiscoveredSkill): string | null => {
     if (!row.path) return null;
@@ -16392,7 +16404,7 @@ const limitFailover = createLimitFailoverHost({
     if (IDENTITY.kind !== "perspicax" && (!engineProbes.size || [...engineProbes.values()].some((probe) => Date.now() - probe.at > ENGINE_PROBE_TTL_MS))) {
       await probeEngines().catch(() => {});
     }
-    const bot = store.projectBotForTask(botId, threadId);
+    const bot = threadId ? store.projectBotForTask(botId, threadId) : store.bot(botId);
     if (!bot) return [];
     const guestConfined = cloudGuestDriven(threadId) || botmailConfined(threadId);
     return autoEnginesFor(bot, (speaker ?? { origin: "person" }) as TurnSpeaker, guestConfined).map((engine) => ({
@@ -16401,7 +16413,7 @@ const limitFailover = createLimitFailoverHost({
     }));
   },
   preferred: (botId, threadId) => {
-    const bot = store.projectBotForTask(botId, threadId);
+    const bot = threadId ? store.projectBotForTask(botId, threadId) : store.bot(botId);
     const orgDefault = cfg.newBotDefaults?.profile.modelSelection ?? cfg.defaultModelSelection;
     return [...botRecoveryBackups(bot, cfg), ...(orgDefault ? [{ instanceId: orgDefault.instanceId, model: orgDefault.model }] : [])];
   },
@@ -16412,6 +16424,11 @@ const limitFailover = createLimitFailoverHost({
   payer: (botId, speaker) => {
     const bot = store.bot(botId);
     return bot ? autoPayerKey(bot, (speaker ?? { origin: "person" }) as TurnSpeaker) : "server";
+  },
+  refusal: (botId, threadId, speaker, instanceId) => {
+    const bot = threadId ? store.projectBotForTask(botId, threadId) : store.bot(botId);
+    const engine = bot && routineEngineForBot(bot, (speaker ?? { origin: "person" }) as TurnSpeaker, instanceId);
+    return engine ? routineEngineRefusal(engine, Date.now()) : undefined;
   },
   ownerPays: (botId, speaker) => {
     const bot = store.bot(botId);
@@ -21293,6 +21310,53 @@ function activeRoutineRunForThread(threadId: string): RoutineRun | null {
   return run && ["running", "waiting"].includes(run.status) ? run : null;
 }
 
+/** 2026-11-04 (shared/routine-model.ts): the models a live engine lists. */
+function engineModelIds(instance: { models: { default?: string; options: Array<{ id: string }> } }): string[] {
+  const ids = instance.models.options.map((option) => option.id);
+  return instance.models.default && !ids.includes(instance.models.default) ? [instance.models.default, ...ids] : ids;
+}
+
+/** Why `model` cannot be a routine model of this bot, or null. */
+function routineModelRefusal(botId: string, model: string): string | null {
+  const bot = store.bot(botId);
+  if (!bot) return null;
+  const instance = registry.get(bot.modelSelection.instanceId);
+  if (!instance) return null;
+  const offered = engineModelIds(instance);
+  if (offered.length && !offered.includes(model)) return `Model "${model}" is not offered by this bot's engine (${engineDisplayName(instance)}).`;
+  return modelSwitchRefusal(instance.instanceId, model, effectiveBotOwner(bot)) ?? null;
+}
+
+const routineModelNoticed = new Set<string>();
+
+/** The routine model this turn runs on: the run's model on the bot's own
+ * engine, unless a limit takeover moved the thread. A model that cannot
+ * apply is ignored with one line in the run, once. */
+function routineModelForTurn(botId: string, threadId: string, instance: { instanceId: string; models: { default?: string; options: Array<{ id: string }> } }): { model: string } | null {
+  const run = activeRoutineRunForThread(threadId);
+  if (!run?.model || run.botId !== botId) return null;
+  const bot = store.bot(botId);
+  if (!bot) return null;
+  const decided = routineTurnModel({
+    model: run.model,
+    botInstanceId: bot.modelSelection.instanceId,
+    turnInstanceId: instance.instanceId,
+    takenOver: Boolean(limitFailoverStore.failover(botId, threadId)),
+    offered: engineModelIds(instance),
+    refusal: modelSwitchRefusal(instance.instanceId, run.model, effectiveBotOwner(bot)),
+  });
+  if (decided && "ignored" in decided) {
+    if (!routineModelNoticed.has(run.id)) {
+      routineModelNoticed.add(run.id);
+      if (routineModelNoticed.size > 500) routineModelNoticed.delete(routineModelNoticed.values().next().value!);
+      console.info(`[routine-model] ${threadId}: ${decided.ignored}`);
+      store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: `notice: ${decided.ignored}`, ok: true } });
+    }
+    return null;
+  }
+  return decided;
+}
+
 function routineDelegationCanResume(threadId: string, routineRunId?: string): boolean {
   return !routineRunId || activeRoutineRunForThread(threadId)?.id === routineRunId;
 }
@@ -24609,21 +24673,29 @@ const directChatOf = (botId: string, threadId: string): boolean => {
   return source !== null && !source.group;
 };
 /** Resolve the same worker Auto pick and account plan as routine startTurn. */
-function routineReadinessEngine(routine: ReadinessRoutine, run: ReadinessRun) {
-  const original = run.threadId ? botForThread(run.botId, run.threadId) : store.bot(run.botId);
-  if (!original) return undefined;
+function routineReadinessBot(routine: ReadinessRoutine, run: ReadinessRun) {
   const speaker = routineRunSpeaker({ botId: run.botId, runAs: run.runAs ?? routine.runAs });
-  const pick = autoPickForTurn({ bot: original, threadId: run.threadId ?? "", speaker, role: "worker", text: run.prompt ?? routine.prompt });
-  const bot = pick ? { ...original, modelSelection: pick.pick.selection } : original;
-  const instance = registry.get(bot.modelSelection.instanceId);
+  return routineReadinessTarget(run, {
+    bot: (id, threadId) => threadId ? botForThread(id, threadId) : store.bot(id),
+    pick: (bot) => autoPickForTurn({ bot, threadId: run.threadId ?? "", speaker, role: "worker", text: run.prompt ?? routine.prompt })?.pick.selection,
+  });
+}
+function routineEngineForBot(bot: BotRecord, speaker: TurnSpeaker, instanceId = bot.modelSelection.instanceId) {
+  const instance = registry.get(instanceId);
   if (!instance) return undefined;
   const plan = resolveEngineAccess(orgEngineInput(bot, instance, speaker));
   const account = refusalAccount(plan.ok ? plan.via : "subscription", plan.payerPrincipalId, turnSlotFor(bot, instance));
   const signedIn = IDENTITY.kind === "perspicax" ? (!plan.ok ? false : plan.via === "subscription" ? true : undefined)
     : engineProbes.get(instance.instanceId)?.ready;
   return { engine: instance.instanceId, name: engineDisplayName(instance), account, signedIn,
+    driver: instance.driverKind, ...(plan.ok ? { accessVia: plan.via } : {}),
+    keyBacked: driverKeyBacked(cfg, instance.driverKind, instance.instanceId) || keyOnlyInstance(instance.instanceId),
     ...(IDENTITY.kind !== "perspicax" ? { signedInAt: engineProbes.get(instance.instanceId)?.at } : {}),
     ...(!plan.ok ? { detail: plan.cause ?? plan.reason } : {}) };
+}
+function routineReadinessEngine(routine: ReadinessRoutine, run: ReadinessRun) {
+  const bot = routineReadinessBot(routine, run);
+  return bot ? routineEngineForBot(bot, routineRunSpeaker({ botId: run.botId, runAs: run.runAs ?? routine.runAs })) : undefined;
 }
 function refusalAccount(via: string, principal?: string, slot = "primary"): string {
   return JSON.stringify([via === "owner-key" || via === "speaker-key" ? "key" : via, principal ?? "organization", slot]);
@@ -24635,10 +24707,16 @@ const routineReadinessDeps: RoutineReadinessDeps = {
     return JSON.stringify([engine, bot?.modelSelection, bot?.mcpServers, bot?.toolScope, bot?.assignedSkills, bot?.computer, bot?.remoteHosts]);
   },
   engine: (routine, run) => routineReadinessEngine(routine, run),
-  skills: (_routine, run) => {
-    const bot = store.bot(run.botId);
+  backup: async (routine, run, primary) => {
+    const speaker = routineRunSpeaker({ botId: run.botId, runAs: run.runAs ?? routine.runAs });
+    const backup = await limitFailover.backupFor(run.botId, run.threadId ?? "", speaker, primary.engine);
+    const bot = run.threadId ? botForThread(run.botId, run.threadId) : store.bot(run.botId);
+    return backup && bot ? routineEngineForBot({ ...bot, modelSelection: backup }, speaker) : undefined;
+  },
+  skills: (routine, run) => {
+    const bot = routineReadinessBot(routine, run);
     if (!bot) return undefined;
-    const inventory = scopedSkillInventory(bot, registry.get(bot.modelSelection.instanceId), run.runAs);
+    const inventory = scopedSkillInventory(bot, registry.get(bot.modelSelection.instanceId), run.runAs ?? routine.runAs);
     // Partial discovery cannot prove that an unlisted skill is absent.
     return inventory.incomplete ? undefined : inventory.rows.filter(row => row.enabled && row.kind === "skill").map(row => row.name);
   },
@@ -24664,6 +24742,13 @@ const routineReadinessDeps: RoutineReadinessDeps = {
     const principal = effectiveRunAs(run);
     if (!store.bot(run.botId) || !principal) return undefined;
     return perspicaxMcp.probeReadiness(principal, signal);
+  },
+  flow: async (routine, run, signal) => {
+    if (!perspicaxMcp) throw new Error("Perspicax Flow readiness is unavailable on this server.");
+    const bot = store.bot(run.botId);
+    const principal = effectiveRunAs({ ...run, runAs: run.runAs ?? routine.runAs });
+    if (!bot || !principal) throw new Error("Perspicax routine person or bot is unavailable.");
+    return perspicaxMcp.probeFlowReadiness(principal, bot.id, routineFlowInput(run.prompt ?? routine.prompt), signal);
   },
   computers: async (routine, run, signal) => {
     const bot = store.bot(run.botId);
@@ -24698,7 +24783,13 @@ const routineReadinessDeps: RoutineReadinessDeps = {
 };
 routines = new RoutineManager({
   readiness: (routine, run, mode) => checkRoutineReadiness(routine, run, routineReadinessDeps, mode),
+  prepareTurn: async (run) => {
+    if (!run.threadId) return;
+    const bot = routineReadinessBot({ botId: run.botId, prompt: run.prompt ?? "" }, run);
+    await limitFailover.beforeTurn(run.botId, run.threadId, routineRunSpeaker(run), bot?.modelSelection);
+  },
   engineForRun: (run) => routineReadinessEngine({ botId: run.botId, prompt: run.prompt ?? "" }, run),
+  checkModel: (botId, model) => routineModelRefusal(botId, model),
   botName: (botId) => store.bot(botId)?.name,
   evaluateWatch: (routine, watch) => routineWatchEvaluator(routine, watch),
   forgetWatch: (routineId) => routineWatchStates.forget(routineId),
@@ -24713,9 +24804,13 @@ routines = new RoutineManager({
     const person = effectiveRunAs({ botId: routine.botId, ...(routine.runAs ? { runAs: routine.runAs } : {}) });
     return (person && isPrincipalId(person) ? botSettings.person(person).timeZone : null) ?? undefined;
   },
-  emit: (payload) => broadcast(payload.kind === "routine" && payload.routine && typeof payload.routine === "object"
-    ? { ...payload, routine: routineOnWire(payload.routine as Routine) }
-    : payload),
+  emit: (payload) => {
+    // 2026-11-04: a dispatch pass refreshes its KPI dashboard, no model turn
+    if (payload.kind === "routine.run" && payload.run && typeof payload.run === "object") refreshDispatchKpiAfterRun(payload.run as RoutineRun);
+    broadcast(payload.kind === "routine" && payload.routine && typeof payload.routine === "object"
+      ? { ...payload, routine: routineOnWire(payload.routine as Routine) }
+      : payload);
+  },
   ...(IDENTITY.kind === "perspicax" ? {
     admit: routineAdmission,
     memoryHint: routineMemoryHint,
@@ -31075,10 +31170,22 @@ ROUTES.push(createMeetingRoutes({
  * delegation (speakerOrigin owner-routine). The relay applies the MCP
  * permission guard; the tokens end with the call. */
 async function perspicaxReadAlone(input: { botId: string; principalId: string; threadId: string; tool: string; args: Record<string, unknown>; clientName: string }): Promise<ToolAnswer | { error: string }> {
+  const answer = await perspicaxSessionAlone(input, (call) => call(input.tool, input.args));
+  return answer;
+}
+/** Several Perspicax calls in one session with nobody there (2026-11-04:
+ * the dispatch KPI snapshot, which switches identity first): same
+ * delegation and guard as perspicaxReadAlone, one initialize, the tokens
+ * end with `work`. The account's fixed connection exposes every role the
+ * person holds; an explicit identity_switch remains part of `work`. */
+async function perspicaxSessionAlone<T>(
+  input: { botId: string; principalId: string; threadId: string; clientName: string },
+  work: (call: (tool: string, args: Record<string, unknown>) => Promise<ToolAnswer | { error: string }>) => Promise<T>,
+): Promise<T | { error: string }> {
   const mcp = perspicaxMcp;
   const live = store.bot(input.botId);
   if (!mcp || !live) return { error: "Perspicax is not available to this bot." };
-  const { threadId, tool, args } = input;
+  const { threadId } = input;
   const generation = randomUUID();
   try {
     const plan = await mcp.prepareTurn({
@@ -31093,12 +31200,61 @@ async function perspicaxReadAlone(input: { botId: string; principalId: string; t
     const relay = (frame: Record<string, unknown>) => mcp.relay({ threadId, generation, botId: live.id, frame });
     await relay({ jsonrpc: "2.0", id: "artifact-init", method: "initialize", params: { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: input.clientName, version: serverVersion() } } });
     await relay({ jsonrpc: "2.0", method: "notifications/initialized" });
-    const answer = await relay({ jsonrpc: "2.0", id: "artifact-call", method: "tools/call", params: { name: tool, arguments: args } });
-    const body = answer.body as { error?: { message?: unknown }; result?: unknown } | undefined;
-    if (!body || body.error) return { error: typeof body?.error?.message === "string" ? body.error.message : "Perspicax refused the call." };
-    return toolResultValue(body.result);
+    let sequence = 0;
+    return await work(async (tool, args) => {
+      sequence += 1;
+      const answer = await relay({ jsonrpc: "2.0", id: `artifact-call-${sequence}`, method: "tools/call", params: { name: tool, arguments: args } });
+      const body = answer.body as { error?: { message?: unknown }; result?: unknown } | undefined;
+      if (!body || body.error) return { error: typeof body?.error?.message === "string" ? body.error.message : "Perspicax refused the call." };
+      return toolResultValue(body.result);
+    });
   } finally {
     await mcp.endGeneration(threadId, generation).catch(() => {});
+  }
+}
+// The dispatch KPI snapshot (server/artifacts/dispatch-kpi.ts): computed by
+// code when its dashboard opens and after each dispatch routine's run, in
+// the artifact owner's name, through a short cache; written back to the
+// bot's docs/dispatch-kpi.md when its numbers change.
+const dispatchKpi = createDispatchKpiService({
+  session: ({ botId, principalId, key }, work) => perspicaxSessionAlone({ botId, principalId, threadId: key, clientName: "Sagax dispatch KPI" }, work),
+  readDoc: (botId, path) => readWorkspaceText(botId, path).text,
+  writeDoc: (botId, path, text) => {
+    const written = updateDoc(botId, { action: "write", path, text }, { actor: "upkeep", via: DISPATCH_KPI_TOOL });
+    if (!written.ok) throw new Error(written.error);
+  },
+  log: (line) => console.warn(line),
+});
+/** Artifacts whose next dispatch_kpi run skips the cache (a dispatch pass
+ * just changed the journal). */
+const dispatchKpiForced = new Set<string>();
+const dispatchKpiRefreshedRuns = new Set<string>();
+async function runDispatchKpiSource(artifact: Artifact, args: Record<string, unknown>): Promise<ArtifactRun> {
+  const live = store.bot(artifact.botId);
+  if (!live) return { ok: false, blocked: true, error: "The bot that saved this artifact is gone." };
+  const principalId = artifact.ownerPrincipalId ?? effectiveBotOwner(live);
+  const personZone = isPrincipalId(principalId) ? botSettings.person(principalId).timeZone : null;
+  const parsed = parseDispatchKpiArgs(args, personZone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+  if (!parsed.ok) return { ok: false, error: parsed.error };
+  const force = dispatchKpiForced.delete(artifact.id);
+  const result = await dispatchKpi.snapshot({ botId: live.id, principalId, args: parsed.value, force });
+  return result.ok ? { ok: true, value: result.value } : { ok: false, error: result.error };
+}
+/** After a dispatch routine's run: refresh every dispatch_kpi artifact of
+ * its bot whose refresh_after names that routine, past the cache. */
+function refreshDispatchKpiAfterRun(run: RoutineRun): void {
+  if (run.status !== "completed" && run.status !== "failed") return;
+  if (!run.botId || dispatchKpiRefreshedRuns.has(run.id)) return;
+  dispatchKpiRefreshedRuns.add(run.id);
+  if (dispatchKpiRefreshedRuns.size > 500) dispatchKpiRefreshedRuns.delete(dispatchKpiRefreshedRuns.values().next().value!);
+  for (const artifact of artifactStore.all()) {
+    if (artifact.botId !== run.botId || artifact.source?.kind !== "tool" || !isDispatchKpi(artifact.source.tool)) continue;
+    const parsed = parseDispatchKpiArgs(artifact.source.args);
+    if (!parsed.ok || !dispatchRoutineMatches(run.routineName ?? "", parsed.value.refreshAfter)) continue;
+    dispatchKpiForced.add(artifact.id);
+    void artifactRefresher.refreshNow(artifact.id).catch((error: unknown) => {
+      console.warn(`[dispatch-kpi] refresh after ${run.routineName} failed: ${error instanceof Error ? error.message : "error"}`);
+    });
   }
 }
 // Artifacts in the Files tab and the palette (server/routes/artifacts.ts).
@@ -31108,6 +31264,8 @@ async function perspicaxReadAlone(input: { botId: string; principalId: string; t
 const artifactRefresher = createArtifactRefresher({
   store: artifactStore,
   log: (line) => console.warn(line),
+  // dispatch_kpi keeps its own cache: run it as soon as the dashboard opens
+  refreshOnOpen: (artifact) => artifact.source?.kind === "tool" && isDispatchKpi(artifact.source.tool),
   run: createArtifactSourceRunner({
     bot: (botId) => {
       const bot = store.bot(botId);
@@ -31128,6 +31286,7 @@ const artifactRefresher = createArtifactRefresher({
     },
     toolDisabled: (server, tool) => Boolean(mcpDisabledTools(cfg)[server]?.includes(tool)),
     workspaceRead: (botId, path) => readWorkspaceText(botId, path).text,
+    ...(IDENTITY.kind === "perspicax" ? { dispatchKpi: ({ artifact, args }) => runDispatchKpiSource(artifact, args) } : {}),
     vm: {
       state: async (botId) => {
         if (botComputerControlSnapshot(botId).held) return "held";
@@ -46067,6 +46226,7 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   mountPersonalMcp,
   mountPluginMcp,
   mountUserSandbox,
+  syncPluginsForTurn,
   myChromePromptFor,
   namesEngine,
   noteBotRead,
@@ -46444,6 +46604,7 @@ const startTurnRunner = createStartTurn({
   mountPersonalMcp,
   mountPluginMcp,
   mountUserSandbox,
+  syncPluginsForTurn,
   myChromePromptFor,
   namedTeammates,
   namesEngine,
@@ -46598,6 +46759,7 @@ const startTurnRunner = createStartTurn({
   turnContextBuckets,
   turnHolder,
   turnModelRequested,
+  routineModelForTurn,
   turnModelSwitches,
   turnNetworkProxy,
   turnOrigin,

@@ -11,7 +11,7 @@ import { ARTIFACT_LIMITS, type Artifact } from "../../shared/artifacts.ts";
 const dirs: string[] = [];
 afterEach(() => { for (const dir of dirs.splice(0)) void removeTempDir(dir); });
 
-function setup(answer: (artifact: Artifact) => Promise<ArtifactRun> | ArtifactRun = () => ({ ok: true, value: { n: 1 } })) {
+function setup(answer: (artifact: Artifact) => Promise<ArtifactRun> | ArtifactRun = () => ({ ok: true, value: { n: 1 } }), extra: { refreshOnOpen?: (artifact: Artifact) => boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "omb-artifact-refresh-"));
   dirs.push(dir);
   let clock = 1_000_000;
@@ -21,6 +21,7 @@ function setup(answer: (artifact: Artifact) => Promise<ArtifactRun> | ArtifactRu
     store,
     now: () => clock,
     run: async (artifact) => { runs.push(artifact.id); return answer(artifact); },
+    ...extra,
   });
   const make = (fields: Record<string, unknown> = {}) => {
     const made = store.create("bot-a", "t1", { title: "T", html: "<p>", source: { kind: "tool", tool: "srv__stats" }, interval_seconds: 60, ...fields });
@@ -119,5 +120,23 @@ describe("artifact refresher", () => {
     store.remove(made.artifact.id);
     finish({ ok: true, value: 1 });
     expect(await pending).toBeNull();
+  });
+
+  it("runs a refresh-on-open source as soon as its artifact opens, once per opening", async () => {
+    const { refresher, runs, make, advance } = setup(undefined, { refreshOnOpen: (artifact) => artifact.source?.kind === "tool" && artifact.source.tool === "dispatch_kpi" });
+    const kpi = make({ source: { kind: "tool", tool: "dispatch_kpi", args: { place: "team:a" } }, interval_seconds: 300 });
+    const other = make();
+    refresher.watch([kpi.id, other.id]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(runs).toEqual([kpi.id]);
+    // the lease is renewed while open: no new run
+    refresher.watch([kpi.id]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(runs).toEqual([kpi.id]);
+    // closed long enough for the lease to end, then opened again
+    advance(120_000);
+    refresher.watch([kpi.id]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(runs).toEqual([kpi.id, kpi.id]);
   });
 });

@@ -28,6 +28,8 @@ import type { ExchangeResult } from "./perspicax-link.ts";
 import { PERSPICAX_READ_ONLY_TOOLS } from "../drivers/acp/grok-read-only-tools.ts";
 import { executionKey, WriteOnce } from "../write-once.ts";
 import { PerspicaxIdentity, identityFailureReason, identityLapsed, identityValue, type IdentityFailure } from "./perspicax-identity.ts";
+import type { RoutineFlowInput } from "../routines/routine-flow-input.ts";
+import type { ReadinessFlow } from "../routines/routine-readiness.ts";
 
 export type PerspicaxUnavailableReason = "not_held" | "no_session" | "unreachable" | "rate_limited" | "no_delegation" | "unknown_speaker";
 
@@ -784,6 +786,103 @@ export class PerspicaxMcp {
         void link.revokeExchanged(token).catch(() => {});
       }
     }
+  }
+
+  /** Shadow the first Flow plan on a private account connection backed by
+   * the run-as person's routine delegation. Flow is supplied by the active
+   * organization pack, never by a bot profile or a stored role choice. */
+  async probeFlowReadiness(principalId: string, botId: string, input: RoutineFlowInput, signal: AbortSignal): Promise<ReadinessFlow> {
+    const link = this.options.link();
+    const subject = this.options.subjectOf(principalId);
+    if (!link || !subject || subject.disabled || subject.iss !== this.options.issuer) throw new Error("Perspicax routine access is unavailable.");
+    signal.throwIfAborted();
+    const source = await this.subjectFor("delegation", principalId, subject);
+    if (!source.ok) throw new Error("Perspicax routine delegation is unavailable.");
+    const exchanged = await link.exchangeToken(source.token);
+    if (!exchanged.ok) throw new Error(`Perspicax routine account exchange failed: ${exchanged.error}`);
+    let session: string | null = null;
+    let finish = false;
+    let runId: string | undefined;
+    let result: ReadinessFlow | undefined;
+    let problem: unknown;
+    const rpc = async (method: string, params: Json, callSignal = signal): Promise<Json> => {
+      callSignal.throwIfAborted();
+      const id = `sagax-flow-check-${++this.nativeCalls}`;
+      const response = await this.fetcher(link.mcpEndpoint(), { method: "POST", redirect: "error", signal: callSignal,
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${exchanged.token}`, ...(session ? { "mcp-session-id": session } : {}) },
+        body: JSON.stringify({ jsonrpc: "2.0", ...(method === "notifications/initialized" ? {} : { id }), method, params }) });
+      session = response.headers.get("mcp-session-id") ?? session;
+      const text = await response.text();
+      if (!response.ok) throw new Error(`Perspicax Flow check HTTP ${response.status}`);
+      if (method === "notifications/initialized") return {};
+      const body = parseMcpBody(text, id);
+      if (!isObject(body)) throw new Error("Perspicax Flow check returned an invalid MCP response.");
+      return body;
+    };
+    const call = async (command: string, args: Json, callSignal = signal): Promise<{ value: unknown; isError: boolean }> => {
+      const body = await rpc("tools/call", { name: "flow_run", arguments: { command, args } }, callSignal);
+      if (isObject(body.error)) return { value: body.error, isError: true };
+      if (!isObject(body.result)) throw new Error("Perspicax Flow check returned no tool result.");
+      const tool = body.result;
+      let value: unknown = tool.structuredContent;
+      if (value === undefined && Array.isArray(tool.content)) {
+        const block = tool.content.find(block => isObject(block) && block.type === "text");
+        if (isObject(block) && typeof block.text === "string") {
+          try { value = JSON.parse(block.text); } catch { value = block.text; }
+        }
+      }
+      if (value === undefined) throw new Error("Perspicax Flow check returned an empty tool result.");
+      return { value, isError: tool.isError === true };
+    };
+    const failure = (answer: { value: unknown; isError: boolean }, step: string): ReadinessFlow | undefined => {
+      const value = isObject(answer.value) ? answer.value : {};
+      const output = isObject(value.output) ? value.output : value;
+      if (value.reason === "runner_unavailable") throw new Error("The Flow runner is unavailable.");
+      if (!answer.isError && value.ok !== false && output.ok !== false && !output.error && ![value.status, output.status].some(status => ["blocked", "failed", "error"].includes(String(status)))) {
+        if (value.status !== "ok" && value.ok !== true) throw new Error("Perspicax Flow check returned an invalid engine result.");
+        return undefined;
+      }
+      const error = isObject(output.error) ? output.error : output;
+      const code = error.code ?? output.error ?? value.reason ?? value.code ?? value.status ?? "flow_error";
+      const message = error.message ?? output.detail ?? value.detail ?? (typeof value.output === "string" ? value.output : typeof answer.value === "string" ? answer.value : "");
+      return { step, error: `${typeof code === "object" ? "flow_error" : code} ${message}`.trim() };
+    };
+    try {
+      await rpc("initialize", { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: `Pulsa Bot (${botId})`, version: this.options.version } });
+      await rpc("notifications/initialized", {});
+      const listed = await rpc("tools/list", {});
+      if (!isObject(listed.result) || !Array.isArray(listed.result.tools)) throw new Error("Perspicax Flow tools could not be listed.");
+      if (!listed.result.tools.some(tool => isObject(tool) && tool.name === "flow_run")) {
+        result = { step: "tools/list", error: "tool_missing flow_run is not available on this account connection." };
+      } else {
+        finish = true;
+        const init = await call("run.init", { shadow: true, ...(input.routine ? { routine: input.routine } : {}) });
+        const value = isObject(init.value) ? init.value : {};
+        if (value.reason === "already_running" || value.code === "already_running") {
+          finish = false;
+          result = { live: true };
+        } else {
+          runId = typeof value.run_id === "string" ? value.run_id : undefined;
+          if (value.status === "blocked" || value.status === "failed" || value.ok === false || init.isError) finish = false;
+          result = failure(init, "run.init");
+          if (result) finish = false; // A refused init acquired no lease.
+          else result = failure(await call("plan", { ...input.plan, ...(runId ? { run_id: runId } : {}) }), "plan") ?? {};
+        }
+      }
+    } catch (error) { problem = error; }
+    finally {
+      if (finish) {
+        try {
+          // A timed-out probe still closes its run with a fresh cleanup signal.
+          const closed = failure(await call("run.finish", runId ? { run_id: runId } : {}, AbortSignal.timeout(1_000)), "run.finish");
+          if (!result?.error && closed) result = closed;
+        } catch (error) { if (!result?.error) problem ??= error; }
+      }
+      if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${exchanged.token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(() => {});
+      void link.revokeExchanged(exchanged.token).catch(() => {});
+    }
+    if (problem) throw problem;
+    return result ?? { step: "tools/list", error: "tool_missing flow_run is not available on this account connection." };
   }
 
   /** Exchange the speaker's access for the account's one main connection

@@ -21,6 +21,72 @@ withdraws its notice and removes the source backlink. A late model review
 re-reads the live address and falls back to the original execution thread.
 Verification: `docs/verification/peer-approvals.md`.
 
+## Routine model override (2026-11-04)
+
+`Routine.model` (`shared/routine-model.ts`) is the model its runs use on the
+bot's own engine; absent means the bot's model. Runs snapshot it
+(`RoutineRun.model`). `routineModelForTurn` (server/index.ts) applies it per
+turn in `start-turn-prepare-admit.ts`, never on the thread, so chat keeps the
+bot's model. A limit takeover (a failover row for the thread) or another
+engine wins; a model the engine does not offer or that is turned off is
+ignored with one `notice:` row per run. Claude turns pass `subagentModel`,
+which sets `CLAUDE_CODE_SUBAGENT_MODEL` and is part of the spawn contract.
+Writes: POST/PATCH `/api/routines` with `model` (null or "" clears), and the
+`model` field of `propose_routine` / `propose_routine_action`; `checkModel`
+refuses a model the bot's engine does not list. Tests:
+`shared/routine-model.test.ts`, `routines.test.ts`, `claude.test.ts`,
+`RoutineCalendarPage.test.ts`.
+
+## Flow routine shadow readiness (#1991, 2026-11-04)
+
+Flow readiness calls `flow_run` on the account's main Perspicax connection
+with the run-as person's routine delegation. It never selects a bot profile
+or identity. It opens a
+shadow run, checks the first plan with the prompt's explicit server inputs,
+then finishes its run in `finally`, with an independent cleanup signal.
+An `already_running` answer keeps the live lease and reports that the plan
+was not checked. Actual Flow refusals are `flow_plan`; transport errors and
+timeouts remain `probe_error`, passing in run mode. The Flow probe runs
+beside the fast probes with its own 45-second budget and a per-routine,
+per-input cache. Tests: `perspicax-flow-readiness.test.ts`,
+`routine-flow-input.test.ts`, `routine-readiness.test.ts`,
+`routine-reliability.test.ts`.
+
+## Routine readiness and failover (#1986, 2026-11-04)
+
+Routine pre-flight uses `limitFailover.backupFor` to check the same backup
+order and access rules as dispatch. Account refusals stay live outside the
+probe cache. `RoutineManager.prepareTurn` applies the failover before
+capturing the run's engine account, so a backup's success never clears the
+primary's refusal. Credits keep the 30-minute refusal TTL, including in the
+failover store; a thread returns through the existing reset path.
+Tests: `routine-readiness.test.ts`, `routine-reliability.test.ts`,
+`limit-failover-host.test.ts`.
+
+## Skills follow the dispatched engine (#1987, 2026-11-04)
+
+Real turns project the scoped inventory into their private task folder's
+native skill directories (`server/skills/turn-skill-links.ts`), including
+organization Flow, personal and bot plugins on a limit backup. Claude keeps
+its native plugin loader; other file engines retain the same prompt paths
+alongside native discovery. Organization turns await the selected plugin
+copies in the person's environment before dispatch, on every engine.
+Readiness resolves the thread override and Auto choice for both the engine
+and skill probes (`server/routines/routine-readiness-target.ts`). Previews
+and receipts remain reads. Regressions: `turn-skill-links.test.ts` and
+`start-turn-computer-workspace.test.ts` (temporary files and fake dispatch).
+
+## Native Claude artifact tools (#1990, 2026-11-04)
+
+Organization Claude turns keep `Artifact`, `ArtifactData` and `ArtifactComments`
+in `CLAUDE_ORG_TOOLS`, with no host deny on their parent. The driver opts print
+sessions into `CLAUDE_CODE_ARTIFACT` and `CLAUDE_CODE_ARTIFACT_TOOLSET` by default.
+Native ToolSearch remains available on compact turns; their Sagax MCP directory
+stays compact. Explicit engine settings and Claude account eligibility still
+apply. Routine readiness uses the resolved driver and payer access to explain
+artifact dependencies on API accounts or another engine before creating a task.
+Evidence and configuration matrix: `docs/verification/claude-artifacts.md`.
+
 ## Desktop store subscriptions
 
 Shell selects routing and chrome; BotSurface and GroupSurface subscribe to

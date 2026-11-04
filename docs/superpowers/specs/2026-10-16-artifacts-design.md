@@ -95,6 +95,22 @@ Runner rules (`server/artifacts/artifact-sources.ts`), checked before every run
 - `workspace_read`: the bot's reviewed read of a text file in its own
   workspace (a JSON file it keeps up to date), through `readWorkspaceText`,
   which refuses a path outside the workspace, a link or a binary file.
+- `dispatch_kpi` (2026-11-04, `server/artifacts/dispatch-kpi.ts`): the
+  dispatch KPI snapshot Sagax computes itself, with no model turn, from
+  fixed read-only Perspicax calls in the artifact owner's name, in one
+  session: `identity_switch` to `args.profile`, `memory_find` of the team
+  journal (today, yesterday) and of the lessons tag, `flow`
+  `journal_summary` / `journal_read` (lease-free; null with a reason when
+  Flow does not serve them, never 0), then `cw_psa_query` `calculateSla`
+  and `service.tickets` by id for the tickets the journal cites. Args:
+  `place` (team:<id>, required), `profile`, `time_zone`, `journal_tag`,
+  `lessons_tag`, `lessons_limit`, `board`, `doc` (default
+  `docs/dispatch-kpi.md`, rewritten only when the numbers change),
+  `refresh_after` (routine name prefixes, default `morning-dispatch`,
+  `dispatch`). It runs as soon as the artifact opens (a new lease, last run
+  older than 30 s) and after every completed or failed run of a routine of
+  the same bot named by `refresh_after`, past the cache; otherwise a
+  3 minute cache answers repeated opens.
 - Perspicax tool: only the reviewed read-only list
   (`PERSPICAX_READ_ONLY_TOOLS`, e.g. `cw_psa_query`), in the name of the
   artifact's owner (else the bot's owner), through the same delegated path a

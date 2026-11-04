@@ -351,17 +351,27 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     await waitFor(async () => (await api("GET", "/api/org", alice)).body.settings?.orgKeyConfigured === false);
     expect((await api("POST", `/api/bots/${shared.id}/direct-grants`, alice, { userId: bobId })).status).toBe(200);
     const bob = await signIn(BOB);
+    await waitFor(async () => {
+      const engine = (await api("GET", "/api/me/engines", bob)).body.engines.find((entry: { instanceId: string }) => entry.instanceId === "claude");
+      return engine?.orgKey === false && engine.orgKeyNotGiven !== true && engine.myTurns === "none";
+    });
+    // Access failures are deduplicated in a conversation. Keep this missing-
+    // credential case separate from the earlier engine-policy refusals.
+    const conversation = await api("POST", `/api/bots/${shared.id}/tasks`, bob, { title: "Missing organization credential" });
+    expect(conversation.status, conversation.text).toBe(201);
+    const threadId = conversation.body.task.threadId as string;
     const aliceStream = await openStream(alice);
     const bobStream = await openStream(bob);
     const before = readFileSync(dump, "utf8");
-    const sent = await api("POST", `/api/bots/${shared.id}/messages`, bob, { text: "no key now" });
+    const sent = await api("POST", `/api/bots/${shared.id}/messages`, bob, { threadId, text: "no key now" });
     expect(sent.status, sent.text).toBe(202);
     const card = await waitFor(async () => {
-      const bot = (await botsOf(bob)).find((b) => b.id === shared.id);
-      return bot?.messages.find((m) => m.kind === "access") ?? null;
+      const messages = (await api("GET", `/api/threads/${threadId}/messages`, bob)).body.messages as Array<{ kind: string; access?: unknown }>;
+      return messages.find((message) => message.kind === "access") ?? null;
     });
-    // bob spoke: the card is his to act on (his subscription, his key)
-    expect(card.access).toMatchObject({ reason: "no_access", engine: "Claude", botId: shared.id, payer: "speaker", payerPrincipalId: bobId, cause: "server_engine_not_allowed", subscriptionSignIn: true, keysUrl: `${idp.issuer}/console/credentials?kind=model` });
+    // Bob's server-engine grant was restored above. The missing credential,
+    // rather than a policy refusal, is his to fix (his subscription, his key).
+    expect(card.access).toMatchObject({ reason: "no_access", engine: "Claude", botId: shared.id, payer: "speaker", payerPrincipalId: bobId, cause: "no_credentials", subscriptionSignIn: true, keysUrl: `${idp.issuer}/console/credentials?kind=model` });
     expect(readFileSync(dump, "utf8")).toBe(before);
     // private threads: bob hears his own thread's failure; alice, the bot's
     // owner, hears nothing of bob's conversation
@@ -478,7 +488,7 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     const cardsBefore = await accessCards(bob, shared.id);
     const editRefusals = () => log.split(`bot=${shared.id} refused: no_access`).length;
     const refusedBeforeEdit = editRefusals();
-    const edited = await api("POST", `/api/bots/${shared.id}/messages/${mine!.id}/edit`, bob, { text: "edited by bob" });
+    const edited = await api("POST", `/api/bots/${shared.id}/messages/${mine!.id}/edit`, bob, { threadId: xavier.threadId, text: "edited by bob" });
     expect(edited.status, edited.text).toBe(202);
     // The same missing sign-in was already shown on this thread, so the edit
     // is refused without a second copy of that card (shared/failure-dedup.ts).

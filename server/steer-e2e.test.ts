@@ -268,12 +268,13 @@ posixOnly("mid-turn steering e2e", () => {
     expect(await internalTools()).toBe(401);
     const bot = await getBot(created.id);
     const texts = bot.messages.filter((m: any) => m.kind === "text").map((m: any) => `${m.role}:${m.role === "bot" ? withoutTurnClock(m.text) : m.text}`);
+    // 7b5040911 deduplicates replies within this one owned turn, including
+    // the repeated greeting from its second native model call.
     expect(texts.slice(1)).toEqual([
       "user:first",
       "bot:hello from fake claude",
       "user:and also this",
       "bot:reply to: first",
-      "bot:hello from fake claude",
       "bot:reply to: and also this",
     ]);
     // one provider turn from the harness's point of view, over after the steered reply

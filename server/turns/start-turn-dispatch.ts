@@ -192,6 +192,8 @@ export function createDispatchStartTurn(host: StartTurnHost) {
     })), () => !directTurnClaimExists(state.bot.id, state.dispatchClaimId, state.threadId), async () => {
       await state.instance.adapter.interruptTurn(state.threadId).catch(() => {});
     });
+    // Adapter accepted the turn (process reused or spawned).
+    if (!state.warmOnly) turnTrace(state.threadId, "dispatched");
     if (state.warmOnly) {
       // A duplex interrupt while the person is still talking cancels this
       // claim: there is no spoken turn yet, and releasing the process

@@ -68,6 +68,10 @@ export function noteFirstResponse(threadId: string, at = Date.now()): void {
   const from = row.sentAt ?? row.startedAt ?? row.queuedAt;
   if (from !== undefined) row.firstResponseMs = Math.max(0, Math.round(at - from));
   publish(threadId, row);
+  // Same stderr line as turnTrace steps: server-side TTFT for the harness.
+  if (!enabled()) return;
+  const start = row.startedAt ?? row.sentAt ?? row.queuedAt ?? at;
+  console.error(`[turn-trace] ${threadId.slice(0, 8)} first-token ${at} +${at - start}`);
 }
 
 /** Queue wait and time to first answer. Null until that moment has happened. */

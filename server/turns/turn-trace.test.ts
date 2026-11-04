@@ -79,4 +79,28 @@ describe("turn trace (SAGAX_TURN_TRACE)", () => {
     ]);
     expect(JSON.stringify(seen)).not.toContain("hello");
   });
+
+  it("prints a first-token line from noteFirstResponse when the trace is on", () => {
+    process.env.SAGAX_TURN_TRACE = "1";
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    let now = 5_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const thread = "fedcba9876543210";
+    turnTrace(thread, "start", true);
+    now = 5_100;
+    turnTrace(thread, "send");
+    now = 5_700;
+    noteFirstResponse(thread);
+    noteFirstResponse(thread);
+    const lines = spy.mock.calls.map((call) => String(call[0]));
+    expect(lines.filter((line) => line.includes(" first-token "))).toHaveLength(1);
+    expect(lines.at(-1)).toMatch(/^\[turn-trace\] fedcba98 first-token 5700 \+\d+$/);
+    expect(lines.join("\n")).not.toContain("hello");
+  });
+
+  it("keeps first-token silent when the trace is off", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    noteFirstResponse("silent-thread-id");
+    expect(spy).not.toHaveBeenCalled();
+  });
 });

@@ -21,6 +21,20 @@ describe("startTurn leaf modules (#1388 w4 step 3)", () => {
     expect(src).not.toMatch(/from ["'].*\/index\.ts["']/);
   });
 
+  it("starts Perspicax prepare beside compact and awaits it before mounts (#1955)", () => {
+    const setup = readFileSync(join(here, "start-turn-setup.ts"), "utf8");
+    expect(setup).toMatch(/perspicaxTurnPrepare\(/);
+    expect(setup).toMatch(/perspicaxPrepared/);
+    const prepareAt = setup.indexOf("perspicaxTurnPrepare({");
+    const compactAt = setup.indexOf("await compactConversation(");
+    const mountAt = setup.indexOf("await perspicaxTurnIntegration(");
+    expect(prepareAt).toBeGreaterThan(-1);
+    expect(compactAt).toBeGreaterThan(prepareAt);
+    expect(mountAt).toBeGreaterThan(compactAt);
+    expect(setup).toMatch(/prepared: perspicaxPrepared/);
+    expect(setup).toMatch(/settlePerspicaxPrepare/);
+  });
+
   it("calls finish, stream and prepare leaves from the orchestrator", () => {
     const src = readFileSync(join(here, "start-turn.ts"), "utf8");
     for (const name of [

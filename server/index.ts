@@ -7334,25 +7334,25 @@ async function routineMemoryHint(run: RoutineRun, prompt: string): Promise<{ hin
  * else). Nothing in solo mode, without a link, or for a bot without
  * profiles. The bridge holds only a turn capability; the tokens stay in
  * perspicaxMcp. */
-async function perspicaxTurnIntegration(input: {
+/** Token exchange, session open/verify, identity switch and tools/list:
+ * nothing here needs the custom MCP mount names, so setupStartTurn can start
+ * it beside compaction and prompt build (#1955). */
+async function perspicaxTurnPrepare(input: {
   bot: BotRecord;
   threadId: string;
   generation: string;
   speaker: TurnSpeaker;
-  taken: readonly string[];
-  from?: { botId: string; name: string; color: string };
-  /** A call warm builds the same prompt and mounts, and writes no activity row. */
   quiet?: boolean;
-}): Promise<{ custom: Record<string, McpServerSpec>; prompt: string }> {
-  const none = { custom: {}, prompt: "" };
-  if (IDENTITY.kind !== "perspicax" || !perspicaxMcp) return none;
+}): Promise<{
+  live: BotRecord;
+  speakerPrincipalId: string;
+  routine: boolean;
+  plan: { mounted: Array<{ profileId: string; slug: string; name: string }>; unavailable: Array<{ profileId: string; name: string; reason: PerspicaxUnavailableReason; detail?: string }> };
+} | null> {
+  if (IDENTITY.kind !== "perspicax" || !perspicaxMcp) return null;
   const live = store.bot(input.bot.id) ?? input.bot;
-  if (!live.perspicax?.profiles.length && !live.perspicaxActAs) return none;
+  if (!live.perspicax?.profiles.length && !live.perspicaxActAs) return null;
   const routine = routineLineage(input.speaker);
-  // MCP speaks only for a known person: a routine's lineage speaks for the
-  // person it runs as, through their routine delegation (slice 6), and a
-  // peer hop whose source speaker is not known is an unknown person, never
-  // the asking bot's owner.
   const speakerPrincipalId = input.speaker.origin === "peer" && input.speaker.principalId === undefined
     ? ""
     : orgSpeakerPrincipal(live, input.speaker);
@@ -7364,10 +7364,34 @@ async function perspicaxTurnIntegration(input: {
     speakerOrigin: input.speaker.origin,
     ...(routine ? { routine: true } : {})
   });
-  if (plan.mounted.length && !input.quiet) recordPerspicaxWork(live, input.threadId, input.speaker, speakerPrincipalId, plan.mounted.map((profile) => profile.name));
-  // 2026-10-27: the product names Perspicax declares, for the step rows
-  // (declaredToolProduct); never awaited
+  // Handshake beside setup: open/verify the MCP session and identity lease
+  // now, so the engine's later tools/list hits the same-session cache.
+  if (plan.mounted.length) await perspicaxMcp.ensureTurnSessions(input.threadId, input.generation);
   if (plan.mounted.length) void perspicaxMcp?.refreshApiNames({ threadId: input.threadId, generation: input.generation, botId: live.id });
+  return { live, speakerPrincipalId, routine, plan };
+}
+
+async function perspicaxTurnIntegration(input: {
+  bot: BotRecord;
+  threadId: string;
+  generation: string;
+  speaker: TurnSpeaker;
+  taken: readonly string[];
+  from?: { botId: string; name: string; color: string };
+  /** A call warm builds the same prompt and mounts, and writes no activity row. */
+  quiet?: boolean;
+  /** When setup already started prepare+handshake in parallel, reuse it. */
+  prepared?: ReturnType<typeof perspicaxTurnPrepare>;
+}): Promise<{ custom: Record<string, McpServerSpec>; prompt: string }> {
+  const none = { custom: {}, prompt: "" };
+  const early = input.prepared ? await input.prepared : await perspicaxTurnPrepare(input);
+  if (!early || !perspicaxMcp) return none;
+  const { live, speakerPrincipalId, routine, plan } = early;
+  // The organization's work row is written where it always was: once the
+  // turn's setup reached the mounts, never for a turn cancelled before that.
+  if (plan.mounted.length && !input.quiet) recordPerspicaxWork(live, input.threadId, input.speaker, speakerPrincipalId, plan.mounted.map((profile) => profile.name));
+  // Mount naming needs `taken` (custom MCP names already attached): sequential
+  // after attachCustomMcp, never in parallel with it.
   const custom: Record<string, McpServerSpec> = {};
   const taken = new Set(input.taken);
   for (const profile of plan.mounted) {
@@ -17113,6 +17137,7 @@ function releaseBootEngineSlot(threadId: string, closeIdleProcess: boolean): voi
       // closed here: it no longer counts as a warm session (engine memory guard)
       idleEngines.forget(threadId);
       try { held.instance.adapter.releaseWarmSession?.(threadId); } catch { /* the slot goes back regardless */ }
+      perspicaxMcp?.noteEngineCold(threadId);
       held.slot.release();
     });
   } else held.slot.release();
@@ -17129,8 +17154,14 @@ bus.subscribe((event: RuntimeEvent) => {
       // after the driver's own settle bookkeeping, like releaseBootEngineSlot
       idleEngines.noteIdle(threadId, () => setImmediate(() => {
         try { engine.adapter.releaseWarmSession?.(threadId); } catch { /* already closed */ }
+        // engine idle timer (or pool eviction): stop Perspicax keep-alive (#1955)
+        perspicaxMcp?.noteEngineCold(threadId);
       }));
-    } else idleEngines.forget(event.threadId);
+      perspicaxMcp?.noteEngineWarm(threadId);
+    } else {
+      idleEngines.forget(event.threadId);
+      perspicaxMcp?.noteEngineCold(event.threadId);
+    }
     runningTurnEngines.delete(event.threadId);
     const rows = endMemoryTurn(event.threadId);
     // the files the engine read by path are sealed again once idle
@@ -21673,7 +21704,10 @@ function prewarmThread(botId: string, threadId: string, person: string, opts: Pr
   return threadPrewarm.begin(threadId, person, (signal) => new Promise<void>((resolve) => {
     signal.addEventListener("abort", () => {
       // the driver closed its idle process (a turn's process stays)
-      if (!runningTurnEngines.has(threadId)) idleEngines.forget(threadId);
+      if (!runningTurnEngines.has(threadId)) {
+        idleEngines.forget(threadId);
+        perspicaxMcp?.noteEngineCold(threadId);
+      }
     }, { once: true });
     void startTurn(botId, "", {
       threadId,
@@ -21689,7 +21723,10 @@ function prewarmThread(botId: string, threadId: string, person: string, opts: Pr
         // counted with the finished sessions, so the idle cap (#804) holds
         if (ok && !signal.aborted && !runningTurnEngines.has(threadId)) idleEngines.noteIdle(threadId, () => {
           threadPrewarm.cancel(threadId);
-          setImmediate(() => releaseWarmEngine(threadId));
+          setImmediate(() => {
+            releaseWarmEngine(threadId);
+            perspicaxMcp?.noteEngineCold(threadId);
+          });
         });
         resolve();
       }
@@ -39900,6 +39937,9 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
     writeOnceScope: ({ threadId }) => activeRoutineRunForThread(threadId) || internalTurnThreads.has(threadId) ? "unattended" : null,
     // a live call keeps its Perspicax tools mounted from turn to turn
     keepWarm: (threadId) => Boolean(voiceCalls.active(threadId)),
+    // a warm engine session (idle pool or the turn in flight) keeps Perspicax
+    // MCP entries and pings them under Perspicax's 120 s idle close (#1955)
+    engineWarm: (threadId) => idleEngines.has(threadId) || runningTurnEngines.has(threadId),
     // 2026-10-28: a bot's own voice_call is a place_phone_call (its card,
     // the AI disclosure, the pilot and the do-not-call list)
     placeCall: (turn, args) => outbound.placeCall({
@@ -45530,6 +45570,7 @@ const runGroupMemberTurnRunner = createRunGroupMemberTurn({
   personalFeatureOn,
   perspicaxMcp,
   perspicaxTurnIntegration,
+  perspicaxTurnPrepare,
   phoneIntegration,
   pluginDirsFor,
   policyModelRefusal,
@@ -45924,6 +45965,7 @@ const startTurnRunner = createStartTurn({
   personalSkillInputs,
   personalSkills,
   perspicaxTurnIntegration,
+  perspicaxTurnPrepare,
   phoneIntegration,
   phoneToolTaintedThreads,
   pickFastSentenceModel,

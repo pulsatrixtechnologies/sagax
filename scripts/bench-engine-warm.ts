@@ -487,6 +487,8 @@ async function benchPerspicaxMcp(): Promise<EngineReport> {
     callDelayMs: MCP_RTT_MS,
   });
   const samples: number[] = [];
+  const afterPause: number[] = [];
+  const keptWarm: number[] = [];
   const sequences: string[][] = [];
   try {
     for (let i = 0; i < WARM; i++) {
@@ -500,8 +502,43 @@ async function benchPerspicaxMcp(): Promise<EngineReport> {
       samples.push(Number((performance.now() - t0).toFixed(1)));
       sequences.push(["initialize", "notifications/initialized", "tools/list", "tools/list"]);
       await client.close();
-      // Simulate idle past Perspicax KEEP_ALIVE (2 min) only on the last few
-      // iterations by forcing a fresh client — measured as reopen cost above.
+    }
+    // Warm thread kept by keep-alive: same session, tools/list only (no re-handshake).
+    {
+      const client = new RemoteMcpClient({ type: "http", url: fake.url, headers: {} });
+      const signal = AbortSignal.timeout(15_000);
+      await client.initialize("bench-kept-warm", signal);
+      await client.request("tools/list", {}, signal);
+      for (let i = 0; i < WARM; i++) {
+        const t = performance.now();
+        await client.request("tools/list", {}, signal);
+        keptWarm.push(Number((performance.now() - t).toFixed(1)));
+      }
+      await client.close();
+    }
+    // Turn after a 130 s pause: fake forgets sessions (no real sleep).
+    for (let i = 0; i < WARM; i++) {
+      const client = new RemoteMcpClient({ type: "http", url: fake.url, headers: {} });
+      const signal = AbortSignal.timeout(10_000);
+      await client.initialize("bench-pause", signal);
+      await client.request("tools/list", {}, signal);
+      fake.forgetSessions();
+      const t0 = performance.now();
+      try {
+        await client.request("tools/list", {}, signal);
+      } catch {
+        // Session lost: re-handshake like Sagax reopen + tools/list.
+        await client.close().catch(() => {});
+        const again = new RemoteMcpClient({ type: "http", url: fake.url, headers: {} });
+        await again.initialize("bench-pause-reopen", signal);
+        await again.request("tools/list", {}, signal);
+        await again.close();
+        afterPause.push(Number((performance.now() - t0).toFixed(1)));
+        continue;
+      }
+      // Client transparently survived: still count the round trip.
+      afterPause.push(Number((performance.now() - t0).toFixed(1)));
+      await client.close();
     }
     // Connection reuse micro-bench: many posts on one client.
     const reuseClient = new RemoteMcpClient({ type: "http", url: fake.url, headers: {} });
@@ -523,10 +560,16 @@ async function benchPerspicaxMcp(): Promise<EngineReport> {
     return summarize("perspicax-mcp", warmSamples, [], samples.length, 120_000, [
       `fake toolsDelayMs=${MCP_RTT_MS}`,
       `handshake+2x tools/list p50=${percentile(samples, 0.5)} p95=${percentile(samples, 0.95)}`,
+      `kept-warm tools/list (no re-handshake) p50=${percentile(keptWarm, 0.5)} p95=${percentile(keptWarm, 0.95)} n=${keptWarm.length}`,
+      `after 130s pause (forgetSessions) p50=${percentile(afterPause, 0.5)} p95=${percentile(afterPause, 0.95)} n=${afterPause.length}`,
       `same-session tools/list x20 p50=${percentile(rpcMs, 0.5)} p95=${percentile(rpcMs, 0.95)}`,
-      `fake counters toolsLists=${fake.toolsLists} delayedToolsLists=${fake.delayedToolsLists}`,
+      `fake counters toolsLists=${fake.toolsLists} delayedToolsLists=${fake.delayedToolsLists} sessionsMinted=${fake.sessionsMinted}`,
       "Perspicax KEEP_ALIVE=120s PER_SUB_CAP=32 GLOBAL_CAP=512",
       `sequence=${sequences[0]?.join(" -> ")}`,
+      "handshake-beside-setup: see turn-trace steps compacted..integrations overlapping perspicax prepare",
+    ], [
+      `keptWarm:${keptWarm.slice(0, 5).join(",")}`,
+      `afterPause:${afterPause.slice(0, 5).join(",")}`,
     ]);
   } finally {
     await fake.close();

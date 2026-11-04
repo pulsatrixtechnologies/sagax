@@ -442,4 +442,10 @@ struct DesktopComputerGalleryBackdrop: View {
         .accessibilityHidden(true)
     }
 }
+#else
+/// Release: the parity gallery never runs (parityGallery is false), the
+/// picture only has to exist for the screen's DEBUG branch to compile.
+struct DesktopComputerGalleryPicture: View {
+    var body: some View { EmptyView() }
+}
 #endif

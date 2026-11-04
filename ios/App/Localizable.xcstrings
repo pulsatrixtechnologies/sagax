@@ -5301,7 +5301,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Une modification de fichier"
+            "value": "Un changement de fichier"
           }
         }
       }
@@ -8758,6 +8758,22 @@
         }
       }
     },
+    "All bots →": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tous les bots →"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todos os bots →"
+          }
+        }
+      }
+    },
     "All day": {
       "localizations": {
         "en": {
@@ -12064,6 +12080,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Assistente"
+          }
+        }
+      }
+    },
+    "At a glance": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En bref"
           }
         }
       }
@@ -15574,6 +15600,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Alterado:"
+          }
+        }
+      }
+    },
+    "Changed: %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifié : %@"
           }
         }
       }
@@ -22304,6 +22340,16 @@
         }
       }
     },
+    "Couldn't restore this version.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de revenir à cette version."
+          }
+        }
+      }
+    },
     "Couldn't save the folder order. Try again.": {
       "localizations": {
         "en": {
@@ -23296,6 +23342,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Provedor atual (indisponível)"
+          }
+        }
+      }
+    },
+    "Current version": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version actuelle"
           }
         }
       }
@@ -27179,7 +27235,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Editar avatar"
+            "value": "Editar o avatar"
           }
         }
       }
@@ -29051,7 +29107,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tous ceux qui peuvent se connecter"
+            "value": "Toute personne qui peut se connecter"
           }
         },
         "pt-BR": {
@@ -46509,13 +46565,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucun changement enregistré pour l'instant."
+            "value": "Aucun changement enregistré."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nenhuma mudança registrada ainda."
+            "value": "Ainda não há mudanças registradas."
           }
         }
       }
@@ -48523,13 +48579,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucune utilisation enregistrée pour ce bot pour l'instant."
+            "value": "Aucune utilisation enregistrée pour ce bot."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nenhum uso registrado para este bot ainda."
+            "value": "Ainda não há uso registrado para este bot."
           }
         }
       }
@@ -51945,7 +52001,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uma linha sobre a função deste bot"
+            "value": "Uma linha sobre para que serve este bot"
           }
         }
       }
@@ -54820,6 +54876,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Propriétaire"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dono"
           }
         }
       }
@@ -58499,7 +58561,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Robot principal"
+            "value": "Bot principal"
           }
         },
         "pt-BR": {
@@ -63752,6 +63814,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rétablir les réglages par défaut"
+          }
+        }
+      }
+    },
+    "Restore this version": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revenir à cette version"
+          }
+        }
+      }
+    },
+    "Restore this version?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revenir à cette version ?"
           }
         }
       }
@@ -69672,6 +69754,22 @@
         }
       }
     },
+    "Shared with %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partagé avec %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compartilhado com %@"
+          }
+        }
+      }
+    },
     "Shared with %lld people or teams": {
       "localizations": {
         "en": {
@@ -69761,6 +69859,12 @@
             "state": "translated",
             "value": "Partage"
           }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compartilhamento"
+          }
         }
       }
     },
@@ -69846,6 +69950,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Court"
+          }
+        }
+      }
+    },
+    "Short description": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Courte description"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descrição curta"
           }
         }
       }
@@ -77334,6 +77454,16 @@
         }
       }
     },
+    "The bot goes back to this version (%@). The current version stays in Changes, so you can come back to it.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le bot revient à cette version (%@). La version actuelle reste dans Changements : vous pourrez y revenir."
+          }
+        }
+      }
+    },
     "The bot is busy. Stop it first.": {
       "localizations": {
         "en": {
@@ -82049,13 +82179,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ce fournisseur n'indique pas de prix ; les jetons sont comptés."
+            "value": "Ce fournisseur n'indique pas de prix. Les jetons sont comptés."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Este provedor não informa preço; os tokens são contados."
+            "value": "Este provedor não informa um preço. Os tokens são contados."
           }
         }
       }
@@ -87364,6 +87494,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Version %lld, remplacée par une plus récente"
+          }
+        }
+      }
+    },
+    "Version restored": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version rétablie"
           }
         }
       }
@@ -96573,7 +96713,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "equivalente, na sua assinatura, não cobrado"
+            "value": "equivalente — está na sua assinatura, não é cobrado"
           }
         }
       }

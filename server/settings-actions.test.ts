@@ -954,6 +954,25 @@ describe("sagax_settings: plugins, MCP servers and a routine's webhook (2026-10-
     expect((await self.call({ action: "set", key: "bot.mcpServer", value: { name: "crm", attached: true } })).body.text).toBeDefined();
   });
 
+  // #1992: get goes through sagax_settings to GET /api/me/capabilities (servers),
+  // never POST /api/me/mcp/servers which only adds a server.
+  it("reads connections.mcpServer through get on the capabilities list (#1992)", async () => {
+    const servers = [{ name: "notes", enabled: true, url: "https://notes.example.test" }];
+    const h = harness({
+      organization: () => true,
+      answer: (path: string) => path === "/api/me/capabilities"
+        ? { github: { connected: false }, servers, sandbox: false }
+        : {},
+    });
+    const read = await h.call({ action: "get", key: "connections.mcpServer" });
+    expect(read.status).toBe(200);
+    expect(JSON.parse(String(read.body.text))).toEqual({ key: "connections.mcpServer", value: servers });
+    expect(h.planned).toEqual([expect.objectContaining({ method: "GET", path: "/api/me/capabilities", effect: "run" })]);
+    expect(JSON.stringify(h.planned)).not.toMatch(/POST only|\/api\/me\/mcp\/servers"/);
+    const enabled = await h.call({ action: "get", key: "connections.mcpServerEnabled" });
+    expect(JSON.parse(String(enabled.body.text))).toEqual({ key: "connections.mcpServerEnabled", value: servers });
+  });
+
   it("reads a webhook routine's address, never a key, and rotates its key for the person to copy", async () => {
     const answer = { webhooks: [{ id: "wh1", routineId: "r1", endpointId: "wh_abc", enabled: true, tokenLast4: "9xQz", tokenPending: false }], ingress: { baseUrl: "https://hooks.example.test/" } };
     const h = harness({ mode: "full", answer });

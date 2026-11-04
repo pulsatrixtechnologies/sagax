@@ -1,5 +1,5 @@
+import type { SidebarState } from "./types";
 import { Archive, CheckCheck, FolderInput, Pin, PinOff, SlidersHorizontal, X } from "lucide-react";
-import type { AppState } from "@/state/store";
 import { api } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
@@ -28,7 +28,7 @@ export function SidebarMultiSelectBar({
 }: {
   selecting: boolean;
   density: SidebarDensity;
-  state: AppState;
+  state: SidebarState;
   selectedBotIds: string[];
   personal: PersonalSections | null;
   clearSelection: () => void;

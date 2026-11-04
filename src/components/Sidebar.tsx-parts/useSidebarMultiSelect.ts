@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import type { AppState } from "@/state/store";
+import type { SidebarState } from "./types";
+import { useEffect, useRef, useState } from "react";
 import { showBotArchive } from "@/lib/bot-capabilities";
 import { toggleSelected } from "@/lib/bot-unread";
 import type { SidebarDensity } from "@/lib/sidebar-preferences";
@@ -12,7 +12,7 @@ export function useSidebarMultiSelect({
   state,
   density,
 }: {
-  state: AppState;
+  state: SidebarState;
   density: SidebarDensity;
 }) {
   const [selecting, setSelecting] = useState(false);
@@ -30,14 +30,27 @@ export function useSidebarMultiSelect({
     setSelectedBotIds([]);
     setBatchSectionPicker(null);
   };
-  const selectionFor = (botId: string) => ({
-    active: selecting,
-    selected: selectedBotIds.includes(botId),
-    onToggle: () => {
-      setSelecting(true);
-      setSelectedBotIds((current) => toggleSelected(current, botId));
-    },
-  });
+  const selections = useRef(new Map<string, { active: boolean; selected: boolean; onToggle: () => void }>());
+  // Stable row props let a live preview update its own row only. Toggle
+  // closures capture just the id and use React's current-state setter.
+  const selectionFor = (botId: string) => {
+    const selected = selectedBotIds.includes(botId);
+    const held = selections.current.get(botId);
+    if (held && held.active === selecting && held.selected === selected) return held;
+    const next = {
+      active: selecting, selected,
+      onToggle: held?.onToggle ?? (() => {
+        setSelecting(true);
+        setSelectedBotIds((current) => toggleSelected(current, botId));
+      }),
+    };
+    selections.current.set(botId, next);
+    return next;
+  };
+  useEffect(() => {
+    const ids = new Set(state.bots.map((bot) => bot.id));
+    for (const id of selections.current.keys()) if (!ids.has(id)) selections.current.delete(id);
+  }, [state.bots]);
   // The rail has no bar: leaving the wide sidebar ends the selection.
   useEffect(() => {
     if (density === "icons" && selecting) clearSelection();

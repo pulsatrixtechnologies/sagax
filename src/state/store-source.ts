@@ -2,6 +2,7 @@
 // publishes each state it renders here. Kept apart from store-selector.ts so
 // store.tsx can provide it without importing the hooks, which read
 // `useStore` from "./store" (a test that mocks the store reaches them there).
+import type { BotAnnouncement } from "./store";
 import { createContext, useLayoutEffect, useRef, type Dispatch } from "react";
 
 /** What selector reads subscribe to: the latest rendered state and the store's dispatch.
@@ -44,6 +45,14 @@ export function createStoreSource<S, A>(initial: S, dispatch: Dispatch<A>): Publ
 /** The context erases the state type. The selectors in store-selector.ts put
  * `AppState` and `Action` back; naming them here would import the store. */
 export const StoreSourceContext = createContext<StoreSource<unknown, never> | null>(null);
+
+/** Imperative services have identities independent of reducer frames. */
+export interface StoreCommands {
+  flushBotPatches(botId: string): Promise<BotAnnouncement | null>;
+  refreshInstances(options?: { reportErrors?: boolean }): Promise<void>;
+  refreshModels(instanceId: string): Promise<void>;
+}
+export const StoreCommandsContext = createContext<StoreCommands | null>(null);
 
 /** One source per provider, holding the state this render draws. Publishing
  * during render lets children rendered in the same pass read that state;

@@ -1,3 +1,4 @@
+import { botRoutineRuns } from "@/state/view-slices";
 // Per-bot settings as a right sidebar with fold-out (accordion) categories:
 // same shell pattern as InspectorPanel. Every section lives under
 // bot-settings/; their bodies and reads (overview, system-prompt, history)
@@ -8,7 +9,8 @@ import { useEffect, useRef, useState } from "react";
 import { DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
 import { PanelRight } from "lucide-react";
 
-import { useStore, type Bot } from "@/state/store";
+import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
+import type { Bot } from "@/state/store";
 import { useDataWindowItem } from "./DataWindowButton";
 import { CIRCLE_BUTTON } from "@/lib/circle-button";
 import { reportAchievement } from "@/lib/achievements";
@@ -42,7 +44,9 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
   overlay?: boolean;
 }) {
   const advanced = useAdvancedMode();
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({ botSettingsSection: current.botSettingsSection, botSettingsExpandAccordion: current.botSettingsExpandAccordion, computerOpen: current.computerOpen, config: current.config }), shallowEqual);
+  const runs = useStoreSelector((current) => botRoutineRuns(current, bot.id), shallowEqual);
   const { padClass, dragProps } = useCaptionChrome();
   const { macInset, browser } = useMacInsetChrome();
   const section = state.botSettingsSection;
@@ -262,7 +266,7 @@ export function BotSettingsDialog({ bot, onOpenVmWorkspace }: {
                   Unattended hosts live in the Computer place picker. */}
               <RemoteSessionsSection bot={bot} />
               <section data-bot-settings-section="routines" className="flex flex-col gap-2">
-                <RoutinesSection bot={bot} routines={derived.botRoutines} runs={state.routineRuns} grouped />
+                <RoutinesSection bot={bot} routines={derived.botRoutines} runs={runs} grouped />
               </section>
               <PackageProvenance bot={bot} />
             </div>

@@ -1,6 +1,8 @@
-import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
+import { equalRows, peerBots, peerGroups } from "@/state/view-slices";
+import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { useThreadPrefetch, type ThreadPrefetchIntent } from "@/state/thread-prefetch";
 import {
+  memo,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -41,7 +43,6 @@ import {
 } from "lucide-react";
 import {
   api,
-  useStore,
   formatTime,
   visibleMessages,
   currentTaskBot,
@@ -293,6 +294,13 @@ export function StackedMauses({ members, density, viewerId }: { members: Bot[]; 
   );
 }
 
+/** Personal section overlays may clone a record without changing a row. */
+function sameSidebarRow<P extends object>(a: P, b: P): boolean {
+  const keys = Object.keys(a) as (keyof P)[];
+  return keys.length === Object.keys(b).length && keys.every((key) =>
+    key === "bot" || key === "group" ? equalRows([a[key]], [b[key]]) : Object.is(a[key], b[key]));
+}
+
 export function GroupListItem({
   group,
   density,
@@ -307,7 +315,14 @@ export function GroupListItem({
   query?: string;
   onMenu: (menu: { groupId: string; x: number; y: number }) => void;
 }) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({
+    activeView: current.activeView,
+    bots: peerBots(current),
+    config: current.config,
+    instances: current.instances,
+    selectedId: current.selectedId,
+  }), (a, b) => Object.is(a.activeView, b.activeView) && equalRows(a.bots, b.bots) && Object.is(a.config, b.config) && Object.is(a.instances, b.instances) && Object.is(a.selectedId, b.selectedId));
   const showThreads = useShowThreads();
   const selected = state.activeView === "chat" && state.selectedId === group.id;
   // a search opens this room only when it has a matching thread to show,
@@ -417,6 +432,8 @@ export function GroupListItem({
   );
 }
 
+const MemoGroupListItem = memo(GroupListItem, sameSidebarRow);
+
 /** Sidebar mode: the threads under a bot, a room or a person sit under the
  * row's text, past its avatar and the gap after it (36px + 8px comfortable,
  * 28px + 8px compact), the same for every kind of row. */
@@ -436,7 +453,11 @@ function useRevealedThreadRow(reveal: AppState["revealThread"], currentThreadId:
 }
 
 export function GroupThreadList({ group, selected, density = "comfortable", query = "" }: { group: Group; selected: boolean; density?: SidebarDensity; query?: string }) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({
+    bots: peerBots(current),
+    revealThread: current.revealThread,
+  }), (a, b) => equalRows(a.bots, b.bots) && Object.is(a.revealThread, b.revealThread));
   const now = useRelativeNow();
   const [showAll, setShowAll] = useState(false);
   const busy = Boolean(group.working || group.busyBotId);
@@ -501,7 +522,11 @@ export function RoomContextMenu({
 }) {
   const motion = useHeldMenuMotion(menu);
   const shown = motion.value;
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({
+    config: current.config,
+    groups: peerGroups(current),
+  }), (a, b) => Object.is(a.config, b.config) && equalRows(a.groups, b.groups));
   const remoteClient = window.ogb?.remoteClient?.active === true;
   const group = shown ? state.groups.find((g) => g.id === shown.groupId) : undefined;
   const [renaming, setRenaming] = useState(false);
@@ -827,7 +852,11 @@ function MoveToSectionItem({
   onAssign: (section: string) => void;
   label?: string;
 }) {
-  const { state } = useStore();
+  const state = useStoreSelector((current) => ({
+    bots: peerBots(current),
+    groups: peerGroups(current),
+    sections: current.sections,
+  }), (a, b) => equalRows(a.bots, b.bots) && equalRows(a.groups, b.groups) && Object.is(a.sections, b.sections));
   const personal = usePersonalLayout();
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -933,7 +962,14 @@ export function BotContextMenu({
 }) {
   const motion = useHeldMenuMotion(menu);
   const shown = motion.value;
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({
+    bots: peerBots(current),
+    config: current.config,
+    deletingBots: current.deletingBots,
+    selectedId: current.selectedId,
+    settingsOpen: current.settingsOpen,
+  }), (a, b) => equalRows(a.bots, b.bots) && Object.is(a.config, b.config) && Object.is(a.deletingBots, b.deletingBots) && Object.is(a.selectedId, b.selectedId) && Object.is(a.settingsOpen, b.settingsOpen));
   const showThreads = useShowThreads();
   const remoteClient = window.ogb?.remoteClient?.active === true;
   const personal = usePersonalLayout();
@@ -1648,7 +1684,8 @@ export function PersonThreadList({ group, name, selected, density = "comfortable
   name: string;
   selected: boolean; density?: SidebarDensity; query?: string; hidden?: boolean;
 }) {
-  const { dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+
   const tasks = personPickerThreads(group);
   const latest = useRef(group);
   latest.current = group;
@@ -1697,20 +1734,21 @@ export function BotListItem({
   startRename?: boolean;
   onRenameStarted?: () => void;
 }) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const config = useStoreSelector((current) => current.config);
+  const selected = useStoreSelector((current) => current.activeView === "chat" && current.selectedId === bot.id);
+  const deleting = useStoreSelector((current) => current.deletingBots[bot.id] === true);
+  const mascotMotion = useStoreSelector((current) => selected && current.mascotMotion?.botId === bot.id ? current.mascotMotion : null);
+  const pendingQueued = useStoreSelector((current) => Object.fromEntries([bot.threadId, ...(bot.tasks ?? []).map((task) => task.threadId)].map((id) => [id, current.pendingQueued[id]])), shallowEqual);
+  const instances = useStoreSelector((current) => current.instances.filter((instance) => instance.instanceId === bot.modelSelection.instanceId), shallowEqual);
   const showThreads = useShowThreads();
   const remoteClient = typeof window !== "undefined" && window.ogb?.remoteClient?.active === true;
   const [renaming, setRenaming] = useState(false);
-  const selected = state.activeView === "chat" && state.selectedId === bot.id;
   // Settings > Conversation threads (useThreadsMode), one reader for the
   // row: "sidebar" folds the bot open on its threads (a chevron, the choice
   // remembered per bot); "header" and "one" draw one line per bot, nothing
   // under it and no chevron.
   const threadsMode = useThreadsMode();
-  const deleting = state.deletingBots[bot.id] === true;
-  const mascotMotion = selected && state.mascotMotion?.botId === bot.id ? state.mascotMotion : null;
-  const pendingQueued = state.pendingQueued;
-  const instances = state.instances;
   const iconOnly = density === "icons";
   const comfortable = density === "comfortable";
   useEffect(() => {
@@ -1765,10 +1803,10 @@ export function BotListItem({
   const statusLine = deleting || lineWorking || waiting || teammateWait || queued;
   // The viewer's own Primary Bot wears the orange star at the avatar's
   // bottom-right corner; a status dot then sits at the top-right instead.
-  const primary = isViewersPrimaryBot(bot, orgViewerId(state));
+  const primary = isViewersPrimaryBot(bot, orgViewerId({ config }));
   // A bot shared with the viewer wears its sharer's face at the bottom-right
   // (as in Browse Bots), so the status dot moves up, like beside the star.
-  const sharer = botSharer(bot, orgViewerId(state), useOrgPeople());
+  const sharer = botSharer(bot, orgViewerId({ config }), useOrgPeople());
   const dotCorner = primary || sharer ? "-top-0.5" : "-bottom-0.5";
   // Grok Bot marks an unread bot with a blue dot at the row's end, the name
   // keeps its weight.
@@ -1787,7 +1825,7 @@ export function BotListItem({
           size={avatarSize}
           motion={mascotMotion?.kind ?? "none"}
           motionKey={mascotMotion?.nonce ?? 0}
-          animated={mascotRowAnimated(bot, state.pendingQueued, mascotMotion?.kind)}
+          animated={mascotRowAnimated(bot, pendingQueued, mascotMotion?.kind)}
         />
         {/* status dot (StatusDot, the same one a person's presence wears):
             green while the bot is working, ringed in the row's ground so it
@@ -1954,6 +1992,8 @@ export function BotListItem({
   </>;
 }
 
+const MemoBotListItem = memo(BotListItem, sameSidebarRow);
+
 export function ArchivedBotRow({
   bot,
   restoring,
@@ -2015,7 +2055,11 @@ export function ArchivedBotsPanel({
   onClose: () => void;
   onRestored: (message: string) => void;
 }) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({
+    config: current.config,
+    deletingBots: current.deletingBots,
+  }), shallowEqual);
   const showThreads = useShowThreads();
   const dialogRef = useRef<HTMLDivElement>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -2192,11 +2236,20 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
   onCompose?: () => void;
   composeOpen?: boolean;
 }) {
-  const store = useStore();
-  const { state } = store;
+  const storeDispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({
+    activeView: current.activeView,
+    bots: current.bots,
+    groups: current.groups,
+    config: current.config,
+    instances: current.instances,
+    pendingQueued: current.pendingQueued,
+    sections: current.sections,
+    selectedId: current.selectedId,
+  }), (a, b) => Object.is(a.activeView, b.activeView) && equalRows(a.bots, b.bots) && equalRows(a.groups, b.groups) && Object.is(a.config, b.config) && Object.is(a.instances, b.instances) && Object.is(a.pendingQueued, b.pendingQueued) && Object.is(a.sections, b.sections) && Object.is(a.selectedId, b.selectedId));
   const listFade = useScrollFade();
-  const dispatch: typeof store.dispatch = (action) => {
-    store.dispatch(action);
+  const dispatch: typeof storeDispatch = (action) => {
+    storeDispatch(action);
     if (composeOpen && COMPOSE_DISMISS.has(action.type)) onCompose?.();
   };
   const showThreads = useShowThreads();
@@ -2412,8 +2465,8 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
           setTeamMenu={sections.setTeamMenu}
           drag={dnd}
           hiddenRows={hiddenSidebarRows(sections.sidebarHidden.items, { bots: state.bots, groups: state.groups, viewerId: roster.viewerId, people: sections.sidebarPeople })}
-          renderBot={(props) => <BotListItem {...props} />}
-          renderGroup={(props) => <GroupListItem {...props} />}
+          renderBot={(props) => <MemoBotListItem {...props} />}
+          renderGroup={(props) => <MemoGroupListItem {...props} />}
         />
       </div>
       <SidebarUnreadPillBelow density={density} count={unread.moreUnread.below} onJump={() => unread.jumpToUnread("below")} />

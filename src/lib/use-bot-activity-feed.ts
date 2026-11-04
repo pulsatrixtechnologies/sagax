@@ -1,7 +1,8 @@
 // Shared polling and live linger for bot activity lists (panel and sidebar).
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
-import { api, useStore, type Bot } from "@/state/store";
+import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
+import { api, type Bot } from "@/state/store";
 import {
   activitySignature,
   activityStatusActive,
@@ -17,7 +18,7 @@ const POLL_IDLE_MS = 30_000;
 const LIST_LIMIT = 50;
 
 export function useBotActivityFeed(bot: Bot) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
   const [list, setList] = useState<BotActivityList | null>(null);
   const [error, setError] = useState(false);
   const [, rerender] = useReducer((count: number) => count + 1, 0);
@@ -51,7 +52,7 @@ export function useBotActivityFeed(bot: Bot) {
     tracker.current = new LiveActivity(rerender);
   }, [bot.id]);
 
-  const target = state.botActivityTarget;
+  const target = useStoreSelector((current) => current.botActivityTarget?.botId === bot.id ? current.botActivityTarget : null);
   const [deepLinked, setDeepLinked] = useState<BotActivityItem | null>(null);
   useEffect(() => {
     if (!target || target.botId !== bot.id) return;

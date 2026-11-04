@@ -26,6 +26,7 @@ await import("@/state/store");
 await import("./ChatView");
 const { Shell } = await import("../App");
 const screens = await import("./lazy-screens");
+const threadPreferences = await import("@/lib/thread-preferences");
 const mode = await import("@/lib/interface-mode");
 const sidebarHelpers = await import("./Sidebar.tsx-parts/helpers");
 const composerFocus = await import("./Composer.tsx-parts/useComposerFocus");
@@ -49,11 +50,12 @@ const run = { id: "run-1", routineId: "routine-1", routineName: "Daily report", 
 const start: AppState = { ...initialState, bots, selectedId: bots[0]!.id, connected: true, everConnected: true, hydrated: true, settingsOpen: true, routineRuns: [run] };
 let send: (action: Action) => void;
 let seen: AppState;
+const services = { flushBotPatches: async () => null, refreshInstances: async () => {}, refreshModels: async () => {} };
 function Host({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, start);
   send = dispatch;
   seen = state;
-  return createElement(BotEditorStore, { value: { state, dispatch, flushBotPatches: async () => null, refreshInstances: async () => {}, refreshModels: async () => {} }, children });
+  return createElement(BotEditorStore, { value: { state, dispatch, ...services }, children });
 }
 class Observer { observe() {} unobserve() {} disconnect() {} }
 let container: HTMLDivElement;
@@ -63,6 +65,11 @@ beforeEach(() => {
   measured.counts = {};
   vi.spyOn(screens, "preloadScreens").mockImplementation(() => () => {});
   vi.spyOn(mode, "useAdvancedMode").mockImplementation(() => { measured.record(); return true; });
+  const showThreads = threadPreferences.useShowThreads;
+  vi.spyOn(threadPreferences, "useShowThreads").mockImplementation(() => {
+    if (new Error().stack?.match(/at (?:Module\.|Object\.)?BotListItem\s*\(/)) measured.counts.BotListItem = (measured.counts.BotListItem ?? 0) + 1;
+    return showThreads();
+  });
   const fade = sidebarHelpers.useScrollFade;
   vi.spyOn(sidebarHelpers, "useScrollFade").mockImplementation(() => {
     measured.counts.Sidebar = (measured.counts.Sidebar ?? 0) + 1;
@@ -95,6 +102,9 @@ it("isolates the desktop from background reply, routine and activity frames", as
   await act(async () => root.render(createElement(Host, null, createElement(ConfirmProvider, null, createElement(ThreadRefsProvider, null, createElement(Shell))))));
   await settle();
   for (const name of ["Shell", "ChatView", "Sidebar", "BotSettingsDialog", "Composer"]) expect(measured.counts[name], name).toBeGreaterThan(0);
+  const input = container.querySelector("textarea")!;
+  expect(input).not.toBeNull();
+  act(() => input.focus());
   const report: Record<string, Record<string, number>> = {};
   for (const scenario of ["reply", "routine", "activity", "poll", "activeReply"] as const) {
     const before = { ...measured.counts };
@@ -109,6 +119,8 @@ it("isolates the desktop from background reply, routine and activity frames", as
         else send({ type: "botPatched", bot: { ...seen.bots[2]! } });
       });
     }
+    expect(container.querySelector("textarea")).toBe(input);
+    expect(document.activeElement).toBe(input);
     report[scenario] = Object.fromEntries(Object.entries(measured.counts).map(([name, n]) => [name, n - (before[name] ?? 0)]));
   }
   process.stdout.write(`STORE-RENDERS ${JSON.stringify(report)}\n`);
@@ -117,8 +129,10 @@ it("isolates the desktop from background reply, routine and activity frames", as
   expect(report.activeReply!.ChatView).toBeGreaterThan(0);
   if (!process.env.STORE_RENDER_BASELINE) {
     expect(report.activeReply!.Shell).toBe(0);
+    expect(report.reply!.BotListItem).toBe(12);
+    expect(report.activeReply!.BotListItem).toBe(12);
     for (const count of Object.values(report.poll!)) expect(count).toBe(0);
-    for (const scenario of ["routine", "activity"]) for (const name of ["Shell", "ChatView"]) expect(report[scenario]![name], `${scenario}:${name}`).toBe(0);
-    for (const name of ["Shell", "ChatView"]) expect(report.reply![name], `reply:${name}`).toBe(0);
+    for (const scenario of ["routine", "activity"]) for (const name of ["Shell", "ChatView", "Sidebar", "BotListItem", "BotSettingsDialog", "Composer"]) expect(report[scenario]![name], `${scenario}:${name}`).toBe(0);
+    for (const name of ["Shell", "ChatView", "BotSettingsDialog", "Composer"]) expect(report.reply![name], `reply:${name}`).toBe(0);
   }
 });

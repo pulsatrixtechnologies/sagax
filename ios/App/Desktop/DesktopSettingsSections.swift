@@ -115,8 +115,8 @@ private struct DesktopGeneralMainSettings: View {
             // the desktop's guided tours (GuidedToursRow) play in its window;
             // on the iPad the row says so behind its help
             DesktopCompactRow(Text("Guided tours"), identifier: "tours") {
-                DesktopTourButton(title: Text("App tour"), identifier: "desktop-settings.app-tour")
-                DesktopTourButton(title: Text("Welcome tour"), identifier: "desktop-settings.welcome-tour")
+                DesktopTourButton(title: Text("App tour"), identifier: "desktop-settings.app-tour", replay: .desktopReplayTour)
+                DesktopTourButton(title: Text("Welcome tour"), identifier: "desktop-settings.welcome-tour", replay: .desktopReplayFirstRun)
             }
             if mode.advanced {
                 DesktopSubPageRowBare(title: Text("Advanced"), summary: Text("People's tool access, conversation cleanup, diagnostics"),
@@ -133,24 +133,18 @@ private struct DesktopGeneralMainSettings: View {
     }
 }
 
-/// A guided tour's button (GuidedToursRow): the tours play in the desktop's
-/// window, so on the iPad the button says where to find them.
+/// A guided tour's button (GuidedToursRow): the App tour replays the
+/// 9-step tour, the Welcome tour the first-run setup, both played by the
+/// iPad shell as the desktop's window plays them (DesktopOnboarding).
 struct DesktopTourButton: View {
     let title: Text
     let identifier: String
-    @State private var showing = false
+    let replay: Notification.Name
 
     var body: some View {
-        Button { showing = true } label: { title }
+        Button { NotificationCenter.default.post(name: replay, object: nil) } label: { title }
             .buttonStyle(DesktopPillButtonStyle())
             .accessibilityIdentifier(identifier)
-            .popover(isPresented: $showing) {
-                DesktopText("The app tour and the welcome tour play in Sagax on your computer.", size: 12, line: 17, color: \.inkSecondary)
-                    .frame(width: 232, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(12)
-                    .desktopPopoverOnCompact()
-            }
     }
 }
 

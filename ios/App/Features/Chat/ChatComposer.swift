@@ -41,6 +41,12 @@ extension ChatView {
             ThemeStore.shared.toggleRetro(client: session.settingsClient)
             return
         }
+        // A typed "/loop …" writes a routine for this chat, never a message
+        // (useComposerSend.ts parseLoopCommand). A quick reply is never one.
+        if explicitText == nil, outgoingAttachments.isEmpty, let loop = LoopCommand.parse(text) {
+            runLoopCommand(loop)
+            return
+        }
         // A room's typed "/goal …" runs as a bounded team goal.
         var words = text
         var goal = false

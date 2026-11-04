@@ -76,6 +76,20 @@ final class DesktopSidebarPlacesTests: XCTestCase {
         XCTAssertFalse(BotPatch(hidden: false).isEmpty)
     }
 
+    /// ComposeToPicker.limit.test.ts: six results at most under the create
+    /// rows, a query ranked best first (name start, word start, elsewhere).
+    func testComposeToShowsSixResultsRankedByTheQuery() {
+        let names = ["Orion", "Liora", "Aurora", "Sirius", "Vera", "Celeste", "Ciel", "Rigel"]
+        let bots = names.map { name -> Bot in var b = bot(name.lowercased()); b.name = name; return b }
+        let browse = DesktopComposeTo.rows(mode: .browse, bots: bots, canCreateBots: true)
+        XCTAssertEqual(browse.count, 3 + 6)
+        XCTAssertEqual(browse.last, .bot("celeste"))
+        let group = DesktopComposeTo.rows(mode: .group, bots: bots, canCreateBots: true)
+        XCTAssertEqual(group, [.createGroup] + ["orion", "liora", "aurora", "sirius", "vera", "celeste"].map { .bot($0) })
+        let ranked = DesktopComposeTo.rows(mode: .group, bots: bots.filter { $0.name.lowercased().contains("r") }, canCreateBots: true, query: "r")
+        XCTAssertEqual(ranked.dropFirst().first, .bot("rigel"), "a name that starts with the query comes first")
+    }
+
     func testComposeToListsCreateRowsThenOwnActiveBotsMatchingTheQuery() {
         var mine = bot("orion"); mine.name = "Orion"; mine.title = "Analyst"
         var theirs = bot("x"); theirs.ownerUserId = "someone@else"

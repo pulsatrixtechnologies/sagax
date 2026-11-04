@@ -41,7 +41,7 @@ import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from 
 import { freePortBlock } from "../testing/ports.ts";
 import { sandboxKeyForPrincipal, sandboxNames, sandboxdConfigFromEnv } from "../sandbox/user-sandbox-spec.ts";
 
-const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
+const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const posixOnly = describe.skipIf(process.platform === "win32" || !hasGit());
 const ORG_KEY = "sk-ant-test-org-key-000000";
@@ -254,13 +254,14 @@ posixOnly("organization: a person's own GitHub, MCP servers, plugins and skills"
     writeFileSync(join(data, "config.json"), JSON.stringify({
       instances: {
         claude: {
-          driver: "claudeAgent",
+          // fcce56775 (#1812): this fixture uses the organization API key.
+          driver: "claudeAgent", access: "api",
           environment: {
             FAKE_CLAUDE_MCP_CALLS: JSON.stringify([{ server: "mytools", tool: "whoami", arguments: {} }]),
             FAKE_CLAUDE_MCP_DUMP: mcpDump,
             FAKE_CLAUDE_DUMP: engineDump,
           },
-          config: { cli: FAKE_CLAUDE, fullAuto: true },
+          config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true },
         },
       },
     }));

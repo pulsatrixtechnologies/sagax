@@ -43,7 +43,7 @@ import { orgComputerFor, type EffectivePlace } from "@/lib/place";
 import { placeLabel, savePlaceLabel, usePlaceLabels } from "@/lib/place-labels";
 import { reportScreenDot, SCREEN_DOT_CLASS, SCREEN_DOT_LABEL_KEY, screenDot, useScreenDots, type ScreenDot } from "@/lib/screen-status";
 import {
-  formatBytes, loadServerEnvironment, loadServerEnvironmentStats, powerServerEnvironment, powerState,
+  formatPanelBytes, loadServerEnvironment, loadServerEnvironmentStats, powerServerEnvironment, powerState,
   type PowerAction, type ServerEnvironmentStats, type ServerEnvironmentStatus,
 } from "@/lib/server-environment";
 import type { Bot } from "@/state/store";
@@ -850,13 +850,13 @@ export function UsagePanel() {
     {disk && diskLevel !== "normal" && (
       <p role="alert" data-disk-level={diskLevel} className={cn("flex items-start gap-2 rounded-xl border px-3 py-2 text-[12px]", diskLevel === "full" ? "border-danger/40 text-danger" : "border-hairline text-warning")}>
         <AlertTriangle size={14} aria-hidden="true" className="mt-0.5 shrink-0" />
-        <span>{t(diskLevel === "full" ? "orgComputer.diskFull" : "orgComputer.diskAlmostFull", { free: formatBytes(disk.freeBytes), total: formatBytes(disk.totalBytes) })}</span>
+        <span>{t(diskLevel === "full" ? "orgComputer.diskFull" : "orgComputer.diskAlmostFull", { free: formatPanelBytes(disk.freeBytes), total: formatPanelBytes(disk.totalBytes) })}</span>
       </p>
     )}
     <dl aria-label={t("orgComputer.usage")} className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-xl border border-hairline p-3 text-[12px]">
-      <Row icon={HardDrive} label={t("orgComputer.disk")} value={stats ? t("orgComputer.usedOf", { used: formatBytes(stats.workspaceBytes), limit: formatBytes(disk ? Math.min(disk.totalBytes, stats.workspaceQuotaBytes) : stats.workspaceQuotaBytes) }) : "?"} detail={disk ? t("orgComputer.diskFree", { free: formatBytes(disk.freeBytes) }) : undefined} />
+      <Row icon={HardDrive} label={t("orgComputer.disk")} value={stats ? t("orgComputer.usedOf", { used: formatPanelBytes(stats.workspaceBytes), limit: formatPanelBytes(disk ? Math.min(disk.totalBytes, stats.workspaceQuotaBytes) : stats.workspaceQuotaBytes) }) : "?"} detail={disk ? t("orgComputer.diskFree", { free: formatPanelBytes(disk.freeBytes) }) : undefined} />
       <Row icon={Cpu} label={t("orgComputer.cpu")} value={live && stats.cpuPercent !== null ? t("orgComputer.cpuValue", { percent: Math.round(stats.cpuPercent) }) : "?"} />
-      <Row icon={MemoryStick} label={t("orgComputer.memory")} value={stats ? t("orgComputer.usedOf", { used: live ? formatBytes(stats.memoryBytes) : "?", limit: formatBytes(stats.memoryLimitBytes) }) : "?"} />
+      <Row icon={MemoryStick} label={t("orgComputer.memory")} value={stats ? t("orgComputer.usedOf", { used: live ? formatPanelBytes(stats.memoryBytes) : "?", limit: formatPanelBytes(stats.memoryLimitBytes) }) : "?"} />
       <Row icon={Server} label={t("orgComputer.os")} value={stats ? [stats.os, stats.arch].filter(Boolean).join(" ") || "Linux" : "?"} detail={stats?.image} />
     </dl>
     </>

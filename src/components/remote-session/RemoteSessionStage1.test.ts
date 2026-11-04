@@ -45,7 +45,7 @@ describe("tailcat stage 1", () => {
 
   it("the panel row shows computer, user, code and end time, with Prendre le contrôle and a two-step close", () => {
     setLocale("fr");
-    const props = { botId: "melonie", rows: [view], error: null, onTakeControl: () => undefined, onClose: () => undefined };
+    const props = { botId: "wren", rows: [view], error: null, onTakeControl: () => undefined, onClose: () => undefined };
     const first = renderToStaticMarkup(createElement(RemoteSessionsPanel, { ...props, confirmId: null }));
     for (const part of ["POSTE-01", "exemple\\usager", "Windows Server 2022", formatEndLabel(view.endAt), "Prendre le contrôle", "Fermer la session", "Shell", "Envoyer", "Télécharger"]) {
       expect(first).toContain(part);
@@ -65,7 +65,7 @@ describe("tailcat stage 1", () => {
     const card = renderToStaticMarkup(createElement(
       StoreProvider,
       null,
-      createElement(RemoteSessionCard, { botId: "melonie", threadId: "thread-1", view: { ...view, hostname: `POSTE-01 ${ADDRESS}` }, detailsOpen: true }),
+      createElement(RemoteSessionCard, { botId: "wren", threadId: "thread-1", view: { ...view, hostname: `POSTE-01 ${ADDRESS}` }, detailsOpen: true }),
     ));
     for (const field of ["poste", "user", "rights", "session", "serial", "model", "cpu", "ram", "disk"]) {
       expect(card).toContain(`data-remote-field="${field}"`);
@@ -85,7 +85,7 @@ describe("tailcat stage 1", () => {
     const elevated = renderToStaticMarkup(createElement(
       StoreProvider,
       null,
-      createElement(RemoteSessionCard, { botId: "melonie", threadId: "thread-1", view: { ...view, elevated: true } }),
+      createElement(RemoteSessionCard, { botId: "wren", threadId: "thread-1", view: { ...view, elevated: true } }),
     ));
     expect(elevated).toContain(t("remoteSession.rights.admin"));
   });

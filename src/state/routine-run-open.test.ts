@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // 2026-11-01: View run under a routine's report, a run's notification and a
 // link to a run's execution thread (an Inbox entry) open the run as an
-// exchange sheet over the chat column (same place as Melonie <-> Katarina),
+// exchange sheet over the chat column (same place as Wren <-> Osprey),
 // never a modal. Continue in the conversation stays a footer action.
 import { createElement } from "react";
 import { flushSync } from "react-dom";

@@ -180,6 +180,8 @@ enum IPadParityScreen: String, CaseIterable {
     case newBot = "new-bot"
     case pluginsMcp = "plugins-mcp"
     case keyboardShortcuts = "keyboard-shortcuts"
+    case aboutDialog = "about-dialog"
+    case releaseNotesDialog = "release-notes-dialog"
     case noticeThreadGone = "notice-thread-gone"
     case settingsGeneral = "settings-general"
     case settingsOrganization = "settings-organization"
@@ -248,6 +250,11 @@ enum IPadParityScreen: String, CaseIterable {
     case orgSettingsBackups = "org-settings-backups"
     case orgSettingsMyConnections = "org-settings-myConnections"
     case memoryPage = "memory-page"
+    case memoryMap = "memory-map"
+    case memoryTags = "memory-tags"
+    case memoryQuality = "memory-quality"
+    case memoryMapRadial = "memory-map-radial"
+    case memoryMapColumns = "memory-map-columns"
     case capabilities = "capabilities"
     case routineEdit = "routine-edit"
     case settingsAccount = "settings-account"
@@ -258,6 +265,8 @@ enum IPadParityScreen: String, CaseIterable {
     case settingsSecurity = "settings-security"
     case settingsCredentials = "settings-credentials"
     case settingsImport = "settings-import"
+    case sidebarSelect = "sidebar-select"
+    case computerWindow = "computer-window"
 
     /// Accepts the id, or a capture file stem ("03-main", "desktop-1366x1024-03-main").
     init?(argument: String) {
@@ -279,7 +288,8 @@ enum IPadParityScreen: String, CaseIterable {
         // I2: the sidebar's densities, threads, hover and menus
         case .mainCompact, .mainCollapsed, .mainThreads, .sidebarRowHover, .sidebarBotMenu,
              .sidebarBotContextMenu, .sidebarSectionMenu, .sidebarProfileMenu, .sidebarNewMenu, .newGroup: true
-        default: isDesktopChat || opensBotPanel || isDesktopSettings || parityPage != nil || self == .keyboardShortcuts
+        default: isDesktopChat || opensBotPanel || isDesktopSettings || parityPage != nil || self == .keyboardShortcuts || self == .aboutDialog || self == .releaseNotesDialog
+            || self == .sidebarSelect || self == .computerWindow || self == .newBot || self == .noticeThreadGone
         }
     }
 

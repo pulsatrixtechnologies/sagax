@@ -6,27 +6,29 @@
 // refusing the peers it still covers; the list survives an approval card that
 // was open while it changed; and the field can only ever be made smaller from
 // the loopback API a bot's own tool call can reach. The
-// endpoints are sealed behind a per-turn token. The real MCP config is still
-// inspected below, while the isolated server's test-only mint route provides
-// an exact synthetic legacy turn for the ask/delegate authorization checks.
+// endpoints are sealed behind a scoped capability. The real MCP config is
+// inspected below; standalone ask/delegate probes use the current external
+// runtime capability, which polls its work rather than resuming a fake turn.
 // These checks do not prove ordinary-chat dispatch: direct-coordination.e2e.test.ts
 // exercises that mounted coordinate_bots flow, including grants and revocation.
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DatabaseSync } from "node:sqlite";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { freePortBlock } from "./testing/ports.ts";
+import type { Assignment } from "./runtime/types.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(SERVER_DIR, "..");
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const REFUSED = "not on this bot's allowed peers";
-const TEST_CAPABILITY_KEY = "peer-allowlist-fixture-capability";
 
 let child: ChildProcess;
 let home = "";
@@ -52,7 +54,7 @@ const api = async (
 const fixture = (displayName: string, dump?: string) => ({
   driver: "claudeAgent",
   displayName,
-  environment: { FAKE_CLAUDE_MODE: "happy", ...(dump ? { FAKE_CLAUDE_DUMP: dump } : {}) },
+  environment: { FAKE_CLAUDE_MODE: "happy", FAKE_CLAUDE_TOOL_CALLS: "[]", ...(dump ? { FAKE_CLAUDE_DUMP: dump } : {}) },
   config: { cli: FAKE_CLAUDE },
 });
 
@@ -94,7 +96,6 @@ beforeAll(async () => {
       SAGAX_PORT: String(port),
       SAGAX_WEBHOOK_PORT: String(port + 1),
       SAGAX_STATIC_DIR: staticDir,
-      SAGAX_TEST_INTERNAL_CAPABILITY_KEY: TEST_CAPABILITY_KEY,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -149,22 +150,28 @@ const botMessages = async (botId: string): Promise<any[]> => {
   return state.bots.find((bot: { id: string }) => bot.id === botId)?.messages ?? [];
 };
 
-/** Drive a bot through one turn so it owns a task its own thread id resolves
- * to — /api/internal/ask-bot refuses a source thread that has none. */
+/** Drive the real provider before probing its roster and comms capability. */
 const warmUp = async (botId: string) => {
   expect((await api("POST", `/api/bots/${botId}/messages`, { text: "Warm up" })).status).toBe(202);
   await expect.poll(() => botBusy(botId), { timeout: 15_000 }).toBe(false);
 };
 
+// 84841aeed: standalone endpoint probes have no live requester to resume.
+// Give them the real external-runtime capability and its poll root.
+const runtimes: Record<string, { token: string; threadId: string }> = {};
 const mintCapability = async (botId: string, threadId: string): Promise<string> => {
-  const minted = await api(
-    "POST",
-    "/api/testing/internal-capability",
-    { botId, threadId, kind: "agents" },
-    { "x-openmausbot-test-capability": TEST_CAPABILITY_KEY },
-  );
-  expect(minted.status).toBe(201);
-  return String(minted.body.token);
+  const token = `allowlist-runtime-${randomUUID()}`;
+  runtimes[botId] = { token, threadId };
+  writeFileSync(join(home, ".sagax", "external-runtimes.json"), JSON.stringify(runtimes), { mode: 0o600 });
+  return token;
+};
+
+const runtimeAssignment = (taskId: string): Assignment | undefined => {
+  const db = new DatabaseSync(join(home, ".sagax", "runtime.db"), { readOnly: true });
+  try {
+    const rows = db.prepare("SELECT json FROM assignments").all() as Array<{ json: string }>;
+    return rows.map(row => JSON.parse(row.json) as Assignment).find(row => row.id === taskId);
+  } finally { db.close(); }
 };
 
 const hideSeededBot = async () => {
@@ -417,13 +424,17 @@ describe("peer allow-list", () => {
       const token = await mintCapability(asker.id, asker.threadId);
       expect((await api("PATCH", `/api/bots/${asker.id}`, { approvePeerComms: true })).status).toBe(200);
 
-      // parks inside requestPeerApproval until the card below is answered
+      // The external consultation queues on the runtime while its review
+      // card is open; its task id remains the same after the answer.
       const parked = api(
         "POST",
         "/api/internal/ask-bot",
         { fromBotId: asker.id, toBotId: helper.id, message: "Hedge, a quick one" },
         { authorization: `Bearer ${token}` },
       );
+      const queued = await parked;
+      expect(queued.status).toBe(200);
+      expect(queued.body).toMatchObject({ busy: true, taskId: expect.any(String) });
 
       const askCard = async () =>
         (await botMessages(asker.id)).find(
@@ -441,9 +452,13 @@ describe("peer allow-list", () => {
       expect(allowed.status).toBe(200);
 
       // the human said yes to a contact that is no longer permitted
-      const outcome = await parked;
-      expect(outcome.status).toBe(200);
-      expect(String(outcome.body.error)).toBe("that bot is no longer an allowed peer");
+      await expect.poll(() => runtimeAssignment(queued.body.taskId)?.status, { timeout: 15_000 }).toBe("failed");
+      expect(runtimeAssignment(queued.body.taskId)?.executions).toBe(0);
+      const outcome = await api("GET", `/api/internal/delegations/${queued.body.taskId}`, undefined, { authorization: `Bearer ${token}` });
+      expect(outcome.status).toBe(403);
+      expect(String(outcome.body.error)).toBe("Result withheld: team access changed while the teammate was working");
+      expect(outcome.body).not.toHaveProperty("result");
+      expect(outcome.body).not.toHaveProperty("toBotName");
       // and the peer turn never started: no inbound message, nothing to mirror
       expect(
         (await botMessages(helper.id)).some(

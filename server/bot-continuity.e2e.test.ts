@@ -4,7 +4,8 @@ import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb } from "../scripts/control-omb.ts";
 
 it("keeps ordinary work out of setup and carries explicit bot defaults and file locations into rooms", async () => {
-  const fixture = await launchVerificationServer();
+  // 062d7c42e continues tool-only endings; inspect this requested turn, not a follow-up.
+  const fixture = await launchVerificationServer({ FAKE_CLAUDE_TOOL_CALLS: "[]" });
   const evidence: unknown[] = [{ fixture: fixture.info }];
   const control = async (args: string[]) => {
     const result = await runControlOmb([...args, "--url", fixture.info.url]) as any;

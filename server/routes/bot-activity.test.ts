@@ -626,3 +626,24 @@ describe("work another bot hands over is Coding only for its own request's code 
     expect(await entryOf(await serve(settled(failed)))).toMatchObject({ status: "failed" });
   });
 });
+
+describe("activity list reuses one message page per thread", () => {
+  it("calls messagesTail once per listed thread, not once per helper", async () => {
+    const calls: Array<{ threadId: string; limit: number }> = [];
+    const base = await serve(deps({
+      messages: (threadId, limit) => {
+        calls.push({ threadId, limit });
+        return { messages: (messages[threadId] ?? []).slice(-limit), hasMore: false };
+      },
+    }));
+    await get(base, "/api/bots/pepper/activity", "alice");
+    const byThread = new Map<string, number>();
+    for (const call of calls) byThread.set(call.threadId, (byThread.get(call.threadId) ?? 0) + 1);
+    // Busy alice + completed routine thread: each paid one messagesTail (the
+    // coding-scan page), reused for untouched / settled / currentStep.
+    expect(byThread.get("t-alice")).toBe(1);
+    expect(byThread.get("t-routine")).toBe(1);
+    expect(byThread.has("t-bob")).toBe(false);
+    expect(byThread.has("t-old")).toBe(false);
+  });
+});

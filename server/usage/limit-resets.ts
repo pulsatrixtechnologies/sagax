@@ -58,6 +58,8 @@ export interface LimitClockOptions {
   accounts: () => PlanAccount[];
   /** Plan usage for those engines; the default reads each engine's own sign-in, or SAGAX_TEST_PLAN_USAGE_FILE. */
   loadUsage?: (accounts: PlanAccount[], refresh: boolean) => Promise<PlanUsageReport>;
+  /** An engine's name and family when no account names it (a refusal on a key, which has no plan usage). */
+  describe?: (engine: string) => { name: string; driver: Driver } | undefined;
   /** Something is waiting on a reset time, so usage is checked again on its own. */
   waiting?: () => boolean;
   /** The known reset times changed. */
@@ -127,9 +129,24 @@ export class LimitResetClock {
     if (!engine || resetsAt === undefined || !Number.isFinite(resetsAt) || resetsAt <= this.now() || this.refusals.get(engine) === resetsAt) return;
     this.refusals.set(engine, resetsAt);
     this.options.onChange?.();
+    this.refreshSoon();
+  }
+
+  private refreshSoon(): void {
     if (this.soon) clearTimeout(this.soon);
     this.soon = setTimeout(() => { this.soon = null; void this.refresh(true); }, SOON_AFTER_REFUSAL_MS);
     this.soon.unref?.();
+  }
+
+  /** A turn on this engine just succeeded on this clock's account, so that account is not refusing work now: a
+   * refusal kept for it is over, and a usage reading at its limit is out of date until the next reading. */
+  noteSuccess(engine: string | undefined): void {
+    if (!engine) return;
+    const refused = this.refusals.delete(engine);
+    const usage = this.usage.get(engine);
+    const stale = usage?.blocked === true;
+    if (stale) this.usage.set(engine, { ...usage, blocked: false });
+    if (refused || stale) this.options.onChange?.();
   }
 
   noteUsage(report: PlanUsageReport): void {
@@ -196,6 +213,7 @@ export class LimitResetClock {
 
   private unnamed(engine: string): EngineLimit {
     const account = this.options.accounts().find((candidate) => candidate.id === engine);
-    return { engine, name: account?.name ?? engine, driver: account?.driver ?? "claude", window: null, usedPercent: null, resetsAt: null, blocked: false };
+    const described = account ? undefined : this.options.describe?.(engine);
+    return { engine, name: account?.name ?? described?.name ?? engine, driver: account?.driver ?? described?.driver ?? "claude", window: null, usedPercent: null, resetsAt: null, blocked: false };
   }
 }

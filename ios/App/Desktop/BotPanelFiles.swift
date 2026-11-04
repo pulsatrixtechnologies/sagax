@@ -6,8 +6,11 @@
 // (show in chat, download, copy path). The bot's artifacts are in the same
 // list and open in the widget sandbox. The grouping is `LibraryRules`
 // (CompanionCore); a pin is kept on the server (`setThreadFilePin`, the
-// artifact's favorite flag) so it is the same on the desktop. The bot's links
-// stay one more chip, Links (owner 2026-10-18).
+// artifact's favorite flag) so it is the same on the desktop. No chips
+// above the list: the owner kept a Links chip on 2026-10-18 while the
+// desktop had one; the desktop's Library dropped it (LibraryTab.tsx, the
+// list alone), so the iPad follows (sweep 2026-11-03). The bot's links stay
+// on the phone's profile (LinksTab).
 import SwiftUI
 import UIKit
 import CompanionCore
@@ -34,41 +37,26 @@ struct BotPanelFiles: View {
     @State private var sharing: IdentifiedURL?
     @State private var working: String?
     @State private var status: String?
-    /// The bot's links, one more chip (`BotLibraryChip.links`), as on the phone.
-    @State private var showingLinks = false
-    @StateObject private var links = LibraryLoader<BotLink>()
+    /// The row under the pointer (its actions show).
+    @State private var hoveredRow: String?
 
     private var threadId: String { bot.threadId }
     private var all: [ThreadFile] { library.files ?? [] }
-    private var linkCount: Int { links.page?.total ?? links.page?.items.count ?? 0 }
-    /// Files and Links, only when the bot has links to switch to.
-    private var allChips: [BotLibraryChip] { linkCount > 0 ? [.files(.all), .links] : [] }
-    private var selectedChip: BotLibraryChip { showingLinks ? .links : .files(.all) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if !allChips.isEmpty { AnyView(chipRow) }
             if let status {
                 Label(status, systemImage: "checkmark")
                     .font(theme.font(12))
                     .foregroundStyle(theme.success)
             }
-            if showingLinks {
-                AnyView(LinksTab(bot: bot, loader: links, onShowMessage: { link in jump(link) }).padding(.horizontal, -Theme.Profile.cardMargin))
-            } else {
-                AnyView(content)
-            }
+            AnyView(content)
         }
         .padding(.top, 8)
         .padding(.leading, 17)
         .padding(.trailing, 16)
         .padding(.bottom, 24)
-        .task(id: threadId) {
-            await load()
-            guard let client = session.profileClient else { return }
-            let botId = bot.id
-            links.loadFirst { cursor, limit in try await client.botLinks(botId: botId, cursor: cursor, limit: limit) }
-        }
+        .task(id: threadId) { await load() }
         .sheet(item: $previewing) { item in ProfileQuickLook(url: item.url).ignoresSafeArea() }
         .sheet(item: $sharing) { item in ProfileShareSheet(items: [item.url]) }
         .sheet(item: $opened) { artifact in BotArtifactSheet(artifact: artifact) }
@@ -94,64 +82,6 @@ struct BotPanelFiles: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("desktop-panel-files")
-    }
-
-    // MARK: Controls
-
-    private var chipRow: some View {
-        PanelFlow(spacing: 6, lineSpacing: 6) {
-            ForEach(allChips, id: \.self) { chip in
-                let selected = selectedChip == chip
-                Button {
-                    switch chip {
-                    case .files:
-                        showingLinks = false
-                    case .links:
-                        showingLinks = true
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(verbatim: chipName(chip))
-                            .foregroundStyle(selected ? theme.app : theme.inkSecondary)
-                        Text(verbatim: "\(chipCount(chip))")
-                            .monospacedDigit()
-                            .foregroundStyle(selected ? theme.app.opacity(0.7) : theme.inkTertiary)
-                    }
-                    .font(theme.font(12))
-                    .padding(.horizontal, 11) // px-2.5 inside a 1 pt border
-                    .frame(height: 26)
-                    .background(selected ? theme.ink : .clear, in: Capsule())
-                    .overlay(Capsule().strokeBorder(selected ? .clear : theme.hairlineWeak, lineWidth: 1))
-                    .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(selected ? .isSelected : [])
-                .accessibilityIdentifier("desktop-files-chip.\(chipId(chip))")
-            }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(Text("Library views"))
-    }
-
-    private func chipName(_ chip: BotLibraryChip) -> String {
-        switch chip {
-        case .files: String(localized: "Files")
-        case .links: String(localized: "Links")
-        }
-    }
-
-    private func chipCount(_ chip: BotLibraryChip) -> Int {
-        switch chip {
-        case .files: all.count + library.artifacts.count
-        case .links: linkCount
-        }
-    }
-
-    private func chipId(_ chip: BotLibraryChip) -> String {
-        switch chip {
-        case .files: "files"
-        case .links: "links"
-        }
     }
 
     // MARK: Content
@@ -257,9 +187,33 @@ struct BotPanelFiles: View {
             .disabled(!available)
             .accessibilityLabel(Text("Open \(name)"))
             .accessibilityIdentifier("desktop-file.\(name)")
-            actions(entry)
+            // the desktop shows a row's actions on hover; a finger reaches
+            // them by a long press (the same items)
+            if hoveredRow == ThreadFilesView.name(entry) { actions(entry) }
         }
         .frame(minHeight: 40)
+        .padding(.horizontal, 8)
+        .contentShape(Rectangle())
+        .onHover { inside in hoveredRow = inside ? ThreadFilesView.name(entry) : (hoveredRow == ThreadFilesView.name(entry) ? nil : hoveredRow) }
+        .contextMenu { menuItems(entry) }
+    }
+
+    @ViewBuilder
+    private func menuItems(_ entry: LibraryEntry) -> some View {
+        Button(entry.pinned ? String(localized: "Unpin") : String(localized: "Pin"), systemImage: "pin") { Task { await setPinned(entry, !entry.pinned) } }
+        if case let .page(page) = entry {
+            Button(String(localized: "Share…"), systemImage: "square.and.arrow.up") { sharingPage = page }
+            Button(String(localized: "Delete…"), systemImage: "trash", role: .destructive) { deletingPage = page }
+        }
+        if case let .file(file) = entry {
+            Button(String(localized: "Show in chat"), systemImage: "bubble.left") { jump(file) }
+            if file.available {
+                Button(String(localized: "Download"), systemImage: "arrow.down.to.line") { Task { await fetch(file, share: true) } }
+                if let path = ThreadFileRules.copyablePath(of: file) {
+                    Button(String(localized: "Copy path"), systemImage: "square.on.square") { copy(path) }
+                }
+            }
+        }
     }
 
     private func actions(_ entry: LibraryEntry) -> some View {
@@ -333,16 +287,6 @@ struct BotPanelFiles: View {
     private func jump(_ file: ThreadFile) {
         if !docked { model.togglePanel() }
         Task { await session.jump(to: file.messageId, inThread: threadId) }
-    }
-
-    /// Go to message on a link: the chat beside the panel switches to the
-    /// link's conversation in place when it is another one.
-    private func jump(_ link: BotLink) {
-        guard let messageId = link.messageId else { return }
-        let target = link.threadId ?? threadId
-        let botId = bot.id
-        if !docked { model.togglePanel() }
-        Task { await session.showLinkMessage(messageId, botId: botId, threadId: target) }
     }
 
     private func open(_ entry: LibraryEntry) {

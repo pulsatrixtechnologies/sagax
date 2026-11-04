@@ -23,7 +23,7 @@ import { grokHostToolArgs, grokOrgAgentProfile } from "../host-tools.ts";
 import { grokReadOnlyAllowRules } from "./grok-read-only-tools.ts";
 import { gateReadOnlyTools, grokApprovalGateEnabled } from "./grok-approval-gate.ts";
 import { knownGrokTools, knownGrokToolsSection, recordGrokToolUse, useToolName } from "./grok-tool-usage.ts";
-import { grokCatalogFor, grokCatalogSection, noteGrokAccountReach, rememberGrokCatalog } from "./grok-tool-catalog.ts";
+import { grokCatalogFor, grokCatalogSection, grokMcpAlreadySettled, noteGrokAccountReach, rememberGrokCatalog, rememberGrokMcpSettled, forgetGrokMcpSettled } from "./grok-tool-catalog.ts";
 import { GROK_CLOUD_CONNECTORS } from "../../../shared/grok-cloud-connectors.ts";
 import { turnReachFor } from "../../turns/turn-reach.ts";
 import { allowsTool, canUseMcpServer, narrowsNativeTools, parseToolScope } from "../../../shared/tool-scope.ts";
@@ -1073,7 +1073,7 @@ const support: AcpSupport = {
 
   // -m on argv is necessary but not sufficient: session/new still starts on
   // [models].default. Pin the slug over the wire, same as Hermes/Droid.
-  async configureSession({ request, sessionId, turn, currentModelId, sessionModels, notice }) {
+  async configureSession({ request, sessionId, turn, currentModelId, sessionModels, notice, reused }) {
     if (turn.toolScope !== undefined) {
       const available = new Set([
         ...(turn.integrations?.agents ? ["agents"] : []),
@@ -1112,11 +1112,20 @@ const support: AcpSupport = {
       // What the person's own xAI account brought (its grok.com connectors),
       // kept by their sign-in folder: only on a turn that loads the gateway
       // (grokCloudConnectorEnv), where an empty gateway means none.
+      // A later turn on the same live session that already settled skips the
+      // poll. A session/new or session/load (reused false) forgets the flag
+      // so a reconnect still waits once.
       const reachHome = turn.grokCloudConnectors === true && turn.withholdHostTools === true ? turn.access?.engineHome : undefined;
-      await waitForGrokMcpSettled(request, sessionId, GROK_MCP_SETTLE_MS, (catalog) => {
-        rememberGrokCatalog(sessionId, catalog);
-        noteGrokAccountReach(reachHome, catalog);
-      });
+      if (reused !== true) forgetGrokMcpSettled(sessionId);
+      if (reused === true && grokMcpAlreadySettled(sessionId)) {
+        /* MCP mounts of this live session already settled on an earlier turn */
+      } else {
+        const settled = await waitForGrokMcpSettled(request, sessionId, GROK_MCP_SETTLE_MS, (catalog) => {
+          rememberGrokCatalog(sessionId, catalog);
+          noteGrokAccountReach(reachHome, catalog);
+        });
+        if (settled) rememberGrokMcpSettled(sessionId);
+      }
     }
     if (!turn.model) return;
     if (grokPinsModelInProfile(turn)) {

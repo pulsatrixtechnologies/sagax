@@ -162,7 +162,7 @@ async function captureGallery(chromium) {
       // the galleries' fixtures are French; the README reads English, so
       // the few words on a card are swapped before the shot
       const WORDS = [
-        ["Katarina", "Nova"], ["Portail Exemple", "Example portal"], ["Exemple travail", "Example work"], ["Exemple admin", "Example admin"], ["Travail", "Work"], ["Perso", "Personal"],
+        ["Osprey", "Nova"], ["Portail Exemple", "Example portal"], ["Exemple travail", "Example work"], ["Exemple admin", "Example admin"], ["Travail", "Work"], ["Perso", "Personal"],
         ["Boutique Exemple", "Example Store"], ["Câble USB-C", "USB-C cable"], ["Chargeur 65 W", "65 W charger"], ["Boutique Audio", "Audio Shop"],
         ["Casque sans fil, réduction de bruit", "Wireless headphones, noise cancelling"], ["Postes Canada", "Canada Post"], ["Retenu au dépôt, adresse à confirmer", "Held at the depot, address to confirm"],
       ];

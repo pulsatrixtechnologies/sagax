@@ -12,7 +12,7 @@ final class DisplayHygieneTests: XCTestCase {
         XCTAssertTrue(DisplayHygiene.containsUuid("card:\(uuid)"))
         XCTAssertTrue(DisplayHygiene.containsUuid("prefix \(uuid) suffix"))
         XCTAssertTrue(DisplayHygiene.containsUuid(String(uuid.prefix(23))))
-        XCTAssertFalse(DisplayHygiene.containsUuid("Instructions changed by Katarina, approval card, Oct 21"))
+        XCTAssertFalse(DisplayHygiene.containsUuid("Instructions changed by Osprey, approval card, Oct 21"))
         XCTAssertFalse(DisplayHygiene.containsUuid("connectwise-ticket-handling"))
     }
 
@@ -26,13 +26,13 @@ final class DisplayHygieneTests: XCTestCase {
             summary: "soul: 1640 → 1650 bytes",
             canRestore: true
         )
-        let phrase = DisplayHygiene.historyPhrase(row, botName: "Katarina",
+        let phrase = DisplayHygiene.historyPhrase(row, botName: "Osprey",
                                                   now: Date(timeIntervalSince1970: 1_730_000_000))
         XCTAssertFalse(DisplayHygiene.containsUuid(phrase), phrase)
         XCTAssertFalse(phrase.localizedCaseInsensitiveContains("bytes"), phrase)
         XCTAssertFalse(phrase.localizedCaseInsensitiveContains("1640"), phrase)
         XCTAssertTrue(phrase.localizedCaseInsensitiveContains("Instructions"), phrase)
-        XCTAssertTrue(phrase.localizedCaseInsensitiveContains("Katarina"), phrase)
+        XCTAssertTrue(phrase.localizedCaseInsensitiveContains("Osprey"), phrase)
         XCTAssertTrue(phrase.localizedCaseInsensitiveContains("approval card")
                       || phrase.localizedCaseInsensitiveContains("carte"), phrase)
     }
@@ -88,11 +88,11 @@ final class DisplayHygieneTests: XCTestCase {
     func testSkillTitlePrefersDescriptionAndKeepsSlugSeparate() {
         let skill = ManagedSkill(
             name: "connectwise-ticket-handling",
-            description: "How Katarina reads ConnectWise tickets.",
+            description: "How Osprey reads ConnectWise tickets.",
             enabled: true,
             source: "learn:conversation"
         )
-        XCTAssertEqual(DisplayHygiene.skillTitle(skill), "How Katarina reads ConnectWise tickets.")
+        XCTAssertEqual(DisplayHygiene.skillTitle(skill), "How Osprey reads ConnectWise tickets.")
         XCTAssertEqual(DisplayHygiene.skillSlug(skill), "connectwise-ticket-handling")
         let bare = ManagedSkill(name: "deploy-check", description: "", enabled: false)
         XCTAssertEqual(DisplayHygiene.skillTitle(bare), "deploy check")
@@ -119,10 +119,10 @@ final class DisplayHygieneTests: XCTestCase {
             source: "import:\(uuid)"
         )
         let open: [String] = [
-            DisplayHygiene.historyPhrase(row, botName: "Katarina",
+            DisplayHygiene.historyPhrase(row, botName: "Osprey",
                                          now: Date(timeIntervalSince1970: 1_730_000_000)),
             DisplayHygiene.historyVia(row.via),
-            DisplayHygiene.historyWho(row.actor, botName: "Katarina"),
+            DisplayHygiene.historyWho(row.actor, botName: "Osprey"),
             DisplayHygiene.displayWorkspacePath(path),
             DisplayHygiene.skillTitle(skill),
         ]

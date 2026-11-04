@@ -48,6 +48,13 @@ vi.mock("@/state/store", async (importOriginal) => {
   return { ...original, api: fixture.api, useStore: () => ({ state: fixture.state, dispatch: fixture.dispatch }) };
 });
 
+vi.mock("@/state/store-selector", async (original) => ({
+  ...await original<typeof import("@/state/store-selector")>(),
+  useStoreSelector: (select: (state: AppState) => unknown) => select(fixture.state),
+  useStoreDispatch: () => fixture.dispatch,
+  useStoreGetter: () => () => fixture.state,
+}));
+
 import { initialState } from "@/state/store";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ArchivedBotsPanel, BotContextMenu, Sidebar } from "./Sidebar";

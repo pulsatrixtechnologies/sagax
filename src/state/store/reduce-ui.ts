@@ -82,6 +82,7 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
         ...state,
         activeView: "chat",
         routineRunSheet: { runId: action.runId, ...(action.routineId ?? known?.routineId ? { routineId: action.routineId ?? known?.routineId } : {}) },
+        codingChat: null,
         // Keep the bot panel if it was already open; otherwise land on chat.
         personPanelId: null,
         appSettingsOpen: false,
@@ -96,6 +97,23 @@ export function reduceUi(state: AppState, action: Action, reduce: ReduceFn): App
     }
     case "closeRoutineRunSheet":
       return state.routineRunSheet ? { ...state, routineRunSheet: null } : state;
+    // 2026-11-03: a coding task opens as a chat where the chat is, never in
+    // the side panel (the panel stays open as it was, its Coding list the
+    // entry point).
+    case "openCodingChat":
+      return {
+        ...state,
+        activeView: "chat",
+        codingChat: action.target,
+        routineRunSheet: null,
+        personPanelId: null,
+        appSettingsOpen: false,
+        pluginsOpen: false,
+        triggersOpen: false,
+        memoryManagerOpen: false,
+      };
+    case "closeCodingChat":
+      return state.codingChat ? { ...state, codingChat: null } : state;
     case "openBotActivity": {
       const opened = reduce(state, { type: "toggleSettings", open: true, section: "routines", botId: action.botId });
       if (opened === state) return state;

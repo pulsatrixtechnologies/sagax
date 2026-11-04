@@ -8,6 +8,12 @@ import CompanionCore
 struct BotConversationPage: View {
     let row: BotConversation
     let selfBot: Bot
+    /// The iPad desktop shell (ExchangeSheet): a page over the chat column,
+    /// the app's background, the header pill, one centred Close Chat pill
+    /// in place of the composer and no read-only pill.
+    var desktop = false
+    var onClose: (() -> Void)?
+    @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
     @Environment(\.dismiss) private var dismiss
     @State private var lines: [BotConversationLine] = []
@@ -68,11 +74,44 @@ struct BotConversationPage: View {
             .accessibilityLabel(Text("Transcript of the exchange between Bots"))
             footer
         }
+        .background(desktop ? theme.app : Color.clear)
         .task { await load() }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("bot-conversation-page")
     }
 
-    private var header: some View {
+    private func close() {
+        if let onClose { onClose() } else { dismiss() }
+    }
+
+    @ViewBuilder private var header: some View {
+        if desktop { desktopHeader } else { phoneHeader }
+    }
+
+    /// `rounded-full bg-elevated px-3 py-1.5`: avatar 18, the name 13
+    /// medium in the bot's ink, ⇄ 14 tertiary between them; pt-6.
+    private var desktopHeader: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 6) {
+                BotConversationAvatar(bot: selfBot, name: selfBot.name, size: 18)
+                Text(verbatim: selfBot.name).font(theme.font(13, .medium)).foregroundStyle(Theme.readable(MausPalette.color(selfBot.color)))
+            }
+            DesktopIconView(icon: .arrowLeftRight, size: 14).foregroundStyle(theme.inkTertiary)
+            HStack(spacing: 6) {
+                let other = bot(row.otherBotId)
+                BotConversationAvatar(bot: other, name: row.otherName, size: 18, agent: row.isAgent)
+                Text(verbatim: row.otherName).font(theme.font(13, .medium)).foregroundStyle(Theme.readable(MausPalette.color(other?.color ?? "")))
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 6)
+        .background(Capsule().fill(theme.elevated))
+        .padding(.top, 24).padding(.bottom, 6)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Agents in this exchange"))
+        .accessibilityValue(Text("\(selfBot.name), \(row.otherName)"))
+    }
+
+    private var phoneHeader: some View {
         HStack(spacing: 8) {
             BotConversationAvatar(bot: selfBot, name: selfBot.name, size: 20)
             Text(selfBot.name).font(.system(size: 14, weight: .medium))
@@ -99,17 +138,32 @@ struct BotConversationPage: View {
                         .accessibilityIdentifier("bot-conversation-stop")
                 }
             }
-            Label("Bot conversation, read only", systemImage: "lock.fill")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.textSecondary)
-                .padding(.horizontal, 12).padding(.vertical, 5)
-                .background(Capsule().fill(Color.secondary.opacity(0.15)))
-                .accessibilityIdentifier("bot-conversation-readonly")
-            Button("Close Chat") { dismiss() }
-                .buttonStyle(.bordered).buttonBorderShape(.capsule)
+            if !desktop {
+                Label("Bot conversation, read only", systemImage: "lock.fill")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.textSecondary)
+                    .padding(.horizontal, 12).padding(.vertical, 5)
+                    .background(Capsule().fill(Color.secondary.opacity(0.15)))
+                    .accessibilityIdentifier("bot-conversation-readonly")
+            }
+            if desktop {
+                // PILL px-4 font-medium: the raised capsule, 13 medium
+                Button { close() } label: {
+                    Text("Close Chat").font(theme.font(13, .medium)).foregroundStyle(theme.ink)
+                        .padding(.horizontal, 16).frame(minHeight: 32)
+                        .background(Capsule().fill(theme.raised))
+                }
+                .buttonStyle(.plain)
+                .hoverEffect(.highlight)
+                .keyboardShortcut(.cancelAction)
                 .accessibilityIdentifier("bot-conversation-close")
+            } else {
+                Button("Close Chat") { close() }
+                    .buttonStyle(.bordered).buttonBorderShape(.capsule)
+                    .accessibilityIdentifier("bot-conversation-close")
+            }
         }
-        .padding(.top, 8).padding(.bottom, 24)
+        .padding(.top, 8).padding(.bottom, desktop ? 16 : 24)
     }
 
     private func load() async {

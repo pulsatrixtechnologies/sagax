@@ -1,3 +1,5 @@
+import type { ConsoleRole, OrgAdminViewer, AdminBotReach } from "./org-admin-types.ts";
+export type { ConsoleRole, OrgAdminViewer, AdminBotReach } from "./org-admin-types.ts";
 // The organization admin API the Perspicax console reads through its proxy
 // (slice 7, spec section 8 "/api/org/admin/*"):
 //
@@ -26,7 +28,7 @@ import { permissionCatalogue } from "../../shared/permissions.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import { aggregateOrgUsage, ORG_USAGE_MAX_ROWS, parseOrgUsageRange, type OrgUsageAggregate, type UsageRow } from "../usage/usage-ledger.ts";
-import type { ConsoleAssertion, ConsoleGrant, ConsoleGrantKind, OidcTeamClaim } from "../auth/oidc-rp.ts";
+import type { ConsoleAssertion, ConsoleGrant, ConsoleGrantKind } from "../auth/oidc-rp.ts";
 import type { IdentifiedAdminAction } from "../activity/admin-activity.ts";
 import type { AdminBotLook, AdminBotPersona } from "./org-admin-look.ts";
 import { ADMIN_FILES_ROUTE, answerBotFiles, type OrgAdminFilesDeps } from "./org-admin-files.ts";
@@ -102,24 +104,12 @@ const MAX_TOKEN_CHARS = 8_192;
 const CARD_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const AUDIT_CURSOR = /^\d{4}-\d{2}-\d{1,9}$/;
 
-export type ConsoleRole = "admin" | "manager" | "employee";
-
 /** A person as the console reads one. */
 export interface AdminPerson {
   principalId: string;
   /** The Perspicax user id; null for a local or interim principal. */
   sub: string | null;
   name: string;
-}
-
-/** Who the assertion names, as the admin API sees them. */
-export interface OrgAdminViewer {
-  principalId: string;
-  sub: string;
-  name: string;
-  role: ConsoleRole;
-  orgAdmin: boolean;
-  teams: OidcTeamClaim[];
 }
 
 export type AccessKind = "subscription" | "owner-key" | "speaker-key" | "org-key" | "server" | "none";
@@ -152,15 +142,6 @@ export interface AdminBot {
   /** 2026-10-16: the bot's default approval level (ask, edits, auto, full,
    * custom), for the console's "Approve for me" bulk action. */
   approvalMode: string;
-}
-
-/** What a manager's reach is checked against for one bot. */
-export interface AdminBotReach {
-  ownerPrincipalId: string;
-  /** `user:<pid>` / `team:<id>` of its grants. */
-  grantTargets: string[];
-  /** Member targets of the shared sections it sits in. */
-  sectionMemberTargets: string[];
 }
 
 export type ApprovalType = "tool" | "skill" | "routine" | "profile" | "model" | "team_setup" | "tightening" | "peer" | "other";
@@ -249,7 +230,6 @@ export class AssertionReplayCache {
     return this.seen.size;
   }
 }
-
 
 /** Whether an assertion's `grant` covers this one request: the kind the
  * route declares, the same method, the same path below /api/org/admin/. */

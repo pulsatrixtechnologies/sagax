@@ -28,7 +28,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronRight, History, GitCommitHorizontal, GitMerge, GitPullRequest, GitPullRequestClosed, SquareTerminal } from "lucide-react";
 
-import { api, openRoutineRun, type Bot } from "@/state/store";
+import { api, openRoutineRun, type Action, type Bot } from "@/state/store";
 import { useStoreDispatch, useStoreGetter } from "@/state/store-selector";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -62,6 +62,16 @@ import { loadArchivedBranches, setBranchArchived } from "@/lib/code-branches";
 import { CodeBranchList, type BranchListActions } from "./CodeBranchList";
 
 export { ActivityList, type CardActions };
+
+/** A coding job opens as the coding chat: a conversation's (or a cloud
+ * agent's) code work, never a routine run or a sub-agent. */
+export function opensAsCodingChat(item: BotActivityItem): boolean {
+  return Boolean(item.coding) && item.kind !== "routine" && item.kind !== "subagent" && (item.id.startsWith("thread:") || item.id.startsWith("cloud:"));
+}
+
+function openCodingChat(dispatch: (action: Action) => void, item: BotActivityItem) {
+  dispatch({ type: "openCodingChat", target: { botId: item.botId, itemId: item.id, ...(item.threadId ? { threadId: item.threadId } : {}), seed: item } });
+}
 
 /** One row of code work: an icon, a line, a quieter line; with a web page
  * it opens in the system browser. */
@@ -302,6 +312,9 @@ export function ActivitySection({ bot }: { bot: Bot }) {
     const runId = item.kind === "routine" && item.id.startsWith("run:") ? item.id.slice(4) : undefined;
     const run = runId ? getState().routineRuns.find((candidate) => candidate.id === runId) : undefined;
     if (run) openRoutineRun(dispatch, { runId: run.id, routineId: run.routineId });
+    // 2026-11-03: a coding task opens as a chat where the chat is, never
+    // in this panel (src/components/coding/CodingChat.tsx).
+    else if (opensAsCodingChat(item)) openCodingChat(dispatch, item);
     else setOpen(item);
   };
   const actions: CardActions = { onOpen: openItem, onStop: stop, stopping: feed.stopping, now: feed.now, fading: feed.live.fading };
@@ -323,14 +336,22 @@ export function ActivitySection({ bot }: { bot: Bot }) {
   // The command palette's "<bot> history" opens it with the row hidden.
   useEffect(() => watchBotHistoryRequests(bot.id, () => setAll("coding")), [bot.id]);
   useEffect(() => {
-    if (feed.deepLinked) setOpen(feed.deepLinked);
-  }, [feed.deepLinked]);
+    if (!feed.deepLinked) return;
+    if (opensAsCodingChat(feed.deepLinked)) openCodingChat(dispatch, feed.deepLinked);
+    else setOpen(feed.deepLinked);
+  }, [feed.deepLinked, dispatch]);
+  // A launched agent that did code work opens as a coding chat too, on
+  // the bot that runs it.
   const openLaunched = useCallback((item: BotLaunchedAgentItem) => {
     if (!item.threadId) return;
+    if (item.coding) {
+      dispatch({ type: "openCodingChat", target: { botId: item.targetBotId, itemId: item.id, threadId: item.threadId } });
+      return;
+    }
     loadBotActivityDetail(api, item.targetBotId, item.id)
       .then((detail) => setOpen(detail))
       .catch(() => {});
-  }, []);
+  }, [dispatch]);
 
   return (
     <>

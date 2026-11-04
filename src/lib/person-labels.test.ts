@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { applyPersonLabel, canEditPersonLabel, loadPersonLabels, personLabel, resetPersonLabelsForTests, savePersonLabel } from "./person-labels";
+import { applyPersonLabel, canEditPersonLabel, loadPersonLabels, storedPersonLabel, resetPersonLabelsForTests, savePersonLabel } from "./person-labels";
 
 const ok = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }));
 
@@ -15,17 +15,17 @@ describe("person labels on the client", () => {
     vi.stubGlobal("fetch", fetch);
     await loadPersonLabels(true);
     expect(fetch).toHaveBeenCalledWith("/api/people/labels", expect.anything());
-    expect(personLabel("pr_ada")).toBe("CTO");
-    expect(personLabel("pr_bob")).toBe("");
-    expect(personLabel("pr_cy")).toBe("");
-    expect(personLabel(null)).toBe("");
+    expect(storedPersonLabel("pr_ada")).toBe("CTO");
+    expect(storedPersonLabel("pr_bob")).toBe("");
+    expect(storedPersonLabel("pr_cy")).toBe("");
+    expect(storedPersonLabel(null)).toBe("");
   });
 
   it("applies a person.label frame and clears with null", () => {
     applyPersonLabel("pr_ada", "Dispatch");
-    expect(personLabel("PR_ADA")).toBe("Dispatch");
+    expect(storedPersonLabel("PR_ADA")).toBe("Dispatch");
     applyPersonLabel("pr_ada", null);
-    expect(personLabel("pr_ada")).toBe("");
+    expect(storedPersonLabel("pr_ada")).toBe("");
   });
 
   it("saves a trimmed label with PUT and shows the server's answer; refuses a long one before sending", async () => {
@@ -37,7 +37,7 @@ describe("person labels on the client", () => {
     expect(path).toBe("/api/people/pr_ada/label");
     expect(init?.method).toBe("PUT");
     expect(JSON.parse(String(init?.body))).toEqual({ label: "CTO" });
-    expect(personLabel("pr_ada")).toBe("CTO");
+    expect(storedPersonLabel("pr_ada")).toBe("CTO");
     await expect(savePersonLabel("pr_ada", "x".repeat(41))).rejects.toThrow("label_too_long");
     expect(fetch).toHaveBeenCalledTimes(1);
   });
@@ -46,7 +46,7 @@ describe("person labels on the client", () => {
     applyPersonLabel("pr_ada", "CTO");
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(JSON.stringify({ error: "nope", code: "person_label_forbidden" }), { status: 403 }))));
     await expect(savePersonLabel("pr_ada", "CFO")).rejects.toThrow("nope");
-    expect(personLabel("pr_ada")).toBe("CTO");
+    expect(storedPersonLabel("pr_ada")).toBe("CTO");
   });
 
   it("lets the person, an admin and a manager of their team edit; nobody else", () => {

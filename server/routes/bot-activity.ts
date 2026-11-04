@@ -36,6 +36,8 @@
 // the card of a run refused on their credentials even when the run's thread
 // is another person's private one, and nothing else of that thread.
 import { redactSecretsInText } from "../redact.ts";
+import { toolFailureText } from "../../shared/tool-failure-text.ts";
+import { shortPathsIn } from "../../shared/working-step.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { WireAccessCard } from "../../shared/wire.ts";
 import type { RoutineRun } from "../../shared/routines.ts";
@@ -165,7 +167,8 @@ const SUBAGENT_RESULT_CHARS = 4_000;
 export const STEP_ERROR_CHARS = 600;
 export function stepError(output: unknown): string | undefined {
   if (typeof output !== "string" || !output.trim()) return undefined;
-  const text = redactSecretsInText(output.trim());
+  // its own words, not an envelope a driver stored before 2026-11-03
+  const text = redactSecretsInText(toolFailureText(output) ?? output.trim());
   return text.length > STEP_ERROR_CHARS ? `${text.slice(0, STEP_ERROR_CHARS - 1).trimEnd()}…` : text;
 }
 
@@ -307,6 +310,44 @@ export function turnChildren<T extends { startedAt: number }>(children: readonly
 export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandler {
   const now = deps.now ?? Date.now;
 
+  // One list/detail request used to call messagesTail three or four times per
+  // thread (untouched, settled status, coding scan, current step). Cache the
+  // largest page per thread for the life of this handler closure so each
+  // thread pays one SQLite/memory read.
+  const messagePages = new Map<string, { messages: ActivityMessage[]; hasMore: boolean; limit: number }>();
+  function messages(threadId: string, limit: number): { messages: ActivityMessage[]; hasMore: boolean } {
+    const hit = messagePages.get(threadId);
+    if (hit && (hit.limit >= limit || !hit.hasMore)) {
+      const start = Math.max(0, hit.messages.length - limit);
+      return {
+        messages: start === 0 ? hit.messages : hit.messages.slice(start),
+        hasMore: hit.hasMore || start > 0,
+      };
+    }
+    const page = deps.messages(threadId, limit);
+    messagePages.set(threadId, { messages: page.messages, hasMore: page.hasMore, limit });
+    return page;
+  }
+
+  // inRepository / repository walk the filesystem; the same cwd is common
+  // across a bot's coding threads.
+  const inRepoCache = new Map<string, boolean>();
+  const repositoryCache = new Map<string, RepositoryInfo | undefined>();
+  function inRepository(cwd: string): boolean {
+    let hit = inRepoCache.get(cwd);
+    if (hit === undefined) {
+      hit = Boolean(deps.inRepository?.(cwd));
+      inRepoCache.set(cwd, hit);
+    }
+    return hit;
+  }
+  function repositoryOf(cwd: string): RepositoryInfo | undefined {
+    if (repositoryCache.has(cwd)) return repositoryCache.get(cwd);
+    const info = deps.repository?.(cwd);
+    repositoryCache.set(cwd, info);
+    return info;
+  }
+
   function startedBy(task: ActivityTask, run: RoutineRun | undefined): BotActivityActor | undefined {
     if (run || task.routineRunId) return { kind: "routine", name: run?.routineName ?? "" };
     if (task.openedBy) return { kind: "bot", name: task.openedBy.name };
@@ -323,7 +364,7 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
     if (run && ACTIVE_RUN.has(run.status)) status = runStatus(run.status);
     else if (task.busy) status = task.activity === "waiting-on-you" ? "waiting" : "running";
     else if (run) status = runStatus(run.status);
-    else status = settledStatus(deps.messages(task.threadId, 12).messages);
+    else status = settledStatus(messages(task.threadId, 12).messages);
     const updatedAt = Math.max(task.updatedAt ?? task.createdAt, run?.finishedAt ?? 0);
     const startedAt = activityStatusActive(status)
       ? task.turnStartedAt ?? run?.startedAt ?? task.createdAt
@@ -392,28 +433,28 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
     if (cached && cached.at === at && (!task.busy || now() - cached.scannedAt < CODING_RESCAN_MS)) return cached.scan;
     const all: CodingSignals = { edits: 0, codeFiles: 0, vcs: false };
     const turn: CodingSignals = { edits: 0, codeFiles: 0, vcs: false };
-    const repository = task.cwd ? deps.repository?.(task.cwd) : undefined;
+    const repository = task.cwd ? repositoryOf(task.cwd) : undefined;
     const collector = new CodeWorkCollector(repository?.origin);
-    const page = deps.messages(task.threadId, CODING_SCAN);
-    const messages = page.messages;
-    const start = turnStartIndex(messages);
-    messages.forEach((message, index) => {
+    const page = messages(task.threadId, CODING_SCAN);
+    const rows = page.messages;
+    const start = turnStartIndex(rows);
+    rows.forEach((message, index) => {
       if (!message.tool) return;
       addCodingSignal(all, message.tool);
       if (index > start) addCodingSignal(turn, message.tool);
       collector.add(message.tool, message.at);
     });
-    const inRepository = Boolean(task.cwd && (all.edits > 0 || turn.edits > 0) && deps.inRepository?.(task.cwd));
-    const everCoding = Boolean(cached?.scan.everCoding) || isCodingWork(all, inRepository);
+    const repo = Boolean(task.cwd && (all.edits > 0 || turn.edits > 0) && inRepository(task.cwd));
+    const everCoding = Boolean(cached?.scan.everCoding) || isCodingWork(all, repo);
     // A teammate's request is a task of its own; a person's turns in a
     // repository conversation add up to one coding job. With no request
     // in the page, a thread another bot opened is read as its requests.
-    const teammateTurn = start >= 0 ? messages[start]!.role !== "user" : Boolean(task.openedBy && task.openedBy.botId !== bot.id);
+    const teammateTurn = start >= 0 ? rows[start]!.role !== "user" : Boolean(task.openedBy && task.openedBy.botId !== bot.id);
     // The request scrolled out of the page: when the page still holds the
     // newest message the last scan read, nothing asked for work since, so
     // this is the turn that scan read.
-    const sameTurn = start < 0 && page.hasMore && cached?.scan.lastId !== undefined && messages.some((message) => message.id === cached.scan.lastId);
-    const coding = isCodingWork(turn, inRepository) || (!teammateTurn && inRepository && everCoding) || (sameTurn && cached!.scan.coding);
+    const sameTurn = start < 0 && page.hasMore && cached?.scan.lastId !== undefined && rows.some((message) => message.id === cached.scan.lastId);
+    const coding = isCodingWork(turn, repo) || (!teammateTurn && repo && everCoding) || (sameTurn && cached!.scan.coding);
     const code: BotCodeWork | undefined = everCoding
       ? {
         ...(repository ? { folder: repository.root } : {}),
@@ -422,8 +463,8 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
         ...collector.result(),
       }
       : undefined;
-    const request = newestRequest(messages);
-    const lastId = messages.at(-1)?.id;
+    const request = newestRequest(rows);
+    const lastId = rows.at(-1)?.id;
     const scan: ThreadScan = {
       coding,
       everCoding,
@@ -442,14 +483,14 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
    * request that just started, a teammate's included, has none yet. */
   function currentStep(threadId: string, run: RoutineRun | undefined): string | undefined {
     if (run?.status === "waiting" && run.attention) return run.attention.slice(0, 160);
-    const tail = deps.messages(threadId, CURRENT_SCAN).messages;
+    const tail = messages(threadId, CURRENT_SCAN).messages;
     let latest: string | undefined;
     for (let index = tail.length - 1; index >= 0; index--) {
       const message = tail[index]!;
       if (asksForWork(message)) break;
       const tool = message.tool;
       if (!tool || tool.setup) continue;
-      const label = (tool.summary?.trim() || tool.name).slice(0, 160);
+      const label = shortPathsIn(tool.summary?.trim() || tool.name).slice(0, 160);
       if (tool.ok === undefined) return label;
       latest ??= label;
     }
@@ -476,7 +517,9 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
   }
 
   function untouched(threadId: string): boolean {
-    const page = deps.messages(threadId, 3);
+    // Prefer the coding-scan page when list() already paid for it: a short
+    // unread greeting is still detected from the tail of that page.
+    const page = messages(threadId, 3);
     return !page.hasMore && page.messages.every((message) => message.role !== "user" && !message.tool);
   }
 
@@ -508,6 +551,9 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
       if (!deps.threadReadable(bot.id, task.threadId, viewerId)) continue;
       const recent = task.busy || (task.updatedAt ?? task.createdAt) >= since;
       if (!recent) continue;
+      // Prefetch the coding-scan page once: untouched, settled status, the
+      // coding scan and the current step all reuse it (no N+1 tails).
+      messages(task.threadId, CODING_SCAN);
       // A conversation nobody wrote in yet (at most the bot's greeting) did no work.
       if (!task.busy && !task.routineRunId && !task.openedBy && untouched(task.threadId)) continue;
       if (task.routineRunId) listedRuns.add(task.routineRunId);
@@ -616,7 +662,7 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
   function threadDetail(bot: ActivityBot, task: ActivityTask, viewerId: string | undefined, askedRun?: RoutineRun): BotActivityDetail {
     const runs = deps.runs(bot.id).filter((run) => deps.runSeen(run, viewerId));
     const item = threadItem(bot, task, new Map(runs.map((run) => [run.id, run])), viewerId);
-    const page = deps.messages(task.threadId, BOT_ACTIVITY_STEPS);
+    const page = messages(task.threadId, BOT_ACTIVITY_STEPS);
     const organization = deps.organization();
     const steps: BotActivityStep[] = [];
     const files = new Set<string>();
@@ -694,6 +740,9 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
     const match = path.match(/^\/api\/bots\/([\w-]+)\/activity(\/item)?$/);
     if (!match) return PASS;
     if (method !== "GET") return json(res, 405, { error: "method not allowed" });
+    // Fresh message pages for this request only. scanCache keeps its
+    // updatedAt key across polls; message tails must not.
+    messagePages.clear();
     const bot = deps.bot(match[1]!);
     if (!bot) return json(res, 404, { error: "no such bot" });
     const viewerId = deps.viewerId(auth);

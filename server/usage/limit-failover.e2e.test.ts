@@ -60,6 +60,9 @@ it("continues a limited turn on an engine the person has, never another, and goe
       primary: {
         driver: "opencodeGo", displayName: "Primary fixture", config: { cli },
         environment: {
+          // 95e8f39e4 continues tool-only endings. Keep real tool events,
+          // then a final answer so the reset's one turn is actually done.
+          FAKE_ACP_MODE: "interleave",
           FAKE_ACP_MODELS: PRIMARY.model, FAKE_ACP_RPC_APPEND_FILE: primaryRpc,
           FAKE_ACP_RPC_FAILURE_FILE: limitedFile, FAKE_ACP_RPC_FAILURE_WHILE_FILE: "1",
         },
@@ -145,10 +148,14 @@ it("continues a limited turn on an engine the person has, never another, and goe
     const second = "AFTER_RESET_BACK_ON_PRIMARY_9W";
     await api("POST", `/api/bots/${bot.id}/messages`, { text: second, threadId });
     await expect.poll(async () => (await messages()).findLast((message: any) => message.role === "bot" && message.kind === "text")?.text,
-      { timeout: 45_000, interval: 250 }).toBe("hello from fake acp");
+      { timeout: 45_000, interval: 250 }).toBe("after");
     await settled();
     const afterReset = await messages();
     evidence.push({ afterReset });
+    const primaryReply = afterReset.findLast(message => message.role === "bot" && message.kind === "text");
+    expect(primaryReply.turnRun).toMatchObject(PRIMARY);
+    expect(afterReset.filter(message => message.turnId === primaryReply.turnId && message.kind === "activity" && message.tool?.name === "run")
+      .map(message => message.tool.ok)).toEqual([true, true]);
     expect(prompts(primaryRpc).length).toBe(promptsBefore + 1);
     expect(jsonLines(claudePrompts)).toHaveLength(2);
     expect(afterReset.filter((message) => message.tool?.limitFailover)).toHaveLength(2);

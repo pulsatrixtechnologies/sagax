@@ -1,5 +1,5 @@
 import type { Json, HarnessClient } from "./agents-client.ts";
-import type { ToolCallResult } from "./agents-call.ts";
+import type { ToolCallResult } from "./agents-call-types.ts";
 
 export const VIDEO_TOOL_NAME = "make_video";
 

@@ -43,6 +43,8 @@ it.each([false, true])("recovers the same conversation after an ACP internal err
       driver: "opencodeGo", displayName: "Recovery fixture",
       config: { cli: fileURLToPath(new URL("./testing/fake-acp-cli.ts", import.meta.url)) },
       environment: {
+        // 062d7c42e continues tool-only endings. Successful fixture turns finish with words.
+        FAKE_ACP_TEXT_REPLY: "Recovery fixture finished.",
         FAKE_ACP_MODELS: "fixture/recovery", FAKE_ACP_DUMP: dumpFile, FAKE_ACP_DUMP_PROMPT: "1",
         FAKE_ACP_RPC_APPEND_FILE: rpcFile, FAKE_ACP_RPC_FAILURE_FILE: failureFile,
         ...(afterOutput ? { FAKE_ACP_RPC_FAILURE_AFTER_OUTPUT: "1" } : {}),

@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
 
-import { parseOrgLibraryCatalog as parseSharedOrgLibraryCatalog } from "./org-library-catalog.mjs";
+import { parseOrgLibraryCatalog } from "./org-library-catalog.mjs";
 
 // The organization library channel in Electron main (contract 60 §5). Admin
 // advertises capabilities.library; the session carries a small pointer; the
@@ -52,10 +52,8 @@ export function libraryRouteLimits(route) {
   return { method: "GET", maxBytes: LIBRARY_BLOB_MAX_BYTES, timeoutMs: 60_000 };
 }
 
-/** GET /api/desktop/library (contract §5.3). shared/org-library-catalog.ts. */
-export function parseOrgLibraryCatalog(input, options = {}) {
-  return parseSharedOrgLibraryCatalog(input, options);
-}
+/** GET /api/desktop/library (contract §5.3). shared/org-library-catalog.ts (generated electron copy). */
+export { parseOrgLibraryCatalog };
 /** Install report entries (contract §5.5), each parsed on its own like Admin's: a bad one is dropped. */
 export function parseLibraryReportEntries(value) {
   if (!Array.isArray(value)) return null;

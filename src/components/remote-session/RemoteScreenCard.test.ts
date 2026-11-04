@@ -130,7 +130,7 @@ describe("the screen's state and words", () => {
 
 describe("the chat screen card", () => {
   it("is the bot computer's screen card with the remote session as its source", async () => {
-    act(() => root.render(createElement(RemoteScreenCard, { botId: "melonie", view })));
+    act(() => root.render(createElement(RemoteScreenCard, { botId: "wren", view })));
     await flush();
     const figure = $("[data-computer-screen]")!;
     expect(figure.dataset.computerSource).toBe("remote");
@@ -145,7 +145,7 @@ describe("the chat screen card", () => {
   });
 
   it("is a compact screen in the chat, enlarged to the chat width on demand (#1499)", async () => {
-    act(() => root.render(createElement(RemoteScreenCard, { botId: "melonie", view })));
+    act(() => root.render(createElement(RemoteScreenCard, { botId: "wren", view })));
     await flush();
     const card = $("[data-remote-screen-card]")!;
     expect(card.className).toContain("max-w-md");
@@ -161,7 +161,7 @@ describe("the chat screen card", () => {
 
   it("has no Take control on a Mac (view only), and says why when the screen is not there", async () => {
     screenOk = false;
-    act(() => root.render(createElement(RemoteScreenCard, { botId: "melonie", view: { ...view, os: "macos", inventory: "no-tunnel" } })));
+    act(() => root.render(createElement(RemoteScreenCard, { botId: "wren", view: { ...view, os: "macos", inventory: "no-tunnel" } })));
     await flush();
     expect($("[data-computer-screen]")!.dataset.computerScreen).toBe("error");
     expect($("[data-take-control]")).toBeNull();
@@ -170,7 +170,7 @@ describe("the chat screen card", () => {
   });
 
   it("pauses and resumes the live picture", async () => {
-    act(() => root.render(createElement(RemoteScreenCard, { botId: "melonie", view })));
+    act(() => root.render(createElement(RemoteScreenCard, { botId: "wren", view })));
     await flush();
     await act(async () => { button(t("computerScreen.pause"))!.click(); });
     expect($("[data-computer-screen]")!.dataset.computerScreen).toBe("paused");
@@ -184,7 +184,7 @@ describe("the chat screen card", () => {
   });
 
   it("ends the session on a second Stop only", async () => {
-    act(() => root.render(createElement(RemoteScreenCard, { botId: "melonie", view })));
+    act(() => root.render(createElement(RemoteScreenCard, { botId: "wren", view })));
     await flush();
     await act(async () => { button(t("computerScreen.stop"))!.click(); });
     expect($("[data-remote-stop-confirm]")!.textContent).toBe(t("remoteSession.confirmStop"));
@@ -197,7 +197,7 @@ describe("the chat screen card", () => {
 
 describe("Take control: the bot computer's window over the live control socket", () => {
   it("opens the window (never the Computer tab), grants control, releases it and closes the socket", async () => {
-    act(() => root.render(createElement(RemoteScreenCard, { botId: "melonie", view })));
+    act(() => root.render(createElement(RemoteScreenCard, { botId: "wren", view })));
     await flush();
     await click("[data-take-control]");
     const dialog = $("[data-sandbox-takeover]")!;
@@ -211,7 +211,7 @@ describe("Take control: the bot computer's window over the live control socket",
     expect($("[data-remote-takeover-open]")).not.toBeNull();
 
     const socket = FakeSocket.last!;
-    expect(socket.url).toBe(`ws://${window.location.host}/api/bots/melonie/remote-sessions/${view.id}/control`);
+    expect(socket.url).toBe(`ws://${window.location.host}/api/bots/wren/remote-sessions/${view.id}/control`);
     await act(async () => { socket.open(); });
     expect(socket.sent).toEqual([JSON.stringify({ t: "grant", on: true })]);
     expect($("[data-remote-live-screen]")!.dataset.remoteInput).toBe("control");
@@ -229,7 +229,7 @@ describe("Take control: the bot computer's window over the live control socket",
 
 describe("the chat card for a remote session", () => {
   it("puts the screen card first and the facts card under it", async () => {
-    act(() => root.render(createElement(StoreProvider, null, createElement(RemoteSessionCard, { botId: "melonie", threadId: "thread-1", view }))));
+    act(() => root.render(createElement(StoreProvider, null, createElement(RemoteSessionCard, { botId: "wren", threadId: "thread-1", view }))));
     await flush();
     const order = [...document.querySelectorAll("[data-remote-screen-card], [data-remote-session-card]")].map((node) => node.hasAttribute("data-remote-screen-card") ? "screen" : "facts");
     expect(order).toEqual(["screen", "facts"]);
@@ -239,7 +239,7 @@ describe("the chat card for a remote session", () => {
   });
 
   it("shows no screen on a server without a desktop and says shell only", async () => {
-    act(() => root.render(createElement(StoreProvider, null, createElement(RemoteSessionCard, { botId: "melonie", threadId: "thread-1", view: { ...view, headless: true } }))));
+    act(() => root.render(createElement(StoreProvider, null, createElement(RemoteSessionCard, { botId: "wren", threadId: "thread-1", view: { ...view, headless: true } }))));
     await flush();
     expect($("[data-remote-screen-card]")).toBeNull();
     expect($("[data-remote-headless]")!.textContent).toBe("Serveur sans interface : shell seulement");
@@ -248,7 +248,7 @@ describe("the chat card for a remote session", () => {
 
   it("says why the facts are missing and lets the technician name an unknown OS", async () => {
     act(() => root.render(createElement(StoreProvider, null, createElement(RemoteSessionCard, {
-      botId: "melonie", threadId: "thread-1", view: { ...view, hostname: undefined, osName: undefined, user: undefined, os: "windows", osKnown: false, inventory: "os-unknown" },
+      botId: "wren", threadId: "thread-1", view: { ...view, hostname: undefined, osName: undefined, user: undefined, os: "windows", osKnown: false, inventory: "os-unknown" },
     }))));
     await flush();
     expect($("[data-remote-facts-notice]")!.dataset.remoteFactsNotice).toBe("os-unknown");
@@ -258,6 +258,6 @@ describe("the chat card for a remote session", () => {
     expect(document.body.textContent).not.toContain("n/a");
     await click("[data-remote-os=macos]");
     await flush();
-    expect(requests).toContainEqual({ url: `/api/bots/melonie/remote-sessions/${view.id}/os`, method: "POST" });
+    expect(requests).toContainEqual({ url: `/api/bots/wren/remote-sessions/${view.id}/os`, method: "POST" });
   });
 });

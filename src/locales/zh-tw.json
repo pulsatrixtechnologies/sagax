@@ -3658,5 +3658,13 @@
   "routineEditor.formatAiHint": "開啟 {bot} 的聊天並填入整理此指令的請求。按 Enter 前不會送出。",
   "routineEditor.formatAiPrompt": "請重新整理我的例行工作「{name}」（ID {id}）的指令，使其結構更清楚、更易讀：使用標題、編號步驟和短句。完整保留每條規則、事實、日期和決定，不改變任何意思。接著用你的例行工作編輯工具（propose_routine_action，action update，changes.instructions）以結果更新例行工作「{name}」（ID {id}），並給我看修改前後的對照。",
   "routineEditor.copy": "建立副本",
-  "routineEditor.hint.duplicate": "使用這些設定的新例行工作。"
+  "routineEditor.hint.duplicate": "使用這些設定的新例行工作。",
+  "botPanel.library.kind.artifact": "成品",
+  "botPanel.library.pageTitle": "頁面：{state}",
+  "botPanel.library.pageState.draft": "草稿",
+  "botPanel.library.pageState.private": "已發布給我",
+  "botPanel.library.pageState.org": "已發布給我的組織",
+  "botPanel.library.pageState.link": "已發布給任何有連結的人",
+  "botPanel.library.pageState.revoked": "已撤銷",
+  "botPanel.library.pageState.expired": "已過期"
 }

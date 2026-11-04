@@ -35,7 +35,7 @@ async function serve(deps: Partial<ComputerWorkingBotsRouteDeps>, auth: RequestA
 describe("GET /api/computer/working-bots", () => {
   it("answers the working bots with human names and the ids the stop needs", async () => {
     const bots: WorkingBot[] = [
-      { id: "b1", name: "Katarina", threadId: "t1" },
+      { id: "b1", name: "Osprey", threadId: "t1" },
       { id: "b2", name: "Ember", threadId: "t2" },
     ];
     const { base } = await serve({ list: async () => bots });

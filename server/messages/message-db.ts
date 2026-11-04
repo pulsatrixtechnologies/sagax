@@ -63,6 +63,8 @@ function open(): DatabaseSync {
     -- walk these rows in time order on messages_thread. Created on every
     -- open, including a database that already has messages.
     CREATE INDEX IF NOT EXISTS messages_thread_at ON messages(thread_id, at);
+    -- kind-filtered scans: working goal runs and similar.
+    CREATE INDEX IF NOT EXISTS messages_kind ON messages(kind);
     CREATE TABLE IF NOT EXISTS thread_state (
       thread_id TEXT PRIMARY KEY,
       active_leaf_id TEXT
@@ -84,6 +86,8 @@ function open(): DatabaseSync {
       payload TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS chat_followups_receipt ON chat_followups(kind, owner_id, thread_id, send_id);
+    -- deleteThread / rebind followups by thread alone (receipt index is kind-led).
+    CREATE INDEX IF NOT EXISTS chat_followups_thread ON chat_followups(thread_id);
     CREATE TABLE IF NOT EXISTS command_receipts (
       kind TEXT NOT NULL,
       key TEXT NOT NULL,
@@ -120,6 +124,16 @@ function ensureSealedSchema(db: DatabaseSync): void {
       thread_id TEXT PRIMARY KEY,
       key_id TEXT NOT NULL
     );
+    CREATE INDEX IF NOT EXISTS thread_keys_key_id ON thread_keys(key_id);
+    -- After key_id exists: erase-by-owner and migration scans.
+    CREATE INDEX IF NOT EXISTS messages_key_id ON messages(key_id) WHERE key_id IS NOT NULL;
+    -- Open permission cards at restart: json projection is cleartext even when sealed.
+    CREATE INDEX IF NOT EXISTS messages_open_permission_cards ON messages(thread_id)
+      WHERE json_extract(json, '$.card.requestType') = 'permission'
+        AND json_extract(json, '$.card.requestId') IS NOT NULL
+        AND json_extract(json, '$.card.answered') IS NULL
+        AND COALESCE(json_extract(json, '$.card.dismissed'), 0) = 0
+        AND COALESCE(json_extract(json, '$.card.expired'), 0) = 0;
     CREATE VIRTUAL TABLE IF NOT EXISTS messages_sealed_fts USING fts5(
       words, prefixes, content='', contentless_delete=1, detail=column
     );
@@ -180,6 +194,7 @@ function ensureMemoryIndex(db: DatabaseSync): void {
   if (!columns.has("sealed")) db.exec("ALTER TABLE memory_files ADD COLUMN sealed BLOB");
   if (!columns.has("key_id")) db.exec("ALTER TABLE memory_files ADD COLUMN key_id TEXT");
   db.exec(`
+    CREATE INDEX IF NOT EXISTS memory_files_key_id ON memory_files(key_id) WHERE key_id IS NOT NULL;
     CREATE VIRTUAL TABLE IF NOT EXISTS memory_sealed_fts USING fts5(
       words, prefixes, content='', contentless_delete=1, detail=column
     );
@@ -1097,8 +1112,9 @@ export interface FollowupPayload {
   peerAsk?: Message["peerAsk"];
   mode?: "chat" | "goal";
   /** "api": a room line sent through the local API with no session behind
-   * it. "call": a person's words relayed from a Live call. */
-  via?: "api" | "call";
+   * it. "call": a person's words relayed from a Live call. "sms": a text
+   * the person sent their bot from their own verified number. */
+  via?: "api" | "call" | "sms";
   /** Words said on a voice call (Message.voiceCall). */
   voiceCall?: Message["voiceCall"];
   /** The Live call a "call" line was spoken on (Message.callId). Only with
@@ -1379,6 +1395,22 @@ export function openApprovalCardMessages(): Array<{ threadId: string; message: M
   return decodedWithThread(rows);
 }
 
+/** Every open inbox card (permission, question, request): still waiting on
+ * the person, with a requestId. Used by the age-based pending expiry policy
+ * (#1940), which covers every kind list_pending_approvals lists. */
+export function openPendingInboxCards(): Array<{ threadId: string; message: Message }> {
+  const rows = db()
+    .prepare(
+      "SELECT thread_id, id, json, sealed, key_id FROM messages " +
+      "WHERE json_extract(json, '$.card.requestId') IS NOT NULL " +
+      "AND json_extract(json, '$.card.answered') IS NULL " +
+      "AND COALESCE(json_extract(json, '$.card.dismissed'), 0) = 0 " +
+      "AND COALESCE(json_extract(json, '$.card.expired'), 0) = 0",
+    )
+    .all() as unknown as Array<StoredRow & { thread_id: string }>;
+  return decodedWithThread(rows);
+}
+
 function decodedWithThread(rows: Array<StoredRow & { thread_id: string }>): Array<{ threadId: string; message: Message }> {
   const out: Array<{ threadId: string; message: Message }> = [];
   for (const row of rows) {
@@ -1481,6 +1513,15 @@ export function threadsReferencing(fragment: string): string[] {
   if (!fragment) return [];
   const rows = db().prepare("SELECT DISTINCT thread_id FROM messages WHERE instr(json, ?) > 0").all(fragment) as Array<{ thread_id: string }>;
   return rows.map((row) => row.thread_id);
+}
+
+/** 2026-11-03 (audit S-5): threadsReferencing for many fragments at once,
+ * one pass over messages in the search worker, never on the server's thread. */
+export function threadsReferencingAsync(fragments: readonly string[]): Promise<Map<string, string[]>> {
+  if (!fragments.some((fragment) => fragment.length > 0)) return Promise.resolve(new Map());
+  db(); // the owner initializes/migrates the schema before any read-only scan
+  searchWorker ??= new MessageSearchWorker(DB_FILE());
+  return searchWorker.references(fragments);
 }
 
 /** Case-insensitive substring search over text messages, newest first.

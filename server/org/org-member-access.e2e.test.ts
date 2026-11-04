@@ -36,7 +36,7 @@ import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
 
-const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
+const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const FAKE_CODEX_LOGIN = join(SERVER_DIR, "testing", "fake-codex-login-cli.ts");
 const posixOnly = describe.skipIf(process.platform === "win32");
@@ -188,7 +188,9 @@ posixOnly("Perspicax organization: a member's own engines and read-only bots", (
     dump = join(home, "claude-dump.json");
     writeFileSync(join(data, "config.json"), JSON.stringify({
       instances: {
-        claude: { driver: "claudeAgent", environment: { FAKE_CLAUDE_DUMP: dump }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        // fcce56775 (#1812): organization-paid turns and personal subscription usage are separate.
+        claude: { driver: "claudeAgent", config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        claudeApi: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP: dump }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
         codex: { driver: "codex", environment: { SAGAX_DEVICE_AUTH_FIXTURE: "1" }, config: { cli: FAKE_CODEX_LOGIN } },
         // absent on this server whatever the machine has installed
         cursor: { driver: "cursorAgent", config: { cli: "sagax-test-no-such-cursor-agent" } },
@@ -279,8 +281,8 @@ posixOnly("Perspicax organization: a member's own engines and read-only bots", (
     // Uma made a bot while she could; then Alice shares one with her at edit
     let uma = await signIn(UMA);
     expect((await api("GET", "/api/config", uma)).body.viewer).toMatchObject({ canCreateBots: true });
-    const own = await createBot(uma, "Uma's", "claude");
-    const shared = await createBot(alice, "Edit me", "claude");
+    const own = await createBot(uma, "Uma's", "claudeApi");
+    const shared = await createBot(alice, "Edit me", "claudeApi");
     expect((await api("PUT", `/api/bots/${shared.id}/grants`, alice, { target: `user:${ids.uma}`, level: "edit" })).status).toBe(200);
 
     setUma("use");
@@ -320,7 +322,7 @@ posixOnly("Perspicax organization: a member's own engines and read-only bots", (
 
   it("MA-4: create_bot belongs to the Primary Bot's person; use refuses it", async () => {
     let uma = await signIn(UMA);
-    const chief = await createBot(uma, "Uma Chief", "claude");
+    const chief = await createBot(uma, "Uma Chief", "claudeApi");
     expect((await api("POST", `/api/bots/${chief.id}/primary`, uma, {})).status).toBe(200);
 
     // A capability minted for the Primary Bot's thread, as the agents proxy
@@ -362,7 +364,7 @@ posixOnly("Perspicax organization: a member's own engines and read-only bots", (
   it("MA-4b: any bot of a member creates a bot for her, from her own request only (2026-10-17)", async () => {
     setUma("manage");
     const uma = await signInUntil(UMA, (viewer) => viewer.botsReadOnly !== true && viewer.canCreateBots === true);
-    const maker = await createBot(uma, "Uma Maker", "claude");
+    const maker = await createBot(uma, "Uma Maker", "claudeApi");
     const capability = async (botId: string, threadId: string, speakerPrincipalId?: string): Promise<string> => {
       const res = await fetch(`${BASE}/api/testing/internal-capability`, {
         method: "POST",
@@ -420,7 +422,7 @@ posixOnly("Perspicax organization: a member's own engines and read-only bots", (
     // is conversation use and stays allowed. An admin is never narrowed.
     setUma("manage");
     let uma = await signInUntil(UMA, (viewer) => viewer.botsReadOnly !== true && viewer.canCreateBots === true);
-    const own = await createBot(uma, "Uma Full", "claude");
+    const own = await createBot(uma, "Uma Full", "claudeApi");
 
     setUma("use");
     uma = await signInUntil(UMA, (viewer) => viewer.botsReadOnly === true);
@@ -439,12 +441,12 @@ posixOnly("Perspicax organization: a member's own engines and read-only bots", (
     const stored = ((await api("GET", "/api/bots", uma)).body.bots as Array<{ id: string; approvalMode?: string; fullAccessConsent?: unknown; modelSelection?: { instanceId: string } }>).find((bot) => bot.id === own.id);
     expect(stored?.approvalMode).not.toBe("full");
     expect(stored?.fullAccessConsent).toBeFalsy();
-    expect(stored?.modelSelection?.instanceId).toBe("claude");
+    expect(stored?.modelSelection?.instanceId).toBe("claudeApi");
     expect((await api("PATCH", `/api/bots/${own.id}/tasks/${own.threadId}`, uma, { title: "Still mine" })).status).toBe(200);
 
     idp.directoryPeople = idp.directoryPeople.map((person) => (person.sub === ALICE.sub ? { ...person, sagax_bots: "use" as const } : person));
     alice = await signIn(ALICE);
-    const adminBot = await createBot(alice, "Alice Full", "claude");
+    const adminBot = await createBot(alice, "Alice Full", "claudeApi");
     const adminFull = await api("PATCH", `/api/bots/${adminBot.id}`, alice, { approvalMode: "full", confirmFullAccess: true });
     expect(adminFull.status, adminFull.text).toBe(200);
 
@@ -458,7 +460,7 @@ posixOnly("Perspicax organization: a member's own engines and read-only bots", (
   it("MA-6: sagax_bots use cannot add or remove a direct grant", async () => {
     setUma("manage");
     let uma = await signInUntil(UMA, (viewer) => viewer.botsReadOnly !== true && viewer.canCreateBots === true);
-    const own = await createBot(uma, "Uma Shares", "claude");
+    const own = await createBot(uma, "Uma Shares", "claudeApi");
     const added = await api("POST", `/api/bots/${own.id}/direct-grants`, uma, { userId: ids.bob });
     expect(added.status, added.text).toBe(200);
     expect(added.body.directGrants).toContain(ids.bob);
@@ -532,8 +534,8 @@ posixOnly("Perspicax organization: a member's own engines and read-only bots", (
     setUma("manage");
     const uma = await signInUntil(UMA, (viewer) => viewer.botsReadOnly !== true);
     const bob = await signIn(BOB);
-    const asker = await createBot(bob, "Bob Asker", "claude");
-    const peer = await createBot(bob, "Bob Peer", "claude");
+    const asker = await createBot(bob, "Bob Asker", "claudeApi");
+    const peer = await createBot(bob, "Bob Peer", "claudeApi");
     expect((await api("PATCH", `/api/bots/${asker.id}`, bob, { approvePeerComms: true })).status).toBe(200);
     const asked = internal(await mint(asker.id, asker.threadId, ids.bob), "/api/internal/ask-bot", { toBotId: peer.id, message: "Check the report." });
     const card = await waitFor(async () => ((await api("GET", `/api/threads/${asker.threadId}/messages`, bob)).body.messages as Array<{ card?: any }> ?? [])
@@ -554,11 +556,11 @@ posixOnly("Perspicax organization: a member's own engines and read-only bots", (
     setUma("manage");
     const uma = await signInUntil(UMA, (viewer) => viewer.botsReadOnly !== true);
     const bob = await signIn(BOB);
-    const chief = await createBot(uma, "Uma Lead", "claude");
+    const chief = await createBot(uma, "Uma Lead", "claudeApi");
     expect((await api("POST", `/api/bots/${chief.id}/primary`, uma, {})).status).toBe(200);
     const level = await api("PATCH", `/api/bots/${chief.id}/tasks/${chief.threadId}`, uma, { approvalMode: "auto" });
     expect(level.status, level.text).toBe(200);
-    const writer = await createBot(uma, "Uma Writer", "claude");
+    const writer = await createBot(uma, "Uma Writer", "claudeApi");
     const plan = (botId: string, title: string) => ({ plan: { reason: "Uma asked for it", operations: [{ action: "update", botId, fields: { title } }] } });
     const title = async (id: string) => ((await api("GET", "/api/bots", uma)).body.bots as Array<{ id: string; title?: string }>).find((bot) => bot.id === id)?.title;
 
@@ -573,7 +575,7 @@ posixOnly("Perspicax organization: a member's own engines and read-only bots", (
     expect(own.body.state).toBe("applied");
     expect(await title(writer.id)).toBe("Writer lead");
     // someone else's bot stays out of reach, even on her own turn
-    const bobs = await createBot(bob, "Bob Own", "claude");
+    const bobs = await createBot(bob, "Bob Own", "claudeApi");
     const foreign = await internal(await mint(chief.id, chief.threadId, ids.uma), "/api/internal/team-setup-requests", plan(bobs.id, "Taken"));
     expect(foreign.body.state, JSON.stringify(foreign.body)).not.toBe("applied");
     expect(((await api("GET", "/api/bots", bob)).body.bots as Array<{ id: string; title?: string }>).find((bot) => bot.id === bobs.id)?.title).not.toBe("Taken");
@@ -587,7 +589,7 @@ posixOnly("Perspicax organization: a member's own engines and read-only bots", (
   it("MA-9: a member's bot adds an MCP server to the member's own servers, on at Full access, off below (2026-10-28)", async () => {
     setUma("manage");
     const uma = await signInUntil(UMA, (viewer) => viewer.botsReadOnly !== true);
-    const bot = await createBot(uma, "Uma Wires", "claude");
+    const bot = await createBot(uma, "Uma Wires", "claudeApi");
     const full = await api("PATCH", `/api/bots/${bot.id}/tasks/${bot.threadId}`, uma, { approvalMode: "full", confirmFullAccess: true });
     expect(full.status, full.text).toBe(200);
     const token = await mint(bot.id, bot.threadId, ids.uma);
@@ -602,7 +604,7 @@ posixOnly("Perspicax organization: a member's own engines and read-only bots", (
     expect(command.status, JSON.stringify(command.body)).toBe(409);
     expect(command.body.code).toBe("no_environment");
     // below Full: off
-    const ask = await createBot(uma, "Uma Asks", "claude");
+    const ask = await createBot(uma, "Uma Asks", "claudeApi");
     const asking = await api("PATCH", `/api/bots/${ask.id}/tasks/${ask.threadId}`, uma, { approvalMode: "ask" });
     expect(asking.status, asking.text).toBe(200);
     const off = await internal(await mint(ask.id, ask.threadId, ids.uma), "/api/internal/mcp-servers", { name: "umaoff", url: "https://127.0.0.1:9/other" });

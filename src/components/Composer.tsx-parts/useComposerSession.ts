@@ -1,4 +1,5 @@
-import { useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
+import { equalRows, peerBots } from "@/state/view-slices";
+import { shallowEqual, useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
 import { visibleMessages, currentTaskBot, type Bot, type Group } from "@/state/store";
 import { orgFullAccessFor } from "@/lib/full-access";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
@@ -36,8 +37,8 @@ export function useComposerSession({
   // bot's frame) does not render the composer while someone types.
   const dispatch = useStoreDispatch();
   const getState = useStoreGetter();
-  const storeBots = useStoreSelector((current) => current.bots);
-  const routines = useStoreSelector((current) => current.routines);
+  const storeBots = useStoreSelector(peerBots, equalRows);
+  const routines = useStoreSelector((current) => current.routines.filter((routine) => routine.botId === bot?.id || members?.some((member) => member.id === routine.botId)), shallowEqual);
   const config = useStoreSelector((current) => current.config);
   const instances = useStoreSelector((current) => current.instances);
   const ownerOrAdmin = useOwnerOrAdmin();

@@ -86,6 +86,14 @@ vi.mock("@/state/store", () => ({ useStore: () => store }));
 // is what this suite checks.
 vi.mock("@/lib/focus-message", () => ({ useFocusMessage: () => {} }));
 
+vi.mock("@/state/store-selector", async () => {
+  const { useStore } = await import("@/state/store");
+  return {
+    useStoreSelector: (select: (state: import("@/state/store").AppState) => unknown) => select(useStore().state),
+    useStoreDispatch: () => useStore().dispatch,
+  };
+});
+
 import { useTranscriptViewport } from "./use-transcript-viewport";
 
 type Row = { id: string; role?: "user" | "bot" };

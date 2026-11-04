@@ -22,7 +22,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Loader2, Maximize2, X } from "lucide-react";
 import { PanelSlotProvider, usePanelSlot } from "./panel-slot";
-import { api, openBotThread, peopleDmReadTarget, useStore, type Bot, type Group } from "@/state/store";
+import { shallowEqual, useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
+import { api, openBotThread, peopleDmReadTarget, type Bot, type Group } from "@/state/store";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
@@ -82,14 +83,15 @@ function edgeRect(box: DropZone["rect"], edge: SplitEdge | null, share: number):
 
 export function SplitWorkspace({ main, panelSlot = null }: { main: ReactNode; panelSlot?: HTMLElement | null }) {
   const layout = useSplitLayout();
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const getState = useStoreGetter();
+  const owner = useStoreSelector((current) => current.panelOwner);
   const rootRef = useRef<HTMLDivElement>(null);
   const [zone, setZone] = useState<DropZone | null>(null);
   const showThreads = useShowThreads();
 
   // A section's panel goes with its section: closed, or showing another
   // conversation, the panel closes too.
-  const owner = state.panelOwner;
   useEffect(() => {
     if (!owner) return;
     const target = splitLeaves(layout).find((candidate) => candidate.id === owner.leafId)?.target;
@@ -146,7 +148,7 @@ export function SplitWorkspace({ main, panelSlot = null }: { main: ReactNode; pa
     const at = zoneAt(event);
     setZone(null);
     const drag = parseSplitDrag(event.dataTransfer.getData(SPLIT_DRAG_TYPE));
-    const target = drag ? dragTarget(drag, state) : null;
+    const target = drag ? dragTarget(drag, getState()) : null;
     if (!at || !target) return;
     if (at.edge === null) {
       if (at.leafId && at.leafId !== MAIN_LEAF_ID) {
@@ -154,7 +156,7 @@ export function SplitWorkspace({ main, panelSlot = null }: { main: ReactNode; pa
         return;
       }
       // The main chat's middle: open it there, as a click on the row would.
-      openInMain(dispatch, target, state.bots, showThreads);
+      openInMain(dispatch, target, getState().bots, showThreads);
       return;
     }
     // Already in the split: focus that section instead of opening a copy (#1781).
@@ -192,17 +194,18 @@ export function SplitWorkspace({ main, panelSlot = null }: { main: ReactNode; pa
  * chat's bot, or the bot of the section whose pill opened it (panelOwner).
  * undefined while a group section holds the one panel. */
 export function useBotPanelBot(mainBot: Bot | undefined): Bot | undefined {
-  const { state } = useStore();
-  const owner = state.panelOwner;
-  if (!owner) return mainBot;
-  return owner.botId === undefined ? undefined : state.bots.find((candidate) => candidate.id === owner.botId);
+  return useStoreSelector((current) => {
+    const owner = current.panelOwner;
+    if (!owner) return mainBot;
+    return owner.botId === undefined ? undefined : current.bots.find((candidate) => candidate.id === owner.botId);
+  });
 }
 
 /** A section's pill: open when this section owns the one panel; a click
  * closes it, or opens it for this section's bot or group. */
 function useSectionPanel(leafId: string, owner: { botId: string } | { groupId: string }) {
-  const { state, dispatch } = useStore();
-  const open = (state.settingsOpen || state.computerOpen) && state.panelOwner?.leafId === leafId;
+  const dispatch = useStoreDispatch();
+  const open = useStoreSelector((current) => (current.settingsOpen || current.computerOpen) && current.panelOwner?.leafId === leafId);
   const onToggle = () => {
     if (open) for (const action of botPillActions(true)) dispatch(action);
     else dispatch({ type: "toggleSettings", open: true, owner: { leafId, ...owner } });
@@ -214,7 +217,7 @@ function useSectionPanel(leafId: string, owner: { botId: string } | { groupId: s
  * through openBotThread, the one gate of the single stream
  * (shared/single-stream.ts): an earlier topic opens the conversation, a
  * thread outside the stream opens beside it. */
-function openInMain(dispatch: ReturnType<typeof useStore>["dispatch"], target: SplitTarget, bots: readonly Bot[], threadsShown: boolean) {
+function openInMain(dispatch: import("react").Dispatch<import("@/state/store").Action>, target: SplitTarget, bots: readonly Bot[], threadsShown: boolean) {
   if (target.kind === "bot") {
     const bot = bots.find((candidate) => candidate.id === target.botId);
     if (bot && target.threadId) {
@@ -356,10 +359,10 @@ function SplitHandle({ branch, index, row, containerRef, hideNarrow }: { branch:
 
 /** One section other than the main chat. */
 function SplitPane({ leaf }: { leaf: SplitLeaf }) {
-  const { state } = useStore();
+  const target = leaf.target;
+  const state = useStoreSelector((current) => ({ connected: current.connected, bots: current.bots.filter((bot) => target?.kind === "bot" && bot.id === target.botId), groups: current.groups.filter((group) => target?.kind === "group" && group.id === target.groupId) }), (a, b) => a.connected === b.connected && shallowEqual(a.bots, b.bots) && shallowEqual(a.groups, b.groups));
   const ref = useRef<HTMLDivElement>(null);
   useFocusFlash(leaf.id, ref);
-  const target = leaf.target;
   const close = () => updateSplitLayout((layout) => removeSection(layout, leaf.id));
   const bot = target?.kind === "bot" ? state.bots.find((candidate) => candidate.id === target.botId) : undefined;
   const group = target?.kind === "group" ? state.groups.find((candidate) => candidate.id === target.groupId) : undefined;
@@ -428,7 +431,8 @@ function PaneLoading({ header, failed }: { header: ReactNode; failed: boolean })
 }
 
 function BotPane({ leafId, bot, threadId, target, onClose }: { leafId: string; bot: Bot; threadId: string; target: SplitTarget; onClose: () => void }) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const getState = useStoreGetter();
   // This section's pill opens this bot's panel at the window's right edge.
   const panel = useSectionPanel(leafId, { botId: bot.id });
   const showThreads = useShowThreads();
@@ -457,7 +461,7 @@ function BotPane({ leafId, bot, threadId, target, onClose }: { leafId: string; b
       pill={pill}
       title={title}
       {...(target.threadId ? { subtitle: bot.name } : {})}
-      onOpenMain={() => { onClose(); openInMain(dispatch, target.threadId ? { kind: "bot", botId: bot.id, threadId } : { kind: "bot", botId: bot.id }, state.bots, showThreads); }}
+      onOpenMain={() => { onClose(); openInMain(dispatch, target.threadId ? { kind: "bot", botId: bot.id, threadId } : { kind: "bot", botId: bot.id }, getState().bots, showThreads); }}
       onClose={onClose}
     />
   );
@@ -471,7 +475,9 @@ function BotPane({ leafId, bot, threadId, target, onClose }: { leafId: string; b
 }
 
 function GroupPane({ leafId, group, threadId, target, onClose }: { leafId: string; group: Group; threadId: string; target: SplitTarget; onClose: () => void }) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const getState = useStoreGetter();
+  const memberBots = useStoreSelector((current) => groupMemberBots(group, current.bots), shallowEqual);
   // This section's pill opens this group's panel at the window's right edge.
   const panel = useSectionPanel(leafId, { groupId: group.id });
   const showThreads = useShowThreads();
@@ -491,7 +497,7 @@ function GroupPane({ leafId, group, threadId, target, onClose }: { leafId: strin
     messages: transcript.messages,
     hasMore: transcript.hasMore,
   }), [group, threadId, transcript.messages, transcript.hasMore]);
-  const members = useMemo(() => groupMemberBots(group, state.bots), [group, state.bots]);
+  const members = memberBots;
   const task = group.tasks?.find((candidate) => candidate.threadId === threadId);
   const title = target.threadId && task ? task.title?.trim() || t("task.newShort") : group.name;
   const label = t("splitView.aria", { name: group.name });
@@ -501,7 +507,7 @@ function GroupPane({ leafId, group, threadId, target, onClose }: { leafId: strin
       title={title}
       {...(target.threadId && task ? { subtitle: group.name } : {})}
       inFlow
-      onOpenMain={() => { onClose(); openInMain(dispatch, target.threadId ? { kind: "group", groupId: group.id, threadId } : { kind: "group", groupId: group.id }, state.bots, showThreads); }}
+      onOpenMain={() => { onClose(); openInMain(dispatch, target.threadId ? { kind: "group", groupId: group.id, threadId } : { kind: "group", groupId: group.id }, getState().bots, showThreads); }}
       onClose={onClose}
     />
   );

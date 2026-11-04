@@ -86,3 +86,40 @@ public extension CompanionClient {
         try await send(makeRequest("POST", "/api/bots/import/agent", encodedBody: XaiMarketplaceStageBody(marketplace: slug, timeZone: timeZone)), as: AgentImportStaged.self)
     }
 }
+
+/// A Grok Bot link (shared/grok-import.ts): a share link
+/// (https://x.ai/bot/<id>) or a marketplace page
+/// (https://x.ai/bot/marketplace/bots/<slug>).
+public enum GrokLink {
+    private static func url(_ text: String) -> URL? {
+        let raw = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowered = raw.lowercased()
+        let full = lowered.hasPrefix("x.ai/") || lowered.hasPrefix("www.x.ai/") ? "https://\(raw)" : raw
+        guard let url = URL(string: full), url.scheme == "https", url.user == nil, url.password == nil, url.port == nil,
+              url.host == "x.ai" || url.host == "www.x.ai" else { return nil }
+        return url
+    }
+
+    private static func parts(_ url: URL) -> [String] { url.path.split(separator: "/").map(String.init) }
+
+    /// The slug of a marketplace page.
+    public static func marketplaceSlug(_ text: String) -> String? {
+        guard let url = url(text) else { return nil }
+        let p = parts(url)
+        guard p.count == 4, p[0] == "bot", p[1] == "marketplace", p[2] == "bots" else { return nil }
+        let slug = p[3]
+        guard slug.range(of: #"^[a-z0-9][a-z0-9-]{0,79}$"#, options: .regularExpression) != nil else { return nil }
+        return slug
+    }
+
+    /// A share link's id.
+    public static func shareId(_ text: String) -> String? {
+        guard let url = url(text) else { return nil }
+        let p = parts(url)
+        guard p.count == 2, p[0] == "bot", p[1] != "marketplace",
+              p[1].range(of: #"^[A-Za-z0-9_-]{21}$"#, options: .regularExpression) != nil else { return nil }
+        return p[1]
+    }
+
+    public static func isLink(_ text: String) -> Bool { marketplaceSlug(text) != nil || shareId(text) != nil }
+}

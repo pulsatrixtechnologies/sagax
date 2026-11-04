@@ -6,7 +6,7 @@ import { expect, it } from "vitest";
 import { launchVerificationServer } from "../../scripts/control-omb.ts";
 import { canonicalJson, parsePackageDocument } from "../../shared/package-format.ts";
 
-const FIXTURES = join(import.meta.dirname, "..", "shared", "package-fixtures");
+const FIXTURES = join(import.meta.dirname, "..", "..", "shared", "package-fixtures");
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 const ORG = "11111111-1111-4111-8111-111111111111";
 const PUBLISHER = "33333333-3333-4333-8333-333333333333";

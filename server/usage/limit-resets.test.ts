@@ -127,6 +127,45 @@ describe("LimitResetClock", () => {
     expect(instance.report().engines).toEqual([expect.objectContaining({ engine: "claude", name: "Claude", blocked: true, usedPercent: 100, resetsAt: NOW + HOUR })]);
   });
 
+  it("clears a refusal when a turn on that engine then succeeds (#1918)", () => {
+    const changed = vi.fn();
+    const { instance } = clock({ onChange: changed });
+    instance.noteRefusal("claude", NOW + 50 * HOUR);
+    expect(instance.limit("claude")).toMatchObject({ blocked: true });
+    instance.noteSuccess("claude");
+    expect(instance.blockedUntil("claude")).toBeNull();
+    expect(instance.resetAt("claude")).toBeNull();
+    expect(instance.report().engines).toEqual([]);
+    expect(changed).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops showing a usage reading at its limit once a turn succeeds, until the next reading (#1918)", () => {
+    const { instance } = clock();
+    instance.noteUsage(report(claude([100, NOW + 2 * HOUR], [40, NOW + 90 * HOUR])));
+    expect(instance.blockedUntil("claude")).toBe(NOW + 2 * HOUR);
+    instance.noteSuccess("claude");
+    expect(instance.blockedUntil("claude")).toBeNull();
+    expect(instance.limit("claude")).toMatchObject({ blocked: false });
+    instance.noteUsage(report(claude([100, NOW + 2 * HOUR], [40, NOW + 90 * HOUR])));
+    expect(instance.limit("claude")).toMatchObject({ blocked: true });
+  });
+
+  it("a success on an engine that was not blocked changes nothing", () => {
+    const changed = vi.fn();
+    const { instance } = clock({ onChange: changed });
+    instance.noteUsage(report(claude([40, NOW + 2 * HOUR], [10, NOW + 90 * HOUR])));
+    instance.noteSuccess("claude");
+    instance.noteSuccess(undefined);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(instance.limit("claude")).toMatchObject({ usedPercent: 40, blocked: false });
+  });
+
+  it("names a refused engine no account lists from describe (an organization's key)", () => {
+    const instance = new LimitResetClock({ accounts: () => [], now: () => NOW, describe: (engine) => engine === "grok" ? { name: "Grok", driver: "grok" } : undefined });
+    instance.noteRefusal("grok", NOW + HOUR);
+    expect(instance.limit("grok")).toMatchObject({ name: "Grok", driver: "grok", blocked: true });
+  });
+
   it("reads usage at most once while it is fresh, and through the test fixture file when one is set", async () => {
     const load = vi.fn(async () => report(claude([50, NOW + HOUR], [5, NOW + 90 * HOUR])));
     const { instance, at } = clock({ loadUsage: load });

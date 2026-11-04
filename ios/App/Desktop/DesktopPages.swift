@@ -76,6 +76,16 @@ struct DesktopTeamMapPage: View {
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var shell: DesktopShellModel
     @StateObject private var model = TeamMapModel()
+    @State private var boatComputer = false
+    /// The Computers shelf (CanvasComputers.tsx) at the right of the canvas.
+    @State private var computersOpen = false
+    @State private var computerDrop: (id: String, section: String)?
+    @State private var createComputer = 0
+    @State private var creating = false
+    @State private var teamName = ""
+
+    /// `canManageTeamMap` (an owner or an admin, never the remote client).
+    private var manageTeams: Bool { session.surfaceGate.allows(.teamMapMove) }
 
     private var visibleBots: [Bot] { session.state.bots.filter { $0.hidden != true } }
 
@@ -87,11 +97,34 @@ struct DesktopTeamMapPage: View {
                 title: "Team map",
                 count: count == 1 ? String(localized: "1 bot") : String(localized: "\(count) bots"),
                 subtitle: "Your bots, their teams, and how they work together."
-            ) { EmptyView() })
-            AnyView(DesktopTeamCanvas(model: model))
+            ) { AnyView(headerControls) })
+            HStack(spacing: 0) {
+                AnyView(DesktopTeamCanvas(model: model, onComputerDrop: { id, section in
+                    guard manageTeams else { return }
+                    computersOpen = true
+                    computerDrop = (id, section)
+                }))
+                if manageTeams && computersOpen {
+                    DesktopTeamComputers(
+                        sections: TeamMap.pageSections(state: session.state).map { ($0.key, $0.key.isEmpty ? String(localized: "General") : $0.name) },
+                        drop: $computerDrop, createRequest: createComputer, close: { computersOpen = false })
+                    .transition(.move(edge: .trailing))
+                }
+            }
         }
         .background(theme.app)
         .task(id: session.connection?.id) { await model.poll(session) }
+        .task(id: session.connection?.id) { boatComputer = (await session.configStatus())?.features?.boatComputer == true }
+        .alert(String(localized: "Create team"), isPresented: $creating) {
+            TextField(String(localized: "Team name"), text: $teamName)
+            Button(String(localized: "Cancel"), role: .cancel) { teamName = "" }
+            Button(String(localized: "Create team")) {
+                let name = teamName.trimmingCharacters(in: .whitespacesAndNewlines)
+                teamName = ""
+                guard !name.isEmpty else { return }
+                Task { await session.assignSection(name: name, botIds: []) }
+            }
+        }
         .alert(
             model.pendingMove.map { String(localized: "Move \($0.bot.name) to \($0.destinationName)?") } ?? "",
             isPresented: Binding(get: { model.pendingMove != nil }, set: { if !$0, model.pendingMove != nil { model.cancelMove() } }),
@@ -107,6 +140,50 @@ struct DesktopTeamMapPage: View {
     }
 }
 
+extension DesktopTeamMapPage {
+    /// The page's top right: the Computer button (a 36 pt square) and Add
+    /// (`TeamMapPage.tsx`: Create team, Boat computer, Local VM...).
+    @ViewBuilder
+    fileprivate var headerControls: some View {
+        if manageTeams {
+            HStack(spacing: 8) {
+                Button { withAnimation(.easeOut(duration: 0.18)) { computersOpen.toggle() } } label: {
+                    DesktopIconView(icon: .monitor, size: 16, strokeWidth: 1.75)
+                        .foregroundStyle(theme.inkSecondary)
+                        .frame(width: 36, height: 36)
+                        .background(theme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Computers"))
+                .accessibilityValue(computersOpen ? Text("Expanded") : Text("Collapsed"))
+                .accessibilityIdentifier("team-map-computers")
+                Menu {
+                    Button { creating = true } label: { Label(String(localized: "Create team"), systemImage: "person.2") }
+                    if boatComputer {
+                        Button { computersOpen = true; createComputer += 1 } label: { Label(String(localized: "Boat computer"), systemImage: "shippingbox") }
+                    }
+                    Button { shell.settingsSection = .computer; shell.modal = .settings } label: { Label(String(localized: "Local VM…"), systemImage: "display") }
+                } label: {
+                    HStack(spacing: 6) {
+                        DesktopIconView(icon: .plus, size: 15, strokeWidth: 1.75)
+                        Text("Add").font(theme.font(12, .medium))
+                    }
+                    .foregroundStyle(theme.ink)
+                    .padding(.horizontal, 12)
+                    .frame(height: 36)
+                    .background(theme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
+                    .contentShape(Rectangle())
+                }
+                .accessibilityLabel(Text("Add to team map"))
+                .accessibilityIdentifier("team-map-add")
+            }
+        }
+    }
+}
+
 /// The canvas: drag to pan, pinch to zoom, − / % / + at the bottom right
 /// (the % fits the teams to the view again).
 private struct DesktopTeamCanvas: View {
@@ -114,11 +191,28 @@ private struct DesktopTeamCanvas: View {
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var shell: DesktopShellModel
     @ObservedObject var model: TeamMapModel
+    /// A computer card of the Computers shelf dropped on a team (its id, the team).
+    var onComputerDrop: (String, String) -> Void = { _, _ in }
 
     @State private var view: TeamCanvasLayout.View?
     @State private var dragStart: TeamCanvasLayout.View?
     @State private var pinchStart: TeamCanvasLayout.View?
     @State private var modelLabels: [String: String] = [:]
+    /// The engine behind each bot's model: its provider mark on the card.
+    @State private var modelInstances: [String: Instance] = [:]
+    @State private var renaming: String?
+    /// The team ⋯ menu's editor open now (Move bots, Shared instructions, Team memory).
+    @State private var teamEditor: TeamEditor?
+
+    struct TeamEditor: Identifiable {
+        enum Kind { case bots, instructions, memory }
+        let kind: Kind
+        let section: String
+        let label: String
+        var id: String { "\(kind)|\(section)" }
+    }
+    @State private var renameText = ""
+    @State private var deleting: String?
 
     private var sections: [TeamMapSection] { TeamMap.pageSections(state: session.state) }
 
@@ -164,6 +258,41 @@ private struct DesktopTeamCanvas: View {
             )
         }
         .task(id: session.connection?.id) { await loadModelLabels() }
+        .sheet(item: $teamEditor) { editor in
+            Group {
+                switch editor.kind {
+                case .bots: DesktopTeamBotsSheet(section: editor.section, label: editor.label) { teamEditor = nil }
+                case .instructions: DesktopSectionContextSheet(section: editor.section, label: editor.label) { teamEditor = nil }
+                case .memory: DesktopTeamMemorySheet(section: editor.section, label: editor.label) { teamEditor = nil }
+                }
+            }
+            .environmentObject(session)
+            .environment(\.desktopTheme, theme)
+            .presentationDetents([.large])
+        }
+        .alert(String(localized: "Rename team"), isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField(String(localized: "Team name"), text: $renameText)
+            Button(String(localized: "Cancel"), role: .cancel) { renaming = nil }
+            Button(String(localized: "Save name")) {
+                let old = renaming, name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                renaming = nil
+                guard let old, !name.isEmpty, name != old else { return }
+                Task { _ = await session.renameServerSection(old, to: name) }
+            }
+        }
+        .alert(
+            String(localized: "Delete \(deleting ?? "") team?"),
+            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })
+        ) {
+            Button(String(localized: "Cancel"), role: .cancel) { deleting = nil }
+            Button(String(localized: "Delete team"), role: .destructive) {
+                let name = deleting
+                deleting = nil
+                if let name { Task { _ = await session.deleteServerSection(name) } }
+            }
+        } message: {
+            Text("Bots and group chats move to Unassigned with their conversations intact. The team and its shared instructions are deleted. This cannot be undone.")
+        }
     }
 
     /// `radial-gradient(circle, ink-secondary 18 %, 1px)` every 24 pt at the view's scale.
@@ -202,6 +331,33 @@ private struct DesktopTeamCanvas: View {
                     .font(theme.font(11))
                     .monospacedDigit()
                     .foregroundStyle(theme.inkSecondary)
+                if session.surfaceGate.allows(.teamMapMove) {
+                    Menu {
+                        // TeamCanvas.tsx: Move bots to, Shared instructions, Team memory, then Rename and Delete
+                        let label = section.key.isEmpty ? String(localized: "Unassigned") : section.name
+                        Button { teamEditor = TeamEditor(kind: .bots, section: section.key, label: label) } label: {
+                            Label(String(format: String(localized: "Move bots to %@"), label), systemImage: "person.2")
+                        }
+                        Button { teamEditor = TeamEditor(kind: .instructions, section: section.key, label: label) } label: {
+                            Label(String(localized: "Shared instructions"), systemImage: "book")
+                        }
+                        Button { teamEditor = TeamEditor(kind: .memory, section: section.key, label: label) } label: {
+                            Label(String(localized: "Team memory"), systemImage: "brain")
+                        }
+                        if !section.key.isEmpty {
+                            Button { renameText = section.name; renaming = section.key } label: { Label(String(localized: "Rename team"), systemImage: "pencil") }
+                            Button(role: .destructive) { deleting = section.key } label: { Label(String(localized: "Delete team"), systemImage: "trash") }
+                        }
+                    } label: {
+                        DesktopIconView(icon: .ellipsis, size: 17, strokeWidth: 2)
+                            .foregroundStyle(theme.inkSecondary)
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .opacity(section.key.isEmpty ? 0.35 : 1)
+                    .disabled(section.key.isEmpty)
+                    .accessibilityLabel(Text("Manage \(section.key.isEmpty ? String(localized: "Unassigned") : section.name) team"))
+                }
             }
             .padding(.horizontal, 20)
             .frame(height: 64)
@@ -234,6 +390,11 @@ private struct DesktopTeamCanvas: View {
         .frame(width: tile.width, height: tile.height, alignment: .topLeading)
         .background(theme.panel.opacity(0.9), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
+        .dropDestination(for: String.self) { items, _ in
+            guard let id = items.compactMap(TeamComputerDrag.id).first else { return false }
+            onComputerDrop(id, section.key)
+            return true
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("\(section.key.isEmpty ? String(localized: "Unassigned") : section.name) team"))
     }
@@ -267,8 +428,7 @@ private struct DesktopTeamCanvas: View {
             .accessibilityLabel(Text("Edit \(bot.name)"))
             HStack(spacing: 4) {
                 Button { open(bot, panel: false) } label: {
-                    Image(systemName: "bubble.left")
-                        .font(.system(size: 12))
+                    DesktopIconView(icon: .messageCircle, size: 13, strokeWidth: 2)
                         .foregroundStyle(theme.inkSecondary)
                         .frame(width: 32, height: 32)
                         .contentShape(Rectangle())
@@ -283,12 +443,21 @@ private struct DesktopTeamCanvas: View {
                 }
                 Spacer(minLength: 4)
                 if let label = modelLabels[bot.id] {
-                    Text(verbatim: label)
-                        .font(theme.font(10))
-                        .foregroundStyle(theme.inkSecondary)
-                        .lineLimit(1)
-                        .frame(maxWidth: 114, alignment: .trailing)
-                        .padding(.horizontal, 8)
+                    // TeamCanvas.tsx: the provider's mark (13) in front of the model
+                    HStack(spacing: 4) {
+                        if let instance = modelInstances[bot.id] {
+                            ProviderMarkView(instance: instance, size: 13)
+                        } else {
+                            ProviderMarkView(driverKind: "", size: 13)
+                        }
+                        Text(verbatim: label)
+                            .font(theme.font(10))
+                            .foregroundStyle(theme.inkSecondary)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: 130, alignment: .trailing)
+                    .padding(.horizontal, 8)
+                    .accessibilityIdentifier("team-map-model.\(bot.id)")
                 }
             }
             .padding(.horizontal, 8)
@@ -329,7 +498,7 @@ private struct DesktopTeamCanvas: View {
         VStack {
             Spacer(minLength: 0)
             HStack(alignment: .bottom, spacing: 12) {
-                Text("Drag within a team to arrange · Drop in another team to move · Scroll to pan")
+                Text("Drag within a team to arrange · Drop in another team to move · Wheel zooms · Trackpad or Shift+wheel pans")
                     .font(theme.font(11))
                     .foregroundStyle(theme.inkSecondary)
                     .padding(.horizontal, 8)
@@ -338,7 +507,7 @@ private struct DesktopTeamCanvas: View {
                     .allowsHitTesting(false)
                 Spacer(minLength: 0)
                 HStack(spacing: 2) {
-                    zoomButton("minus", label: "Zoom out") { zoom(current, by: 1 / 1.2, size: size) }
+                    zoomButton(.minus, label: "Zoom out") { zoom(current, by: 1 / 1.2, size: size) }
                     Button { view = fitted } label: {
                         Text(verbatim: "\(Int((current.scale * 100).rounded()))%")
                             .font(theme.font(11))
@@ -349,7 +518,8 @@ private struct DesktopTeamCanvas: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(Text("Fit teams to view"))
-                    zoomButton("plus", label: "Zoom in") { zoom(current, by: 1.2, size: size) }
+                    .accessibilityValue(Text(verbatim: "\(Int((current.scale * 100).rounded()))%"))
+                    zoomButton(.plus, label: "Zoom in") { zoom(current, by: 1.2, size: size) }
                 }
                 .padding(4)
                 .background(theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -357,12 +527,13 @@ private struct DesktopTeamCanvas: View {
             }
             .padding(20)
         }
+        // the size of the view, not of the (larger) world the ZStack holds
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
     }
 
-    private func zoomButton(_ symbol: String, label: LocalizedStringKey, action: @escaping () -> Void) -> some View {
+    private func zoomButton(_ icon: DesktopIcon, label: LocalizedStringKey, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 13))
+            DesktopIconView(icon: icon, size: 15, strokeWidth: 2)
                 .foregroundStyle(theme.inkSecondary)
                 .frame(width: 36, height: 36)
                 .contentShape(Rectangle())
@@ -389,14 +560,17 @@ private struct DesktopTeamCanvas: View {
         guard session.canAdminister || session.surfaceGate.isOrgMemberSession else { return }
         let instances = await DesktopModelCatalog.shared.instances(session)
         var labels: [String: String] = [:]
+        var engines: [String: Instance] = [:]
         for bot in session.state.bots {
             let selection = bot.modelSelection
             let instance = instances.first { $0.instanceId == selection.instanceId }
             let id = selection.model.isEmpty ? (instance?.models.default ?? "") : selection.model
             let label = instance?.models.options.first { $0.id == id }?.label ?? id
             if !label.isEmpty { labels[bot.id] = label }
+            if let instance { engines[bot.id] = instance }
         }
         modelLabels = labels
+        modelInstances = engines
     }
 
     private func statusLabel(_ status: TeamMapStatus) -> String {
@@ -430,13 +604,17 @@ struct DesktopAutomationsPage: View {
     var body: some View {
         // its navigation bar is the page's header: the title and the
         // routines' own actions (New, the view pickers)
-        NavigationStack {
-            TasksRoutinesView(page: .automations)
-                .navigationBarTitleDisplayMode(.inline)
-                // the desktop's week, not the phone's day
-                .environment(\.automationsGridDays, 7)
-                // lot 4: the desktop's header and right column
-                .environment(\.automationsDesktop, true)
+        // the column's width: the page header folds as the desktop's does
+        GeometryReader { proxy in
+            NavigationStack {
+                TasksRoutinesView(page: .automations)
+                    .navigationBarTitleDisplayMode(.inline)
+                    // the desktop's week, not the phone's day
+                    .environment(\.automationsGridDays, 7)
+                    // lot 4: the desktop's header and right column
+                    .environment(\.automationsDesktop, true)
+                    .environment(\.automationsPageWidth, proxy.size.width)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.app)
@@ -449,9 +627,9 @@ extension IPadParityScreen {
     /// The page surfaces (desktop-*-53 to -56): the page in the main column.
     var parityPage: DesktopPage? {
         switch self {
-        case .routinesCalendar, .routinesList, .routinesLogs: .automations
+        case .routinesCalendar, .routinesList, .routinesLogs, .routineEdit: .automations
         case .teamMap: .teamMap
-        case .memoryPage: .memory
+        case .memoryPage, .memoryMap, .memoryTags, .memoryQuality, .memoryMapRadial, .memoryMapColumns: .memory
         default: nil
         }
     }

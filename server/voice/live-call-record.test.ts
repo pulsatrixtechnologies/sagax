@@ -12,10 +12,12 @@ const record = (extra: Partial<LiveCallRecord> = {}): LiveCallRecord => ({
 });
 
 describe("spokenLineFields", () => {
-  it("stamps a spoken line with its call, and only a spoken line", () => {
+  it("stamps a spoken line with its call, and only a spoken line; stamps via for an own SMS", () => {
     expect(spokenLineFields("call", "call-1")).toEqual({ via: "call", callId: "call-1" });
     expect(spokenLineFields("call", undefined)).toEqual({ via: "call" });
     expect(spokenLineFields("call", "")).toEqual({ via: "call" });
+    expect(spokenLineFields("sms", "call-1")).toEqual({ via: "sms" });
+    expect(spokenLineFields("sms", undefined)).toEqual({ via: "sms" });
     expect(spokenLineFields("api", "call-1")).toEqual({});
     expect(spokenLineFields(undefined, "call-1")).toEqual({});
   });

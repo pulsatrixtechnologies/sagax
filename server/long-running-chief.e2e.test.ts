@@ -551,7 +551,10 @@ it("lets a card hold only its own job: other jobs run beside it, or say once who
 
   // No free slot: Mira's one slot is the card's. Job K waits, and its chat
   // says behind whose card, once.
-  expect((await f.api("PATCH", "/api/config", { threads: { maxConcurrentPerBot: 1 } })).status).toBe(200);
+  // 59b8ce34d: parallel conversations are Mira's own runtime setting;
+  // changing the global default no longer changes an existing bot's limit.
+  expect((await f.api("PATCH", `/api/bots/${f.mira.id}/runtime-settings`, { maxConcurrentThreads: 1 })).status).toBe(200);
+  expect((await f.api("GET", `/api/bots/${f.mira.id}/runtime-settings`)).body.settings.maxConcurrentThreads).toBe(1);
   const jobK = await f.newJob("Changelog");
   await f.say(jobK, "PHASE-K-JOB: have Mira update the changelog.");
   await expect.poll(() => f.child(jobK, f.mira.id, "CHANGELOG")?.status, { timeout: 20_000 }).toBe("queued");

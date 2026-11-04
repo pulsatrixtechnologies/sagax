@@ -400,6 +400,9 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
     // FAKE_CLAUDE_DUMP stays the launcher's: assertions read fixtureDumpPath.
     if (key.startsWith("FAKE_CLAUDE_") && key !== "FAKE_CLAUDE_DUMP" && value) childEnv[key] = value;
   }
+  // Per-step turn path timing on stderr (server/turns/turn-trace.ts). Off
+  // unless the parent sets it; no test change.
+  if (parentEnv.SAGAX_TURN_TRACE === "1") childEnv.SAGAX_TURN_TRACE = "1";
   // A suite that checks how a failed turn reads (a rate limit, a refused key)
   // turns the automatic backup engine off, or the same message would simply
   // continue on another engine and never fail (server/usage/limit-failover-host.ts).
@@ -584,7 +587,9 @@ export async function launchVerificationServer(
   });
   closeSync(log);
 
-  const deadline = Date.now() + 20_000;
+  // Strip-types boot of server/index.ts can exceed 20s when the Mac is under
+  // several concurrent verification servers; 60s keeps the harness usable.
+  const deadline = Date.now() + 60_000;
   try {
     for (;;) {
       if (signal?.aborted) throw new ControlOmbError("verification launch cancelled");

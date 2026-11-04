@@ -26,6 +26,10 @@ export interface MemoryManagerSource {
   mayManage?: boolean;
   /** Bot source: the bot id for existing memory file routes. */
   botId?: string;
+  /** Bot source: whether a current bot owns this memory. A temporary agent
+   * (create_agent: never listed with the bots) leaves a folder no bot is
+   * linked to, which the page lets the person delete. */
+  linked?: boolean;
   /** Team source: section key for /api/team-memory. */
   section?: string;
   /** Perspicax scope hint (`me`, `org`, `team:<id>`), never a person GUID. */
@@ -34,7 +38,7 @@ export interface MemoryManagerSource {
 
 export interface MemoryManagerSourcesDeps {
   /** Bots the caller may open in the manager. */
-  bots(auth: RequestAuth): Array<{ id: string; name: string; mayWrite: boolean }>;
+  bots(auth: RequestAuth): Array<{ id: string; name: string; mayWrite: boolean; temporary?: boolean }>;
   /** Whether this bot's memory routes answer the caller (the request gate's
    * visibility and channel checks, then the memory owner gate). A bot they
    * refuse is not listed: its row would only open on "no such bot". */
@@ -60,6 +64,7 @@ export function createMemoryManagerRoutes(deps: MemoryManagerSourcesDeps): Route
         detail: "Bot memory",
         mayWrite: bot.mayWrite,
         botId: bot.id,
+        linked: !bot.temporary,
       });
     }
     for (const section of deps.teamSections(auth)) {

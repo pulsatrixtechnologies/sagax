@@ -83,7 +83,7 @@ public enum DisplayHygiene {
         }
     }
 
-    /// The readable history line: "Instructions changed by Katarina, approval
+    /// The readable history line: "Instructions changed by Osprey, approval
     /// card, Oct 21". Ids and byte sizes stay out of this string.
     public static func historyPhrase(_ row: BotHistoryRow, botName: String, now: Date = Date()) -> String {
         let who = historyWho(row.actor, botName: botName)

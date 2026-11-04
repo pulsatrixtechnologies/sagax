@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  redactRun,
   parseRoutineScopeQuery,
   routineRunClearable,
   routineScopeRefusal,
@@ -205,4 +206,9 @@ describe("Clear logs", () => {
     expect(clearable("all", admin, "&routineId=r-dave")).toEqual(["run-dave"]);
     expect(parseRoutineScopeQuery(new URLSearchParams("routineId=../x"))).toMatchObject({ code: "routine_scope_invalid" });
   });
+});
+
+it("withholds readiness requirements and account facts from another person's run", () => {
+  const redacted = redactRun({ id: "run", status: "blocked", requires: { skills: ["inbox-review"] }, readiness: [{ code: "mcp_missing" }], readinessEngine: { engine: "grok", account: "person" } });
+  expect(redacted).toEqual({ id: "run", status: "blocked", redacted: true });
 });

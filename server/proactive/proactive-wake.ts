@@ -26,6 +26,10 @@
 // - batching: events of one bot within PROACTIVE_GATHER_MS make ONE wake,
 //   and a wake starts at most every minIntervalMs (ProactiveBudget),
 //   the events in between joining the next one;
+// - person isolation (2026-11-03, audit S-2): events gather per bot AND per
+//   person (the event's runAs, else the bot owner), and each person's events
+//   make their own wake under that person's rights; one turn never reads two
+//   people's events;
 // - lane: one active wake per bot, in a lane that never blocks the person's
 //   routines (RoutineManager.enqueueProactive);
 // - destination: the wake reports into the bot's one conversation only when
@@ -253,13 +257,17 @@ export interface ProactiveWakeBatch {
   confined: boolean;
   /** Why it woke, for the Events line. */
   reasons: string[];
-  /** Person the wake should run as, when an event named one. */
+  /** The one person the wake runs as: every event of the batch is theirs
+   * (their runAs, else the bot owner). Absent: the owner, resolved later. */
   runAs?: string;
 }
 
 export interface ProactiveWakerDeps {
   /** The stored bot, undefined if gone. */
   bot(botId: string): { proactiveMode?: unknown } | undefined;
+  /** 2026-11-03 (audit S-2): the person an event without runAs runs as (the
+   * bot owner). Events gather per (bot, person). */
+  owner?: (botId: string) => string | undefined;
   /** Start the background wake run (proactive on). */
   wake(batch: ProactiveWakeBatch): void;
   /** One line in the bot conversation's Events tab. */
@@ -286,9 +294,17 @@ export interface ProactiveWakerDeps {
 }
 
 interface Pending {
+  botId: string;
+  /** The person this group's wake runs as ("" when unknown: the owner). */
+  person: string;
   events: ProactiveEvent[];
   more: number;
   timer: unknown;
+}
+
+/** The gathering key of an event: its bot and its person. */
+function pendingKey(botId: string, person: string): string {
+  return `${botId}\u0000${person}`;
 }
 
 /** Labels for the Events line: counted when repeated, never content. */
@@ -352,18 +368,37 @@ export class ProactiveWaker {
     this.keySet.add(key);
     this.keys.push(key);
     if (this.keys.length > KEYS_KEPT) this.keySet.delete(this.keys.shift()!);
-    const pending = this.pending.get(event.botId);
+    // 2026-11-03 (audit S-2): never one wake for two people's events
+    const person = this.personOf(event);
+    const group = pendingKey(event.botId, person);
+    const pending = this.pending.get(group);
     if (pending) {
       if (pending.events.length < PROACTIVE_EVENTS_PER_WAKE) pending.events.push(event);
       else pending.more += 1;
-      this.changed(event.botId, pending.events);
+      this.changed(event.botId);
       return "gathered";
     }
-    const fresh: Pending = { events: [event], more: 0, timer: null };
-    this.pending.set(event.botId, fresh);
-    this.changed(event.botId, fresh.events);
-    fresh.timer = this.setTimer(() => this.flush(event.botId), this.delayFor(event.botId));
+    const fresh: Pending = { botId: event.botId, person, events: [event], more: 0, timer: null };
+    this.pending.set(group, fresh);
+    this.changed(event.botId);
+    fresh.timer = this.setTimer(() => this.flush(event.botId, person), this.delayFor(event.botId));
     return "gathered";
+  }
+
+  /** Who a wake of this event runs as: its runAs, else the bot owner. */
+  private personOf(event: ProactiveEvent): string {
+    const explicit = event.runAs?.trim();
+    if (explicit) return explicit;
+    try {
+      return this.deps.owner?.(event.botId)?.trim() ?? "";
+    } catch {
+      return "";
+    }
+  }
+
+  /** Every gathering group of a bot (one per person). */
+  private groupsOf(botId: string): Pending[] {
+    return [...this.pending.values()].filter((pending) => pending.botId === botId);
   }
 
   /** The gather window, or longer when the last wake was too recent. */
@@ -373,12 +408,13 @@ export class ProactiveWaker {
     return Math.max(this.gatherMs, cadence);
   }
 
-  /** Wake now with what this bot gathered (the timer calls it). */
-  flush(botId: string): ProactiveWakeBatch | null {
-    const pending = this.pending.get(botId);
+  /** Wake now with what this bot gathered for one person (the timer calls
+   * it). Without a person: the first group of the bot. */
+  flush(botId: string, person?: string): ProactiveWakeBatch | null {
+    const pending = person === undefined ? this.groupsOf(botId)[0] : this.pending.get(pendingKey(botId, person));
     if (!pending) return null;
-    this.pending.delete(botId);
-    this.changed(botId, []);
+    this.pending.delete(pendingKey(botId, pending.person));
+    this.changed(botId);
     if (pending.timer !== null) this.clearTimer(pending.timer);
     const bot = this.deps.bot(botId);
     if (!bot) return null;
@@ -397,7 +433,8 @@ export class ProactiveWaker {
     this.budget.noteCycle(botId);
     this.budget.noteInitiate(botId);
     this.lastWake.set(botId, this.now());
-    const runAs = pending.events.map((event) => event.runAs).find((value): value is string => Boolean(value));
+    // every event of the group is this one person's (offer keys them so)
+    const runAs = pending.person || undefined;
     const batch: ProactiveWakeBatch = {
       botId,
       mode,
@@ -417,7 +454,10 @@ export class ProactiveWaker {
     return batch;
   }
 
-  private changed(botId: string, events: readonly ProactiveEvent[]): void {
+  /** Reports every event the bot has gathered, all persons together (the
+   * disk copy is per bot; each event is keyed back to its person on replay). */
+  private changed(botId: string): void {
+    const events = this.groupsOf(botId).flatMap((pending) => pending.events);
     try {
       this.deps.pendingChanged?.(botId, events);
     } catch {
@@ -435,15 +475,15 @@ export class ProactiveWaker {
 
   /** Waiting events of a bot (tests, and a deleted bot). */
   pendingFor(botId: string): number {
-    const pending = this.pending.get(botId);
-    return pending ? pending.events.length + pending.more : 0;
+    return this.groupsOf(botId).reduce((sum, pending) => sum + pending.events.length + pending.more, 0);
   }
 
   forget(botId: string): void {
-    const pending = this.pending.get(botId);
-    if (pending?.timer) this.clearTimer(pending.timer);
-    this.pending.delete(botId);
-    this.changed(botId, []);
+    for (const pending of this.groupsOf(botId)) {
+      if (pending.timer) this.clearTimer(pending.timer);
+      this.pending.delete(pendingKey(botId, pending.person));
+    }
+    this.changed(botId);
     this.budget.forget(botId);
     this.lastWake.delete(botId);
   }

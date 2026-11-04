@@ -25,7 +25,7 @@ describe("spend cap and prices through real turns", () => {
     layerDir = mkdtempSync(join(tmpdir(), "omb-fake-layer-"));
     mkdirSync(join(layerDir, "server"));
     writeFileSync(join(layerDir, "server", "index.js"), 'export async function register() { return { customer: "Fixture Co", features: ["budgets", "billing"], expiresAt: "2099-01-01" }; }\n');
-    session = await launchVerificationServer(process.env, undefined, undefined, undefined, { dir: layerDir, licenseKey: "fixture-key" });
+    session = await launchVerificationServer({ ...process.env, FAKE_CLAUDE_TOOL_CALLS: "[]" }, undefined, undefined, undefined, { dir: layerDir, licenseKey: "fixture-key" });
   }, 60_000);
 
   afterEach(async () => {
@@ -48,7 +48,8 @@ describe("spend cap and prices through real turns", () => {
       [ORGANIZE_MARKER]: '{"moves":[]}',
       [TIDY_MARKER]: '{"pairs":[]}',
     }));
-    session = await launchVerificationServer({ ...process.env, FAKE_CLAUDE_TEXT_ROUTES: routes, FAKE_CLAUDE_TEXT_DUMP: dump },
+    // 95e8f39e4 continues tool-only endings; these budgeted turns finish in text.
+    session = await launchVerificationServer({ ...process.env, FAKE_CLAUDE_TOOL_CALLS: "[]", FAKE_CLAUDE_TEXT_ROUTES: routes, FAKE_CLAUDE_TEXT_DUMP: dump },
       undefined, undefined, undefined, { dir: layerDir, licenseKey: "fixture-key" });
     const created = await api("/api/bots", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Budgeted memory" }) });
     expect(created.status).toBe(201);

@@ -137,7 +137,7 @@ describe("Détails du poste", () => {
 
 describe("the action row", () => {
   it("shows three grey pills of the same size; Take control is on the screen card", () => {
-    act(() => root.render(createElement(RemoteSessionActions, { botId: "melonie", view })));
+    act(() => root.render(createElement(RemoteSessionActions, { botId: "wren", view })));
     expect($("[data-remote-take-control]")).toBeNull();
     const secondary = [...document.querySelectorAll<HTMLElement>("[data-remote-action]")];
     expect(secondary.map((button) => button.dataset.remoteAction)).toEqual(["shell", "upload", "download"]);
@@ -154,7 +154,7 @@ describe("the action row", () => {
 
 describe("remote file browser: download", () => {
   it("opens on the user's profile, browses into a folder, and downloads the chosen file", async () => {
-    act(() => root.render(createElement(RemoteSessionActions, { botId: "melonie", view })));
+    act(() => root.render(createElement(RemoteSessionActions, { botId: "wren", view })));
     await click("[data-remote-action=download]");
     expect(dialog()?.getAttribute("data-remote-file-browser")).toBe("download");
     expect(dialog()?.getAttribute("role")).toBe("dialog");
@@ -178,7 +178,7 @@ describe("remote file browser: download", () => {
   });
 
   it("climbs with the parent button and the breadcrumb, and switches drives", async () => {
-    act(() => root.render(createElement(RemoteSessionActions, { botId: "melonie", view })));
+    act(() => root.render(createElement(RemoteSessionActions, { botId: "wren", view })));
     await click("[data-remote-action=download]");
     await click("[data-remote-browser-up]");
     expect(calls.at(-1)).toEqual({ action: "ls", body: { path: "C:\\Users" } });
@@ -203,7 +203,7 @@ describe("remote file browser: download", () => {
 
   it("says why a folder did not open and offers to try again", async () => {
     vi.mocked(fetch).mockImplementationOnce(async () => respond({ error: "The remote computer did not answer. Try again in a moment." }, 409));
-    act(() => root.render(createElement(RemoteSessionActions, { botId: "melonie", view })));
+    act(() => root.render(createElement(RemoteSessionActions, { botId: "wren", view })));
     await click("[data-remote-action=download]");
     expect(dialog()?.querySelector("[role=alert]")?.textContent).toContain("did not answer");
     const retry = [...dialog()!.querySelectorAll("button")].find((button) => button.textContent === t("remoteSession.browser.retry"))!;
@@ -222,7 +222,7 @@ async function chooseLocalFile(file: File) {
 
 describe("remote file browser: upload", () => {
   it("picks a local file, then sends it to the folder chosen on the remote computer", async () => {
-    act(() => root.render(createElement(RemoteSessionActions, { botId: "melonie", view })));
+    act(() => root.render(createElement(RemoteSessionActions, { botId: "wren", view })));
     await chooseLocalFile(new File(["pdf"], "facture octobre.pdf", { type: "application/pdf" }));
     expect(dialog()?.getAttribute("data-remote-file-browser")).toBe("upload");
     expect(dialog()?.textContent).toContain(t("remoteSession.browser.uploadTitle", { name: "facture octobre.pdf" }));
@@ -246,7 +246,7 @@ describe("remote file browser: upload", () => {
   });
 
   it("keeps the 8 MB limit before anything opens", async () => {
-    act(() => root.render(createElement(RemoteSessionActions, { botId: "melonie", view })));
+    act(() => root.render(createElement(RemoteSessionActions, { botId: "wren", view })));
     const big = new File(["x"], "gros.iso");
     Object.defineProperty(big, "size", { value: 8 * 1024 * 1024 + 1 });
     await chooseLocalFile(big);
@@ -256,7 +256,7 @@ describe("remote file browser: upload", () => {
   });
 
   it("keeps the browser open with the reason when the transfer fails", async () => {
-    act(() => root.render(createElement(RemoteSessionActions, { botId: "melonie", view })));
+    act(() => root.render(createElement(RemoteSessionActions, { botId: "wren", view })));
     await chooseLocalFile(new File(["pdf"], "a.pdf"));
     await click("[data-remote-browser-pick]");
     vi.mocked(fetch).mockImplementationOnce(async () => respond({ error: "That folder cannot receive a file." }, 409));
@@ -269,7 +269,7 @@ describe("remote file browser: upload", () => {
 describe("remote file browser: replace and refused folders", () => {
   it("asks before replacing a file already there, naming it and its folder, then sends overwrite", async () => {
     existing.add(`${HOME}\\notes.txt`);
-    act(() => root.render(createElement(RemoteSessionActions, { botId: "melonie", view })));
+    act(() => root.render(createElement(RemoteSessionActions, { botId: "wren", view })));
     await chooseLocalFile(new File(["x"], "notes.txt"));
     await click("[data-remote-browser-pick]");
     await click("[data-remote-confirm-go]");
@@ -294,7 +294,7 @@ describe("remote file browser: replace and refused folders", () => {
   });
 
   it("refuses a system folder and a folder name scp cannot carry, before any confirmation", async () => {
-    act(() => root.render(createElement(RemoteSessionActions, { botId: "melonie", view })));
+    act(() => root.render(createElement(RemoteSessionActions, { botId: "wren", view })));
     await chooseLocalFile(new File(["x"], "a.txt"));
     // the next listing the browser asks for answers this folder
     const open = async (path: string) => {
@@ -311,7 +311,7 @@ describe("remote file browser: replace and refused folders", () => {
   });
 
   it("locks the stale listing after a failed folder: no parent, no breadcrumb", async () => {
-    act(() => root.render(createElement(RemoteSessionActions, { botId: "melonie", view })));
+    act(() => root.render(createElement(RemoteSessionActions, { botId: "wren", view })));
     await click("[data-remote-action=download]");
     vi.mocked(fetch).mockImplementationOnce(async () => respond({ error: "The remote computer did not answer. Try again in a moment." }, 409));
     await click("[data-remote-entry=dir][data-name=Documents]");
@@ -323,7 +323,7 @@ describe("remote file browser: replace and refused folders", () => {
   });
 
   it("keeps the focus in the window after a folder opens, so Escape still closes it", async () => {
-    act(() => root.render(createElement(RemoteSessionActions, { botId: "melonie", view })));
+    act(() => root.render(createElement(RemoteSessionActions, { botId: "wren", view })));
     await click("[data-remote-action=download]");
     $("[data-remote-entry=dir][data-name=Documents]")!.focus();
     await click("[data-remote-entry=dir][data-name=Documents]");

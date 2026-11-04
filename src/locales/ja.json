@@ -3773,5 +3773,13 @@
   "routineEditor.formatAiHint": "{bot} のチャットを開き、この指示を整える依頼を入力します。Enter を押すまで送信されません。",
   "routineEditor.formatAiPrompt": "ルーティン「{name}」（ID {id}）の指示を、見出し・番号付き手順・短い文で、より構造的で読みやすく整形してください。ルール、事実、日付、決定はすべてそのまま残し、意味は変えないでください。そのうえで、ルーティン編集ツール（propose_routine_action、action update、changes.instructions）でルーティン「{name}」（ID {id}）を更新し、変更前と変更後を見せてください。",
   "routineEditor.copy": "コピーを作成",
-  "routineEditor.hint.duplicate": "この設定で新しいルーティンを作成します。"
+  "routineEditor.hint.duplicate": "この設定で新しいルーティンを作成します。",
+  "botPanel.library.kind.artifact": "アーティファクト",
+  "botPanel.library.pageTitle": "ページ: {state}",
+  "botPanel.library.pageState.draft": "下書き",
+  "botPanel.library.pageState.private": "自分に公開",
+  "botPanel.library.pageState.org": "組織に公開",
+  "botPanel.library.pageState.link": "リンクを知っている全員に公開",
+  "botPanel.library.pageState.revoked": "取り消し済み",
+  "botPanel.library.pageState.expired": "期限切れ"
 }

@@ -1,3 +1,4 @@
+import { botRoutineRuns } from "@/state/view-slices";
 // The body of each bot settings section and the reads behind them (the
 // server overview and prompt preview, the file-backed history and its
 // version restore). Shared by the bot panel's More tab (BotSettingsDialog) and the
@@ -5,11 +6,12 @@
 // controls and save through the same paths.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 
-import { api, useStore, type Bot, type BotSettingsSection, type ConfigStatus } from "@/state/store";
+import { shallowEqual, useStoreCommands, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
+import { api, type Bot, type BotSettingsSection, type ConfigStatus } from "@/state/store";
 import type { BotOverview } from "@/lib/bot-overview-types";
 import type { LocaleKey } from "@/locales";
 import { t } from "@/lib/i18n";
-import { canEditBotField, canStepPrimary, showBotVisibility } from "@/lib/bot-capabilities";
+import { canEditBotField, canSetBotHost, canStepPrimary, showBotVisibility, viewerOwnsBot } from "@/lib/bot-capabilities";
 import { viewerBotsReadOnly } from "@/lib/viewer";
 import { servedPage } from "@/lib/desktop";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
@@ -37,6 +39,7 @@ import { UsageSection } from "./UsageSection";
 import { VisibilitySection } from "./VisibilitySection";
 import { SharingSection } from "./SharingSection";
 import { PerspicaxSection } from "./PerspicaxSection";
+import { TeamBotVaultSection } from "./TeamBotVaultSection";
 import { AppearancePane } from "../appearance/AppearancePane";
 import type { PromptPreviewData } from "./PromptPreview";
 
@@ -48,14 +51,14 @@ import type { PromptPreviewData } from "./PromptPreview";
  * with Perspicax shares a bot person by person (Sharing) and offers its MCP
  * profiles; the audience setting does not apply there. */
 export function useBotSectionAvailability(botId: string) {
-  const { state } = useStore();
+  const config = useStoreSelector((current) => current.config);
+  const bot = useStoreSelector((current) => current.bots.find((candidate) => candidate.id === botId));
   const slackUrl = useSlackManagementUrl(botId);
   const ownerOrAdmin = useOwnerOrAdmin();
   const perspicaxOrg = usePerspicaxOrg();
-  const bot = state.bots.find((candidate) => candidate.id === botId);
   const available = (id: BotSettingsSection): boolean =>
     id === "slack" ? slackUrl !== null
-      : id === "visibility" ? Boolean(bot) && showBotVisibility(state.config, bot!, { served: servedPage(), ownerOrAdmin, perspicaxOrg: perspicaxOrg !== null })
+      : id === "visibility" ? Boolean(bot) && showBotVisibility(config, bot!, { served: servedPage(), ownerOrAdmin, perspicaxOrg: perspicaxOrg !== null })
         : id === "sharing" || id === "perspicax" ? perspicaxOrg !== null
           : true;
   return { available, slackUrl, perspicaxOrg };
@@ -102,7 +105,12 @@ export function useBotSectionContent(bot: Bot, {
   returnFocusRef: RefObject<HTMLElement | null>;
   slackUrl: string | null;
 }): { renderSectionBody: (id: BotSettingsSection) => ReactNode; dialogs: ReactNode; derived: ReturnType<typeof useBotSettingsDerived> } {
-  const { state, dispatch, flushBotPatches } = useStore();
+  const dispatch = useStoreDispatch();
+  const { flushBotPatches } = useStoreCommands();
+  const config = useStoreSelector((current) => current.config);
+  const routines = useStoreSelector((current) => current.routines.filter((routine) => routine.botId === bot.id), shallowEqual);
+  const webhooks = useStoreSelector((current) => current.webhooks);
+  const runs = useStoreSelector((current) => botRoutineRuns(current, bot.id), shallowEqual);
   const derived = useBotSettingsDerived(bot);
 
   const [overview, setOverview] = useState<BotOverview | null>(null);
@@ -193,7 +201,7 @@ export function useBotSectionContent(bot: Bot, {
     return () => {
       cancelled = true;
     };
-  }, [bot.id, section, factsSignature, state.routines, state.webhooks, flushBotPatches]);
+  }, [bot.id, section, factsSignature, routines, webhooks, flushBotPatches]);
 
   // Read the file-backed history only when its section is opened. A newer
   // load (or leaving History) invalidates older rows, revision, and errors.
@@ -212,7 +220,7 @@ export function useBotSectionContent(bot: Bot, {
       });
   }, [bot.id, flushBotPatches]);
 
-  const historyAllowed = canEditBotField(state.config, bot, "soul");
+  const historyAllowed = canEditBotField(config, bot, "soul");
   useEffect(() => {
     if (!historyAllowed || section !== "history") return;
     void loadHistory();
@@ -268,7 +276,7 @@ export function useBotSectionContent(bot: Bot, {
       case "appearance":
         return <AppearancePane bot={bot} onPatch={derived.patch} />;
       case "soul":
-        if (!canEditBotField(state.config, bot, "soul")) return null;
+        if (!canEditBotField(config, bot, "soul")) return null;
         return <SoulSection bot={bot} patch={derived.patch} />;
       case "slack":
         return slackUrl ? <SlackSection managementUrl={slackUrl} /> : null;
@@ -279,18 +287,18 @@ export function useBotSectionContent(bot: Bot, {
         // while the user consults another section. It fetches when it
         // becomes the active section. Mounted below while the viewer may
         // change it; visibility toggled via hidden on the wrapper.
-        if (!canEditBotField(state.config, bot, "memoryEnabled")) return null;
+        if (!canEditBotField(config, bot, "memoryEnabled")) return null;
         return <MemorySection bot={bot} active={expanded && section === "memory"} onToggle={(enabled) => derived.patch({ memoryEnabled: enabled })} />;
       case "rules":
         // Rules and Files have their own Save; the persona editor keeps them
         // mounted like Memory (PersonaEditorModal).
-        if (!canEditBotField(state.config, bot, "soul")) return null;
+        if (!canEditBotField(config, bot, "soul")) return null;
         return <RulesSection bot={bot} active={expanded && section === "rules"} />;
       case "files":
-        if (!canEditBotField(state.config, bot, "soul")) return null;
-        return <WorkspaceFilesSection bot={bot} active={expanded && section === "files"} onOpenSection={onOpenSection} memoryEditable={canEditBotField(state.config, bot, "memoryEnabled")} />;
+        if (!canEditBotField(config, bot, "soul")) return null;
+        return <WorkspaceFilesSection bot={bot} active={expanded && section === "files"} onOpenSection={onOpenSection} memoryEditable={canEditBotField(config, bot, "memoryEnabled")} />;
       case "routines":
-        return <RoutinesSection bot={bot} routines={derived.botRoutines} runs={state.routineRuns} />;
+        return <RoutinesSection bot={bot} routines={derived.botRoutines} runs={runs} />;
       case "access":
         return <AccessSection bot={bot} derived={derived} />;
       case "worksOn":
@@ -304,7 +312,16 @@ export function useBotSectionContent(bot: Bot, {
       case "visibility":
         return <VisibilitySection bot={bot} />;
       case "sharing":
-        return <SharingSection bot={bot} />;
+        // The shared vault of a team bot sits with its sharing, in Edit bot,
+        // not in the bot's side panel (JC 2026-11-03).
+        return (
+          <>
+            <SharingSection bot={bot} />
+            {Boolean(bot.grants?.length || bot.directGrants?.length) && (viewerOwnsBot(config, bot) || canSetBotHost(config, bot)) && (
+              <TeamBotVaultSection botId={bot.id} botName={bot.name} />
+            )}
+          </>
+        );
       case "perspicax":
         return <PerspicaxSection bot={bot} />;
       case "history":

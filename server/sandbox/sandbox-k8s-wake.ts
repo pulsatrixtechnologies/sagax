@@ -125,6 +125,11 @@ export function sandboxStarting(error: unknown): boolean {
 
 export const CLUSTER_STARTING_MESSAGE = "The server environment is starting. This can take a few minutes.";
 export const CLUSTER_STOPPED_MESSAGE = "The server environment is stopped. It starts with the next bot turn that needs it.";
+/** A call the environment did not take while it was starting: nothing ran. */
+export const SANDBOX_STILL_STARTING_MESSAGE = "The server environment is still starting, so this did not run. Wait a minute, then call it again.";
+/** A command cut off while the environment was starting: it may or may not
+ * have run, so the bot checks before running it again. */
+export const SANDBOX_CUT_WHILE_STARTING_MESSAGE = "The server environment was still starting and the command was cut off before it answered. It may not have run: wait a minute, check its effect, then run it again if needed.";
 export const CLUSTER_TIMEOUT_MESSAGE = "The server environment did not start in time. Send the message again in a few minutes.";
 
 export interface SandboxClusterWakerOptions {

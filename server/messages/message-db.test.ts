@@ -8,12 +8,16 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { commandReceipt, runCommand } from "../commands.ts";
 import { DATA_DIR } from "../config.ts";
 import { closeMessageDb,
+  closeMessageSearch,
+  threadsReferencing,
+  threadsReferencingAsync,
   deleteThread,
   indexMemoryFile,
   indexedMemoryFiles,
   insertMessage,
   latestPersonLineAts,
   openApprovalCardMessages,
+  openPendingInboxCards,
   latestSaidByBot,
   readMessageText,
   recentMessages,
@@ -26,6 +30,7 @@ import { closeMessageDb,
   setActiveLeaf,
   updateMessage, describeMissingFts5 } from "./message-db.ts";
 import { withPeerProvenance } from "../peers/peer-provenance.ts";
+import { threadsReferencingInDatabase } from "./message-search-query.ts";
 import { Store, type Message } from "../store.ts";
 import type { ModelSelection } from "../contracts.ts";
 
@@ -47,6 +52,34 @@ describe("message-db", () => {
     mkdirSync(DATA_DIR, { recursive: true });
   });
 
+  // 2026-11-03 (audit S-5): the workspace tidy looked up to 400 fragments
+  // with one synchronous full scan each; now one pass, in the search worker.
+  it("finds the threads of many fragments in one pass, off the server's thread, like threadsReferencing", async () => {
+    insertMessage("t-a", msg("a1", "wrote /workspace/report.pdf and notes.txt"));
+    insertMessage("t-b", msg("b1", "see /workspace/report.pdf"));
+    insertMessage("t-c", msg("c1", "nothing here"));
+    const fragments = ["/workspace/report.pdf", "notes.txt", "/workspace/absent.bin", ""];
+    try {
+      const found = await threadsReferencingAsync(fragments);
+      for (const fragment of fragments.filter(Boolean)) expect((found.get(fragment) ?? []).sort()).toEqual(threadsReferencing(fragment).sort());
+      expect(found.get("/workspace/report.pdf")!.sort()).toEqual(["t-a", "t-b"]);
+      expect(found.get("/workspace/absent.bin")).toEqual([]);
+    } finally {
+      await closeMessageSearch();
+    }
+    // one statement for the whole batch (a chunk of up to 500 fragments)
+    const database = new DatabaseSync(join(DATA_DIR, "messages.db"), { readOnly: true });
+    let prepared = 0;
+    const counting = { prepare: (sql: string) => { prepared += 1; return database.prepare(sql); } } as unknown as DatabaseSync;
+    try {
+      const many = Array.from({ length: 400 }, (_, n) => `/workspace/file-${n}.txt`);
+      expect(threadsReferencingInDatabase(counting, many).size).toBe(400);
+      expect(prepared).toBe(1);
+    } finally {
+      database.close();
+    }
+  });
+
   it("finds only open permission cards (startup expiry after a restart)", () => {
     const card = (extra: Record<string, unknown>) => ({ title: "t", subtitle: "s", options: ["Allow"], requestType: "permission", requestId: "r", ...extra }) as Message["card"];
     insertMessage("ap1", msg("open", "", { role: "bot", kind: "options", card: card({}) }));
@@ -56,6 +89,7 @@ describe("message-db", () => {
     insertMessage("ap1", msg("question", "", { role: "bot", kind: "options", card: card({ requestType: "question" }) }));
     insertMessage("ap2", msg("plain", "hello"));
     expect(openApprovalCardMessages().map((h) => `${h.threadId}/${h.message.id}`)).toEqual(["ap1/open"]);
+    expect(openPendingInboxCards().map((h) => `${h.threadId}/${h.message.id}`).sort()).toEqual(["ap1/open", "ap1/question"]);
   });
 
   it("persists inserts, updates, and the active leaf across a reopen", () => {
@@ -459,6 +493,31 @@ describe("messages_thread_at", () => {
       const ats = planOf("SELECT thread_id, MAX(at) AS at FROM messages WHERE thread_id IN (?, ?) GROUP BY thread_id");
       expect(said).toContain("messages_thread_at");
       expect(ats).toContain("messages_thread_at");
+    } finally {
+      raw.close();
+    }
+  });
+
+  it("plans key_id, followup-thread and open-approval lookups on their indexes", () => {
+    insertMessage("thread-0", msg("m-0", "hello", { role: "bot", at: 1 }));
+    insertMessage("ap1", msg("open", "", {
+      role: "bot",
+      kind: "options",
+      card: { title: "t", subtitle: "s", options: ["Allow"], requestType: "permission", requestId: "r" },
+    }));
+    closeMessageDb();
+    const raw = new DatabaseSync(join(DATA_DIR, "messages.db"));
+    const planOf = (sql: string) => raw.prepare(`EXPLAIN QUERY PLAN ${sql}`).all()
+      .map((row) => String((row as { detail: string }).detail))
+      .join("\n");
+    try {
+      expect(planOf("SELECT DISTINCT thread_id FROM messages WHERE key_id IN (?)")).toMatch(/messages_key_id|SEARCH/i);
+      expect(planOf("SELECT rowid, id, payload FROM chat_followups WHERE thread_id = ?")).toContain("chat_followups_thread");
+      expect(planOf(
+        "SELECT thread_id, id FROM messages WHERE json_extract(json, '$.card.requestType') = 'permission' " +
+        "AND json_extract(json, '$.card.requestId') IS NOT NULL AND json_extract(json, '$.card.answered') IS NULL " +
+        "AND COALESCE(json_extract(json, '$.card.dismissed'), 0) = 0 AND COALESCE(json_extract(json, '$.card.expired'), 0) = 0",
+      )).toContain("messages_open_permission_cards");
     } finally {
       raw.close();
     }

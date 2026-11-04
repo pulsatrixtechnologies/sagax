@@ -23,11 +23,42 @@ enum DesktopIcon: String, CaseIterable {
     case wand
     // the palette's bot rows (lucide Bot)
     case bot
+    // Automations header (List, Filters), the grouped list's folders, the bot panel's Suggestions
+    case list, slidersHorizontal, folder, sparkles, refresh
+    // Team map (Monitor, Minus) and About's link rows (ExternalLink)
+    case monitor, minus, externalLink, messageCircle
+    // lot 6: the multi-select bar (CheckCheck, ListChecks) and the computer window (Minimize2, Hand)
+    case checkCheck, listChecks, minimize, hand
+    // sweep: the rail's expand (ChevronsRight), the palette's message hits
+    // (MessageSquare), Put on the desktop (PictureInPicture2)
+    case chevronsRight, messageSquare, pictureInPicture
+    // the pages sweep (2026-11-03): Automations' header (Menu, ChevronLeft,
+    // Clock3, Pause, CircleAlert), Memory's tabs and lists (Tag, CircleCheck,
+    // NotebookText), the map's settings (Settings2), fit and play
+    case messagesSquare, clipboardList, user, menu, chevronLeft, clock3, pause, circleAlert, tag, circleCheck, notebookText, settings2, maximize2, play
 
     /// Path data in the 24 pt viewBox.
     var paths: [String] {
         switch self {
         case .plus: ["M5 12h14", "M12 5v14"]
+        case .messagesSquare: ["M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z", "M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1"]
+        case .clipboardList: [Self.rect(8, 2, 8, 4, 1), "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2", "M12 11h4", "M12 16h4", "M8 11h.01", "M8 16h.01"]
+        case .user: ["M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2", Self.circle(12, 7, 4)]
+        case .menu: ["M4 5h16", "M4 12h16", "M4 19h16"]
+        case .chevronLeft: ["m15 18-6-6 6-6"]
+        case .clock3: [Self.circle(12, 12, 10), "M12 6v6h4"]
+        case .pause: [Self.rect(14, 3, 5, 18, 1), Self.rect(5, 3, 5, 18, 1)]
+        case .circleAlert: [Self.circle(12, 12, 10), "M12 8L12 12", "M12 16L12.01 16"]
+        case .tag: ["M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z", Self.circle(7.5, 7.5, 0.5)]
+        case .circleCheck: [Self.circle(12, 12, 10), "m16 9-5.5 5.5L8 12"]
+        case .notebookText: ["M2 6h4", "M2 10h4", "M2 14h4", "M2 18h4", Self.rect(4, 2, 16, 20, 2), "M9.5 8h5", "M9.5 12H16", "M9.5 16H14"]
+        case .settings2: ["M14 17H5", "M19 7h-9", Self.circle(17, 17, 3), Self.circle(7, 7, 3)]
+        case .maximize2: ["M15 3h6v6", "m21 3-7 7", "m3 21 7-7", "M9 21H3v-6"]
+        case .play: ["M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"]
+        case .monitor: [Self.rect(2, 3, 20, 14, 2), "M8 21h8", "M12 17v4"]
+        case .minus: ["M5 12h14"]
+        case .messageCircle: ["M7.9 20A9 9 0 1 0 4 16.1L2 22Z"]
+        case .externalLink: ["M15 3h6v6", "M10 14 21 3", "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"]
         case .panelLeftClose: [Self.rect(3, 3, 18, 18, 2), "M9 3v18", "m16 15-3-3 3-3"]
         case .panelLeftOpen: [Self.rect(3, 3, 18, 18, 2), "M9 3v18", "m14 9 3 3-3 3"]
         case .search: ["m21 21-4.34-4.34", Self.circle(11, 11, 8)]
@@ -129,6 +160,24 @@ enum DesktopIcon: String, CaseIterable {
             ["M16 14v2.2l1.6 1", "M16 2v4", "M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5", "M3 10h5", "M8 2v4", Self.circle(16, 16, 6)]
         case .fileText:
             ["M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z", "M14 2v4a2 2 0 0 0 2 2h4", "M10 9H8", "M16 13H8", "M16 17H8"]
+        case .list: ["M3 5h.01", "M3 12h.01", "M3 19h.01", "M8 5h13", "M8 12h13", "M8 19h13"]
+        case .slidersHorizontal:
+            ["M10 5H3", "M12 19H3", "M14 3v4", "M16 17v4", "M21 12h-9", "M21 19h-5", "M21 5h-7", "M8 10v4", "M8 12H3"]
+        case .refresh:
+            ["M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8", "M21 3v5h-5", "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16", "M8 16H3v5"]
+        case .folder: ["M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"]
+        case .sparkles:
+            ["M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z",
+             "M20 3v4", "M22 5h-4", "M4 17v2", "M5 18H3"]
+        case .checkCheck: ["M18 6 7 17l-5-5", "m22 10-7.5 7.5L13 16"]
+        case .listChecks: ["m3 17 2 2 4-4", "m3 7 2 2 4-4", "M13 6h8", "M13 12h8", "M13 18h8"]
+        case .minimize: ["m14 10 7-7", "M20 10h-6V4", "m3 21 7-7", "M4 14h6v6"]
+        case .hand:
+            ["M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2", "M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2", "M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8",
+             "M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"]
+        case .chevronsRight: ["m6 17 5-5-5-5", "m13 17 5-5-5-5"]
+        case .messageSquare: ["M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"]
+        case .pictureInPicture: ["M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4", Self.rect(12, 13, 10, 7, 2)]
         case .eye:
             ["M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0",
              Self.circle(12, 12, 3)]
@@ -143,6 +192,10 @@ enum DesktopIcon: String, CaseIterable {
         case .panelLeftClose: "sidebar.left"
         case .panelLeftOpen: "sidebar.left"
         case .search: "magnifyingglass"
+        case .monitor: "display"
+        case .minus: "minus"
+        case .messageCircle: "bubble.left"
+        case .externalLink: "arrow.up.right.square"
         case .chevronRight: "chevron.right"
         case .network: "point.3.connected.trianglepath.dotted"
         case .calendarDays: "calendar"
@@ -189,6 +242,32 @@ enum DesktopIcon: String, CaseIterable {
         case .arrowLeftRight: "arrow.left.arrow.right"
         case .arrowUp: "arrow.up"
         case .arrowDown: "arrow.down"
+        case .list: "list.bullet"
+        case .slidersHorizontal: "slider.horizontal.3"
+        case .folder: "folder"
+        case .sparkles: "sparkles"
+        case .refresh: "arrow.clockwise"
+        case .checkCheck: "checkmark.circle"
+        case .listChecks: "checklist"
+        case .minimize: "arrow.down.right.and.arrow.up.left"
+        case .hand: "hand.raised"
+        case .chevronsRight: "chevron.right.2"
+        case .messageSquare: "message"
+        case .pictureInPicture: "pip"
+        case .messagesSquare: "bubble.left.and.bubble.right"
+        case .clipboardList: "list.clipboard"
+        case .user: "person"
+        case .menu: "line.3.horizontal"
+        case .chevronLeft: "chevron.left"
+        case .clock3: "clock"
+        case .pause: "pause"
+        case .circleAlert: "exclamationmark.circle"
+        case .tag: "tag"
+        case .circleCheck: "checkmark.circle"
+        case .notebookText: "book.closed"
+        case .settings2: "slider.horizontal.2.square"
+        case .maximize2: "arrow.up.left.and.arrow.down.right"
+        case .play: "play"
         }
     }
 

@@ -94,6 +94,25 @@ describe("rules are kept per person and never shared", () => {
   });
 });
 
+describe("destructive gateway calls with hyphenated server names (#1931)", () => {
+  it.each(["user", "team", "org", "workspace"])("reads the tool after the whole %s server name", (scope) => {
+    const tool = `cursor__${scope}-pulsatrix-connectwise-psa-delete_5frecord___23`;
+    expect(destructiveKindOf({ tool, input: "{}" })).toBe("delete");
+    expect(ruleCandidateFor({ tool, input: "{}" }).destructive).toBe("delete");
+    expect(ownerDecision({ mode: "auto", rules: [], call: call("{}", { tool }) }))
+      .toMatchObject({ kind: "card", reason: "destructive" });
+  });
+
+  it("never treats a verb in the server name as the tool's action", () => {
+    for (const prefix of ["", "mcp__"]) {
+      const tool = `${prefix}cursor__user-acme-delete-list_5frecords___23`;
+      expect(destructiveKindOf({ tool, input: "{}" })).toBeUndefined();
+      expect(ownerDecision({ mode: "auto", rules: [], call: call("{}", { tool }) }))
+        .toMatchObject({ kind: "allow", source: "owner-auto" });
+    }
+  });
+});
+
 describe("Always allow / Allow once / Deny", () => {
   it("Always allow approves the next matching call without a card", () => {
     expect(ownerDecision({ mode: "approval", rules: [rule()], call: call(ticketUpdate) })).toMatchObject({ kind: "allow", source: "owner-rule" });

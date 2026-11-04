@@ -1,11 +1,14 @@
 // The group's right side panel. It is the bot panel (BotSettingsDialog)
 // adapted to a group: the same docked shell, top bar, big avatar, name and
-// tab strip, so a group and a bot read as one design. Group-specific bodies
-// (members on Details; responder and folder on Advanced, like a bot's own
-// folder) come from GroupView, which owns their state. Every group setting
-// lives here: there is no separate setup dialog.
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { PanelRight } from "lucide-react";
+// tab strip, so a group and a bot read as one design. 2026-11-03 (JC): the
+// tabs are Details (the bot's Details sections, for the group), Members
+// (people, bots with the lead set on its row, Leave group, then every other
+// setting under Advanced, folded by default), Instructions, Memory, Library
+// and Computer. The roster and the Advanced settings come from GroupView,
+// which owns their state. Every group setting lives here: there is no
+// separate setup dialog.
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ChevronDown, PanelRight } from "lucide-react";
 
 import { useStore, type Bot, type Group } from "@/state/store";
 import { DockedPanelResizeHandle, useDockedPanelWidth } from "./DockedPanelResize";
@@ -22,12 +25,50 @@ import { useCaptionChrome, useMacInsetChrome } from "./DesktopCapabilities";
 import { normalizeState } from "@/lib/mascot";
 import { HelpTip } from "./SettingsPrimitives";
 import { GroupBotPayers } from "./GroupBotPayers";
+import { useAdvancedMode } from "@/lib/interface-mode";
+import { GROUP_PANEL_TABS, groupLeadBotId, visibleGroupPanelTabs, type GroupPanelTab } from "@/lib/group-panel";
+import { lazyScreen } from "./lazy-screen";
 
-export const GROUP_PANEL_TABS = ["details", "instructions", "memory", "advanced"] as const;
-export type GroupPanelTab = (typeof GROUP_PANEL_TABS)[number];
+// The Details and Computer tabs pull the routines page, the computer panel and
+// the diff view: loaded when the tab opens, never on the launch path.
+const GroupDetailsTab = lazyScreen("GroupDetailsTab", async () => (await import("./group-panel/GroupDetailsTab")).GroupDetailsTab);
+const GroupComputerTab = lazyScreen("GroupComputerTab", async () => (await import("./group-panel/GroupComputerTab")).GroupComputerTab);
+
+function groupComputerBots(ownBots: readonly Bot[]): Bot[] {
+  return ownBots.filter((bot) => bot.computer !== "off");
+}
+import { GroupLibraryTab } from "./bot-settings/LibraryTab";
+
+export { GROUP_PANEL_TABS, type GroupPanelTab };
 
 const tabLabel = (tab: GroupPanelTab) =>
-  tab === "instructions" ? t("groupPanel.tab.instructions") : tab === "memory" ? t("groupPanel.tab.memory") : t(`botPanel.tab.${tab}`);
+  tab === "instructions" ? t("groupPanel.tab.instructions")
+    : tab === "memory" ? t("groupPanel.tab.memory")
+      : tab === "members" ? t("groupPanel.tab.members")
+        : t(`botPanel.tab.${tab}`);
+
+/** Members > Advanced: every setting that is not the roster, folded by
+ * default (JC, 2026-11-03: nothing dropped, full detail one click away). */
+export function AdvancedDisclosure({ groupId, children, defaultOpen = false }: { groupId: string; children: ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const bodyId = `group-advanced-${groupId}`;
+  return (
+    <section data-group-advanced={open ? "open" : "closed"} className="flex flex-col gap-4">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={bodyId}
+        data-group-advanced-toggle=""
+        onClick={() => setOpen((value) => !value)}
+        className="-mx-1 flex items-center gap-1 self-start rounded-md px-1 py-0.5 text-[13px] leading-[18px] text-ink-secondary hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+      >
+        {t("botPanel.tab.advanced")}
+        <ChevronDown size={13} aria-hidden="true" className={cn("transition-transform motion-reduce:transition-none", open && "rotate-180")} />
+      </button>
+      {open && <div id={bodyId} className="flex flex-col gap-4">{children}</div>}
+    </section>
+  );
+}
 
 /** Up to three member faces overlapped in a square, the group's avatar. */
 export function GroupAvatarStack({ members, size }: { members: Bot[]; size: number }) {
@@ -71,9 +112,12 @@ export function PanelSection({ title, children, className }: { title: string; ch
 export function GroupPanel({
   group,
   members,
-  details,
+  roster,
   advanced,
   canEdit,
+  canAddBot = false,
+  onLeave,
+  onOpenVmWorkspace,
   readOnlyNote = false,
   arriving = true,
 }: {
@@ -82,22 +126,37 @@ export function GroupPanel({
   arriving?: boolean;
   group: Group;
   members: Bot[];
-  /** People and bots, rendered by GroupView. */
-  details: ReactNode;
-  /** Default responder and working folder, rendered by GroupView; null for a remote client. */
+  /** People and bots (with the lead on its row), rendered by GroupView: the Members tab. */
+  roster: ReactNode;
+  /** Default responder, @all, turn limit, working folder and Manage members,
+   * rendered by GroupView; null for a remote client. Members > Advanced. */
   advanced: ReactNode;
+  /** The viewer may bring a bot in (a Suggestions row opens Members). */
+  canAddBot?: boolean;
+  /** Leave group, at the bottom of Members; absent when the viewer cannot leave. */
+  onLeave?: () => void;
+  onOpenVmWorkspace?: (botId: string) => void;
   /** Rename and instructions: the group's owner, never a remote client. */
   canEdit: boolean;
   /** Organization server: someone else owns the group; say why it is read-only. */
   readOnlyNote?: boolean;
 }) {
-  const { dispatch } = useStore();
+  const { state, dispatch } = useStore();
   const { padClass, dragProps } = useCaptionChrome();
   const { macInset, browser } = useMacInsetChrome();
   const dialogRef = useRef<HTMLElement | null>(null);
-  const [tab, setTab] = useState<GroupPanelTab>("details");
-  // A remote client edits neither the responder nor the folder: no Advanced tab.
-  const tabs: readonly GroupPanelTab[] = advanced == null ? GROUP_PANEL_TABS.filter((id) => id !== "advanced") : GROUP_PANEL_TABS;
+  const advancedMode = useAdvancedMode();
+  // The viewer's own bots in the group: the lists, activity and computer
+  // the panel may read are theirs (someone else's bot shows its face only).
+  const ownBots = useMemo(() => {
+    const own = new Set((state.bots ?? []).map((bot) => bot.id));
+    return members.filter((bot) => own.has(bot.id));
+  }, [members, state.bots]);
+  const computerBots = groupComputerBots(ownBots);
+  const leadBotId = groupLeadBotId(group, members);
+  const tabs = visibleGroupPanelTabs({ advanced: advancedMode, hasComputer: computerBots.length > 0 });
+  const [picked, setTab] = useState<GroupPanelTab>("details");
+  const tab: GroupPanelTab = tabs.includes(picked) ? picked : "details";
   // The one app-wide docked-panel width: the group opens at the width the bot
   // panel was left at, and its resize handle is the shared one.
   const dockedPanel = useDockedPanelWidth();
@@ -222,10 +281,27 @@ export function GroupPanel({
         )}
 
         {tab === "details" && (
-          <div className="flex flex-col gap-6 px-4 pb-6 pt-2">
-            {details}
-            {/* #1137: who pays for the replies of the viewer's own bots here */}
-            <GroupBotPayers group={group} />
+          <GroupDetailsTab group={group} members={members} ownBots={ownBots} leadBotId={leadBotId} canEdit={canEdit} canAddBot={canAddBot} onOpenTab={setTab} />
+        )}
+
+        {tab === "members" && (
+          <div data-group-members="" className="flex flex-col gap-6 px-4 pb-6 pt-2">
+            {roster}
+            {onLeave && (
+              <button
+                type="button"
+                data-leave-group=""
+                onClick={onLeave}
+                className="self-start rounded-lg px-3 py-2 text-[13px] text-danger hover:bg-hover"
+              >
+                {t("groupPanel.leave")}
+              </button>
+            )}
+            <AdvancedDisclosure groupId={group.id}>
+              {advanced}
+              {/* #1137: who pays for the replies of the viewer's own bots here */}
+              <GroupBotPayers group={group} />
+            </AdvancedDisclosure>
           </div>
         )}
 
@@ -253,11 +329,9 @@ export function GroupPanel({
 
         {tab === "memory" && <GroupMemoryTab groupId={group.id} />}
 
-        {tab === "advanced" && advanced != null && (
-          <div className="flex flex-col gap-4 px-4 pb-6 pt-2">
-            {advanced}
-          </div>
-        )}
+        {tab === "library" && <GroupLibraryTab group={group} />}
+
+        {tab === "computer" && <GroupComputerTab bots={computerBots} leadBotId={leadBotId} onOpenVmWorkspace={onOpenVmWorkspace} />}
       </div>
     </aside>
   );

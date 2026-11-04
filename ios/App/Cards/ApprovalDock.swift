@@ -146,7 +146,8 @@ struct ApprovalDock: View {
 
     /// PendingApprovalBox: a card ring (accent at 40 %, radius 16): the
     /// heading (avatar, "Ara wants to run a command", the risk chip, the
-    /// stepper), the command on an inset block, "See technical details",
+    /// stepper), the command folded on one inset line (Details open: the
+    /// command and the technical details),
     /// then Cancel turn as a quiet link on the left and the pills on the
     /// right: Deny, the remembering choice, Allow once.
     private func desktopBody(_ theme: DesktopTheme) -> some View {
@@ -190,7 +191,11 @@ struct ApprovalDock: View {
                             .disabled(answering)
                             .accessibilityIdentifier("approval-allow-read-only")
                         }
-                    }) : nil
+                    }) : nil,
+                    // toolApprovalView's summary: with no command or text to
+                    // show, the plain line of what the tool does
+                    summary: proposal || TeammateAsk.parse(card) != nil || Self.desktopDetail(card) != nil || (card.toolInput ?? "").isEmpty == false
+                        ? nil : DesktopApprovalLine.fallback(ApprovalRiskClassifier.risk(of: card))
                 )
                 if let ask = TeammateAsk.parse(card) {
                     let ink = ApprovalInk.of(theme, accent: theme.accent)
@@ -199,17 +204,19 @@ struct ApprovalDock: View {
                         TeammateQuoteView(ask: ask, ink: ink)
                     }
                     .padding(.top, 8)
-                } else if let detail = Self.desktopDetail(card) {
-                    DesktopApprovalBlock(text: detail, size: 12, theme: theme)
+                } else if proposal {
+                    if let detail = Self.desktopDetail(card) {
+                        DesktopApprovalBlock(text: detail, size: 12, theme: theme)
+                    }
+                } else if Self.desktopDetail(card) != nil || card.tool?.isEmpty == false {
+                    // a tool request: one line of what runs, the rest folded
+                    // under it (PendingApproval.tsx, 2026-10-20)
+                    DesktopApprovalFold(text: Self.desktopDetail(card), card: card, theme: theme)
+                        .id(pending.requestId)
                 }
                 if ApprovalHeldNote.shows(card) {
                     ApprovalHeldLine(card: card, ink: ApprovalInk.of(theme, accent: theme.accent))
                         .padding(.top, 8)
-                }
-                if !proposal, card.tool?.isEmpty == false {
-                    DesktopTechnicalDetails(card: card, theme: theme)
-                        .id(pending.requestId)
-                        .padding(.bottom, 2)
                 }
             }
             .padding(.horizontal, 16)

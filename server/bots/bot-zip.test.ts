@@ -171,6 +171,7 @@ describe("bot zip round trip", () => {
   it("imports what it exported: the record, the files, skills, plugins, routines, webhooks and conversations", async () => {
     const fx = fixture({ organization: true });
     const source = richBot(fx);
+    fx.store.setBotPerspicaxActAs(source.id, { slug: "dispatch", name: "Service desk" });
     const file = await exportToFile(fx.host, source.id);
     const inspected = inspectBotZip(file);
     expect(inspected.kind).toBe("zip");

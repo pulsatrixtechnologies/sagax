@@ -22,7 +22,7 @@ import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from 
 import { startFakeXaiVoice, type FakeXaiVoice } from "../testing/fake-xai-voice.ts";
 import { freePortBlock } from "../testing/ports.ts";
 
-const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
+const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const posixOnly = describe.skipIf(process.platform === "win32");
 const XAI_KEY = "xai-test-org-key-0123456789";

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { grokMcpSettled, waitForGrokMcpSettled } from "./grok.ts";
+import {
+  forgetGrokMcpSettled,
+  grokMcpAlreadySettled,
+  rememberGrokMcpSettled,
+  resetGrokCatalogs,
+} from "./grok-tool-catalog.ts";
 
 describe("grokMcpSettled", () => {
   it("waits for the session to resolve and for every enabled server to leave pending", () => {
@@ -26,5 +32,20 @@ describe("waitForGrokMcpSettled", () => {
   it("gives up without throwing when Grok cannot answer or the budget runs out", async () => {
     expect(await waitForGrokMcpSettled(async () => { throw new Error("no such method"); }, "s", 5_000)).toBe(false);
     expect(await waitForGrokMcpSettled(async () => ({ result: { sessionMcpResolved: false, servers: [] } }), "s", 250)).toBe(false);
+  });
+});
+
+describe("grok MCP settle cache across reused turns", () => {
+  it("remembers settle per session and forgets on re-establish", () => {
+    resetGrokCatalogs();
+    expect(grokMcpAlreadySettled("s1")).toBe(false);
+    rememberGrokMcpSettled("s1");
+    expect(grokMcpAlreadySettled("s1")).toBe(true);
+    expect(grokMcpAlreadySettled("s2")).toBe(false);
+    forgetGrokMcpSettled("s1");
+    expect(grokMcpAlreadySettled("s1")).toBe(false);
+    rememberGrokMcpSettled("s1");
+    resetGrokCatalogs();
+    expect(grokMcpAlreadySettled("s1")).toBe(false);
   });
 });

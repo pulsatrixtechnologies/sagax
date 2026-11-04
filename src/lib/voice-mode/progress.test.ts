@@ -17,6 +17,8 @@ import {
   type ProgressTool,
 } from "./progress";
 import { looksFrench } from "./turns";
+import { RealtimeVoiceCall } from "./realtime-call";
+import { realtimeInstructions } from "../../../server/voice/realtime-call.ts";
 
 const idle = (now: number, tools: ProgressTool[], extra: Partial<ProgressInput> = {}): ProgressInput => ({
   now,
@@ -238,9 +240,9 @@ describe("turnToolAuthor: a room turn may reach several bots", () => {
   });
 });
 
-describe("the older macOS call and the room call", () => {
+describe("realtime progress and the remaining legacy call pipelines", () => {
   const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
-  const calls = { CallView: read("../../components/CallView.tsx"), GroupCallView: read("../../components/GroupCallView.tsx") };
+  const calls = { LiveCall: read("../../components/voice-mode/LiveCall.tsx"), GroupCallView: read("../../components/GroupCallView.tsx") };
 
   it.each(Object.entries(calls))("%s never reads the server's chip narration: only the planner's line, in the call's words", (_name, source) => {
     expect(source).not.toMatch(/tool\??\.spoken/);
@@ -248,6 +250,46 @@ describe("the older macOS call and the room call", () => {
     expect(source).toContain("const text = progressText(line, (key, params) => tIn(locale, key, params));");
     expect(source).toContain("progress.current.turnSent(Date.now());");
     expect(source).toContain("progress.current.stop();");
+  });
+
+  it("the realtime call reports real work state and native progress, without reviving TTS narration", () => {
+    // 4cf8c3eb6: realtime voice acknowledges work natively. The page shows
+    // its working frames; the old tool-based planner stays on legacy calls.
+    const sent: string[] = [];
+    const socket = {
+      readyState: 1, binaryType: "",
+      onmessage: null as null | ((event: { data: string }) => void),
+      send: (value: string) => sent.push(value),
+      close: () => {},
+    };
+    const call = new RealtimeVoiceCall({ url: "wss://voice.example.test/api/bots/b1/voice/realtime?threadId=t1",
+      createSocket: () => socket as unknown as WebSocket });
+    // Same socket-only setup as realtime-call.test.ts; no microphone or network.
+    (call as unknown as { connect(): void }).connect();
+    const frame = (value: Record<string, unknown>) => socket.onmessage?.({ data: JSON.stringify(value) });
+    try {
+      frame({ type: "ready" });
+      frame({ type: "working", busy: true });
+      expect(call.current).toMatchObject({ botBusy: true, phase: "thinking" });
+      call.interrupt();
+      expect(call.current.botBusy).toBe(true);
+      expect(sent.map(value => JSON.parse(value))).toEqual([{ type: "interrupt" }]);
+      frame({ type: "working", busy: false });
+      expect(call.current).toMatchObject({ botBusy: false, phase: "listening" });
+      frame({ type: "refused", code: "realtime_key_refused" });
+      expect(call.refused).toBe(true);
+      expect(call.current.phase).toBe("ended");
+      const instructions = realtimeInstructions({ name: "Voice fixture" });
+      expect(instructions).toContain("first say one short sentence");
+      expect(instructions).toContain("Never guess the result");
+      expect(instructions).toContain("do not call `work` again for the same request");
+      expect(instructions).toContain("never repeat a result");
+      expect(instructions).toContain("never an identifier read aloud");
+      const realtime = read("./realtime-call.ts");
+      expect(realtime).not.toMatch(/tool\??\.spoken|\b(?:turnTools|progressText|spokenReply)\s*\(|\/voice\/(?:speak|speech)\b/);
+    } finally {
+      call.hangUp();
+    }
   });
 
   it("the room says a line in a member's voice only when the turn's tools are all that member's", () => {

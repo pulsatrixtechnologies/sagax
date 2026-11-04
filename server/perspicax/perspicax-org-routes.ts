@@ -67,6 +67,8 @@ export interface OrgSettings {
    * client id; null: people paste a token). `fromEnvironment` when it comes
    * from SAGAX_GITHUB_CLIENT_ID. */
   github?: { clientId: string | null; fromEnvironment: boolean };
+  /** #1940: days before a pending approval leaves the inbox (0 = never). */
+  pendingApprovalExpireDays?: number;
 }
 
 export interface OrgDirectoryEntry {
@@ -144,6 +146,8 @@ export interface PerspicaxOrgRouteDeps {
   savePluginMarketplaces?(policy: unknown, auth: RequestAuth): void;
   /** Set (or with null clear) the GitHub OAuth App client id. */
   saveGithubClientId?(clientId: string | null, auth: RequestAuth): void;
+  /** #1940: days before a pending approval leaves the inbox (0 = never). */
+  savePendingApprovalExpireDays?(days: number, auth: RequestAuth): void;
   /** Team secrets (admin only). list() has no values. change() writes one. */
   botSecrets?: {
     list(): OrgBotSecretPublic[];
@@ -230,9 +234,11 @@ export function createPerspicaxOrgRoutes(deps: PerspicaxOrgRouteDeps): RouteHand
       const keys = body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body) : null;
       // the interim attach window feeds identity merges: an admin's alone
       if (!admin && keys?.includes("interimAttachDays")) return json(res, 403, { error: "Only an organization admin can change the interim attach window.", code: "admin_only_field", field: "interimAttachDays" });
+      if (!admin && keys?.includes("pendingApprovalExpireDays")) return json(res, 403, { error: "Only an organization admin can change the pending approval expiry.", code: "admin_only_field", field: "pendingApprovalExpireDays" });
       // memberBotsUseOrgKey is gone (2026-10-01): the organization's key
       // serves whenever an admin set one, so it is refused like any other.
       const days = keys?.includes("interimAttachDays");
+      const pendingExpire = keys?.includes("pendingApprovalExpireDays");
       const fullAccess = keys?.includes("allowFullAccess");
       const memberEnvironment = keys?.includes("memberEnvironmentAutonomy");
       const confidentialDefault = keys?.includes("confidentialThreadsByDefault");
@@ -240,9 +246,10 @@ export function createPerspicaxOrgRoutes(deps: PerspicaxOrgRouteDeps): RouteHand
       const vaultExport = keys?.includes("allowVaultExport");
       const marketplaces = keys?.includes("pluginMarketplaces");
       const githubClient = keys?.includes("githubClientId");
-      const known = new Set(["interimAttachDays", "allowFullAccess", "memberEnvironmentAutonomy", "confidentialThreadsByDefault", "memberAutoApproval", "allowVaultExport", "pluginMarketplaces", "githubClientId"]);
+      const known = new Set(["interimAttachDays", "pendingApprovalExpireDays", "allowFullAccess", "memberEnvironmentAutonomy", "confidentialThreadsByDefault", "memberAutoApproval", "allowVaultExport", "pluginMarketplaces", "githubClientId"]);
       if (!keys || !keys.length || keys.some((key) => !known.has(key)) ||
         (days && (!deps.saveInterimAttachDays || !Number.isInteger(body.interimAttachDays) || body.interimAttachDays < 0 || body.interimAttachDays > 90)) ||
+        (pendingExpire && (!deps.savePendingApprovalExpireDays || !Number.isInteger(body.pendingApprovalExpireDays) || body.pendingApprovalExpireDays < 0 || body.pendingApprovalExpireDays > 365)) ||
         (fullAccess && (!deps.saveAllowFullAccess || typeof body.allowFullAccess !== "boolean")) ||
         (memberEnvironment && (!deps.saveMemberEnvironmentAutonomy || typeof body.memberEnvironmentAutonomy !== "boolean")) ||
         (confidentialDefault && (!deps.saveConfidentialThreadsByDefault || typeof body.confidentialThreadsByDefault !== "boolean")) ||
@@ -250,7 +257,7 @@ export function createPerspicaxOrgRoutes(deps: PerspicaxOrgRouteDeps): RouteHand
         (vaultExport && (!deps.saveAllowVaultExport || typeof body.allowVaultExport !== "boolean")) ||
         (marketplaces && !deps.savePluginMarketplaces) ||
         (githubClient && (!deps.saveGithubClientId || (body.githubClientId !== null && (typeof body.githubClientId !== "string" || !/^[\x21-\x7e]{1,128}$/.test(body.githubClientId.trim())))))) {
-        return json(res, 400, { error: "send { interimAttachDays: 0 to 90 }, { allowFullAccess: true | false }, { memberEnvironmentAutonomy: true | false }, { confidentialThreadsByDefault: true | false }, { memberAutoApproval: true | false }, { allowVaultExport: true | false }, { pluginMarketplaces: { mode: \"any\" } | { mode: \"list\", allow: [...] } } or { githubClientId: string | null }" });
+        return json(res, 400, { error: "send { interimAttachDays: 0 to 90 }, { pendingApprovalExpireDays: 0 to 365 }, { allowFullAccess: true | false }, { memberEnvironmentAutonomy: true | false }, { confidentialThreadsByDefault: true | false }, { memberAutoApproval: true | false }, { allowVaultExport: true | false }, { pluginMarketplaces: { mode: \"any\" } | { mode: \"list\", allow: [...] } } or { githubClientId: string | null }" });
       }
       try {
         if (marketplaces) deps.savePluginMarketplaces!(body.pluginMarketplaces, auth);
@@ -262,6 +269,7 @@ export function createPerspicaxOrgRoutes(deps: PerspicaxOrgRouteDeps): RouteHand
       }
       try {
         if (days) deps.saveInterimAttachDays!(body.interimAttachDays, auth);
+        if (pendingExpire) deps.savePendingApprovalExpireDays!(body.pendingApprovalExpireDays, auth);
         if (fullAccess) deps.saveAllowFullAccess!(body.allowFullAccess, auth);
         if (memberEnvironment) deps.saveMemberEnvironmentAutonomy!(body.memberEnvironmentAutonomy, auth);
         if (confidentialDefault) deps.saveConfidentialThreadsByDefault!(body.confidentialThreadsByDefault, auth);

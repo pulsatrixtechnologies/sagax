@@ -46,7 +46,7 @@ function harness(os: "windows" | "macos" | "linux" = "windows") {
     session: { id: "0123456789ab", os, endAt: new Date(1_000_000 + 3_600_000).toISOString() },
     tunnel: { keyPath: "/k", address: "tcADDRESS" },
     bin: "tailcat",
-    principalId: "melonie",
+    principalId: "wren",
     botId: "bot-1",
     onMeta: (meta) => sink.meta.push(meta),
     onFrame: (bytes) => sink.frames.push(bytes),

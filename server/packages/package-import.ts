@@ -1,3 +1,5 @@
+import type { OrgImportContext } from "./org-import-context.ts";
+export type { OrgImportContext } from "./org-import-context.ts";
 // Adding a shared team to this installation.
 //
 // Import is additive-only. A package is untrusted input (a file someone
@@ -94,16 +96,6 @@ export interface PackageImportDeps {
   /** Preset bots (presets.ts). Absent, presets are listed as skipped and a
    * package without bots is refused, as before presets existed. */
   presets?: PresetRegistry;
-}
-
-export interface OrgImportContext {
-  installId: string;
-  ref: string;
-  packageId: string;
-  sha256: string;
-  publisher: { organizationId: string; slug: string; name: string };
-  adminOrigin: string;
-  organizationId: string;
 }
 
 export interface PackageImportOptions {

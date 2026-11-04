@@ -132,7 +132,7 @@ posixOnly("Sign in with Pulsatrix (SAGAX_IDENTITY=perspicax)", () => {
     writeFileSync(join(data, "config.json"), JSON.stringify({
       instances: {
         grok: { driver: "grokAgent", config: { cli: FAKE_CLI, fullAuto: false } },
-        claude: { driver: "claudeAgent", config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        claude: { driver: "claudeAgent", access: "api", config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } },
       },
     }));
     await start();

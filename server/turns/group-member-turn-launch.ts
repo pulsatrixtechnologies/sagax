@@ -1379,11 +1379,12 @@ if (providerDispatched) throw error;
     }
     if (!roomSpeaker && !isSpendCap && !isVariantError && !isToolScopeError) throw error;
     const message = error instanceof Error ? error.message : "Local VM setup failed";
-    store.appendMessage(threadId, {
+    const failure = store.appendMessage(threadId, {
       role: "bot", kind: "activity",
       from: { botId: bot.id, name: bot.name, color: bot.color },
       tool: failedTurnTool(message, error instanceof PlaceUnavailableError ? { place: error.row } : {})
     });
+    orchestration?.onFailureRecorded?.(failure.id);
     onDispatchError?.(message);
     if (orchestration) {
       // A spend-cap refusal is deterministic: record it as its own

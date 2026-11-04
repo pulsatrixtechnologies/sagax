@@ -1,0 +1,55 @@
+{
+  "items": [
+    {
+      "id": "thread:th-coding-1",
+      "kind": "session",
+      "botId": "wren",
+      "botName": "Wren",
+      "title": "Keep the board column order",
+      "status": "running",
+      "startedAt": 1730000000000,
+      "updatedAt": 1730000005000,
+      "threadId": "th-coding-1",
+      "coding": true,
+      "canStop": true,
+      "currentStep": "pnpm test",
+      "code": {
+        "folder": "/workspace/bots/wren/dispatch-board",
+        "branch": "feat/column",
+        "repo": "acme/board",
+        "pullRequests": [],
+        "branches": [],
+        "commits": []
+      }
+    },
+    {
+      "id": "thread:th-other-1",
+      "kind": "session",
+      "botId": "wren",
+      "botName": "Wren",
+      "title": "Summarise the inbox",
+      "status": "finished",
+      "startedAt": 1729990000000,
+      "endedAt": 1729990100000,
+      "updatedAt": 1729990100000,
+      "threadId": "th-other-1",
+      "coding": false
+    }
+  ],
+  "subagents": [
+    {
+      "id": "thread:th-sub-1",
+      "kind": "subagent",
+      "botId": "osprey",
+      "botName": "Osprey",
+      "title": "Explore the board package",
+      "status": "running",
+      "startedAt": 1730000002000,
+      "updatedAt": 1730000004000,
+      "threadId": "th-sub-1",
+      "parentId": "thread:th-coding-1",
+      "canStop": true
+    }
+  ],
+  "launchedAgents": []
+}

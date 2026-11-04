@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { availableTools, catalogProfileFromEnv, type CatalogProfile } from "../drivers/agents-catalog.ts";
 import { builtinAgentToolName, HOST_LEVEL_AGENT_TOOLS, MEMBER_OWN_SCOPE_AGENT_TOOLS, memberOwnScopeTool, ownBotReadAct } from "./member-tool-scope.ts";
 import { describeApproval } from "../../shared/approval-describe.ts";
+import { memberBotAdminApproval } from "../engines/engine-access.ts";
 
 const everything: CatalogProfile = {
   externalRuntime: false, coordinating: false, ownThreadCreation: true, skillAuthoring: true, sharedComputers: true,
@@ -34,11 +35,12 @@ function catalogNames(): string[] {
 
 describe("member tool scope on an organization server", () => {
   it("classifies every agents tool exactly once: the member's own scope or the admin gate", () => {
-    for (const name of catalogNames()) {
+    const invalid = catalogNames().flatMap((name) => {
       const own = Object.hasOwn(MEMBER_OWN_SCOPE_AGENT_TOOLS, name);
       const host = HOST_LEVEL_AGENT_TOOLS.has(name);
-      expect(own !== host, `${name} must be classified once (own ${own}, host ${host})`).toBe(true);
-    }
+      return own !== host ? [] : [{ name, own, host }];
+    });
+    expect(invalid, "Every agents tool must be classified exactly once").toEqual([]);
   });
 
   it("lets the reads and the bot's own work run without an admin, in every engine's spelling", () => {
@@ -72,6 +74,27 @@ describe("member tool scope on an organization server", () => {
     }
     expect(memberOwnScopeTool("agents__openapi_")).toBeNull();
     expect(memberOwnScopeTool("notes__openapi_getnote")).toBeNull();
+  });
+
+  it.each([
+    ["wait_until", "own-work"],
+    ["cancel_wait", "own-work"],
+    ["propose_rule", "own-setup"],
+    ["place_call", "conversation"],
+    ["send_dtmf", "conversation"],
+    ["transfer", "conversation"],
+    ["hang_up", "conversation"],
+  ] as const)("keeps %s at the member's own level without trusting another server's spelling", (tool, family) => {
+    const name = `mcp__agents__${tool}`;
+    const scope = { workspaceRoot: "/member/task-workspaces/bot-1" };
+    expect(memberOwnScopeTool(name)).toBe(family);
+    expect(memberBotAdminApproval({ ...scope, tool: name })).toBe(false);
+    // An arbitrary MCP server cannot borrow the built-in tool's exemption,
+    // even when its mount name is agents. Nor can a command borrow it.
+    expect(memberOwnScopeTool(`notes__${tool}`)).toBeNull();
+    expect(memberBotAdminApproval({ ...scope, tool: `notes__${tool}` })).toBe(true);
+    expect(memberBotAdminApproval({ ...scope, tool: name, foreignMcpServers: ["agents"] })).toBe(true);
+    expect(memberBotAdminApproval({ ...scope, tool: name, command: "echo changed" })).toBe(true);
   });
 
   it("keeps the host-level agents tools, other servers and look-alikes behind the admin gate", () => {

@@ -28,6 +28,7 @@ function setup(speaker: string | undefined, over: { organization?: boolean; inFl
       botOwner: OWNER,
       ...(routine.runAs ? { runAs: routine.runAs } : {}),
     }),
+    check: async () => ({ ok: true, checks: [], checkedAt: 123 }),
     inFlight: () => over.inFlight === true,
     runNow: (id, by) => { runs.push(id); startedBy.push(by); return { id: `run-${id}` }; },
     standing: () => ({ status: "queued", position: 2, queuedForBot: 3, reason: "Waits for a free slot on this bot" }),
@@ -49,6 +50,17 @@ function setup(speaker: string | undefined, over: { organization?: boolean; inFl
   };
   return { call, runs, audits, startedBy };
 }
+
+describe("routine check through the internal bridge", () => {
+  it("checks with run authorization, even while a run is already in flight", async () => {
+    const h = setup(OWNER, { inFlight: true });
+    const answer = await h.call({ routineId: "r1", action: "check" });
+    expect(answer.sent[0]).toEqual({ status: 200, body: { ok: true, checks: [], checkedAt: 123 } });
+    expect(h.runs).toEqual([]); expect(h.audits).toEqual([]);
+    const stranger = setup(STRANGER);
+    expect((await stranger.call({ routineId: "r1", action: "check" })).sent[0]?.status).toBe(403);
+  });
+});
 
 describe("POST /api/internal/routine-run", () => {
   it("refuses a person who talks to the bot but is neither its owner, the run-as person nor an admin", async () => {

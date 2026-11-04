@@ -116,15 +116,19 @@ describe("paired thread targets through an isolated HTTP fixture", () => {
       expect((await paired("PATCH", `/api/bots/${bot.id}/tasks/${threadId}`, { modelSelection: selection(models[1]) })).status).toBe(200);
     }
     // B is the server's selected thread; the panel shows A.
-    expect((await botState(bot.id)).threadId).toBe(threadB);
+    const before = await botState(bot.id);
+    expect(before.threadId).toBe(threadB);
 
     const changed = await paired("PATCH", `/api/bots/${bot.id}`, { modelSelection: selection(models[2]), threadId: threadA });
     expect(changed.status, JSON.stringify(changed.body)).toBe(200);
     expect(changed.body.bot.modelSelection).toEqual(selection(models[2]));
     const tasks = (await botState(bot.id)).tasks;
-    // The named thread follows the bot from now on; the other keeps its own pick.
+    // a9872c8a9: a bot choice clears every thread's old model pick while
+    // preserving each conversation's permission level.
     expect(tasks.find((task: any) => task.threadId === threadA)).toMatchObject({ modelSelection: selection(models[2]), followsBotModel: true });
-    expect(tasks.find((task: any) => task.threadId === threadB)).toMatchObject({ modelSelection: selection(models[1]), followsBotModel: false });
+    expect(tasks.find((task: any) => task.threadId === threadB)).toMatchObject({ modelSelection: selection(models[2]), followsBotModel: true });
+    expect(tasks.find((task: any) => task.threadId === threadA).approvalMode).toBe(before.tasks.find((task: any) => task.threadId === threadA).approvalMode);
+    expect(tasks.find((task: any) => task.threadId === threadB).approvalMode).toBe(before.tasks.find((task: any) => task.threadId === threadB).approvalMode);
 
     expect((await paired("PATCH", `/api/bots/${bot.id}`, { modelSelection: selection(models[0]), threadId: "th_missing" })).status).toBe(404);
     expect((await paired("PATCH", `/api/bots/${bot.id}`, { color: "blue", threadId: threadA })).status).toBe(400);

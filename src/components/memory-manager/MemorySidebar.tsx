@@ -3,18 +3,22 @@
 // quick switcher), LISTS (All notes, Teams, Pinned, Recent, Review and its
 // dot), TIERS (each collapsible, its swatch and count, its folders hanging
 // from a hairline; a bot is a folder of My memory with its Topics and Logs),
-// then TIDY UP (Archived, Trash). A row shows its actions (new note, new
+// then TIDY UP (Archived, Trash, Import). A row shows its actions (new note, new
 // folder, rename, delete) on hover or focus, only the ones its source
-// really supports. Since 2026-11-03 (JC) it is the page's RIGHT rail, the
-// same piece as Automations' calendar rail (RightRail.tsx): 280px, border on
-// its left, the "›" fold button at its top-left, open from 1280px.
-import { useState, type ReactNode } from "react";
+// really supports. A folder says whether a bot is linked to it (the bot's
+// look and "Linked to <bot>", or a plain folder and "Not linked"), and its
+// ⋯ menu (a right click too) says what uses it and offers what it allows.
+// Since 2026-11-03 (JC) it is the page's RIGHT rail, the same piece as
+// Automations' calendar rail (RightRail.tsx): 280px, border on its left, the
+// "›" fold button at its top-left, open from 1280px.
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Bot,
   ChevronDown,
   ChevronRight,
   Folder,
   FolderPlus,
+  MoreHorizontal,
   Pencil,
   Plus,
   Search,
@@ -52,6 +56,27 @@ export interface MemorySidebarFolder {
   data?: Record<string, string>;
   /** Inline rename: the row turns into a field while it is renamed. */
   onRename?: (next: string) => void;
+  /** Linked to a bot: its look in place of the folder icon. */
+  leading?: ReactNode;
+  /** No bot is linked to it: a plain folder and a muted "Not linked". */
+  unlinked?: boolean;
+  /** The ⋯ menu, also opened by a right click on the row. */
+  menu?: MemoryFolderMenu;
+}
+
+export interface MemoryFolderMenuItem {
+  id: string;
+  label: string;
+  onSelect: () => void;
+  /** Set: the item shows, greyed, with this reason under it. */
+  disabledReason?: string;
+  danger?: boolean;
+}
+
+export interface MemoryFolderMenu {
+  /** What the folder is used by, one line each. */
+  lines: string[];
+  items: MemoryFolderMenuItem[];
 }
 
 export interface MemorySidebarTier {
@@ -90,10 +115,11 @@ const COUNT = "ml-auto shrink-0 pl-2 text-[11px] tabular-nums text-ink-tertiary"
 const ROW = "group/row relative flex min-h-[30px] w-full min-w-0 items-center rounded-lg";
 const SECTION = cn(SECTION_LABEL, "mx-2 mb-1.5 mt-4");
 
-function RowActions({ actions }: { actions: MemoryRowAction[] }) {
-  if (!actions.length) return null;
+function RowActions({ actions, more, hint }: { actions: MemoryRowAction[]; more?: ReactNode; hint?: string }) {
+  if (!actions.length && !more && !hint) return null;
   return (
-    <span className="absolute right-1 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded-md bg-panel pl-1 group-focus-within/row:flex group-hover/row:flex" data-memory-row-actions="">
+    <span className="absolute right-1 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded-md bg-panel pl-1 group-focus-within/row:flex group-hover/row:flex has-[[aria-expanded=true]]:flex" data-memory-row-actions="">
+      {hint && <span className="px-1 text-[11px] text-ink-tertiary" data-memory-unlinked="">{hint}</span>}
       {actions.map((action) => {
         const Icon = ACTION_ICON[action.kind];
         return (
@@ -113,6 +139,61 @@ function RowActions({ actions }: { actions: MemoryRowAction[] }) {
           </button>
         );
       })}
+      {more}
+    </span>
+  );
+}
+
+function FolderMenu({ name, menu, open, onOpenChange }: { name: string; menu: MemoryFolderMenu; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const box = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (event: MouseEvent) => { if (!box.current?.contains(event.target as Node)) onOpenChange(false); };
+    const key = (event: KeyboardEvent) => { if (event.key === "Escape") onOpenChange(false); };
+    document.addEventListener("mousedown", away);
+    window.addEventListener("keydown", key);
+    return () => { document.removeEventListener("mousedown", away); window.removeEventListener("keydown", key); };
+  }, [open, onOpenChange]);
+  return (
+    <span ref={box} className="relative flex">
+      <button
+        type="button"
+        aria-label={t("memoryManager.folderMenu", { folder: name })}
+        title={t("memoryManager.folderMenu", { folder: name })}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(event) => { event.stopPropagation(); onOpenChange(!open); }}
+        className="flex size-6 items-center justify-center rounded-md text-ink-secondary hover:bg-raised hover:text-ink"
+        data-memory-row-action="menu"
+      >
+        <MoreHorizontal size={13} aria-hidden="true" />
+      </button>
+      {open && (
+        <div role="menu" aria-label={name} className="absolute right-0 top-full z-40 mt-1 w-[220px] rounded-xl border-[0.5px] border-border bg-elevated p-1.5 text-left popover-surface" data-memory-folder-menu="">
+          {menu.lines.map((line, index) => (
+            <p key={index} className="px-2 py-1 text-[12px] leading-4 text-ink-secondary" data-memory-folder-menu-line="">{line}</p>
+          ))}
+          {menu.lines.length > 0 && menu.items.length > 0 && <div className="my-1 border-t border-hairline-weak" />}
+          {menu.items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="menuitem"
+              disabled={Boolean(item.disabledReason)}
+              title={item.disabledReason}
+              onClick={(event) => { event.stopPropagation(); onOpenChange(false); item.onSelect(); }}
+              className={cn(
+                "flex w-full min-w-0 flex-col items-start rounded-md px-2 py-1.5 text-left text-[13px] disabled:cursor-not-allowed",
+                item.disabledReason ? "text-ink-tertiary" : item.danger ? "text-danger hover:bg-danger/10" : "text-ink hover:bg-hover",
+              )}
+              data-memory-folder-menu-item={item.id}
+            >
+              <span className="flex items-center gap-2">{item.id === "delete" && <Trash2 size={13} aria-hidden="true" />}{item.label}</span>
+              {item.disabledReason && <span className="mt-0.5 text-[11.5px] leading-4 text-ink-tertiary" data-memory-folder-menu-reason="">{item.disabledReason}</span>}
+            </button>
+          ))}
+        </div>
+      )}
     </span>
   );
 }
@@ -152,6 +233,7 @@ function FolderRow({ folder, depth, renaming, onRenameDone, opened, onToggle }: 
   onToggle: (key: string) => void;
 }) {
   const Icon = folder.icon === "bot" ? Bot : Folder;
+  const [menuOpen, setMenuOpen] = useState(false);
   const hasChildren = Boolean(folder.children?.length);
   const childCurrent = Boolean(folder.children?.some((child) => child.current));
   const open = hasChildren && (folder.current || childCurrent || opened.has(folder.key));
@@ -165,7 +247,12 @@ function FolderRow({ folder, depth, renaming, onRenameDone, opened, onToggle }: 
   }
   return (
     <>
-      <div className={cn(ROW, folder.current ? "bg-selected" : "hover:bg-hover")} style={{ paddingLeft: depth * 18 }}>
+      <div
+        className={cn(ROW, folder.current ? "bg-selected" : "hover:bg-hover", menuOpen && "z-30")}
+        style={{ paddingLeft: depth * 18 }}
+        onContextMenu={folder.menu ? (event) => { event.preventDefault(); setMenuOpen(true); } : undefined}
+        data-memory-folder-link={folder.unlinked ? "none" : folder.leading ? "bot" : undefined}
+      >
         <button
           type="button"
           onClick={folder.onOpen}
@@ -174,7 +261,7 @@ function FolderRow({ folder, depth, renaming, onRenameDone, opened, onToggle }: 
           className="flex min-h-[30px] min-w-0 flex-1 items-center gap-2 pl-2 pr-2 text-left"
           {...folder.data}
         >
-          <Icon size={14} className="shrink-0 text-ink-secondary" aria-hidden="true" />
+          {folder.leading ?? <Icon size={14} className="shrink-0 text-ink-secondary" aria-hidden="true" />}
           <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{folder.name}</span>
           {folder.count != null && <span className={COUNT}>{folder.count}</span>}
         </button>
@@ -189,7 +276,7 @@ function FolderRow({ folder, depth, renaming, onRenameDone, opened, onToggle }: 
             {open ? <ChevronDown size={12} aria-hidden="true" /> : <ChevronRight size={12} aria-hidden="true" />}
           </button>
         )}
-        <RowActions actions={folder.actions} />
+        <RowActions actions={folder.actions} hint={folder.unlinked ? t("memoryManager.notLinked") : undefined} more={folder.menu ? <FolderMenu name={folder.name} menu={folder.menu} open={menuOpen} onOpenChange={setMenuOpen} /> : undefined} />
       </div>
       {open && folder.children?.map((child) => (
         <FolderRow key={child.key} folder={child} depth={depth + 1} renaming={renaming} onRenameDone={onRenameDone} opened={opened} onToggle={onToggle} />

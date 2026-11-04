@@ -16,11 +16,11 @@ import { createComputerStatusRoutes } from "../routes/computer-status.ts";
 import { dispatchRoutes } from "../routes/table.ts";
 import { createUserSandboxRoutes } from "./user-sandbox-routes.ts";
 import {
-  DEFAULT_WAKE_TIMEOUT_MS, POST_WINDOW_MS, SANDBOX_STARTING_CODE, SANDBOX_STARTING_RETRY_DELAY_MS, SANDBOX_STARTING_RETRY_MS, SandboxClusterWaker, provisionerNotReached, provisionerUnreachable, sandboxWakeSettingsFromEnv,
+  DEFAULT_WAKE_TIMEOUT_MS, POST_WINDOW_MS, SANDBOX_CUT_WHILE_STARTING_MESSAGE, SANDBOX_STARTING_CODE, SANDBOX_STILL_STARTING_MESSAGE, SANDBOX_STARTING_RETRY_DELAY_MS, SANDBOX_STARTING_RETRY_MS, SandboxClusterWaker, provisionerNotReached, provisionerUnreachable, sandboxWakeSettingsFromEnv,
 } from "./sandbox-k8s-wake.ts";
 import type { SandboxExecOutput, SandboxStatus } from "./sandboxd-core.ts";
 import { SandboxdRequestError, sandboxdHealth, type SandboxdClient } from "./user-sandbox-client.ts";
-import { UserSandboxManager, userSandboxSettingsFromEnv, type ClusterWaitEvent } from "./user-sandbox-manager.ts";
+import { UserSandboxManager, UserSandboxUnavailable, userSandboxSettingsFromEnv, type ClusterWaitEvent } from "./user-sandbox-manager.ts";
 
 const ALICE = "pr_00000000-0000-4000-8000-00000000000a";
 const SECRET_URL = "https://wake.example.invalid/webhooks?token=s3cr3t-T0KEN-value";
@@ -330,7 +330,7 @@ describe("the cluster wake", () => {
     const r = rig();
     r.cluster.up = true;
     r.faults.exec = Array.from({ length: 500 }, () => starting());
-    await expect(r.manager.exec(ALICE, { argv: ["true"] })).rejects.toMatchObject({ code: SANDBOX_STARTING_CODE });
+    await expect(r.manager.exec(ALICE, { argv: ["true"] })).rejects.toMatchObject({ code: SANDBOX_STARTING_CODE, message: SANDBOX_STILL_STARTING_MESSAGE });
     const sent = r.calls.length;
     expect(sent).toBeGreaterThan(10);
     expect(sent).toBeLessThanOrEqual(SANDBOX_STARTING_RETRY_MS / SANDBOX_STARTING_RETRY_DELAY_MS + 1);
@@ -347,6 +347,25 @@ describe("the cluster wake", () => {
     r.faults.exec = [reset()];
     await expect(r.manager.exec(ALICE, { argv: ["true"] })).rejects.toBeTruthy();
     expect(r.calls.filter((call) => call === "kubernetes:exec")).toHaveLength(1);
+  });
+
+  // 2026-11-03 (production): a run_command sent while "The server environment
+  // is starting" was shown came back as an unexplained interrupted connection
+  it("a command cut off right after a wake says the environment was still starting, plainly, without running it twice", async () => {
+    const r = rig({ upAfterProbes: 2 });
+    r.faults.exec = [reset()];
+    const failure = await r.manager.exec(ALICE, { argv: ["python3", "-c", "print(1)"] }).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(UserSandboxUnavailable);
+    expect(failure).toMatchObject({ code: "sandbox_starting_cut", message: SANDBOX_CUT_WHILE_STARTING_MESSAGE });
+    expect(r.posts).toHaveLength(1);
+    expect(r.calls.filter((call) => call === "kubernetes:exec")).toHaveLength(1);
+    expect(r.waits.map((wait) => wait.phase)).toContain("waiting");
+  });
+
+  it("a command refused before it reached a just woken provisioner twice says still starting, nothing ran", async () => {
+    const r = rig({ upAfterProbes: 2 });
+    r.faults.exec = [refused(), refused()];
+    await expect(r.manager.exec(ALICE, { argv: ["true"] })).rejects.toMatchObject({ code: "sandbox_starting_cut", message: SANDBOX_STILL_STARTING_MESSAGE });
   });
 
   it("prewake starts the cluster and the person's environment before a routine of a bot that used it, and never on Docker", async () => {

@@ -28,7 +28,7 @@ describe("whose text it is", () => {
 
 function harness(script: SmsTurnState[], reply = "Trois factures, 3 en tout.", sendOk = true) {
   const texts: Array<{ to: string; body: string }> = [];
-  const sent: Array<{ person: string; botId: string; text: string }> = [];
+  const sent: Array<{ person: string; botId: string; text: string; label: string }> = [];
   let step = 0;
   let clock = 0;
   const conversation = new SmsConversation({
@@ -48,14 +48,14 @@ function harness(script: SmsTurnState[], reply = "Trois factures, 3 en tout.", s
   return { conversation, texts, sent };
 }
 
-const EVENT = { person: "pr_a", sub: "u_1", botId: "b1", from: "+15145550100", text: "Quoi de neuf ?" };
+const EVENT = { person: "pr_a", sub: "u_1", botId: "b1", from: "+15145550100", text: "Quoi de neuf ?", label: "Osprey" };
 
 describe("the answer by text", () => {
   it("sends the words into the conversation and texts the answer back once", async () => {
     const { conversation, texts, sent } = harness(["running", "running", "idle"]);
     expect(await conversation.start(EVENT)).toBe(true);
     await conversation.drain();
-    expect(sent).toEqual([{ person: "pr_a", sub: "u_1", botId: "b1", text: "Quoi de neuf ?" }]);
+    expect(sent).toEqual([{ person: "pr_a", sub: "u_1", botId: "b1", text: "Quoi de neuf ?", label: "Osprey" }]);
     expect(texts).toEqual([{ to: "+15145550100", body: "Trois factures, 3 en tout." }]);
   });
 

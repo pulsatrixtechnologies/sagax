@@ -33,7 +33,7 @@ export async function establishAcpTurn(ctx: AcpTurnCtx): Promise<void> {
   let init = ctx.init;
   let selectedModel = ctx.selectedModel;
   let rebuiltFromReplay = ctx.rebuiltFromReplay;
-  void reused; void latency; void controlsHost; void settle; void active; void freshNextTurn;
+  void latency; void controlsHost; void settle; void active; void freshNextTurn;
   void startQuietWatch; void asks; void acknowledge; void rejectStartup; void startupAck; void started;
   void spawnEnv;
 
@@ -300,6 +300,7 @@ try {
       configOptions: Array.isArray(session.sessionConfigResult?.configOptions)
         ? session.sessionConfigResult.configOptions
         : [],
+      reused: reused === true,
       notice: (message) => {
         // once per conversation: a model switch opens a new
         // process (a new session record), so the live session

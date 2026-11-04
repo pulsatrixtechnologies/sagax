@@ -1,6 +1,6 @@
 // Where the "Jump to latest" pill goes so it never covers a chip of the
 // transcript (2026-11-02: it was drawn over the "3 conversations with
-// Katarina" chip). Centered by default; beside the chip it would cover when
+// Osprey" chip). Centered by default; beside the chip it would cover when
 // there is room on either side; hidden while it cannot clear the chip.
 // Pure so the rule is testable without a layout engine.
 

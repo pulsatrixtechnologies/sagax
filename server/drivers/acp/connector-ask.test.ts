@@ -28,13 +28,30 @@ describe("an engine connector call in an ACP ask (review of #943)", () => {
     expect(connectorAsk(useTool("search_emails"), mounted)).toMatchObject({ engineConnector: true, outward: false });
   });
 
-  it("a mounted server is not an engine connector; its sends are still outward", () => {
+  it("a mounted server is not an engine connector; an external send stays outward", () => {
     expect(connectorAsk(useTool("agents__list_bots", {}), mounted)).toMatchObject({ engineConnector: false, outward: false });
-    expect(connectorAsk({ kind: "other", title: "agents__send_to_bot", rawInput: { text: "hi" } }, mounted)).toMatchObject({ engineConnector: false, outward: true });
+    expect(connectorAsk(useTool("outlook__send_email", { to: "ana@example.test" }), new Set(["outlook"]))).toMatchObject({ engineConnector: false, outward: true });
+  });
+
+  // c09f3dfa2 (#1905): peer contact inside Sagax uses approvePeerComms,
+  // so it no longer raises the outbound guard as well.
+  it.each(["send_to_bot", "post_to_room", "coordinate_bots", "ask_bot", "delegate_bot"])("keeps mounted agents__%s on the peer approval path", (tool) => {
+    const target = `agents__${tool}`;
+    expect(connectorAsk(useTool(target, { text: "hi" }), mounted)).toMatchObject({ engineConnector: false, outward: false });
+    expect(connectorAsk({ kind: "other", title: target, rawInput: { text: "hi" } }, mounted)).toMatchObject({ engineConnector: false, outward: false });
   });
 
   it("ignores commands and file changes", () => {
     expect(connectorAsk({ kind: "execute", title: "rm -rf /", rawInput: { command: "rm -rf /" } }, mounted)).toEqual({ engineConnector: false, outward: false });
     expect(connectorAsk(null, mounted)).toEqual({ engineConnector: false, outward: false });
+  });
+
+  it("reads tool_input sent as JSON text, and an empty one as no arguments (#1931)", () => {
+    const id = "cursor__user-pulsatrix-connectwise-profile_5fuse___23";
+    const ask = connectorAsk(useTool(id, JSON.stringify({ profile: "gox" })), mounted);
+    expect(ask).toMatchObject({ target: id, engineConnector: true });
+    expect(ask.input).toContain('"profile"');
+    expect(connectorAsk(useTool(id, {}), mounted).input).toBe("{}");
+    expect(connectorAsk(useTool(id, "not json"), mounted).input).toBeUndefined();
   });
 });

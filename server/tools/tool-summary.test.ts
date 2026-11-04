@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { askInputDetail, askInputSummary, commandSummary, toolDetailPreview } from "./tool-summary.ts";
+import { askInputDetail, askInputSummary, commandSummary, EDIT_PREVIEW_MAX, inputPreviewMax, toolDetailPreview, toolFailurePreview } from "./tool-summary.ts";
 
 describe("toolDetailPreview", () => {
   it("keeps useful input and results while removing nested credentials and binary data", () => {
@@ -24,6 +24,16 @@ describe("toolDetailPreview", () => {
     expect(toolDetailPreview(Array.from({ length: 100 }, () => "item"))).toContain("additional items omitted");
     expect(toolDetailPreview({ first: " ".repeat(255_999), second: `ghp_${"a".repeat(36)}` })).not.toContain("ghp_");
     expect(toolDetailPreview({ url: "data:image/png;base64,private-pixels", blob: "more-pixels" })).not.toContain("pixels");
+  });
+  it("keeps more of a file edit's arguments for the coding chat's diffs, still redacted first", () => {
+    expect(inputPreviewMax("Edit")).toBe(EDIT_PREVIEW_MAX);
+    expect(inputPreviewMax("mcp__ide__apply_patch")).toBe(EDIT_PREVIEW_MAX);
+    expect(inputPreviewMax("Bash")).toBeUndefined();
+    const edit = { file_path: "src/a.ts", old_string: "a".repeat(9_000), new_string: `${"b".repeat(9_000)} ghp_${"c".repeat(36)}` };
+    const preview = toolDetailPreview(edit, inputPreviewMax("Edit"))!;
+    expect(preview).not.toContain("preview shortened");
+    expect(preview).not.toContain("ghp_");
+    expect(toolDetailPreview(edit)).toContain("preview shortened");
   });
   it("does not invent output and preserves failure text or primitive results", () => {
     expect(toolDetailPreview(undefined)).toBeUndefined();
@@ -114,5 +124,19 @@ describe("askInputDetail", () => {
     expect(askInputDetail({})).toBeUndefined();
     expect(askInputDetail(undefined)).toBeUndefined();
     expect(askInputDetail("text")).toBeUndefined();
+  });
+});
+
+describe("toolFailurePreview", () => {
+  it("is the failure's own words, redacted", () => {
+    const key = "sk-ant-api03-" + "a".repeat(80);
+    const text = toolFailurePreview({ content: [{ type: "text", text: `upstream refused key ${key}` }], isError: true });
+    expect(text).toMatch(/^upstream refused key /);
+    expect(text).not.toContain(key);
+  });
+
+  it("falls back to the preview when the failure has no words", () => {
+    expect(toolFailurePreview({ output: null, exitCode: 2 })).toContain("exitCode");
+    expect(toolFailurePreview(undefined)).toBeUndefined();
   });
 });

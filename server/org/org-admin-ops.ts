@@ -98,6 +98,8 @@ export interface SettingsChanges {
   disabledModels?: string[];
   defaults?: { engine?: string | null; model?: string | null; approvalMode?: string | null };
   interimAttachDays?: number;
+  /** #1940: days before a pending approval leaves the inbox (0 = never). */
+  pendingApprovalExpireDays?: number;
 }
 
 const TEST_TIMEOUT_MS = 10_000;
@@ -120,7 +122,7 @@ export async function timed(check: () => Promise<TestResult | null>): Promise<{ 
 }
 
 function settingsChanges(body: Record<string, unknown>): SettingsChanges | string {
-  const extra = onlyKeys(body, ["allowFullAccess", "memberEnvironmentAutonomy", "memberAutoApproval", "allowVaultExport", "pluginMarketplaces", "allowedEngines", "ownAccountsOutsideList", "disabledModels", "defaults", "interimAttachDays"]);
+  const extra = onlyKeys(body, ["allowFullAccess", "memberEnvironmentAutonomy", "memberAutoApproval", "allowVaultExport", "pluginMarketplaces", "allowedEngines", "ownAccountsOutsideList", "disabledModels", "defaults", "interimAttachDays", "pendingApprovalExpireDays"]);
   if (extra) return extra;
   if (!Object.keys(body).length) return "Send at least one setting.";
   const out: SettingsChanges = {};
@@ -173,6 +175,12 @@ function settingsChanges(body: Record<string, unknown>): SettingsChanges | strin
   if (body.interimAttachDays !== undefined) {
     if (!Number.isInteger(body.interimAttachDays) || (body.interimAttachDays as number) < 0 || (body.interimAttachDays as number) > 90) return "interimAttachDays is a whole number from 0 to 90.";
     out.interimAttachDays = body.interimAttachDays as number;
+  }
+  if (body.pendingApprovalExpireDays !== undefined) {
+    if (!Number.isInteger(body.pendingApprovalExpireDays) || (body.pendingApprovalExpireDays as number) < 0 || (body.pendingApprovalExpireDays as number) > 365) {
+      return "pendingApprovalExpireDays is a whole number from 0 to 365 (0 means never).";
+    }
+    out.pendingApprovalExpireDays = body.pendingApprovalExpireDays as number;
   }
   return out;
 }

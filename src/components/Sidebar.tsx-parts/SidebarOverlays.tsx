@@ -1,7 +1,8 @@
+import type { SidebarState } from "./types";
 import { createPortal } from "react-dom";
 import type { ReactNode, RefObject } from "react";
 import { Archive, Trash2 } from "lucide-react";
-import { api, type AppState, type Bot, type Group } from "@/state/store";
+import { api, type Bot, type Group } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
@@ -25,7 +26,7 @@ import { TeamMenuItems } from "./TeamMenuItems";
 import { roomDeleteCopy } from "./helpers";
 
 export function SidebarOverlays(props: {
-  state: AppState;
+  state: SidebarState;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   dispatch: (action: any) => void;
   sidebarRef: RefObject<HTMLElement | null>;

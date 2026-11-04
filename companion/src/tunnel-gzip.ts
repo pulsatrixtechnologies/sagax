@@ -1,7 +1,8 @@
+// Generated from shared/tunnel-gzip.ts.
+// Edit the shared source, then run node scripts/gen-companion-tunnel-gzip.mjs.
 // Port of OpenMausBot #3009, rewritten: gzip large JSON replies on the phone
 // tunnel listeners only (the hop up the home connection to Cloudflare). Other
-// listeners are untouched. Copy of shared/tunnel-gzip.ts: the companion
-// builds alone (rootDir companion/src); a test keeps the code equal.
+// listeners are untouched. One copy for the harness and the companion.
 import type { IncomingMessage, OutgoingHttpHeaders, ServerResponse } from "node:http";
 import { gzip } from "node:zlib";
 

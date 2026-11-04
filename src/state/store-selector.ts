@@ -10,7 +10,7 @@
 // under the existing mocks.
 import { useContext, useRef, useSyncExternalStore, type Dispatch } from "react";
 import { useStore, type Action, type AppState } from "./store";
-import { StoreSourceContext, type StoreSource } from "./store-source";
+import { StoreCommandsContext, StoreSourceContext, type StoreCommands, type StoreSource } from "./store-source";
 
 export { createStoreSource, StoreSourceContext, usePublishedStoreSource, type PublishingStoreSource, type StoreSource } from "./store-source";
 
@@ -73,4 +73,12 @@ export function useStoreGetter(): () => AppState {
     return () => state;
   }
   return source.getState as () => AppState;
+}
+
+/** Store services without a subscription to reducer state. */
+export function useStoreCommands(): StoreCommands {
+  const commands = useContext(StoreCommandsContext);
+  if (commands) return commands;
+  const { flushBotPatches, refreshInstances, refreshModels } = useStore();
+  return { flushBotPatches, refreshInstances, refreshModels };
 }

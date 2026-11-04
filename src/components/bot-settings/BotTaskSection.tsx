@@ -84,10 +84,40 @@ const listPath = (botId: string) => `/api/bots/${encodeURIComponent(botId)}/task
 
 type MenuState = { task: BotTask; x: number; y: number; trigger: HTMLElement };
 
-export function BotTaskSection({ botId }: { botId: string }) {
+/** A group's panel (2026-11-03): the task lists of the viewer's bots in the
+ * group, narrowed to the tasks those bots added from the group's
+ * conversations; Answer goes back to the group. */
+export interface BotTaskScope {
+  botIds: readonly string[];
+  threadIds: ReadonlySet<string>;
+  onAnswer: (task: BotTask) => void;
+}
+
+/** Several task lists read as one: the tasks of every list that answered,
+ * narrowed to the scope's conversations. Every read failed: the first
+ * failure stands for them. */
+export function mergeTaskLists(results: ReadonlyArray<PromiseSettledResult<{ tasks: BotTask[] }>>, threadIds?: ReadonlySet<string>): { tasks: BotTask[] } {
+  const answered = results.filter((result): result is PromiseFulfilledResult<{ tasks: BotTask[] }> => result.status === "fulfilled");
+  if (answered.length === 0 && results.length > 0) throw (results[0] as PromiseRejectedResult).reason;
+  const tasks: BotTask[] = [];
+  for (const result of answered) {
+    if (!Array.isArray(result.value?.tasks)) throw new Error("the task list answer is not a list");
+    for (const task of result.value.tasks) if (!threadIds || (task.threadId !== undefined && threadIds.has(task.threadId))) tasks.push(task);
+  }
+  return { tasks };
+}
+
+export function BotTaskSection({ botId, scope }: { botId: string; scope?: BotTaskScope }) {
   const store = useStoreOptional();
   const threadsShown = useShowThreads();
   const bot = store?.state.bots.find((candidate) => candidate.id === botId);
+  // The lists read: this bot's, or every bot of the group's scope.
+  const listIds = scope ? scope.botIds : [botId];
+  const listKey = listIds.join(",");
+  const threadKey = scope ? [...scope.threadIds].sort().join(",") : "";
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
+  const canAnswer = scope ? true : Boolean(bot);
   const [tasks, setTasks] = useState<BotTask[] | null>(null);
   const [state, setState] = useState<LoadState>("ok");
   // Tasks that just moved to Done: "check" shows the green check, "fold" the
@@ -112,7 +142,11 @@ export function BotTaskSection({ botId }: { botId: string }) {
   const load = useCallback(() => {
     const seq = ++readSeq.current;
     if (retry.current.timer) { clearTimeout(retry.current.timer); retry.current.timer = null; }
-    api<{ tasks: BotTask[] }>(listPath(botId))
+    const ids = listKey ? listKey.split(",") : [];
+    const read = scopeRef.current
+      ? Promise.allSettled(ids.map((id) => api<{ tasks: BotTask[] }>(listPath(id)))).then((results) => mergeTaskLists(results, scopeRef.current?.threadIds))
+      : api<{ tasks: BotTask[] }>(listPath(botId));
+    read
       .then((body) => {
         if (seq !== readSeq.current) return;
         if (!Array.isArray(body?.tasks)) throw new Error("the task list answer is not a list");
@@ -127,11 +161,11 @@ export function BotTaskSection({ botId }: { botId: string }) {
         setState(next.state);
         if (next.state !== "failed") { retry.current.attempt = 0; return; }
         // Not shown: the last known list stays, or nothing. Read again quietly.
-        console.warn(`[bot-tasks] the task list of ${botId} could not be loaded`, error);
+        console.warn(`[bot-tasks] the task list of ${listKey} could not be loaded`, error);
         const delay = taskListRetryDelay(retry.current.attempt++);
         retry.current.timer = setTimeout(() => { retry.current.timer = null; load(); }, delay);
       });
-  }, [botId]);
+  }, [botId, listKey, threadKey]);
 
   useEffect(() => {
     setTasks(null);
@@ -145,7 +179,8 @@ export function BotTaskSection({ botId }: { botId: string }) {
     load();
     // the bot added or moved a task (frame `bot.tasks`, src/state/store.tsx)
     const onFrame = (event: Event) => {
-      if ((event as CustomEvent<BotTasksEventDetail>).detail?.botId === botId) load();
+      const changed = (event as CustomEvent<BotTasksEventDetail>).detail?.botId;
+      if (changed && listKey.split(",").includes(changed)) load();
     };
     // back on the window: read again, in case a frame was missed
     const onVisible = () => { if (document.visibilityState === "visible") load(); };
@@ -160,7 +195,7 @@ export function BotTaskSection({ botId }: { botId: string }) {
       window.removeEventListener("focus", onVisible);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [botId, load]);
+  }, [botId, listKey, load]);
 
   // A task that goes from open to Done (the bot finished it, or the person
   // did) keeps its row a moment with the check, then the row folds away.
@@ -208,14 +243,15 @@ export function BotTaskSection({ botId }: { botId: string }) {
     // shown at once; the server answer (and its frame) confirms it
     const next = action === "complete" ? "done" : "doing";
     setTasks((current) => current?.map((item) => item.id === task.id ? { ...item, state: next, updatedAt: Date.now() } : item) ?? current);
-    void api(`${listPath(botId)}/${encodeURIComponent(task.id)}/${action}`, { method: "POST", body: "{}" }).then(load).catch((error: unknown) => { fail(error); load(); });
+    void api(`${listPath(task.botId || botId)}/${encodeURIComponent(task.id)}/${action}`, { method: "POST", body: "{}" }).then(load).catch((error: unknown) => { fail(error); load(); });
   };
   const remove = (task: BotTask) => {
     setTasks((current) => current?.filter((item) => item.id !== task.id) ?? current);
     if (openId === task.id) setOpenId(null);
-    void api(`${listPath(botId)}/${encodeURIComponent(task.id)}`, { method: "DELETE" }).then(load).catch((error: unknown) => { fail(error); load(); });
+    void api(`${listPath(task.botId || botId)}/${encodeURIComponent(task.id)}`, { method: "DELETE" }).then(load).catch((error: unknown) => { fail(error); load(); });
   };
   const answer = (task: BotTask) => {
+    if (scope) { scope.onAnswer(task); return; }
     if (!store || !bot) return;
     const threadId = task.threadId ?? bot.threadId;
     openBotThread(store.dispatch, bot, threadId, threadsShown);
@@ -262,7 +298,7 @@ export function BotTaskSection({ botId }: { botId: string }) {
           {waiting && task.note ? <span data-bot-task-note-preview="true" title={task.note} className="mt-0.5 line-clamp-1 text-[12px] leading-4 text-ink">{task.note}</span> : null}
           <span className={cn("block truncate text-[12px] leading-4", done ? "text-ink-tertiary" : "text-ink-secondary")}>{subtitle}</span>
         </button>
-        {waiting && bot ? (
+        {waiting && canAnswer ? (
           <button type="button" data-bot-task-answer="true" onClick={() => answer(task)}
             className="shrink-0 rounded-full bg-accent px-2.5 py-1 text-[12px] font-medium leading-4 text-accent-ink hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60">
             {t("botTasks.answer")}
@@ -307,7 +343,7 @@ export function BotTaskSection({ botId }: { botId: string }) {
               if (event.key === "Escape" || event.key === "Tab") { event.preventDefault(); event.stopPropagation(); closeMenu(); return; }
               navigateThreadMenu(event);
             }}>
-            <TaskActions task={menu.task} canAnswer={Boolean(bot)} kind="menu"
+            <TaskActions task={menu.task} canAnswer={canAnswer} kind="menu"
               onOpen={() => openTask(menu.task)}
               onAnswer={() => { closeMenu(false); answer(menu.task); }}
               onMove={(action) => { closeMenu(); move(menu.task, action); }}
@@ -316,7 +352,7 @@ export function BotTaskSection({ botId }: { botId: string }) {
         </div>, document.body)}
 
       {open ? (
-        <TaskDetail task={open} canAnswer={Boolean(bot)} onBack={closeTask}
+        <TaskDetail task={open} canAnswer={canAnswer} onBack={closeTask}
           onClose={store ? () => { store.dispatch({ type: "toggleSettings", open: false }); store.dispatch({ type: "toggleComputer", open: false }); } : closeTask}
           onAnswer={() => answer(open)}
           onMove={(action) => move(open, action)}

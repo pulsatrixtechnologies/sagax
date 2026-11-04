@@ -19,6 +19,9 @@ public struct MemoryManagerSource: Codable, Hashable, Sendable, Identifiable {
     public var botId: String?
     public var section: String?
     public var scope: String?
+    /// Bot source: false when no current bot owns this memory (a temporary
+    /// agent's); nil from an older computer (treated as linked).
+    public var linked: Bool?
 
     public init(
         id: String,
@@ -29,7 +32,8 @@ public struct MemoryManagerSource: Codable, Hashable, Sendable, Identifiable {
         mayManage: Bool? = nil,
         botId: String? = nil,
         section: String? = nil,
-        scope: String? = nil
+        scope: String? = nil,
+        linked: Bool? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -40,6 +44,7 @@ public struct MemoryManagerSource: Codable, Hashable, Sendable, Identifiable {
         self.botId = botId
         self.section = section
         self.scope = scope
+        self.linked = linked
     }
 }
 
@@ -186,6 +191,15 @@ public struct TeamMemoryEntry: Codable, Hashable, Sendable, Identifiable {
     public var detail: String
     public var status: String?
     public var updatedAt: Double?
+    /// Other names it goes by ("also …").
+    public var aliases: [String]? = nil
+    /// The bot that proposed it (TeamMemoryDialog "from …").
+    public var source: Source? = nil
+
+    public struct Source: Codable, Hashable, Sendable {
+        public var botId: String?
+        public var botName: String?
+    }
 
     public init(id: String, kind: String, name: String, detail: String, status: String? = nil, updatedAt: Double? = nil) {
         self.id = id
@@ -570,5 +584,33 @@ public enum MemoryJsonTree {
             return .object(o.keys.sorted().map { ($0, wrap(o[$0]!)) })
         default: return .null
         }
+    }
+}
+
+public extension MemoryManager {
+    /// A note's line in the list (src/lib/memory-page.ts `excerptFromBody`):
+    /// JSON as its first 160 characters, otherwise the first line of prose
+    /// past the front matter, headings, fences and rules, without its list,
+    /// quote or callout mark, its links and its emphasis; 160 at most.
+    static func excerpt(fromBody body: String) -> String {
+        let text = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("{") || text.hasPrefix("[") { return String(text.prefix(160)) }
+        let stripped = text.replacingOccurrences(of: #"^---\n[\s\S]*?\n---\n?"#, with: "", options: .regularExpression)
+        for raw in stripped.components(separatedBy: "\n") {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty || line.range(of: #"^#{1,6}\s"#, options: .regularExpression) != nil
+                || line.hasPrefix("```") || line.range(of: #"^[-*_]{3,}$"#, options: .regularExpression) != nil { continue }
+            var plain = line
+            plain = plain.replacingOccurrences(of: #"^>\s?(\[![A-Za-z]+\]\s*)?"#, with: "", options: .regularExpression)
+            plain = plain.replacingOccurrences(of: #"^[-*+]\s+(\[[ xX]\]\s+)?"#, with: "", options: .regularExpression)
+            plain = plain.replacingOccurrences(of: #"^\d+\.\s+"#, with: "", options: .regularExpression)
+            plain = plain.replacingOccurrences(of: #"\[\[([^\]|]+)\|([^\]]+)\]\]"#, with: "$2", options: .regularExpression)
+            plain = plain.replacingOccurrences(of: #"\[\[([^\]|]+)\]\]"#, with: "$1", options: .regularExpression)
+            plain = plain.replacingOccurrences(of: #"\[([^\]]+)\]\([^)]+\)"#, with: "$1", options: .regularExpression)
+            plain = plain.replacingOccurrences(of: #"[*_`~]+"#, with: "", options: .regularExpression)
+            plain = plain.trimmingCharacters(in: .whitespaces)
+            if !plain.isEmpty { return String(plain.prefix(160)) }
+        }
+        return ""
     }
 }

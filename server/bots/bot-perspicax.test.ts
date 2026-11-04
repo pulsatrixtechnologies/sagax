@@ -20,7 +20,7 @@ const CATALOG = [
   { id: "P3", slug: "sales", name: "Sales", description: "" },
 ];
 
-function harness(options: { linked?: boolean } = {}) {
+function harness(options: { linked?: boolean; identities?: boolean } = {}) {
   const profiles: Record<string, string[]> = { x: [] };
   const grants: BotGrant[] = [
     { target: `user:${BOB}`, level: "edit", by: ALICE, at: 1 },
@@ -29,6 +29,7 @@ function harness(options: { linked?: boolean } = {}) {
   ];
   const held: Record<string, string[]> = { [ALICE]: ["P1", "P2"], [BOB]: ["P1"], [CAROL]: ["P1"], [EDITOR]: [] };
   const changed: string[] = [];
+  const actsAs: Record<string, { slug: string; name: string }> = {};
   const route = createBotPerspicaxRoutes({
     linked: () => options.linked ?? true,
     profilesOf: (id) => profiles[id] && [...profiles[id]!],
@@ -42,6 +43,11 @@ function harness(options: { linked?: boolean } = {}) {
     catalog: () => CATALOG,
     setProfiles: (id, next) => { profiles[id] = next; },
     onChanged: (id) => changed.push(id),
+    ...(options.identities ? {
+      identities: async () => ({ supported: true, profiles: [{ slug: "redacted", name: "Bot attribution", explicit_only: true }] }),
+      actsAsOf: (id: string) => actsAs[id],
+      setActsAs: (id: string, identity: { slug: string; name: string } | null) => { if (identity) actsAs[id] = identity; else delete actsAs[id]; },
+    } : {}),
   });
   const call = async (actor: string | undefined, method: string, path: string, body?: unknown) => {
     let answer: { status: number; body: any } | undefined;
@@ -58,10 +64,20 @@ function harness(options: { linked?: boolean } = {}) {
     return answer ?? { status: 0, body: handled };
   };
   const put = (actor: string | undefined, list: unknown) => call(actor, "PUT", "/api/bots/x/perspicax", { profiles: list });
-  return { profiles, held, changed, call, put };
+  return { profiles, held, changed, call, put, actsAs };
 }
 
 describe("bot Perspicax profiles routes", () => {
+  it("never selects the explicit-only identity by default; saves only a currently held slug and its human name", async () => {
+    const h = harness({ identities: true });
+    expect((await h.call(ALICE, "GET", "/api/bots/x/perspicax")).body).toMatchObject({ actsAs: null, identities: { profiles: [{ name: "Bot attribution", explicit_only: true }] } });
+    expect(await h.call(ALICE, "PUT", "/api/bots/x/perspicax", { profiles: [], actsAs: "redacted", name: "forged" })).toMatchObject({ status: 200, body: { actsAs: { slug: "redacted", name: "Bot attribution" } } });
+    expect(h.actsAs.x).toEqual({ slug: "redacted", name: "Bot attribution" });
+    expect(await h.call(ALICE, "PUT", "/api/bots/x/perspicax", { profiles: [], actsAs: "not-held" })).toMatchObject({ status: 400, body: { code: "params_invalid" } });
+    expect(await h.call(CAROL, "PUT", "/api/bots/x/perspicax", { profiles: [], actsAs: null })).toMatchObject({ status: 403 });
+    expect(await h.call(ALICE, "PUT", "/api/bots/x/perspicax", { profiles: [], actsAs: null })).toMatchObject({ status: 200, body: { actsAs: null } });
+  });
+
   it("the owner adds profiles she holds; GET shows selected, available and canEdit", async () => {
     const h = harness();
     expect(await h.put(ALICE, ["P1", "P2", "P1"])).toMatchObject({ status: 200 });

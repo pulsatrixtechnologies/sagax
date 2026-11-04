@@ -33,7 +33,7 @@ final class DesktopSidebarUITests: XCTestCase {
     // MARK: Launch
 
     @MainActor
-    private func launch() -> XCUIApplication {
+    private func launch(_ extra: [String] = []) -> XCUIApplication {
         XCUIDevice.shared.orientation = .landscapeLeft
         let app = XCUIApplication()
         app.terminate()
@@ -45,7 +45,7 @@ final class DesktopSidebarUITests: XCTestCase {
             "-companion.sidebarPrefs.parity-harness", "{}",
         ]
         if let environment { arguments += ["-parityEnvironment", environment] }
-        app.launchArguments = arguments
+        app.launchArguments = arguments + extra
         app.launch()
         XCTAssertTrue(app.buttons["desktop-sidebar-account"].waitForExistence(timeout: 30), "the desktop shell")
         return app
@@ -279,6 +279,55 @@ final class DesktopSidebarUITests: XCTestCase {
         XCTAssertTrue(toolsOn.waitForExistence(timeout: 10))
         toolsOn.tap()
         XCTAssertTrue(app.buttons["Browse Bots"].firstMatch.waitForExistence(timeout: 5), "switched on (the parity pairing is an administrator's)")
+    }
+
+    /// The desktop's two row layouts: with a pointer a row's "⋯" shows on
+    /// hover only (the parity launch draws the pointer layout); on touch
+    /// it stays on screen, and its menu has Put on the desktop.
+    @MainActor
+    func testRowActionsFollowThePointerAndTheMenuPutsTheBotOnTheDesktop() throws {
+        let aurora = try XCTUnwrap(try bot(named: "Aurora")["id"] as? String)
+        var app = launch()
+        _ = row(aurora, in: app)
+        XCTAssertFalse(app.buttons["desktop-row-actions.\(aurora)"].exists, "pointer layout: no \u{22EF} until hovered")
+        XCTAssertFalse(app.buttons["desktop-row-new-folder.\(aurora)"].exists, "no New folder on the row")
+        app = launch(["-desktop.touchRows", "YES"])
+        let actions = app.buttons["desktop-row-actions.\(aurora)"].firstMatch
+        XCTAssertTrue(actions.waitForExistence(timeout: 10), "touch layout: the \u{22EF} stays")
+        actions.tap()
+        XCTAssertTrue(app.buttons["desktop-menu.put-on-desktop"].waitForExistence(timeout: 5), "Put on the desktop")
+        XCTAssertTrue(app.buttons["desktop-menu.select"].exists)
+    }
+
+    /// The rail's » button, ⌘B, ⌘⇧N and the shortcuts window (the
+    /// desktop's catalog, its title and Done).
+    @MainActor
+    func testRailExpandButtonShortcutsAndTheirWindow() throws {
+        let app = launch()
+        app.typeKey("b", modifierFlags: .command)
+        XCTAssertTrue(app.otherElements["desktop-sidebar-rail"].waitForExistence(timeout: 5), "⌘B folds the sidebar")
+        let expand = app.buttons["desktop-sidebar-expand"].firstMatch
+        XCTAssertTrue(expand.waitForExistence(timeout: 5), "the rail's » button")
+        expand.tap()
+        XCTAssertTrue(app.otherElements["desktop-sidebar-full"].waitForExistence(timeout: 5), "» unfolds it")
+
+        app.typeKey("n", modifierFlags: [.command, .shift])
+        XCTAssertTrue(app.textFields["desktop-compose-field"].waitForExistence(timeout: 5), "⌘⇧N opens the To: picker")
+        XCTAssertFalse(app.buttons["desktop-compose.create-bot"].exists, "in group mode")
+        app.buttons["desktop-compose-close"].firstMatch.tap()
+
+        app.typeKey("/", modifierFlags: .command)
+        let sheet = app.otherElements["desktop-shortcuts"].firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Keyboard shortcuts"].exists, "the desktop's title")
+        for id in ["search-everything", "new-group", "toggle-sidebar", "focus-composer", "quote-selection", "dictate", "live-call-mute", "reorder-section"] {
+            XCTAssertTrue(app.descendants(matching: .any)["desktop-shortcut.\(id)"].exists, "row \(id)")
+        }
+        let sidebarRow = app.descendants(matching: .any)["desktop-shortcut.toggle-sidebar"]
+        XCTAssertTrue(sidebarRow.label.contains("B"), sidebarRow.label)
+        XCTAssertFalse(app.staticTexts["Workspace"].exists, "no Workspace section")
+        app.buttons["desktop-shortcuts-done"].tap()
+        XCTAssertFalse(sheet.waitForExistence(timeout: 2))
     }
 
     @MainActor

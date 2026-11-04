@@ -184,17 +184,28 @@ describe("the server's own machine on an organization server", () => {
     // every computer claim (host screen, local VMs) passes the policy
     expect(source).toMatch(/async function bindTurnComputer\([^)]*\)[^{]*\{[\s\S]{0,300}computerPlaceRefusal\(kind\)/);
     expect(source).toMatch(/function computerPlaceRefusal\([\s\S]{0,400}managedPolicy\.computerRefusal\(kind\)/);
-    // creating or starting a desktop on the server itself is refused
-    expect(source).toMatch(/const hostVmRefusal = action === "stop" \|\| action === "remove" \? undefined : hostComputerRefusal\(\);/);
-    expect(source).toMatch(/const botVmRefusal = action === "run" \|\| action === "start" \? hostComputerRefusal\(\) : undefined;/);
+    // The VM routes moved out of index.ts in 062d7c42e. Check both the
+    // policy injection and the refusal at each extracted host entry point.
+    const routes = readFileSync(new URL("../routes/local-computer.ts", import.meta.url), "utf8");
+    expect(source).toMatch(/createLocalComputerRoutes\(\{[\s\S]*?hostRefusal: hostComputerRefusal,/);
+    expect(routes).toMatch(/const hostVmRefusal = action === "stop" \|\| action === "remove" \? undefined : deps\.hostRefusal\(\);/);
+    expect(routes).toMatch(/if \(hostVmRefusal\) return json\(res, 403, \{ error: hostVmRefusal, code: "host_computer" \}\);/);
+    expect(routes).toMatch(/const botVmRefusal = action === "run" \|\| action === "start" \? deps\.hostRefusal\(\) : undefined;/);
+    expect(routes).toMatch(/if \(botVmRefusal\) return json\(res, 403, \{ error: botVmRefusal, code: "host_computer" \}\);/);
     // the internal route answers the proven requester's computers on an organization server
     // (2026-10-26, #1138: with no person speaking, the turn's own speaker and
     // the bot's owner and routine trigger, so the person's own routine reaches
     // the computer they lent; userComputers decides, see the routine cases above)
     expect(source).toMatch(/function userComputerSpeaking\(principal: string \| null[\s\S]{0,300}?\{\s*if \(principal\) return \{ speaker: personSpeaker\(principal\), context: \{\} \};/);
-    expect(source).toMatch(/const \{ speaker: computerSpeaker, context: computerContext \} = userComputerSpeaking\(principal, internalCapability\);\s*return json\(res, 200, \{ computers: userComputers\.list\(computerSpeaker, computerContext\)/);
-    expect(source).toMatch(/userComputers\.request\(computerSpeaker, parsed\.data, active, computerContext\)/);
+    const environments = readFileSync(new URL("../routes/internal-environments.ts", import.meta.url), "utf8");
+    expect(source).toMatch(/userComputerSpeaking: \(principal, capability\) => userComputerSpeaking\(principal, capability\)/);
+    expect(source).toMatch(/userComputersList: \(speaker, context\) => userComputers\.list\(speaker as never, context as never\)/);
+    expect(source).toMatch(/userComputersRequest: \(speaker, operation, active, context\) => userComputers\.request\(speaker as never, operation as never, active, context as never\)/);
+    expect(environments).toMatch(/const \{ speaker: computerSpeaker, context: computerContext \} = deps\.userComputerSpeaking\(principal, capability\);\s*return json\(res, 200, \{\s*computers: deps\.userComputersList\(computerSpeaker, computerContext\)/);
+    expect(environments).toMatch(/deps\.userComputersRequest\(computerSpeaker, parsed\.data, active, computerContext\)/);
     // only a person may lend a computer to an organization server
-    expect(source).toMatch(/IDENTITY\.kind === "perspicax" && !auth\.session\.principalId\) return json\(res, 403/);
+    const lending = readFileSync(new URL("../routes/shared-computers-http.ts", import.meta.url), "utf8");
+    expect(source).toMatch(/createSharedComputersRoutes\(\{[\s\S]*?identityKind: \(\) => IDENTITY\.kind/);
+    expect(lending).toMatch(/deps\.identityKind\(\) === "perspicax" && !auth\.session\.principalId\) \{\s*return json\(res, 403/);
   });
 });

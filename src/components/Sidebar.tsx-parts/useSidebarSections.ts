@@ -1,5 +1,6 @@
+import type { SidebarState } from "./types";
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { api, type AppState, type Bot, type Group } from "@/state/store";
+import { api, type Bot, type Group } from "@/state/store";
 import { useHeldMenuMotion } from "../MenuMotion";
 import { useOrgPeople, usePerspicaxOrg } from "@/lib/perspicax-org";
 import {
@@ -36,7 +37,7 @@ import { readableError } from "@/lib/plain-error";
 import { viewerActorId } from "@/lib/viewer";
 import { assignPersonalSection, sectionEditMessage } from "./helpers";
 
-function orgViewerId(state: AppState): string {
+function orgViewerId(state: Pick<SidebarState, "config">): string {
   // The server's principal for this viewer; older servers: the profile
   // email, else the same "local-owner" fallback as the server actor id.
   return viewerActorId(state.config);
@@ -50,7 +51,7 @@ export function useSidebarSections({
   sidebarRef,
   setTeamFeedback,
 }: {
-  state: AppState;
+  state: SidebarState;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   dispatch: (action: any) => void;
   remoteClient: boolean;

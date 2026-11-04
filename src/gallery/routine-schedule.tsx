@@ -24,7 +24,7 @@ window.fetch = async (input, init) => {
 };
 
 const expression = params.get("cron") ?? "0,17,20,40 8-18 * * 1-5";
-const bot = { id: "bot-katarina", name: "Katarina", color: "violet" } as unknown as Bot;
+const bot = { id: "bot-osprey", name: "Osprey", color: "violet" } as unknown as Bot;
 const routine = {
   id: "routine-1", name: "Suivi des billets", prompt: "Passe en revue les billets ouverts.", target: "bot", botId: bot.id,
   runOn: "local", enabled: true, schedule: { type: "cron", expression, timeZone: "America/Toronto" },

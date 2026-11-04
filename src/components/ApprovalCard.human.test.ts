@@ -4,7 +4,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { setLocale } from "@/lib/i18n";
 import type { Bot, Message } from "@/state/store";
-import { ApprovalCard, toolLabel } from "./ApprovalCard";
+import { ApprovalCard, toolApprovalView, toolLabel } from "./ApprovalCard";
 import { RiskChip, TechnicalDetails } from "./ApprovalParts";
 import { PendingApprovalPanel, pendingApprovals, readOnlyApprovals, spokenApprovalPrompt, stepperIndex } from "./PendingApproval";
 
@@ -182,5 +182,36 @@ describe("composer panel and stepper", () => {
     expect(spoken).toContain("Quasar wants to view the schedule in Acme Desk");
     expect(spoken).toContain("amartin");
     expect(spoken).not.toContain("conditions");
+  });
+});
+
+describe("a Grok gateway connector call (#1931)", () => {
+  const ID = "cursor__user-pulsatrix-connectwise-profile_5fuse___23";
+  const grokAsk = (): Message => ({
+    id: "g", role: "bot", kind: "options", at: 1,
+    card: { title: "Approval needed", subtitle: ID, toolInput: '{"profile":"gox"}', options: ["Allow", "Deny"], requestId: "req-g", tool: "other", mcpTool: ID },
+  });
+
+  it("names the real connector and tool in the title and the full request, never 'other', 'cursor' or '23'", () => {
+    setLocale("fr");
+    const view = toolApprovalView(grokAsk().card!, "Quasar");
+    expect(view.title).toContain("Pulsatrix Connectwise");
+    expect(view.title).not.toMatch(/\b23\b|5f|User /);
+    expect(view).toMatchObject({ tool: "profile_use", server: "pulsatrix-connectwise" });
+    expect(view.plain).toBeUndefined();
+    expect(view.args).toContain("gox");
+    const details = renderToStaticMarkup(createElement(TechnicalDetails, { tool: view.tool, server: view.server, args: view.args, defaultOpen: true }));
+    expect(details).toContain("profile_use");
+    expect(details).not.toContain(">other<");
+    expect(details).not.toContain(">cursor<");
+  });
+
+  it("reads the same in the composer's box and by voice", () => {
+    setLocale("fr");
+    const [pending] = pendingApprovals([grokAsk()]);
+    const html = renderToStaticMarkup(createElement(PendingApprovalPanel, { pending: pending!, count: 1, index: 0, bot }));
+    expect(html).toContain("Pulsatrix Connectwise");
+    expect(html).not.toContain(ID);
+    expect(spokenApprovalPrompt(pending!, "Quasar")).not.toMatch(/\b23\b|cursor/);
   });
 });

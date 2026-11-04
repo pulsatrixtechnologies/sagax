@@ -33,6 +33,10 @@ import {
 } from "../memory/memory-journal.ts";
 import { upkeepEnabled, type MemoryUpkeep } from "../memory/memory-upkeep.ts";
 import { listLearnedFacts, removeLearned } from "../profiles/profile-learned.ts";
+import { secretValue } from "../backup/workspace-backup-policy.ts";
+import { MEMORY_FILE_MAX_BYTES } from "../workspace/workspace.ts";
+import { writeWorkspaceBytes } from "../workspace/workspace-manage.ts";
+import { botImportAttachmentPath, botImportNotePath, vaultTextHoldsSecret, VAULT_LIMITS } from "../../shared/obsidian-import.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import { BOT_ACT_ROUTE_HEADER } from "./remote-session-files.ts";
 import { PASS, type RouteHandler } from "./table.ts";
@@ -66,6 +70,57 @@ export interface BotMemoryRouteDeps {
   /** Who may read and change this bot's memory; absent: anyone the auth
    * gate let through. */
   mayEdit?(auth: RequestAuth, botId: string): boolean;
+}
+
+export const IMPORT_BATCH_MAX = 200;
+export const IMPORT_BODY_MAX_BYTES = 16 * 1024 * 1024;
+const IMPORT_BODY = z.object({
+  notes: z.array(z.object({ path: z.string().min(1).max(260), text: z.string() })).max(IMPORT_BATCH_MAX).default([]),
+  attachments: z.array(z.object({ path: z.string().min(1).max(400), data: z.string() })).max(IMPORT_BATCH_MAX).default([]),
+  conflict: z.enum(["skip", "rename", "overwrite"]).default("skip"),
+}).refine((body) => body.notes.length + body.attachments.length <= IMPORT_BATCH_MAX);
+
+export type ImportResultStatus = "written" | "unchanged" | "skipped" | "refused";
+export interface ImportResult {
+  path: string;
+  status: ImportResultStatus;
+  reason?: "unsafe_path" | "secret" | "too_large" | "exists" | "invalid";
+}
+
+/** One batch of an import into a bot's memory: the notes, then the attachments. */
+export function importIntoBotMemory(
+  botId: string,
+  notes: Array<{ path: string; text: string }>,
+  attachments: Array<{ path: string; data: string }>,
+  conflict: "skip" | "rename" | "overwrite",
+  via: string,
+): ImportResult[] {
+  const results: ImportResult[] = [];
+  for (const note of notes) {
+    if (!botImportNotePath(note.path)) { results.push({ path: note.path, status: "refused", reason: "unsafe_path" }); continue; }
+    if (Buffer.byteLength(note.text, "utf8") > MEMORY_FILE_MAX_BYTES) { results.push({ path: note.path, status: "refused", reason: "too_large" }); continue; }
+    if (vaultTextHoldsSecret(note.text) || secretValue(note.text)) { results.push({ path: note.path, status: "refused", reason: "secret" }); continue; }
+    try {
+      const current = readMemoryDoc(botId, note.path);
+      if (current.exists && current.text === note.text) { results.push({ path: note.path, status: "unchanged" }); continue; }
+      if (current.exists && conflict !== "overwrite") { results.push({ path: note.path, status: "skipped", reason: "exists" }); continue; }
+      journalMemoryWrite(botId, note.path, note.text, { actor: "import", via });
+      results.push({ path: note.path, status: "written" });
+    } catch (error) {
+      if (!(error instanceof MemoryStoreError)) throw error;
+      results.push({ path: note.path, status: "refused", reason: error.code === "too-large" ? "too_large" : error.code === "path" ? "unsafe_path" : "invalid" });
+    }
+  }
+  for (const attachment of attachments) {
+    if (!botImportAttachmentPath(attachment.path)) { results.push({ path: attachment.path, status: "refused", reason: "unsafe_path" }); continue; }
+    const bytes = Buffer.from(attachment.data, "base64");
+    if (bytes.length > VAULT_LIMITS.attachmentBytes) { results.push({ path: attachment.path, status: "refused", reason: "too_large" }); continue; }
+    const written = writeWorkspaceBytes(botId, attachment.path, bytes, { overwrite: conflict === "overwrite" });
+    if (written.ok) results.push({ path: attachment.path, status: "written" });
+    else if (written.code === "exists") results.push({ path: attachment.path, status: "unchanged" });
+    else results.push({ path: attachment.path, status: "refused", reason: written.code === "too-large" ? "too_large" : "invalid" });
+  }
+  return results;
 }
 
 export function createBotMemoryRoutes(deps: BotMemoryRouteDeps): RouteHandler {
@@ -261,6 +316,22 @@ export function createBotMemoryRoutes(deps: BotMemoryRouteDeps): RouteHandler {
       const report = await deps.upkeep.tidy(bot.id);
       await flushMemoryJournal(bot.id);
       return json(res, 200, { report, overview: memoryOverview(bot.id) });
+    }
+    // 2026-11-03: an Obsidian vault imported from Tools > Memory (shared/obsidian-import.ts).
+    // The page plans it and sends it in batches; every note and attachment
+    // is checked here again (its path, its size, a secret in it), written
+    // as the import's own journal row (undoable like any change) and an
+    // unchanged one is left alone, so a batch sent twice writes nothing twice.
+    m = path.match(/^\/api\/bots\/([\w-]+)\/memory\/import$/);
+    if (m && method === "POST") {
+      if (!deps.bot(m[1])) return json(res, 404, { error: "no such bot" });
+      const parsed = IMPORT_BODY.safeParse(await readBody(req, IMPORT_BODY_MAX_BYTES).catch(() => null));
+      if (!parsed.success) return json(res, 400, { error: `send { notes: [{ path, text }], attachments: [{ path, data }], conflict }: at most ${IMPORT_BATCH_MAX} files and ${Math.round(IMPORT_BODY_MAX_BYTES / (1024 * 1024))} MB a batch` });
+      const botId = m[1];
+      const { notes, attachments, conflict } = parsed.data;
+      const results = write(botId, () => importIntoBotMemory(botId, notes, attachments, conflict, via("import")));
+      await flushMemoryJournal(botId);
+      return json(res, 200, { ok: true, results, overview: memoryOverview(botId) });
     }
     m = path.match(/^\/api\/bots\/([\w-]+)\/memory\/open$/);
     if (m && method === "POST") {

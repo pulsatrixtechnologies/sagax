@@ -12,7 +12,11 @@ describe("usage ledger through real turns", () => {
   let session: VerificationServer;
 
   beforeEach(async () => {
-    session = await launchVerificationServer();
+    session = await launchVerificationServer({ ...process.env,
+      // 95e8f39e4 continues tool-only endings. Keep each real tool receipt,
+      // followed by an answer, so two requested turns yield two ledger rows.
+      FAKE_CLAUDE_TOOL_CALLS: JSON.stringify([{ name: "Bash", input: { command: "echo hi" }, ok: true, output: "hi" }]),
+    });
   }, 60_000);
 
   afterEach(async () => {

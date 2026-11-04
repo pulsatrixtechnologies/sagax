@@ -2379,5 +2379,13 @@
   "routineEditor.formatAiHint": "Відкриває чат {bot} із проханням упорядкувати цю інструкцію. Нічого не надсилається, доки ви не натиснете Enter.",
   "routineEditor.formatAiPrompt": "Переформатуй інструкцію моєї рутини «{name}» (id {id}), щоб вона була краще структурована й легше читалася: заголовки, нумеровані кроки, короткі речення. Збережи точно кожне правило, факт, дату й рішення та не змінюй змісту. Потім онови рутину «{name}» (id {id}) результатом через свій інструмент редагування рутин (propose_routine_action, action update, changes.instructions) і покажи мені, як було і як стало.",
   "routineEditor.copy": "Створити копію",
-  "routineEditor.hint.duplicate": "Нова рутина з цими налаштуваннями."
+  "routineEditor.hint.duplicate": "Нова рутина з цими налаштуваннями.",
+  "botPanel.library.kind.artifact": "Артефакт",
+  "botPanel.library.pageTitle": "Сторінка: {state}",
+  "botPanel.library.pageState.draft": "чернетка",
+  "botPanel.library.pageState.private": "опубліковано для мене",
+  "botPanel.library.pageState.org": "опубліковано для моєї організації",
+  "botPanel.library.pageState.link": "опубліковано для всіх, хто має посилання",
+  "botPanel.library.pageState.revoked": "відкликано",
+  "botPanel.library.pageState.expired": "термін минув"
 }

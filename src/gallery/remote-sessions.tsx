@@ -71,7 +71,7 @@ const headless: RemoteSessionView = {
   suggestions: [{ id: "cpu" }, { id: "errors" }],
 };
 const routine = (id: string, name: string, everyMinutes: number): Routine => ({
-  id, name, prompt: "", target: "bot", botId: "melonie", runOn: "maus", enabled: true,
+  id, name, prompt: "", target: "bot", botId: "wren", runOn: "maus", enabled: true,
   schedule: { type: "interval", everyMinutes, anchorAt: 1 }, durationMinutes: 30, nextRunAt: NOW + H, createdAt: 1, updatedAt: 1,
 } as Routine);
 
@@ -94,7 +94,7 @@ function Gallery() {
     <div className="flex items-start gap-6 bg-app p-4 text-ink">
       <aside data-gallery-panel="" style={{ width: Number(params.get("panel")) || 380 }} className="shrink-0 rounded-xl border border-hairline/40 bg-panel">
         <div className="flex flex-col gap-6 px-4 pb-6 pt-4">
-          <RemoteSessionsSection bot={{ id: "melonie" } as Bot} />
+          <RemoteSessionsSection bot={{ id: "wren" } as Bot} />
           <section data-bot-settings-section="routines" className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <CalendarClock size={16} className="text-ink-secondary" />
@@ -111,7 +111,7 @@ function Gallery() {
             <ComputerScreen
               source="server"
               state="running"
-              caption={t("computer.screenOf", { name: "Melonie" })}
+              caption={t("computer.screenOf", { name: "Wren" })}
               live={<><img src={MOCK_FRAME} alt="" className="h-full w-full object-contain" /><TakeControlPill onClick={() => {}} /></>}
               controls={{ pause: () => {}, stop: () => {} }}
             />
@@ -119,23 +119,23 @@ function Gallery() {
         </Column>
         <Column title="Session Tailcat (Windows)">
           <div data-gallery-card="">
-            <RemoteSessionCard botId="melonie" threadId="thread-1" view={view} />
+            <RemoteSessionCard botId="wren" threadId="thread-1" view={view} />
           </div>
         </Column>
       </div>
       <div data-gallery-states="" className="flex shrink-0 items-start gap-6">
         <Column title="OS pas encore connu (8F2NZU)">
           <div data-gallery-unknown="">
-            <RemoteSessionCard botId="melonie" threadId="thread-1" view={unknown} />
+            <RemoteSessionCard botId="wren" threadId="thread-1" view={unknown} />
           </div>
         </Column>
         <Column title="Serveur sans interface">
           <div data-gallery-headless="">
-            <RemoteSessionCard botId="melonie" threadId="thread-1" view={headless} />
+            <RemoteSessionCard botId="wren" threadId="thread-1" view={headless} />
           </div>
         </Column>
       </div>
-      {params.get("takeover") === "1" && <RemoteTakeover botId="melonie" view={view} state="running" onClose={() => {}} />}
+      {params.get("takeover") === "1" && <RemoteTakeover botId="wren" view={view} state="running" onClose={() => {}} />}
     </div>
   );
 }

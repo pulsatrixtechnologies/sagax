@@ -18,7 +18,12 @@ export type LimitFailoverLine =
    * once it resets. */
   | { kind: "waiting"; from: string; resetsAt: number; owner?: true }
   /** Same, for a routine run: the routine runs again at the reset. */
-  | { kind: "waitingRoutine"; from: string; resetsAt: number };
+  | { kind: "waitingRoutine"; from: string; resetsAt: number }
+  /** #1942: primary and at least one backup hit their limits with nothing
+   * left to try. The turn is failed (not silent done); `tried` names the
+   * engines that refused. `resetsAt` is the soonest known reset when one
+   * was said. */
+  | { kind: "exhausted"; tried: string[]; resetsAt?: number; owner?: true };
 
 /** How long after a reset the conversation goes back, so the provider has
  * rolled its window over (upstream AFTER_RESET_MS). */
@@ -56,5 +61,11 @@ export function limitFailoverText(line: LimitFailoverLine, clock: (at: number) =
       return `Limit reached on ${line.from} and no other engine is available: your message will be sent again when it resets (around ${clock(line.resetsAt)}).`;
     case "waitingRoutine":
       return `Limit reached on ${line.from} and no other engine is available: this routine runs again when it resets (around ${clock(line.resetsAt)}).`;
+    case "exhausted": {
+      const tried = line.tried.filter(Boolean).join(", ") || "the engines tried";
+      const when = line.resetsAt !== undefined ? ` Try again around ${clock(line.resetsAt)}, or pick another model / add credit.` : " Pick another model, add credit, or try again later.";
+      if (line.owner) return `This bot's owner hit usage limits on ${tried}: no other engine could answer.${when}`;
+      return `Limits were reached on ${tried}: no other engine could answer.${when}`;
+    }
   }
 }

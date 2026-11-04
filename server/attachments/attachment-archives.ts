@@ -26,12 +26,11 @@ import {
   readSmallArchiveTexts,
   type ArchiveManifest,
 } from "../../electron/archive-extract.mjs";
-import { formatArchiveBytes as formatBytes } from "../../shared/format-bytes.ts";
+import { formatArchiveBytes } from "../../shared/format-bytes.ts";
 import { readAtRestTextSync } from "../encryption/content-at-rest.ts";
 import { ATTACHMENTS_DIR } from "./attachments.ts";
 import { INLINE_FILE_MAX_BYTES, INLINE_TOTAL_MAX_BYTES } from "./attachment-staging.ts";
 
-export { formatBytes };
 export { ARCHIVE_LIMITS, archiveKind, extractedFolderName };
 export type { ArchiveManifest };
 
@@ -147,7 +146,7 @@ export function manifestTree(manifest: ArchiveManifest, maxLines = NOTE_MAX_LINE
   const entries = manifest.entries;
   if (!entries.length) return [];
   if (entries.length <= maxLines && !manifest.truncated) {
-    return entries.map((entry) => `${entry.path} (${formatBytes(entry.size)})`);
+    return entries.map((entry) => `${entry.path} (${formatArchiveBytes(entry.size)})`);
   }
   // the shared leading folders (one top folder is common: "project/...")
   const split = entries.map((entry) => entry.path.split("/"));
@@ -164,7 +163,7 @@ export function manifestTree(manifest: ArchiveManifest, maxLines = NOTE_MAX_LINE
   }
   const lines: string[] = [];
   for (const [key, group] of [...groups.entries()].slice(0, maxLines)) {
-    lines.push(group.dir ? `${key} (${group.files} files, ${formatBytes(group.bytes)})` : `${key} (${formatBytes(group.bytes)})`);
+    lines.push(group.dir ? `${key} (${group.files} files, ${formatArchiveBytes(group.bytes)})` : `${key} (${formatArchiveBytes(group.bytes)})`);
   }
   const listed = [...groups.values()].slice(0, maxLines).reduce((sum, group) => sum + group.files, 0);
   if (manifest.files > listed) lines.push(`... and ${manifest.files - listed} more files`);
@@ -220,7 +219,7 @@ export function archiveNote(input: {
     `kind="${manifest.kind ?? "unknown"}"`,
     `status="${manifest.status}"`,
     `files="${manifest.files}"`,
-    `unpacked-size="${formatBytes(manifest.totalBytes)}"`,
+    `unpacked-size="${formatArchiveBytes(manifest.totalBytes)}"`,
   ];
   const lines: string[] = [];
   const unpackable = manifest.status === "ok";
@@ -238,14 +237,14 @@ export function archiveNote(input: {
   } else if (manifest.status === "encrypted") {
     lines.push("Password-protected: kept as is, not unpacked. Ask the person for the password if you need its contents.");
   } else if (manifest.status === "too-large") {
-    lines.push(`Not unpacked: ${manifest.reason ?? "it is too large"} (limits: ${ARCHIVE_LIMITS.maxFiles} files, ${formatBytes(ARCHIVE_LIMITS.maxTotalBytes)}). Work from the archive itself, for example extract only what you need.`);
+    lines.push(`Not unpacked: ${manifest.reason ?? "it is too large"} (limits: ${ARCHIVE_LIMITS.maxFiles} files, ${formatArchiveBytes(ARCHIVE_LIMITS.maxTotalBytes)}). Work from the archive itself, for example extract only what you need.`);
   } else if (manifest.status === "unsupported") {
     lines.push("Not unpacked: Sagax does not open this format. Use a tool for it if one is available (for example 7z).");
   } else {
     lines.push(`Not unpacked: ${manifest.reason ?? "it could not be read as an archive"}.`);
   }
   const tree = manifestTree(manifest);
-  if (tree.length) lines.push(`Contents (${manifest.files} files, ${formatBytes(manifest.totalBytes)}):`, ...tree);
+  if (tree.length) lines.push(`Contents (${manifest.files} files, ${formatArchiveBytes(manifest.totalBytes)}):`, ...tree);
   if (manifest.skippedCount) {
     const reasons = [...new Set(manifest.skipped.map((entry) => SKIP_LABEL[entry.reason] ?? entry.reason))];
     lines.push(`Left out of the unpacked folder: ${manifest.skippedCount} entries (${reasons.join(", ")}).`);

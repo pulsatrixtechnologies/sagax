@@ -27,7 +27,7 @@ describe("botReplyQuoteId", () => {
   it("quotes the triggering message when the person sent several in a row", () => {
     const a = user("fais ceci");
     const b = user("et aussi cela");
-    const c = user("passe le mot aussi a katarina sur sagax");
+    const c = user("passe le mot aussi a osprey sur sagax");
     expect(botReplyQuoteId([a, b, c], c.id)).toBe(c.id);
   });
 

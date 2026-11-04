@@ -36,7 +36,7 @@ import { writeFileAtomic } from "../atomic.ts";
 import { pcShell, scrubHookEnv } from "../hooks/lifecycle-hooks.ts";
 import type { RoutinePrecheckVerdict } from "./routine-precheck.ts";
 import { watchToolRefusal } from "./routine-watch-tools.ts";
-import { defang } from "../triggers/webhooks.ts";
+import { defang } from "../../shared/defang.ts";
 
 export { canonicalJson };
 

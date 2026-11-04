@@ -222,6 +222,66 @@ describe("a turn its engine's limit refused", () => {
     expect(w.state.lines.at(-1)!.line).toMatchObject({ kind: "switched", from: "Claude", to: "Grok" });
   });
 
+  // #1942: primary + backup both limited, nothing left → exhausted (failed), not silent done.
+  it("marks the turn exhausted when a second spent engine has no further backup (#1942)", async () => {
+    const w = world({ allowed: ["claude", "codex"] });
+    w.dispatch();
+    w.host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT });
+    await w.host.idle();
+    expect(w.state.lines.at(-1)!.line).toMatchObject({ kind: "switched", from: "Claude", to: "Codex" });
+    w.dispatch(B);
+    w.state.request = { messageId: "m1", turnId: "turn-2", origin: { kind: "user" } };
+    w.host.turnFailed({ threadId: "thread", turnId: "turn-2", cause: "429 Too Many Requests; retry-after: 600" });
+    await w.host.idle();
+    expect(w.state.lines.at(-1)!.line).toMatchObject({
+      kind: "exhausted",
+      tried: expect.arrayContaining(["Claude", "Codex"]),
+    });
+    expect(w.state.switches).toEqual([B]);
+  });
+
+  it("surfaces exhausted when the backup switch records but resend does not start (#1942)", async () => {
+    const clock = { now: Date.UTC(2026, 9, 19, 16, 0) };
+    const state = {
+      selection: { ...A } as ModelSelection,
+      lines: [] as Array<{ threadId: string; line: LimitFailoverLine; replaced?: string }>,
+      switches: [] as ModelSelection[],
+      request: { messageId: "m1", turnId: "turn-1", origin: { kind: "user" } } as LimitRequest | undefined,
+    };
+    const store = new LimitFailoverStore({ file: null, now: () => clock.now });
+    const host = createLimitFailoverHost({
+      store,
+      now: () => clock.now,
+      enabled: () => true,
+      engineName: (id) => NAMES[id] ?? id,
+      engine: (id) => DRIVERS[id] ? { instanceId: id, driverKind: DRIVERS[id]! } : undefined,
+      candidates: async () => ["claude", "codex"].map((id): LimitCandidate => ({
+        instanceId: id, driverKind: DRIVERS[id]!, models: [id === "codex" ? "gpt" : "opus"],
+      })),
+      preferred: () => [],
+      config: () => undefined,
+      payer: () => "server",
+      threadSelection: () => state.selection,
+      busy: () => false,
+      switchThread: (_bot, _thread, to) => {
+        state.selection = { ...to };
+        state.switches.push({ ...to });
+        return null;
+      },
+      note: (threadId, line) => { state.lines.push({ threadId, line }); },
+      replaceFailure: (threadId, turnId, line) => { state.lines.push({ threadId, line, replaced: turnId }); },
+      request: () => state.request,
+      resend: async () => false,
+      rerunRoutine: () => true,
+    });
+    host.noteDispatch("thread", {
+      botId: "bot", engine: { instanceId: A.instanceId, driverKind: DRIVERS[A.instanceId]! }, selection: A, payer: "server", at: clock.now,
+    });
+    expect(host.turnFailed({ threadId: "thread", turnId: "turn-1", cause: LIMIT })).toBe(true);
+    await host.idle();
+    expect(state.lines.at(-1)!.line).toMatchObject({ kind: "exhausted", tried: expect.arrayContaining(["Claude", "Codex"]) });
+  });
+
   it("says whose limit it is when the bot owner's plan pays for a member's turn (J4)", async () => {
     const waiting = world({ allowed: ["claude"] });
     waiting.dispatch(waiting.state.selection, true);

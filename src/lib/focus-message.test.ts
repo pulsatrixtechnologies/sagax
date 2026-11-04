@@ -8,6 +8,14 @@ vi.mock("@/state/store", () => ({
   useStore: () => ({ state: { focusMessage: { threadId: "thread", messageId: "message", matchText: fixture.text, nonce: 1, consumed: false } }, dispatch: fixture.dispatch }),
 }));
 
+vi.mock("@/state/store-selector", async () => {
+  const { useStore } = await import("@/state/store");
+  return {
+    useStoreSelector: (select: (state: import("@/state/store").AppState) => unknown) => select(useStore().state),
+    useStoreDispatch: () => useStore().dispatch,
+  };
+});
+
 import { useFocusMessage } from "./focus-message";
 
 let cleanup: (() => void) | undefined;

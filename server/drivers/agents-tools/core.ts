@@ -358,7 +358,7 @@ export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set(['tool_result_read',
 
 /** Handle a tool of this family, or return null when the name is not ours. */
 export async function callCoreTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
-  const { botId: BOT_ID, threadId: THREAD_ID, depth: DEPTH, externalRuntime: EXTERNAL_RUNTIME, coordinating: COORDINATING } = context;
+  const { externalRuntime: EXTERNAL_RUNTIME } = context;
   const { api, apiResponse } = context.client;
   const OURS = new Set([...CORE_TOOL_NAMES, "remove_reaction"]);
   if (!OURS.has(name)) return null;

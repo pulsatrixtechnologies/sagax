@@ -230,14 +230,13 @@ export type OpenedBotChat = NonNullable<ReturnType<typeof openInternalBotChat>>;
 
 export async function handleAskBot(opened: OpenedBotChat): Promise<typeof PASS | void> {
   const {
-    res, path, method, json, internalCapability, readInternalBody, req, store,
-    startTurn, coordinator, approvalBus, delegationWatch, phoneToolTaintedThreads,
-    incidentLedger, threadStarters, directRequestOwners, coordinationRequestId, engineEligibility,
+    res, json, internalCapability, readInternalBody, req, store,
+    coordinator, phoneToolTaintedThreads,
+    engineEligibility,
     connectorThread, pollOnlyCaller, delegateOnRuntime, peerThreadFor, threadBusy,
     runningTurnInstance, orgJoinsRunningTurn, peerSpeaker, isUnattended,
-    peerReviewRequired, cloudGuestDriven, idempotencyKeyOf, runtimeDelegationStatus,
-    openPersonCard, roomHandoffProblem, turnOrigin, joinPerson, applyDelegatedLevel,
-    adoptReservedWorkThread, openerFrom, latestFailedTurnCause, internalSender, url,
+    peerReviewRequired, cloudGuestDriven, idempotencyKeyOf,
+    internalSender,
     requireActiveInternalCapability, delegatedThisTurn,
   } = opened;
   const body = await readInternalBody();
@@ -392,15 +391,13 @@ export async function handleAskBot(opened: OpenedBotChat): Promise<typeof PASS |
 
 export async function handleDelegationStatus(opened: OpenedBotChat, taskId: string): Promise<typeof PASS | void> {
   const {
-    res, path, method, json, internalCapability, readInternalBody, req, store,
-    startTurn, coordinator, approvalBus, delegationWatch, phoneToolTaintedThreads,
-    incidentLedger, threadStarters, directRequestOwners, coordinationRequestId, engineEligibility,
-    connectorThread, pollOnlyCaller, delegateOnRuntime, peerThreadFor, threadBusy,
-    runningTurnInstance, orgJoinsRunningTurn, peerSpeaker, isUnattended,
-    peerReviewRequired, cloudGuestDriven, idempotencyKeyOf, runtimeDelegationStatus,
-    openPersonCard, roomHandoffProblem, turnOrigin, joinPerson, applyDelegatedLevel,
-    adoptReservedWorkThread, openerFrom, latestFailedTurnCause, internalSender, url,
-    requireActiveInternalCapability, delegatedThisTurn,
+    res, json, internalCapability, store,
+    coordinator, delegationWatch,
+    connectorThread,
+    runtimeDelegationStatus,
+    openPersonCard,
+    internalSender, url,
+    requireActiveInternalCapability,
   } = opened;
   if (internalCapability.delegatedThisTurn?.has(taskId)) {
     return json(res, 409, { error: `Task ${taskId} was delegated during this turn. Finish your response now so the other bot can work; its result will be delivered to this conversation automatically. Do not check or wait for a newly delegated task until a later turn.` });
@@ -474,15 +471,13 @@ export async function handleDelegationStatus(opened: OpenedBotChat, taskId: stri
 
 export async function handleRetryThread(opened: OpenedBotChat): Promise<typeof PASS | void> {
   const {
-    res, path, method, json, internalCapability, readInternalBody, req, store,
-    startTurn, coordinator, approvalBus, delegationWatch, phoneToolTaintedThreads,
-    incidentLedger, threadStarters, directRequestOwners, coordinationRequestId, engineEligibility,
-    connectorThread, pollOnlyCaller, delegateOnRuntime, peerThreadFor, threadBusy,
-    runningTurnInstance, orgJoinsRunningTurn, peerSpeaker, isUnattended,
-    peerReviewRequired, cloudGuestDriven, idempotencyKeyOf, runtimeDelegationStatus,
-    openPersonCard, roomHandoffProblem, turnOrigin, joinPerson, applyDelegatedLevel,
-    adoptReservedWorkThread, openerFrom, latestFailedTurnCause, internalSender, url,
-    requireActiveInternalCapability, delegatedThisTurn,
+    res, json, internalCapability, readInternalBody, store,
+    startTurn,
+    incidentLedger,
+    threadBusy,
+    peerSpeaker, isUnattended,
+    latestFailedTurnCause, internalSender,
+    requireActiveInternalCapability,
   } = opened;
   const body = await readInternalBody();
   const from = internalSender;
@@ -545,15 +540,12 @@ export async function handleRetryThread(opened: OpenedBotChat): Promise<typeof P
 
 export async function handleDelegateBot(opened: OpenedBotChat): Promise<typeof PASS | void> {
   const {
-    res, path, method, json, internalCapability, readInternalBody, req, store,
-    startTurn, coordinator, approvalBus, delegationWatch, phoneToolTaintedThreads,
-    incidentLedger, threadStarters, directRequestOwners, coordinationRequestId, engineEligibility,
-    connectorThread, pollOnlyCaller, delegateOnRuntime, peerThreadFor, threadBusy,
-    runningTurnInstance, orgJoinsRunningTurn, peerSpeaker, isUnattended,
-    peerReviewRequired, cloudGuestDriven, idempotencyKeyOf, runtimeDelegationStatus,
-    openPersonCard, roomHandoffProblem, turnOrigin, joinPerson, applyDelegatedLevel,
-    adoptReservedWorkThread, openerFrom, latestFailedTurnCause, internalSender, url,
-    requireActiveInternalCapability, delegatedThisTurn,
+    res, json, internalCapability, readInternalBody, req, store,
+    engineEligibility,
+    connectorThread, pollOnlyCaller, delegateOnRuntime,
+    idempotencyKeyOf,
+    internalSender,
+    delegatedThisTurn,
   } = opened;
   const body = await readInternalBody();
   const toBotRef = String(body.toBotId ?? "");
@@ -601,15 +593,13 @@ export async function handleDelegateBot(opened: OpenedBotChat): Promise<typeof P
 
 export async function handleRoomCoordination(opened: OpenedBotChat): Promise<typeof PASS | void> {
   const {
-    res, path, method, json, internalCapability, readInternalBody, req, store,
-    startTurn, coordinator, approvalBus, delegationWatch, phoneToolTaintedThreads,
-    incidentLedger, threadStarters, directRequestOwners, coordinationRequestId, engineEligibility,
-    connectorThread, pollOnlyCaller, delegateOnRuntime, peerThreadFor, threadBusy,
-    runningTurnInstance, orgJoinsRunningTurn, peerSpeaker, isUnattended,
-    peerReviewRequired, cloudGuestDriven, idempotencyKeyOf, runtimeDelegationStatus,
-    openPersonCard, roomHandoffProblem, turnOrigin, joinPerson, applyDelegatedLevel,
-    adoptReservedWorkThread, openerFrom, latestFailedTurnCause, internalSender, url,
-    requireActiveInternalCapability, delegatedThisTurn,
+    res, path, method, json, internalCapability, readInternalBody, store,
+    coordinator, approvalBus,
+    threadStarters, directRequestOwners, coordinationRequestId, engineEligibility,
+    peerReviewRequired,
+    roomHandoffProblem, turnOrigin, joinPerson, applyDelegatedLevel,
+    adoptReservedWorkThread, openerFrom, internalSender,
+    requireActiveInternalCapability,
   } = opened;
   const source = store.groupByThread(internalCapability.threadId);
   if (!internalCapability.roomCoordination || (source && (source.dm || !source.memberIds.includes(internalSender.id)))) {

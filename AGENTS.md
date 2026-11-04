@@ -1,3 +1,18 @@
+## Shared warm-resource budget (#1985, 2026-11-04)
+
+`server/resources/warm-resources.ts` is the shared retention registry for
+Codex, every ACP engine, Claude, Pi standby/fresh processes, per-thread HTTP
+MCP mounts and Perspicax sessions. Register active, claim before reuse,
+park idle only after the turn, mark ordinary teardown `retiring`, and forget
+only after close. Per-person caps reclaim that person's idle LRU first;
+global caps reclaim idle LRU across the server. Active turns never yield to
+budget pressure. Normal identity contracts and idle timers remain in place.
+Capability files for retained proxies are scoped by speaker as well as thread.
+`GET /api/health` includes aggregate `warmResources` only at its existing
+full-detail auth level. Defaults: 64 resources / 2 GiB globally, 12 / 1 GiB
+per person. Four `SAGAX_WARM_*` overrides, estimates, process-tree RSS sampling,
+load evidence and limits: `docs/verification/warm-resource-budget.md`.
+
 # Sagax agent notes
 
 ## Flow routine shadow readiness (#1991, 2026-11-04)

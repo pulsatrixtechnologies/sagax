@@ -1,5 +1,6 @@
 // Turn runner for createOpenAIChatRuntime (extracted for the #1383 function-size budget).
 import type { SendTurnInput } from "../contracts.ts";
+import { warmResourcePerson } from "../resources/warm-resources.ts";
 import { newId } from "../contracts.ts";
 import { ASK_USER_TOOL, ASK_USER_TOOL_DEFINITION, askQuestionSummary, parseAskQuestions, questionChoices } from "../../shared/ask-question.ts";
 import { allowsTool, parseToolScope } from "../../shared/tool-scope.ts";
@@ -84,9 +85,8 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
             computerUse: Boolean(options.computerUse),
             toolLimit: options.toolLimit,
             driverKind: options.driverKind,
-            // TurnAccess identity is person-scoped on org servers; botId is
-            // enough on solo (one person). Caps concurrent waiting prewarms.
-            person: turn.access?.identity ?? turn.botId,
+            // The speaker is independent of the account paying for the turn.
+            person: warmResourcePerson(turn),
             signal: turn.warmSignal,
           });
           if (outcome === "mounted" || outcome === "kept") {
@@ -233,7 +233,7 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
           toolLimit,
           callTimeoutMs: turn.mcpCallTimeoutMs,
         });
-        const cached = mountIntegrations ? warmToolSessions.get(turn.threadId, toolsFp) : undefined;
+        const cached = mountIntegrations ? warmToolSessions.get(turn.threadId, toolsFp, warmResourcePerson(turn)) : undefined;
         if (cached) {
           tools = cached;
           toolsReused = true;
@@ -241,6 +241,10 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
           turnTrace(turn.threadId, "tools-reused");
         } else {
           tools = await mountChatTools(mountIntegrations, abort.signal, options.computerUse, scope, turn.mcpCallTimeoutMs, toolLimit);
+          if (mountIntegrations) {
+            warmToolSessions.set(turn.threadId, toolsFp, tools, { person: warmResourcePerson(turn), active: true });
+            toolsReused = true; // The cache owns cleanup for new mounts too.
+          }
         }
         turnTrace(turn.threadId, "tools-mounted");
         for (const { server, reason } of tools.skipped) {
@@ -584,7 +588,7 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
             // token files). An interrupted turn drops it so a half-dead
             // MCP child is never reused.
             if (!abort.signal.aborted && mountIntegrations) {
-              warmToolSessions.keep(turn.threadId, tools, toolsFp, { prewarmed: false });
+              warmToolSessions.keep(turn.threadId, tools, toolsFp, { person: warmResourcePerson(turn), prewarmed: false });
             } else if (toolsReused) {
               await warmToolSessions.release(turn.threadId);
             } else {

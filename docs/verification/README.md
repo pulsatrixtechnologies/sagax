@@ -71,6 +71,7 @@ Use only mapped, tested commands:
 - [Claude coordination and turn-scoped tools](claude-tool-lifecycle.md)
 - [Codex bot instructions](codex-instructions.md)
 - [Codex process reuse, lifecycle and latency](codex-warm-process.md)
+- [Shared warm-resource caps and 50-person retention load](warm-resource-budget.md)
 - [Codex browser routing and native search](codex-browser-routing.md)
 - [Codex helper event isolation](codex-helpers.md)
 - [Qwen model route selection](qwen-models.md)

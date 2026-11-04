@@ -1221,6 +1221,7 @@ describe("HTTP MCP prewarm on warmOnly (#1975)", () => {
       config: OpenAICompatDriver.decodeConfig({ url: "https://api.example.test/v1", apiKeyEnv: "K", model: "fixture" }),
       environment: { K: "secret" },
     });
+
     const controller = new AbortController();
     try {
       await instance.adapter.sendTurn({
@@ -1248,4 +1249,31 @@ describe("HTTP MCP prewarm on warmOnly (#1975)", () => {
       await instance.dispose();
     }
   }, 30_000);
+  it("an old warm signal cannot close MCP tools already serving a real turn", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-http-active-warm-")); dirs.push(dir);
+    const launches = join(dir, "launches.txt"); writeFileSync(launches, "");
+    const agents = agentsServer(launches);
+    let finish!: (response: Response) => void;
+    let requests = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      if (String(url).endsWith("/models")) return Response.json({ data: [{ id: "fixture" }] });
+      if (++requests === 1) return new Promise<Response>(resolve => { finish = resolve; });
+      return sse(`data: ${JSON.stringify({ choices: [{ delta: { content: "Fixture done" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`);
+    }));
+    const instance = await OpenAICompatDriver.create({ instanceId: "openaiCompat", displayName: "Osprey", enabled: true,
+      config: OpenAICompatDriver.decodeConfig({ url: "https://api.example.test/v1", apiKeyEnv: "K", model: "fixture" }), environment: { K: "fixture-only" } });
+    const controller = new AbortController(); const events: RuntimeEvent[] = [];
+    instance.adapter.onEvent(event => events.push(event));
+    try {
+      const input = { threadId: "active-warm", botId: "bot-osprey", principalId: "osprey", text: "Fixture reply", integrations: { agents } };
+      await instance.adapter.sendTurn({ ...input, warmOnly: true, warmSignal: controller.signal });
+      const { turnId } = await instance.adapter.sendTurn(input);
+      await vi.waitFor(() => expect(finish).toBeTypeOf("function")); controller.abort();
+      finish(sse(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: "fixture-call", type: "function", function: { name: "agents_ping", arguments: "{}" } }] }, finish_reason: "tool_calls" }] })}\n\ndata: [DONE]\n\n`));
+      await vi.waitFor(() => expect(events.find(event => event.type === "turn.completed" && event.turnId === turnId)).toBeDefined(), { timeout: 10_000 });
+      expect(events.find(event => event.type === "turn.completed" && event.turnId === turnId), JSON.stringify(events)).toMatchObject({ ok: true });
+      expect(readFileSync(launches, "utf8").trim().split("\n").filter(Boolean)).toHaveLength(1);
+    } finally { controller.abort(); await instance.dispose(); }
+  });
+
 });

@@ -15,6 +15,7 @@ import type { LogSignal } from "./quiet-status.ts";
 import type { TurnLatency } from "./turn-latency.ts";
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
+import type { WarmResourceLease } from "../../resources/warm-resources.ts";
 
 /** Failures the person fixes on their provider account, not by retrying:
  * the process that reported one is healthy and stays pooled. */
@@ -128,6 +129,7 @@ export interface AcpConnection {
  *  later turns prompt the live session. The pool shape is the Claude
  *  driver's: spawn contract in, quiet-timeout out, crash drops the record. */
 export interface AcpSession {
+  budget?: WarmResourceLease;
   child: ChildProcessByStdio<Writable, Readable, Readable>;
   acp: AcpConnection;
   launch: { command: string; args?: string[] };

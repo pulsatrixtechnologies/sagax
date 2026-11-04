@@ -36,6 +36,10 @@ export class ChatToolSessionError extends Error {}
 /** A configured (custom) MCP server that could not mount this turn. */
 export interface SkippedChatMcpServer { server: string; reason: string }
 export interface ChatToolSession {
+  /** A retained mount is transferred to another turn's cancellation owner. */
+  detachAbort?(): void;
+  /** Process roots and retained catalog bytes for the shared warm budget. */
+  resources?(): { pids: number[]; bytes: number; stopped?: boolean };
   definitions: ChatToolDefinition[];
   /** Custom servers left out of this turn because they failed to start or advertised an unusable catalog. */
   skipped: SkippedChatMcpServer[];
@@ -104,6 +108,11 @@ export function chatMcpEnvironment(serverEnv: Record<string, string>, source: No
 
 /** Stdio MCP client used by chat tool mounts and by saved-steps replay. */
 export class ChatMcpClient {
+  resourcePid(): number | undefined {
+    // A root's exit does not confirm that its process tree is gone.
+    return this.treeStopped ? undefined : this.child.pid;
+  }
+  private treeStopped = false;
   private readonly frameBytes: number;
   private child: ReturnType<typeof spawnCli>;
   private buffer = "";
@@ -155,7 +164,9 @@ export class ChatMcpClient {
     // budgets on a loaded machine; elsewhere the budget is the TERM grace
     // before KILL, so it stays short.
     this.closing = killCliTree(this.child, process.platform === "win32" ? 15_000 : 5_000).then((stopped) => {
+      this.treeStopped = stopped;
       if (stopped) return;
+      this.closing = undefined; // A later budget sweep must retry the real kill.
       if (!inFlight) {
         console.warn("chat-mcp: shutdown could not be confirmed within its budget; no call was in flight, so the turn outcome is unaffected");
         return;
@@ -335,6 +346,7 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
     closed = true;
     signal.removeEventListener("abort", cancel);
     closing = Promise.allSettled(clients.map((client) => client.close())).then((results) => {
+      if (clients.some(client => client.resourcePid())) closing = undefined;
       if (results.some((result) => result.status === "rejected")) throw new ChatToolSessionError("MCP server shutdown could not be confirmed; execution outcome may be uncertain");
     });
     return closing;
@@ -563,6 +575,14 @@ export async function mountChatTools(integrations: SendTurnInput["integrations"]
   };
   return {
     definitions, skipped, validate, view, close,
+    detachAbort: () => {
+      signal.removeEventListener("abort", cancel);
+      // Validation/search and execute read the mount's lifetime signal too.
+      // A former warm/turn signal no longer owns this retained transport.
+      signal = new AbortController().signal;
+    },
+    resources: () => ({ pids: clients.flatMap(client => client.resourcePid() ? [client.resourcePid()!] : []), stopped: clients.every(client => !client.resourcePid()),
+      bytes: Math.max(DEFERRED_CATALOG_BYTES, Buffer.byteLength(JSON.stringify(definitions)) + Buffer.byteLength(JSON.stringify([...deferred.values()]))) }),
     async execute(name, args, callSignal) {
       if (name === searchName) { validate(name, args); return search(args); }
       if (name === callName) {

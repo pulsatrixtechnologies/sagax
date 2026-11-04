@@ -19,6 +19,7 @@ import { editionForMembers, editionStatus } from "../enterprise.ts";
 import { healthzUnreadyBody } from "../process/healthz.ts";
 import { healthDetail } from "../auth/request-auth.ts";
 import { PASS, type RouteHandler } from "./table.ts";
+import { warmResources } from "../resources/warm-resources.ts";
 
 /** One cached CLI probe, as GET /api/health lists it. */
 export interface HealthEngineProbe {
@@ -93,7 +94,7 @@ export function createBrowserEngineRoutes(deps: BrowserEngineRouteDeps): RouteHa
         .sort((a, b) => a.instanceId.localeCompare(b.instanceId));
       // app: "openmausbot" stays one release beside product: "sagax" (deployed
       // health checks grep the body for it; legacy-names.mjs HEALTH_IDENTITY).
-      return json(res, 200, { ...HEALTH_IDENTITY, pid: process.pid, static: Boolean(deps.staticDir()), capabilities, engines });
+      return json(res, 200, { ...HEALTH_IDENTITY, pid: process.pid, static: Boolean(deps.staticDir()), capabilities, engines, warmResources: warmResources.stats() });
     }
 
     // The bots' browser engine: install it on this machine (agent-browser +

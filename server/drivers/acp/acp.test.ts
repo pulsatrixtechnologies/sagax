@@ -3234,6 +3234,30 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     const launches = () => Number(readFileSync(countFile, "utf8"));
     const rpc = () => JSON.parse(readFileSync(rpcFile, "utf8")) as string[];
 
+    it("retires idle processes through the shared global cap across people", async () => {
+      vi.stubEnv("SAGAX_WARM_MAX_COUNT", "1");
+      try {
+        countFile = join(scratch, "budget-launches");
+        process.env.FAKE_ACP_LAUNCH_COUNT_FILE = countFile;
+        await create(SelectModelDriver, "simple");
+        for (const [threadId, principalId] of [["osprey-thread", "osprey"], ["wren-thread", "wren"], ["osprey-thread", "osprey"]]) {
+          const { turnId } = await instance.adapter.sendTurn({ threadId: threadId!, principalId, text: "Fixture reply" });
+          expect(await recorder.until(e => e.type === "turn.completed" && e.turnId === turnId)).toMatchObject({ ok: true });
+        }
+        expect(launches()).toBe(3);
+      } finally { vi.unstubAllEnvs(); }
+    });
+
+    it("does not reuse another person's process on a shared payer and thread", async () => {
+      countFile = join(scratch, "isolation-launches"); process.env.FAKE_ACP_LAUNCH_COUNT_FILE = countFile;
+      await create(SelectModelDriver, "simple");
+      for (const principalId of ["osprey", "wren"]) {
+        const { turnId } = await instance.adapter.sendTurn({ threadId: "same-thread", principalId, access: { via: "org-key", identity: "shared" }, text: "Fixture reply" });
+        expect(await recorder.until(e => e.type === "turn.completed" && e.turnId === turnId)).toMatchObject({ ok: true });
+      }
+      expect(launches()).toBe(2);
+    });
+
     it("recovers on the next explicit turn after session establishment fails", async () => {
       countFile = join(scratch, "launches");
       const appendFile = join(scratch, "rpc-all.jsonl");

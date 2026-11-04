@@ -8,6 +8,7 @@ import type { ProviderInstance, SendTurnInput } from "../../contracts.ts";
 import { recordEvents, type EventRecorder } from "../../testing/events.ts";
 import { removeTempDir } from "../../testing/cleanup.ts";
 import * as procs from "../../procs.ts";
+import { warmResources } from "../../resources/warm-resources.ts";
 
 const cli = fileURLToPath(new URL("../../testing/fake-codex-app-server.ts", import.meta.url));
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
@@ -59,6 +60,28 @@ describe("Codex retained app-server", () => {
     expect(seen().calls.find(c => c.method === "thread/resume")?.params.developerInstructions).toContain("First rule");
     await instance.dispose();
     expect(alive(pid)).toBe(false);
+  });
+
+  it("evicts a retained process at the shared cap, then resumes its next turn cold", async () => {
+    vi.stubEnv("SAGAX_WARM_MAX_COUNT", "1");
+    await create(); await send({ principalId: "osprey" }); const firstPid = seen().pid;
+    await send({ threadId: "thread-wren", principalId: "wren" });
+    await warmResources.settled(); expect(alive(firstPid)).toBe(false);
+    expect(instance.adapter.hasSession("thread-osprey")).toBe(false);
+    expect(await send({ principalId: "osprey", resumeCursor: "codex-thread-1" })).toMatchObject({ ok: true });
+  });
+
+  it("protects an active principal while another principal returns idle above the cap", async () => {
+    vi.stubEnv("SAGAX_WARM_MAX_COUNT", "1");
+    await create({ FAKE_CODEX_MODE: "approval" });
+    const first = await instance.adapter.sendTurn({ threadId: "thread-active", principalId: "osprey", text: "Fixture", model: "fixture-model", cwd: scratch });
+    await events.until(e => e.type === "request.opened" && e.turnId === first.turnId); const activePid = seen().pid;
+    const second = await instance.adapter.sendTurn({ threadId: "thread-idle", principalId: "wren", text: "Fixture", model: "fixture-model", cwd: scratch });
+    const ask = await events.until(e => e.type === "request.opened" && e.turnId === second.turnId);
+    await instance.adapter.respondToRequest("thread-idle", ask.requestId!, { behavior: "deny" });
+    await events.until(e => e.type === "turn.completed" && e.turnId === second.turnId);
+    await warmResources.settled(); expect(alive(activePid)).toBe(true);
+    await instance.adapter.interruptTurn("thread-active");
   });
 
   it("retires an idle process using the shared idle policy and respawns for the next turn", async () => {

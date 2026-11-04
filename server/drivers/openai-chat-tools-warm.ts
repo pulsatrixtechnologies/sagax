@@ -11,6 +11,7 @@ import { ASK_USER_TOOL } from "../../shared/ask-question.ts";
 import { allowsTool, parseToolScope, type ToolScope } from "../../shared/tool-scope.ts";
 import { mountChatTools, providerToolLimit, type ChatToolSession } from "./chat-mcp-tools.ts";
 import { PERSPICAX_TOKEN_ENV, warmCommsEnv, warmPerspicaxEnv, withoutTurnTokens } from "./spawn-contract.ts";
+import { MiB, warmResourcePerson, warmResourceTokenThread, warmResources, type WarmResourceBudget, type WarmResourceLease } from "../resources/warm-resources.ts";
 
 export type WarmToolSession = {
   session: ChatToolSession;
@@ -19,6 +20,8 @@ export type WarmToolSession = {
   person?: string;
   /** True when kept by warmOnly before any real turn. */
   prewarmed?: boolean;
+  budget?: WarmResourceLease;
+  active?: boolean;
 };
 
 /** Same as pi's withWarmTokens: per-turn tokens ride files so a kept MCP
@@ -26,6 +29,7 @@ export type WarmToolSession = {
 export function withWarmTokens(turn: SendTurnInput, threadId: string): SendTurnInput {
   const integrations = turn.integrations;
   if (!integrations) return turn;
+  threadId = warmResourceTokenThread({ ...turn, threadId });
   const agents = integrations.agents?.env?.SAGAX_COMMS_TOKEN
     ? { ...integrations.agents, env: warmCommsEnv(threadId, turn.botId, integrations.agents.env) }
     : integrations.agents;
@@ -73,20 +77,27 @@ export function chatToolsTurnLimit(
   return { ok: true, toolLimit, scope };
 }
 
-const MAX_WARM_TOOL_SESSIONS = 64;
 /** Concurrent prewarmed mounts one person may hold at once (#1975). */
 export const PREWARM_MCP_PER_PERSON = 2;
 
 /** Bounded per-thread MCP session cache for createOpenAIChatRuntime. */
-export function createWarmToolSessions(options?: { maxPerPerson?: number }) {
+export function createWarmToolSessions(options?: { maxPerPerson?: number; budget?: WarmResourceBudget; mount?: typeof mountChatTools }) {
   const sessions = new Map<string, WarmToolSession>();
+  const budget = options?.budget ?? warmResources;
   const maxPerPerson = Math.max(1, options?.maxPerPerson ?? PREWARM_MCP_PER_PERSON);
+
+  const closeRow = async (row: WarmToolSession): Promise<void> => {
+    row.budget?.retiring();
+    await row.session.close().catch(() => {});
+    const usage = row.session.resources?.();
+    if (usage?.stopped ?? !usage?.pids.length) row.budget?.forget();
+  };
 
   const evict = async (threadId: string): Promise<void> => {
     const row = sessions.get(threadId);
     if (!row) return;
     sessions.delete(threadId);
-    await row.session.close().catch(() => {});
+    await closeRow(row);
   };
 
   const prewarmedFor = (person: string): string[] => {
@@ -98,10 +109,10 @@ export function createWarmToolSessions(options?: { maxPerPerson?: number }) {
   };
 
   return {
-    get(threadId: string, fingerprint: string): ChatToolSession | undefined {
+    get(threadId: string, fingerprint: string, person?: string): ChatToolSession | undefined {
       const row = sessions.get(threadId);
       if (!row) return undefined;
-      if (row.fingerprint !== fingerprint) {
+      if (row.fingerprint !== fingerprint || (person !== undefined && row.person !== person)) {
         void evict(threadId);
         return undefined;
       }
@@ -123,31 +134,47 @@ export function createWarmToolSessions(options?: { maxPerPerson?: number }) {
       threadId: string,
       fingerprint: string,
       session: ChatToolSession,
-      meta?: { person?: string; prewarmed?: boolean },
+      meta?: { person?: string; prewarmed?: boolean; active?: boolean },
     ): void {
       const previous = sessions.get(threadId);
-      if (previous && previous.session !== session) void previous.session.close().catch(() => {});
+      if (previous && previous.session !== session) {
+        void closeRow(previous);
+      }
       sessions.delete(threadId);
-      sessions.set(threadId, {
+      const row: WarmToolSession = {
         session,
         fingerprint,
         ...(meta?.person ? { person: meta.person } : previous?.person ? { person: previous.person } : {}),
         ...(meta?.prewarmed !== undefined
           ? { prewarmed: meta.prewarmed }
           : previous?.prewarmed !== undefined ? { prewarmed: previous.prewarmed } : {}),
+        active: meta?.active === true,
+        budget: previous?.session === session ? previous.budget : undefined,
+      };
+      sessions.set(threadId, row);
+      if (!row.active && !row.prewarmed) session.detachAbort?.();
+      const usage = () => session.resources?.() ?? { pids: [], bytes: MiB, stopped: undefined };
+      row.budget ??= budget.register({
+        person: row.person ?? "solo", kind: "http-mcp",
+        pids: () => usage().pids,
+        count: () => Math.max(1, usage().pids.length),
+        bytes: () => usage().bytes + Math.max(1, usage().pids.length) * 32 * MiB,
+        protected: () => sessions.get(threadId)?.session === session && sessions.get(threadId)?.active === true,
+        evict: () => {
+          if (sessions.get(threadId)?.session === session) sessions.delete(threadId);
+          return session.close().then(() => usage().stopped ?? usage().pids.every(pid => {
+            try { process.kill(pid, 0); return false; } catch { return true; }
+          }));
+        },
       });
-      while (sessions.size > MAX_WARM_TOOL_SESSIONS) {
-        const oldest = sessions.keys().next().value;
-        if (oldest === undefined) break;
-        void evict(oldest);
-      }
+      if (row.active) row.budget.active(); else row.budget.idle();
     },
     /** Keep the session for the next turn of this thread; do not close. */
     keep(
       threadId: string,
       session: ChatToolSession,
       fingerprint: string,
-      meta?: { person?: string; prewarmed?: boolean },
+      meta?: { person?: string; prewarmed?: boolean; active?: boolean },
     ): void {
       this.set(threadId, fingerprint, session, meta);
     },
@@ -156,6 +183,9 @@ export function createWarmToolSessions(options?: { maxPerPerson?: number }) {
       const row = sessions.get(threadId);
       if (!row) return;
       row.prewarmed = false;
+      row.active = true;
+      row.session.detachAbort?.();
+      row.budget?.active();
     },
     async release(threadId: string): Promise<void> {
       await evict(threadId);
@@ -180,6 +210,7 @@ export function createWarmToolSessions(options?: { maxPerPerson?: number }) {
       },
     ): Promise<"kept" | "mounted" | "limited" | "skipped" | "aborted"> {
       if (opts.signal?.aborted) return "aborted";
+      if (sessions.get(turn.threadId)?.active) return "skipped";
       if (!turn.integrations) return "skipped";
       const limit = chatToolsTurnLimit({
         toolsEnabled: true,
@@ -195,14 +226,15 @@ export function createWarmToolSessions(options?: { maxPerPerson?: number }) {
         toolLimit: limit.toolLimit,
         callTimeoutMs: turn.mcpCallTimeoutMs,
       });
-      if (this.get(turn.threadId, fingerprint)) {
+      const person = turn.principalId ?? opts.person ?? warmResourcePerson(turn);
+      if (this.get(turn.threadId, fingerprint, person)) {
+        sessions.get(turn.threadId)?.budget?.touch();
         if (opts.person) {
           const row = sessions.get(turn.threadId);
           if (row && !row.person) row.person = opts.person;
         }
         return "kept";
       }
-      const person = opts.person?.trim();
       if (person) {
         const waiting = prewarmedFor(person);
         if (waiting.length >= maxPerPerson && !waiting.includes(turn.threadId)) {
@@ -212,7 +244,9 @@ export function createWarmToolSessions(options?: { maxPerPerson?: number }) {
         }
       }
       try {
-        const session = await mountChatTools(
+        const before = sessions.get(turn.threadId);
+        if (before?.active) return "skipped";
+        const session = await (options?.mount ?? mountChatTools)(
           warmTurn.integrations,
           opts.signal ?? AbortSignal.timeout(30_000),
           opts.computerUse,
@@ -224,8 +258,14 @@ export function createWarmToolSessions(options?: { maxPerPerson?: number }) {
           await session.close().catch(() => {});
           return "aborted";
         }
+        // A real turn or newer prewarm may have installed its mount while
+        // this handshake was waiting. Never replace its resources.
+        if (sessions.get(turn.threadId) !== before || sessions.get(turn.threadId)?.active) {
+          await session.close().catch(() => {});
+          return "skipped";
+        }
         this.keep(turn.threadId, session, fingerprint, {
-          ...(person ? { person } : {}),
+          person,
           prewarmed: true,
         });
         return "mounted";

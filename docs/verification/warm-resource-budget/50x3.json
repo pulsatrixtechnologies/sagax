@@ -1,0 +1,1126 @@
+{
+  "people": 50,
+  "threadsPerPerson": 3,
+  "turns": 150,
+  "elapsedMs": 56836,
+  "limits": {
+    "count": 16,
+    "bytes": 1073741824,
+    "personCount": 6,
+    "personBytes": 536870912
+  },
+  "final": {
+    "count": 12,
+    "memoryBytes": 693043430,
+    "sampledRssBytes": 387235840,
+    "active": 0,
+    "idle": 12,
+    "closing": 0,
+    "resources": 12,
+    "people": 3,
+    "limits": {
+      "count": 16,
+      "bytes": 1073741824,
+      "personCount": 6,
+      "personBytes": 536870912
+    },
+    "kinds": {
+      "http-mcp": {
+        "count": 5,
+        "memoryBytes": 218038272,
+        "sampledRssBytes": 218038272,
+        "active": 0,
+        "idle": 5,
+        "closing": 0
+      },
+      "perspicax": {
+        "count": 5,
+        "memoryBytes": 5243110,
+        "sampledRssBytes": 0,
+        "active": 0,
+        "idle": 5,
+        "closing": 0
+      },
+      "codex": {
+        "count": 1,
+        "memoryBytes": 201326592,
+        "sampledRssBytes": 84705280,
+        "active": 0,
+        "idle": 1,
+        "closing": 0
+      },
+      "acp": {
+        "count": 1,
+        "memoryBytes": 268435456,
+        "sampledRssBytes": 84492288,
+        "active": 0,
+        "idle": 1,
+        "closing": 0
+      }
+    },
+    "overBudget": false,
+    "evictions": 438,
+    "personEvictions": 200,
+    "globalEvictions": 238,
+    "closeFailures": 0
+  },
+  "exchanges": 150,
+  "peakRetainedCount": 15,
+  "peakChargedBytes": 1006420244,
+  "peakSampledChildRssBytes": 512786432,
+  "samples": [
+    {
+      "turn": 1,
+      "count": 3,
+      "memoryBytes": 246038574,
+      "sampledRssBytes": 125534208,
+      "hostRssBytes": 130854960
+    },
+    {
+      "turn": 2,
+      "count": 5,
+      "memoryBytes": 357679196,
+      "sampledRssBytes": 170164224,
+      "hostRssBytes": 131248224
+    },
+    {
+      "turn": 3,
+      "count": 5,
+      "memoryBytes": 290242652,
+      "sampledRssBytes": 169164800,
+      "hostRssBytes": 131428448
+    },
+    {
+      "turn": 4,
+      "count": 8,
+      "memoryBytes": 603062410,
+      "sampledRssBytes": 295567360,
+      "hostRssBytes": 133345952
+    },
+    {
+      "turn": 5,
+      "count": 10,
+      "memoryBytes": 580649144,
+      "sampledRssBytes": 340049920,
+      "hostRssBytes": 133542560
+    },
+    {
+      "turn": 6,
+      "count": 10,
+      "memoryBytes": 648200376,
+      "sampledRssBytes": 337920000,
+      "hostRssBytes": 133640864
+    },
+    {
+      "turn": 7,
+      "count": 13,
+      "memoryBytes": 894386406,
+      "sampledRssBytes": 465387520,
+      "hostRssBytes": 133722832
+    },
+    {
+      "turn": 8,
+      "count": 12,
+      "memoryBytes": 760103142,
+      "sampledRssBytes": 384204800,
+      "hostRssBytes": 133804752
+    },
+    {
+      "turn": 9,
+      "count": 12,
+      "memoryBytes": 692797670,
+      "sampledRssBytes": 381698048,
+      "hostRssBytes": 134034152
+    },
+    {
+      "turn": 10,
+      "count": 15,
+      "memoryBytes": 1005601044,
+      "sampledRssBytes": 508461056,
+      "hostRssBytes": 134099688
+    },
+    {
+      "turn": 11,
+      "count": 12,
+      "memoryBytes": 625721574,
+      "sampledRssBytes": 384073728,
+      "hostRssBytes": 136311864
+    },
+    {
+      "turn": 12,
+      "count": 12,
+      "memoryBytes": 692863206,
+      "sampledRssBytes": 384352256,
+      "hostRssBytes": 138835360
+    },
+    {
+      "turn": 13,
+      "count": 15,
+      "memoryBytes": 938934548,
+      "sampledRssBytes": 512131072,
+      "hostRssBytes": 141932368
+    },
+    {
+      "turn": 14,
+      "count": 12,
+      "memoryBytes": 759988454,
+      "sampledRssBytes": 386285568,
+      "hostRssBytes": 144505040
+    },
+    {
+      "turn": 15,
+      "count": 12,
+      "memoryBytes": 692355302,
+      "sampledRssBytes": 382337024,
+      "hostRssBytes": 147454472
+    },
+    {
+      "turn": 16,
+      "count": 15,
+      "memoryBytes": 1005650196,
+      "sampledRssBytes": 509313024,
+      "hostRssBytes": 147667488
+    },
+    {
+      "turn": 17,
+      "count": 12,
+      "memoryBytes": 625148134,
+      "sampledRssBytes": 381534208,
+      "hostRssBytes": 147749408
+    },
+    {
+      "turn": 18,
+      "count": 12,
+      "memoryBytes": 692142310,
+      "sampledRssBytes": 382828544,
+      "hostRssBytes": 147946016
+    },
+    {
+      "turn": 19,
+      "count": 15,
+      "memoryBytes": 938197268,
+      "sampledRssBytes": 508264448,
+      "hostRssBytes": 147962400
+    },
+    {
+      "turn": 20,
+      "count": 12,
+      "memoryBytes": 759431398,
+      "sampledRssBytes": 385400832,
+      "hostRssBytes": 147978784
+    },
+    {
+      "turn": 21,
+      "count": 12,
+      "memoryBytes": 692224230,
+      "sampledRssBytes": 382517248,
+      "hostRssBytes": 147995168
+    },
+    {
+      "turn": 22,
+      "count": 15,
+      "memoryBytes": 1004994836,
+      "sampledRssBytes": 508575744,
+      "hostRssBytes": 149060248
+    },
+    {
+      "turn": 23,
+      "count": 12,
+      "memoryBytes": 625737958,
+      "sampledRssBytes": 382009344,
+      "hostRssBytes": 151960648
+    },
+    {
+      "turn": 24,
+      "count": 12,
+      "memoryBytes": 692977894,
+      "sampledRssBytes": 381452288,
+      "hostRssBytes": 154287536
+    },
+    {
+      "turn": 25,
+      "count": 15,
+      "memoryBytes": 938983700,
+      "sampledRssBytes": 508887040,
+      "hostRssBytes": 157089608
+    },
+    {
+      "turn": 26,
+      "count": 12,
+      "memoryBytes": 760037606,
+      "sampledRssBytes": 385794048,
+      "hostRssBytes": 159498392
+    },
+    {
+      "turn": 27,
+      "count": 12,
+      "memoryBytes": 692617446,
+      "sampledRssBytes": 383238144,
+      "hostRssBytes": 160891200
+    },
+    {
+      "turn": 28,
+      "count": 15,
+      "memoryBytes": 1005338900,
+      "sampledRssBytes": 507854848,
+      "hostRssBytes": 160940352
+    },
+    {
+      "turn": 29,
+      "count": 12,
+      "memoryBytes": 624787686,
+      "sampledRssBytes": 381321216,
+      "hostRssBytes": 160956736
+    },
+    {
+      "turn": 30,
+      "count": 12,
+      "memoryBytes": 692076774,
+      "sampledRssBytes": 384532480,
+      "hostRssBytes": 160973120
+    },
+    {
+      "turn": 31,
+      "count": 15,
+      "memoryBytes": 938328340,
+      "sampledRssBytes": 511131648,
+      "hostRssBytes": 160973120
+    },
+    {
+      "turn": 32,
+      "count": 12,
+      "memoryBytes": 759677158,
+      "sampledRssBytes": 385531904,
+      "hostRssBytes": 160973120
+    },
+    {
+      "turn": 33,
+      "count": 12,
+      "memoryBytes": 691929318,
+      "sampledRssBytes": 383057920,
+      "hostRssBytes": 160973120
+    },
+    {
+      "turn": 34,
+      "count": 15,
+      "memoryBytes": 1004536084,
+      "sampledRssBytes": 507559936,
+      "hostRssBytes": 160973120
+    },
+    {
+      "turn": 35,
+      "count": 12,
+      "memoryBytes": 623378662,
+      "sampledRssBytes": 379060224,
+      "hostRssBytes": 161005888
+    },
+    {
+      "turn": 36,
+      "count": 12,
+      "memoryBytes": 692240614,
+      "sampledRssBytes": 380387328,
+      "hostRssBytes": 161022272
+    },
+    {
+      "turn": 37,
+      "count": 15,
+      "memoryBytes": 938033428,
+      "sampledRssBytes": 505151488,
+      "hostRssBytes": 161055040
+    },
+    {
+      "turn": 38,
+      "count": 12,
+      "memoryBytes": 759365862,
+      "sampledRssBytes": 379518976,
+      "hostRssBytes": 160661800
+    },
+    {
+      "turn": 39,
+      "count": 12,
+      "memoryBytes": 692568294,
+      "sampledRssBytes": 379256832,
+      "hostRssBytes": 160661800
+    },
+    {
+      "turn": 40,
+      "count": 15,
+      "memoryBytes": 1005863188,
+      "sampledRssBytes": 505774080,
+      "hostRssBytes": 160678184
+    },
+    {
+      "turn": 41,
+      "count": 12,
+      "memoryBytes": 625787110,
+      "sampledRssBytes": 381108224,
+      "hostRssBytes": 160694568
+    },
+    {
+      "turn": 42,
+      "count": 12,
+      "memoryBytes": 692322534,
+      "sampledRssBytes": 379420672,
+      "hostRssBytes": 160694568
+    },
+    {
+      "turn": 43,
+      "count": 15,
+      "memoryBytes": 938197268,
+      "sampledRssBytes": 505364480,
+      "hostRssBytes": 160710952
+    },
+    {
+      "turn": 44,
+      "count": 12,
+      "memoryBytes": 760037606,
+      "sampledRssBytes": 381812736,
+      "hostRssBytes": 160727336
+    },
+    {
+      "turn": 45,
+      "count": 12,
+      "memoryBytes": 692977894,
+      "sampledRssBytes": 382517248,
+      "hostRssBytes": 160727336
+    },
+    {
+      "turn": 46,
+      "count": 15,
+      "memoryBytes": 1006125332,
+      "sampledRssBytes": 509100032,
+      "hostRssBytes": 160727336
+    },
+    {
+      "turn": 47,
+      "count": 12,
+      "memoryBytes": 626131174,
+      "sampledRssBytes": 383238144,
+      "hostRssBytes": 160776488
+    },
+    {
+      "turn": 48,
+      "count": 12,
+      "memoryBytes": 693403878,
+      "sampledRssBytes": 382451712,
+      "hostRssBytes": 160940328
+    },
+    {
+      "turn": 49,
+      "count": 15,
+      "memoryBytes": 939082004,
+      "sampledRssBytes": 508592128,
+      "hostRssBytes": 161841592
+    },
+    {
+      "turn": 50,
+      "count": 12,
+      "memoryBytes": 760414438,
+      "sampledRssBytes": 382844928,
+      "hostRssBytes": 161890744
+    },
+    {
+      "turn": 51,
+      "count": 12,
+      "memoryBytes": 693223654,
+      "sampledRssBytes": 382713856,
+      "hostRssBytes": 161890744
+    },
+    {
+      "turn": 52,
+      "count": 15,
+      "memoryBytes": 1006174484,
+      "sampledRssBytes": 510164992,
+      "hostRssBytes": 161890744
+    },
+    {
+      "turn": 53,
+      "count": 12,
+      "memoryBytes": 625377510,
+      "sampledRssBytes": 381927424,
+      "hostRssBytes": 161890744
+    },
+    {
+      "turn": 54,
+      "count": 12,
+      "memoryBytes": 692666598,
+      "sampledRssBytes": 383909888,
+      "hostRssBytes": 161890744
+    },
+    {
+      "turn": 55,
+      "count": 15,
+      "memoryBytes": 938524948,
+      "sampledRssBytes": 510246912,
+      "hostRssBytes": 161907128
+    },
+    {
+      "turn": 56,
+      "count": 12,
+      "memoryBytes": 759021798,
+      "sampledRssBytes": 383795200,
+      "hostRssBytes": 161907128
+    },
+    {
+      "turn": 57,
+      "count": 12,
+      "memoryBytes": 691880166,
+      "sampledRssBytes": 384204800,
+      "hostRssBytes": 161923512
+    },
+    {
+      "turn": 58,
+      "count": 15,
+      "memoryBytes": 1004667156,
+      "sampledRssBytes": 508837888,
+      "hostRssBytes": 161923512
+    },
+    {
+      "turn": 59,
+      "count": 12,
+      "memoryBytes": 625410278,
+      "sampledRssBytes": 386842624,
+      "hostRssBytes": 161972664
+    },
+    {
+      "turn": 60,
+      "count": 12,
+      "memoryBytes": 693059814,
+      "sampledRssBytes": 384565248,
+      "hostRssBytes": 162759192
+    },
+    {
+      "turn": 61,
+      "count": 15,
+      "memoryBytes": 938885396,
+      "sampledRssBytes": 511541248,
+      "hostRssBytes": 162759192
+    },
+    {
+      "turn": 62,
+      "count": 12,
+      "memoryBytes": 760266982,
+      "sampledRssBytes": 383074304,
+      "hostRssBytes": 162759192
+    },
+    {
+      "turn": 63,
+      "count": 12,
+      "memoryBytes": 693223654,
+      "sampledRssBytes": 384401408,
+      "hostRssBytes": 162759192
+    },
+    {
+      "turn": 64,
+      "count": 15,
+      "memoryBytes": 1005961492,
+      "sampledRssBytes": 512786432,
+      "hostRssBytes": 162759192
+    },
+    {
+      "turn": 65,
+      "count": 12,
+      "memoryBytes": 625426662,
+      "sampledRssBytes": 385433600,
+      "hostRssBytes": 162808344
+    },
+    {
+      "turn": 66,
+      "count": 12,
+      "memoryBytes": 692748518,
+      "sampledRssBytes": 385515520,
+      "hostRssBytes": 162808344
+    },
+    {
+      "turn": 67,
+      "count": 15,
+      "memoryBytes": 938672404,
+      "sampledRssBytes": 512196608,
+      "hostRssBytes": 162808344
+    },
+    {
+      "turn": 68,
+      "count": 12,
+      "memoryBytes": 759447782,
+      "sampledRssBytes": 385826816,
+      "hostRssBytes": 162824728
+    },
+    {
+      "turn": 69,
+      "count": 12,
+      "memoryBytes": 692256998,
+      "sampledRssBytes": 385548288,
+      "hostRssBytes": 162841112
+    },
+    {
+      "turn": 70,
+      "count": 15,
+      "memoryBytes": 1005142292,
+      "sampledRssBytes": 512655360,
+      "hostRssBytes": 162857496
+    },
+    {
+      "turn": 71,
+      "count": 12,
+      "memoryBytes": 625410278,
+      "sampledRssBytes": 385056768,
+      "hostRssBytes": 163594944
+    },
+    {
+      "turn": 72,
+      "count": 12,
+      "memoryBytes": 692715750,
+      "sampledRssBytes": 385335296,
+      "hostRssBytes": 163594944
+    },
+    {
+      "turn": 73,
+      "count": 15,
+      "memoryBytes": 938393876,
+      "sampledRssBytes": 512114688,
+      "hostRssBytes": 163644096
+    },
+    {
+      "turn": 74,
+      "count": 12,
+      "memoryBytes": 759382246,
+      "sampledRssBytes": 382386176,
+      "hostRssBytes": 163644096
+    },
+    {
+      "turn": 75,
+      "count": 12,
+      "memoryBytes": 692256998,
+      "sampledRssBytes": 384663552,
+      "hostRssBytes": 150700736
+    },
+    {
+      "turn": 76,
+      "count": 15,
+      "memoryBytes": 1004978452,
+      "sampledRssBytes": 511213568,
+      "hostRssBytes": 150700736
+    },
+    {
+      "turn": 77,
+      "count": 12,
+      "memoryBytes": 624853222,
+      "sampledRssBytes": 384057344,
+      "hostRssBytes": 150717120
+    },
+    {
+      "turn": 78,
+      "count": 12,
+      "memoryBytes": 692306150,
+      "sampledRssBytes": 384729088,
+      "hostRssBytes": 150717120
+    },
+    {
+      "turn": 79,
+      "count": 15,
+      "memoryBytes": 938443028,
+      "sampledRssBytes": 511787008,
+      "hostRssBytes": 150749888
+    },
+    {
+      "turn": 80,
+      "count": 12,
+      "memoryBytes": 759890150,
+      "sampledRssBytes": 384827392,
+      "hostRssBytes": 150766272
+    },
+    {
+      "turn": 81,
+      "count": 12,
+      "memoryBytes": 692469990,
+      "sampledRssBytes": 384729088,
+      "hostRssBytes": 151421704
+    },
+    {
+      "turn": 82,
+      "count": 15,
+      "memoryBytes": 1005355284,
+      "sampledRssBytes": 511344640,
+      "hostRssBytes": 151438088
+    },
+    {
+      "turn": 83,
+      "count": 12,
+      "memoryBytes": 625590502,
+      "sampledRssBytes": 384892928,
+      "hostRssBytes": 151454472
+    },
+    {
+      "turn": 84,
+      "count": 12,
+      "memoryBytes": 692699366,
+      "sampledRssBytes": 385499136,
+      "hostRssBytes": 151454472
+    },
+    {
+      "turn": 85,
+      "count": 15,
+      "memoryBytes": 938639636,
+      "sampledRssBytes": 510853120,
+      "hostRssBytes": 151454472
+    },
+    {
+      "turn": 86,
+      "count": 12,
+      "memoryBytes": 759611622,
+      "sampledRssBytes": 384729088,
+      "hostRssBytes": 151470856
+    },
+    {
+      "turn": 87,
+      "count": 12,
+      "memoryBytes": 692289766,
+      "sampledRssBytes": 384204800,
+      "hostRssBytes": 151503624
+    },
+    {
+      "turn": 88,
+      "count": 15,
+      "memoryBytes": 1004994836,
+      "sampledRssBytes": 511787008,
+      "hostRssBytes": 151503624
+    },
+    {
+      "turn": 89,
+      "count": 12,
+      "memoryBytes": 624705766,
+      "sampledRssBytes": 383778816,
+      "hostRssBytes": 151503624
+    },
+    {
+      "turn": 90,
+      "count": 12,
+      "memoryBytes": 692240614,
+      "sampledRssBytes": 384663552,
+      "hostRssBytes": 151552776
+    },
+    {
+      "turn": 91,
+      "count": 15,
+      "memoryBytes": 937935124,
+      "sampledRssBytes": 509657088,
+      "hostRssBytes": 151552776
+    },
+    {
+      "turn": 92,
+      "count": 12,
+      "memoryBytes": 759300326,
+      "sampledRssBytes": 384532480,
+      "hostRssBytes": 152355736
+    },
+    {
+      "turn": 93,
+      "count": 12,
+      "memoryBytes": 692650214,
+      "sampledRssBytes": 384204800,
+      "hostRssBytes": 152372120
+    },
+    {
+      "turn": 94,
+      "count": 15,
+      "memoryBytes": 1005748500,
+      "sampledRssBytes": 509968384,
+      "hostRssBytes": 152372120
+    },
+    {
+      "turn": 95,
+      "count": 12,
+      "memoryBytes": 625688806,
+      "sampledRssBytes": 383975424,
+      "hostRssBytes": 152372120
+    },
+    {
+      "turn": 96,
+      "count": 12,
+      "memoryBytes": 692453606,
+      "sampledRssBytes": 383123456,
+      "hostRssBytes": 152372120
+    },
+    {
+      "turn": 97,
+      "count": 15,
+      "memoryBytes": 938246420,
+      "sampledRssBytes": 510771200,
+      "hostRssBytes": 152372120
+    },
+    {
+      "turn": 98,
+      "count": 12,
+      "memoryBytes": 759218406,
+      "sampledRssBytes": 383991808,
+      "hostRssBytes": 152372120
+    },
+    {
+      "turn": 99,
+      "count": 12,
+      "memoryBytes": 691945702,
+      "sampledRssBytes": 384057344,
+      "hostRssBytes": 152503192
+    },
+    {
+      "turn": 100,
+      "count": 15,
+      "memoryBytes": 1004683540,
+      "sampledRssBytes": 511819776,
+      "hostRssBytes": 152503192
+    },
+    {
+      "turn": 101,
+      "count": 12,
+      "memoryBytes": 624378086,
+      "sampledRssBytes": 384335872,
+      "hostRssBytes": 152503192
+    },
+    {
+      "turn": 102,
+      "count": 12,
+      "memoryBytes": 691945702,
+      "sampledRssBytes": 382222336,
+      "hostRssBytes": 152503192
+    },
+    {
+      "turn": 103,
+      "count": 15,
+      "memoryBytes": 937623828,
+      "sampledRssBytes": 507691008,
+      "hostRssBytes": 152503192
+    },
+    {
+      "turn": 104,
+      "count": 12,
+      "memoryBytes": 759152870,
+      "sampledRssBytes": 382910464,
+      "hostRssBytes": 152503192
+    },
+    {
+      "turn": 105,
+      "count": 12,
+      "memoryBytes": 692568294,
+      "sampledRssBytes": 383303680,
+      "hostRssBytes": 152503192
+    },
+    {
+      "turn": 106,
+      "count": 15,
+      "memoryBytes": 1005519124,
+      "sampledRssBytes": 509034496,
+      "hostRssBytes": 152503192
+    },
+    {
+      "turn": 107,
+      "count": 12,
+      "memoryBytes": 626163942,
+      "sampledRssBytes": 385138688,
+      "hostRssBytes": 152503192
+    },
+    {
+      "turn": 108,
+      "count": 12,
+      "memoryBytes": 693551334,
+      "sampledRssBytes": 386465792,
+      "hostRssBytes": 152519576
+    },
+    {
+      "turn": 109,
+      "count": 15,
+      "memoryBytes": 939507988,
+      "sampledRssBytes": 511246336,
+      "hostRssBytes": 152519576
+    },
+    {
+      "turn": 110,
+      "count": 12,
+      "memoryBytes": 760496358,
+      "sampledRssBytes": 383533056,
+      "hostRssBytes": 152519576
+    },
+    {
+      "turn": 111,
+      "count": 12,
+      "memoryBytes": 693420262,
+      "sampledRssBytes": 386220032,
+      "hostRssBytes": 152748952
+    },
+    {
+      "turn": 112,
+      "count": 15,
+      "memoryBytes": 1006256404,
+      "sampledRssBytes": 512016384,
+      "hostRssBytes": 152748952
+    },
+    {
+      "turn": 113,
+      "count": 12,
+      "memoryBytes": 625344742,
+      "sampledRssBytes": 384139264,
+      "hostRssBytes": 152748952
+    },
+    {
+      "turn": 114,
+      "count": 12,
+      "memoryBytes": 692355302,
+      "sampledRssBytes": 383025152,
+      "hostRssBytes": 152765336
+    },
+    {
+      "turn": 115,
+      "count": 15,
+      "memoryBytes": 938279188,
+      "sampledRssBytes": 510197760,
+      "hostRssBytes": 152765336
+    },
+    {
+      "turn": 116,
+      "count": 12,
+      "memoryBytes": 759480550,
+      "sampledRssBytes": 380502016,
+      "hostRssBytes": 152765336
+    },
+    {
+      "turn": 117,
+      "count": 12,
+      "memoryBytes": 692322534,
+      "sampledRssBytes": 381140992,
+      "hostRssBytes": 152765336
+    },
+    {
+      "turn": 118,
+      "count": 15,
+      "memoryBytes": 1005338900,
+      "sampledRssBytes": 507445248,
+      "hostRssBytes": 152765336
+    },
+    {
+      "turn": 119,
+      "count": 12,
+      "memoryBytes": 625328358,
+      "sampledRssBytes": 379813888,
+      "hostRssBytes": 152781720
+    },
+    {
+      "turn": 120,
+      "count": 12,
+      "memoryBytes": 692551910,
+      "sampledRssBytes": 382042112,
+      "hostRssBytes": 152781720
+    },
+    {
+      "turn": 121,
+      "count": 15,
+      "memoryBytes": 938426644,
+      "sampledRssBytes": 507527168,
+      "hostRssBytes": 152601448
+    },
+    {
+      "turn": 122,
+      "count": 12,
+      "memoryBytes": 760135910,
+      "sampledRssBytes": 382664704,
+      "hostRssBytes": 152601448
+    },
+    {
+      "turn": 123,
+      "count": 12,
+      "memoryBytes": 693207270,
+      "sampledRssBytes": 382287872,
+      "hostRssBytes": 152601448
+    },
+    {
+      "turn": 124,
+      "count": 15,
+      "memoryBytes": 1005994260,
+      "sampledRssBytes": 507346944,
+      "hostRssBytes": 152601448
+    },
+    {
+      "turn": 125,
+      "count": 12,
+      "memoryBytes": 625918182,
+      "sampledRssBytes": 381960192,
+      "hostRssBytes": 152601448
+    },
+    {
+      "turn": 126,
+      "count": 12,
+      "memoryBytes": 693272806,
+      "sampledRssBytes": 381911040,
+      "hostRssBytes": 152601448
+    },
+    {
+      "turn": 127,
+      "count": 15,
+      "memoryBytes": 939163924,
+      "sampledRssBytes": 509558784,
+      "hostRssBytes": 152617832
+    },
+    {
+      "turn": 128,
+      "count": 12,
+      "memoryBytes": 759726310,
+      "sampledRssBytes": 382861312,
+      "hostRssBytes": 152617832
+    },
+    {
+      "turn": 129,
+      "count": 12,
+      "memoryBytes": 692502758,
+      "sampledRssBytes": 383238144,
+      "hostRssBytes": 152650600
+    },
+    {
+      "turn": 130,
+      "count": 15,
+      "memoryBytes": 1005437204,
+      "sampledRssBytes": 508657664,
+      "hostRssBytes": 152650600
+    },
+    {
+      "turn": 131,
+      "count": 12,
+      "memoryBytes": 625082598,
+      "sampledRssBytes": 386596864,
+      "hostRssBytes": 152666984
+    },
+    {
+      "turn": 132,
+      "count": 12,
+      "memoryBytes": 692617446,
+      "sampledRssBytes": 384319488,
+      "hostRssBytes": 152666984
+    },
+    {
+      "turn": 133,
+      "count": 15,
+      "memoryBytes": 938426644,
+      "sampledRssBytes": 510525440,
+      "hostRssBytes": 152666984
+    },
+    {
+      "turn": 134,
+      "count": 12,
+      "memoryBytes": 759824614,
+      "sampledRssBytes": 384172032,
+      "hostRssBytes": 152666984
+    },
+    {
+      "turn": 135,
+      "count": 12,
+      "memoryBytes": 692797670,
+      "sampledRssBytes": 383582208,
+      "hostRssBytes": 152666984
+    },
+    {
+      "turn": 136,
+      "count": 15,
+      "memoryBytes": 1005699348,
+      "sampledRssBytes": 509181952,
+      "hostRssBytes": 152666984
+    },
+    {
+      "turn": 137,
+      "count": 12,
+      "memoryBytes": 625475814,
+      "sampledRssBytes": 382894080,
+      "hostRssBytes": 152666984
+    },
+    {
+      "turn": 138,
+      "count": 12,
+      "memoryBytes": 692814054,
+      "sampledRssBytes": 383352832,
+      "hostRssBytes": 152666984
+    },
+    {
+      "turn": 139,
+      "count": 15,
+      "memoryBytes": 938819860,
+      "sampledRssBytes": 509689856,
+      "hostRssBytes": 152666984
+    },
+    {
+      "turn": 140,
+      "count": 12,
+      "memoryBytes": 759955686,
+      "sampledRssBytes": 384909312,
+      "hostRssBytes": 152666984
+    },
+    {
+      "turn": 141,
+      "count": 12,
+      "memoryBytes": 692928742,
+      "sampledRssBytes": 383533056,
+      "hostRssBytes": 152699752
+    },
+    {
+      "turn": 142,
+      "count": 15,
+      "memoryBytes": 1006027028,
+      "sampledRssBytes": 511148032,
+      "hostRssBytes": 152699752
+    },
+    {
+      "turn": 143,
+      "count": 12,
+      "memoryBytes": 626213094,
+      "sampledRssBytes": 385204224,
+      "hostRssBytes": 152699752
+    },
+    {
+      "turn": 144,
+      "count": 12,
+      "memoryBytes": 693354726,
+      "sampledRssBytes": 383991808,
+      "hostRssBytes": 152716136
+    },
+    {
+      "turn": 145,
+      "count": 15,
+      "memoryBytes": 939294996,
+      "sampledRssBytes": 509132800,
+      "hostRssBytes": 152716136
+    },
+    {
+      "turn": 146,
+      "count": 12,
+      "memoryBytes": 760512742,
+      "sampledRssBytes": 386187264,
+      "hostRssBytes": 152716136
+    },
+    {
+      "turn": 147,
+      "count": 12,
+      "memoryBytes": 693174502,
+      "sampledRssBytes": 385630208,
+      "hostRssBytes": 152716136
+    },
+    {
+      "turn": 148,
+      "count": 15,
+      "memoryBytes": 1006420244,
+      "sampledRssBytes": 512344064,
+      "hostRssBytes": 152716136
+    },
+    {
+      "turn": 149,
+      "count": 12,
+      "memoryBytes": 626098406,
+      "sampledRssBytes": 386531328,
+      "hostRssBytes": 152716136
+    },
+    {
+      "turn": 150,
+      "count": 12,
+      "memoryBytes": 693043430,
+      "sampledRssBytes": 387235840,
+      "hostRssBytes": 152716136
+    }
+  ],
+  "scope": "Production Codex/ACP/HTTP MCP/Perspicax pools with fake providers. Settled checkpoints, not a limit on simultaneous active-turn memory.",
+  "revocations": 150,
+  "cleanupResources": 0
+}

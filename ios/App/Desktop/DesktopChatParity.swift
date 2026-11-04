@@ -75,7 +75,7 @@ enum DesktopChatParity {
         switch screen {
         // the desktop's composer has no approval control any more: the
         // approval-mode and model-picker surfaces are the + menu (2026-11-03)
-        case .chatApprovalMode, .chatModelPicker: .plus
+        case .chatApprovalMode: .plus
         default: nil
         }
     }
@@ -236,6 +236,10 @@ extension ChatView {
             draft = "Brouillon de remplacement : vérifie la sauvegarde de dimanche\net envoie le résumé à l'équipe."
         case .chatComposerSlash:
             draft = "/"
+        case .chatModelPicker:
+            // surfaces.mjs opens the model window on Ara (ModelWindowHost):
+            // the composer has no model control left
+            desktopChat?.openModelPicker()
         case .chatFind:
             openFind()
             finder.query = "sauvegarde"

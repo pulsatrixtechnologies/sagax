@@ -194,6 +194,12 @@ public struct DesktopSettingsConfig: Decodable, Equatable, Sendable {
         public var claudeUserMcp: Bool?
         /// Settings > Appearance > Tool calls ("Details"): off by default.
         public var showToolCalls: Bool?
+        /// Settings > Experimental (ExperimentalSettings.tsx): a server that
+        /// predates one sends no value, and its row stays greyed.
+        public var decisionModel: Bool?
+        public var dataWindow: Bool?
+        public var meetingNotetaker: Bool?
+        public var llmThreadTitles: Bool?
     }
 
     public struct Rooms: Decodable, Equatable, Sendable { public var turnTimeoutMinutes: Int? }
@@ -220,9 +226,15 @@ public struct DesktopSettingsConfig: Decodable, Equatable, Sendable {
         public var baseUrl: String?
         public var model: String?
         public var fishModel: String?
+        /// The solo installation's voice (before 2026-10-29), seeded into the
+        /// person's choice the first time (`installedVoiceSettings`).
+        public var provider: String?
+        public var voice: String?
     }
 
     public var profile: Profile?
+    /// An organization server where each person keeps their own settings (#1098).
+    public var personalSettings: Bool?
     public var language: String?
     public var features: Features?
     public var rooms: Rooms?
@@ -301,6 +313,8 @@ public enum DesktopConfigChange: Equatable, Sendable {
     /// The features the Experimental and General switches may set.
     public static let switchableFeatures: Set<String> = [
         "skillAuthoring", "routinesInConversation", "templates", "browser", "claudeUserMcp", "showToolCalls",
+        // Settings > Experimental (ExperimentalSettings.tsx)
+        "decisionModel", "dataWindow", "meetingNotetaker", "llmThreadTitles",
     ]
 
     /// The JSON body, or nil for a change that is out of range.

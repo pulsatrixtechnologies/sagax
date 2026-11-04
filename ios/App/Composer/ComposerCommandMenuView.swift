@@ -21,6 +21,9 @@ struct ComposerCommandMenuView: View {
     /// 37 pt raised header, 27 pt group headings, 53 pt rows).
     @Environment(\.desktopChatText) private var desktop
 
+    /// The footer's 1 pt rule and its 6 + 16.5 + 6 line.
+    static let footerHeight: CGFloat = 1 + 28.5
+
     private func startsSection(_ index: Int) -> Bool {
         index == 0 || items[index - 1].section != items[index].section
     }
@@ -29,7 +32,7 @@ struct ComposerCommandMenuView: View {
     /// is as tall as what it lists, up to the 320 pt cap less the header.
     private var desktopListHeight: CGFloat {
         let headings = items.indices.filter(startsSection).count
-        return min(CGFloat(headings) * 27 + CGFloat(items.count) * 53, 320 - 37)
+        return min(CGFloat(headings) * 27 + CGFloat(items.count) * 53, 320 - 37 - Self.footerHeight)
     }
 
     var body: some View {
@@ -49,8 +52,29 @@ struct ComposerCommandMenuView: View {
             }
             .frame(maxHeight: desktop == nil ? 264 : desktopListHeight)
             .frame(height: desktop == nil ? nil : desktopListHeight)
+            if let desktop {
+                // `sticky bottom-0 border-t px-3 py-1.5 text-[11px]`: "Esc to close"
+                Rectangle().fill(desktop.hairline.opacity(0.2)).frame(height: 1)
+                Text("Esc to close")
+                    .font(desktop.font(11))
+                    .foregroundStyle(desktop.inkTertiary)
+                    .lineLimit(1)
+                    .padding(.horizontal, 12)
+                    .frame(maxWidth: .infinity, minHeight: Self.footerHeight - 1, alignment: .leading)
+                    .background(desktop.raised)
+                    .accessibilityIdentifier("slash-menu-esc")
+            }
         }
         .modifier(CommandMenuChrome(desktop: desktop))
+        // "Esc to close": a hardware keyboard's Escape closes it
+        .background {
+            if desktop != nil {
+                Button("Close commands", action: close)
+                    .keyboardShortcut(.escape, modifiers: [])
+                    .opacity(0)
+                    .accessibilityHidden(true)
+            }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Composer commands")
         .accessibilityIdentifier("slash-menu")
@@ -255,7 +279,14 @@ struct ComposerCommandMenuView: View {
 
     static func icon(_ item: ComposerMenuItem) -> String {
         switch item.kind {
-        case let .sagax(command): return command == .goal ? "target" : "book"
+        // ComposerCommandMenu.tsx ItemIcon: Target, Wand2, Repeat, BookOpen
+        case let .sagax(command):
+            switch command {
+            case .goal: return "target"
+            case .setup: return "wand.and.stars"
+            case .loop, .loopStatus, .loopStop: return "repeat"
+            case .learn: return "book"
+            }
         case .skill: return "sparkles"
         case .engine:
             switch item.group {
@@ -268,6 +299,7 @@ struct ComposerCommandMenuView: View {
 
     static func groupTitle(_ group: ComposerMenuItem.Group) -> LocalizedStringKey {
         switch group {
+        case .goal: return "Goal"
         case .sagax: return "Sagax"
         case .skills: return "Skills"
         case .engine: return "Engine"
@@ -283,12 +315,27 @@ struct ComposerCommandMenuView: View {
         }
     }
 
-    /// The descriptions of Sagax's own commands (`composer.command.*Desc`).
-    static func description(_ command: SagaxSlashCommand) -> String {
+    /// The descriptions of Sagax's own commands (`composer.command.*Desc`,
+    /// `composer.loop.sub.*`); a 1:1's /goal is the bot's own goal.
+    static func description(_ command: SagaxSlashCommand, room: Bool) -> String {
         switch command {
-        case .goal: return String(localized: "Keep a team working until the goal is complete")
+        case .goal:
+            return room ? String(localized: "Keep a team working until the goal is complete")
+                : String(localized: "Give this bot a goal and let it work until the goal is done")
         case .learn: return String(localized: "Draft a reusable skill from this conversation")
         case .setup: return String(localized: "Have this bot interview you and set itself up")
+        case .loop: return String(localized: "Repeat a prompt in this chat")
+        case .loopStatus: return String(localized: "Show this bot's loops")
+        case .loopStop: return String(localized: "Stop a loop")
+        }
+    }
+
+    /// `composer.command.goalHint`, `composer.command.loopHint`.
+    static func hint(_ command: SagaxSlashCommand) -> String? {
+        switch command {
+        case .goal: return String(localized: "<goal>")
+        case .loop: return String(localized: "5m prompt")
+        default: return nil
         }
     }
 }

@@ -43,6 +43,15 @@ enum DesktopComputerWindow {
 /// The window's content. `floating`: drawn over the shell (veil, rounded
 /// panel at 92 % by 88 %); otherwise it is the whole scene.
 struct DesktopComputerWindowView: View {
+    /// The parity capture of the gallery's window.
+    static var parityGallery: Bool {
+        #if DEBUG
+        ParityLaunch.current?.iPadScreen == .computerWindow
+        #else
+        false
+        #endif
+    }
+
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
     let botId: String
@@ -90,6 +99,12 @@ struct DesktopComputerWindowView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
+                #if DEBUG
+                // the reference is the gallery page (computer-screens.html
+                // ?modal=sandbox, `noShell`): its column of captions behind
+                // behind the veil's `backdrop-blur-[2px]`, as the shell is
+                if floating, Self.parityGallery { DesktopComputerGalleryBackdrop().blur(radius: 2) }
+                #endif
                 if floating {
                     Color.black.opacity(0.6)
                         .contentShape(Rectangle())
@@ -148,6 +163,8 @@ struct DesktopComputerWindowView: View {
         .background(panelFill, in: shape)
         .overlay(shape.strokeBorder(Color.white.opacity(floating ? 0.10 : 0), lineWidth: 1))
         .clipShape(shape)
+        // the window has focus as the desktop's modal does (`autoFocus`): its ring
+        .overlay(shape.strokeBorder(floating ? theme.focus : .clear, lineWidth: 1.5))
         .shadow(color: .black.opacity(floating ? 0.5 : 0), radius: 24, y: 12)
         .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .contain)
@@ -185,7 +202,11 @@ struct DesktopComputerWindowView: View {
         GeometryReader { proxy in
             let size = ComputerPictureLayout.fit(in: proxy.size)
             ZStack {
-                if let image = controller.image {
+                if Self.parityGallery {
+                    // the gallery's `fakeDesktop()` picture, 1280 x 800
+                    DesktopComputerGalleryPicture()
+                        .frame(width: size.width, height: size.height)
+                } else if let image = controller.image {
                     Image(uiImage: image)
                         .resizable()
                         .aspectRatio(contentMode: .fit)
@@ -377,3 +398,48 @@ private struct SceneReader: UIViewRepresentable {
         DispatchQueue.main.async { closer.scene = view.window?.windowScene }
     }
 }
+
+
+#if DEBUG
+/// computer-screens.tsx `fakeDesktop()`: the dark desktop, two cards,
+/// "Workspace" and "notes.md".
+struct DesktopComputerGalleryPicture: View {
+    var body: some View {
+        Canvas { context, size in
+            let k = size.width / 1280
+            context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Color(red: 0x1a / 255, green: 0x1b / 255, blue: 0x1e / 255)))
+            context.fill(Path(CGRect(x: 40 * k, y: 40 * k, width: 400 * k, height: 280 * k)), with: .color(Color(red: 0x2a / 255, green: 0x2d / 255, blue: 0x33 / 255)))
+            context.fill(Path(CGRect(x: 480 * k, y: 40 * k, width: 360 * k, height: 180 * k)), with: .color(Color(red: 0x3a / 255, green: 0x3f / 255, blue: 0x48 / 255)))
+            context.draw(Text(verbatim: "Workspace").font(.system(size: 28 * k)).foregroundColor(Color(red: 0xc8 / 255, green: 0xcc / 255, blue: 0xd4 / 255)),
+                         at: CGPoint(x: 60 * k, y: 90 * k), anchor: .bottomLeading)
+            context.draw(Text(verbatim: "notes.md").font(.system(size: 20 * k)).foregroundColor(Color(red: 0x8b / 255, green: 0x90 / 255, blue: 0x9a / 255)),
+                         at: CGPoint(x: 60 * k, y: 130 * k), anchor: .bottomLeading)
+        }
+        .accessibilityIdentifier("computer-picture")
+    }
+}
+
+/// The gallery page behind the window: the app colour and its 380 pt
+/// column of section captions (the reference's own French test labels).
+struct DesktopComputerGalleryBackdrop: View {
+    @Environment(\.desktopTheme) private var theme
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            theme.app
+            VStack(alignment: .leading, spacing: 0) {
+                Text(verbatim: "VM locale éteinte")
+                    .font(theme.font(13, .semibold)).foregroundStyle(theme.inkSecondary)
+                Spacer()
+                Text(verbatim: "Navigateur en direct")
+                    .font(theme.font(13, .semibold)).foregroundStyle(theme.inkSecondary)
+                    .padding(.bottom, -8)
+            }
+            .frame(width: 380, alignment: .leading)
+            .padding(.top, 20)
+        }
+        .ignoresSafeArea()
+        .accessibilityHidden(true)
+    }
+}
+#endif

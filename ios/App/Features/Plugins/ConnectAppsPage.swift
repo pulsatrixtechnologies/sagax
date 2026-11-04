@@ -49,10 +49,21 @@ final class ConnectAppsModel: ObservableObject {
 
     private var featured: [PluginListing] = []
     private var skills: [LibrarySkill] = []
+    /// The desktop Capabilities window's Me scope (PluginsPanel.tsx
+    /// `scopedItems`): the person's own things only, the marketplace plugins,
+    /// the private skills and Tailscale; apps and servers are the
+    /// workspace's (its Organization scope, or a bot's Access).
+    @Published var personalScope = false
+
+    /// The items the scope shows.
+    var scopedItems: [ConnectAppItem] {
+        guard personalScope else { return items }
+        return items.filter { $0.key == tailscaleConnectAppKey || $0.kind == .plugin || $0.kind == .skill }
+    }
 
     /// Discover: what can still be added (installed rows live in Installed).
     var sections: [ConnectApps.Section] {
-        ConnectApps.sections(ConnectApps.discover(items), query: query, filter: filter, type: type, extraSources: marketplaces.map(\.name))
+        ConnectApps.sections(ConnectApps.discover(scopedItems), query: query, filter: filter, type: type, extraSources: marketplaces.map(\.name))
     }
 
     var summary: (count: Int, icons: [ConnectAppItem]) { ConnectApps.connected(items, extra: claudeConnectors) }
@@ -60,7 +71,7 @@ final class ConnectAppsModel: ObservableObject {
     func item(_ key: String) -> ConnectAppItem? { items.first { $0.key == key } }
 
     /// Manage > Installed: one entry per thing (CompanionCore InstalledEntries).
-    var entries: [InstalledEntry] { ConnectApps.installedEntries(items, catalog: Set(featured.map(\.url))) }
+    var entries: [InstalledEntry] { ConnectApps.installedEntries(scopedItems, catalog: Set(featured.map(\.url))) }
 
     func load(_ session: Session) async {
         guard let client = session.settingsClient else { loading = false; return }
@@ -246,6 +257,9 @@ struct ConnectAppsPage: View {
     var embedded = false
     /// The desktop window's own search field, when embedded.
     var embeddedQuery: Binding<String>? = nil
+    /// The desktop window's Me scope: the person's own capabilities only.
+    var personalScope = false
+    @Environment(\.desktopTheme) private var desktopTheme
     @Environment(\.themePalette) var themePalette
     @EnvironmentObject private var session: Session
     @StateObject private var model = ConnectAppsModel()
@@ -264,6 +278,8 @@ struct ConnectAppsPage: View {
     var body: some View {
         NavigationStack(path: $path) {
             ConnectAppsMain(model: model, bots: bots, botsShown: botsShown, initialTab: initialTab, openBot: openBot) { path.append($0) }
+                // the desktop window's body: the app's colour, not the stack's black
+                .background { if embedded { desktopTheme.app.ignoresSafeArea() } }
                 .navigationTitle(String(localized: "Capabilities"))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar(embedded ? .hidden : .automatic, for: .navigationBar)
@@ -296,7 +312,8 @@ struct ConnectAppsPage: View {
         .onValueChange(of: embeddedQuery?.wrappedValue ?? "") { value in
             if embedded { model.query = value }
         }
-        .task { await model.load(session) }
+        .task { model.personalScope = personalScope; await model.load(session) }
+        .onValueChange(of: personalScope) { model.personalScope = $0 }
         .task { if botsShown { await bots.load(session) } }
         // back from an authorization page in the browser
         .onValueChange(of: scenePhase) { phase in
@@ -392,9 +409,35 @@ struct ConnectAppIcon: View {
     var body: some View {
         if item.kind == .skill {
             PluginsGlyphTile(systemImage: "sparkles", size: size)
+        } else if item.key == tailscaleConnectAppKey {
+            TailscaleMarkTile(size: size)
         } else {
             PluginIconTile(key: item.domain.map { $0.split(separator: ".").dropLast().last.map(String.init) ?? $0 }, monogram: item.logo == nil ? nil : item.name, size: size)
         }
+    }
+}
+
+/// Tailscale's own mark (the desktop's `TailscaleIcon`): nine dots in a
+/// grid, the middle row and the bottom centre lit, the others faint, on a
+/// dark tile.
+struct TailscaleMarkTile: View {
+    var size: CGFloat = 34
+
+    var body: some View {
+        Canvas { context, box in
+            let step = box.width * 0.22
+            let r = box.width * 0.075
+            let lit: Set<Int> = [3, 4, 5, 7]
+            for index in 0..<9 {
+                let x = box.width / 2 + CGFloat(index % 3 - 1) * step
+                let y = box.height / 2 + CGFloat(index / 3 - 1) * step
+                context.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)),
+                             with: .color(Color.white.opacity(lit.contains(index) ? 1 : 0.35)))
+            }
+        }
+        .frame(width: size, height: size)
+        .background(Color(red: 0x24 / 255, green: 0x22 / 255, blue: 0x22 / 255), in: RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
+        .accessibilityHidden(true)
     }
 }
 
@@ -427,9 +470,10 @@ struct ConnectAppRow: View {
                         .font(theme.font(12))
                         .foregroundStyle(theme.inkSecondary)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
-            .frame(maxWidth: 440, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             if busy {
                 ProgressView().controlSize(.small)
             } else if let action = item.action {
@@ -448,8 +492,11 @@ struct ConnectAppRow: View {
                     .font(theme.font(12))
                     .foregroundStyle(item.status == .connected ? theme.accent : theme.inkSecondary)
             }
-            Spacer(minLength: 0)
         }
+        // a cell of the desktop's two-column grid (CATEGORY_MODAL.grid): the
+        // description truncates and the action sits beside it
+        .frame(maxWidth: 414, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 4)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
@@ -637,6 +684,8 @@ struct ConnectAppsMain: View {
             Rectangle().fill(theme.hairlineWeak).frame(height: 1)
         }
         .padding(.top, 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("connect-apps-tabs")
     }
 
     /// The category chips of Discover: All, then each category with apps.
@@ -996,11 +1045,14 @@ struct ConnectAppsManage: View {
     @State private var removing: InstalledEntry?
     @State private var service = ConnectAccountsService.all
     @State private var slackAvailable = false
+    /// Installed's New skill (InstalledView.tsx `onNewSkill`): the person's
+    /// own skill, in their library (`POST /api/me/skills-library`).
+    @State private var creatingSkill = false
 
     var body: some View {
         Group {
             switch tab {
-            case .installed: installed
+            case .installed: if desktop { desktopInstalled } else { installed }
             case .sources: sources
             case .discover, .bots, .pages: EmptyView()
             }
@@ -1025,6 +1077,61 @@ struct ConnectAppsManage: View {
         }
     }
 
+    // MARK: Installed on the desktop window (InstalledView.tsx)
+
+    /// The desktop's order: This Mac, the tools (New skill), Nothing
+    /// installed with its Discover link, the entries, the private skills,
+    /// then Providers.
+    @ViewBuilder
+    private var desktopInstalled: some View {
+        let entries = model.entries
+        let skills = ConnectApps.privateSkills(model.items)
+        MacAppsInstalledSection(push: push)
+        Section {
+            Button { creatingSkill = true } label: {
+                HStack(spacing: 6) {
+                    DesktopIconView(icon: .plus, size: 14)
+                    Text("New skill").font(theme.font(12.5, .medium))
+                }
+                .foregroundStyle(theme.ink)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(theme.control, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("connect-apps-new-skill")
+            .sheet(isPresented: $creatingSkill) {
+                NewPersonalSkillSheet { await model.load(session) }
+                    .environmentObject(session)
+            }
+            if entries.isEmpty && skills.isEmpty && !model.loading {
+                HStack(spacing: 12) {
+                    Text("Nothing installed yet. Find apps, plugins and skills in Discover.")
+                        .font(theme.font(12.5)).foregroundStyle(theme.inkSecondary)
+                    Spacer(minLength: 0)
+                    Button { tab = .discover } label: {
+                        Text("Discover").font(theme.font(12.5, .medium)).foregroundStyle(theme.accentText)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("connect-apps-go-discover")
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(theme.inset, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        if !entries.isEmpty || !skills.isEmpty {
+            installedRows
+        }
+        // Providers, 1:1 with the desktop (AccountsView.tsx)
+        DesktopProvidersSection(servers: session.surfaceGate.allows(.myConnections))
+        if session.surfaceGate.allows(.myConnections) {
+            Section { DesktopMyConnectionsSettings(part: .servers) }
+        }
+    }
+
     // MARK: Installed: one line per thing, then the private skills
 
     @ViewBuilder
@@ -1038,6 +1145,19 @@ struct ConnectAppsManage: View {
                     .foregroundStyle(Theme.textSecondary)
             }
         }
+        installedRows
+        // Mac apps (Messages): always listed; setup runs on the person's Mac.
+        MacAppsInstalledSection(push: push)
+        // Providers (2026-10-29): once a tab of their own, now the last
+        // section of Installed. A provider listed is already installed.
+        accounts
+    }
+
+    /// The entries, then the private skills.
+    @ViewBuilder
+    private var installedRows: some View {
+        let entries = model.entries
+        let skills = ConnectApps.privateSkills(model.items)
         if !entries.isEmpty {
             Section {
                 ForEach(entries) { entry in
@@ -1102,11 +1222,6 @@ struct ConnectAppsManage: View {
                 Text(String(localized: "Private skills"))
             }
         }
-        // Mac apps (Messages): always listed; setup runs on the person's Mac.
-        MacAppsInstalledSection(push: push)
-        // Providers (2026-10-29): once a tab of their own, now the last
-        // section of Installed. A provider listed is already installed.
-        accounts
     }
 
     /// The entry's mark: the plugin's puzzle tile, or its neutral monogram when
@@ -1649,6 +1764,7 @@ extension Notification.Name {
 /// The Connect apps list: the phone's themed list, or the desktop window's
 /// flat page (no row chrome, no separators, the window's own background).
 struct CapabilitiesList<Content: View>: View {
+    @Environment(\.desktopTheme) private var theme
     let desktop: Bool
     @ViewBuilder let content: () -> Content
 
@@ -1663,8 +1779,79 @@ struct CapabilitiesList<Content: View>: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .padding(.horizontal, 20)
+            .background(theme.app)
         } else {
             ThemedList(content: content)
+        }
+    }
+}
+
+
+/// Installed's New skill (plugins/SkillPage.tsx, creating): the name (its
+/// rule), the description and the instructions; Save writes the SKILL.md to
+/// the person's own library.
+struct NewPersonalSkillSheet: View {
+    @EnvironmentObject private var session: Session
+    @Environment(\.dismiss) private var dismiss
+    let saved: () async -> Void
+    @State private var name = ""
+    @State private var description = ""
+    @State private var instructions = ""
+    @State private var busy = false
+    @State private var error: String?
+
+    private var canSave: Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        return CompanionClient.isSkillName(trimmed) && !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !busy
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField(String(localized: "Name"), text: $name)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .accessibilityIdentifier("new-skill-name")
+                } footer: {
+                    Text("Lowercase letters, digits and single hyphens, at most 64 characters.")
+                }
+                Section(String(localized: "Description")) {
+                    TextField(String(localized: "Description"), text: $description, axis: .vertical)
+                        .accessibilityIdentifier("new-skill-description")
+                }
+                Section(String(localized: "Instructions")) {
+                    TextEditor(text: $instructions)
+                        .frame(minHeight: 180)
+                        .accessibilityIdentifier("new-skill-instructions")
+                }
+                if let error {
+                    Section { Text(verbatim: error).foregroundStyle(Theme.danger) }
+                }
+            }
+            .navigationTitle(Text("New skill"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(String(localized: "Cancel")) { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(String(localized: "Save")) { Task { await save() } }
+                        .disabled(!canSave)
+                        .accessibilityIdentifier("new-skill-save")
+                }
+            }
+        }
+    }
+
+    private func save() async {
+        guard let client = session.settingsClient else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            try await client.createPersonalSkill(name: name.trimmingCharacters(in: .whitespaces), description: description, instructions: instructions)
+            await saved()
+            dismiss()
+        } catch {
+            self.error = error.localizedDescription
         }
     }
 }

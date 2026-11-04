@@ -81,6 +81,9 @@ public enum RoutinePatch {
         if let target = input.target {
             body["target"] = target
             if target == "room-goal" { body["groupId"] = input.groupId.map { $0 as Any } ?? NSNull() }
+        } else if let groupId = input.groupId {
+            // a room's /loop: the routine posts in that room (useComposerCommands.ts)
+            body["groupId"] = groupId
         }
         if let overlap = input.overlap { body["overlap"] = overlap }
         if let attachments = input.attachments { body["attachments"] = attachments.map(attachmentBody) }

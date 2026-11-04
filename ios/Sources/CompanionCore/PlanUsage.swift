@@ -39,6 +39,14 @@ public struct PlanUsageReport: Decodable, Equatable, Sendable {
         public var weekly: Window
         public var extra: [Extra]
         public var models: [ModelUsage]?
+        /// "windows", "no-windows", "signed-out" or "error" (#1774); an
+        /// older server names none (`ok` decides).
+        public var state: String?
+        public var access: String?
+        public var instanceId: String?
+
+        /// The row's state as the desktop reads it (`legacyState`).
+        public var rowState: String { state ?? (ok ? "windows" : (error == nil ? "signed-out" : "error")) }
     }
 
     public var fetchedAt: String?

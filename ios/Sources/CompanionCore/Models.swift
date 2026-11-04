@@ -1600,6 +1600,13 @@ public struct InstanceCapabilities: Codable, Hashable, Sendable {
     }
 }
 
+public struct InstanceIcon: Codable, Hashable, Sendable {
+    public var kind: String?
+    public var preset: String?
+    public var dataUrl: String?
+    public init(kind: String? = nil, preset: String? = nil, dataUrl: String? = nil) { self.kind = kind; self.preset = preset; self.dataUrl = dataUrl }
+}
+
 public struct Instance: Codable, Hashable, Identifiable, Sendable {
     public var instanceId: String
     public var driverKind: String
@@ -1609,6 +1616,9 @@ public struct Instance: Codable, Hashable, Identifiable, Sendable {
     public var capabilities: InstanceCapabilities? = nil
     /// "subscription" (a sign-in plan), "api" (a pasted key) or "custom"
     /// (a local engine with no catalogue); nil reads as a sign-in plan.
+    /// The desktop's provider mark override (`InstanceInfo.icon`): a preset
+    /// brand or a custom image; absent, the driver's own mark.
+    public var icon: InstanceIcon? = nil
     public var access: String? = nil
 
     public var id: String { instanceId }
@@ -2594,7 +2604,7 @@ public enum PulsatrixSignIn {
 
     /// `<server origin>/auth/oidc/start?client=phone[&return=sagax]`, or nil
     /// for an address that is not http(s).
-    public static func startURL(base: URL, returnScheme: String = callbackScheme) -> URL? {
+    public static func startURL(base: URL, returnScheme: String = callbackScheme, fresh: Bool = false) -> URL? {
         guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false),
               let scheme = components.scheme?.lowercased(), scheme == "https" || scheme == "http",
               components.host != nil
@@ -2604,6 +2614,8 @@ public enum PulsatrixSignIn {
         components.fragment = nil
         var items = [URLQueryItem(name: "client", value: "phone")]
         if returnScheme == callbackScheme { items.append(URLQueryItem(name: "return", value: callbackScheme)) }
+        // "Sign in again" (oidc-login.ts): Perspicax asks for the factors even when signed in
+        if fresh { items.append(URLQueryItem(name: "fresh", value: "1")) }
         components.queryItems = items
         return components.url
     }

@@ -77,6 +77,10 @@ struct DesktopTeamMapPage: View {
     @EnvironmentObject private var shell: DesktopShellModel
     @StateObject private var model = TeamMapModel()
     @State private var boatComputer = false
+    /// The Computers shelf (CanvasComputers.tsx) at the right of the canvas.
+    @State private var computersOpen = false
+    @State private var computerDrop: (id: String, section: String)?
+    @State private var createComputer = 0
     @State private var creating = false
     @State private var teamName = ""
 
@@ -94,7 +98,19 @@ struct DesktopTeamMapPage: View {
                 count: count == 1 ? String(localized: "1 bot") : String(localized: "\(count) bots"),
                 subtitle: "Your bots, their teams, and how they work together."
             ) { AnyView(headerControls) })
-            AnyView(DesktopTeamCanvas(model: model))
+            HStack(spacing: 0) {
+                AnyView(DesktopTeamCanvas(model: model, onComputerDrop: { id, section in
+                    guard manageTeams else { return }
+                    computersOpen = true
+                    computerDrop = (id, section)
+                }))
+                if manageTeams && computersOpen {
+                    DesktopTeamComputers(
+                        sections: TeamMap.pageSections(state: session.state).map { ($0.key, $0.key.isEmpty ? String(localized: "General") : $0.name) },
+                        drop: $computerDrop, createRequest: createComputer, close: { computersOpen = false })
+                    .transition(.move(edge: .trailing))
+                }
+            }
         }
         .background(theme.app)
         .task(id: session.connection?.id) { await model.poll(session) }
@@ -131,7 +147,7 @@ extension DesktopTeamMapPage {
     fileprivate var headerControls: some View {
         if manageTeams {
             HStack(spacing: 8) {
-                Button { shell.settingsSection = .computer; shell.modal = .settings } label: {
+                Button { withAnimation(.easeOut(duration: 0.18)) { computersOpen.toggle() } } label: {
                     DesktopIconView(icon: .monitor, size: 16, strokeWidth: 1.75)
                         .foregroundStyle(theme.inkSecondary)
                         .frame(width: 36, height: 36)
@@ -141,11 +157,12 @@ extension DesktopTeamMapPage {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Computers"))
+                .accessibilityValue(computersOpen ? Text("Expanded") : Text("Collapsed"))
                 .accessibilityIdentifier("team-map-computers")
                 Menu {
                     Button { creating = true } label: { Label(String(localized: "Create team"), systemImage: "person.2") }
                     if boatComputer {
-                        Button { shell.settingsSection = .computer; shell.modal = .settings } label: { Label(String(localized: "Boat computer"), systemImage: "shippingbox") }
+                        Button { computersOpen = true; createComputer += 1 } label: { Label(String(localized: "Boat computer"), systemImage: "shippingbox") }
                     }
                     Button { shell.settingsSection = .computer; shell.modal = .settings } label: { Label(String(localized: "Local VM…"), systemImage: "display") }
                 } label: {
@@ -174,12 +191,26 @@ private struct DesktopTeamCanvas: View {
     @EnvironmentObject private var session: Session
     @EnvironmentObject private var shell: DesktopShellModel
     @ObservedObject var model: TeamMapModel
+    /// A computer card of the Computers shelf dropped on a team (its id, the team).
+    var onComputerDrop: (String, String) -> Void = { _, _ in }
 
     @State private var view: TeamCanvasLayout.View?
     @State private var dragStart: TeamCanvasLayout.View?
     @State private var pinchStart: TeamCanvasLayout.View?
     @State private var modelLabels: [String: String] = [:]
+    /// The engine behind each bot's model: its provider mark on the card.
+    @State private var modelInstances: [String: Instance] = [:]
     @State private var renaming: String?
+    /// The team ⋯ menu's editor open now (Move bots, Shared instructions, Team memory).
+    @State private var teamEditor: TeamEditor?
+
+    struct TeamEditor: Identifiable {
+        enum Kind { case bots, instructions, memory }
+        let kind: Kind
+        let section: String
+        let label: String
+        var id: String { "\(kind)|\(section)" }
+    }
     @State private var renameText = ""
     @State private var deleting: String?
 
@@ -227,6 +258,18 @@ private struct DesktopTeamCanvas: View {
             )
         }
         .task(id: session.connection?.id) { await loadModelLabels() }
+        .sheet(item: $teamEditor) { editor in
+            Group {
+                switch editor.kind {
+                case .bots: DesktopTeamBotsSheet(section: editor.section, label: editor.label) { teamEditor = nil }
+                case .instructions: DesktopSectionContextSheet(section: editor.section, label: editor.label) { teamEditor = nil }
+                case .memory: DesktopTeamMemorySheet(section: editor.section, label: editor.label) { teamEditor = nil }
+                }
+            }
+            .environmentObject(session)
+            .environment(\.desktopTheme, theme)
+            .presentationDetents([.large])
+        }
         .alert(String(localized: "Rename team"), isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField(String(localized: "Team name"), text: $renameText)
             Button(String(localized: "Cancel"), role: .cancel) { renaming = nil }
@@ -290,6 +333,17 @@ private struct DesktopTeamCanvas: View {
                     .foregroundStyle(theme.inkSecondary)
                 if session.surfaceGate.allows(.teamMapMove) {
                     Menu {
+                        // TeamCanvas.tsx: Move bots to, Shared instructions, Team memory, then Rename and Delete
+                        let label = section.key.isEmpty ? String(localized: "Unassigned") : section.name
+                        Button { teamEditor = TeamEditor(kind: .bots, section: section.key, label: label) } label: {
+                            Label(String(format: String(localized: "Move bots to %@"), label), systemImage: "person.2")
+                        }
+                        Button { teamEditor = TeamEditor(kind: .instructions, section: section.key, label: label) } label: {
+                            Label(String(localized: "Shared instructions"), systemImage: "book")
+                        }
+                        Button { teamEditor = TeamEditor(kind: .memory, section: section.key, label: label) } label: {
+                            Label(String(localized: "Team memory"), systemImage: "brain")
+                        }
                         if !section.key.isEmpty {
                             Button { renameText = section.name; renaming = section.key } label: { Label(String(localized: "Rename team"), systemImage: "pencil") }
                             Button(role: .destructive) { deleting = section.key } label: { Label(String(localized: "Delete team"), systemImage: "trash") }
@@ -336,6 +390,11 @@ private struct DesktopTeamCanvas: View {
         .frame(width: tile.width, height: tile.height, alignment: .topLeading)
         .background(theme.panel.opacity(0.9), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
+        .dropDestination(for: String.self) { items, _ in
+            guard let id = items.compactMap(TeamComputerDrag.id).first else { return false }
+            onComputerDrop(id, section.key)
+            return true
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(Text("\(section.key.isEmpty ? String(localized: "Unassigned") : section.name) team"))
     }
@@ -384,12 +443,21 @@ private struct DesktopTeamCanvas: View {
                 }
                 Spacer(minLength: 4)
                 if let label = modelLabels[bot.id] {
-                    Text(verbatim: label)
-                        .font(theme.font(10))
-                        .foregroundStyle(theme.inkSecondary)
-                        .lineLimit(1)
-                        .frame(maxWidth: 114, alignment: .trailing)
-                        .padding(.horizontal, 8)
+                    // TeamCanvas.tsx: the provider's mark (13) in front of the model
+                    HStack(spacing: 4) {
+                        if let instance = modelInstances[bot.id] {
+                            ProviderMarkView(instance: instance, size: 13)
+                        } else {
+                            ProviderMarkView(driverKind: "", size: 13)
+                        }
+                        Text(verbatim: label)
+                            .font(theme.font(10))
+                            .foregroundStyle(theme.inkSecondary)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: 130, alignment: .trailing)
+                    .padding(.horizontal, 8)
+                    .accessibilityIdentifier("team-map-model.\(bot.id)")
                 }
             }
             .padding(.horizontal, 8)
@@ -492,14 +560,17 @@ private struct DesktopTeamCanvas: View {
         guard session.canAdminister || session.surfaceGate.isOrgMemberSession else { return }
         let instances = await DesktopModelCatalog.shared.instances(session)
         var labels: [String: String] = [:]
+        var engines: [String: Instance] = [:]
         for bot in session.state.bots {
             let selection = bot.modelSelection
             let instance = instances.first { $0.instanceId == selection.instanceId }
             let id = selection.model.isEmpty ? (instance?.models.default ?? "") : selection.model
             let label = instance?.models.options.first { $0.id == id }?.label ?? id
             if !label.isEmpty { labels[bot.id] = label }
+            if let instance { engines[bot.id] = instance }
         }
         modelLabels = labels
+        modelInstances = engines
     }
 
     private func statusLabel(_ status: TeamMapStatus) -> String {
@@ -533,13 +604,17 @@ struct DesktopAutomationsPage: View {
     var body: some View {
         // its navigation bar is the page's header: the title and the
         // routines' own actions (New, the view pickers)
-        NavigationStack {
-            TasksRoutinesView(page: .automations)
-                .navigationBarTitleDisplayMode(.inline)
-                // the desktop's week, not the phone's day
-                .environment(\.automationsGridDays, 7)
-                // lot 4: the desktop's header and right column
-                .environment(\.automationsDesktop, true)
+        // the column's width: the page header folds as the desktop's does
+        GeometryReader { proxy in
+            NavigationStack {
+                TasksRoutinesView(page: .automations)
+                    .navigationBarTitleDisplayMode(.inline)
+                    // the desktop's week, not the phone's day
+                    .environment(\.automationsGridDays, 7)
+                    // lot 4: the desktop's header and right column
+                    .environment(\.automationsDesktop, true)
+                    .environment(\.automationsPageWidth, proxy.size.width)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.app)

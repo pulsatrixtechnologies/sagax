@@ -76,7 +76,10 @@ struct MessageRow: View {
                 .environment(\.desktopMessageActions, desktop == nil || isPendingEdit ? nil : DesktopMessageActions(
                     copyText: message.webhookContent?.task ?? Citations.split(attachedContent.text).display,
                     actions: actionSet,
-                    at: message.date
+                    at: message.date,
+                    react: { emoji in Task { await session.react(to: message, in: chat.threadId, emoji: emoji) } },
+                    mine: Set(ReactionRules.chips(message.reactions ?? [], selfIds: ReactionChipsRow.selfIds(session, threadId: chat.threadId)).filter(\.mine).map(\.emoji)),
+                    moreReactions: { addingReaction = true }
                 ))
             }
 

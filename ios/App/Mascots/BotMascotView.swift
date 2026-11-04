@@ -22,6 +22,12 @@ struct BotMascotView: View {
     var comets = false
     /// Wing moves and beats for the owl (profile preview).
     var owlHandle: OwlMascotHandle?
+    /// `BotAvatar fillBox` (the sidebar's rows and tiles): a shape fills its
+    /// box, scaled by `SHAPE_FILL_SCALE` about `SHAPE_FILL_ORIGIN` (Avatar.tsx).
+    var fillBox = false
+
+    static let shapeFillScale: CGFloat = 1.6
+    static let shapeFillAnchor = UnitPoint(x: 0.5, y: 0.38)
 
     @EnvironmentObject private var session: Session
     @State private var image: UIImage?
@@ -40,6 +46,7 @@ struct BotMascotView: View {
             case .gradientMascot:
                 MascotComets(size: size, active: comets) {
                     MascotCharacterView(bot: bot, size: size, state: state, animated: animated, owlHandle: owlHandle)
+                        .scaleEffect(fillsShape ? Self.shapeFillScale : 1, anchor: Self.shapeFillAnchor)
                 }
             }
         }
@@ -74,6 +81,11 @@ struct BotMascotView: View {
             guard !Task.isCancelled else { return }
             image = decoded
         }
+    }
+
+    /// `avatarFillScale`: only a shape drawn as the character (no picture).
+    private var fillsShape: Bool {
+        fillBox && bot.avatarUrl == nil && bot.resolvedMascotLook.character == .shape
     }
 
     @ViewBuilder private var picture: some View {
@@ -162,13 +174,15 @@ struct ChatAvatarView: View {
     var comets = false
     /// The surface a room's cut-outs are painted in.
     var background: Color = Theme.parity(Color(uiColor: .systemBackground), Theme.bg)
+    /// The sidebar's `fillBox` (BotMascotView).
+    var fillBox = false
 
     @EnvironmentObject private var session: Session
 
     var body: some View {
         switch chat {
         case let .bot(bot):
-            BotMascotView(bot: bot, size: size, state: state, animated: animated, comets: comets)
+            BotMascotView(bot: bot, size: size, state: state, animated: animated, comets: comets, fillBox: fillBox)
         case let .room(room):
             MascotComets(size: size, active: comets) {
                 // WP15 (RM22): a conversation with a person shows them

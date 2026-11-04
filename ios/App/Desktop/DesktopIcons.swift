@@ -29,11 +29,32 @@ enum DesktopIcon: String, CaseIterable {
     case monitor, minus, externalLink, messageCircle
     // lot 6: the multi-select bar (CheckCheck, ListChecks) and the computer window (Minimize2, Hand)
     case checkCheck, listChecks, minimize, hand
+    // sweep: the rail's expand (ChevronsRight), the palette's message hits
+    // (MessageSquare), Put on the desktop (PictureInPicture2)
+    case chevronsRight, messageSquare, pictureInPicture
+    // the pages sweep (2026-11-03): Automations' header (Menu, ChevronLeft,
+    // Clock3, Pause, CircleAlert), Memory's tabs and lists (Tag, CircleCheck,
+    // NotebookText), the map's settings (Settings2), fit and play
+    case messagesSquare, clipboardList, user, menu, chevronLeft, clock3, pause, circleAlert, tag, circleCheck, notebookText, settings2, maximize2, play
 
     /// Path data in the 24 pt viewBox.
     var paths: [String] {
         switch self {
         case .plus: ["M5 12h14", "M12 5v14"]
+        case .messagesSquare: ["M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z", "M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1"]
+        case .clipboardList: [Self.rect(8, 2, 8, 4, 1), "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2", "M12 11h4", "M12 16h4", "M8 11h.01", "M8 16h.01"]
+        case .user: ["M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2", Self.circle(12, 7, 4)]
+        case .menu: ["M4 5h16", "M4 12h16", "M4 19h16"]
+        case .chevronLeft: ["m15 18-6-6 6-6"]
+        case .clock3: [Self.circle(12, 12, 10), "M12 6v6h4"]
+        case .pause: [Self.rect(14, 3, 5, 18, 1), Self.rect(5, 3, 5, 18, 1)]
+        case .circleAlert: [Self.circle(12, 12, 10), "M12 8L12 12", "M12 16L12.01 16"]
+        case .tag: ["M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z", Self.circle(7.5, 7.5, 0.5)]
+        case .circleCheck: [Self.circle(12, 12, 10), "m16 9-5.5 5.5L8 12"]
+        case .notebookText: ["M2 6h4", "M2 10h4", "M2 14h4", "M2 18h4", Self.rect(4, 2, 16, 20, 2), "M9.5 8h5", "M9.5 12H16", "M9.5 16H14"]
+        case .settings2: ["M14 17H5", "M19 7h-9", Self.circle(17, 17, 3), Self.circle(7, 7, 3)]
+        case .maximize2: ["M15 3h6v6", "m21 3-7 7", "m3 21 7-7", "M9 21H3v-6"]
+        case .play: ["M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"]
         case .monitor: [Self.rect(2, 3, 20, 14, 2), "M8 21h8", "M12 17v4"]
         case .minus: ["M5 12h14"]
         case .messageCircle: ["M7.9 20A9 9 0 1 0 4 16.1L2 22Z"]
@@ -154,6 +175,9 @@ enum DesktopIcon: String, CaseIterable {
         case .hand:
             ["M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2", "M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2", "M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8",
              "M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"]
+        case .chevronsRight: ["m6 17 5-5-5-5", "m13 17 5-5-5-5"]
+        case .messageSquare: ["M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"]
+        case .pictureInPicture: ["M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4", Self.rect(12, 13, 10, 7, 2)]
         case .eye:
             ["M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0",
              Self.circle(12, 12, 3)]
@@ -227,6 +251,23 @@ enum DesktopIcon: String, CaseIterable {
         case .listChecks: "checklist"
         case .minimize: "arrow.down.right.and.arrow.up.left"
         case .hand: "hand.raised"
+        case .chevronsRight: "chevron.right.2"
+        case .messageSquare: "message"
+        case .pictureInPicture: "pip"
+        case .messagesSquare: "bubble.left.and.bubble.right"
+        case .clipboardList: "list.clipboard"
+        case .user: "person"
+        case .menu: "line.3.horizontal"
+        case .chevronLeft: "chevron.left"
+        case .clock3: "clock"
+        case .pause: "pause"
+        case .circleAlert: "exclamationmark.circle"
+        case .tag: "tag"
+        case .circleCheck: "checkmark.circle"
+        case .notebookText: "book.closed"
+        case .settings2: "slider.horizontal.2.square"
+        case .maximize2: "arrow.up.left.and.arrow.down.right"
+        case .play: "play"
         }
     }
 

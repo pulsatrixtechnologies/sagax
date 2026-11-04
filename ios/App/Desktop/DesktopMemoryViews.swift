@@ -22,6 +22,8 @@ struct DesktopBrainMap: View {
     /// The preview of a note chosen on the map (the desktop opens it in the
     /// notes view on a double click).
     var preview: ((DesktopMemoryPage.Entry) -> Void)?
+    /// The notes' excerpts the page read from their bodies (the cards' second line).
+    var excerpts: [String: String] = [:]
 
     enum Layout: String, CaseIterable { case graph, brain, columns }
 
@@ -250,14 +252,13 @@ struct DesktopBrainMap: View {
                 if !playing, step >= Self.steps { step = 0 }
                 playing.toggle()
             } label: {
-                Image(systemName: playing ? "pause.fill" : "play.fill").font(.system(size: 11)).foregroundStyle(theme.ink)
+                DesktopIconView(icon: playing ? .pause : .play, size: 14).foregroundStyle(theme.ink)
                     .frame(width: 32, height: 32).background(theme.raised, in: Circle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(playing ? Text("Pause the timeline") : Text("Play the timeline"))
             .accessibilityIdentifier("desktop-memory-map.play")
-            Slider(value: Binding(get: { Double(step) }, set: { playing = false; step = Int($0.rounded()) }), in: 0...Double(Self.steps))
-                .tint(theme.accent)
+            DesktopRangeSlider(value: Binding(get: { Double(step) }, set: { playing = false; step = Int($0.rounded()) }), range: 0...Double(Self.steps))
                 .accessibilityLabel(Text("Timeline"))
             Text("\(when) · \(String(layout == .brain ? brain.notes : visible)) notes").font(theme.font(12.5)).foregroundStyle(theme.inkSecondary).monospacedDigit()
                 .fixedSize()
@@ -270,7 +271,10 @@ struct DesktopBrainMap: View {
     /// Radial: the console's brain (BrainMap.tsx).
     private func radial(brain: MemoryBrain.Brain, lit: Set<Int>?, tiers: [MapTier], tags: [String]) -> some View {
         GeometryReader { geometry in
-            let base = MemoryBrain.fit(brain, width: geometry.size.width, height: geometry.size.height)
+            // BrainMap.tsx `fitView`: `brainBounds` (the outer ring and 120), pad 24, 0.04 to 2.2
+            let bound = (brain.rings.last ?? 0) + 120
+            let fitScale = max(0.04, min(2.2, min((geometry.size.width - 48) / (bound * 2), (geometry.size.height - 48) / (bound * 2))))
+            let base = (scale: fitScale, tx: geometry.size.width / 2, ty: geometry.size.height / 2)
             let s = base.scale * zoom * pinch
             let tx = base.tx + pan.width + drag.width
             let ty = base.ty + pan.height + drag.height
@@ -294,9 +298,9 @@ struct DesktopBrainMap: View {
                 HStack(alignment: .bottom, spacing: 8) {
                     radialMinimap(brain: brain, tiers: tiers, s: s, tx: tx, ty: ty, size: geometry.size)
                     VStack(spacing: 4) {
-                        zoomButton("plus") { zoom = min(6, zoom * 1.25) }
-                        zoomButton("minus") { zoom = max(0.3, zoom / 1.25) }
-                        zoomButton("arrow.up.left.and.arrow.down.right") { zoom = 1; pan = .zero }
+                        zoomButton(.plus) { zoom = min(6, zoom * 1.25) }
+                        zoomButton(.minus) { zoom = max(0.3, zoom / 1.25) }
+                        zoomButton(.maximize2) { zoom = 1; pan = .zero }
                     }
                 }
                 .padding(8)
@@ -308,50 +312,93 @@ struct DesktopBrainMap: View {
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
     }
 
+    /// The minimap (132 pt, bottom-2 right-[52px]): every node as a dot in
+    /// its tier's colour, and where the screen is, in the ink at 0.8.
     private func radialMinimap(brain: MemoryBrain.Brain, tiers: [MapTier], s: Double, tx: Double, ty: Double, size: CGSize) -> some View {
         Canvas { context, mini in
-            let fit = MemoryBrain.fit(brain, width: mini.width, height: mini.height, pad: 8)
+            // `brainBounds`: the outer ring and 120 around it
+            let bound = (brain.rings.last ?? 0) + 120
+            let ms = min(mini.width, mini.height) / (bound * 2)
+            let cx = mini.width / 2, cy = mini.height / 2
             for node in brain.nodes {
                 let colour = node.kind == .root ? theme.accent : (tiers.first { $0.id == node.scope }?.colour ?? theme.accent)
-                context.fill(Path(ellipseIn: CGRect(x: node.x * fit.scale + fit.tx - 1, y: node.y * fit.scale + fit.ty - 1, width: 2, height: 2)), with: .color(colour.opacity(0.9)))
+                let r = node.kind == .root ? 3.0 : node.kind == .note ? 0.9 : 1.8
+                let stale = node.age >= MemoryBrain.staleDays && node.kind == .note
+                context.fill(Path(ellipseIn: CGRect(x: cx + node.x * ms - r, y: cy + node.y * ms - r, width: r * 2, height: r * 2)),
+                             with: .color(colour.opacity(stale ? 0.35 : 0.9)))
             }
-            let x0 = (0 - tx) / s * fit.scale + fit.tx, y0 = (0 - ty) / s * fit.scale + fit.ty
-            context.stroke(Path(CGRect(x: x0, y: y0, width: size.width / s * fit.scale, height: size.height / s * fit.scale)), with: .color(theme.accent), lineWidth: 1.5)
+            // the screen's rectangle in the world
+            let wx0 = (0 - tx) / s, wy0 = (0 - ty) / s
+            let frame = CGRect(x: cx + wx0 * ms, y: cy + wy0 * ms, width: size.width / s * ms, height: size.height / s * ms)
+            context.stroke(Path(frame), with: .color(theme.ink.opacity(0.8)), lineWidth: 1.5)
         }
-        .frame(width: 96, height: 96)
+        .frame(width: 132, height: 132)
         .background(theme.panel.opacity(0.9), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.6), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .accessibilityLabel(Text("Minimap"))
+        .accessibilityIdentifier("desktop-memory-map.minimap")
     }
 
-    /// Columns (MemoryMapCanvas, Team map's look): the tier, its folders,
-    /// the notes as cards, joined by lines, zoomed to fit.
+    private struct ColumnCard {
+        enum Kind { case source, folder, note }
+        var id: String
+        var kind: Kind
+        var x: Double
+        var y: Double
+        var title: String
+        var detail: String?
+        var colour: Color
+        var parent: String?
+    }
+
+    /// `notesPerRow` (lib/memory-map.ts).
+    private static func notesPerRow(_ count: Int) -> Int { count <= 1 ? 1 : count <= 4 ? 2 : count <= 9 ? 3 : 4 }
+
+    /// Columns (MemoryMapCanvas.tsx, lib/memory-map.ts `layoutMemoryMapNodes`):
+    /// each tier a source card, its folders in their order, the notes in a
+    /// grid per folder; 168 x 56 cards, GAP 16, clusters 40 apart, columns
+    /// 56 apart, tiers 120 apart; fitted (pad 48, 35 to 120 %).
     private func columns(tiers: [MapTier], hidden: Set<String>?) -> some View {
-        let cardW = 150.0, cardH = 34.0, gap = 12.0, colGap = 70.0
-        var cards: [(id: String, x: Double, y: Double, title: String, detail: String?, colour: Color, parent: String?)] = []
-        var y = 0.0
+        let cardW = 168.0, cardH = 56.0, gap = 16.0, clusterGap = 40.0, colGap = 56.0, origin = 40.0, groupGap = 120.0
+        var cards: [ColumnCard] = []
+        var offsetX = 0.0
         for tier in tiers where !tier.entries.isEmpty && (focus == "all" || focus == tier.id) {
-            let groups = Dictionary(grouping: tier.entries.filter { !(hidden?.contains($0.id) ?? false) }, by: { tier.topic($0) })
-            let keys = groups.keys.sorted()
-            let tierY = y
-            cards.append(("t:\(tier.id)", 0, tierY, tier.name, nil, tier.colour, nil))
+            let shown = tier.entries.filter { !(hidden?.contains($0.id) ?? false) }
+            var keys: [String] = []
+            for entry in shown where !keys.contains(tier.topic(entry)) { keys.append(tier.topic(entry)) }
+            let sourceId = "t:\(tier.id)"
+            cards.append(ColumnCard(id: sourceId, kind: .source, x: offsetX + origin, y: origin, title: tier.name, detail: nil, colour: tier.colour, parent: nil))
+            var clusterY = origin
+            var maxX = offsetX + origin + cardW
             for key in keys {
-                let notes = groups[key] ?? []
-                cards.append(("f:\(tier.id):\(key)", cardW + colGap, y, key, nil, tier.colour, "t:\(tier.id)"))
-                for (i, entry) in notes.enumerated() {
-                    cards.append(("n:\(entry.id)", (cardW + colGap) * 2, y + Double(i) * (cardH + gap), entry.row.title, entry.row.excerpt, tier.colour, "f:\(tier.id):\(key)"))
+                let notes = shown.filter { tier.topic($0) == key }
+                let folderX = offsetX + origin + cardW + colGap
+                let folderId = "f:\(tier.id):\(key)"
+                cards.append(ColumnCard(id: folderId, kind: .folder, x: folderX, y: clusterY, title: key, detail: "\(notes.count)", colour: tier.colour, parent: sourceId))
+                let notesX = folderX + cardW + colGap
+                let perRow = Self.notesPerRow(notes.count)
+                var bottom = clusterY + cardH
+                for (index, entry) in notes.enumerated() {
+                    let x = notesX + Double(index % perRow) * (cardW + gap)
+                    let y = clusterY + Double(index / perRow) * (cardH + gap)
+                    cards.append(ColumnCard(id: "n:\(entry.id)", kind: .note, x: x, y: y, title: entry.row.title, detail: excerpts[entry.id] ?? entry.row.excerpt, colour: tier.colour, parent: folderId))
+                    bottom = max(bottom, y + cardH)
+                    maxX = max(maxX, x + cardW)
                 }
-                y += Double(max(1, notes.count)) * (cardH + gap)
+                clusterY = bottom + clusterGap
             }
-            y += 24
+            offsetX = maxX + groupGap
         }
-        let width = (cardW + colGap) * 2 + cardW, height = max(cardH, y)
+        let minX = cards.map(\.x).min() ?? 0, minY = cards.map(\.y).min() ?? 0
+        let maxX = (cards.map(\.x).max() ?? 0) + cardW, maxY = (cards.map(\.y).max() ?? 0) + cardH
         return GeometryReader { geometry in
-            let base = min(1, min((geometry.size.width - 48) / width, (geometry.size.height - 48) / height))
-            let s = max(0.2, base * zoom * pinch)
-            let tx = (geometry.size.width - width * s) / 2 + pan.width + drag.width
-            let ty = 24 + pan.height + drag.height
-            ZStack(alignment: .bottomTrailing) {
+            let pad = 48.0
+            let base = min(1.2, max(0.35, min((geometry.size.width - pad * 2) / max(1, maxX - minX), (geometry.size.height - pad * 2) / max(1, maxY - minY))))
+            let s = min(2.4, max(0.35, base * zoom * pinch))
+            let tx = (geometry.size.width - (minX + maxX) * s) / 2 + pan.width + drag.width
+            let ty = (geometry.size.height - (minY + maxY) * s) / 2 + pan.height + drag.height
+            ZStack(alignment: .bottom) {
                 Canvas { context, _ in
                     let byId = Dictionary(uniqueKeysWithValues: cards.map { ($0.id, $0) })
                     for card in cards {
@@ -359,19 +406,31 @@ struct DesktopBrainMap: View {
                         var path = Path()
                         path.move(to: CGPoint(x: tx + (parent.x + cardW) * s, y: ty + (parent.y + cardH / 2) * s))
                         path.addLine(to: CGPoint(x: tx + card.x * s, y: ty + (card.y + cardH / 2) * s))
-                        context.stroke(path, with: .color(theme.inkTertiary.opacity(0.35)), lineWidth: 1)
+                        context.stroke(path, with: .color(theme.hairline), lineWidth: 1)
                     }
                     for card in cards {
                         let rect = CGRect(x: tx + card.x * s, y: ty + card.y * s, width: cardW * s, height: cardH * s)
-                        let shape = RoundedRectangle(cornerRadius: 6 * s, style: .continuous).path(in: rect)
-                        context.fill(shape, with: .color(theme.card))
-                        context.stroke(shape, with: .color(theme.hairline.opacity(0.5)), lineWidth: 1)
-                        context.fill(Path(ellipseIn: CGRect(x: rect.minX + 8 * s, y: rect.minY + 9 * s, width: 6 * s, height: 6 * s)), with: .color(card.colour))
-                        context.draw(Text(verbatim: card.title).font(theme.font(max(6, 11 * s), .medium)).foregroundColor(theme.ink),
-                                     at: CGPoint(x: rect.minX + 20 * s, y: rect.minY + 12 * s), anchor: .leading)
+                        let shape = RoundedRectangle(cornerRadius: 12 * s, style: .continuous).path(in: rect)
+                        context.fill(shape, with: .color(card.kind == .note ? theme.card : theme.raised.opacity(0.8)))
+                        context.stroke(shape, with: .color(theme.hairline.opacity(card.kind == .note ? 0.5 : 0.4)), lineWidth: 1)
+                        let leadX = rect.minX + 12 * s
+                        if card.kind == .note {
+                            context.fill(Path(ellipseIn: CGRect(x: leadX, y: rect.midY - 4 * s, width: 8 * s, height: 8 * s)), with: .color(card.colour))
+                        } else {
+                            var icon = context
+                            icon.translateBy(x: leadX, y: rect.midY - 7 * s)
+                            icon.scaleBy(x: 14 * s / 24, y: 14 * s / 24)
+                            for d in (card.kind == .source ? DesktopIcon.brain : DesktopIcon.folder).paths {
+                                icon.stroke(Path(SVGPath.cached(d)), with: .color(theme.inkSecondary), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                            }
+                        }
+                        let textX = leadX + (card.kind == .note ? 16 : 22) * s
+                        let hasDetail = !(card.detail ?? "").isEmpty
+                        let title = Text(verbatim: card.title).font(theme.font(12.5 * s, .medium)).foregroundColor(theme.ink)
+                        context.draw(title, in: CGRect(x: textX, y: rect.midY - (hasDetail ? 15 : 8) * s, width: rect.maxX - 12 * s - textX, height: 17 * s))
                         if let detail = card.detail, !detail.isEmpty {
-                            context.draw(Text(verbatim: String(detail.prefix(28))).font(theme.font(max(5, 9 * s))).foregroundColor(theme.inkSecondary),
-                                         at: CGPoint(x: rect.minX + 20 * s, y: rect.minY + 25 * s), anchor: .leading)
+                            let line = Text(verbatim: detail).font(theme.font(10.5 * s)).foregroundColor(theme.inkSecondary)
+                            context.draw(line, in: CGRect(x: textX, y: rect.midY + 2 * s, width: rect.maxX - 12 * s - textX, height: 14 * s))
                         }
                     }
                 }
@@ -380,27 +439,76 @@ struct DesktopBrainMap: View {
                     DragGesture().onChanged { drag = $0.translation }.onEnded { pan.width += $0.translation.width; pan.height += $0.translation.height; drag = .zero }
                 ))
                 .simultaneousGesture(SpatialTapGesture().onEnded { value in
-                    for card in cards where card.id.hasPrefix("n:") {
+                    for card in cards where card.kind == .note {
                         let rect = CGRect(x: tx + card.x * s, y: ty + card.y * s, width: cardW * s, height: cardH * s)
                         if rect.contains(value.location), let entry = entries.first(where: { "n:\($0.id)" == card.id }) { open(entry); return }
                     }
                 })
                 .accessibilityLabel(Text("Map of the memory"))
-                HStack(spacing: 2) {
-                    zoomButton("minus") { zoom = max(0.3, zoom / 1.25) }
-                    Text(verbatim: "\(Int((s * 100).rounded())) %").font(theme.font(11.5)).foregroundStyle(theme.inkSecondary).frame(width: 48)
-                    zoomButton("arrow.up.left.and.arrow.down.right") { zoom = 1; pan = .zero }
-                    zoomButton("plus") { zoom = min(6, zoom * 1.25) }
+                HStack(alignment: .bottom, spacing: 12) {
+                    columnsMinimap(cards: cards, cardW: cardW, cardH: cardH, bounds: CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY),
+                                   s: s, tx: tx, ty: ty, size: geometry.size)
+                    Spacer(minLength: 0)
+                    HStack(spacing: 2) {
+                        columnsZoomButton(.minus, 15) { zoom = max(0.3, zoom / 1.2) }
+                        Button { zoom = 1; pan = .zero } label: {
+                            Text(verbatim: "\(Int((s * 100).rounded()))%").font(theme.font(11)).monospacedDigit().foregroundStyle(theme.inkSecondary)
+                                .frame(minWidth: 48, minHeight: 34)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Text("Fit"))
+                        .accessibilityIdentifier("desktop-memory-map.zoom")
+                        columnsZoomButton(.maximize2, 14) { zoom = 1; pan = .zero }
+                        columnsZoomButton(.plus, 15) { zoom = min(6, zoom * 1.2) }
+                    }
+                    .padding(4)
+                    .background(theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.6), lineWidth: 1))
+                    .shadow(color: .black.opacity(0.08), radius: 1, y: 1)
                 }
-                .padding(4)
-                .background(theme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
-                .padding(12)
+                .padding(20)
             }
         }
         .background(theme.panel.opacity(0.5))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
+    }
+
+    private func columnsZoomButton(_ icon: DesktopIcon, _ size: CGFloat, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            DesktopIconView(icon: icon, size: size).foregroundStyle(theme.inkSecondary).frame(width: 36, height: 36).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .hoverEffect(.highlight)
+    }
+
+    /// The console's minimap (168 x 104 at most, the map's proportions):
+    /// every card in small, the screen as an accent frame.
+    private func columnsMinimap(cards: [ColumnCard], cardW: Double, cardH: Double, bounds: CGRect, s: Double, tx: Double, ty: Double, size: CGSize) -> some View {
+        let pad = 40.0
+        let world = bounds.insetBy(dx: -pad, dy: -pad)
+        let fit = min(168 / world.width, 104 / world.height)
+        let boxW = max(48, world.width * fit), boxH = max(32, world.height * fit)
+        return Canvas { context, box in
+            let scale = min(box.width / world.width, box.height / world.height)
+            let ox = (box.width - world.width * scale) / 2, oy = (box.height - world.height * scale) / 2
+            func map(_ r: CGRect) -> CGRect {
+                CGRect(x: ox + (r.minX - world.minX) * scale, y: oy + (r.minY - world.minY) * scale, width: r.width * scale, height: r.height * scale)
+            }
+            for card in cards {
+                let rect = map(CGRect(x: card.x, y: card.y, width: cardW, height: cardH))
+                context.fill(Path(roundedRect: rect, cornerRadius: 8 * scale), with: .color(card.kind == .note ? theme.inkTertiary.opacity(0.5) : theme.inkSecondary))
+            }
+            let screen = map(CGRect(x: -tx / s, y: -ty / s, width: size.width / s, height: size.height / s))
+            context.fill(Path(screen), with: .color(theme.accent.opacity(0.1)))
+            context.stroke(Path(screen), with: .color(theme.accent), lineWidth: 1.5)
+        }
+        .frame(width: boxW, height: boxH)
+        .background(theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.6), lineWidth: 1))
+        .accessibilityLabel(Text("Minimap"))
+        .accessibilityIdentifier("desktop-memory-map.columns-minimap")
     }
 
     private func chip(id: String, label: Text, colour: Color?, count: Int?) -> some View {
@@ -420,11 +528,13 @@ struct DesktopBrainMap: View {
         .hoverEffect(.highlight)
     }
 
-    private func zoomButton(_ symbol: String, _ action: @escaping () -> Void) -> some View {
+    /// BrainMap.tsx's `button`: a 32 pt circle, hairline/60, the panel, a 16 pt icon.
+    private func zoomButton(_ icon: DesktopIcon, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 11, weight: .medium)).foregroundStyle(theme.inkSecondary).frame(width: 30, height: 30)
-                .background(theme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
+            DesktopIconView(icon: icon, size: 16).foregroundStyle(theme.inkSecondary).frame(width: 32, height: 32)
+                .background(theme.panel, in: Circle())
+                .overlay(Circle().strokeBorder(theme.hairline.opacity(0.6), lineWidth: 1))
+                .shadow(color: .black.opacity(0.08), radius: 1, y: 1)
         }
         .buttonStyle(.plain)
         .hoverEffect(.highlight)
@@ -446,20 +556,68 @@ struct DesktopBrainMap: View {
             let tint = style.tinted ? colour(node) : theme.inkTertiary
             context.stroke(path, with: .color(tint.opacity(dim ? 0.08 : style.alpha)), lineWidth: style.width * min(1.4, max(0.6, s.squareRoot())))
         }
-        // nodes and labels
+        // nodes: a ring in the card's colour around a branch (BrainMap.tsx)
         for (index, node) in brain.nodes.enumerated() {
             let p = point(node)
             let r = MemoryBrain.nodeSize(node, scale: s)
             let dim = lit.map { !$0.contains(index) } ?? false
             let fill = node.kind == .root ? theme.accent : colour(node)
-            context.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)), with: .color(fill.opacity(dim ? 0.15 : (node.age >= MemoryBrain.staleDays && node.kind == .note ? 0.5 : 1))))
-            let showsLabel = node.kind != .note || s > 0.45 || (lit?.contains(index) ?? false)
-            guard showsLabel, !dim else { continue }
-            let size: CGFloat = node.kind == .root ? 14 : node.kind == .tier ? 13 : node.kind == .topic ? 12 : 11
-            let text = Text(verbatim: node.label).font(theme.font(size, node.kind == .note ? .regular : .medium)).foregroundColor(node.kind == .note ? theme.inkSecondary : theme.ink)
-            let outward = node.kind == .root ? CGPoint(x: p.x, y: p.y + r + 10) : CGPoint(x: p.x + cos(node.angle) * (r + 8), y: p.y + sin(node.angle) * (r + 8))
-            let anchor: UnitPoint = node.kind == .root ? .top : (cos(node.angle) >= 0 ? .leading : .trailing)
-            context.draw(text, at: outward, anchor: anchor)
+            // the glow: the root most, then recent notes and branches
+            let glow = node.kind == .root ? 1 : node.kind == .note ? node.recency * 0.8 : 0.35 + 0.5 * node.recency
+            if glow > 0.05, !dim {
+                let g = r * (node.kind == .root ? 5 : 4.2) / 2
+                context.fill(Path(ellipseIn: CGRect(x: p.x - g, y: p.y - g, width: g * 2, height: g * 2)),
+                             with: .radialGradient(Gradient(colors: [fill.opacity(0.55 * glow), fill.opacity(0)]), center: p, startRadius: 0, endRadius: g))
+            }
+            let circle = Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2))
+            context.fill(circle, with: .color(fill.opacity(dim ? 0.15 : (node.age >= MemoryBrain.staleDays && node.kind == .note ? 0.5 : 1))))
+            if node.kind != .note {
+                context.stroke(circle, with: .color(theme.card.opacity(dim ? 0.3 : 1)), lineWidth: node.kind == .root ? 2.5 : 1.5)
+            }
+        }
+        // labels (`planLabels`): a leaf's along its ray, flipped on the left
+        // half; a branch's in a capsule beside it, toward the outside, the
+        // root's under it; a leaf is named once two leaves are 11 pt apart
+        let outer = brain.rings.last ?? 0
+        let leafGap = (2 * Double.pi * outer) / Double(max(1, brain.notes)) * 0.84 * s
+        var placed: [CGRect] = []
+        for (index, node) in brain.nodes.enumerated() {
+            let dim = lit.map { !$0.contains(index) } ?? false
+            guard !dim else { continue }
+            let p = point(node)
+            let r = MemoryBrain.nodeSize(node, scale: s)
+            if node.kind == .note {
+                guard leafGap >= 11 || (lit?.contains(index) ?? false) else { continue }
+                let label = node.label.count > 34 ? String(node.label.prefix(33)) + "…" : node.label
+                let left = cos(node.angle) < 0
+                let angle = left ? node.angle + .pi : node.angle
+                let start = CGPoint(x: p.x + cos(node.angle) * (r + 5), y: p.y + sin(node.angle) * (r + 5))
+                var layer = context
+                layer.translateBy(x: start.x, y: start.y)
+                layer.rotate(by: .radians(angle))
+                let text = layer.resolve(Text(verbatim: label).font(theme.font(11, .medium)).foregroundColor(theme.inkSecondary))
+                layer.draw(text, at: .zero, anchor: left ? .trailing : .leading)
+            } else {
+                let size: CGFloat = node.kind == .root ? 14 : node.kind == .tier ? 13 : 12
+                let label = node.label.count > (node.kind == .topic ? 28 : 36) ? String(node.label.prefix(node.kind == .topic ? 27 : 35)) + "…" : node.label
+                let text = context.resolve(Text(verbatim: label).font(theme.font(size, node.kind == .topic ? .medium : .semibold)).foregroundColor(theme.ink))
+                let w = text.measure(in: CGSize(width: 400, height: 40)).width + 12
+                let h = size + 8
+                let centre: CGPoint = node.kind == .root
+                    ? CGPoint(x: p.x, y: p.y + r + 6 + h / 2)
+                    : CGPoint(x: p.x + cos(node.angle) * (r + 4 + w / 2) * 0.9, y: p.y + sin(node.angle) * (r + 4 + h / 2))
+                let box = CGRect(x: centre.x - w / 2, y: centre.y - h / 2, width: w, height: h)
+                if placed.contains(where: { $0.intersects(box.insetBy(dx: 2, dy: 2)) }) { continue }
+                placed.append(box)
+                // the root's and a tier's in a bordered capsule; a topic's is the
+                // map's own colour (the desktop's card, which is its ground)
+                if node.kind != .topic {
+                    let capsule = Path(roundedRect: box, cornerRadius: h / 2)
+                    context.fill(capsule, with: .color(theme.card.opacity(0.92)))
+                    context.stroke(capsule, with: .color((node.kind == .root ? theme.accent : colour(node)).opacity(0.6)), lineWidth: 1)
+                }
+                context.draw(text, at: CGPoint(x: centre.x, y: centre.y + 0.5), anchor: .center)
+            }
         }
     }
 
@@ -583,9 +741,10 @@ struct DesktopMemoryQuality: View {
         let duplicates = Dictionary(grouping: entries, by: { "\($0.source.id)|\($0.row.title.lowercased())" }).values.filter { $0.count > 1 }.reduce(0) { $0 + $1.count }
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Quality").font(theme.font(17, .semibold)).foregroundStyle(theme.ink)
-                    Text("How the memory holds up: its size, its age, its doubles, its writes.").font(theme.font(12)).foregroundStyle(theme.inkSecondary)
+                // MemoryQualityView.tsx: h2 20 semibold, the line 13 under it (mt-1)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Quality").font(theme.font(20, .semibold)).foregroundStyle(theme.ink)
+                    Text("How the memory holds up: its size, its age, its doubles, its writes.").font(theme.font(13)).foregroundStyle(theme.inkSecondary)
                 }
                 // Health | Journal (the desktop's segmented pair)
                 HStack(spacing: 2) {
@@ -595,17 +754,19 @@ struct DesktopMemoryQuality: View {
                 .padding(2)
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
                 if view == .health {
-                    HStack(spacing: 12) {
+                    // the grid's row: every tile as tall as the tallest, top aligned
+                    HStack(alignment: .top, spacing: 12) {
                         DesktopStatCard(title: Text("Active notes"), value: "\(entries.count)", caption: nil)
                         DesktopStatCard(title: Text("In review"), value: "0", caption: Text("Proposals waiting"))
                         DesktopStatCard(title: Text("Aging"), value: "\(aging)", caption: Text("No change in \(String(Int(Self.agingDays))) days"))
                         DesktopStatCard(title: Text("Duplicates"), value: "\(duplicates)", caption: Text("Same title in one tier"))
                     }
-                    HStack(alignment: .top, spacing: 12) {
+                    .fixedSize(horizontal: false, vertical: true)
+                    HStack(alignment: .top, spacing: 16) {
                         let weeks = weekly()
                         chart(title: Text("Active notes per tier, 26 weeks"), hint: weeks.isEmpty ? nil : Text("Today's notes by the week they were written.")) {
                             if weeks.isEmpty {
-                                Text("Nothing to chart yet.").font(theme.font(12.5)).foregroundStyle(theme.inkSecondary)
+                                Text("Nothing to chart yet.").font(theme.font(13)).foregroundStyle(theme.inkSecondary)
                             } else {
                                 Chart(weeks, id: \.id) { bar in
                                     BarMark(x: .value("Week", bar.week, unit: .weekOfYear), y: .value("Notes", bar.count))
@@ -618,7 +779,7 @@ struct DesktopMemoryQuality: View {
                         let written = writes()
                         chart(title: Text("Writes per week"), hint: nil) {
                             if written.isEmpty {
-                                Text("Nothing to chart yet.").font(theme.font(12.5)).foregroundStyle(theme.inkSecondary)
+                                Text("Nothing to chart yet.").font(theme.font(13)).foregroundStyle(theme.inkSecondary)
                             } else {
                                 Chart(written, id: \.week) { bar in
                                     BarMark(x: .value("Week", bar.week, unit: .weekOfYear), y: .value("Writes", bar.count))
@@ -685,15 +846,22 @@ struct DesktopMemoryQuality: View {
         return grouped.map { ($0.key, $0.value.count) }.sorted { $0.week < $1.week }
     }
 
+    /// `MemoryCard`: rounded-xl, a hairline/50 border, the panel; the title
+    /// 14 semibold (pt-4, pb-2), the body px-4 pb-4.
     private func chart<Content: View>(title: Text, hint: Text?, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            title.font(theme.font(13, .semibold)).foregroundStyle(theme.ink)
-            if let hint { hint.font(theme.font(12)).foregroundStyle(theme.inkSecondary) }
-            content()
+        VStack(alignment: .leading, spacing: 0) {
+            title.font(theme.font(14, .semibold)).foregroundStyle(theme.ink)
+                .padding(.top, 16).padding(.bottom, 8)
+            VStack(alignment: .leading, spacing: 4) {
+                content()
+                if let hint { hint.font(theme.font(11.5)).foregroundStyle(theme.inkTertiary) }
+            }
+            .padding(.bottom, 16)
         }
-        .padding(14)
+        .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
     }
 
     private func loadJournal() async {
@@ -715,14 +883,58 @@ struct DesktopStatCard: View {
     let caption: Text?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            title.font(theme.font(12)).foregroundStyle(theme.inkSecondary)
+        // StatGrid's tile: px-4 py-3, 12 label, 22/28 semibold, 11.5 caption (mt-0.5)
+        VStack(alignment: .leading, spacing: 0) {
+            title.font(theme.font(12)).foregroundStyle(theme.inkSecondary).lineLimit(1)
             Text(verbatim: value).font(theme.font(22, .semibold)).foregroundStyle(theme.ink).monospacedDigit()
-            caption?.font(theme.font(11.5)).foregroundStyle(theme.inkTertiary)
+                .frame(height: 28).padding(.top, 4)
+            caption?.font(theme.font(11.5)).foregroundStyle(theme.inkTertiary).lineLimit(1).padding(.top, 2)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
+    }
+}
+
+
+/// `<input type="range">` with `accent-color` as Chromium draws it: a 4 pt
+/// track, its filled part in the accent, a 16 pt accent knob.
+struct DesktopRangeSlider: View {
+    @Environment(\.desktopTheme) private var theme
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    var step: Double = 1
+
+    var body: some View {
+        GeometryReader { proxy in
+            let knob: CGFloat = 16
+            let span = max(1, proxy.size.width - knob)
+            let fraction = (value - range.lowerBound) / max(1, range.upperBound - range.lowerBound)
+            let x = CGFloat(fraction) * span
+            ZStack(alignment: .leading) {
+                Capsule().fill(theme.ink.opacity(0.25)).frame(height: 4).padding(.horizontal, knob / 2)
+                Capsule().fill(theme.accent).frame(width: x, height: 4).padding(.leading, knob / 2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Circle().fill(theme.accent).frame(width: knob, height: knob).offset(x: x)
+            }
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
+                let f = min(1, max(0, (drag.location.x - knob / 2) / span))
+                let raw = range.lowerBound + Double(f) * (range.upperBound - range.lowerBound)
+                value = (raw / step).rounded() * step
+            })
+        }
+        .frame(height: 20)
+        .accessibilityElement()
+        .accessibilityValue(Text(verbatim: "\(Int(value))"))
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: value = min(range.upperBound, value + step)
+            case .decrement: value = max(range.lowerBound, value - step)
+            @unknown default: break
+            }
+        }
     }
 }

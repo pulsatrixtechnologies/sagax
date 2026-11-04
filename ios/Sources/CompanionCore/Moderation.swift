@@ -50,6 +50,42 @@ public enum Moderation {
         }
     }
 
+    /// A report people sent (`GET /api/moderation/reports`, admins only):
+    /// Settings > Notifications > Reports.
+    public struct Report: Codable, Hashable, Identifiable, Sendable {
+        public var id: String
+        public var at: Double
+        public var groupName: String?
+        public var peopleDm: Bool?
+        public var reportedName: String?
+        public var reason: String
+        public var note: String?
+        public var excerpt: String?
+        public var reporterName: String?
+        public var status: String
+
+        public init(id: String, at: Double, groupName: String? = nil, peopleDm: Bool? = nil, reportedName: String? = nil,
+                    reason: String, note: String? = nil, excerpt: String? = nil, reporterName: String? = nil, status: String) {
+            self.id = id
+            self.at = at
+            self.groupName = groupName
+            self.peopleDm = peopleDm
+            self.reportedName = reportedName
+            self.reason = reason
+            self.note = note
+            self.excerpt = excerpt
+            self.reporterName = reporterName
+            self.status = status
+        }
+
+        public var isOpen: Bool { status == "open" }
+    }
+
+    /// The open reports, then the last 20 handled (ModerationSettings.tsx).
+    public static func listed(_ reports: [Report]) -> [Report] {
+        reports.filter(\.isOpen) + Array(reports.filter { $0.status == "resolved" }.prefix(20))
+    }
+
     /// The person behind a line someone else wrote.
     public struct Author: Hashable, Sendable {
         public var id: String
@@ -160,6 +196,26 @@ public extension CompanionClient {
 
     func unblock(id: String) async throws -> [Moderation.BlockedPerson] {
         try await send(unblockRequest(id: id), as: BlocksAnswer.self).people
+    }
+
+    private struct ReportsAnswer: Decodable { let reports: [Moderation.Report]? }
+    private struct ReportOne: Decodable { let report: Moderation.Report }
+
+    func moderationReportsRequest() throws -> URLRequest { try makeRequest("GET", "/api/moderation/reports") }
+
+    /// Every report people sent, newest first (an admin, a solo server's owner).
+    func moderationReports() async throws -> [Moderation.Report] {
+        try await send(moderationReportsRequest(), as: ReportsAnswer.self).reports ?? []
+    }
+
+    func resolveReportRequest(id: String) throws -> URLRequest {
+        try makeRequest("POST", "/api/moderation/reports/\(id)/resolve")
+    }
+
+    /// Mark one report handled.
+    @discardableResult
+    func resolveReport(id: String) async throws -> Moderation.Report {
+        try await send(resolveReportRequest(id: id), as: ReportOne.self).report
     }
 
     func termsRequest() throws -> URLRequest { try makeRequest("GET", "/api/me/terms") }

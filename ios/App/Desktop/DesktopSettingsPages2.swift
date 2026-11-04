@@ -6,6 +6,7 @@
 import SwiftUI
 import UIKit
 import UserNotifications
+import UniformTypeIdentifiers
 import CompanionCore
 
 // MARK: - Security
@@ -18,49 +19,104 @@ struct DesktopSecuritySettings: View {
     @State private var grants: [OwnToolGrant]?
     @State private var error: String?
 
+    @State private var name = ""
+    @State private var busy = false
+    @State private var notice: String?
+    @StateObject private var webSignIn = PulsatrixWebSignIn()
+
+    private var httpsServer: Bool { session.settingsClient?.connection.baseURL?.scheme == "https" }
+
     var body: some View {
         DesktopText(Text("Ask for a security key or a passkey (Touch ID, Face ID) before Sagax approves the actions you choose. A tap alone is then not enough."),
-                    line: 19.5, color: \.inkSecondary)
-        if let error { DesktopText(Text(verbatim: error), color: \.danger) }
+                    color: \.inkSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.bottom, 4)
+        if let error { DesktopSettingsNotice(Text(verbatim: error), color: \.danger) }
+        if keys?.unreadable == true { DesktopSettingsNotice(Text("Your saved security keys could not be read on the server, so sensitive approvals are refused until it is repaired."), color: \.danger) }
+        if let notice { DesktopSettingsNotice(Text(verbatim: notice), color: \.success) }
 
-        DesktopSettingsHeading(Text("Your keys"))
-        DesktopSettingsGroup {
-            if let keys, !keys.keys.isEmpty {
+        DesktopSettingsGroup(Text("Your keys"), identifier: "security.keys") {
+            if let keys {
                 ForEach(keys.keys) { key in
-                    DesktopSettingRow(title: Text(verbatim: key.name),
-                                      subtitle: Text("Added \(Date(timeIntervalSince1970: key.createdAt / 1000).formatted(date: .abbreviated, time: .omitted))")) {
-                        Button("Remove") { Task { await removeKey(key) } }
-                            .buttonStyle(DesktopButtonStyle(kind: .ghost, size: 12.5, weight: .medium, height: 30, horizontal: 10))
-                            .accessibilityLabel(Text("Remove \(key.name)"))
+                    DesktopDescribedRow(Text(verbatim: key.name), description: Text(verbatim: keyLine(key, list: keys)), identifier: "security-key-\(key.id.prefix(12))") {
+                        Button { Task { await removeKey(key) } } label: {
+                            HStack(spacing: 4) {
+                                DesktopSettingsIconView(icon: .trash2, size: 13)
+                                Text("Remove")
+                            }
+                        }
+                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .disabled(busy)
+                        .accessibilityLabel(Text(verbatim: String(format: AppStrings.localized("Remove %@"), key.name)))
                     }
                 }
-            } else {
-                DesktopSettingRow(title: Text("No key yet"),
-                                  subtitle: Text("Add your first key from the Sagax desktop app.")) { EmptyView() }
+                if keys.keys.isEmpty {
+                    DesktopDescribedRow(Text("No key yet"), identifier: "security-keys-none") { EmptyView() }
+                }
+                if keys.needsSignIn == true {
+                    // the first key needs a fresh Pulsatrix sign-in; a server
+                    // without one says so, as the desktop does
+                    DesktopDescribedRow(
+                        Text("Sign in again to add your first key"),
+                        description: session.surfaceGate.organization
+                            ? Text("For your safety, the first key needs a Pulsatrix sign-in from the last 15 minutes, with your password or passkey. An email code does not count. You come back to this page afterwards.")
+                            : Text("This server offers no Pulsatrix sign-in, and an email code does not count. Add your first key from the Sagax desktop app."),
+                        identifier: "security-keys-reauth"
+                    ) {
+                        // CredentialsTransfer / SecuritySettings: a fresh Pulsatrix sign-in
+                        // (`fresh=1`) whose invite renews this iPad's session, then the key
+                        if session.surfaceGate.organization, let origin = session.connection?.baseURL {
+                            Button("Sign in again") { signInAgain(origin) }
+                                .buttonStyle(DesktopButtonStyle(kind: .accent))
+                                .disabled(busy || webSignIn.running)
+                                .accessibilityIdentifier("desktop-settings.security.sign-in-again")
+                        }
+                    }
+                } else {
+                    DesktopDescribedRow(
+                        Text("Add a security key or a passkey"),
+                        description: httpsServer ? Text("A hardware key (such as a YubiKey), or a passkey on this device.")
+                                                 : Text("Security keys need this page on https, or the desktop app on this computer."),
+                        identifier: "security-keys-add"
+                    ) {
+                        TextField(text: $name, prompt: Text("My key").foregroundColor(theme.inkSecondary)) { Text("Key name") }
+                            .font(theme.font(13))
+                            .padding(.horizontal, 10)
+                            .frame(width: 160, height: 32)
+                            .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+                            .submitLabel(.done)
+                            .onSubmit { Task { await addKey() } }
+                            .disabled(busy)
+                            .accessibilityIdentifier("desktop-settings.security.key-name")
+                        Button("Add a key") { Task { await addKey() } }
+                            .buttonStyle(DesktopButtonStyle(kind: .accent))
+                            .disabled(busy || !httpsServer)
+                            .accessibilityIdentifier("desktop-settings.security.add-key")
+                    }
+                }
             }
         }
 
-        DesktopSettingsHeading(Text("Approvals that need a key"))
-        DesktopSettingsGroup {
+        DesktopSettingsGroup(Text("Approvals that need a key"), identifier: "security.classes") {
             let hasKey = !(keys?.keys.isEmpty ?? true)
-            DesktopText(hasKey ? Text("When one of these is on, approving that kind of action asks for one of your keys. Turning one off asks for your key too.")
-                               : Text("Add a key first, then choose which approvals need it."),
-                        size: 12.5, line: 18, color: \.inkSecondary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
+            DesktopSettingsTextRow(hasKey ? Text("When one of these is on, approving that kind of action asks for one of your keys. Turning one off asks for your key too.")
+                                          : Text("Add a key first, then choose which approvals need it."))
+            if hasKey, keys?.keyHere == false {
+                DesktopSettingsTextRow(Text("None of your keys works on this address, so these approvals will be refused here. Add a key from this address."), color: \.warning)
+            }
             ForEach(StepUpClass.allCases, id: \.self) { step in
                 let on = keys?.classes.contains(step.rawValue) == true
-                DesktopSettingRow(title: Self.title(step), subtitle: Self.hint(step)) {
+                DesktopDescribedRow(Self.title(step), description: Self.hint(step), identifier: "security-class-\(step.rawValue)") {
                     DesktopSwitch(isOn: on, label: Self.title(step), identifier: "desktop-settings.security.\(step.rawValue)",
-                                  disabled: keys == nil || (!hasKey && !on)) {
+                                  disabled: busy || keys == nil || (!hasKey && !on)) {
                         Task { await setClass(step, on: !on) }
                     }
                 }
             }
         }
 
-        DesktopSettingsHeading(Text("Your approval rules"))
-        DesktopSettingsGroup {
+        DesktopSettingsGroup(Text("Your approval rules")) {
             if let rules, !rules.isEmpty {
                 ForEach(rules) { rule in
                     DesktopSettingRow(title: Text(verbatim: rule.description),
@@ -76,8 +132,7 @@ struct DesktopSecuritySettings: View {
             }
         }
 
-        DesktopSettingsHeading(Text("My tool access"))
-        DesktopSettingsGroup {
+        DesktopSettingsGroup(Text("My tool access")) {
             if let grants, !grants.isEmpty {
                 ForEach(grants) { grant in
                     DesktopSettingRow(title: Text(verbatim: grant.scope), subtitle: Text(verbatim: grant.state)) {
@@ -101,6 +156,63 @@ struct DesktopSecuritySettings: View {
         keys = try? await client.securityKeys()
         rules = (try? await client.approvalRules()) ?? []
         grants = (try? await client.ownToolGrants()) ?? []
+    }
+
+    private func keyLine(_ key: SecurityKeyPublic, list: SecurityKeysList) -> String {
+        func day(_ at: Double) -> String { Date(timeIntervalSince1970: at / 1000).formatted(date: .abbreviated, time: .omitted) }
+        return [
+            key.deviceType == "multiDevice" ? AppStrings.localized("Passkey") : AppStrings.localized("Security key"),
+            String(format: AppStrings.localized("Added %@"), day(key.createdAt)),
+            key.lastUsedAt.map { String(format: AppStrings.localized("last used %@"), day($0)) },
+            list.rpId != nil && key.rpId != nil && key.rpId != list.rpId ? String(format: AppStrings.localized("works on %@"), key.rpId!) : nil,
+        ].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    /// Add a key (`registerSecurityKey`): the server's ceremony page in the
+    /// system's web sheet, where iPadOS offers the passkey or the key.
+    private func signInAgain(_ origin: URL) {
+        error = nil
+        webSignIn.start(origin: origin, scheme: PulsatrixSignIn.callbackScheme, fresh: true) { outcome in
+            guard case let .invite(invite) = outcome else {
+                if let failure = OrgConnectError.from(outcome) { error = failure.localizedMessage }
+                return
+            }
+            Task {
+                do {
+                    try await session.pair(with: invite.connection, credential: invite.credential,
+                                           deviceName: PairingView.deviceName(), pairRequestId: UUID().uuidString)
+                    await load()
+                } catch { self.error = error.localizedDescription }
+            }
+        }
+    }
+
+    private func addKey() async {
+        guard let client = session.settingsClient, !busy else { return }
+        busy = true
+        error = nil
+        notice = nil
+        defer { busy = false }
+        do {
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            switch try await client.startSecurityKey(name: trimmed.isEmpty ? AppStrings.localized("Security key") : trimmed) {
+            case .needsSignIn:
+                keys?.needsSignIn = true
+            case let .ceremony(start):
+                guard let page = client.stepUpPageURL(start) else {
+                    error = AppStrings.localized("Security keys need this page on https, or the desktop app on this computer.")
+                    return
+                }
+                if try await SecurityKeyStepUp.shared.open(page: page, ceremonyId: start.ceremonyId) {
+                    name = ""
+                    notice = AppStrings.localized("Key added.")
+                }
+                await load()
+            }
+        } catch {
+            self.error = error.localizedDescription
+            await load()
+        }
     }
 
     private func setClass(_ step: StepUpClass, on: Bool) async {
@@ -161,56 +273,76 @@ struct DesktopVaultSettings: View {
     @State private var filter = "all"
     @State private var managing = false
 
+    @State private var failure: String?
+
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach([("all", String(localized: "All")), ("login", String(localized: "Logins")), ("payment", String(localized: "Payments")), ("contact", String(localized: "Contacts"))], id: \.0) { option in
-                Button { filter = option.0 } label: {
-                    DesktopText(Text(verbatim: option.1), size: 12, line: 16, color: filter == option.0 ? \.ink : \.inkSecondary)
-                        .padding(.horizontal, 8)
-                        .frame(minHeight: 30)
-                        .background(filter == option.0 ? theme.selected : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        // the desktop's states (CredentialsSettings.tsx): nothing read yet is
+        // the loading line or the error alone; the page once it answers
+        if list == nil {
+            Group {
+                if failed {
+                    DesktopSettingsNotice(failure.map { Text(verbatim: $0) } ?? Text("Sign in to do this."), color: \.danger)
+                } else {
+                    DesktopText(Text("Loading your vault…"), color: \.inkSecondary).padding(.bottom, 4)
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("desktop-settings.vault.filter.\(option.0)")
             }
-            Spacer(minLength: 0)
-            Button("Add an item") { managing = true }
-                .buttonStyle(DesktopButtonStyle(kind: .ghost, size: 12.5, weight: .medium, height: 30, horizontal: 10))
-        }
-        DesktopSettingsGroup {
-            if failed {
-                DesktopText(Text("Sign in to do this."), size: 12.5, line: 18, color: \.inkSecondary)
-                    .padding(.horizontal, 14).padding(.vertical, 10)
-            } else if let list {
+            .task { await load() }
+        } else if let list {
+            DesktopText(Text("Logins, API keys and notes your bots can use without seeing them. A bot fills a login into its browser only on the sites you set, and only after you allow it."),
+                        color: \.inkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 4)
+            HStack(spacing: 4) {
+                ForEach([("all", String(localized: "All")), ("login", String(localized: "Logins")), ("payment", String(localized: "Payments")), ("contact", String(localized: "Contacts"))], id: \.0) { option in
+                    Button { filter = option.0 } label: {
+                        DesktopText(Text(verbatim: option.1), size: 12, line: 16, color: filter == option.0 ? \.ink : \.inkSecondary)
+                            .padding(.horizontal, 8)
+                            .frame(minHeight: 30)
+                            .background(filter == option.0 ? theme.selected : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("desktop-settings.vault.filter.\(option.0)")
+                }
+                Spacer(minLength: 0)
+                Button("Add an item") { managing = true }
+                    .buttonStyle(DesktopButtonStyle(kind: .control))
+            }
+            DesktopSettingsGroup {
                 let items = list.items.filter { filter == "all" || Self.kind($0.kind) == filter }
                 if items.isEmpty {
-                    DesktopText(Text("Nothing in your vault yet."), size: 12.5, line: 18, color: \.inkSecondary)
-                        .padding(.horizontal, 14).padding(.vertical, 10)
+                    DesktopSettingsTextRow(Text("Nothing in your vault yet."))
                 }
                 ForEach(items) { item in
                     Button { managing = true } label: {
-                        DesktopSettingRow(title: Text(verbatim: item.name), subtitle: item.domains.isEmpty ? nil : Text(verbatim: item.domains.joined(separator: ", "))) {
-                            DesktopSettingsIconView(icon: .chevronDown, size: 12, strokeWidth: 2.5).rotationEffect(.degrees(-90))
-                                .foregroundStyle(theme.inkSecondary)
+                        DesktopDescribedRow(Text(verbatim: item.name), description: item.domains.isEmpty ? nil : Text(verbatim: item.domains.joined(separator: ", "))) {
+                            DesktopSettingsIconView(icon: .chevronRight, size: 14).foregroundStyle(theme.inkSecondary)
                         }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(DesktopHoverFill(radius: 0))
                 }
-            } else {
-                ProgressView().controlSize(.small).padding(14)
             }
-        }
-        .task { await load() }
-        .sheet(isPresented: $managing, onDismiss: { Task { await load() } }) {
-            NavigationStack { VaultSettingsView() }
-                .environmentObject(session)
+            .sheet(isPresented: $managing, onDismiss: { Task { await load() } }) {
+                NavigationStack { VaultSettingsView() }
+                    .environmentObject(session)
+            }
         }
     }
 
     private func load() async {
         guard let client = session.settingsClient else { failed = true; return }
-        do { list = try await client.vaultItems(); failed = false } catch { failed = true }
+        do {
+            list = try await client.vaultItems()
+            failed = false
+        } catch {
+            failed = true
+            // the server's own sentence (server-error-text.ts), else the desktop's no_person line
+            if case let APIError.status(_, message?) = error, !message.isEmpty, !message.lowercased().contains("person") {
+                failure = message
+            } else {
+                failure = nil
+            }
+        }
     }
 
     private static func kind(_ raw: String) -> String {
@@ -227,6 +359,7 @@ struct DesktopVaultSettings: View {
 /// Settings > Notifications: Alerts (the system permission, sounds, the
 /// icon's count, the approval chime), Nudges, then Blocked people.
 struct DesktopNotificationsSettings: View {
+    @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
     @AppStorage(NotificationSounds.key) private var sounds = true
     @AppStorage(AttentionPrefs.badgeKey) private var badge = true
@@ -235,20 +368,34 @@ struct DesktopNotificationsSettings: View {
     @AppStorage(AttentionPrefs.approvalChimeKey) private var approvalChime = true
     @AppStorage(NotificationSounds.choiceKey) private var soundChoice = NotificationSoundChoice.system.rawValue
     @State private var authorized: Bool?
+    /// "Keep notifications on screen": iPadOS keeps a banner up when its
+    /// style is Persistent (`alertStyle == .alert`), set in the iPad's Settings.
+    /// The desktop's `persistentNotifications`, on by default; on iPadOS
+    /// it holds once the banner style is Persistent in the iPad's Settings.
+    @AppStorage("sagax.notifications.persistent") private var persistent = true
+    @State private var persistentStyle = false
+    @State private var reports: [Moderation.Report]?
+    @State private var reportsError: String?
+
+    private var admin: Bool {
+        let role = session.surfaceGate.viewer?.role
+        return role == "admin" || role == "owner" || session.surfaceGate.scope == .sidecar
+    }
+
+    private var thisIPad: AnyView {
+        AnyView(DesktopText(verbatim: "· " + AppStrings.localized("On this iPad"), color: \.inkSecondary).lineLimit(1))
+    }
 
     var body: some View {
-        DesktopSettingsHeading(Text("Alerts · On this iPad"))
-        DesktopSettingsGroup {
-            DesktopSettingRow(title: Text("Let your bots notify you when something needs your attention")) {
-                if authorized == true {
-                    DesktopText(Text("On"), color: \.success)
-                } else {
+        DesktopSettingsGroup(Text("Alerts"), accessory: thisIPad, identifier: "alerts") {
+            if authorized != true {
+                DesktopCompactRow(Text("Let your bots notify you when something needs your attention"), identifier: "notificationInvite") {
                     Button("Enable") { Task { await enable() } }
-                        .buttonStyle(DesktopButtonStyle(kind: .ghost, size: 12.5, weight: .medium, height: 30, horizontal: 10))
+                        .buttonStyle(DesktopButtonStyle(kind: .control))
                         .accessibilityIdentifier("desktop-settings.notifications.enable")
                 }
             }
-            DesktopSettingRow(title: Text("Notification sounds")) {
+            DesktopCompactRow(Text("Notification sounds"), identifier: "notificationSounds") {
                 DesktopSwitch(isOn: sounds, label: Text("Notification sounds"), identifier: "desktop-settings.notifications.sounds") {
                     sounds.toggle()
                     let value = sounds
@@ -258,57 +405,150 @@ struct DesktopNotificationsSettings: View {
                     }
                 }
             }
-            DesktopSettingRow(title: Text("Notification sound")) {
-                DesktopSelect(options: NotificationSoundChoice.allCases.map { ($0.rawValue, AppStrings.localized($0.label)) },
-                              selection: soundChoice, label: Text("Notification sound"), identifier: "desktop-settings.notifications.sound",
-                              disabled: !sounds) { value in
+            DesktopCompactRow(Text("Notification sound"), identifier: "notificationSound") {
+                DesktopPillSelect(options: NotificationSoundChoice.allCases.map { ($0.rawValue, AppStrings.localized($0.label)) },
+                                  selection: soundChoice, label: Text("Notification sound"), identifier: "desktop-settings.notifications.sound",
+                                  disabled: !sounds) { value in
                     soundChoice = value
                     NotificationSounds.applyChoice(NotificationSoundChoice.parse(value))
                     Task { await PushRegistrar.shared.sync() }
                 }
             }
-            DesktopSettingRow(title: Text("Unread count on the app icon")) {
+            DesktopDescribedRow(Text("Keep notifications on screen"), description: Text("On the iPad, choose Persistent banners in Settings > Notifications > Sagax."), identifier: "persistentNotifications") {
+                DesktopSwitch(isOn: persistent, label: Text("Keep notifications on screen"), identifier: "desktop-settings.notifications.persistent") {
+                    persistent.toggle()
+                    // the banner style is the iPad's own: open it where it is set
+                    if persistent != persistentStyle, let url = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(url) }
+                }
+            }
+            DesktopCompactRow(Text("Unread count on the app icon"), identifier: "dockBadge") {
                 DesktopSwitch(isOn: badge, label: Text("Unread count on the app icon"), identifier: "desktop-settings.notifications.badge") {
                     badge.toggle()
                     NotificationCoordinator.shared.setBadge(session.state.unreadCount)
                     Task { await PushRegistrar.shared.sync() }
                 }
             }
-            DesktopSettingRow(title: Text("Chime when an approval arrives")) {
+            DesktopCompactRow(Text("Chime when an approval arrives"), identifier: "approvalChime") {
                 DesktopSwitch(isOn: approvalChime, label: Text("Chime when an approval arrives"), identifier: "desktop-settings.notifications.chime") {
                     approvalChime.toggle()
                     Task { await PushRegistrar.shared.sync() }
                 }
             }
         }
-        DesktopSettingsHeading(Text("Nudges · On this iPad"))
-        DesktopSettingsGroup {
-            DesktopSettingRow(title: Text("Nudge sound")) {
+        DesktopSettingsGroup(Text("Nudges"), accessory: thisIPad, identifier: "nudges") {
+            DesktopCompactRow(Text("Nudge sound"), identifier: "nudgeSound") {
                 DesktopSwitch(isOn: nudgeSound, label: Text("Nudge sound"), identifier: "desktop-settings.notifications.nudge-sound") { nudgeSound.toggle() }
             }
-            DesktopSettingRow(title: Text("Shake on nudge"), subtitle: Text("The iPad buzzes, as the desktop window shakes.")) {
+            DesktopCompactRow(Text("Shake on nudge"), identifier: "nudgeShake") {
                 DesktopSwitch(isOn: nudgeHaptic, label: Text("Shake on nudge"), identifier: "desktop-settings.notifications.nudge-shake") { nudgeHaptic.toggle() }
             }
         }
-        DesktopSettingsHeading(Text("Blocked people"))
-        DesktopSettingsGroup {
+        DesktopSettingsGroup(Text("Blocked people"), identifier: "blockedPeople") {
             if session.blockedPeople.isEmpty {
-                DesktopSettingRow(title: Text("Nobody blocked")) { EmptyView() }
+                DesktopCompactRow(Text("Nobody blocked"), identifier: "blockedPeople") { EmptyView() }
             } else {
                 ForEach(session.blockedPeople, id: \.id) { person in
-                    DesktopSettingRow(title: Text(verbatim: person.name)) {
+                    DesktopCompactRow(person.name.isEmpty ? Text("Someone") : Text(verbatim: person.name), identifier: "blocked-\(person.id)") {
                         Button("Unblock") { Task { _ = await session.unblock(person.id) } }
-                            .buttonStyle(DesktopButtonStyle(kind: .ghost, size: 12.5, weight: .medium, height: 30, horizontal: 10))
+                        .buttonStyle(DesktopButtonStyle(kind: .control))
                     }
                 }
             }
+            DesktopText(Text("Their messages are hidden for you only, on all your devices."), size: 12.5, line: 18, color: \.inkSecondary)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
         }
-        DesktopText(Text("Their messages are hidden for you only, on all your devices."), size: 12, line: 16, color: \.inkSecondary)
-            .padding(.leading, 2)
+        if admin {
+            DesktopSettingsGroup(Text("Reports"), identifier: "reports") {
+                let listed = Moderation.listed(reports ?? [])
+                if reports != nil && !listed.contains(where: \.isOpen) {
+                    DesktopCompactRow(Text("No open reports"), identifier: "reports") { EmptyView() }
+                }
+                ForEach(listed) { report in reportRow(report) }
+                if let reportsError {
+                    DesktopText(verbatim: reportsError, size: 12.5, line: 18, color: \.danger)
+                        .padding(.horizontal, 14).padding(.bottom, 8)
+                }
+            }
+        }
+        Color.clear.frame(height: 0)
             .task {
                 await session.loadModeration()
-                authorized = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .authorized
+                let settings = await UNUserNotificationCenter.current().notificationSettings()
+                authorized = settings.authorizationStatus == .authorized
+                persistentStyle = settings.alertStyle == .alert
+                if admin { await loadReports() }
             }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                Task {
+                    let settings = await UNUserNotificationCenter.current().notificationSettings()
+                    authorized = settings.authorizationStatus == .authorized
+                    persistentStyle = settings.alertStyle == .alert
+                }
+            }
+    }
+
+    private func reportRow(_ report: Moderation.Report) -> some View {
+        let someone = AppStrings.localized("Someone")
+        let line = String(format: AppStrings.localized("%@ reported %@: %@"),
+                          report.reporterName?.isEmpty == false ? report.reporterName! : someone,
+                          report.reportedName?.isEmpty == false ? report.reportedName! : someone,
+                          Self.reasonLabel(report.reason))
+        let place = report.peopleDm == true ? AppStrings.localized("In a direct message")
+            : report.groupName.map { String(format: AppStrings.localized("In %@"), $0) }
+        let date = Date(timeIntervalSince1970: report.at / 1000).formatted(date: .abbreviated, time: .shortened)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 0) {
+                    DesktopText(verbatim: line)
+                    DesktopText(verbatim: [place, date].compactMap { $0 }.joined(separator: " · "), size: 12, line: 16, color: \.inkSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if report.isOpen {
+                    Button("Mark handled") {
+                        Task {
+                            do { _ = try await session.settingsClient?.resolveReport(id: report.id); await loadReports() }
+                            catch { reportsError = error.localizedDescription }
+                        }
+                    }
+                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                } else {
+                    DesktopText("Handled", size: 12, line: 16, color: \.inkSecondary)
+                }
+            }
+            if let excerpt = report.excerpt, !excerpt.isEmpty {
+                DesktopText(verbatim: excerpt, size: 12.5, line: 18, color: \.inkSecondary)
+                    .padding(.leading, 8)
+                    .overlay(alignment: .leading) { Rectangle().fill(theme.hairline).frame(width: 2) }
+            }
+            if let note = report.note, !note.isEmpty {
+                DesktopText(verbatim: String(format: AppStrings.localized("Note: %@"), note), size: 12.5, line: 18, color: \.inkSecondary)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+    }
+
+    static func reasonLabel(_ reason: String) -> String {
+        switch reason {
+        case "harassment": AppStrings.localized("Harassment or bullying")
+        case "hate": AppStrings.localized("Hate speech")
+        case "sexual": AppStrings.localized("Sexual content")
+        case "violence": AppStrings.localized("Violence or threats")
+        case "spam": AppStrings.localized("Spam or scam")
+        case "privacy": AppStrings.localized("Private information")
+        default: AppStrings.localized("Something else")
+        }
+    }
+
+    private func loadReports() async {
+        guard let client = session.settingsClient else { return }
+        do {
+            reports = try await client.moderationReports()
+            reportsError = nil
+        } catch {
+            reportsError = error.localizedDescription
+        }
     }
 
     private func enable() async {
@@ -333,60 +573,209 @@ struct DesktopImportSettings: View {
     @State private var message: String?
     @State private var busy = false
 
+    @State private var link = ""
+    @State private var reply = ""
+    @State private var marketplaceSlug: String?
+    @State private var staged = ""
+    @State private var copied = false
+    @State private var grokError: String?
+    /// A share link's public card (GrokImportBox.tsx `card`).
+    @State private var card: GrokTemplateCard?
+    @State private var readingLink = false
+    @State private var choosingFile = false
+
     private var primary: Bot? { session.state.bots.first { $0.chiefOfStaff == true } }
 
+    private func box(_ content: some View) -> some View {
+        content
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(theme.inset, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
+    }
+
     var body: some View {
-        DesktopSettingsHeading(Text("Import a Grok Bot"))
-        DesktopSettingsGroup {
-            DesktopText(Text("Bring a shared Grok Bot into Sagax: its instructions, skills (turned off), timed routines (paused) and the apps it used. The model, the computer, logins and keys never come over; the bot uses your own engine and apps."),
-                        size: 12.5, line: 18, color: \.inkSecondary)
-                .padding(.horizontal, 14).padding(.vertical, 10)
-            DesktopSettingRow(title: Text("Grok Bot link")) {
-                Button("Read the link") { importing = true }
-                    .buttonStyle(DesktopButtonStyle(kind: .ghost, size: 12.5, weight: .medium, height: 30, horizontal: 10))
-                    .accessibilityIdentifier("desktop-settings.import.grok")
+        // Settings > Import (ImportSettings.tsx, GrokImportBox.tsx): the link,
+        // the two steps with Copy export prompt, the reply box, Preview and
+        // Choose a .json file; the preview and Add are the import sheet's
+        DesktopSettingsGroup(Text("Import a Grok Bot"), identifier: "import") {
+            VStack(alignment: .leading, spacing: 12) {
+                DesktopText(Text("Bring a shared Grok Bot into Sagax: its instructions, skills (turned off), timed routines (paused) and the apps it used. The model, the computer, logins and keys never come over; the bot uses your own engine and apps."),
+                            size: 12.5, line: 20, color: \.inkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 8) {
+                    box(TextField(text: $link, prompt: Text(verbatim: "https://x.ai/bot/...").foregroundColor(theme.inkSecondary)) { Text("Grok Bot link") }
+                        .font(theme.font(13))
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .submitLabel(.go)
+                        .onSubmit { readLink() })
+                        .accessibilityIdentifier("desktop-settings.import.link")
+                    Button(readingLink ? "Reading..." : "Read the link") { readLink() }
+                        .buttonStyle(DesktopButtonStyle(kind: .control, size: 12))
+                        .disabled(link.trimmingCharacters(in: .whitespaces).isEmpty || readingLink)
+                        .accessibilityIdentifier("desktop-settings.import.grok")
+                }
+                if let card {
+                    VStack(alignment: .leading, spacing: 2) {
+                        DesktopText(Text(verbatim: card.name), size: 13, weight: .medium, line: 18)
+                        if let creator = card.creator { DesktopText(Text("by \(creator)"), size: 12, line: 16, color: \.inkSecondary) }
+                        if !card.description.isEmpty {
+                            DesktopText(Text(verbatim: card.description), size: 12, line: 18, color: \.inkSecondary).padding(.top, 4)
+                        }
+                        Button("Start from the description") { staged = card.starterReply; marketplaceSlug = nil; importing = true }
+                            .buttonStyle(DesktopButtonStyle(kind: .control, size: 12))
+                            .padding(.top, 8)
+                            .accessibilityIdentifier("desktop-settings.import.from-description")
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(theme.raised.opacity(0.3), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        DesktopText(verbatim: "1. " + AppStrings.localized("Copy the export prompt and send it to your own Grok Bot."), size: 12.5, line: 20, color: \.inkSecondary)
+                        Button { Task { await copyPrompt() } } label: {
+                            HStack(spacing: 6) {
+                                DesktopSettingsIconView(icon: copied ? .check : .copy, size: 12)
+                                Text(copied ? "Copied" : "Copy export prompt")
+                            }
+                        }
+                        .buttonStyle(DesktopButtonStyle(kind: .control, size: 12))
+                        .accessibilityIdentifier("desktop-settings.import.copy-prompt")
+                    }
+                    DesktopText(verbatim: "2. " + AppStrings.localized("Paste its reply below, or choose the .json file you saved it in."), size: 12.5, line: 20, color: \.inkSecondary)
+                }
+                .padding(.leading, 6)
+                ZStack(alignment: .topLeading) {
+                    TextEditor(text: $reply)
+                        .font(.system(size: 12, design: .monospaced))
+                        .scrollContentBackground(.hidden)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                        .frame(minHeight: 96)
+                        .accessibilityLabel(Text("Grok Bot's reply"))
+                        .accessibilityIdentifier("desktop-settings.import.reply")
+                    if reply.isEmpty {
+                        Text("Paste the JSON reply here")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(theme.inkSecondary)
+                            .padding(.top, 8).padding(.leading, 5)
+                            .allowsHitTesting(false)
+                    }
+                }
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(theme.inset, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
+                HStack(spacing: 8) {
+                    Button("Preview") { staged = reply; importing = true }
+                        .buttonStyle(DesktopButtonStyle(kind: .control, size: 12))
+                        .disabled(reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityIdentifier("desktop-settings.import.preview")
+                    Button { choosingFile = true } label: {
+                        HStack(spacing: 6) {
+                            DesktopSettingsIconView(icon: .fileUp, size: 12)
+                            Text("Choose a .json file")
+                        }
+                    }
+                    .buttonStyle(DesktopButtonStyle(kind: .control, size: 12))
+                    .accessibilityIdentifier("desktop-settings.import.file")
+                }
+                if let grokError { DesktopText(verbatim: grokError, size: 12, line: 16, color: \.danger) }
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
         }
-        .sheet(isPresented: $importing) {
-            AgentImportSheet(close: { importing = false }) { bot in
+        .sheet(isPresented: $importing, onDismiss: { marketplaceSlug = nil }) {
+            AgentImportSheet(close: { importing = false }, imported: { bot in
                 importing = false
                 if let bot { shell.modal = nil; shell.open(.bot(bot)) }
-            }
+            }, initialReply: staged, marketplaceSlug: marketplaceSlug)
             .environmentObject(session)
         }
+        .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.json, .plainText]) { result in
+            guard case let .success(url) = result else { return }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 4 * 1024 * 1024 else {
+                grokError = AppStrings.localized("That file is larger than 4 MB.")
+                return
+            }
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else { return }
+            reply = text
+            staged = text
+            importing = true
+        }
 
-        DesktopSettingsHeading(Text("Import preferences"))
-        DesktopSettingsGroup {
+        DesktopSettingsGroup(Text("Import preferences"), identifier: "preference-import") {
             VStack(alignment: .leading, spacing: 8) {
                 DesktopText(Text("Paste preference lines for your primary bot. Nothing is written until you accept the lines on the card. A line that would replace one starts unchecked."),
                             size: 12.5, line: 18, color: \.inkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 if primary == nil {
                     DesktopText(Text("You have no primary bot yet."), size: 12.5, line: 18)
-                } else {
-                    TextEditor(text: $text)
-                        .font(theme.font(12.5))
-                        .frame(minHeight: 110)
-                        .scrollContentBackground(.hidden)
-                        .padding(6)
-                        .background(theme.raised, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                        .accessibilityLabel(Text("Preference lines"))
-                    Button("Review") { Task { await preview() } }
-                        .buttonStyle(DesktopButtonStyle(kind: .ghost, size: 12.5, weight: .medium, height: 30, horizontal: 10))
-                        .disabled(busy || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    if let lines {
-                        if lines.isEmpty { DesktopText(Text("No preference lines in that text."), size: 12.5, line: 18, color: \.inkSecondary) }
-                        ForEach(lines) { line in lineRow(line) }
-                        if !lines.isEmpty {
-                            Button("Apply the checked lines") { Task { await apply() } }
-                                .buttonStyle(DesktopButtonStyle(kind: .ghost, size: 12.5, weight: .medium, height: 30, horizontal: 10))
-                                .disabled(busy)
-                        }
+                }
+                TextEditor(text: $text)
+                    .font(theme.font(12.5))
+                    .frame(minHeight: 110)
+                    .scrollContentBackground(.hidden)
+                    .padding(6)
+                    .background(theme.raised, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(theme.hairline.opacity(0.6), lineWidth: 1))
+                    .accessibilityLabel(Text("Preference lines"))
+                    .accessibilityIdentifier("desktop-settings.import.preferences")
+                Button { Task { await preview() } } label: {
+                    DesktopText(Text("Review the preference lines"), size: 12.5, color: \.accent)
+                }
+                .buttonStyle(DesktopHoverFill(radius: 4))
+                .disabled(busy || primary == nil || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .opacity(busy || primary == nil || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.4 : 1)
+                if let lines {
+                    if lines.isEmpty { DesktopText(Text("No preference lines in that text."), size: 12.5, line: 18, color: \.inkSecondary) }
+                    ForEach(lines) { line in lineRow(line) }
+                    if !lines.isEmpty {
+                        Button { Task { await apply() } } label: { DesktopText(Text("Apply the checked lines"), size: 12.5, color: \.accent) }
+                            .buttonStyle(DesktopHoverFill(radius: 4))
+                            .disabled(busy)
                     }
                 }
                 if let message { DesktopText(Text(verbatim: message), size: 12.5, line: 18) }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
+        }
+    }
+
+    /// "Read the link": a marketplace page is staged at once; a share
+    /// link's bot comes over through its export prompt (the steps below).
+    private func readLink() {
+        grokError = nil
+        let value = link.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let slug = GrokLink.marketplaceSlug(value) {
+            marketplaceSlug = slug
+            staged = ""
+            importing = true
+        } else if GrokLink.shareId(value) == nil {
+            grokError = AppStrings.localized("Paste a Grok Bot link, like https://x.ai/bot/... or a Grok Bot marketplace page.")
+        } else {
+            // the share page's public card, then its description or the export prompt
+            readingLink = true
+            Task {
+                defer { readingLink = false }
+                do { card = try await session.profileClient?.grokCard(url: value) }
+                catch { grokError = error.localizedDescription }
+            }
+        }
+    }
+
+    private func copyPrompt() async {
+        grokError = nil
+        do {
+            guard let prompt = try await session.profileClient?.agentImportPrompt() else { return }
+            UIPasteboard.general.string = prompt
+            copied = true
+        } catch {
+            grokError = AppStrings.localized("The prompt could not be copied. Select it from the docs instead.")
         }
     }
 
@@ -446,22 +835,45 @@ struct DesktopImportSettings: View {
 /// Account > Appearance's time zone rows (the bots' own computer clock):
 /// "Detect time zone automatically" and, under it, the zone in use.
 struct DesktopTimeZoneRows: View {
+    @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
     @StateObject private var model = SettingsModel()
 
     var body: some View {
         Group {
-            DesktopSettingRow(title: Text("Detect time zone automatically")) {
+            DesktopCompactRow(Text("Detect time zone automatically"), identifier: "timeZoneAuto") {
                 DesktopSwitch(isOn: model.timeZoneAuto, label: Text("Detect time zone automatically"), identifier: "desktop-settings.time-zone-auto") {
                     let next = !model.timeZoneAuto
                     Task { await model.setTimeZoneAuto(next) }
                 }
             }
-            DesktopSettingRow(title: Text("Time zone")) {
-                DesktopSelect(options: Self.zones.map { ($0, $0) }, selection: model.timeZone ?? TimeZone.current.identifier,
-                              label: Text("Time zone"), identifier: "desktop-settings.time-zone", disabled: model.timeZoneAuto) { zone in
-                    Task { await model.setTimeZone(zone) }
+            DesktopCompactRow(Text("Time zone"), identifier: "timeZone") {
+                let current = model.timeZone ?? TimeZone.current.identifier
+                // the desktop's field (`h-8 w-56 rounded-full bg-control
+                // text-right`), its zones in a menu
+                Menu {
+                    ForEach(Self.zones, id: \.self) { zone in
+                        Button {
+                            Task { await model.setTimeZone(zone) }
+                        } label: {
+                            if zone == current { Label(zone, systemImage: "checkmark") } else { Text(verbatim: zone) }
+                        }
+                    }
+                } label: {
+                    Text(verbatim: current)
+                        .font(theme.font(13))
+                        .foregroundStyle(theme.ink)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.horizontal, 12)
+                        .frame(width: 224, height: 32)
+                        .background(theme.control, in: Capsule())
                 }
+                .disabled(model.timeZoneAuto)
+                .opacity(model.timeZoneAuto ? 0.6 : 1)
+                .accessibilityLabel(Text("Time zone"))
+                .accessibilityValue(Text(verbatim: current))
+                .accessibilityIdentifier("desktop-settings.time-zone")
             }
         }
         .task {

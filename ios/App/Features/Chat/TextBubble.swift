@@ -21,6 +21,7 @@ struct TextBubble: View {
     @Environment(\.desktopChatText) private var desktop
     @Environment(\.desktopWideCap) private var wideCap
     @Environment(\.desktopMessageActions) private var hoverActions
+    @Environment(\.desktopFindHit) private var findHit
     @State private var hovering = false
     /// So a bubble repaints when the person flips the bot-colour switch.
     @ObservedObject private var bubblePrefs = SidebarPrefsModel.shared
@@ -155,7 +156,7 @@ struct TextBubble: View {
                     }
                     if !cited.display.isEmpty {
                         let collapsible = MessageCollapse.isLong(cited.display)
-                        Text(MentionTint.attributed(cited.display, peers: context.mentionPeers, everyone: context.mentionEveryone))
+                        Text(findHighlighted(MentionTint.attributed(cited.display, peers: context.mentionPeers, everyone: context.mentionEveryone)))
                             .font(desktop?.font(DesktopChatMetrics.textSize) ?? Theme.Font.body)
                             .lineSpacing(desktop.map(DesktopChatMetrics.lineSpacing) ?? Theme.bodyLineSpacing)
                             .modifier(DesktopLineBox(theme: desktop))
@@ -234,14 +235,35 @@ struct TextBubble: View {
                 }
             )
 
+            // the landed find hit: `ring-2 ring-accent/70 rounded-2xl`
+            // outside the bubble, and its words highlighted in the text
+            .overlay {
+                if let desktop, isFindHit {
+                    RoundedRectangle(cornerRadius: 16 + 2, style: .continuous)
+                        .strokeBorder(desktop.accent.opacity(0.7), lineWidth: 2)
+                        .padding(-2)
+                        .allowsHitTesting(false)
+                        .accessibilityIdentifier("desktop-find-hit")
+                    GeometryReader { geometry in
+                        DesktopFindProbe()
+                            .frame(width: 1, height: 1)
+                            .position(x: 1, y: geometry.size.height * DesktopFindProbe.fraction(of: findHit?.text ?? "", in: message.text ?? ""))
+                    }
+                    .allowsHitTesting(false)
+                }
+            }
+            .environment(\.desktopFindHighlight, isFindHit ? findHit?.text : nil)
+
             // the hover row beside the bubble, outside its layout: the cap
             // (100 % - 82) already leaves it room, as on the desktop
             .overlay(alignment: mine ? .bottomLeading : .bottomTrailing) {
                 if let hoverActions, desktop != nil {
+                    // a zero-wide frame on the bubble's edge, the bar hanging
+                    // out of it 6 pt away (MessageBar beside the bubble)
                     DesktopMessageHoverStrip(model: hoverActions, mine: mine, hovering: hovering || parityHover)
                         .fixedSize()
-                        .alignmentGuide(.leading) { d in d[.trailing] + 6 }
-                        .alignmentGuide(.trailing) { d in d[.leading] - 6 }
+                        .padding(mine ? .trailing : .leading, 6)
+                        .frame(width: 0, alignment: mine ? .trailing : .leading)
                 }
             }
             .modifier(DesktopBubbleCapModifier(cap: desktopCap(mine: mine), mine: mine))
@@ -250,6 +272,15 @@ struct TextBubble: View {
         }
         .onHover { hovering = $0 }
     }
+
+    private func findHighlighted(_ text: AttributedString) -> AttributedString {
+        guard let desktop, isFindHit, let needle = findHit?.text else { return text }
+        var out = text
+        DesktopFindHighlight.apply(to: &out, needle: needle, theme: desktop)
+        return out
+    }
+
+    private var isFindHit: Bool { desktop != nil && findHit?.messageId == message.id }
 
     private var parityHover: Bool {
         #if DEBUG

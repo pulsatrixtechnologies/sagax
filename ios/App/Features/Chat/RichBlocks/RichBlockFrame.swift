@@ -84,15 +84,29 @@ struct RichToolButton: View {
 struct DesktopBlockTool: View {
     @Environment(\.desktopTheme) private var theme
     let icon: String
-    let title: LocalizedStringKey
+    let title: LocalizedStringKey?
     var pressed = false
+    /// The renderer's own lucide glyph (11 pt) instead of the symbol.
+    var lucide: [String]? = nil
     let action: () -> Void
+
+    init(icon: String, title: LocalizedStringKey?, pressed: Bool = false, lucide: [String]? = nil, action: @escaping () -> Void) {
+        self.icon = icon
+        self.title = title
+        self.pressed = pressed
+        self.lucide = lucide
+        self.action = action
+    }
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 4) {
-                Image(systemName: icon).font(.system(size: 10, weight: .medium))
-                Text(title).font(theme.font(11))
+                if let lucide {
+                    DesktopLucideGlyph(paths: lucide, size: 11)
+                } else {
+                    Image(systemName: icon).font(.system(size: 10, weight: .medium))
+                }
+                if let title { Text(title).font(theme.font(11)) }
             }
             .foregroundStyle(pressed ? theme.ink : theme.inkSecondary)
             .padding(.horizontal, 6)

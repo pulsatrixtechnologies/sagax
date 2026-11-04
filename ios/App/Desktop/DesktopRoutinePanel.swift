@@ -60,6 +60,8 @@ struct DesktopRoutinePanel: View {
             bottomBar
         }
         .background(Theme.bg)
+        // the bar sits at the window's foot, as the desktop's
+        .ignoresSafeArea(.container, edges: .bottom)
         .onAppear(perform: seed)
         .onValueChange(of: routine.id) { _ in editing = false; seed() }
         .confirmationDialog(String(localized: "Delete \(routine.name)?"), isPresented: $confirmingDelete, titleVisibility: .visible) {
@@ -97,15 +99,16 @@ struct DesktopRoutinePanel: View {
     /// name 14 medium (a field while editing), the round × that closes.
     private var header: some View {
         HStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(MausPalette.color(bot?.color ?? ""))
-                .frame(width: 10, height: 10)
+            // EventDetails: `size-3 rounded bg-accent` (a call: #6d7cff)
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(Theme.accent)
+                .frame(width: 12, height: 12)
             if editing {
                 TextField(String(localized: "Name"), text: $name)
-                    .font(Theme.font(14, .medium))
+                    .font(Theme.font(16, .semibold))
                     .accessibilityIdentifier("desktop-routine-panel.name")
             } else {
-                Text(verbatim: routine.name).font(Theme.font(14, .medium)).foregroundStyle(Theme.textPrimary).lineLimit(1)
+                Text(verbatim: routine.name).font(Theme.font(16, .semibold)).foregroundStyle(Theme.textPrimary).lineLimit(1)
             }
             Spacer(minLength: 0)
             Button(action: close) {

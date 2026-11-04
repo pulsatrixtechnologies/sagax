@@ -110,13 +110,20 @@ struct BotPanelMore: View {
     @EnvironmentObject private var model: DesktopShellModel
     let bot: Bot
     let slackURL: URL?
+    /// The Edit bot window's page: that one section's body, without its heading.
+    var only: DesktopPanelSection?
 
     @State private var query = ""
 
     private var sections: [DesktopPanelSection] { DesktopPanelSection.visible(gate: session.surfaceGate, slack: slackURL != nil, bot: bot) }
 
     var body: some View {
-        if let section = model.panelSection, sections.contains(section) {
+        if let only {
+            AnyView(body(of: only))
+                .id(only)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("desktop-panel-section.\(only.rawValue)")
+        } else if let section = model.panelSection, sections.contains(section) {
             VStack(alignment: .leading, spacing: 12) {
                 Text(section.title)
                     .font(theme.font(14, .medium))
@@ -227,7 +234,7 @@ struct BotPanelMore: View {
         case .soul: BotPanelSoul(bot: bot)
         case .skills: BotPanelSkills(bot: bot)
         case .memory: BotPanelMemory(bot: bot)
-        case .access: BotPanelAccess(bot: bot, showsWorksOn: !sections.contains(.worksOn))
+        case .access: BotPanelAccess(bot: bot, showsWorksOn: only == nil && !sections.contains(.worksOn))
         case .worksOn: BotPanelWorksOn(bot: bot)
         case .model: BotPanelModel(bot: bot)
         case .permissions: BotPanelPermissions(bot: bot)

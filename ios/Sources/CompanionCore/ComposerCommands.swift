@@ -101,7 +101,7 @@ public struct HarnessCommandsAnswer: Decodable, Hashable, Sendable {
 
 public enum ComposerCommandNames {
     /// `SAGAX_COMMAND_NAMES`: Sagax's own commands win a collision.
-    public static let sagax = ["goal", "learn", "setup"]
+    public static let sagax = ["goal", "learn", "loop", "setup"]
     /// `ENGINE_COMMAND_PREFIX`: reaches an engine command a Sagax one shadows.
     public static let enginePrefix = "engine:"
 
@@ -171,36 +171,135 @@ public func goalTextFromComposer(_ text: String) -> String? {
 
 /// `ComposerSlashCommand`: one of Sagax's own composer commands.
 public enum SagaxSlashCommand: String, CaseIterable, Hashable, Sendable {
-    /// Rooms: a bounded team goal.
+    /// A goal: a room's bounded team goal, or (2026-10-30) one bot's goal
+    /// it works on until done (server/solo-goal.ts).
     case goal
     /// Draft a reusable skill from the conversation.
     case learn
     /// The bot interviews the person and sets itself up.
     case setup
+    /// A repeating prompt in this chat, written as a routine
+    /// (src/lib/composer-loop.ts).
+    case loop
+    /// `/loop status`: this bot's loops (the routine list).
+    case loopStatus = "loop-status"
+    /// `/loop stop`: turns this bot's loops off.
+    case loopStop = "loop-stop"
 
-    public var label: String { "/\(rawValue)" }
+    /// `/goal`, `/loop status`.
+    public var label: String { "/" + rawValue.replacingOccurrences(of: "-", with: " ") }
 
-    /// What picking it puts in the draft (`pickCommand`): `/learn ` and
-    /// `/setup `; goal switches the room's send mode and inserts nothing.
+    /// The names the query matches (`[label without the slash, id]`).
+    public var names: [String] { [String(label.dropFirst()).lowercased(), rawValue] }
+
+    /// The heading it is listed under (`sagaxCommandGroup`): Goal for /goal.
+    public var group: ComposerMenuItem.Group { self == .goal ? .goal : .sagax }
+
+    /// What picking it puts in the draft (`pickCommand`): `/learn `,
+    /// `/setup `, `/loop `; goal switches the send mode and inserts nothing;
+    /// the loop subcommands run at once.
     public var insertion: String {
         switch self {
-        case .goal: return ""
+        case .goal, .loopStatus, .loopStop: return ""
         case .learn: return "/learn "
         case .setup: return "/setup "
+        case .loop: return "/loop "
         }
     }
 
-    /// The commands the desktop offers here (`commandCandidates`): `/goal` in
-    /// a room (not a DM); `/learn` while skill authoring is on and an engine
-    /// that would answer mounts the agents tools; `/setup` for one bot whose
-    /// engine mounts them.
+    /// Runs when picked instead of going into the draft.
+    public var runsAtOnce: Bool { self == .loopStatus || self == .loopStop }
+
+    /// The commands the desktop offers here (`commandCandidates`): `/goal`
+    /// in a 1:1 or a room (not a DM); `/learn` while skill authoring is on
+    /// and an engine that would answer mounts the agents tools; `/setup`
+    /// for one bot whose engine mounts them; `/loop` and its subcommands
+    /// in a 1:1 or a room (not a DM).
     public static func offered(isRoom: Bool, isDM: Bool, skillAuthoring: Bool, supportsAgents: Bool) -> [SagaxSlashCommand] {
         var out: [SagaxSlashCommand] = []
-        if isRoom && !isDM { out.append(.goal) }
+        let conversation = !isRoom || !isDM
+        if conversation { out.append(.goal) }
         if skillAuthoring && supportsAgents { out.append(.learn) }
         if !isRoom && supportsAgents { out.append(.setup) }
+        if conversation { out += [.loop, .loopStatus, .loopStop] }
         return out
     }
+}
+
+// MARK: - /loop
+
+/// `LoopCommand` (src/lib/composer-loop.ts): the typed `/loop …`.
+public enum LoopCommand: Hashable, Sendable {
+    case incomplete
+    case status
+    case stop(name: String)
+    case start(everyMinutes: Int, prompt: String, raised: Bool, capped: Bool)
+
+    /// `LOOP_MIN_MINUTES`, `LOOP_MAX_MINUTES`.
+    public static let minMinutes = 5
+    public static let maxMinutes = 1_440
+
+    /// `parseLoopCommand`: nil when the text is not that command.
+    public static func parse(_ text: String) -> LoopCommand? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = trimmed.lowercased()
+        guard lower.hasPrefix("/loop") else { return nil }
+        let after = trimmed.dropFirst(5)
+        if let first = after.first, !first.isWhitespace { return nil }
+        let rest = after.trimmingCharacters(in: .whitespacesAndNewlines)
+        if rest.isEmpty { return .incomplete }
+        let words = rest.split(whereSeparator: \.isWhitespace).map(String.init)
+        let word = words[0].lowercased()
+        let tail = Array(words.dropFirst())
+        if word == "status" && tail.isEmpty { return .status }
+        if word == "stop" { return .stop(name: tail.joined(separator: " ")) }
+        guard let raw = rawMinutes(word), raw >= 1 else { return .incomplete }
+        let prompt = tail.joined(separator: " ")
+        guard !prompt.isEmpty else { return .incomplete }
+        return .start(
+            everyMinutes: min(maxMinutes, max(minMinutes, raw)), prompt: prompt,
+            raised: raw < minMinutes, capped: raw > maxMinutes
+        )
+    }
+
+    /// `5m`, `2h`, `1d` in minutes; nil for anything else.
+    static func rawMinutes(_ token: String) -> Int? {
+        guard let unit = token.last, "mhd".contains(unit) else { return nil }
+        let digits = token.dropLast()
+        guard !digits.isEmpty, digits.allSatisfy(\.isASCIIDigit), let count = Int(digits) else { return nil }
+        switch unit {
+        case "h": return count * 60
+        case "d": return count * 1_440
+        default: return count
+        }
+    }
+
+    /// `loopRoutineName`: "Loop 5m check the board", at most 80 characters.
+    public static func routineName(everyMinutes: Int, prompt: String) -> String {
+        let cadence: String
+        if everyMinutes >= 60 && everyMinutes % 60 == 0 {
+            cadence = everyMinutes % 1_440 == 0 ? "\(everyMinutes / 1_440)d" : "\(everyMinutes / 60)h"
+        } else {
+            cadence = "\(everyMinutes)m"
+        }
+        let collapsed = prompt.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        let title = String(collapsed.prefix(42)).trimmingCharacters(in: .whitespaces)
+        return String("Loop \(cadence) \(title)".prefix(80))
+    }
+
+    /// The routines `/loop stop [name]` turns off (`runLoopCommand`): this
+    /// bot's enabled interval routines whose name or prompt holds the name,
+    /// else, with no name, the ones `/loop` wrote ("Loop …").
+    public static func stopTargets(_ routines: [Routine], botId: String, name: String) -> [Routine] {
+        let mine = routines.filter { $0.botId == botId && $0.schedule.type == .interval && $0.enabled != false }
+        let named = name.lowercased()
+        if named.isEmpty { return mine.filter { $0.name.hasPrefix("Loop ") } }
+        return mine.filter { $0.name.lowercased().contains(named) || $0.prompt.lowercased().contains(named) }
+    }
+}
+
+private extension Character {
+    var isASCIIDigit: Bool { isASCII && isNumber }
 }
 
 // MARK: - The bot's skills
@@ -244,7 +343,7 @@ public struct ComposerMenuItem: Hashable, Identifiable, Sendable {
     }
 
     public enum Group: String, CaseIterable, Hashable, Sendable {
-        case sagax, skills, engine, plugins, mcp
+        case goal, sagax, skills, engine, plugins, mcp
     }
 
     public var kind: Kind
@@ -313,6 +412,7 @@ public enum ComposerCommandMenu {
     public static func items(
         sagax: [SagaxSlashCommand],
         sagaxDescription: (SagaxSlashCommand) -> String = { _ in "" },
+        sagaxHint: (SagaxSlashCommand) -> String? = { _ in nil },
         skills: [SlashSkill] = [],
         engine: [HarnessCommand],
         query rawQuery: String
@@ -321,10 +421,10 @@ public enum ComposerCommandMenu {
         var ranked: [(item: ComposerMenuItem, rank: Int, order: Int)] = []
         for (order, command) in sagax.enumerated() {
             let description = sagaxDescription(command)
-            guard let rank = rank(query, names: [command.rawValue], description: description) else { continue }
+            guard let rank = rank(query, names: command.names, description: description) else { continue }
             ranked.append((ComposerMenuItem(
-                kind: .sagax(command), key: "sagax:\(command.rawValue)", group: .sagax,
-                label: command.label, description: description
+                kind: .sagax(command), key: "sagax:\(command.rawValue)", group: command.group,
+                label: command.label, description: description, argumentHint: sagaxHint(command)
             ), rank, order))
         }
         var skillNames = Set<String>()
@@ -387,10 +487,11 @@ public enum ComposerCommandMenu {
     public static func roomItems(
         sagax: [SagaxSlashCommand],
         sagaxDescription: (SagaxSlashCommand) -> String = { _ in "" },
+        sagaxHint: (SagaxSlashCommand) -> String? = { _ in nil },
         sets: [RoomEngineCommands],
         query: String
     ) -> [ComposerMenuItem] {
-        var out = items(sagax: sagax, sagaxDescription: sagaxDescription, engine: [], query: query)
+        var out = items(sagax: sagax, sagaxDescription: sagaxDescription, sagaxHint: sagaxHint, engine: [], query: query)
         let perBot = limitPerBot(sets.count)
         for set in sets {
             var shown = 0

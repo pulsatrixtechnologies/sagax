@@ -146,6 +146,12 @@ struct BotPanelDetails: View {
     @StateObject private var activity: BotActivityModel
     @StateObject private var remoteSessions: BotRemoteSessionsModel
     @State private var route: BotActivityRoute?
+    /// `useShowAllHistory` (lib/panel-visibility.ts, `sagax.showAllHistory.v1`):
+    /// the "All history" row is off unless the person turns it on; the
+    /// history stays behind the Coding title and the palette.
+    @AppStorage("sagax.showAllHistory.v1") private var showAllHistory = false
+    /// The overview's setup checklist for the Suggestions card.
+    @State private var suggestionsSetup: [BotSetupStep]?
 
     init(bot: Bot) {
         self.bot = bot
@@ -156,9 +162,12 @@ struct BotPanelDetails: View {
     private var showsActivity: Bool { session.surfaceGate.allows(.botActivity) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        // `flex-col gap-6`: a section that draws nothing (the task list
+        // while the bot keeps none) takes no gap, as a flex gap skips an
+        // empty child's box only when it is not rendered at all
+        PanelSectionStack(spacing: 24) {
             // Details > Suggestions (SuggestionsSection.tsx); the routines are just below
-            DesktopBotSuggestionsCard(bot: bot) { action in
+            DesktopBotSuggestionsCard(bot: bot, setup: suggestionsSetup) { action in
                 switch action {
                 case let .openThread(threadId): session.openChat(threadId: threadId)
                 case .openSection("routines"): break
@@ -171,7 +180,7 @@ struct BotPanelDetails: View {
                 if activity.showsCodingSection {
                     AnyView(codingSection)
                 }
-                if activity.list != nil, !activity.showsCodingSection {
+                if showAllHistory, activity.list != nil, !activity.showsCodingSection {
                     AnyView(allHistoryRow)
                 }
             }
@@ -185,6 +194,11 @@ struct BotPanelDetails: View {
         .padding(.trailing, 16)
         .padding(.bottom, 24)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // SuggestionsSection re-reads the overview when the name, title,
+        // instructions or routines change
+        .task(id: "\(bot.id)|\(session.connection?.id ?? "")|\(bot.name)|\(bot.title)") {
+            suggestionsSetup = (try? await session.settingsClient?.overview(botId: bot.id))?.setup
+        }
         .task(id: session.connection?.id) {
             if showsActivity { activity.start(client: session.profileClient) }
             remoteSessions.start(client: session.profileClient ?? session.settingsClient)
@@ -585,8 +599,10 @@ struct BotPanelRoutines: View {
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("desktop-panel-routine.\(routine.name)")
+            // RoutineSwitch: the track wears the bot's colour, as the desktop's does
             PanelSwitch(label: routine.enabled ? "Pause" : "Resume", isOn: routine.enabled,
-                        disabled: toggling.contains(routine.id) || routine.schedule.type == .unknown) { on in
+                        disabled: toggling.contains(routine.id) || routine.schedule.type == .unknown,
+                        onColor: BubbleColors.user(botColor: bot.color)?.fill.color) { on in
                 Task { await toggle(routine, on: on) }
             }
         }
@@ -647,9 +663,11 @@ struct DesktopBotSuggestionsCard: View {
     @EnvironmentObject private var session: Session
     @ObservedObject private var prefs = SidebarPrefsModel.shared
     let bot: Bot
+    /// The overview's setup checklist, loaded by the Details tab: a Group
+    /// with nothing in it hands its `.task` to no child, so the card could
+    /// never ask for it itself (the card never showed).
+    let setup: [BotSetupStep]?
     let run: (BotSuggestion.Action) -> Void
-
-    @State private var setup: [BotSetupStep]?
 
     private var items: [BotSuggestion] {
         BotSuggestions.suggestions(setup: setup, tasks: bot.tasks, waiting: bot.waitingApprovals)
@@ -712,14 +730,49 @@ struct DesktopBotSuggestionsCard: View {
                 }
             }
         }
-        .task(id: "\(bot.id)|\(session.connection != nil)") {
-            setup = (try? await session.settingsClient?.overview(botId: bot.id))?.setup
-        }
     }
 
     private func subtitle(_ item: BotSuggestion) -> String {
         let format = String(localized: String.LocalizationValue(item.subtitle))
         guard let argument = item.argument else { return format }
         return String(format: format, argument)
+    }
+}
+
+/// A vertical stack that puts `spacing` only between children that have a
+/// height, so a section that hides itself (an empty VStack that still owns
+/// its `.task`) leaves no gap.
+struct PanelSectionStack: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width
+        var height: CGFloat = 0
+        var maxWidth: CGFloat = 0
+        var placed = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
+            guard size.height > 0.5 else { continue }
+            height += (placed > 0 ? spacing : 0) + size.height
+            maxWidth = max(maxWidth, size.width)
+            placed += 1
+        }
+        return CGSize(width: width ?? maxWidth, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        var placed = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
+            if size.height <= 0.5 {
+                subview.place(at: CGPoint(x: bounds.minX, y: y), proposal: ProposedViewSize(width: bounds.width, height: 0))
+                continue
+            }
+            if placed > 0 { y += spacing }
+            subview.place(at: CGPoint(x: bounds.minX, y: y), proposal: ProposedViewSize(width: bounds.width, height: size.height))
+            y += size.height
+            placed += 1
+        }
     }
 }

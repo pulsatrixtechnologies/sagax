@@ -5655,6 +5655,7 @@
       "composer.failed.dismissAria": "c9fd41f3f549507fdaf664c731d65004d1f8c70eccd2dca20a0119911ec0fc31",
       "chat.stale": "301fbe625e2b1e0046400daf960b88d2ec2cffb7107b0937d9815e245e891e43",
       "chat.unknownMessage": "5caa5c1a56050915e8bd1614f8927fb30d57e87f78721760453207f78604a2cb",
+      "chat.stepFailed": "1e0709bf254c81dd83fc706e0e8eb6416b278a0415b372dd31fb36768e7c5b80",
       "composer.failed.offline": "3916050a3562745657cc7f26d620aee1fe813952ae5cdf9cef2d059b7173744c",
       "composer.failed.notSent": "0c0a1026c21762cb4246bb8edb99e206bbee6af164040fbe236018411ec3e709",
       "composer.goal.aria": "beb082ec9f205208a6b76cfe706aa220803125abe9255a53c33035d471e55153",

@@ -125,6 +125,16 @@ const INTERPRETERS = new Set([
 ]);
 const PREFIXES = new Set(["sudo", "env", "time", "nohup", "exec", "command", "caffeinate"]);
 
+/** A line shown to a person (a running entry's current step): every
+ * absolute path keeps only its last two segments, never the server's
+ * `/workspace/bots/<slug>/...` prefix (2026-11-03). */
+export function shortPathsIn(text: string): string {
+  return text.replace(/(?<![\w.~:/-])\/(?:[\w.@+-]+\/)+[\w.@+-]+\/?/g, (path) => {
+    const parts = path.replace(/\/+$/, "").split("/").filter(Boolean);
+    return parts.length <= 2 ? path : parts.slice(-2).join("/");
+  });
+}
+
 /** The program or the script a shell command runs, never its arguments:
  * `python scrape.py --key x` reads `scrape.py`, `cd app && pnpm test` reads
  * `pnpm`, `open -a "Google Chrome"` opens an app. */

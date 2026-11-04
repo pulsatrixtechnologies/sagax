@@ -37,6 +37,7 @@
 // is another person's private one, and nothing else of that thread.
 import { redactSecretsInText } from "../redact.ts";
 import { toolFailureText } from "../../shared/tool-failure-text.ts";
+import { shortPathsIn } from "../../shared/working-step.ts";
 import type { RequestAuth } from "../auth/request-auth.ts";
 import type { WireAccessCard } from "../../shared/wire.ts";
 import type { RoutineRun } from "../../shared/routines.ts";
@@ -451,7 +452,7 @@ export function createBotActivityRoutes(deps: BotActivityRouteDeps): RouteHandle
       if (asksForWork(message)) break;
       const tool = message.tool;
       if (!tool || tool.setup) continue;
-      const label = (tool.summary?.trim() || tool.name).slice(0, 160);
+      const label = shortPathsIn(tool.summary?.trim() || tool.name).slice(0, 160);
       if (tool.ok === undefined) return label;
       latest ??= label;
     }

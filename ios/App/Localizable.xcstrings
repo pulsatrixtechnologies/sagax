@@ -2,6 +2,16 @@
   "sourceLanguage": "en",
   "version": "1.0",
   "strings": {
+    " (Default: none sent)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " (Par défaut : aucun niveau envoyé)"
+          }
+        }
+      }
+    },
     " The app keeps retrying automatically.": {
       "localizations": {
         "en": {
@@ -232,6 +242,36 @@
         }
       }
     },
+    "%@ / %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ / %@"
+          }
+        }
+      }
+    },
+    "%@ / %@ lines · %@ / %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ / %@ lignes · %@ / %@"
+          }
+        }
+      }
+    },
+    "%@ B": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ o"
+          }
+        }
+      }
+    },
     "%@ Dictation hears with Apple on this iPhone.": {
       "localizations": {
         "en": {
@@ -244,6 +284,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ La dictée entend avec Apple sur cet iPhone."
+          }
+        }
+      }
+    },
+    "%@ KB": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ Ko"
           }
         }
       }
@@ -320,6 +370,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ permitiu este pedido."
+          }
+        }
+      }
+    },
+    "%@ already exists.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ existe déjà."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ já existe."
           }
         }
       }
@@ -782,6 +848,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ foi excluído. O dono foi avisado."
+          }
+        }
+      }
+    },
+    "%@ deliveries": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ réceptions"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ entregas"
           }
         }
       }
@@ -1302,6 +1384,16 @@
         }
       }
     },
+    "%@ minutes": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ minutes"
+          }
+        }
+      }
+    },
     "%@ moves": {
       "localizations": {
         "fr": {
@@ -1650,6 +1742,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ sélectionné(s)"
+          }
+        }
+      }
+    },
+    "%@ selected in the bot folder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ selected"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ sélectionnés"
           }
         }
       }
@@ -5002,6 +5110,54 @@
         }
       }
     },
+    "@all notifies everyone": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@all avise tout le monde"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@all notifica todo mundo"
+          }
+        }
+      }
+    },
+    "@all notifies nobody. A person tagged by name is always notified.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@all n'avise personne. Une personne mentionnée par son nom est toujours avisée."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@all não notifica ninguém. Quem for marcado pelo nome sempre é notificado."
+          }
+        }
+      }
+    },
+    "@all sends a notification to every person in this group chat. A person tagged by name is always notified.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@all envoie une notification à chaque personne de ce groupe. Une personne mentionnée par son nom est toujours avisée."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@all envia uma notificação para cada pessoa deste grupo. Quem for marcado pelo nome sempre é notificado."
+          }
+        }
+      }
+    },
     "@mention of the app": {
       "localizations": {
         "en": {
@@ -5341,7 +5497,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Une modification de fichier"
+            "value": "Un changement de fichier"
           }
         }
       }
@@ -6900,6 +7056,16 @@
         }
       }
     },
+    "Add a bot": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter un bot"
+          }
+        }
+      }
+    },
     "Add a card": {
       "localizations": {
         "fr": {
@@ -6981,13 +7147,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ajouter un moteur de secours"
+            "value": "Ajouter un moteur de relève"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Adicionar um motor de reserva"
+            "value": "Adicionar um mecanismo de reserva"
           }
         }
       }
@@ -7393,7 +7559,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Adicionar um motor…"
+            "value": "Adicionar um mecanismo…"
           }
         }
       }
@@ -8808,6 +8974,22 @@
         }
       }
     },
+    "All bots →": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tous les bots →"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todos os bots →"
+          }
+        }
+      }
+    },
     "All day": {
       "localizations": {
         "en": {
@@ -9176,6 +9358,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Permitir que %1$@ possa %2$@?"
+          }
+        }
+      }
+    },
+    "Allow Auto mode on this computer?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autoriser le mode Auto sur cet ordinateur?"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permitir o modo Auto neste computador?"
           }
         }
       }
@@ -9594,6 +9792,16 @@
         }
       }
     },
+    "Allowed recipients": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Destinataires permis"
+          }
+        }
+      }
+    },
     "Allowed since %@, renewed %@": {
       "localizations": {
         "en": {
@@ -9977,13 +10185,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Toujours autorisés"
+            "value": "Toujours permis"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sempre permitidos"
+            "value": "Sempre permitido"
           }
         }
       }
@@ -10174,6 +10382,16 @@
         }
       }
     },
+    "An approval is waiting for you in this bot's conversation. Answer it to change the model.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une approbation vous attend dans la conversation de ce bot. Répondez-y pour changer le modèle."
+          }
+        }
+      }
+    },
     "An attachment is waiting to resume. Open its conversation to retry.": {
       "localizations": {
         "en": {
@@ -10192,6 +10410,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Um anexo está aguardando a retomada. Abra a conversa para tentar de novo."
+          }
+        }
+      }
+    },
+    "An email or a text goes without a card when every recipient is on this list. A bot on the list is reached without the confirmation step. Payments, invitations, shares, posts and replies always ask for an approval.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un courriel ou un texto part sans carte quand chaque destinataire est sur la liste. Un bot de la liste est joint sans l'étape de confirmation. Les paiements, invitations, partages, publications et réponses demandent toujours une approbation."
+          }
+        }
+      }
+    },
+    "An email or a text goes without a card when every recipient is on this list. Bots on the list count once \"Ask me before contacting other bots\" is on. Payments, invitations, shares, posts and replies always ask for an approval.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un courriel ou un texto part sans carte quand chaque destinataire est sur la liste. Les bots de la liste comptent quand « Me demander avant de contacter d'autres bots » est activé. Les paiements, invitations, partages, publications et réponses demandent toujours une approbation."
           }
         }
       }
@@ -11030,6 +11268,16 @@
         }
       }
     },
+    "Applies to direct bot threads, including Primary Bot and delegated work. Channels are not included. Only this thread switches; bot defaults stay unchanged.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "S'applique aux conversations directes, y compris le bot principal et le travail délégué, pas aux canaux. Seule la conversation change de modèle."
+          }
+        }
+      }
+    },
     "Applies to every bot turn in groups. Direct threads use the inactivity watchdog instead.": {
       "localizations": {
         "en": {
@@ -11070,6 +11318,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vale para todas as conversas deste bot de uma vez: rotinas, trabalho delegado e trabalho que outro bot ou um cliente de IA envia para cá. Uma conversa mantém o próprio nível só quando você escolheu um nela."
+          }
+        }
+      }
+    },
+    "Applies to every thread of this bot at once: routines, delegated work and work another bot or an AI client sends here. A thread keeps its own level only when you chose one in it; Refresh permissions brings it back to this level.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "S'applique à toutes les conversations de ce bot d'un coup : routines, travail délégué et travail qu'un autre bot ou un client IA envoie ici. Une conversation garde son propre niveau seulement si vous l'y avez choisi ; Actualiser les permissions la ramène à ce niveau."
           }
         }
       }
@@ -11260,6 +11518,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aprovação solicitada"
+          }
+        }
+      }
+    },
+    "Approval rules": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Règles d'approbation"
           }
         }
       }
@@ -11923,7 +12191,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Perguntar antes de contatar outros bots"
+            "value": "Perguntar antes de contactar outros bots"
           }
         }
       }
@@ -12124,6 +12392,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Assistente"
+          }
+        }
+      }
+    },
+    "At a glance": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En bref"
           }
         }
       }
@@ -12532,6 +12810,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "O Auto pode reutilizar o computador na nuvem abaixo quando ele já estiver em execução. Abrir estas configurações nunca cria nem acorda um."
+          }
+        }
+      }
+    },
+    "Auto mode will let this bot click, type, and run tools on this computer without asking first. Destructive and sensitive actions still stop. Continue only if you are watching.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le mode Auto laisse ce bot cliquer, taper et lancer des outils sur cet ordinateur sans demander d'abord. Les actions destructrices et sensibles s'arrêtent encore. Continuez seulement si vous regardez."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O modo Auto deixa este bot clicar, digitar e executar ferramentas neste computador sem perguntar antes. Ações destrutivas e sensíveis ainda param. Continue só se você estiver olhando."
           }
         }
       }
@@ -13040,6 +13334,16 @@
         }
       }
     },
+    "Background brief": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brief en arrière-plan"
+          }
+        }
+      }
+    },
     "Background effects": {
       "localizations": {
         "fr": {
@@ -13070,6 +13374,16 @@
         }
       }
     },
+    "Backup model": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modèle de relève"
+          }
+        }
+      }
+    },
     "Backup models for this bot": {
       "localizations": {
         "en": {
@@ -13081,13 +13395,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Modèles de secours pour ce bot"
+            "value": "Modèles de relève pour ce bot"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Modelos de reserva para este bot"
+            "value": "Modelos de reserva deste bot"
           }
         }
       }
@@ -13110,6 +13424,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Senha do backup"
+          }
+        }
+      }
+    },
+    "Backup provider": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fournisseur de relève"
           }
         }
       }
@@ -15197,7 +15521,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Impossible d'annuler"
+            "value": "Annulation impossible"
           }
         },
         "pt-BR": {
@@ -15680,6 +16004,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Alterado:"
+          }
+        }
+      }
+    },
+    "Changed: %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modifié : %@"
           }
         }
       }
@@ -16918,6 +17252,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Escolher um bot principal"
+          }
+        }
+      }
+    },
+    "Choose a provider": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choisir un fournisseur"
           }
         }
       }
@@ -21199,7 +21543,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Choisit les serveurs offerts à ce bot. L'approbation de chaque outil dépend du fournisseur du modèle et du mode d'approbation."
+            "value": "Les serveurs offerts à ce bot. L'approbation de chaque outil dépend du fournisseur de modèle et du niveau d'approbation."
           }
         },
         "pt-BR": {
@@ -22230,6 +22574,16 @@
         }
       }
     },
+    "Could not save the rule: %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d'enregistrer la règle : %@"
+          }
+        }
+      }
+    },
     "Could not save the tool calls setting.": {
       "localizations": {
         "en": {
@@ -22258,6 +22612,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossible d'enregistrer ta réponse. Vérifie la connexion et réessaie."
+          }
+        }
+      }
+    },
+    "Could not upload %@.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de téléverser %@."
           }
         }
       }
@@ -22452,6 +22816,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não foi possível gravar a nota de voz."
+          }
+        }
+      }
+    },
+    "Couldn't restore this version.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de revenir à cette version."
           }
         }
       }
@@ -23482,6 +23856,16 @@
         }
       }
     },
+    "Current version": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version actuelle"
+          }
+        }
+      }
+    },
     "Current: %@": {
       "localizations": {
         "fr": {
@@ -24242,6 +24626,16 @@
         }
       }
     },
+    "Default (%@ min)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Par défaut (%@ min)"
+          }
+        }
+      }
+    },
     "Default (%@)": {
       "localizations": {
         "en": {
@@ -24254,6 +24648,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Par défaut (%@)"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Padrão (%@)"
           }
         }
       }
@@ -24400,6 +24800,16 @@
         }
       }
     },
+    "Delete %@ and its %@ files? This cannot be undone.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer %@ et ses %@ fichiers ? Cette action est définitive."
+          }
+        }
+      }
+    },
     "Delete %@ and its %lld files? This cannot be undone.": {
       "localizations": {
         "en": {
@@ -24412,6 +24822,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Supprimer %@ et ses %lld fichiers ? Cette action est définitive."
+          }
+        }
+      }
+    },
+    "Delete %@ items? This cannot be undone.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer %@ éléments ? Cette action est définitive."
           }
         }
       }
@@ -24456,6 +24876,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Excluir %@?"
+          }
+        }
+      }
+    },
+    "Delete %@? The change is kept in Changes and can be undone there.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer %@ ? Le changement est conservé dans Changements et peut y être annulé."
           }
         }
       }
@@ -24816,6 +25246,16 @@
         }
       }
     },
+    "Delete rule": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer la règle"
+          }
+        }
+      }
+    },
     "Delete section": {
       "localizations": {
         "en": {
@@ -24984,6 +25424,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Excluir esta página e todas as versões?"
+          }
+        }
+      }
+    },
+    "Delete this rule?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprimer cette règle ?"
           }
         }
       }
@@ -26462,6 +26912,22 @@
         }
       }
     },
+    "Download %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Télécharger %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Baixar %@"
+          }
+        }
+      }
+    },
     "Download as .md": {
       "localizations": {
         "en": {
@@ -26544,6 +27010,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Brouillon à terminer"
+          }
+        }
+      }
+    },
+    "Drafts are off for this bot.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les brouillons sont désactivés pour ce bot."
           }
         }
       }
@@ -26923,7 +27399,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "A pasta de cada bot, ou um caminho absoluto"
+            "value": "A pasta de cada bot — ou um caminho absoluto"
           }
         }
       }
@@ -26940,6 +27416,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cada computador é pareado separadamente. Só o computador selecionado fica ativo por vez."
+          }
+        }
+      }
+    },
+    "Each file must be under %@.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chaque fichier doit faire moins de %@."
           }
         }
       }
@@ -27361,7 +27847,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Editar avatar"
+            "value": "Editar o avatar"
           }
         }
       }
@@ -27808,6 +28294,16 @@
         }
       }
     },
+    "Email address or phone number": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adresse courriel ou numéro de téléphone"
+          }
+        }
+      }
+    },
     "Email addresses": {
       "localizations": {
         "en": {
@@ -27880,6 +28376,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rascunho de e-mail: %@"
+          }
+        }
+      }
+    },
+    "Email drafts": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brouillons de courriel"
           }
         }
       }
@@ -28390,6 +28896,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Saisissez un montant d'au moins %@, comme 25 ou 25,50."
+          }
+        }
+      }
+    },
+    "Enter an email address or a phone number.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entrez une adresse courriel ou un numéro de téléphone."
           }
         }
       }
@@ -28921,13 +29437,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Chaque changement de ces fichiers, peu importe qui l'a fait. Annuler remet un fichier comme il était avant ce changement."
+            "value": "Chaque changement à ces fichiers, qui que ce soit. Annuler remet un fichier comme il était avant ce changement."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Toda alteração nestes arquivos, seja de quem for. Desfazer devolve um arquivo ao que era antes dessa alteração."
+            "value": "Cada mudança nestes arquivos, seja de quem for. Desfazer devolve um arquivo ao estado anterior àquela mudança."
           }
         }
       }
@@ -29163,6 +29679,12 @@
             "state": "translated",
             "value": "À chaque tour"
           }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A cada turno"
+          }
         }
       }
     },
@@ -29253,7 +29775,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tous ceux qui peuvent se connecter"
+            "value": "Toute personne qui peut se connecter"
           }
         },
         "pt-BR": {
@@ -29292,6 +29814,32 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tout"
+          }
+        }
+      }
+    },
+    "Everything in this bot's folder, and when each file reaches the bot. Put reference documents (procedures, templates, lists) in docs/: the bot sees their names every turn and reads one when it needs it.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout ce que contient le dossier de ce bot, et quand chaque fichier lui parvient. Mettez les documents de référence (procédures, gabarits, listes) dans docs/ : le bot voit leurs noms à chaque tour et en lit un quand il en a besoin."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tudo o que há na pasta deste bot e quando cada arquivo chega até ele. Coloque documentos de referência (procedimentos, modelos, listas) em docs/: o bot vê os nomes a cada turno e lê um quando precisa."
+          }
+        }
+      }
+    },
+    "Everything in this bot's folder.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout le contenu du dossier de ce bot."
           }
         }
       }
@@ -31019,13 +31567,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fixé pour ce fil après son premier tour. Commencez un nouveau fil pour travailler ailleurs."
+            "value": "Fixé pour ce fil après son premier tour. Démarrez un nouveau fil pour travailler ailleurs."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fixada para esta conversa após o primeiro turno. Comece uma nova conversa para trabalhar em outro lugar."
+            "value": "Fixado para esta conversa após o primeiro turno. Comece uma nova conversa para trabalhar em outro lugar."
           }
         }
       }
@@ -31162,6 +31710,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nome da pasta"
+          }
+        }
+      }
+    },
+    "Folder options": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Options du dossier"
           }
         }
       }
@@ -31660,6 +32218,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Esquecer este computador?"
+          }
+        }
+      }
+    },
+    "Forgotten": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oublié"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esquecido"
           }
         }
       }
@@ -32809,7 +33383,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dê um nome ao tópico: letras, números, espaços, pontos ou hífens."
+            "value": "Dê um nome ao tema: letras, números, espaços, pontos ou traços."
           }
         }
       }
@@ -33023,7 +33597,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dar a este bot um navegador integrado"
+            "value": "Dar um navegador integrado a este bot"
           }
         }
       }
@@ -33848,6 +34422,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nome do grupo (opcional)"
+          }
+        }
+      }
+    },
+    "Group panel": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Panneau du groupe"
           }
         }
       }
@@ -34954,6 +35538,16 @@
         }
       }
     },
+    "How hard it thinks in groups and new threads": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sa réflexion dans les groupes et les nouvelles conversations"
+          }
+        }
+      }
+    },
     "How hard new bots think from their first message.": {
       "localizations": {
         "en": {
@@ -35079,7 +35673,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Combien de temps un bot peut travailler dans cette conversation avant que le tour s'arrête. Par défaut utilise la limite de tour des groupes dans les Réglages. Un nouveau choix s'applique au prochain tour."
+            "value": "Durée pendant laquelle un bot peut continuer à travailler dans cette conversation avant que le tour s'arrête. Par défaut utilise la limite de tour de groupe dans les Réglages. Un nouveau choix s'applique au prochain tour."
           }
         },
         "pt-BR": {
@@ -35594,6 +36188,16 @@
         }
       }
     },
+    "Idle Claude threads with a big context get one cache read every 50 minutes for the window set in Settings → Models.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les fils Claude inactifs avec un gros contexte reçoivent une lecture de cache toutes les 50 minutes pour la fenêtre réglée dans Réglages → Modèles."
+          }
+        }
+      }
+    },
     "If an ACP model provider (such as Qwen or OpenCode) fails before starting, try a backup once. Work that may have already run is not replayed.": {
       "localizations": {
         "en": {
@@ -35605,7 +36209,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Si un fournisseur ACP (comme Qwen ou OpenCode) échoue avant de démarrer, essayer une fois un modèle de secours. Le travail déjà exécuté n'est pas rejoué."
+            "value": "Si un fournisseur ACP (comme Qwen ou OpenCode) échoue avant de démarrer, Sagax tente une relève une fois. Le travail déjà fait n'est pas rejoué."
           }
         },
         "pt-BR": {
@@ -37718,6 +38322,16 @@
         }
       }
     },
+    "It writes to these people and bots without a card. For anyone else, an approval card shows.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce bot leur écrit sans carte. Pour toute autre personne, une carte d'approbation s'affiche."
+          }
+        }
+      }
+    },
     "Its MCP servers and skills are available to every bot. A server that runs a command starts off: test it, then turn it on. Skills start off until you read them.": {
       "localizations": {
         "en": {
@@ -37979,7 +38593,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Jev est désactivé, donc les messages simples vont à %@ ; les @mentions priment"
+            "value": "Jev est désactivé, donc les messages ordinaires vont à %@ ; les @mentions ont priorité"
           }
         },
         "pt-BR": {
@@ -38023,7 +38637,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Jev choisit qui répond à chaque message simple ; les @mentions priment"
+            "value": "Jev choisit qui répond à chaque message ordinaire ; les @mentions ont priorité"
           }
         },
         "pt-BR": {
@@ -38452,6 +39066,16 @@
         }
       }
     },
+    "Keep prompt cache warm": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Garder le cache de prompt chaud"
+          }
+        }
+      }
+    },
     "Keep related threads together under %@. Moving a thread never changes its model, permissions, or conversation.": {
       "localizations": {
         "en": {
@@ -38495,13 +39119,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Garder le navigateur intégré hors de portée de ce bot."
+            "value": "Gardez le navigateur intégré inaccessible à ce bot."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Manter o navegador integrado indisponível para este bot."
+            "value": "Mantenha o navegador integrado indisponível para este bot."
           }
         }
       }
@@ -39679,7 +40303,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Permitir que este bot envie notas de voz"
+            "value": "Deixar este bot enviar notas de voz"
           }
         }
       }
@@ -39717,7 +40341,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Permettre à ce bot d'utiliser %@"
+            "value": "Laisser ce bot utiliser %@"
           }
         },
         "pt-BR": {
@@ -39810,6 +40434,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Permite que os donos de bots escolham Acesso total: os bots rodam comandos e editam arquivos sem perguntar. Nada roda no próprio servidor Sagax. Desativado, o Acesso total fica indisponível e os turnos que o pedem são recusados."
+          }
+        }
+      }
+    },
+    "Lets this bot send spoken notes.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permet à ce bot d'envoyer des notes parlées."
           }
         }
       }
@@ -39952,6 +40586,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Licença"
+          }
+        }
+      }
+    },
+    "Lifecycle hooks": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hooks de cycle de vie"
           }
         }
       }
@@ -41286,6 +41930,26 @@
         }
       }
     },
+    "Loop guard": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Garde-fou de boucle"
+          }
+        }
+      }
+    },
+    "Loop guard is off for this bot.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le garde-fou de boucle est désactivé pour ce bot."
+          }
+        }
+      }
+    },
     "Loop stopped.": {
       "localizations": {
         "fr": {
@@ -41732,6 +42396,16 @@
         }
       }
     },
+    "Manage bots": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gérer les bots"
+          }
+        }
+      }
+    },
     "Manage command allowlist": {
       "localizations": {
         "en": {
@@ -41772,6 +42446,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gerenciar no Admin"
+          }
+        }
+      }
+    },
+    "Manage in Capabilities": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gérer dans Capacités"
           }
         }
       }
@@ -42642,6 +43326,16 @@
         }
       }
     },
+    "Memory topic": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sujet de mémoire"
+          }
+        }
+      }
+    },
     "Memory upkeep": {
       "localizations": {
         "en": {
@@ -42660,6 +43354,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Manutenção da memória"
+          }
+        }
+      }
+    },
+    "Mentions": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mentions"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Menções"
           }
         }
       }
@@ -44714,6 +45424,26 @@
         }
       }
     },
+    "Name of the new file": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom du nouveau fichier"
+          }
+        }
+      }
+    },
+    "Name of the new folder": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom du nouveau dossier"
+          }
+        }
+      }
+    },
     "Name section": {
       "localizations": {
         "fr": {
@@ -45230,6 +45960,22 @@
         }
       }
     },
+    "Never loaded": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jamais chargé"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nunca carregado"
+          }
+        }
+      }
+    },
     "Never saved. Sagax forgets it when this turn ends.": {
       "localizations": {
         "en": {
@@ -45516,6 +46262,16 @@
         }
       }
     },
+    "New file name": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom du nouveau fichier"
+          }
+        }
+      }
+    },
     "New folder": {
       "localizations": {
         "en": {
@@ -45550,6 +46306,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nouveau dossier ici"
+          }
+        }
+      }
+    },
+    "New folder name": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom du nouveau dossier"
           }
         }
       }
@@ -45911,7 +46677,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nome do novo tópico"
+            "value": "Nome do tema novo"
           }
         }
       }
@@ -45933,7 +46699,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nome do novo tópico, ex.: clientes"
+            "value": "Nome do tema novo, p. ex. clientes"
           }
         }
       }
@@ -46377,7 +47143,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucun serveur MCP ajouté pour l'instant."
+            "value": "Aucun serveur MCP."
           }
         },
         "pt-BR": {
@@ -46518,6 +47284,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pas de réponse"
+          }
+        }
+      }
+    },
+    "No app is connected. The queue stays empty.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune app n'est branchée. La file reste vide."
           }
         }
       }
@@ -46787,13 +47563,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucun changement enregistré pour l'instant."
+            "value": "Aucun changement enregistré."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nenhuma mudança registrada ainda."
+            "value": "Ainda não há mudanças registradas."
           }
         }
       }
@@ -47768,6 +48544,16 @@
         }
       }
     },
+    "No one yet: every send asks for an approval.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personne pour l'instant : chaque envoi demande une approbation."
+          }
+        }
+      }
+    },
     "No open reports": {
       "localizations": {
         "fr": {
@@ -47865,7 +48651,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nenhum outro motor disponível"
+            "value": "Nenhum outro mecanismo está disponível"
           }
         }
       }
@@ -48008,6 +48794,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nenhuma janela de plano para este provedor"
+          }
+        }
+      }
+    },
+    "No plugin hooks installed.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun hook de plugin installé."
           }
         }
       }
@@ -48811,13 +49607,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucune utilisation enregistrée pour ce bot pour l'instant."
+            "value": "Aucune utilisation enregistrée pour ce bot."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nenhum uso registrado para este bot ainda."
+            "value": "Ainda não há uso registrado para este bot."
           }
         }
       }
@@ -50276,6 +51072,16 @@
         }
       }
     },
+    "Nothing allowed yet.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien pour l'instant."
+          }
+        }
+      }
+    },
     "Nothing changed recently.": {
       "localizations": {
         "en": {
@@ -51008,6 +51814,16 @@
         }
       }
     },
+    "Notify me when this bot finishes or needs me": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "M'avertir quand ce bot a fini ou a besoin de moi"
+          }
+        }
+      }
+    },
     "Now": {
       "localizations": {
         "en": {
@@ -51375,13 +52191,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Désactivé arrête les invites de mémoire, le rappel, les outils de mémoire natifs, l'entretien et les journaux de tour automatiques. Les fichiers existants restent consultables."
+            "value": "Désactivé, cela arrête les invites de mémoire, le rappel, les outils de mémoire natifs, l'entretien et les journaux automatiques de tour. Les fichiers existants restent disponibles pour révision."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Desativado interrompe os prompts de memória, a recordação, as ferramentas nativas de memória, a manutenção e os registros automáticos de turno. Os arquivos existentes continuam disponíveis para revisão."
+            "value": "Desligado, param os prompts de memória, a lembrança, as ferramentas nativas, a manutenção e os registros automáticos de turno. Os arquivos existentes continuam disponíveis para revisão."
           }
         }
       }
@@ -51544,6 +52360,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Desligada: os bots não a leem nem escrevem. As notas ficam aqui."
+          }
+        }
+      }
+    },
+    "Off: this bot talks to teammates on its own, without a confirmation step.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivé : ce bot parle à ses coéquipiers de lui-même, sans confirmation."
           }
         }
       }
@@ -51784,6 +52610,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ativado por padrão. Salve a verificação de um bot como habilidade pelo cartão Verificar, ou peça a um bot compatível para rodar /create-verification-skill. Cada mudança aguarda sua revisão."
+          }
+        }
+      }
+    },
+    "On demand": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur demande"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sob demanda"
           }
         }
       }
@@ -52088,6 +52930,16 @@
         }
       }
     },
+    "On: this bot stops and asks before it reaches out to another bot.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activé : ce bot s'arrête et demande avant de contacter un autre bot."
+          }
+        }
+      }
+    },
     "Once %@ at %@": {
       "localizations": {
         "en": {
@@ -52273,7 +53125,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Uma linha sobre a função deste bot"
+            "value": "Uma linha sobre para que serve este bot"
           }
         }
       }
@@ -52452,6 +53304,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Seule une personne connectée avec Pulsatrix peut changer cette photo."
+          }
+        }
+      }
+    },
+    "Only an organization admin can change the working folder.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seul un administrateur de l'organisation peut modifier le dossier de travail."
           }
         }
       }
@@ -55159,6 +56021,12 @@
             "state": "translated",
             "value": "Propriétaire"
           }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dono"
+          }
         }
       }
     },
@@ -56934,6 +57802,16 @@
         }
       }
     },
+    "Permissions stay unchanged; some provider switches need confirmation. Using the backup can incur charges from its provider.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les permissions restent inchangées ; certains changements de fournisseur demandent une confirmation. La relève peut entraîner des frais."
+          }
+        }
+      }
+    },
     "Person": {
       "localizations": {
         "en": {
@@ -58184,6 +59062,16 @@
         }
       }
     },
+    "Plugin hooks run on the bot's computer (sandbox, VM or PC), never on the server. They stay off until you turn them on.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les hooks des plugins s'exécutent sur l'ordinateur du bot (sandbox, VM ou PC), jamais sur le serveur. Ils restent éteints tant que vous ne les activez pas."
+          }
+        }
+      }
+    },
     "Plugin type": {
       "localizations": {
         "en": {
@@ -58837,7 +59725,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Robot principal"
+            "value": "Bot principal"
           }
         },
         "pt-BR": {
@@ -60446,6 +61334,16 @@
         }
       }
     },
+    "Read connectors and MCP servers": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lire les connecteurs et les serveurs MCP"
+          }
+        }
+      }
+    },
     "Read from 1Password only when the bot fills it, never added to chat. 1Password may ask you to approve.": {
       "localizations": {
         "en": {
@@ -60534,6 +61432,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Somente leitura"
+          }
+        }
+      }
+    },
+    "Read only here. Download it, or edit it where it belongs.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lecture seule ici. Téléchargez-le ou modifiez-le là où il se trouve."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Somente leitura aqui. Baixe-o ou edite-o onde ele fica."
           }
         }
       }
@@ -62261,13 +63175,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Retirer %@ des toujours autorisés"
+            "value": "Retirer %@ de toujours permis"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Remover %@ de sempre permitidos"
+            "value": "Remover %@ de sempre permitido"
           }
         }
       }
@@ -62299,7 +63213,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Retirer %@ de la liste de secours"
+            "value": "Retirer %@ de la liste de relève"
           }
         },
         "pt-BR": {
@@ -62790,6 +63704,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Renommer"
+          }
+        }
+      }
+    },
+    "Rename %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renommer %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renomear %@"
           }
         }
       }
@@ -64090,6 +65020,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rétablir les réglages par défaut"
+          }
+        }
+      }
+    },
+    "Restore this version": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revenir à cette version"
+          }
+        }
+      }
+    },
+    "Restore this version?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revenir à cette version ?"
           }
         }
       }
@@ -66138,6 +67088,16 @@
         }
       }
     },
+    "SOUL.md, MEMORY.md and RULES.md stay in place.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SOUL.md, MEMORY.md et RULES.md restent en place."
+          }
+        }
+      }
+    },
     "SSE (older servers)": {
       "localizations": {
         "en": {
@@ -66354,6 +67314,16 @@
         }
       }
     },
+    "Same as Settings (%@)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comme dans Réglages (%@)"
+          }
+        }
+      }
+    },
     "Same as last month": {
       "localizations": {
         "en": {
@@ -66388,6 +67358,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Igual ao meu computador"
+          }
+        }
+      }
+    },
+    "Same as my settings (%@)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comme mes réglages (%@)"
           }
         }
       }
@@ -66620,6 +67600,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enregistrer les plafonds"
+          }
+        }
+      }
+    },
+    "Save mine anyway": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer la mienne quand même"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Salvar a minha mesmo assim"
           }
         }
       }
@@ -66934,6 +67930,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Salva. Cole uma nova chave para substituí-la."
+          }
+        }
+      }
+    },
+    "Saves facts from chats, tidies the notes each night, and keeps every change so you can undo it.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistre les faits des chats, range les notes chaque nuit, et garde chaque changement pour pouvoir l'annuler."
           }
         }
       }
@@ -68900,6 +69906,16 @@
         }
       }
     },
+    "Send the brief every day at": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envoyer le brief chaque jour à"
+          }
+        }
+      }
+    },
     "Send the code from your WhatsApp to finish.": {
       "localizations": {
         "en": {
@@ -70020,6 +71036,22 @@
         }
       }
     },
+    "Shared with %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partagé avec %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compartilhado com %@"
+          }
+        }
+      }
+    },
     "Shared with %lld people or teams": {
       "localizations": {
         "en": {
@@ -70108,6 +71140,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Partage"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compartilhamento"
           }
         }
       }
@@ -70214,6 +71252,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Court"
+          }
+        }
+      }
+    },
+    "Short description": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Courte description"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descrição curta"
           }
         }
       }
@@ -73470,6 +74524,16 @@
         }
       }
     },
+    "Speaks this bot's answers as they arrive.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lit les réponses de ce bot à mesure qu'elles arrivent."
+          }
+        }
+      }
+    },
     "Special keys": {
       "localizations": {
         "en": {
@@ -74850,24 +75914,40 @@
         }
       }
     },
-    "Stop this bot's turn before changing this setting.": {
+    "Stop this bot's turn before changing its approval level": {
       "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stop this bot's turn before changing this setting."
-          }
-        },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Arrêtez le tour de ce bot avant de changer ce réglage."
+            "value": "Arrêtez le tour de ce bot avant de changer son niveau d'autorisation"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pare o turno deste bot antes de mudar esta configuração."
+            "value": "Pare o turno deste bot antes de mudar o nível de aprovação"
+          }
+        }
+      }
+    },
+    "Stop this bot's turn before changing this setting.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " Stop this bot's turn before changing this setting."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " Arrêtez le tour de ce bot avant de changer ce réglage."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " Pare o turno deste bot antes de mudar este ajuste."
           }
         }
       }
@@ -75644,6 +76724,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trocar, renomear ou remover uma"
+          }
+        }
+      }
+    },
+    "Switched off in Capabilities > Installed. Test it and turn it on there first.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Désactivé dans Capacités > Installées. Testez-le et activez-le là d'abord."
           }
         }
       }
@@ -77768,6 +78858,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Le bot n'a pas pu être créé. Réessayez."
+          }
+        }
+      }
+    },
+    "The bot goes back to this version (%@). The current version stays in Changes, so you can come back to it.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le bot revient à cette version (%@). La version actuelle reste dans Changements : vous pourrez y revenir."
           }
         }
       }
@@ -80941,13 +82041,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ce bot a son propre navigateur avec ses propres connexions."
+            "value": "Ce bot a son propre navigateur, avec ses propres connexions."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Este bot tem seu próprio navegador com seus próprios logins."
+            "value": "Este bot tem o próprio navegador, com os próprios acessos."
           }
         }
       }
@@ -81160,6 +82260,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "O computador deste bot só é capturado enquanto ele está trabalhando."
+          }
+        }
+      }
+    },
+    "This bot's conversation is working. Stop its turn to change the model.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La conversation de ce bot travaille. Arrêtez son tour pour changer le modèle."
           }
         }
       }
@@ -81778,6 +82888,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Esta escolha de Cloud VM é mantida, mas não pode rodar enquanto o computador pareado não tiver uma chave de API do Boat configurada e um agente Boat disponível."
+          }
+        }
+      }
+    },
+    "This file changed since you opened it, probably the bot. Reload its version, or save yours over it.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce fichier a changé depuis son ouverture, probablement par le bot. Rechargez sa version ou enregistrez la vôtre par-dessus."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este arquivo mudou desde que você o abriu, provavelmente pelo bot. Recarregue a versão dele ou salve a sua por cima."
           }
         }
       }
@@ -82537,13 +83663,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ce fournisseur n'indique pas de prix ; les jetons sont comptés."
+            "value": "Ce fournisseur n'indique pas de prix. Les jetons sont comptés."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Este provedor não informa preço; os tokens são contados."
+            "value": "Este provedor não informa um preço. Os tokens são contados."
           }
         }
       }
@@ -83630,6 +84756,26 @@
         }
       }
     },
+    "Tidied %@: %@.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rangé %@ : %@."
+          }
+        }
+      }
+    },
+    "Tidy memory automatically": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ranger la mémoire automatiquement"
+          }
+        }
+      }
+    },
     "Tidy up": {
       "localizations": {
         "fr": {
@@ -83768,6 +84914,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fuso horário"
+          }
+        }
+      }
+    },
+    "Time of the daily brief": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heure du brief quotidien"
           }
         }
       }
@@ -84509,7 +85665,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les outils pour lesquels ce bot ne demande plus."
+            "value": "Outils pour lesquels ce bot ne demande plus."
           }
         },
         "pt-BR": {
@@ -85332,6 +86488,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Limite de turno"
+          }
+        }
+      }
+    },
+    "Turn limit for this conversation": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limite de tour pour cette conversation"
           }
         }
       }
@@ -86870,6 +88036,16 @@
         }
       }
     },
+    "Upkeep": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entretien"
+          }
+        }
+      }
+    },
     "Upload": {
       "localizations": {
         "en": {
@@ -86942,6 +88118,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enviando %@"
+          }
+        }
+      }
+    },
+    "Uploading %@…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Téléversement de %@…"
           }
         }
       }
@@ -87134,6 +88320,32 @@
         }
       }
     },
+    "Use a backup model": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utiliser un modèle de relève"
+          }
+        }
+      }
+    },
+    "Use a name with letters, digits, spaces, dots, dashes or underscores.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilisez un nom fait de lettres, chiffres, espaces, points, tirets ou traits de soulignement."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use um nome com letras, dígitos, espaços, pontos, hifens ou sublinhados."
+          }
+        }
+      }
+    },
     "Use a password of at least 12 characters. You will need it to import this backup.": {
       "localizations": {
         "en": {
@@ -87250,6 +88462,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Usar mascote"
+          }
+        }
+      }
+    },
+    "Use memory": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utiliser la mémoire"
           }
         }
       }
@@ -87872,6 +89094,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Version %lld, remplacée par une plus récente"
+          }
+        }
+      }
+    },
+    "Version restored": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version rétablie"
           }
         }
       }
@@ -88533,7 +89765,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Attendez que ce bot termine toutes ses tâches avant de changer ses serveurs MCP."
+            "value": "Attendez que ce bot finisse ses tâches en cours avant de changer ses serveurs MCP."
           }
         },
         "pt-BR": {
@@ -89808,6 +91040,16 @@
         }
       }
     },
+    "What to create": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quoi créer"
+          }
+        }
+      }
+    },
     "What to watch": {
       "localizations": {
         "en": {
@@ -89842,6 +91084,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ce qui serait envoyé"
+          }
+        }
+      }
+    },
+    "What you decided with Always allow or Always deny. Rules are yours: they apply to this bot or to all your bots, never to someone else's.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce que vous avez décidé avec Toujours autoriser ou Toujours refuser. Les règles sont à vous : elles s'appliquent à ce bot ou à tous vos bots, jamais à ceux d'une autre personne."
           }
         }
       }
@@ -89975,13 +91227,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Quand la reprise automatique est activée dans les réglages de l'app, ces modèles sont essayés dans l'ordre seulement si le fournisseur prouve que la requête n'a jamais commencé. Le travail qui a pu s'exécuter n'est pas rejoué. Seul ce fil change; les valeurs par défaut du bot et les autres fils restent inchangés. Des frais du fournisseur de secours peuvent s'appliquer."
+            "value": "Quand la reprise automatique est activée dans les réglages, ces modèles sont essayés dans l'ordre seulement si le fournisseur prouve que la demande n'a jamais commencé. Le travail qui a peut-être déjà tourné n'est pas rejoué. Seule cette conversation change. Les défauts du bot et les autres conversations restent. Le fournisseur de relève peut facturer."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Quando a recuperação automática está ativada nos Ajustes do app, estes modelos são tentados em ordem só se o provedor provar que a solicitação nunca começou. Trabalho que pode ter rodado não é repetido. Só aquela conversa muda; os padrões do bot e as outras conversas ficam iguais. Podem ser cobradas tarifas do provedor de reserva."
+            "value": "Quando a recuperação automática está ativa nos Ajustes, estes modelos são tentados em ordem só se o provedor provar que o pedido nunca começou. Trabalho que possa ter rodado não é repetido. Só essa conversa muda. Os padrões do bot e as outras conversas ficam. O provedor de reserva pode cobrar."
           }
         }
       }
@@ -90112,6 +91364,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "When it changes and the condition holds"
+          }
+        }
+      }
+    },
+    "When off, this bot does not write email draft cards.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand c'est éteint, ce bot n'écrit pas de carte de brouillon."
+          }
+        }
+      }
+    },
+    "When off, this bot is not steered or stopped for a repeating shell failure.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quand c'est éteint, ce bot n'est ni orienté ni arrêté pour un échec de shell qui se répète."
           }
         }
       }
@@ -90287,13 +91559,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "L'endroit où chaque bot de ce groupe exécute son terminal et ses outils de fichiers."
+            "value": "Là où chaque bot de ce groupe exécute son shell et ses outils de fichiers."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Onde cada bot deste grupo executa o terminal e as ferramentas de arquivos."
+            "value": "Onde cada bot deste grupo roda o shell e as ferramentas de arquivo."
           }
         }
       }
@@ -90347,13 +91619,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Où ce bot lance ses outils de terminal et de fichiers."
+            "value": "Où ce bot exécute ses outils de shell et de fichiers."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Onde este bot executa suas ferramentas de terminal e de arquivos."
+            "value": "Onde este bot executa as ferramentas de shell e de arquivos."
           }
         }
       }
@@ -90458,6 +91730,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Onde o trabalho roda"
+          }
+        }
+      }
+    },
+    "Whether this bot may wake on its own on an email, a calendar entry, a failed run, a mention of the bot, or a webhook, and start work without being asked. On by default. When on, it acts at this bot's approval level and rules; before a write from a wake, a dry run is recorded on the wake, then ordinary approval runs it. The proactive layer adds no extra approval card. Your organization's Ask and Deny rules and person isolation still apply.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Si ce bot peut se réveiller de lui-même sur un courriel, une entrée de calendrier, une exécution échouée, une mention du bot ou un webhook, et commencer du travail sans qu'on le lui demande. Activé par défaut. Quand c'est activé, il agit selon le niveau d'approbation et les règles de ce bot; avant une écriture depuis un réveil, un essai à blanc est enregistré sur le réveil, puis l'approbation ordinaire l'exécute. La couche proactive n'ajoute aucune carte d'approbation. Les règles Demander d'abord et Refuser de l'organisation, et l'isolement entre personnes, restent."
           }
         }
       }
@@ -91282,6 +92564,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Padrão do espaço de trabalho"
+          }
+        }
+      }
+    },
+    "Workspace is set to Off, so this bot has no browser. Pick another destination above to give it one.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zone de travail est réglée à Désactivé, donc ce bot n'a pas de navigateur. Choisissez une autre destination plus haut pour lui en donner un."
           }
         }
       }
@@ -93380,6 +94672,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Votre organisation n'offre encore aucun moteur."
+          }
+        }
+      }
+    },
+    "Your organization requires an approval each time: this list is paused.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre organisation exige une approbation à chaque fois : cette liste est en pause."
           }
         }
       }
@@ -96198,6 +97500,22 @@
         }
       }
     },
+    "created %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "créé %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "criado %@"
+          }
+        }
+      }
+    },
     "crossed out %lld contradicted notes": {
       "localizations": {
         "en": {
@@ -97137,7 +98455,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "equivalente, na sua assinatura, não cobrado"
+            "value": "equivalente — está na sua assinatura, não é cobrado"
           }
         }
       }
@@ -97296,6 +98614,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "fields: status, priority"
+          }
+        }
+      }
+    },
+    "file last used %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "last used %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "dernière utilisation %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "último uso %@"
           }
         }
       }
@@ -100784,6 +102124,22 @@
         }
       }
     },
+    "modified %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "modifié %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "modificado %@"
+          }
+        }
+      }
+    },
     "money": {
       "localizations": {
         "en": {
@@ -100926,6 +102282,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "não selecionado"
+          }
+        }
+      }
+    },
+    "not used yet": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "pas encore utilisé"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ainda não usado"
           }
         }
       }

@@ -281,9 +281,20 @@ function context(page, viewport, fixture) {
     async hover(selector) {
       const c = await center(selector);
       await mouse("mouseMoved", c.x, c.y, { button: "none" });
+      ctx.lastPointer = c;
       await sleep(120);
       await mouse("mouseMoved", c.x + 1, c.y, { button: "none" });
       await sleep(250);
+    },
+    /** keepPointer: one more move to the resting point, so an element
+     * re-rendered under it since (the sidebar after the engines arrive)
+     * takes :hover again; headless Chrome does not refresh it on its own. */
+    async restPointer() {
+      const c = ctx.lastPointer;
+      if (!c) return;
+      await mouse("mouseMoved", c.x + 1, c.y, { button: "none" });
+      await mouse("mouseMoved", c.x, c.y, { button: "none" });
+      await sleep(200);
     },
     async moveAway() {
       // the header's empty left end: no row, no button, no hover state
@@ -477,12 +488,14 @@ async function main() {
           break;
         }
         if (!item.surface.keepPointer) await ctx.moveAway();
+        // before settle: the hover's own transitions then finish with the rest
+        if (item.surface.keepPointer) await ctx.restPointer();
         await settle(page, item.surface.settleMs ?? 0);
         // a remount between the surface and the shot draws a blank page: retry
         if (!item.surface.noShell && !(await page.eval(`Boolean(document.querySelector("[data-app-shell]") && document.body.innerText.trim().length > 0)`))) {
           throw new Error("blank page at capture time");
         }
-        writeFileSync(join(REFS, `${file}.png`), await page.screenshot());
+        writeFileSync(join(REFS, `${file}.png`), await page.screenshot({ repaint: item.surface.keepPointer ? viewport : null }));
         // --text also shows the end of a scrolled dialog: one more shot
         // (<file>-end.png) when its content runs past the window.
         if (withText) {

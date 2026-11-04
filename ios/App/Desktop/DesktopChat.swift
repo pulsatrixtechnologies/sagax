@@ -120,7 +120,7 @@ struct DesktopChatColumn: View {
         .environment(\.desktopBubbleCap, DesktopChatMetrics.bubbleCap(column: column))
         .environment(\.desktopWideCap, DesktopChatMetrics.wideCap(column: column))
         .environment(\.desktopChat, DesktopChatChrome(
-            panelOpen: model.panelOpen && chat.isBot,
+            panelOpen: model.panelOpen && (chat.isBot || chat.opensGroupPanel),
             // the shell docks the panel at 1024: this column is then
             // the window less the sidebar and the panel
             panelDocked: model.panelOpen && model.panelDocked,
@@ -157,7 +157,10 @@ extension ChatView {
             if let desktop = desktopChat {
                 // the find bar opens under the header (ChatView.tsx), 20 in
                 AnyView(VStack(spacing: 0) {
-                    DesktopChatHeader(chat: current, chrome: desktop, export: exportConversation, copyMarkdown: copyConversationMarkdown, devPods: devPodsAvailable ? { openDevPods() } : nil, devPodsOpen: showingDevPods) { openProfile() }
+                    DesktopChatHeader(chat: current, chrome: desktop, export: exportConversation, copyMarkdown: copyConversationMarkdown, devPods: devPodsAvailable ? { openDevPods() } : nil, devPodsOpen: showingDevPods) {
+                        // a group's pill toggles its docked panel (GroupPanel.swift)
+                        if current.opensGroupPanel { desktop.togglePanel() } else { openProfile() }
+                    }
                         .frame(height: 52, alignment: .top)
                     if finder.isOpen && session.surfaceGate.allows(.findInConversation) {
                         ChatFindBar(model: finder, threadId: threadId)

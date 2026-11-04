@@ -731,7 +731,7 @@ import {
 import { createCustomRuleRoutes } from "./routes/custom-rules.ts";
 import { createAutoApprovalNotes, type ToolAutoApproval } from "./approvals/tool-auto-approval.ts";
 import { createEmailDraftRoutes } from "./routes/email-drafts.ts";
-import { createThreadWarmRoutes } from "./routes/thread-warm.ts";
+import { createThreadWarmRoutes, warmBotAccessRefusal } from "./routes/thread-warm.ts";
 import { createEmailSendPasses, emailSendCard, sendWithMailer } from "./mail/email-draft-send.ts";
 import {
   EMAIL_SEND_REQUEST_PREFIX,
@@ -1616,7 +1616,7 @@ import {
 import { callHasParkableWork, classifyVoiceIntent } from "../src/lib/voice-mode/voice-topics.ts";
 import { VoiceCallSessions, voiceCallTurnSettle } from "./voice/voice-call-session.ts";
 import { VoiceCallWarmup } from "./voice/voice-call-warmup.ts";
-import { namedTeammates, prewarmWindowMs, ThreadPrewarm } from "./threads/thread-prewarm.ts";
+import { namedTeammates, prewarmPerPersonPerMinute, prewarmWindowMs, ThreadPrewarm } from "./threads/thread-prewarm.ts";
 import { callTurnEffort } from "./voice/voice-call-effort.ts";
 import {
   VoiceTurnSessions,
@@ -21804,7 +21804,10 @@ function releaseWarmEngine(threadId: string): void {
 /** Pre-warm (server/threads/thread-prewarm.ts): the engine of a thread starts when the
  * person opens its conversation or starts typing, or shortly before a
  * scheduled routine, so the first message does not pay the cold start. */
-const threadPrewarm = new ThreadPrewarm({ windowMs: prewarmWindowMs() });
+const threadPrewarm = new ThreadPrewarm({
+  windowMs: prewarmWindowMs(),
+  perPersonPerMinute: prewarmPerPersonPerMinute(),
+});
 /** routineRunId of a task reserved for a scheduled run not started yet. */
 const RESERVED_RUN_PREFIX = "prewarm:";
 type PrewarmOutcome = "started" | "extended" | "limited" | "skipped";
@@ -32839,10 +32842,15 @@ ROUTES.push(createEmailDraftRoutes({ ask: requestEmailDraftSend, status: emailDr
 ROUTES.push(createThreadWarmRoutes({ warm: threadWarmRequest }));
 /** POST /api/bots/:id/warm (server/routes/thread-warm.ts): same access as a
  * send to the thread, a named thread only (an implicit one could open a
- * viewer's thread). */
+ * viewer's thread). No prewarm for a bot the person cannot use (#1975). */
 function threadWarmRequest(auth: RequestAuth, botId: string, body: Record<string, unknown>): { status: number; body: Record<string, unknown> } {
   const bot = store.bot(botId);
   if (!bot) return { status: 404, body: { error: "no such bot" } };
+  const denied = warmBotAccessRefusal(viewerBotLevel(auth, bot), {
+    adminScope: auth.scopes.includes("admin"),
+    orgAdmin: orgAdminCaller(auth),
+  });
+  if (denied) return denied;
   if (delegatedRequest()) routeThreadId(bot, body.threadId);
   if (typeof body.threadId !== "string" || !/^[\w-]+$/.test(body.threadId)) return { status: 400, body: { error: "threadId must be a task id" } };
   const threadId = routeThreadId(bot, body.threadId);

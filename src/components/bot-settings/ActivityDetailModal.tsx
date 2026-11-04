@@ -42,6 +42,7 @@ import { activityChip, useElementWidth } from "./ActivityWindow";
 import { PanelPage } from "./PanelPage";
 import { activityJobStage, TaskStatusHeader } from "../task/TaskStatusHeader";
 import { WaitingOnYou, waitingKind, type WaitingNote } from "../task/WaitingOnYou";
+import { StepBoundary, stepFallbackText } from "../MessageBoundary";
 import { ActivityStepGroups } from "../task/ActivityStepGroups";
 import { SubagentList } from "../task/SubagentList";
 import { TaskComposer } from "../task/TaskComposer";
@@ -223,7 +224,11 @@ export function ActivityDetailBody({ item, detail, error, now, engineName, onSto
   const steps = detail && (
     detail.steps.length === 0
       ? <p className="text-[12.5px] text-ink-secondary">{t("botPanel.activity.stepsEmpty")}</p>
-      : <ActivityStepGroups steps={detail.steps} truncated={detail.stepsTruncated} />
+      : (
+        <StepBoundary stepId={detail.id} fallbackText={stepFallbackText(detail.steps[0])}>
+          <ActivityStepGroups steps={detail.steps} truncated={detail.stepsTruncated} />
+        </StepBoundary>
+      )
   );
 
   const tabs = views.length > 1 || (split && views.length > 0) ? (

@@ -2200,6 +2200,7 @@
   "composer.failed.dismissAria": "Ignorer le message en échec",
   "chat.stale": "Cette conversation n’est peut-être pas à jour. Vous êtes hors ligne ; les messages envoyés attendent et partent au retour du réseau.",
   "chat.unknownMessage": "Ce message ne peut pas être affiché dans cette version. Mettez Sagax à jour pour voir le message complet.",
+  "chat.stepFailed": "Une erreur s'est produite dans cette étape.",
   "composer.failed.offline": "Envoyé hors ligne, en attente du réseau : « {text} »",
   "composer.failed.notSent": "Non envoyé : « {text} »",
   "composer.goal.aria": "Terminer ensemble",

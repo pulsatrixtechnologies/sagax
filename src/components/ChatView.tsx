@@ -123,7 +123,7 @@ import { DataResultChip } from "./DataResultChip";
 import { useDataWindowItem } from "./DataWindowButton";
 import { ThreadRefText } from "./ThreadRefs";
 import { optionsCardRow } from "./OptionsCardRow";
-import { MessageBoundary, UnknownMessageCard, isUnknownMessageKind } from "./MessageBoundary";
+import { MessageBoundary, StepBoundary, UnknownMessageCard, isUnknownMessageKind, stepFallbackText, stepIdOf } from "./MessageBoundary";
 import { WidgetMessage } from "./widget/WidgetMessage";
 import { AppMessage } from "./AppMessage";
 import { PagePublishCard } from "./PublishedPages";
@@ -520,7 +520,7 @@ export function FailedTurnRow({ tool, engine, onRetry, botId, threadId }: {
 }
 
 /** The text fallback for a row that will not draw. Rooms import it from here. */
-export { MessageBoundary };
+export { MessageBoundary, StepBoundary };
 
 /** Inline editor a user bubble turns into: the send key sends (forking the
  * conversation), Esc cancels. Any other Enter is a newline, like the composer. */
@@ -1262,10 +1262,13 @@ const MessagesList = memo(function MessagesList({
   const withCloudAgents = (index: number, node: ReactNode): ReactNode => {
     const group = cloudAnchors.get(index);
     const item = items[index]!;
+    const first = listedItemMessages(item)[0];
     return (
-      <Fragment key={`row:${item.kind}:${listedItemMessages(item)[0]?.id ?? index}`}>
+      <Fragment key={`row:${item.kind}:${first?.id ?? index}`}>
         {conversationLines(conversationAt.before.get(index))}
-        {node}
+        <StepBoundary stepId={stepIdOf(first)} fallbackText={stepFallbackText(first)}>
+          {node}
+        </StepBoundary>
         {group && <div className="flex justify-start"><CloudAgentsCard records={group} botId={botId} confidential={confidential} /></div>}
       </Fragment>
     );
@@ -1377,32 +1380,34 @@ const MessagesList = memo(function MessagesList({
               {divider}
               <CwActivityWidgets messages={item.messages} threadId={threadId} botId={botId} />
               {shown.length > 0 && (
-                <ActivityRun
-                  messages={shown}
-                  elapsedMs={item.elapsedMs}
-                  bare={!showToolCalls}
-                  focusedId={focusedId}
-                  nameOf={botNames(bots)}
-                  renderStep={(step) => (
-                    <div className="contents" data-mid={step.id}>
-                      <ActivityChip message={step} place={place} />
-                    </div>
-                  )}
-                  renderMessage={(message) => (
-                    <div className="contents" data-mid={message.id}>
-                      <Bubble
-                        message={message}
-                        editing={false}
-                        pinned={message.id === pinnedMessageId}
-                        onStartEdit={onStartEdit}
-                        onCancelEdit={onCancelEdit}
-                        onSubmitEdit={onSubmitEdit}
-                        replyTarget={lookups.replyTarget(message)}
-                        onReply={onReply}
-                      />
-                    </div>
-                  )}
-                />
+                <StepBoundary stepId={item.id} fallbackText={stepFallbackText(shown[0])}>
+                  <ActivityRun
+                    messages={shown}
+                    elapsedMs={item.elapsedMs}
+                    bare={!showToolCalls}
+                    focusedId={focusedId}
+                    nameOf={botNames(bots)}
+                    renderStep={(step) => (
+                      <div className="contents" data-mid={step.id}>
+                        <ActivityChip message={step} place={place} />
+                      </div>
+                    )}
+                    renderMessage={(message) => (
+                      <div className="contents" data-mid={message.id}>
+                        <Bubble
+                          message={message}
+                          editing={false}
+                          pinned={message.id === pinnedMessageId}
+                          onStartEdit={onStartEdit}
+                          onCancelEdit={onCancelEdit}
+                          onSubmitEdit={onSubmitEdit}
+                          replyTarget={lookups.replyTarget(message)}
+                          onReply={onReply}
+                        />
+                      </div>
+                    )}
+                  />
+                </StepBoundary>
               )}
             </div>
           );

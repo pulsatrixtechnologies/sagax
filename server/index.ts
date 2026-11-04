@@ -1,4 +1,4 @@
-import { checkRoutineReadiness, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun } from "./routines/routine-readiness.ts";
+import { checkRoutineReadiness, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer } from "./routines/routine-readiness.ts";
 import { noteEngineRefusal, clearEngineRefusal } from "./engines/engine-refusals.ts";
 import { classifyRoutineFailure as readinessFailureClass } from "./routines/routine-recovery.ts";
 import { canUseMcpServer } from "../shared/tool-scope.ts";
@@ -24423,7 +24423,7 @@ const routineReadinessDeps: RoutineReadinessDeps = {
     if (!bot) return undefined;
     const inventory = scopedSkillInventory(bot, registry.get(bot.modelSelection.instanceId), run.runAs);
     // Partial discovery cannot prove that an unlisted skill is absent.
-    return inventory.incomplete ? undefined : inventory.rows.filter(row => row.enabled).map(row => row.name);
+    return inventory.incomplete ? undefined : inventory.rows.filter(row => row.enabled && row.kind === "skill").map(row => row.name);
   },
   mcp: (_routine, run) => {
     const bot = store.bot(run.botId);
@@ -24453,14 +24453,15 @@ const routineReadinessDeps: RoutineReadinessDeps = {
     const bot = store.bot(run.botId);
     if (!bot) return undefined;
     const principal = effectiveRunAs(run) ?? localPrincipalId();
-    const rows = sharedComputers.status(principal).map(row => ({ name: row.name, online: row.online }));
+    const rows: ReadinessComputer[] = sharedComputers.status(principal).map(row => ({ name: row.name, online: row.online }));
     if (bot.remoteHosts?.length) {
       const listed = await remoteBotHosts.available(principal);
       if (listed.available) for (const host of listed.hosts.filter(host => bot.remoteHosts?.includes(host.hostId))) {
-        rows.push({ name: host.hostname ?? "Computer", online: host.state === "enrolled" && Boolean(host.lastSeenAt && Date.now() - Date.parse(host.lastSeenAt) < 120_000) });
+        rows.push({ name: host.hostname ?? "Computer", online: host.state !== "enrolled" ? false : host.lastSeenAt ? Date.now() - Date.parse(host.lastSeenAt) < 120_000 : undefined });
       }
     }
     const surface = (run.runOn ?? routine.runOn) === "cloud" ? "cloud" : bot.computer ?? (routine.requires?.computer && IDENTITY.kind === "perspicax" && userSandbox ? "cloud" : undefined);
+    const required = (run.runOn ?? routine.runOn) === "cloud" || routine.requires?.computer === true;
     if (surface && surface !== "off" && surface !== "browser") {
       if (surface === "cloud" && IDENTITY.kind === "perspicax" && userSandbox && principal) {
         let status = await userSandbox.status(principal, bot.id);
@@ -24474,7 +24475,7 @@ const routineReadinessDeps: RoutineReadinessDeps = {
         const option = (await selectableComputers(bot)).find(option => option.surface === surface);
         if (option) rows.push({ name: option.label, online: option.ready });
       }
-      return rows.map(row => ({ ...row, needed: row.name === "Cloud computer" || row.name === surfaceLabel(surface) }));
+      return rows.map(row => ({ ...row, needed: required && (row.name === "Cloud computer" || row.name === surfaceLabel(surface)) }));
     }
     return rows;
   },

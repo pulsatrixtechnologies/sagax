@@ -2879,6 +2879,8 @@ export class RoutineManager {
       if (this.runs.some((run) => run.routineId === routine.id && (run.status === "queued" || run.status === "running" || run.status === "waiting"))) continue;
       const pseudoRun = { routineId: routine.id, routineName: routine.name, botId: routine.botId, target: routine.target, runOn: routine.runOn ?? "maus",
         scheduledFor: dueAt, status: "queued", manual: false, triggerSource: "schedule", ...(routine.runAs ? { runAs: routine.runAs } : {}) } as unknown as RoutineRun;
+      // A known blocker must not reserve or warm an execution task ahead of its run.
+      if (this.options.readiness && !this.prewarmReady(routine, pseudoRun, dueAt)) continue;
       let threadId: string | null = null;
       try {
         threadId = this.options.joinConversation?.(pseudoRun) ?? null;
@@ -2901,6 +2903,23 @@ export class RoutineManager {
       this.reserved.set(routine.id, { dueAt, botId: routine.botId, threadId: reserved ? threadId : "", ...(routine.runAs ? { runAs: routine.runAs } : {}) });
       try { prewarm(cloneRoutine(routine), dueAt, threadId); } catch { /* best effort */ }
     }
+  }
+
+  private warmReadiness = new Map<string, { key: string; result?: RoutineReadinessAnswer }>();
+
+  private prewarmReady(routine: Routine, run: RoutineRun, dueAt: number): boolean {
+    const key = `${routine.updatedAt}:${dueAt}`;
+    const previous = this.warmReadiness.get(routine.id);
+    if (previous?.key === key && (!previous.result || this.now() - previous.result.checkedAt < 60_000)) return previous.result?.ok === true;
+    const entry: { key: string; result?: RoutineReadinessAnswer } = { key };
+    this.warmReadiness.set(routine.id, entry);
+    if (this.warmReadiness.size > 2_000) this.warmReadiness.delete(this.warmReadiness.keys().next().value!);
+    void this.checkReadiness(routine, run).then(result => {
+      if (this.warmReadiness.get(routine.id) !== entry) return;
+      entry.result = result;
+      this.tickInBackground();
+    });
+    return false;
   }
 
   /** The reserved task for this scheduled run, taken once. */

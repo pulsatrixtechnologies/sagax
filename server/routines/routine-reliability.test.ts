@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { RoutineManager, ROUTINE_RESTARTED, type RoutineManagerOptions } from "./routines.ts";
+import { RoutineManager, PREWARM_ENGINE_LEAD_MS, ROUTINE_RESTARTED, type RoutineManagerOptions } from "./routines.ts";
 import { checkRoutineReadiness, type RoutineReadinessDeps } from "./routine-readiness.ts";
 import { activeEngineRefusal, noteEngineRefusal } from "../engines/engine-refusals.ts";
 const dirs: string[] = [];
@@ -42,6 +42,20 @@ describe("routine reliability in an isolated journal", () => {
     expect(h.onRunFailed.mock.calls.at(-1)?.[1]).toBeNull();
     const reloaded = new RoutineManager(h.options);
     expect(reloaded.listRuns()[0]?.readiness).toEqual(h.manager.listRuns()[0]?.readiness);
+  });
+  it("does not reserve or warm a task for an unready upcoming routine", async () => {
+    const reserveTask = vi.fn(() => ({ threadId: "reserved" }));
+    const prewarmEngine = vi.fn();
+    const h = fixture({ reserveTask, prewarmEngine });
+    h.manager.update(h.routine.id, { requires: { skills: ["inbox-review"] } });
+    h.advance(60 * 60_000 - PREWARM_ENGINE_LEAD_MS);
+    await h.flush();
+    expect(reserveTask).not.toHaveBeenCalled(); expect(prewarmEngine).not.toHaveBeenCalled();
+    expect(h.manager.listRuns()).toHaveLength(0);
+    const ready = fixture({ reserveTask, prewarmEngine });
+    ready.advance(60 * 60_000 - PREWARM_ENGINE_LEAD_MS);
+    await ready.flush();
+    expect(reserveTask).toHaveBeenCalledTimes(1); expect(prewarmEngine).toHaveBeenCalledTimes(1);
   });
   it("a provider 402 blocks the next run at five minutes, expires at 31 minutes, and completion clears the refusal", async () => {
     const h = fixture();

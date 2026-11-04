@@ -1,5 +1,6 @@
 import type { RoutineReadinessCheck } from "../../shared/routine-readiness";
 import { activeLocale, t } from "./i18n";
+import { en } from "@/locales";
 /** ISO facts use the viewer's local calendar day and time zone. Old saved labels still render. */
 function localTime(value: string): string {
   const at = new Date(value);
@@ -13,5 +14,6 @@ function localTime(value: string): string {
 export function routineReadinessLine(check: RoutineReadinessCheck): string {
   const params = { ...check.params };
   for (const key of ["at", "until"]) if (params[key]) params[key] = localTime(params[key]);
-  return t(check.code === "ready" ? `routineReadiness.ready.${check.kind}` : `routineReadiness.${check.code}`, params);
+  const key = check.code === "ready" ? check.kind === "flow" && params.live === "true" ? "routineReadiness.flow_live" : `routineReadiness.ready.${check.kind}` : `routineReadiness.${check.code}`;
+  return Object.hasOwn(en, key) ? t(key as keyof typeof en, params) : check.line;
 }

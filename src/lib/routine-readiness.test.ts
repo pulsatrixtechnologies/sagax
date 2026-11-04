@@ -10,6 +10,18 @@ afterEach(() => {
   else process.env.TZ = previousZone;
 });
 describe("readiness timestamps in the viewer's time zone (#1945)", () => {
+  it.each(["en", "fr"])("renders Flow failures and skipped live plans in %s (#1991)", locale => {
+    setLocale(locale);
+    const line = routineReadinessLine({ kind: "flow", code: "flow_plan", ok: false, line: "Wire failure", params: { step: "plan", error: "missing_reads Read first." } });
+    expect(line).toContain("plan");
+    expect(line).toContain("missing_reads Read first.");
+    expect(line).not.toContain("Wire failure");
+    const live = routineReadinessLine({ kind: "flow", code: "ready", ok: true, line: "", params: { live: "true" } });
+    expect(live).toContain(locale === "fr" ? "n’a pas été vérifié" : "not checked");
+  });
+  it("renders an unknown server code without throwing (#1991)", () => {
+    expect(routineReadinessLine({ kind: "flow", code: "future_code", ok: false, line: "Server detail", params: { step: "plan" } } as never)).toBe("Server detail");
+  });
   it.each(["en", "fr"])("uses short local times today and includes the date on other days in %s", (locale) => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-11-04T16:00:00.000Z"));

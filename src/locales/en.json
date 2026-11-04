@@ -10843,6 +10843,8 @@
   "routines.deleteWhenFinished.help": "When this routine has a known end (one time, or until a date), remove it from Automations after its last run settles. Past runs stay in the calendar and the run log.",
   "routines.deleteWhenFinished.willDelete": "Will be deleted once finished",
   "routines.mailAlias.label": "Mail tag",
+  "routines.model.botDefault": "Bot's model",
+  "routines.model.label": "Model",
   "routines.mailAlias.placeholder": "reports",
   "routines.mailAlias.help": "Added after + on this bot's mail address. Mail to name+tag@ wakes only this routine. Sends still leave from the connector's address.",
   "botPanel.email.label": "Email address",
@@ -12995,6 +12997,7 @@
   "routineEditor.hint.onlyPresent": "Skips runs while you are away.",
   "routineEditor.hint.deleteWhenFinished": "After its last run settles.",
   "routineEditor.hint.mailAlias": "Mail to name+tag@ wakes only this routine.",
+  "routineEditor.hint.model": "Its runs and their sub-agents use this model. Chat keeps the bot's model.",
   "routineEditor.hint.watch": "Checks first, runs only on a change.",
   "routineWebhook.hint": "POST JSON with this header to start a run. The body is passed to the routine.",
   "routineDetail.active": "Active",
@@ -13066,6 +13069,7 @@
   "routineReadiness.engine_credits": "{engine}'s account is out of credit (provider's last refusal: {at}). Add credit with the provider, or choose another engine for this bot.",
   "routineReadiness.engine_limit": "{engine} reached its usage limit (reset: {until}). Wait for the reset, or choose another engine for this bot.",
   "routineReadiness.engine_signed_out": "{engine} is signed out for this bot. Reconnect it in Settings > Model providers.",
+  "routineReadiness.engine_artifacts": "This routine needs {tool}, which {engine} cannot offer with this account. Choose Claude with a claude.ai subscription sign-in for this bot; API keys and other engines do not provide claude.ai artifact tools.",
   "routineReadiness.skill_missing": "Skill `{skill}` is not among this bot’s skills. Install its plugin for this bot (Connect apps > Sources) or assign the skill to it.",
   "routineReadiness.mcp_missing": "MCP server `{server}` is not connected for this bot. Connect it in the bot’s Connect apps.",
   "routineReadiness.perspicax_profile": "Perspicax refused this person’s profile `{profile}` (401/403 invalid_token). Choose the profile again in Settings > Perspicax.",
@@ -13088,5 +13092,8 @@
   "limitFailover.exhausted": "Limits were reached on {tried}: no other engine could answer. Pick another model, add credit, or try again when a limit resets (around {time}).",
   "limitFailover.ownerExhausted": "This bot's owner hit usage limits on {tried}: no other engine could answer. Pick another model, add credit, or try again when a limit resets (around {time}).",
   "limitFailover.exhaustedNoTime": "Limits were reached on {tried}: no other engine could answer. Pick another model, add credit, or try again later.",
-  "limitFailover.ownerExhaustedNoTime": "This bot's owner hit usage limits on {tried}: no other engine could answer. Pick another model, add credit, or try again later."
+  "limitFailover.ownerExhaustedNoTime": "This bot's owner hit usage limits on {tried}: no other engine could answer. Pick another model, add credit, or try again later.",
+  "routineReadiness.flow_plan": "The Flow shadow check failed at {step}: {error}",
+  "routineReadiness.ready.flow": "The Flow shadow plan has no known blocker. Run the routine when ready.",
+  "routineReadiness.flow_live": "A Flow run is live, plan not checked."
 }

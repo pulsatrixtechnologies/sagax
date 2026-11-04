@@ -577,6 +577,8 @@ function EventEditorBody({
   // choice, else the installation default. Off keeps a run in the background.
   const [postResults, setPostResults] = useState(template?.postResults ?? routinesInConversationEnabled(state.config));
   const [mailAlias, setMailAlias] = useState(template?.mailAlias ?? "");
+  // 2026-11-04 (shared/routine-model.ts): its runs' model; "" is the bot's.
+  const [routineModel, setRoutineModel] = useState(template?.model ?? "");
   const [recurrence, setRecurrence] = useState<RecurrenceChoice>(seed.limitReset ? "limit_reset" : recurrenceFor(schedule, initialAt, (routinesOnly ? "routine" : seed.kind) === "routine"));
   const [limitReset, setLimitReset] = useState<LimitResetChoice>(
     schedule.type === "limit_reset" ? { engine: schedule.engine, repeat: schedule.repeat } : { engine: seed.limitReset?.engine ?? "", repeat: "once" },
@@ -820,6 +822,7 @@ function EventEditorBody({
           postResults: routineTarget === "bot" ? postResults : undefined,
           deleteWhenFinished: (recurrence === "none" || (recurrence === "interval" && intervalEndsAt != null)) && deleteWhenFinished,
           mailAlias: routineTarget === "bot" ? (mailAlias.trim() || null) : null,
+          model: routineTarget === "bot" ? (routineModel || null) : null,
           // Sent when on, or to remove a watch the routine had.
           ...(watchAllowed && watchBuilt.watch ? { precheck: watchBuilt.watch } : existingWatch ? { precheck: null } : {}),
           attachments: routineTarget === "room-goal" ? [] : attachments as RoutineContextAttachment[],
@@ -948,7 +951,7 @@ function EventEditorBody({
     setMoreOpen(open);
     rememberRoutineEditorMoreOpen(open);
   };
-  const editorSnapshot = JSON.stringify([requiredSkills, requiredMcp, requiresComputer, kind, name, description, recurrence, limitReset, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
+  const editorSnapshot = JSON.stringify([requiredSkills, requiredMcp, requiresComputer, kind, name, description, recurrence, limitReset, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, routineModel, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
   const openedSnapshot = useRef(editorSnapshot);
   const dirty = editorSnapshot !== openedSnapshot.current;
   const requestClose = async () => {
@@ -1253,6 +1256,14 @@ function EventEditorBody({
                 <PanelSelect<RoutineRunOn> data-routine-run-on="" label={t("routineEditor.runsOn")} hint={runOn === "cloud" ? t("routineCalendar.boatAgentHelp") : t("routineCalendar.botSetupHelp")} viewing={viewing} value={runOn} onChange={setRunOn}
                   options={[{ value: "maus", label: t("routineCalendar.botSetup") }, { value: "cloud", label: t("routineCalendar.boatAgent"), disabled: !cloudReady || attachments.length > 0 }]} />
               )}
+              {!isRoomGoal && (() => {
+                // Only the bot's own engine's models apply (shared/routine-model.ts).
+                const engine = state.instances.find((instance) => instance.instanceId === bots.find((bot) => bot.id === (lockedBotId ?? botIds[0]))?.modelSelection?.instanceId);
+                const choices = (engine?.models.options ?? []).map((option) => ({ value: option.id, label: option.label || option.id }));
+                if (routineModel && !choices.some((choice) => choice.value === routineModel)) choices.push({ value: routineModel, label: routineModel });
+                return <PanelSelect data-routine-model="" label={t("routines.model.label")} hint={t("routineEditor.hint.model")} viewing={viewing} value={routineModel} onChange={setRoutineModel}
+                  options={[{ value: "", label: t("routines.model.botDefault") }, ...choices]} />;
+              })()}
               {!isRoomGoal && <PanelToggle data-routine-post-results="" label={t("routines.postResults.label")} hint={t("routines.postResults.hint")} help={t("routines.postResults.help")} viewing={viewing} checked={postResults} onChange={setPostResults} />}
               {isRoomGoal ? (
                 <PanelRow data-routine-attachments="" label={t("routineEditor.attachments")} help={t("routineCalendar.noGoalAttachments")}><PanelValue muted>{t("routineCalendar.sharedContext")}</PanelValue></PanelRow>

@@ -11,6 +11,78 @@ function deps(over: Partial<RoutineReadinessDeps> = {}): RoutineReadinessDeps {
 }
 afterEach(() => vi.useRealTimers());
 describe("routine readiness", () => {
+  it.each([
+    { driver: "codex", accessVia: "subscription" },
+    { driver: "grokAgent", accessVia: "subscription" },
+    { driver: "claudeAgent", accessVia: "org-key" },
+    { driver: "claudeAgent", accessVia: "owner-key" },
+    { driver: "claudeAgent", accessVia: "speaker-key" },
+    { driver: "claudeAgent", accessVia: "server", keyBacked: true },
+  ])("explains an unavailable native artifact tool before running on %j (#1990)", async (selection) => {
+    const check = deps({ engine: () => ({ engine: "fixture-engine", name: "Selected engine", signedIn: true, ...selection }) });
+    for (const tool of ["ArtifactData", "ArtifactComments", "Artifact"]) {
+      const answer = await checkRoutineReadiness({ ...routine, prompt: `Use ${tool} on https://claude.ai/code/artifact/00000000-0000-4000-8000-000000000000.` }, run, check);
+      expect(answer.ok).toBe(false);
+      const blocker = answer.checks.find(row => !row.ok)!;
+      expect(blocker).toMatchObject({ kind: "engine", code: "engine_artifacts", params: { engine: "Selected engine", tool } });
+      expect(blocker.line).toContain("claude.ai subscription sign-in");
+      expect(loadRoutineReadiness([blocker])).toEqual([blocker]);
+    }
+    expect((await checkRoutineReadiness(routine, run, check)).ok).toBe(true);
+  });
+  it.each([
+    { driver: "claudeAgent", accessVia: "subscription", keyBacked: true },
+    { driver: "claudeAgent", accessVia: "server", keyBacked: false },
+    {},
+  ])("keeps supported or unknown artifact accounts runnable: %j (#1990)", async (selection) => {
+    const check = deps({ engine: () => ({ engine: "fixture-engine", name: "Selected engine", signedIn: true, ...selection }) });
+    expect((await checkRoutineReadiness({ ...routine, prompt: "Use ArtifactData to read last-pass." }, run, check)).ok).toBe(true);
+  });
+  it("uses the run's effective prompt for artifact readiness (#1990)", async () => {
+    const check = deps({ engine: () => ({ engine: "fixture-engine", name: "Selected engine", driver: "codex" }) });
+    expect((await checkRoutineReadiness(routine, { ...run, prompt: "Use ArtifactData." }, check)).ok).toBe(false);
+    expect((await checkRoutineReadiness({ ...routine, prompt: "Use ArtifactData." }, { ...run, prompt: "Check the inbox." }, check)).ok).toBe(true);
+  });
+  it("blocks a failed Flow shadow plan instead of passing only its access checks (#1991)", async () => {
+    const answer = await checkRoutineReadiness({ ...routine, prompt: "Use flow_run." }, run,
+      deps({ flow: async () => ({ step: "plan", error: "internal_error Plan failed." }) }));
+    expect(answer.ok).toBe(false);
+    expect(loadRoutineReadiness(answer.checks)?.find(check => check.kind === "flow")).toMatchObject({ code: "flow_plan", ok: false, params: { step: "plan", error: "internal_error Plan failed." } });
+  });
+  it.each([false, true])("checks artifact support on the backup beside a failed Flow plan (supported: %s)", async (supported) => {
+    const now = 60_000;
+    const engine = `flow-artifact-primary-${supported}`;
+    noteEngineRefusal({ engine, cause: "credits", at: now });
+    try {
+      const answer = await checkRoutineReadiness({ ...routine, prompt: "Use flow_run and ArtifactData." }, run, deps({
+        now: () => now,
+        engine: () => ({ engine, name: "Primary", driver: supported ? "codex" : "claudeAgent", accessVia: "subscription" }),
+        backup: () => ({ engine: "backup", name: "Backup", driver: supported ? "claudeAgent" : "codex", accessVia: "subscription" }),
+        flow: async () => ({ step: "plan", error: "missing_reads Read first." }),
+      }));
+      expect(answer.ok).toBe(false);
+      expect(answer.checks.filter(check => !check.ok).map(check => check.code)).toEqual(supported ? ["flow_plan"] : ["engine_artifacts", "flow_plan"]);
+      expect(loadRoutineReadiness(answer.checks)).toEqual(answer.checks);
+      if (!supported) expect(answer.checks.find(check => check.code === "engine_artifacts")?.params?.engine).toBe("Backup");
+    } finally { clearEngineRefusal(engine, undefined, now); }
+  });
+  it("caches shadow plans per routine and inputs without reusing another routine's result (#1991)", async () => {
+    let now = 0;
+    const flow = vi.fn(async () => ({}));
+    const check = deps({ now: () => now, flow });
+    const first = { ...routine, id: "morning", prompt: "Use flow_run.", requires: { skills: ["running-px-flow"] } };
+    await checkRoutineReadiness(first, run, check);
+    await checkRoutineReadiness(first, run, check, "check");
+    expect(flow).toHaveBeenCalledOnce();
+    await checkRoutineReadiness({ ...first, id: "evening" }, run, check);
+    await checkRoutineReadiness({ ...first, prompt: "Use flow_run with different inputs." }, run, check);
+    await checkRoutineReadiness(first, { ...run, runAs: "wren" }, check);
+    now = 60_000;
+    await checkRoutineReadiness(first, run, check);
+    expect(flow).toHaveBeenCalledTimes(5);
+    await checkRoutineReadiness(routine, run, check);
+    expect(flow).toHaveBeenCalledTimes(5);
+  });
   it("passes unknown facts, checks every category and never infers a successful run", async () => {
     expect(await checkRoutineReadiness(routine, run, deps())).toMatchObject({ ok: true, checks: expect.arrayContaining([
       { kind: "engine", ok: true, code: "ready", params: { kind: "engine" }, line: expect.any(String) },
@@ -97,6 +169,54 @@ describe("routine readiness", () => {
   });
   it("blocks known sign-out before any provider turn", async () => {
     expect((await checkRoutineReadiness(routine, run, deps({ engine: () => ({ engine: "codex", name: "Codex", signedIn: false }) }))).checks[0]).toMatchObject({ code: "engine_signed_out", ok: false });
+  });
+  it.each(["credits", "usage_limit", "signed_out"] as const)("passes a primary %s refusal when a backup is ready (#1986)", async (cause) => {
+    const now = Date.UTC(2026, 10, 4);
+    const engine = `primary-with-backup-${cause}`;
+    noteEngineRefusal({ engine, cause, at: now });
+    const backup = vi.fn(() => ({ engine: "backup", name: "Backup", signedIn: true }));
+    const answer = await checkRoutineReadiness(routine, run, deps({ now: () => now,
+      engine: () => ({ engine, name: "Primary" }), backup }));
+    expect(answer.ok).toBe(true);
+    expect(answer.checks.find(check => check.kind === "engine")).toMatchObject({ ok: true, code: "ready" });
+    expect(backup).toHaveBeenCalledOnce();
+  });
+  it.each(["missing", "credits", "usage_limit", "signed_out"] as const)("keeps the primary reason when its backup is %s (#1986)", async (cause) => {
+    const now = Date.UTC(2026, 10, 4);
+    const engine = `primary-without-backup-${cause}`;
+    const backupEngine = `unavailable-backup-${cause}`;
+    noteEngineRefusal({ engine, cause: "credits", at: now });
+    if (cause !== "missing") noteEngineRefusal({ engine: backupEngine, cause, at: now });
+    const answer = await checkRoutineReadiness(routine, run, deps({ now: () => now,
+      engine: () => ({ engine, name: "Primary" }),
+      backup: () => cause === "missing" ? undefined : { engine: backupEngine, name: "Backup" } }));
+    expect(answer.ok).toBe(false);
+    expect(answer.checks[0]).toMatchObject({ ok: false, code: "engine_credits", params: { engine: "Primary" } });
+  });
+  it("rechecks backup refusals while primary probe facts are cached (#1986)", async () => {
+    const now = Date.UTC(2026, 10, 4);
+    const engine = "cached-primary-with-backup";
+    const backupEngine = "fresh-backup-refusal";
+    noteEngineRefusal({ engine, cause: "credits", at: now });
+    const primary = vi.fn(() => ({ engine, name: "Primary" }));
+    const check = deps({ now: () => now, engine: primary,
+      backup: () => ({ engine: backupEngine, name: "Backup" }) });
+    expect((await checkRoutineReadiness(routine, run, check)).ok).toBe(true);
+    noteEngineRefusal({ engine: backupEngine, cause: "credits", at: now });
+    expect((await checkRoutineReadiness(routine, run, check)).ok).toBe(false);
+    expect(primary).toHaveBeenCalledOnce();
+  });
+  it("keeps backup discovery inside the readiness probe deadline (#1986)", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    const now = Date.UTC(2026, 10, 4);
+    const engine = "slow-primary-with-backup";
+    noteEngineRefusal({ engine, cause: "credits", at: now });
+    const answer = checkRoutineReadiness(routine, run, deps({ now: () => now,
+      engine: () => new Promise(resolve => setTimeout(() => resolve({ engine, name: "Primary" }), 4_000)),
+      backup: () => new Promise(() => {}) }));
+    await vi.advanceTimersByTimeAsync(ROUTINE_READINESS_PROBE_TIMEOUT_MS);
+    expect((await answer).checks[0]).toMatchObject({ code: "engine_credits", ok: false });
+    expect(vi.getTimerCount()).toBe(0);
   });
   it("blocks a refused profile, while unreachable Perspicax stays a passing detail", async () => {
     expect((await checkRoutineReadiness(routine, run, deps({ perspicax: async () => ({ refused: true, profile: "dispatch", detail: "401 invalid_token" }) }))).ok).toBe(false);

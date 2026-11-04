@@ -344,6 +344,20 @@ describe("which failed runs wake the bot (2026-11-01)", () => {
     expect(runFailureWakesBot({ status: "failed", error: "x", proactive: { hops: 0 } })).toBe(false);
   });
 
+  it("never wakes for a deterministic block the same run would hit again", () => {
+    for (const error of [
+      "`run.init` refusé (`routine_not_for_profile`). La routine `sample-board` exige le profil Perspicax `dispatch-agent`",
+      "routine_not_for_profile (pack server_profiles missing this profile)",
+      "`run.init` refused (`blocked`): the pack does not declare this profile",
+      "the Flow routine lock was held by other routines the whole time",
+      "Routine readiness failed: the Flow check probe is blocked",
+      "missing required input: plan",
+      "Perspicax is rate limiting this server; this run is skipped",
+    ]) expect(runFailureWakesBot({ status: "failed", error }), error).toBe(false);
+    expect(runFailureWakesBot({ status: "failed", error: "x", readiness: [{ ok: false }] })).toBe(false);
+    expect(runFailureWakesBot({ status: "failed", error: "The CRM answered 500 on the third ticket" })).toBe(true);
+  });
+
   it("never wakes for a known engine auth-expired or Claude credits reconnect condition", async () => {
     const { CLAUDE_NEEDS_RECONNECTING, claudeSignInExpired } = await import("../drivers/claude-errors.ts");
     const { codexSignInExpired } = await import("../drivers/codex-errors.ts");

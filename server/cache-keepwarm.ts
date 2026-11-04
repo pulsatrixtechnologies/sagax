@@ -42,6 +42,16 @@ export const DEFAULT_WINDOW_MINUTES = 180;
 export const MAX_WINDOW_MINUTES = 24 * 60;
 /** Cache Tax's stop rule: a warm ping writes only its own few tokens. */
 export const MAX_WRITE_RATIO = 0.1;
+/** 2026-11-04: cold pings in a row (any thread) that switch keep-warm off
+ * for a while. Measured on an organization server: 15 pings in two days,
+ * every one read nothing from the cache and re-wrote 55k-128k tokens (about
+ * 22 USD of subscription usage for zero hits). One cold ping per window was
+ * already the rule; a fresh window on every big turn still paid that miss
+ * again and again. After this many misses in a row for a bot, or across the
+ * server, no window is armed until COLD_PAUSE_MS has passed or a ping hits. */
+export const COLD_PINGS_PER_BOT = 2;
+export const COLD_PINGS_SERVER = 3;
+export const COLD_PAUSE_MS = 24 * 60 * 60_000;
 
 export interface KeepWarmTarget {
   threadId: string;
@@ -102,6 +112,31 @@ export function createCacheKeepWarm(deps: KeepWarmDeps) {
   const lastPing = new Map<string, NonNullable<KeepWarmStatus["last"]>>();
   const stoppedWhy = new Map<string, string>();
   let disposed = false;
+  /** Cold pings in a row, per bot and server-wide; a warm ping clears both. */
+  const coldByBot = new Map<string, { count: number; at: number }>();
+  let coldServer = { count: 0, at: 0 };
+  const coldPause = (botId: string): string | null => {
+    const now = deps.now();
+    const bot = coldByBot.get(botId);
+    if (bot && bot.count >= COLD_PINGS_PER_BOT && now - bot.at < COLD_PAUSE_MS) {
+      return `keep-warm is paused for this bot: its last ${bot.count} pings found the cache already gone`;
+    }
+    if (coldServer.count >= COLD_PINGS_SERVER && now - coldServer.at < COLD_PAUSE_MS) {
+      return `keep-warm is paused on this server: its last ${coldServer.count} pings found the cache already gone`;
+    }
+    return null;
+  };
+  const noteCold = (botId: string, cold: boolean) => {
+    if (!cold) {
+      coldByBot.delete(botId);
+      coldServer = { count: 0, at: 0 };
+      return;
+    }
+    const now = deps.now();
+    const bot = coldByBot.get(botId);
+    coldByBot.set(botId, { count: (bot && now - bot.at < COLD_PAUSE_MS ? bot.count : 0) + 1, at: now });
+    coldServer = { count: (now - coldServer.at < COLD_PAUSE_MS ? coldServer.count : 0) + 1, at: now };
+  };
 
   const disarm = (w: Window) => {
     w.pending?.cancel();
@@ -167,6 +202,7 @@ export function createCacheKeepWarm(deps: KeepWarmDeps) {
     }
     const warm = pingWasWarm(result.cacheRead, result.cacheWrite);
     lastPing.set(w.target.threadId, { at: now, read: result.cacheRead, write: result.cacheWrite, costUsd: result.costUsd });
+    noteCold(w.target.botId, !warm);
     if (!warm) {
       return end(w, `the ping read ${fmtTokens(result.cacheRead)} and wrote ${fmtTokens(result.cacheWrite)} tokens: the cache was already gone`);
     }
@@ -210,6 +246,12 @@ export function createCacheKeepWarm(deps: KeepWarmDeps) {
       if (windowMs === null || !turn.ok) return quiet(existing);
       if ((turn.contextTokens ?? 0) < MIN_CONTEXT_TOKENS) return quiet(existing);
       if (deps.ineligible(target)) return quiet(existing);
+      const paused = coldPause(target.botId);
+      if (paused) {
+        quiet(existing);
+        stoppedWhy.set(target.threadId, paused);
+        return deps.changed(target);
+      }
       const now = deps.now();
       const w: Window = existing ?? { target, deadline: 0, lastRequestAt: now, pending: null, nextPingAt: null, inflight: null, paused: false };
       w.target = target;

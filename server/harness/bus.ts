@@ -8,8 +8,9 @@
 // Streamed text is merged here, once, for every engine on every kind of
 // install: a provider sends a reply as hundreds of small text deltas, and
 // each would otherwise be its own log line, listener call and SSE frame. The
-// bus holds a thread's text for at most DELTA_MERGE_MS and publishes it as
-// one delta, sooner when anything else happens on that thread, so the order
+// bus publishes the first text of a stream at once, then holds a thread's
+// text for at most DELTA_MERGE_MS and publishes it as one delta, sooner when
+// anything else happens on that thread, so the order
 // of events never changes.
 import { basename, join } from "node:path";
 
@@ -108,6 +109,10 @@ export class EventBus {
   private pendingLogWarnings = new Map<string, RuntimeEvent>();
   /** Per thread: the streamed text not yet published, and when it goes. */
   private pendingText = new Map<string, { event: TextDelta; timer: ReturnType<typeof setTimeout> }>();
+  /** Per thread: the stream whose text last went out (identity only, no
+   * words), so the first delta of a new stream is published at once.
+   * Forgotten on the thread's next non-text event. */
+  private lastStreamed = new Map<string, TextDelta>();
   private readonly appendLog: EventLogAppend;
   /** Accepted events not yet handed to the append, in publish order. */
   private queued: QueuedLog[] = [];
@@ -194,12 +199,23 @@ export class EventBus {
         return;
       }
       if (pending) this.flushThread(event.threadId);
+      // The first text of a stream (a reply's first word, or the words that
+      // resume after a tool line) goes out at once: the person sees the
+      // reply start the moment the engine does, instead of DELTA_MERGE_MS
+      // later (#1952). What follows is merged as before.
+      const last = this.lastStreamed.get(event.threadId);
+      if (!last || !sameStream(last, event)) {
+        this.lastStreamed.set(event.threadId, { ...event, delta: "" });
+        this.write(event);
+        return;
+      }
       const timer = setTimeout(() => this.flushThread(event.threadId), DELTA_MERGE_MS);
       timer.unref?.();
       this.pendingText.set(event.threadId, { event, timer });
       return;
     }
     if (pending) this.flushThread(event.threadId);
+    this.lastStreamed.delete(event.threadId);
     this.write(event);
   }
 

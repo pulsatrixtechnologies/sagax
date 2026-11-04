@@ -99,6 +99,10 @@ export const SSE_DELTA_COALESCE_MS = 16;
  * each pay a stringify, and so a token burst becomes one write per client. */
 export class SseRuntimeDeltaCoalescer {
   private pending = new Map<string, { payload: Record<string, unknown>; timer: ReturnType<typeof setTimeout> }>();
+  /** Per thread: the stream key whose text last went out, so the first
+   * delta of a new stream is flushed at once (#1952). Forgotten on the
+   * thread's next non-delta runtime frame. */
+  private lastStreamed = new Map<string, string>();
   private readonly flush: (payload: Record<string, unknown>) => void;
   private readonly coalesceMs: number;
 
@@ -111,9 +115,11 @@ export class SseRuntimeDeltaCoalescer {
    * (caller must not fan it out itself). */
   offer(payload: Record<string, unknown>): boolean {
     if (payload.kind !== "runtime" || !payload.event || typeof payload.event !== "object") return false;
-    const key = runtimeDeltaStreamKey(payload.event as RuntimeDeltaEvent);
+    const event = payload.event as RuntimeDeltaEvent;
+    const key = runtimeDeltaStreamKey(event);
     if (!key) {
       this.flushAll();
+      if (typeof event.threadId === "string") this.lastStreamed.delete(event.threadId);
       return false;
     }
     const existing = this.pending.get(key);
@@ -124,6 +130,13 @@ export class SseRuntimeDeltaCoalescer {
         return true;
       }
       this.release(key);
+    }
+    // The first text of a stream goes out at once; what follows coalesces.
+    const threadId = String(event.threadId);
+    if (this.lastStreamed.get(threadId) !== key) {
+      this.lastStreamed.set(threadId, key);
+      this.flush(payload);
+      return true;
     }
     const timer = setTimeout(() => this.release(key), this.coalesceMs);
     timer.unref?.();

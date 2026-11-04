@@ -109,6 +109,7 @@ const createBot = async (name: string, instanceId: string, model = "claude-sonne
   const patched = await api("PATCH", `/api/bots/${created.id}`, {
     name,
     notifications: true,
+    computer: "off", browser: false,
     modelSelection: { instanceId, model },
   });
   expect(patched.status).toBe(200);
@@ -130,6 +131,10 @@ beforeAll(async () => {
   chmodSync(FAKE_CLAUDE, 0o755);
   chmodSync(FAKE_ACP, 0o755);
   home = mkdtempSync(join(tmpdir(), "omb-notification-routing-"));
+  // 1217ca7cf: failover honors the account probe even before dispatch.
+  // This fake CLI represents a signed-in account, without real credentials.
+  mkdirSync(join(home, ".grok"), { recursive: true });
+  writeFileSync(join(home, ".grok", "auth.json"), '{"fixture":"offline"}\n', { mode: 0o600 });
   const data = join(home, ".sagax");
   mkdirSync(data, { recursive: true });
   dumpFile = join(home, "quick-dump.json");
@@ -159,7 +164,8 @@ beforeAll(async () => {
       asking: {
         driver: "grokAgent",
         displayName: "Asking fixture",
-        environment: { FAKE_ACP_MODE: "permission" },
+        // Use a write at Ask to exercise a pending approval and its notification.
+        environment: { FAKE_ACP_MODE: "permission", FAKE_ACP_PERMISSION_TOOL_CALL: JSON.stringify({ kind: "execute", rawInput: { command: "touch notification-fixture.txt" }, title: "touch notification-fixture.txt" }) },
         config: { cli: FAKE_ACP },
       },
       curious: {
@@ -598,6 +604,16 @@ describe("bot-to-bot coordination is recorded, not announced", () => {
   }, 45_000);
 });
 
+const approvalNotice = async (stream: Awaited<ReturnType<typeof openSse>>, botId: string) => {
+  try {
+    return await stream.until(candidate => candidate.kind === "notify" && candidate.notification?.botId === botId && candidate.notification?.kind === "approval" && Boolean(candidate.notification?.requestId), 30_000);
+  } catch (error) {
+    const state = await api("GET", "/api/bots");
+    const decisions = (await api("GET", "/api/decisions")).body.decisions;
+    throw new Error(`${error instanceof Error ? error.message : error}\nBot: ${JSON.stringify(state.body.bots.find((bot: any) => bot.id === botId))}\nDecisions: ${JSON.stringify(decisions)}\nServer: ${stderr.slice(-3000)}`);
+  }
+};
+
 describe("an approval in an AI client's conversation", () => {
   const openCard = (bot: any) => bot?.messages?.findLast?.(
     (message: { kind: string; card?: { requestId?: string } }) => message.kind === "options" && Boolean(message.card?.requestId),
@@ -607,6 +623,7 @@ describe("an approval in an AI client's conversation", () => {
   const askingBot = async (name: string) => {
     const bot = await createBot(name, "asking", "grok-4.6");
     expect((await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "ask" })).status).toBe(200);
+    expect((await api("PATCH", `/api/bots/${bot.id}/tasks/${bot.threadId}`, { approvalMode: "ask" })).status).toBe(200);
     return bot;
   };
   const threadMessages = async (threadId: string) =>
@@ -623,10 +640,7 @@ describe("an approval in an AI client's conversation", () => {
     const stream = await openSse(`${base}/api/events`);
     try {
       expect((await api("POST", `/api/bots/${bot.id}/messages`, { text: "run it", threadId })).status).toBe(202);
-      const frame = await stream.until(
-        (candidate) => candidate.kind === "notify" && candidate.notification?.botId === bot.id && candidate.notification?.kind === "approval",
-        20_000,
-      );
+      const frame = await approvalNotice(stream, bot.id);
       // the same words as the card: who, and what it would allow
       expect(frame.notification.threadId).toBe(threadId);
       expect(frame.notification.title).toMatch(/^Allow Warden to .+\?$/);
@@ -660,10 +674,7 @@ describe("an approval in an AI client's conversation", () => {
     try {
       // the person's own chat: approvals there buzz too, with the plain title
       expect((await api("POST", `/api/bots/${bot.id}/messages`, { text: "run it" })).status).toBe(202);
-      const frame = await stream.until(
-        (candidate) => candidate.kind === "notify" && candidate.notification?.botId === bot.id && candidate.notification?.kind === "approval",
-        20_000,
-      );
+      const frame = await approvalNotice(stream, bot.id);
       expect(frame.notification.title).toMatch(/^Allow Keeper to .+\?$/);
       const requestId = frame.notification.requestId;
       expect(requestId).toBeTruthy();
@@ -694,6 +705,7 @@ describe("an approval during a routine run (#1743)", () => {
   it("names the execution card thread so Allow and withdraw hit the card", async () => {
     const bot = await createBot("Routine Asker", "asking", "fake-model");
     expect((await api("PATCH", `/api/bots/${bot.id}`, { approvalMode: "ask" })).status).toBe(200);
+    expect((await api("PATCH", `/api/bots/${bot.id}/tasks/${bot.threadId}`, { approvalMode: "ask" })).status).toBe(200);
     const created = await api("POST", "/api/routines", {
       name: "Needs a yes",
       prompt: "Run the gated step",
@@ -718,17 +730,11 @@ describe("an approval during a routine run (#1743)", () => {
         id: string; threadId: string; resultsThreadId: string;
       };
 
-      const frame = await stream.until(
-        (candidate) =>
-          candidate.kind === "notify" &&
-          candidate.notification?.botId === bot.id &&
-          candidate.notification?.kind === "approval" &&
-          Boolean(candidate.notification?.requestId),
-        30_000,
-      );
+      const frame = await approvalNotice(stream, bot.id);
       expect(frame.notification.threadId).toBe(run.threadId);
       expect(frame.notification.threadId).not.toBe(run.resultsThreadId);
       const requestId = frame.notification.requestId as string;
+      expect(requestId).toBeTruthy();
 
       // The phone posts to notification.threadId (execution), not the report.
       const answered = await api("POST", `/api/threads/${run.threadId}/respond`, {

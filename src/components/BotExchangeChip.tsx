@@ -55,7 +55,7 @@ export function useExchangeColumn(): { node: HTMLElement | null; ref: (node: HTM
 }
 
 /** Context column, else the registered chat-column host (bot panel sheets). */
-function useExchangePortalHost(): HTMLElement | null {
+export function useExchangePortalHost(): HTMLElement | null {
   const column = useContext(ExchangeColumnContext);
   const [host, setHost] = useState<HTMLElement | null>(() => getExchangeColumnHost());
   useEffect(() => subscribeExchangeColumnHost(() => setHost(getExchangeColumnHost())), []);

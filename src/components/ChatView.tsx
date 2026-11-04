@@ -184,6 +184,7 @@ import { foldCollapsedEntry, voiceCallPlan, voiceCallVisibleSpan } from "@/lib/v
 import { VoiceCallCard } from "./VoiceCallCard";
 import { BotExchangeChip, ExchangeColumnProvider, TranscriptDate, useExchangeColumn } from "./BotExchangeChip";
 import { RoutineRunExchange } from "./routines/RoutineRunExchange";
+import { CodingChat } from "./coding/CodingChat";
 import { GotoGroupChip } from "./GotoGroupChip";
 import { JumpToLatestPill } from "./JumpToLatestPill";
 import { collapseGotoLines, gotoGroupFromConversations, silentChatItem, type GotoGroup, type GotoTarget } from "@/lib/goto-lines";
@@ -2839,6 +2840,13 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
         />
       );
     })()}
+    {!side && state.codingChat && (
+      <CodingChat
+        key={`${state.codingChat.botId}:${state.codingChat.itemId}`}
+        target={state.codingChat}
+        onClose={() => dispatch({ type: "closeCodingChat" })}
+      />
+    )}
     </ExchangeColumnProvider>
     </ThreadLinkContext>
   );

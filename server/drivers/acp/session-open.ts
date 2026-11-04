@@ -323,6 +323,7 @@ export function createOpenSession(deps: OpenSessionDeps) {
       settle(threadId, session, false, "spawn_error");
     });
     child.on("close", (code) => {
+      if (process.env.SAGAX_ACP_REUSE_DIAG === "1") console.error(`[acp-reuse-diag] child-close thread=${threadId.slice(0, 8)} code=${code} closing=${session.closing}`);
       session.dead = true;
       session.acp.failAll(new Error(`${DRIVER_KIND} exited ${code} before the prompt result${session.stderr ? `: ${session.stderr.trim().slice(-300)}` : ""}`));
       const current = session.current;

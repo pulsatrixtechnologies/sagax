@@ -145,6 +145,7 @@ export async function createAcpInstance(
   const closeSession = (threadId: string, why: string) => {
     const session = sessions.get(threadId);
     if (!session || session.closing) return;
+    if (process.env.SAGAX_ACP_REUSE_DIAG === "1") console.error(`[acp-reuse-diag] closeSession thread=${threadId.slice(0, 8)} why=${why}`);
     session.closing = true;
     if (session.idleTimer) clearTimeout(session.idleTimer);
     appendNative(threadId, { dir: "out", source: SOURCE, msg: { close: why } });

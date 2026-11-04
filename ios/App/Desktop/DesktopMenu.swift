@@ -71,7 +71,8 @@ enum DesktopMenuStyle {
         }
     }
 
-    var rowHeight: CGFloat { self == .profile ? 32 : 30 }
+    // the account menu: 32 pt a row with the 2 pt gap, as measured on 11
+    var rowHeight: CGFloat { 30 }
     var iconSize: CGFloat {
         switch self {
         case .profile: 18

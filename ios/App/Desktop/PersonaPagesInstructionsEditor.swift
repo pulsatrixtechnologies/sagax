@@ -103,7 +103,7 @@ enum DesktopMarkdownAction: CaseIterable {
         case .task: AppStrings.localized("Checklist")
         case .quote: AppStrings.localized("Quote")
         case .code: AppStrings.localized("Code")
-        case .link: AppStrings.localized("Link")
+        case .link: AppStrings.localized("markdownEditor.link")
         case .table: AppStrings.localized("Table")
         case .rule: AppStrings.localized("Divider line")
         case .format: AppStrings.localized("Tidy up the formatting")

@@ -1733,5 +1733,7 @@
   "Saved. Type /%@ in a chat with this bot to run it.": "skills.write.saved",
   "Could not save that command.": "skills.write.failed",
   "Give the bot a short command for something you ask often. Type /name in a chat to run it. Anything after the name fills in %@.": "skills.write.hint",
-  "What the bot should do. Use %@ for the text typed after the command.": "skills.write.instructionsPlaceholder"
+  "What the bot should do. Use %@ for the text typed after the command.": "skills.write.instructionsPlaceholder",
+  "markdownEditor.link": "markdownEditor.link",
+  "botPanel.skills.sharedWith": "botPanel.skills.sharedWith"
 }

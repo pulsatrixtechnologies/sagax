@@ -959,7 +959,7 @@ struct PersonaSkillsPage: View {
                 .accessibilityIdentifier("desktop-skill-source.\(skill.name)")
             }
             if extras.libraryOn, origin == .me || origin == .library, let bots = info?.assignedBots, !bots.isEmpty {
-                DesktopText(verbatim: instructionsText("Shared with %@", bots.map(\.name).joined(separator: ", ")), size: 10.5, line: 14, color: \.inkSecondary)
+                DesktopText(verbatim: instructionsText("botPanel.skills.sharedWith", bots.map(\.name).joined(separator: ", ")), size: 10.5, line: 14, color: \.inkSecondary)
                     .padding(.top, 4)
             }
             if blocked {

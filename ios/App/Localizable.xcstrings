@@ -98150,6 +98150,28 @@
         }
       }
     },
+    "botPanel.skills.sharedWith": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shared with %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partagée avec %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compartilhada com %@"
+          }
+        }
+      }
+    },
     "botTasks.state.doing": {
       "localizations": {
         "en": {
@@ -100248,6 +100270,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "macOS garde les textos dans un dossier protégé que seul l'accès complet au disque peut ouvrir. Sagax s'en sert seulement pour lire Messages sur ce Mac."
+          }
+        }
+      }
+    },
+    "markdownEditor.link": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lien"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link"
           }
         }
       }

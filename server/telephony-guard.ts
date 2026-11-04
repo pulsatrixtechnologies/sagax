@@ -65,6 +65,10 @@ export function telephonyRefusal(toolName: string, args: unknown, context: Telep
     }
     return FLOW_TWILIO.test(text.replace(/[\s_.-]/g, "")) || /api\.twilio\.com/i.test(text) ? TELEPHONY_WRITE_REFUSAL : null;
   }
+  // Perspicax Voice's voice_line is a read of the line (shared/outbound.ts),
+  // even when its description names Twilio and lands in twilioTools. Empty
+  // args and every other read go through; changes use voice_number.
+  if (/(?:^|_)voice_line$/.test(name)) return null;
   const at = name.search(/(?:^|_)twilio/);
   const aliased = at < 0 && [...(context.twilioTools ?? [])].some((tool) => fold(tool) === name || name.endsWith(`_${fold(tool)}`));
   if (at < 0 && !aliased) return null;

@@ -103,6 +103,7 @@ export function ExchangeSheet({
   onRetry,
   meta,
   footer,
+  pinned,
   closeLabel,
   testId = "bot-exchange-sheet",
   ariaLabel,
@@ -118,6 +119,10 @@ export function ExchangeSheet({
   /** Actions placed in the footer row before Close Chat (routine runs:
    * Continue, Stop, …); its children are the row's items. */
   footer?: ReactNode;
+  /** What waits on the person (a routine run's open approval or question,
+   * 2026-11-04): pinned above the footer, answerable there, never more than
+   * half the sheet. */
+  pinned?: ReactNode;
   closeLabel?: string;
   testId?: string;
   ariaLabel?: string;
@@ -253,6 +258,11 @@ export function ExchangeSheet({
         })}
       </div>
       </div>
+      {pinned && (
+        <div data-exchange-pinned className="max-h-[50%] shrink-0 overflow-y-auto overscroll-y-contain px-5 pb-2" onClick={(event) => event.stopPropagation()}>
+          <div className={CHAT_COLUMN_CLASS}>{pinned}</div>
+        </div>
+      )}
       {/* In place of the composer (Grok Bot): one centered "Close Chat" pill
           is the close. A routine run puts its actions in the same row, before
           it (one row, 2026-11-02); narrow widths wrap it in order, centered. */}

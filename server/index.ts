@@ -15158,6 +15158,15 @@ function inboxPersonName(principalId: string): string | undefined {
   return plainPersonName(name) ? name : undefined;
 }
 
+/** The routine a bot's task is the run of, when it is one. */
+function routineNameOfThread(botId: string, threadId: string): string | undefined {
+  const runId = store.taskByThread(botId, threadId)?.routineRunId;
+  if (!runId) return undefined;
+  const run = routines?.runForThread(threadId);
+  const name = run?.routineName?.trim();
+  return name || undefined;
+}
+
 function inboxPending(auth: RequestAuth, viewer: InboxViewer): InboxApproval[] {
   const approvalViewer = viewerForApproval(auth);
   const viewerId = channelFilterViewerId(auth);
@@ -15231,6 +15240,8 @@ function inboxPending(auth: RequestAuth, viewer: InboxViewer): InboxApproval[] {
     const needsKey = decidable && kind !== "question" ? Boolean(stepUpGate(viewer.principalId, threadId, card.requestId!, "allow", {}, undefined)) : false;
     const owner = IDENTITY.kind === "perspicax" ? inboxPersonName(ownerId) : undefined;
     const title = group ? store.groupTasks(group.id).find((task) => task.threadId === threadId)?.title : store.taskByThread(bot.id, threadId)?.title;
+    // 2026-11-04: a routine run's card names its routine (the run's hidden task)
+    const routineName = !group && !confidential && scope !== "team" ? routineNameOfThread(bot.id, threadId) : undefined;
     out.push({
       key: inboxKey(threadId, card.requestId!),
       threadId,
@@ -15239,6 +15250,7 @@ function inboxPending(auth: RequestAuth, viewer: InboxViewer): InboxApproval[] {
       botName: bot.name,
       ...(group && scope !== "team" ? { roomName: group.name } : {}),
       ...(title && !confidential && scope !== "team" ? { threadTitle: String(title).slice(0, 200) } : {}),
+      ...(routineName ? { routineName: routineName.slice(0, 200) } : {}),
       scope,
       kind,
       at: message.at,

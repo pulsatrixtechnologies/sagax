@@ -93,7 +93,8 @@ final class MemoryGraphEngine: ObservableObject {
 
     func fit(animated: Bool = true) {
         guard size.width > 0 else { return }
-        view = MemoryGraph.fit(MemoryGraph.bounds(sim), width: size.width, height: size.height)
+        // MemoryGraph.tsx: the auto fit and Fit both frame at pad 56, 1.6 at most
+        view = MemoryGraph.fit(MemoryGraph.bounds(sim), width: size.width, height: size.height, pad: 56, maxZoom: 1.6)
         frame += 1
     }
 

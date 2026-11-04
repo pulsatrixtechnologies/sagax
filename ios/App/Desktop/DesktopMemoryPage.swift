@@ -464,9 +464,10 @@ struct DesktopMemoryPage: View {
         let total = entries(in: place).count
         return VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(placeTitle).font(theme.font(17, .semibold)).foregroundStyle(theme.ink)
-                    Text(placeSubtitle).font(theme.font(12)).foregroundStyle(theme.inkSecondary)
+                // MemoryNotesList.tsx: h2 20 semibold (1.3), the line 13 (mt-1)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(placeTitle).font(theme.font(20, .semibold)).foregroundStyle(theme.ink)
+                    Text(placeSubtitle).font(theme.font(13)).foregroundStyle(theme.inkSecondary)
                 }
                 Spacer(minLength: 0)
                 if let source = currentWritableSource ?? writableSource {
@@ -496,7 +497,7 @@ struct DesktopMemoryPage: View {
                     .frame(maxWidth: 220, alignment: .leading)
                     .fixedSize(horizontal: true, vertical: false)
                     .background(theme.ink.opacity(0.03), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
                 }
                 .accessibilityLabel(Text("Named view"))
                 HStack(spacing: 8) {
@@ -507,8 +508,10 @@ struct DesktopMemoryPage: View {
                         .autocorrectionDisabled()
                 }
                 .padding(.horizontal, 10)
-                .frame(width: 150, height: 32)
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline, lineWidth: 1))
+                // FIELD h-8 min-w-[180px] flex-1
+                .frame(minWidth: 180, maxWidth: .infinity, minHeight: 32, maxHeight: 32)
+                .background(theme.ink.opacity(0.03), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
                 Menu {
                     Button("All tags") { tagFilter = nil }
                     ForEach(allTags, id: \.self) { tag in Button(tag) { tagFilter = tag } }
@@ -517,22 +520,28 @@ struct DesktopMemoryPage: View {
                         Image(systemName: "line.3.horizontal.decrease").font(.system(size: 11))
                         Text(tagFilter.map { "#\($0)" } ?? String(localized: "Filter"))
                     }
+                    // OUTLINE_BUTTON: h-8, rounded-full, hairline/60, raised/60
                     .font(theme.font(12.5)).foregroundStyle(theme.ink)
-                    .padding(.horizontal, 10).frame(minHeight: 32)
-                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline, lineWidth: 1))
+                    .padding(.horizontal, 10).frame(height: 32)
+                    .background(theme.raised.opacity(0.6), in: Capsule())
+                    .overlay(Capsule().strokeBorder(theme.hairline.opacity(0.6), lineWidth: 1))
                 }
-                Spacer(minLength: 0)
-                HStack(spacing: 2) {
+                // MiniSegment: rounded-lg, a hairline/50 border, the app's fill, p-0.5
+                HStack(spacing: 0) {
                     ForEach(Sort.allCases, id: \.self) { option in
                         Button { sort = option } label: {
-                            Text(sortLabel(option)).font(theme.font(12.5))
+                            Text(sortLabel(option)).font(theme.font(12, sort == option ? .medium : .regular))
                                 .foregroundStyle(sort == option ? theme.ink : theme.inkSecondary)
-                                .padding(.horizontal, 10).frame(minHeight: 32)
-                                .background(sort == option ? theme.card : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .padding(.horizontal, 10).padding(.vertical, 4)
+                                .background(sort == option ? theme.raised : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                         }
                         .buttonStyle(.plain)
                     }
                 }
+                .padding(2)
+                .background(theme.app, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
+                .fixedSize()
                 DesktopText(Text("\(rows.count) of \(total)"), size: 12, line: 16, color: \.inkSecondary).monospacedDigit()
             }
             .padding(.horizontal, 20).padding(.bottom, 8)
@@ -540,8 +549,7 @@ struct DesktopMemoryPage: View {
                 Button {
                     checked = checked.count == rows.count ? [] : Set(rows.map(\.id))
                 } label: {
-                    Image(systemName: !rows.isEmpty && checked.count == rows.count ? "checkmark.square.fill" : "square")
-                        .foregroundStyle(theme.inkTertiary).frame(width: 24, height: 24)
+                    DesktopNoteCheckbox(on: !rows.isEmpty && checked.count == rows.count).frame(width: 24, height: 24)
                 }
                 .buttonStyle(.plain)
                 DesktopText(Text("\(rows.count) notes · tap to open"), size: 12, line: 16, color: \.inkSecondary)
@@ -567,9 +575,7 @@ struct DesktopMemoryPage: View {
                 Button {
                     if checked.contains(entry.id) { checked.remove(entry.id) } else { checked.insert(entry.id) }
                 } label: {
-                    Image(systemName: checked.contains(entry.id) ? "checkmark.square.fill" : "square")
-                        .foregroundStyle(checked.contains(entry.id) ? theme.accent : theme.inkTertiary)
-                        .frame(width: 24, height: 24)
+                    DesktopNoteCheckbox(on: checked.contains(entry.id)).frame(width: 24, height: 24)
                 }
                 .buttonStyle(.plain)
                 VStack(alignment: .leading, spacing: 4) {
@@ -582,7 +588,7 @@ struct DesktopMemoryPage: View {
                             .accessibilityIdentifier("desktop-memory.note-excerpt")
                     }
                     HStack(spacing: 6) {
-                        Circle().fill(tierColor(entry.source)).frame(width: 7, height: 7)
+                        Circle().fill(tierColor(entry.source)).frame(width: 8, height: 8)
                         Text(tierLabel(entry.source)).font(theme.font(12, .medium)).foregroundStyle(theme.ink)
                         if entry.source.kind == .bot {
                             Text(verbatim: entry.source.name).font(theme.font(12)).foregroundStyle(theme.inkSecondary)
@@ -596,7 +602,7 @@ struct DesktopMemoryPage: View {
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
-            .frame(minHeight: 56)
+            .frame(minHeight: 93, alignment: .top)
             .contentShape(Rectangle())
         }
         .buttonStyle(DesktopHoverFill(radius: 0))
@@ -831,3 +837,24 @@ struct DesktopMemoryPage: View {
     }
 }
 
+
+
+/// `<input type="checkbox">` as Chromium draws it on a dark page: a 13 pt
+/// rounded square filled grey, the accent with a white check when on.
+struct DesktopNoteCheckbox: View {
+    @Environment(\.desktopTheme) private var theme
+    let on: Bool
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                .fill(on ? theme.accent : Color(white: 0.24))
+                .overlay(RoundedRectangle(cornerRadius: 2.5, style: .continuous).strokeBorder(Color(white: on ? 0 : 0.42).opacity(on ? 0 : 1), lineWidth: 1))
+            if on {
+                Image(systemName: "checkmark").font(.system(size: 8, weight: .bold)).foregroundStyle(Color.white)
+            }
+        }
+        .frame(width: 13, height: 13)
+        .accessibilityHidden(true)
+    }
+}

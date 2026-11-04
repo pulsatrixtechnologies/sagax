@@ -13056,5 +13056,6 @@
   "perspicax.identity.unavailable": "Impossible de charger les profils Perspicax. Réessaie.",
   "perspicax.identity.switch_not_consented": "Perspicax ne permet pas à cette connexion de changer de profil. Reconnecte-toi à Perspicax et autorise le changement de profil. Ce tour peut seulement lire.",
   "perspicax.identity.params_invalid": "Tu ne détiens plus ce profil Perspicax. Choisis un autre profil dans les réglages du bot. Ce tour peut seulement lire.",
-  "perspicax.identity.failed": "Perspicax n’a pas pu changer de profil. Vérifie la connexion et le profil choisi dans les réglages du bot. Ce tour peut seulement lire."
+  "perspicax.identity.failed": "Perspicax n’a pas pu changer de profil. Vérifie la connexion et le profil choisi dans les réglages du bot. Ce tour peut seulement lire.",
+  "routines.failures.grouped": "Exécutions de routine en échec ({count})"
 }

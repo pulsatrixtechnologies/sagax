@@ -5,6 +5,9 @@ import type { SectionDropPlace } from "@/lib/sidebar-layout";
 import type { SidebarDensity } from "@/lib/sidebar-preferences";
 import type { hiddenSidebarRows } from "@/lib/sidebar-hidden-entries";
 
+/** State read by the sidebar's prop-only layout helpers. */
+export type SidebarState = Pick<AppState, "activeView" | "bots" | "groups" | "config" | "instances" | "pendingQueued" | "sections" | "selectedId">;
+
 export interface MenuState {
   botId: string;
   x: number;
@@ -58,7 +61,7 @@ export type SidebarSectionListProps = {
   density: SidebarDensity;
   quietRows: boolean;
   q: string;
-  state: AppState;
+  state: SidebarState;
   sectionIds: string[];
   teamMap: TeamMapEntry[];
   botChats: Group[];

@@ -19,7 +19,7 @@ import { stepUpApprovals } from "@/lib/step-up-client";
 import { createBotPatchQueue } from "./bot-patch-queue";
 import { useChatErrorClear } from "./chat-error";
 import { migrateInstalledVoiceSettings } from "@/lib/voice-mode/settings";
-import { StoreSourceContext, usePublishedStoreSource } from "./store-source";
+import { StoreCommandsContext, StoreSourceContext, usePublishedStoreSource } from "./store-source";
 import { ThreadPrefetchContext } from "./thread-prefetch";
 import { createThreadPrefetcher, ThreadPageCache } from "@/lib/thread-page-cache";
 import { PERSON_THREADS_HEADER, currentTaskBot, visibleMessages, configStatusFromFrame, pinBotThreadAction, openRoutineRun, continueRoutineRunInConversation, routineRunOfThread, visibleNotificationThread, openNotificationTarget, opensBesideStream, sendsToFreshTopic, freshTopicCovers, botOpensTo, awayFromMainThread, openBot, landOnBot, startNewTopic, openBotThread, openThread, threadsReadOnScreen, folderOwnerPath, personThreadKept, peopleDmReadTarget, panelFollowsSelection, openBotCatalog, closeBotCatalog, dataTablesFromResponse, dataSheetFromResponse, initialState, liveCallFromFrame, nextLiveCallLookup, ApiError, taskPatchFields, type OptionCardData, type SecretRequestCardData, type Message, type GroupDefaultResponder, type Group, type GroupTask, type ModelSelection, type Task, type ThreadOpener, type ThreadCloser, type TaskUsage, type Bot, type BotProject, type ProjectUpdatePatch, type FolderOwnerKind, type GroupTaskUpdatePatch, type TaskUpdatePatch, type ConfigStatus, type ConfigViewer, type ManagedPolicySummary, type BrowserEngineSummary, type BrowserProfile, type ConfigStatusFrame, type EngineInstall, type InstanceInfo, type AchievementsCategory, type ModelVariantSession, type AppState, type BotAnnouncement, type Action, type ThreadTarget, type BotCatalogTarget, type PanelOwner } from "./store/model";
@@ -572,13 +572,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Selector reads (store-selector.ts): the same state, for components that
   // render only when the slice they read changes.
   const source = usePublishedStoreSource(state, dispatch);
+  const commands = useMemo(() => ({ flushBotPatches, refreshInstances, refreshModels }), [flushBotPatches, refreshInstances, refreshModels]);
   return (
     <StoreSourceContext.Provider value={source}>
-      <StoreContext.Provider value={value}>
-        <ThreadPrefetchContext.Provider value={threadPrefetch}>
-          <StreamContext.Provider value={stream}>{children}</StreamContext.Provider>
-        </ThreadPrefetchContext.Provider>
-      </StoreContext.Provider>
+      <StoreCommandsContext.Provider value={commands}>
+        <StoreContext.Provider value={value}>
+          <ThreadPrefetchContext.Provider value={threadPrefetch}>
+            <StreamContext.Provider value={stream}>{children}</StreamContext.Provider>
+          </ThreadPrefetchContext.Provider>
+        </StoreContext.Provider>
+      </StoreCommandsContext.Provider>
     </StoreSourceContext.Provider>
   );
 }
@@ -598,9 +601,13 @@ export function useStore() {
 export function BotEditorStore({ value, children }: { value: ReturnType<typeof useStore>; children: ReactNode }) {
   // Selector reads inside the editor see its scoped state, not the workspace's.
   const source = usePublishedStoreSource(value.state, value.dispatch);
+  const { flushBotPatches, refreshInstances, refreshModels } = value;
+  const commands = useMemo(() => ({ flushBotPatches, refreshInstances, refreshModels }), [flushBotPatches, refreshInstances, refreshModels]);
   return (
     <StoreSourceContext.Provider value={source}>
-      <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
+      <StoreCommandsContext.Provider value={commands}>
+        <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
+      </StoreCommandsContext.Provider>
     </StoreSourceContext.Provider>
   );
 }

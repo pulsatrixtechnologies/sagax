@@ -1,6 +1,7 @@
+import type { SidebarState } from "./types";
 import { ChevronRight, Eye, EyeOff } from "lucide-react";
-import { useState, type ReactNode } from "react";
-import type { AppState, Bot, Group } from "@/state/store";
+import { useCallback, useState, type ReactNode } from "react";
+import type { Bot, Group } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
 import { showInSidebar } from "@/lib/sidebar-hidden";
@@ -114,7 +115,7 @@ export function SidebarSectionList({
   density: SidebarDensity;
   quietRows: boolean;
   q: string;
-  state: AppState;
+  state: SidebarState;
   sectionIds: string[];
   teamMap: TeamMapEntry[];
   botChats: Group[];
@@ -145,6 +146,7 @@ export function SidebarSectionList({
   renderBot: (props: BotRowProps) => ReactNode;
   renderGroup: (props: GroupRowProps) => ReactNode;
 }) {
+  const renameStarted = useCallback(() => setRenameBotId(null), [setRenameBotId]);
   const {
     draggingSectionId,
     dropTarget,
@@ -253,7 +255,7 @@ export function SidebarSectionList({
                       query: q,
                       onMenu: setMenu,
                       startRename: renameBotId === bot.id,
-                      onRenameStarted: () => setRenameBotId(null),
+                      onRenameStarted: renameStarted,
                       selection: selectionFor(bot.id),
                     })}
                   </div>
@@ -278,7 +280,7 @@ export function SidebarSectionList({
                       query: q,
                       onMenu: setMenu,
                       startRename: renameBotId === bot.id,
-                      onRenameStarted: () => setRenameBotId(null),
+                      onRenameStarted: renameStarted,
                       selection: selectionFor(bot.id),
                     })}
                   </div>
@@ -316,7 +318,7 @@ export function SidebarSectionList({
                       query: q,
                       onMenu: setMenu,
                       startRename: renameBotId === bot.id,
-                      onRenameStarted: () => setRenameBotId(null),
+                      onRenameStarted: renameStarted,
                       selection: selectionFor(bot.id),
                     })}
                   </div>

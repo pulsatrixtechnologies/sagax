@@ -1,4 +1,5 @@
-import type { AppState, Bot } from "@/state/store";
+import type { SidebarState } from "./types";
+import type { Bot } from "@/state/store";
 import { cn } from "@/lib/cn";
 import { isViewersPrimaryBot } from "@/lib/primary-bot";
 import type { SidebarDensity } from "@/lib/sidebar-preferences";
@@ -18,7 +19,7 @@ export function SidebarPinnedGrid({
 }: {
   pinnedBots: Bot[];
   density: SidebarDensity;
-  state: AppState;
+  state: SidebarState;
   viewerId: string;
   showThreads: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

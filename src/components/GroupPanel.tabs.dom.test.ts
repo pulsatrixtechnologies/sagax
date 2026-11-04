@@ -115,8 +115,10 @@ describe("group panel tabs", () => {
 });
 
 describe("group panel Details", () => {
-  it("shows the group's routines: its team goals and the routines that post in it", () => {
+  it("shows the group's routines: its team goals and the routines that post in it", async () => {
     render();
+    // Details loads on demand (it is off the launch bundle).
+    await vi.waitFor(() => expect(host.querySelector("[data-group-routines]")).not.toBeNull(), { timeout: 15_000 });
     const section = host.querySelector("[data-group-routines]")!;
     expect(section).not.toBeNull();
     expect(section.textContent).toContain("Weekly ops review");
@@ -124,9 +126,9 @@ describe("group panel Details", () => {
     expect(section.textContent).not.toContain("Someone else's routine");
   });
 
-  it("draws each own bot's activity, as a bot's Details does", () => {
+  it("draws each own bot's activity, as a bot's Details does", async () => {
     render();
-    expect(host.querySelector('[data-activity-of="osprey"]')).not.toBeNull();
+    await vi.waitFor(() => expect(host.querySelector('[data-activity-of="osprey"]')).not.toBeNull(), { timeout: 15_000 });
     expect(host.querySelector('[data-activity-of="wren"]')).not.toBeNull();
   });
 

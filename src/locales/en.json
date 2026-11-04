@@ -13056,5 +13056,6 @@
   "perspicax.identity.unavailable": "Perspicax profiles could not be loaded. Try again.",
   "perspicax.identity.switch_not_consented": "Perspicax did not allow this connection to switch profiles. Reconnect to Perspicax and allow profile switching. This turn can only read.",
   "perspicax.identity.params_invalid": "You no longer hold this Perspicax profile. Choose another profile in the bot’s settings. This turn can only read.",
-  "perspicax.identity.failed": "Perspicax could not switch profiles. Check the connection and the bot’s profile setting. This turn can only read."
+  "perspicax.identity.failed": "Perspicax could not switch profiles. Check the connection and the bot’s profile setting. This turn can only read.",
+  "routines.failures.grouped": "Failed routine runs ({count})"
 }

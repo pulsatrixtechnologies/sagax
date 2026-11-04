@@ -1,5 +1,6 @@
+import type { SidebarState } from "./types";
 import { useCallback, useEffect, useState } from "react";
-import { api, openBot, type AppState, type Bot } from "@/state/store";
+import { api, openBot, type Bot } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { readableError } from "@/lib/plain-error";
 import { requestPrimaryBot } from "@/lib/bot-quick-actions";
@@ -16,7 +17,7 @@ export function useSidebarBotActions({
   onClose,
   remoteClient,
 }: {
-  state: AppState;
+  state: SidebarState;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   dispatch: (action: any) => void;
   showThreads: boolean;

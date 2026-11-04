@@ -25,7 +25,7 @@ import {
   resolveTranscriptWindow,
   tailWindowStart,
 } from "@/lib/transcript-window";
-import { useStore } from "@/state/store";
+import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 
 export const AUTO_EXPAND_TOP_THRESHOLD = 250;
 
@@ -73,7 +73,9 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
   /** Pending flag when `onLoadOlder` is set; otherwise the store's. */
   loadingOlder?: boolean;
 }) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const focusMessage = useStoreSelector((current) => current.focusMessage?.threadId === threadId ? current.focusMessage : null);
+  const loadingOlder = useStoreSelector((current) => current.loadingOlder[threadId]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -154,7 +156,7 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
   // the row after React commits that window.
   const appliedFocus = useRef<number | null>(null);
   useEffect(() => {
-    const focus = state.focusMessage;
+    const focus = focusMessage;
     if (!focus || focus.consumed || focus.threadId !== threadId || appliedFocus.current === focus.nonce) return;
     const targetIndex = messages.findIndex((message) => message.id === focus.messageId);
     if (targetIndex < 0) return;
@@ -162,7 +164,7 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
     const range = focusWindowRange(messages.length, targetIndex);
     setBottomFollow(false);
     setTranscriptWindow({ key: transcriptKey, start: range.start, end: range.end });
-  }, [threadId, messages, setBottomFollow, state.focusMessage, transcriptKey]);
+  }, [threadId, messages, setBottomFollow, focusMessage, transcriptKey]);
   useFocusMessage(threadId, messages.length > 0);
 
   // Sending a message re-arms follow: the person wants the reply in view, even
@@ -245,7 +247,7 @@ export function useTranscriptViewport<T extends { id: string; role?: string }>({
   // Scrollback across the network: the snapshot holds a bounded page, and
   // everything before it is still on the server. A side / split pane passes
   // its own loader; the main chat uses the store.
-  const olderPending = onLoadOlder ? Boolean(loadingOlderOverride) : Boolean(state.loadingOlder[threadId]);
+  const olderPending = onLoadOlder ? Boolean(loadingOlderOverride) : Boolean(loadingOlder);
   const requestOlder = useCallback(() => {
     if (onLoadOlder) onLoadOlder();
     else dispatch({ type: "loadOlderMessages", threadId });

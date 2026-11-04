@@ -58,7 +58,6 @@ import { useCaptionChrome, useDesktopCapabilities, useMacInsetChrome } from "@/c
 import {
   api,
   currentTaskBot,
-  useStore,
   formatTime,
   openBot,
   openThread,
@@ -199,7 +198,8 @@ import { useComposerDockPad, useMeasuredHeight } from "@/lib/composer-dock";
 import { useTranscriptViewport } from "@/hooks/use-transcript-viewport";
 import { offscreenAnchorShift, useOffscreenRowAnchor } from "@/hooks/use-offscreen-row-anchor";
 import { claimMessageEntrance } from "@/lib/message-entrance";
-import { useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
+import { equalRows, peerBots, peerGroups } from "@/state/view-slices";
+import { shallowEqual, useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
 import { useUnreadDivider } from "@/hooks/use-unread-divider";
 import { NewMessagesDivider } from "./NewMessagesDivider";
 import { unreadMessageIds } from "@/lib/unread-divider";
@@ -1127,8 +1127,8 @@ const MessagesList = memo(function MessagesList({
   // viewing) read slices of the store, so an unrelated dispatch (an unread
   // mark, a notice) leaves the list alone; the rows inside stay memoized on
   // ChatRows.
-  const storeBots = useStoreSelector((current) => current.bots);
-  const storeGroups = useStoreSelector((current) => current.groups);
+  const storeBots = useStoreSelector(peerBots, equalRows);
+  const storeGroups = useStoreSelector(peerGroups, equalRows);
   const config = useStoreSelector((current) => current.config);
   // read when a chip is clicked, so a store event does not render the list
   const getState = useStoreGetter();
@@ -1725,7 +1725,7 @@ function StreamSegment({ task, first, rows, place, engine, aroundId, onQuote, on
   const transcript = useSegmentTranscript(task.threadId, aroundId);
   const messages = useMemo(() => visibleMessages({ messages: transcript.messages, activeLeafId: transcript.activeLeafId }), [transcript.messages, transcript.activeLeafId]);
   const lookups = useMemo(() => transcriptLookups(transcript.messages, messages), [transcript.messages, messages]);
-  const focusAll = useStoreSelector((current) => current.focusMessage);
+  const focusAll = useStoreSelector((current) => current.focusMessage?.threadId === task.threadId ? current.focusMessage : null);
   const focus = focusAll?.threadId === task.threadId ? focusAll : null;
   const ids = useMemo(() => new Set(messages.map((message) => message.id)), [messages]);
   const segmentRows = useMemo<ChatRows>(() => ({
@@ -1960,12 +1960,39 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
     : stored, [stored, preview]);
   const bot = useMemo(() => currentTaskBot(profile), [profile]);
   const dataItem = useDataWindowItem(bot);
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({
+    codingChat: current.codingChat,
+    computerOpen: current.computerOpen,
+    config: current.config,
+    connected: current.connected,
+    disconnectedAt: current.disconnectedAt,
+    error: current.error,
+    everConnected: current.everConnected,
+    inspectorOpen: current.inspectorOpen,
+    notice: current.notice,
+    panelOwner: current.panelOwner,
+    routineRunSheet: current.routineRunSheet,
+    settingsOpen: current.settingsOpen,
+  }), shallowEqual);
+  const storeBots = useStoreSelector(peerBots, equalRows);
+  const engine = useStoreSelector((current) => current.instances.find((instance) => instance.instanceId === bot.modelSelection.instanceId));
+  const computerStart = useStoreSelector((current) => current.computerStarts[bot.id]);
+  const mascotMotion = useStoreSelector((current) => current.mascotMotion?.botId === bot.id ? current.mascotMotion : null);
+  const pendingQueued = useStoreSelector((current) => Object.fromEntries([bot.threadId, ...(bot.tasks ?? []).map((task) => task.threadId)].map((id) => [id, current.pendingQueued[id]])), shallowEqual);
+  const focus = useStoreSelector((current) => current.focusMessage?.threadId === bot.threadId ? current.focusMessage : null);
+  const sheetRun = useStoreSelector((current) => current.routineRuns.find((run) => run.id === current.routineRunSheet?.runId));
+  const sheetRoutine = useStoreSelector((current) => {
+    const sheet = current.routineRunSheet;
+    const routineId = sheet?.routineId ?? current.routineRuns.find((run) => run.id === sheet?.runId)?.routineId;
+    return current.routines.find((routine) => routine.id === routineId) ?? null;
+  });
   const showThreads = useShowThreads();
   const remoteClient = useRemoteClient();
   // 2026-10-26: the failure that paused its routine offers Resume, and its
   // banner leaves once the routine is back on.
-  const routinesNow = state.routines;
+  const routineIds = useMemo(() => new Set(bot.messages.flatMap((message) => message.routineRun ? [message.routineRun.routineId] : [])), [bot.messages]);
+  const routinesNow = useStoreSelector((current) => current.routines.filter((routine) => routineIds.has(routine.id)), shallowEqual);
   const autoPauseSettled = useCallback((m: Message) => routineAutoPauseSettled(m, routinesNow), [routinesNow]);
   const resumeAutoPaused = (m: Message, close: () => void) => {
     const routine = isRoutineAutoPausedNotice(m) ? routinesNow.find((candidate) => candidate.id === m.routineRun?.routineId) : undefined;
@@ -2042,8 +2069,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   // A guest on an OMB Cloud home writes only in conversations it opened.
   const canWrite = useCanWriteIn(bot.threadId);
 
-  const computerStarting = computerStartLine(state.computerStarts[bot.id], bot.name);
-  const mascotMotion = state.mascotMotion?.botId === bot.id ? state.mascotMotion : null;
+  const computerStarting = computerStartLine(computerStart, bot.name);
   const [findOpen, setFindOpen] = useState(false);
   const { replyTo, selectReply, clearReply, consumeReply, restoreReply } = useReplyDraft(
     bot.threadId,
@@ -2108,7 +2134,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   const recordedRun = useMemo(() => runSteps(messages), [messages]);
   const recordedRunCounts = runSummary(recordedRun);
   const engineSupportsAgents = Boolean(
-    state.instances.find((instance) => instance.instanceId === bot.modelSelection.instanceId)?.capabilities?.agentsMcp,
+    engine?.capabilities?.agentsMcp,
   );
   const canSaveRun =
     skillAuthoringEnabled(state.config) && engineSupportsAgents && recordedRunCounts.passed > 0 && recordedRunCounts.running === 0 && !bot.busy;
@@ -2166,9 +2192,8 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   const unreadDivider = useUnreadDivider({ threadId: bot.threadId, messages, following });
 
   // What the rows read besides their own message (see ChatRows).
-  const bots = useDrawnBots(state.bots);
+  const bots = useDrawnBots(storeBots);
   const mentionPeers = useMemo(() => bots.filter((peer) => peer.id !== bot.id), [bots, bot.id]);
-  const focus = state.focusMessage?.threadId === bot.threadId ? state.focusMessage : null;
   const showToolCalls = showToolCallRows(state.config);
   const tts = state.config?.tts;
   const localVoice = useLocalSystemVoice();
@@ -2182,10 +2207,8 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   const hasMore = Boolean(bot.hasMore);
   const reactionSelfKey = reactionSelfIds(state.config, threadReads.self).join("\n");
   const reactionSelf = useMemo(() => reactionSelfKey.split("\n").filter(Boolean), [reactionSelfKey]);
-  const botDmIds = useMemo(
-    () => new Set(state.groups.filter((group) => group.dm && !group.peopleDm).map((group) => group.id)),
-    [state.groups],
-  );
+  const dmIds = useStoreSelector((current) => current.groups.filter((group) => group.dm && !group.peopleDm).map((group) => group.id), shallowEqual);
+  const botDmIds = useMemo(() => new Set(dmIds), [dmIds]);
   const rows = useMemo<ChatRows>(
     () => ({ botId: bot.id, threadId: bot.threadId, botName: bot.name, viewerName, voiceId: bot.voice, tts, localVoice, busy, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds }),
     [bot.id, bot.threadId, bot.name, viewerName, bot.voice, tts, localVoice, busy, hasMore, bots, mentionPeers, focus, showToolCalls, locale, dispatch, onBranch, reactionSelf, botDmIds],
@@ -2210,7 +2233,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   // Coming back put the fresh topic there: it gives way the moment the topic
   // under it comes alive (another device's turn, an approval), never hiding
   // a live conversation. A New topic the person started stays.
-  const queuedUnder = (state.pendingQueued[bot.threadId]?.length ?? 0) > 0;
+  const queuedUnder = (pendingQueued[bot.threadId]?.length ?? 0) > 0;
   const underAlive = Boolean(currentTask && (currentTask.busy || currentTask.activity === "working" || currentTask.activity === "waiting-on-you" || currentTask.unread || currentTask.waitingForTeammates || queuedUnder));
   useEffect(() => {
     if (fresh && freshDraft?.auto && underAlive) dispatch({ type: "freshTopic", botId: bot.id, threadId: null });
@@ -2222,7 +2245,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   // what was loaded above it. A link or a search hit into an earlier topic
   // draws them at once, above whatever of the live topic is loaded (its top
   // sentinel, between the divider and the live rows, fills the rest).
-  const streamFocus = useStoreSelector((current) => current.focusMessage);
+  const streamFocus = useStoreSelector((current) => segmentsAbove(bot.tasks, bot.threadId).some((task) => task.threadId === current.focusMessage?.threadId) ? current.focusMessage : null);
   const streamFocusEarlier = streamHasEarlier && Boolean(streamFocus && !streamFocus.consumed && segmentsAbove(bot.tasks, bot.threadId).some((task) => task.threadId === streamFocus.threadId));
   const [streamShownFor, setStreamShownFor] = useState<string | null>(null);
   // Reply on an earlier topic's message quotes it into the live composer.
@@ -2240,7 +2263,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
     }
     composerDockRef.current?.querySelector("textarea")?.focus();
   }, [bot.id, bot.threadId]);
-  const streamEngine = state.instances.find((i) => i.instanceId === bot.modelSelection.instanceId);
+  const streamEngine = engine;
   // A topic started from New chat opens on its own (src/lib/fresh-topic.ts):
   // reading it back to its first line does not draw the earlier topics above
   // it; a link, a search hit or the activity pill still reaches them.
@@ -2396,7 +2419,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           size={24}
           motion={mascotMotion?.kind ?? "none"}
           motionKey={mascotMotion?.nonce ?? 0}
-          animated={mascotRowAnimated(bot, state.pendingQueued, mascotMotion?.kind)}
+          animated={mascotRowAnimated(bot, pendingQueued, mascotMotion?.kind)}
         />
       }
     />
@@ -2577,7 +2600,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
           ) : (
             <>
           {earlierConversations.length > 0 && <PreviousTopicsLine open={conversationsOpen} onToggle={toggleConversations} />}
-          {conversationsOpen && earlierConversations.length > 0 && <EarlierConversationList self={bot} rows={earlierConversations} bots={state.bots} showToolCalls={showToolCalls} />}
+          {conversationsOpen && earlierConversations.length > 0 && <EarlierConversationList self={bot} rows={earlierConversations} bots={storeBots} showToolCalls={showToolCalls} />}
           {streamDrawn && (
             <>
               <StreamEarlierTopics bot={bot} rows={rows} place={place} engine={streamEngine} scrollRef={scrollRef} followRef={followRef} reach={streamReach} onReached={clearStreamReach} onQuote={quoteEarlier} />
@@ -2607,7 +2630,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
               lastBotTextId={lastBotTextId}
               emergingId={popping}
               canRetryLast={!bot.busy && Boolean(lastUserMessage)}
-              engine={state.instances.find((i) => i.instanceId === bot.modelSelection.instanceId)}
+              engine={engine}
               unreadDividerId={unreadDivider.messageId}
               unreadDividerFading={unreadDivider.fading}
               onStartEdit={startEdit}
@@ -2659,7 +2682,7 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
 
       {/* Dev context pods (Settings > Experimental): an overlay in the
           pane's top-right corner; the transcript above never moves. */}
-      <DevPods bot={bot} messages={messages} composerHeight={composerDock.height + runCardHeight} computerStart={state.computerStarts[bot.id]} dispatch={dispatch} />
+      <DevPods bot={bot} messages={messages} composerHeight={composerDock.height + runCardHeight} computerStart={computerStart} dispatch={dispatch} />
 
       {/* Reading scrollback — one tap back to the end, streaming or not.
           Hidden only while a phone page covers the chat; desktop keeps it
@@ -2826,15 +2849,14 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
       )}
     </Root>
     {state.routineRunSheet && (() => {
-      const sheet = state.routineRunSheet;
-      const run = state.routineRuns.find((candidate) => candidate.id === sheet.runId);
+      const run = sheetRun;
       if (!run) return null;
-      const routine = state.routines.find((candidate) => candidate.id === (sheet.routineId ?? run.routineId)) ?? null;
+      const routine = sheetRoutine;
       return (
         <RoutineRunExchange
           run={run}
           routine={routine}
-          bots={state.bots}
+          bots={storeBots}
           onClose={() => dispatch({ type: "closeRoutineRunSheet" })}
           onStop={["queued", "running", "waiting"].includes(run.status) ? () => dispatch({ type: "cancelRoutineRun", runId: run.id }) : undefined}
         />

@@ -1,5 +1,16 @@
 # Sagax agent notes
 
+## Desktop store subscriptions
+
+Shell selects routing and chrome; BotSurface and GroupSurface subscribe to
+conversation records at the leaves. ChatView, its viewport, focus and unread
+hooks use useStoreSelector scoped by thread or bot. Event handlers use
+useStoreGetter, not a captured workspace. Peer lists use view-slices.ts and
+never subscribe to other conversations' transcripts; ownership, grants,
+hiding and task navigation still invalidate them.
+Render regression: src/components/StoreSubscriptions.renders.dom.test.ts
+(real desktop, scoped store, neutral fixture, no network or visible window).
+
 ## Perspicax identities (2026-11-03)
 
 `perspicaxActAs` is an explicit per-bot profile choice (slug and human name),

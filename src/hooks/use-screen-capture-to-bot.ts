@@ -9,15 +9,18 @@ import { handoffAttachmentImagePreview, imageAttachmentFromFile, optimisticImage
 import { t } from "@/lib/i18n";
 import { captureErrorKey, captureFile, captureTarget } from "@/lib/screen-capture-to-bot";
 import { navigate } from "@/lib/view-transitions";
-import { botOpensTo, openBot, useStore } from "@/state/store";
+import { useStoreDispatch, useStoreGetter } from "@/state/store-selector";
+import { botOpensTo, openBot } from "@/state/store";
 
 export function useScreenCaptureToBot(showThreads: boolean): void {
-  const { state, dispatch } = useStore();
-  const latest = useRef({ state, showThreads });
-  latest.current = { state, showThreads };
+  const dispatch = useStoreDispatch();
+  const getState = useStoreGetter();
+  const latest = useRef(showThreads);
+  latest.current = showThreads;
 
   useEffect(() => window.ogb?.onScreenCapture?.((capture) => {
-    const { state: now, showThreads: threads } = latest.current;
+    const now = getState();
+    const threads = latest.current;
     if ("error" in capture) {
       dispatch({ type: "error", message: t(captureErrorKey(capture)) });
       return;
@@ -62,5 +65,5 @@ export function useScreenCaptureToBot(showThreads: boolean): void {
         dispatch({ type: "error", message: t("screenCapture.uploadFailed") });
       })
       .finally(() => changeDraftAttachmentPending(draftId, false));
-  }), [dispatch]);
+  }), [dispatch, getState]);
 }

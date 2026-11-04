@@ -52,6 +52,16 @@ struct CompanionApp: App {
                     .themeRoot()
             }
         }
+        // Split right / Split down of a conversation (ExportTranscriptMenu):
+        // the conversation in its own window, beside this one.
+        WindowGroup(id: DesktopConversationWindow.sceneId, for: String.self) { binding in
+            if let value = binding.wrappedValue {
+                DesktopConversationWindowScene(value: value)
+                    .environmentObject(session)
+                    .environment(\.locale, AppLanguage.resolved(language).locale ?? .autoupdatingCurrent)
+                    .themeRoot()
+            }
+        }
         // `.defaultSize` is iOS 17 and `SceneBuilder` takes no conditionals,
         // so it is dropped while the app supports 16. It only suggested an
         // opening window size for iPad and Stage Manager; the system picks a

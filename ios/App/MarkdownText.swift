@@ -63,6 +63,8 @@ struct MarkdownText: View {
     @State private var openFootnote: MarkdownFootnote?
     /// iPad desktop shell: 13/20 text, 8 pt paragraphs, 4 pt list items.
     @Environment(\.desktopChatText) private var desktop
+    /// Find in conversation: the landed hit's words in this message.
+    @Environment(\.desktopFindHighlight) private var findHighlight
 
     private var bodyFont: Font { desktop?.font(DesktopChatMetrics.textSize) ?? Theme.Font.body }
     private var bodyLineSpacing: CGFloat { desktop.map(DesktopChatMetrics.lineSpacing) ?? Theme.bodyLineSpacing }
@@ -483,6 +485,7 @@ struct MarkdownText: View {
                 }
             }
             MentionTint.apply(to: &attributed, peers: mentions, everyone: mentionEveryone)
+            if let desktop, let findHighlight { DesktopFindHighlight.apply(to: &attributed, needle: findHighlight, theme: desktop) }
             styleFootnotes(&attributed)
             styleSpoilers(&attributed)
             return attributed

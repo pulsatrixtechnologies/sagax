@@ -1436,6 +1436,22 @@
         }
       }
     },
+    "%@ responds": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ répond"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ responde"
+          }
+        }
+      }
+    },
     "%@ rewrote %lld lines in %@": {
       "localizations": {
         "en": {
@@ -4794,6 +4810,16 @@
         }
       }
     },
+    "5m prompt": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5m consigne"
+          }
+        }
+      }
+    },
     "7 days": {
       "localizations": {
         "en": {
@@ -4806,6 +4832,32 @@
           "stringUnit": {
             "state": "translated",
             "value": "7 jours"
+          }
+        }
+      }
+    },
+    "<goal>": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "<objectif>"
+          }
+        }
+      }
+    },
+    "@ to bring a bot in": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@ pour faire venir un bot"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@ para chamar um bot"
           }
         }
       }
@@ -7360,6 +7412,22 @@
         }
       }
     },
+    "Add group instructions…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter des instructions de groupe…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicionar instruções do grupo…"
+          }
+        }
+      }
+    },
     "Add hours": {
       "localizations": {
         "en": {
@@ -7536,6 +7604,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ajouter des personnes ou des groupes"
+          }
+        }
+      }
+    },
+    "Add reaction": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter une réaction"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicionar reação"
           }
         }
       }
@@ -10768,6 +10852,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Toque de aprovação"
+          }
+        }
+      }
+    },
+    "Approval details to review": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Détails de l'autorisation à examiner"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Detalhes da aprovação para revisar"
           }
         }
       }
@@ -24948,6 +25048,16 @@
         }
       }
     },
+    "Dismiss the group conversation usage notice": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ignorer l'avis sur l'utilisation des conversations de groupe"
+          }
+        }
+      }
+    },
     "Dismiss the run": {
       "localizations": {
         "en": {
@@ -27428,6 +27538,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Erro capturado"
+          }
+        }
+      }
+    },
+    "Esc to close": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Échap pour fermer"
           }
         }
       }
@@ -31666,6 +31786,16 @@
         }
       }
     },
+    "Give this bot a goal and let it work until the goal is done": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Donner un but à ce bot et le laisser travailler jusqu'à ce que ce soit fait"
+          }
+        }
+      }
+    },
     "Go through the steps again for %@. Everything starts filled in from the bot.": {
       "localizations": {
         "en": {
@@ -32246,6 +32376,16 @@
         }
       }
     },
+    "Group conversations use more: every bot in the group reads the whole thread. For a simple question, chat with a single bot instead.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les conversations de groupe consomment davantage : chaque Bot du groupe relit tout le fil. Pour une question simple, discutez plutôt avec un seul Bot."
+          }
+        }
+      }
+    },
     "Group goal": {
       "localizations": {
         "en": {
@@ -32308,6 +32448,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Instruções do grupo"
+          }
+        }
+      }
+    },
+    "Group instructions: every bot in this group follows them (who does what, tone, goals, a task checklist…)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Instructions du groupe : chaque bot du groupe les suit (qui fait quoi, ton, objectifs, une liste de tâches…)"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Instruções do grupo — todo bot deste grupo as segue (quem faz o quê, tom, objetivos, uma lista de tarefas…)"
+          }
+        }
+      }
+    },
+    "Group instructions: shared instructions for every bot here": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bulletin du groupe : instructions partagées pour tous les bots ici"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mural do grupo — instruções compartilhadas para todos os bots daqui"
           }
         }
       }
@@ -36430,6 +36602,16 @@
         }
       }
     },
+    "Jev picks who responds": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jev choisit qui répond"
+          }
+        }
+      }
+    },
     "Jev rejected this key. Check it at typesafe.ai.": {
       "localizations": {
         "en": {
@@ -36594,6 +36776,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ir para o bot 1 a 9 da lista"
+          }
+        }
+      }
+    },
+    "Jump to latest": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aller au plus récent"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ir para o fim"
           }
         }
       }
@@ -37602,6 +37800,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Plus tard"
+          }
+        }
+      }
+    },
+    "Lead": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Référent"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Líder"
           }
         }
       }
@@ -39494,6 +39708,16 @@
         }
       }
     },
+    "Loop stopped.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boucle arrêtée."
+          }
+        }
+      }
+    },
     "MCP": {
       "localizations": {
         "en": {
@@ -40886,6 +41110,22 @@
         }
       }
     },
+    "Message %@ · %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message à %@ · %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mensagem para %@ — %@"
+          }
+        }
+      }
+    },
     "Message a person": {
       "localizations": {
         "en": {
@@ -41776,6 +42016,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mais opções"
+          }
+        }
+      }
+    },
+    "More reactions": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plus de réactions"
           }
         }
       }
@@ -43626,6 +43876,16 @@
         }
       }
     },
+    "New ordinary thread": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveau fil ordinaire"
+          }
+        }
+      }
+    },
     "New routine": {
       "localizations": {
         "fr": {
@@ -43735,7 +43995,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nova thread"
+            "value": "Nova conversa"
           }
         }
       }
@@ -45278,6 +45538,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "N'est plus partagée"
+          }
+        }
+      }
+    },
+    "No loop to stop.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune boucle à arrêter."
           }
         }
       }
@@ -57588,6 +57858,22 @@
         }
       }
     },
+    "React with %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réagir avec %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reagir com %@"
+          }
+        }
+      }
+    },
     "Reaction added": {
       "localizations": {
         "en": {
@@ -60174,6 +60460,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reordenar pastas"
+          }
+        }
+      }
+    },
+    "Repeat a prompt in this chat": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Répéter une consigne dans ce clavardage"
           }
         }
       }
@@ -68054,6 +68350,16 @@
         }
       }
     },
+    "Show this bot's loops": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voir les boucles de ce bot"
+          }
+        }
+      }
+    },
     "Show thread lists and controls on this device.": {
       "localizations": {
         "en": {
@@ -70268,6 +70574,38 @@
         }
       }
     },
+    "Split down": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diviser vers le bas"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dividir para baixo"
+          }
+        }
+      }
+    },
+    "Split right": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diviser à droite"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dividir à direita"
+          }
+        }
+      }
+    },
     "Spoken replies voice": {
       "localizations": {
         "en": {
@@ -71218,6 +71556,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Parar a leitura"
+          }
+        }
+      }
+    },
+    "Stop a loop": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêter une boucle"
           }
         }
       }
@@ -75354,6 +75702,16 @@
         }
       }
     },
+    "The longest cadence is one day. This one starts at one day.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La cadence la plus longue est un jour. Celle-ci part à un jour."
+          }
+        }
+      }
+    },
     "The memory changed again after you looked, so it can't use your Mac yet. Check the notes below, then mark them reviewed.": {
       "localizations": {
         "en": {
@@ -76178,6 +76536,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "La boutique a confirmé %@, et non les %@ que vous avez permis. Vérifiez la commande."
+          }
+        }
+      }
+    },
+    "The shortest cadence is 5 minutes. This one starts at 5 minutes.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La cadence la plus courte est 5 minutes. Celle-ci part à 5 minutes."
           }
         }
       }
@@ -77860,6 +78228,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Esta conversa não pode ser aberta"
+          }
+        }
+      }
+    },
+    "This conversation has no bot for a loop.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette conversation n'a pas de bot pour la boucle."
           }
         }
       }
@@ -87302,6 +87680,32 @@
         }
       }
     },
+    "Write a cadence, then the prompt. Example: /loop 5m check the board": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Écris une cadence, puis la consigne. Exemple : /loop 5m vérifier le tableau"
+          }
+        }
+      }
+    },
+    "Write a message…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Écrivez un message…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escreva uma mensagem…"
+          }
+        }
+      }
+    },
     "Write it for me": {
       "localizations": {
         "en": {
@@ -91804,6 +92208,22 @@
         }
       }
     },
+    "continue the conversation": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "poursuivre la conversation"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "continuar a conversa"
+          }
+        }
+      }
+    },
     "created": {
       "localizations": {
         "fr": {
@@ -92782,6 +93202,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "tous les jours"
+          }
+        }
+      }
+    },
+    "everyone responds": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "tout le monde répond"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "todos respondem"
           }
         }
       }

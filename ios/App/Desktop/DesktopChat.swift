@@ -26,6 +26,8 @@ struct DesktopChatChrome {
     var openModelPicker: () -> Void = {}
     /// Settings > Models and voice, where an engine is connected.
     var openEngines: () -> Void = {}
+    /// `/loop status`: the Automations page (`showRoutines`, the list).
+    var openRoutines: (String) -> Void = { _ in }
 }
 
 private struct DesktopChatKey: EnvironmentKey {
@@ -129,7 +131,8 @@ struct DesktopChatColumn: View {
             openEngines: {
                 model.settingsSection = .engines
                 model.modal = .settings
-            }
+            },
+            openRoutines: { _ in model.page = .automations }
         ))
         return stack
     }
@@ -200,7 +203,29 @@ extension ChatView {
         if dictation.isListening { return String(localized: "Listening…") }
         // Composer.tsx: an open approval stays open while the person writes
         if !dockApprovals.isEmpty { return String(localized: "Answer the approval above, or write something else: it stays open") }
-        return String(localized: "Message \(PeopleDirectory.shared.name(current, session: session))")
+        let name = PeopleDirectory.shared.name(current, session: session)
+        // composer-placeholder.ts: a group says who answers
+        // ("Message Peer Managers · Ara responds")
+        if case let .room(room) = current, room.peopleDm != true {
+            if current.busy { return String(localized: "Write a message…") }
+            return String(localized: "Message \(name) · \(desktopRoomHint(room))")
+        }
+        return String(localized: "Message \(name)")
+    }
+
+    /// `groupComposerHint` (src/lib/group-routing.ts).
+    func desktopRoomHint(_ room: Room) -> String {
+        if room.dm == true { return String(localized: "continue the conversation") }
+        let value = RoomResponder.effective(room)
+        switch value.kind {
+        case "everyone": return String(localized: "everyone responds")
+        case "mentions": return String(localized: "@ to bring a bot in")
+        case "auto" where roomJevOn: return String(localized: "Jev picks who responds")
+        default:
+            let id = value.kind == "auto" ? (value.fallbackBotId ?? room.memberIds.first) : value.botId
+            let lead = id.flatMap { session.state.bot($0)?.name } ?? String(localized: "Lead")
+            return String(localized: "\(lead) responds")
+        }
     }
 
     /// Export conversation > Copy as Markdown.
@@ -345,6 +370,7 @@ struct DesktopChatHeader: View {
     @EnvironmentObject private var model: DesktopShellModel
     @ObservedObject private var prefs = SidebarPrefsModel.shared
     @State private var threadsOpen = DesktopChatHeader.parityThreads
+    @Environment(\.openWindow) private var openWindow
 
     private var panelOpen: Bool { chrome.panelOpen }
 
@@ -429,9 +455,11 @@ struct DesktopChatHeader: View {
 
 extension DesktopChatHeader {
     /// `ExportTranscriptMenu`: Copy as Markdown, Export › (Download as .md),
-    /// then the Inspector. 4 pt under the button, its trailing edge aligned;
-    /// Export's submenu opens to its left. Split right and Split down are
-    /// the desktop window's (iPadOS has no split of its own window).
+    /// Split right and Split down, then the Inspector. 4 pt under the
+    /// button, its trailing edge aligned; Export's submenu opens to its
+    /// left. The desktop splits its own window (#1504); iPadOS opens the
+    /// conversation in a second window scene beside this one, its own
+    /// multi-window split (DesktopConversationWindow).
     var moreMenu: some View {
         VStack(alignment: .leading, spacing: 2) {
             menuRow(DesktopLucide.copy, Text("Copy as Markdown")) {
@@ -445,6 +473,19 @@ extension DesktopChatHeader {
                 if exportOpen { exportSubmenu }
             }
             .zIndex(1)
+            if DesktopConversationWindow.supportsScenes {
+                Rectangle().fill(theme.border).frame(height: 0.5).padding(.horizontal, 8).padding(.vertical, 4)
+                menuRow(DesktopLucide.columns2, Text("Split right")) {
+                    moreOpen = false
+                    DesktopConversationWindow.open(chat, edge: .right, openWindow: openWindow)
+                }
+                .accessibilityIdentifier("desktop-split-right")
+                menuRow(DesktopLucide.rows2, Text("Split down")) {
+                    moreOpen = false
+                    DesktopConversationWindow.open(chat, edge: .bottom, openWindow: openWindow)
+                }
+                .accessibilityIdentifier("desktop-split-down")
+            }
             if inspectorAllowed {
                 Rectangle().fill(theme.border).frame(height: 0.5).padding(.horizontal, 8).padding(.vertical, 4)
                 menuRow(nil, Text("Inspector"), checked: chrome.inspectorOpen, icon: .activity) {
@@ -460,6 +501,7 @@ extension DesktopChatHeader {
         .fixedSize()
         // 4 pt under the 36 pt button, its trailing edge on the button's
         .offset(y: 40)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("desktop-export-menu")
     }
 
@@ -645,5 +687,179 @@ struct ReadOnlyConversationNote: View {
         // a conversation this device just opened is not in the answer it
         // had: ask again once before saying no (useCanWriteIn)
         .task(id: chat.threadId) { await session.loadAccount() }
+    }
+}
+
+// MARK: - Split right / Split down
+
+/// The desktop's Split right and Split down (ExportTranscriptMenu.tsx
+/// `onSplit`, src/lib/split-view.ts) put this conversation in a new section
+/// of its window. iPadOS splits by windows: the conversation opens in a
+/// second window scene, placed beside this one where the system can
+/// (Split View, Stage Manager), as the bot's computer window does
+/// (DesktopComputerWindow). iPadOS decides the arrangement: right and down
+/// both ask for a window beside this one.
+enum DesktopConversationWindow {
+    enum Edge: String { case right, bottom }
+
+    /// The scene's id (`WindowGroup(id:for:)`); its value is `bot:<id>` or `room:<id>`.
+    static let sceneId = "conversation-window"
+
+    @MainActor
+    static var supportsScenes: Bool { UIApplication.shared.supportsMultipleScenes || ParityMode.isActive }
+
+    static func value(for chat: Chat) -> String {
+        switch chat {
+        case let .bot(bot): return "bot:\(bot.id)"
+        case let .room(room): return "room:\(room.id)"
+        }
+    }
+
+    @MainActor
+    static func open(_ chat: Chat, edge: Edge, openWindow: OpenWindowAction) {
+        guard UIApplication.shared.supportsMultipleScenes else { return }
+        openWindow(id: sceneId, value: value(for: chat))
+    }
+}
+
+/// The conversation's own window: the desktop chat column, its header and
+/// composer, on the app ground; the bot panel and the Inspector work in it
+/// as in the main window.
+struct DesktopConversationWindowScene: View {
+    @Environment(\.themePalette) private var themePalette
+    @EnvironmentObject private var session: Session
+    @StateObject private var model = DesktopShellModel()
+    let value: String
+
+    private var chat: Chat? {
+        let parts = value.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return nil }
+        if parts[0] == "bot", let bot = session.state.bot(parts[1]) { return .bot(bot) }
+        if parts[0] == "room", let room = session.state.rooms.first(where: { $0.id == parts[1] }) { return .room(room) }
+        return nil
+    }
+
+    var body: some View {
+        let theme = DesktopTheme.of(themePalette)
+        ZStack {
+            theme.app.ignoresSafeArea()
+            if let chat {
+                DesktopChatColumn(chat: chat)
+                    .accessibilityIdentifier("desktop-conversation-window")
+            }
+        }
+        .environmentObject(model)
+        .environment(\.desktopTheme, theme)
+        .preferredColorScheme(theme.dark ? .dark : .light)
+    }
+}
+
+// MARK: - A group's banners
+
+/// GroupView.tsx under its header (a band, not a float): the group usage
+/// notice (ChatUsageNotices.tsx `GroupCostNotice`, dismissed for good) and
+/// the group instructions line (the bulletin: a pin and its first line, or
+/// "Add group instructions…"; tapped, an editor that saves on leaving it).
+struct DesktopRoomBanners: View {
+    @Environment(\.desktopTheme) private var theme
+    @EnvironmentObject private var session: Session
+    let room: Room
+    @AppStorage("sagax.notice.dismissed.group-cost") private var costDismissed = false
+    @State private var editing = false
+    @State private var draft = ""
+    @FocusState private var focused: Bool
+
+    /// `showsGroupCostNotice`: a group of two bots or more.
+    static func showsCostNotice(_ room: Room) -> Bool {
+        room.dm != true && room.peopleDm != true && room.memberIds.count > 1
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if !costDismissed && Self.showsCostNotice(room) {
+                HStack(alignment: .top, spacing: 8) {
+                    Text("Group conversations use more: every bot in the group reads the whole thread. For a simple question, chat with a single bot instead.")
+                        .font(theme.font(13))
+                        .foregroundStyle(theme.inkSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button { costDismissed = true } label: {
+                        DesktopIconView(icon: .x, size: 13)
+                            .foregroundStyle(theme.inkSecondary)
+                            .frame(width: 17, height: 17)
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(-7.5)
+                    .accessibilityLabel(Text("Dismiss the group conversation usage notice"))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(theme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
+                .padding(.bottom, 8)
+                .accessibilityIdentifier("desktop-group-cost-notice")
+            }
+            if room.peopleDm != true { bulletin }
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private var editable: Bool { session.roomAccess(room).editable }
+
+    @ViewBuilder
+    private var bulletin: some View {
+        if editing {
+            TextEditor(text: $draft)
+                .font(theme.font(13))
+                .foregroundStyle(theme.ink)
+                .scrollContentBackground(.hidden)
+                .focused($focused)
+                .frame(height: 4 * 21)
+                .padding(8)
+                .background(theme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
+                .padding(.bottom, 4)
+                .onAppear { focused = true }
+                .onValueChange(of: focused) { if !$0 { save() } }
+                .accessibilityLabel(Text("Group instructions: every bot in this group follows them (who does what, tone, goals, a task checklist…)"))
+        } else {
+            Button {
+                guard editable else { return }
+                draft = room.bulletin
+                editing = true
+            } label: {
+                HStack(spacing: 8) {
+                    DesktopIconView(icon: .pin, size: 12).foregroundStyle(theme.inkSecondary)
+                    Group {
+                        if let first = room.bulletin.split(separator: "\n").first, !first.isEmpty {
+                            Text(verbatim: String(first)).foregroundStyle(theme.inkSecondary)
+                        } else {
+                            Text("Add group instructions…").foregroundStyle(theme.inkTertiary)
+                        }
+                    }
+                    .font(theme.font(12.5))
+                    .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 8)
+                .frame(height: 30)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .hoverEffect(.highlight)
+            .disabled(!editable)
+            .padding(.bottom, 4)
+            .accessibilityHint(Text("Group instructions: shared instructions for every bot here"))
+            .accessibilityIdentifier("desktop-group-bulletin")
+        }
+    }
+
+    private func save() {
+        editing = false
+        guard draft != room.bulletin else { return }
+        let text = draft
+        Task { _ = await session.patchRoom(room, RoomPatch(bulletin: text)) }
     }
 }

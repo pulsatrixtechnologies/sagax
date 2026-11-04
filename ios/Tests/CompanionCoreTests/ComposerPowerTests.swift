@@ -57,14 +57,49 @@ final class ComposerCommandsTests: XCTestCase {
     }
 
     func testSagaxCommandsOfferedAsTheDesktopDoes() {
-        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: false, isDM: false, skillAuthoring: true, supportsAgents: true), [.learn, .setup])
-        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: false, isDM: false, skillAuthoring: false, supportsAgents: true), [.setup])
-        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: false, isDM: false, skillAuthoring: true, supportsAgents: false), [])
-        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: true, isDM: false, skillAuthoring: true, supportsAgents: true), [.goal, .learn])
+        let loops: [SagaxSlashCommand] = [.loop, .loopStatus, .loopStop]
+        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: false, isDM: false, skillAuthoring: true, supportsAgents: true), [.goal, .learn, .setup] + loops)
+        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: false, isDM: false, skillAuthoring: false, supportsAgents: true), [.goal, .setup] + loops)
+        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: false, isDM: false, skillAuthoring: true, supportsAgents: false), [.goal] + loops)
+        XCTAssertEqual(SagaxSlashCommand.offered(isRoom: true, isDM: false, skillAuthoring: true, supportsAgents: true), [.goal, .learn] + loops)
         XCTAssertEqual(SagaxSlashCommand.offered(isRoom: true, isDM: true, skillAuthoring: true, supportsAgents: false), [])
         XCTAssertEqual(SagaxSlashCommand.learn.insertion, "/learn ")
         XCTAssertEqual(SagaxSlashCommand.setup.insertion, "/setup ")
+        XCTAssertEqual(SagaxSlashCommand.loop.insertion, "/loop ")
         XCTAssertEqual(SagaxSlashCommand.goal.insertion, "")
+        XCTAssertEqual(SagaxSlashCommand.loopStatus.label, "/loop status")
+        XCTAssertTrue(SagaxSlashCommand.loopStop.runsAtOnce)
+        XCTAssertFalse(SagaxSlashCommand.loop.runsAtOnce)
+    }
+
+    func testGoalHeadsTheMenuUnderItsOwnSection() {
+        let items = ComposerCommandMenu.items(
+            sagax: [.goal, .learn, .setup, .loop, .loopStatus, .loopStop],
+            sagaxHint: { $0 == .goal ? "<goal>" : $0 == .loop ? "5m prompt" : nil },
+            engine: [HarnessCommand(name: "compact")], query: ""
+        )
+        XCTAssertEqual(items.map(\.label), ["/goal", "/learn", "/setup", "/loop", "/loop status", "/loop stop", "/compact"])
+        XCTAssertEqual(items.map(\.group), [.goal, .sagax, .sagax, .sagax, .sagax, .sagax, .engine])
+        XCTAssertEqual(items.first?.argumentHint, "<goal>")
+        XCTAssertEqual(items[3].argumentHint, "5m prompt")
+    }
+
+    func testLoopCommandParsesAsTheDesktopDoes() {
+        XCTAssertNil(LoopCommand.parse("hello"))
+        XCTAssertNil(LoopCommand.parse("/loops 5m x"))
+        XCTAssertEqual(LoopCommand.parse("/loop"), .incomplete)
+        XCTAssertEqual(LoopCommand.parse("/loop 5m"), .incomplete)
+        XCTAssertEqual(LoopCommand.parse("/loop soon check"), .incomplete)
+        XCTAssertEqual(LoopCommand.parse("/loop status"), .status)
+        XCTAssertEqual(LoopCommand.parse("/loop stop board"), .stop(name: "board"))
+        XCTAssertEqual(LoopCommand.parse("/loop stop"), .stop(name: ""))
+        XCTAssertEqual(LoopCommand.parse("/loop 10m check the board"), .start(everyMinutes: 10, prompt: "check the board", raised: false, capped: false))
+        XCTAssertEqual(LoopCommand.parse("/LOOP 1m x"), .start(everyMinutes: 5, prompt: "x", raised: true, capped: false))
+        XCTAssertEqual(LoopCommand.parse("/loop 2d x"), .start(everyMinutes: 1_440, prompt: "x", raised: false, capped: true))
+        XCTAssertEqual(LoopCommand.parse("/loop 2h x"), .start(everyMinutes: 120, prompt: "x", raised: false, capped: false))
+        XCTAssertEqual(LoopCommand.routineName(everyMinutes: 120, prompt: "check   the board"), "Loop 2h check the board")
+        XCTAssertEqual(LoopCommand.routineName(everyMinutes: 1_440, prompt: "x"), "Loop 1d x")
+        XCTAssertEqual(LoopCommand.routineName(everyMinutes: 5, prompt: String(repeating: "a", count: 60)), "Loop 5m " + String(repeating: "a", count: 42))
     }
 
     func testMenuOrdersSagaxThenGroupsClosestFirstUnavailableLast() {

@@ -125,7 +125,9 @@ struct DesktopComposerPill: View {
 
     @ViewBuilder
     private var actions: some View {
-        if !hasText { dictationButton }
+        // the mic stays beside the draft (ComposerActionBar: hidden only
+        // while dictating or recording a voice note)
+        dictationButton
         if canSend || busy { sendButton } else { voiceButton }
     }
 
@@ -169,19 +171,39 @@ struct DesktopComposerPill: View {
         }
     }
 
-    /// `ComposerPlusMenu`: min 220 wide, 6 in, rows 30 tall; Attach files
-    /// (the iPad's two sources under it: the photo library and Files), then,
-    /// after a hairline, the Model row with the model in use at its end.
+    /// `ComposerPlusMenu` (useComposerVoice.ts plusItems): min 220 wide,
+    /// 6 in, rows 30 tall; Attach files and Teach a task, nothing else (the
+    /// model and the approval level live in the bot's settings, Loop and
+    /// Goal in the "/" menu). The desktop's Attach files opens the file
+    /// picker; on the iPad it offers its two sources, the photo library and
+    /// Files, as a submenu of that one row.
     private var plusMenu: some View {
-        DesktopComposerMenuPanel(label: "Composer actions") {
-            DesktopMenuRow(systemImage: "paperclip", title: Text("Attach files")) {
-                menu = nil
-                attachFiles()
+        DesktopComposerMenuPanel(label: "Composer actions", width: 220) {
+            Menu {
+                Button {
+                    menu = nil
+                    attachPhotos()
+                } label: { Label("Photo library", systemImage: "photo.on.rectangle") }
+                Button {
+                    menu = nil
+                    attachFiles()
+                } label: { Label("Files", systemImage: "folder") }
+            } label: {
+                HStack(spacing: 8) {
+                    DesktopLucideGlyph(paths: DesktopLucide.paperclip, size: 16)
+                        .frame(width: 16, height: 16)
+                    Text("Attach files").font(theme.font(13)).lineLimit(1)
+                    Spacer(minLength: 4)
+                }
+                .foregroundStyle(theme.ink)
+                .padding(.horizontal, 8)
+                .frame(width: 208, height: 30)
+                .contentShape(Rectangle())
             }
-            DesktopMenuRow(systemImage: "photo.on.rectangle", title: Text("Photo library")) {
-                menu = nil
-                attachPhotos()
-            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .hoverEffect(.highlight)
+            .accessibilityIdentifier("desktop-composer-attach")
             if bot != nil {
                 // Teach a task: the same as picking /learn in the "/" menu
                 Button {
@@ -190,9 +212,10 @@ struct DesktopComposerPill: View {
                     focused.wrappedValue = true
                 } label: {
                     HStack(spacing: 8) {
-                        Circle().strokeBorder(theme.danger, lineWidth: 1.5)
-                            .overlay(Circle().fill(theme.danger).padding(3.5))
-                            .frame(width: 14, height: 14)
+                        // RecordMark: a 5.6 ring (1.25) and a 2.9 dot in a 16 box
+                        Circle().strokeBorder(theme.danger, lineWidth: 1.25)
+                            .frame(width: 12.45, height: 12.45)
+                            .overlay(Circle().fill(theme.danger).frame(width: 5.8, height: 5.8))
                             .frame(width: 16, height: 16)
                         Text("Teach a task").font(theme.font(13)).lineLimit(1)
                         Spacer(minLength: 4)
@@ -202,39 +225,12 @@ struct DesktopComposerPill: View {
                     }
                     .foregroundStyle(theme.ink)
                     .padding(.horizontal, 8)
-                    .frame(height: 30)
+                    .frame(width: 208, height: 30)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .hoverEffect(.highlight)
                 .accessibilityIdentifier("desktop-composer-teach")
-            }
-            if let modelLabel {
-                Rectangle().fill(theme.border).frame(height: 0.5).padding(.horizontal, 8).padding(.vertical, 4)
-                Button {
-                    menu = nil
-                    if bot != nil { modelMenuOpen = true } else { openModel() }
-                } label: {
-                    HStack(spacing: 8) {
-                        DesktopIconView(icon: .brain, size: 16)
-                        Text("Model").font(theme.font(13)).lineLimit(1)
-                        Spacer(minLength: 4)
-                        Text(verbatim: modelLabel)
-                            .font(theme.font(13))
-                            .foregroundStyle(theme.inkTertiary)
-                            .lineLimit(1)
-                            .frame(maxWidth: 140, alignment: .trailing)
-                        DesktopIconView(icon: .chevronRight, size: 14).foregroundStyle(theme.inkTertiary)
-                    }
-                    .foregroundStyle(theme.ink)
-                    .padding(.horizontal, 8)
-                    .frame(height: 30)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .hoverEffect(.highlight)
-                .accessibilityLabel(Text("Model: \(modelLabel)"))
-                .accessibilityIdentifier("desktop-composer-model")
             }
         }
         .fixedSize()
@@ -297,6 +293,22 @@ struct DesktopComposerPill: View {
             } else {
                 // a group's call: the quiet circle, no bot colour to wear
                 secondaryCircle(DesktopLucideGlyph(paths: DesktopLucide.audioLines, size: 16))
+            }
+        }
+        // the call is unavailable (no realtime voice): a 6 pt warning dot in
+        // the circle's top-right, ringed in the app ground (CallView.tsx
+        // `absolute right-1 top-1 size-1.5 rounded-full bg-warning ring-2 ring-app`)
+        .overlay(alignment: .topTrailing) {
+            if realtimeReady == false {
+                Circle().fill(theme.warning)
+                    .frame(width: 6, height: 6)
+                    .padding(2)
+                    .background(theme.app, in: Circle())
+                    // the 28 circle sits 2 in the 32 frame, the dot 4 in it, its ring 2 out
+                    .padding(4)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .accessibilityIdentifier("desktop-composer-voice-unavailable")
             }
         }
         .buttonStyle(.plain)
@@ -363,12 +375,14 @@ struct DesktopComposerPill: View {
 struct DesktopComposerMenuPanel<Content: View>: View {
     @Environment(\.desktopTheme) private var theme
     let label: LocalizedStringKey
+    /// The + menu is `min-w-[220px]` and fits its two rows.
+    var width: CGFloat = 260
     @ViewBuilder let content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) { content }
             .padding(6)
-            .frame(width: 260, alignment: .leading)
+            .frame(width: width, alignment: .leading)
             .background(theme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
             .shadow(color: .black.opacity(0.18), radius: 12, y: 6)
@@ -565,6 +579,14 @@ enum DesktopLucide {
     static let mic = ["M12 19v3", "M19 10v2a7 7 0 0 1-14 0v-2", "M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"]
     static let audioLines = ["M2 10v3", "M6 6v11", "M10 3v18", "M14 8v7", "M18 5v13", "M22 10v3"]
     static let chevronDown = ["m6 9 6 6 6-6"]
+    /// lucide Smile, SmilePlus, Reply, Ellipsis (MessageHoverActions.tsx).
+    static let smile = [circle(12, 12, 10), "M8 14s1.5 2 4 2 4-2 4-2", "M9 9h.01", "M15 9h.01"]
+    static let smilePlus = ["M22 11v1a10 10 0 1 1-9-10", "M8 14s1.5 2 4 2 4-2 4-2", "M9 9h.01", "M15 9h.01", "M16 5h6", "M19 2v6"]
+    static let reply = ["M20 18v-2a4 4 0 0 0-4-4H4", "m9 17-5-5 5-5"]
+    static let ellipsis = [circle(12, 12, 1), circle(19, 12, 1), circle(5, 12, 1)]
+    /// lucide Columns2 and Rows2 (ExportTranscriptMenu.tsx Split right / down).
+    static let columns2 = ["M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z", "M12 3v18"]
+    static let rows2 = ["M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z", "M3 12h18"]
     static let copy = ["M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z",
                        "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"]
     static let download = ["M12 15V3", "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", "m7 10 5 5 5-5"]

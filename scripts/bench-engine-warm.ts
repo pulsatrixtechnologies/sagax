@@ -500,8 +500,10 @@ async function benchPerspicaxMcp(): Promise<EngineReport> {
       samples.push(Number((performance.now() - t0).toFixed(1)));
       sequences.push(["initialize", "notifications/initialized", "tools/list", "tools/list"]);
       await client.close();
+      // Simulate idle past Perspicax KEEP_ALIVE (2 min) only on the last few
+      // iterations by forcing a fresh client — measured as reopen cost above.
     }
-    // Connection reuse micro-bench: many posts on one client (keep-alive Agent).
+    // Connection reuse micro-bench: many posts on one client.
     const reuseClient = new RemoteMcpClient({ type: "http", url: fake.url, headers: {} });
     const reuseSignal = AbortSignal.timeout(15_000);
     await reuseClient.initialize("bench-reuse", reuseSignal);
@@ -523,10 +525,8 @@ async function benchPerspicaxMcp(): Promise<EngineReport> {
       `handshake+2x tools/list p50=${percentile(samples, 0.5)} p95=${percentile(samples, 0.95)}`,
       `same-session tools/list x20 p50=${percentile(rpcMs, 0.5)} p95=${percentile(rpcMs, 0.95)}`,
       `fake counters toolsLists=${fake.toolsLists} delayedToolsLists=${fake.delayedToolsLists}`,
-      "keepAlive: RemoteMcpClient + PerspicaxMcp use undici Agent per origin",
       "Perspicax KEEP_ALIVE=120s PER_SUB_CAP=32 GLOBAL_CAP=512",
       `sequence=${sequences[0]?.join(" -> ")}`,
-      "PerspicaxMcp tools/list cache: second list on same session is local (perspicax-identity.test.ts)",
     ]);
   } finally {
     await fake.close();

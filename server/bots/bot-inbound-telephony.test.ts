@@ -19,6 +19,7 @@ import {
   TELEPHONY_PATH,
   createBotInboundTelephonyRoute,
   parseTelephonyEvent,
+  telephonySenderLabel,
   telephonyTriggerEvent,
   type TelephonyRouteDeps,
 } from "./bot-inbound-telephony.ts";
@@ -79,16 +80,18 @@ describe("parseTelephonyEvent and telephonyTriggerEvent", () => {
       kind: "sms.received",
       title: "Text on the phone line",
       fields: { sender: "+15145550100" },
+      senderLabel: "Alex Example",
       resource: `sms:${SID}`,
       occurredAt: "2026-10-26T14:05:09.000Z",
       directives: { thirdPartyCall: "card", clientPhoneSource: "psa_contact" },
     });
     expect(event!.title).not.toContain("fournisseur");
+    expect(event!.text).toContain("Caller: Alex Example");
     expect(event!.text).toContain("From: +15145550100");
     expect(event!.text).toContain("Line: +15145550199");
     expect(event!.text).toContain("Caller authenticated: yes");
-    expect(event!.text).toContain("Alex Example");
     expect(event!.text).toContain("Rappelle le fournisseur");
+    expect(event!.text).not.toContain("u_123");
   });
 
   it("maps call_request and call_summary to their kinds; notices make no trigger event", () => {
@@ -139,6 +142,54 @@ describe("parseTelephonyEvent and telephonyTriggerEvent", () => {
     expect(maskedCaller("+15145550100")).toBe("***0100");
     expect(maskedCaller("***0100")).toBe("***0100");
     expect(maskedCaller("12")).toBe("***");
+  });
+
+  it("sender label: known person name, explicit sender.label, or formatted number; never a raw id", () => {
+    expect(telephonySenderLabel(parseTelephonyEvent(voice())!)).toBe("Alex Example");
+    expect(telephonySenderLabel(parseTelephonyEvent(voice({ sender: { label: "Osprey" }, person: { id: "u_123", name: "Alex Example" } }))!)).toBe("Osprey");
+    expect(telephonySenderLabel(parseTelephonyEvent(voice({ person: undefined, sender: undefined, authenticated: false }))!)).toBe("+1 514 555 0100");
+    expect(telephonySenderLabel(parseTelephonyEvent(voice({ person: { id: "u_raw", name: "" }, sender: undefined }))!)).toBe("+1 514 555 0100");
+    const known = telephonyTriggerEvent(parseTelephonyEvent(voice())!)!;
+    expect(known.senderLabel).toBe("Alex Example");
+    expect(known.fields.sender).toBe("+15145550100");
+    expect(JSON.stringify(known)).not.toContain("u_123");
+    const unknown = telephonyTriggerEvent(parseTelephonyEvent(voice({ person: undefined, sender: undefined, authenticated: false }))!)!;
+    expect(unknown.senderLabel).toBe("+1 514 555 0100");
+    expect(unknown.text).toContain("Caller: +1 514 555 0100");
+    expect(unknown.fields.sender).toBe("+15145550100");
+  });
+
+  it("inbound SMS and call: known and unknown sender reach the bot turn with a human label", () => {
+    const knownSms = telephonyTriggerEvent(parseTelephonyEvent(voice({ sender: { label: "Osprey" } }))!)!;
+    expect(knownSms).toMatchObject({ kind: "sms.received", senderLabel: "Osprey", fields: { sender: "+15145550100" } });
+    expect(knownSms.text).toContain("Caller: Osprey");
+    expect(knownSms.text).not.toContain("u_123");
+
+    const unknownSms = telephonyTriggerEvent(parseTelephonyEvent(voice({
+      authenticated: false, person: undefined, sender: undefined,
+      content: { trust: "caller", text: "Bonjour" },
+    }))!)!;
+    expect(unknownSms).toMatchObject({ kind: "sms.received", senderLabel: "+1 514 555 0100", fields: { sender: "+15145550100" } });
+    expect(unknownSms.text).toContain("Caller: +1 514 555 0100");
+    expect(unknownSms.text).toContain("Caller authenticated: no");
+
+    const callSid = `CA${"a".repeat(32)}`;
+    const knownCall = telephonyTriggerEvent(parseTelephonyEvent(voice({
+      event: "call_request", eventId: `call_request:${callSid}`,
+      person: { id: "u_123", name: "Wren" },
+      content: { trust: "caller", text: "Rappelle demain." },
+    }))!)!;
+    expect(knownCall).toMatchObject({ kind: "call.requested", senderLabel: "Wren", fields: { sender: "+15145550100" } });
+    expect(knownCall.text).toContain("Caller: Wren");
+    expect(knownCall.text).not.toContain("u_123");
+
+    const unknownCall = telephonyTriggerEvent(parseTelephonyEvent(voice({
+      event: "call_summary", eventId: `call_summary:${callSid}`,
+      authenticated: false, person: undefined, sender: undefined,
+      content: { trust: "caller", text: "Appel manqué." },
+    }))!)!;
+    expect(unknownCall).toMatchObject({ kind: "call.summary", senderLabel: "+1 514 555 0100", fields: { sender: "+15145550100" } });
+    expect(unknownCall.text).toContain("Caller: +1 514 555 0100");
   });
 });
 
@@ -228,7 +279,8 @@ describe("WebhookManager with a telephony trigger", () => {
     const attempts = hooks.listAttempts();
     expect(attempts.length).toBeGreaterThan(0);
     for (const attempt of attempts) expect(attempt.preview ?? "").not.toMatch(/fournisseur|5145550100/);
-    expect(attempts[0]!.preview).toBe("Text from ***0100");
+    // Known sender: the human label in the event log (never the full number or the body).
+    expect(attempts[0]!.preview).toBe("Text from Alex Example");
   });
 
   it("test-fire takes the same path with a sample that passes the trigger's own filters", () => {
@@ -275,7 +327,7 @@ let owners: Map<string, { principalId: string; sub: string | null; active: boole
 let rows: Array<Record<string, unknown>>;
 let identity: "solo" | "perspicax" = "perspicax";
 /** The person texting their own bot (server/sms-conversation.ts); absent: refused, the triggers as before. */
-let ownTexts: Array<{ ownerPrincipalId: string; sub: string; botId: string; from: string; text: string }> | null = null;
+let ownTexts: Array<{ ownerPrincipalId: string; sub: string; botId: string; from: string; text: string; label: string }> | null = null;
 const deps: TelephonyRouteDeps = {
   identity: () => identity,
   publicOrigin: () => ORIGIN,
@@ -487,7 +539,7 @@ describe("the person texting their own bot", () => {
     const got = await post(fresh(), token("u_123"));
     expect(got).toMatchObject({ status: 202, header: "1", body: { event: "sms", delivered: 1, triggers: 0, conversation: true } });
     expect(state.queued).toHaveLength(0);
-    expect(ownTexts).toEqual([{ ownerPrincipalId: "pr_owner", sub: "u_123", botId: "bot_abc", from: "+15145550100", text: "Rappelle le fournisseur pour la livraison de jeudi." }]);
+    expect(ownTexts).toEqual([{ ownerPrincipalId: "pr_owner", sub: "u_123", botId: "bot_abc", from: "+15145550100", text: "Rappelle le fournisseur pour la livraison de jeudi.", label: "Alex Example" }]);
     expect(JSON.stringify(rows)).not.toContain("fournisseur");
     // the same text twice: once
     const again = fresh();
@@ -509,6 +561,78 @@ describe("the person texting their own bot", () => {
     state.hooks.create(phoneTrigger());
     expect((await post(fresh(), token("u_123"))).body).toMatchObject({ delivered: 1, triggers: 1 });
     expect(state.queued).toHaveLength(1);
+  });
+
+  it("own SMS carries the human sender label into ownText (never the raw person id as the label)", async () => {
+    ownTexts = [];
+    expect((await post(fresh("sms", { sender: { label: "Osprey" }, person: { id: "u_123", name: "Alex Example" } }), token("u_123"))).body)
+      .toMatchObject({ conversation: true, delivered: 1 });
+    expect(ownTexts).toEqual([{
+      ownerPrincipalId: "pr_owner", sub: "u_123", botId: "bot_abc", from: "+15145550100",
+      text: "Rappelle le fournisseur pour la livraison de jeudi.", label: "Osprey",
+    }]);
+    expect(ownTexts![0]!.label).toBe("Osprey");
+    expect(ownTexts![0]!.label).not.toBe("u_123");
+  });
+});
+
+describe("inbound SMS and call sender on the delivery path", () => {
+  it("known and unknown SMS: label reaches the trigger run; filters still match the number", async () => {
+    state.hooks.create(phoneTrigger());
+    const known = await post(fresh("sms", {
+      authenticated: false,
+      person: { id: "u_other", name: "Osprey" },
+      sender: { label: "Osprey" },
+      content: { trust: "caller", text: "Bonjour du fournisseur" },
+    }), token("u_123"));
+    expect(known.body).toMatchObject({ delivered: 1, triggers: 1 });
+    expect(known.body).not.toHaveProperty("conversation");
+    expect(state.queued[0]!.prompt).toContain("Caller: Osprey");
+    expect(state.queued[0]!.prompt).toContain('"senderLabel": "Osprey"');
+    expect(state.queued[0]!.prompt).toContain('"sender": "+15145550100"');
+    expect(state.queued[0]!.prompt).not.toContain("u_other");
+    expect(JSON.stringify(rows)).not.toContain("Osprey");
+
+    state.queued.length = 0;
+    const unknown = await post(fresh("sms", {
+      authenticated: false, person: undefined, sender: undefined,
+      content: { trust: "caller", text: "Qui est là ?" },
+    }), token("u_123"));
+    expect(unknown.body).toMatchObject({ delivered: 1, triggers: 1 });
+    expect(state.queued[0]!.prompt).toContain("Caller: +1 514 555 0100");
+    expect(state.queued[0]!.prompt).toContain('"senderLabel": "+1 514 555 0100"');
+    expect(state.queued[0]!.prompt).toContain('"sender": "+15145550100"');
+  });
+
+  it("known and unknown call: label reaches the trigger run; isolation keeps another owner's bot out", async () => {
+    state.hooks.create(phoneTrigger());
+    const callSid = () => `CA${String(eventCounter).padStart(32, "a")}`;
+    const known = await post(fresh("call_request", {
+      eventId: `call_request:${callSid()}`,
+      person: { id: "u_guest", name: "Wren" },
+      content: { trust: "caller", text: "Rappelle demain matin." },
+    }), token("u_123"));
+    expect(known.body).toMatchObject({ delivered: 1, triggers: 1 });
+    expect(state.queued[0]!.prompt).toContain("Caller: Wren");
+    expect(state.queued[0]!.prompt).toContain('"senderLabel": "Wren"');
+    expect(state.queued[0]!.prompt).not.toContain("u_guest");
+
+    state.queued.length = 0;
+    const unknown = await post(fresh("call_summary", {
+      eventId: `call_summary:${callSid()}`,
+      authenticated: false, person: undefined, sender: undefined,
+      content: { trust: "caller", text: "Résumé court." },
+    }), token("u_123"));
+    expect(unknown.body).toMatchObject({ delivered: 1, triggers: 1 });
+    expect(state.queued[0]!.prompt).toContain("Caller: +1 514 555 0100");
+    expect(state.queued[0]!.prompt).toContain('"senderLabel": "+1 514 555 0100"');
+
+    // another person's assertion cannot deliver onto this bot
+    expect((await post(fresh("call_request", {
+      eventId: `call_request:CA${"b".repeat(32)}`,
+      person: { id: "u_stranger", name: "Stranger" },
+      content: { trust: "caller", text: "hi" },
+    }), token("u_other"))).body).toMatchObject({ error: "not_owner" });
   });
 });
 

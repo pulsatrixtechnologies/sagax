@@ -419,6 +419,9 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   // A pre-warm window short enough for a test to see the idle engine closed
   // (server/threads/thread-prewarm.ts).
   if (parentEnv.SAGAX_PREWARM_WINDOW_MS) childEnv.SAGAX_PREWARM_WINDOW_MS = parentEnv.SAGAX_PREWARM_WINDOW_MS;
+  // Per-step turn timing on stderr (server/turns/turn-trace.ts). Forwarded
+  // only when set, so a fixture stays quiet unless a bench opts in.
+  if (parentEnv.SAGAX_TURN_TRACE) childEnv.SAGAX_TURN_TRACE = parentEnv.SAGAX_TURN_TRACE;
   // The Code section's fake Perspicax (server/testing/fake-perspicax-agents.ts),
   // started inside the fixture; a solo server only, never real Perspicax.
   if (parentEnv.SAGAX_CODE_FIXTURE === "1") childEnv.SAGAX_CODE_FIXTURE = "1";

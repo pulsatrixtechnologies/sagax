@@ -101,7 +101,8 @@
     "package": "pnpm package:mac",
     "test:packaged-server": "pnpm build:server && node scripts/smoke-packaged-server.mjs",
     "icons:generate": "electron scripts/generate-app-icon.mjs",
-    "build:duckdb": "node scripts/prepare-duckdb.mjs"
+    "build:duckdb": "node scripts/prepare-duckdb.mjs",
+    "bench:engine-warm": "node --experimental-strip-types scripts/bench-engine-warm.ts"
   },
   "dependencies": {
     "@clack/prompts": "1.8.1",

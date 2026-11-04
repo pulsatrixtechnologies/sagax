@@ -279,6 +279,12 @@ interface Entry {
   /** The served tools Perspicax lists as read-only (perspicaxReadOnlyToolsOf). */
   readOnlyTools?: Set<string>;
   twilioTools?: Set<string>;
+  /** Full JSON-RPC tools/list body for this MCP session and identity.
+   * Serves a later tools/list on the same session (engine after Sagax's
+   * identity list) without a second round trip. Cleared on reopen, identity
+   * invalidate/clear, list_changed, and retire. Never shared across profiles
+   * or persons: it lives on this Entry only. */
+  toolsListBody?: unknown;
   /** #1935: the MCP server name the engine sees this profile under. */
   mount?: string;
   /** One re-initialize at a time (relay, a session Perspicax dropped). */
@@ -432,14 +438,21 @@ export function isGoForm(schema: unknown): boolean {
 
 /** The body of an answer, bounded. On an SSE stream, each request the server
  * sends (`method` and `id`) is handed to `onRequest` as it arrives, so a
- * call that waits on the client's answer can go on. */
-async function readBounded(response: Response, max: number, onRequest?: (request: Json) => Promise<void>): Promise<string> {
+ * call that waits on the client's answer can go on. Notifications (no id)
+ * such as tools/list_changed go to `onNotification`. */
+async function readBounded(
+  response: Response,
+  max: number,
+  onRequest?: (request: Json) => Promise<void>,
+  onNotification?: (frame: Json) => void,
+): Promise<string> {
   const declared = Number(response.headers.get("content-length") ?? "0");
   if (declared > max) throw new Error("the Perspicax answer is too large");
   if (!response.body) return "";
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  const stream = onRequest !== undefined && (response.headers.get("content-type") ?? "").includes("text/event-stream");
+  const stream = (onRequest !== undefined || onNotification !== undefined)
+    && (response.headers.get("content-type") ?? "").includes("text/event-stream");
   let size = 0;
   let text = "";
   let scanned = 0;
@@ -461,14 +474,23 @@ async function readBounded(response: Response, max: number, onRequest?: (request
       if (!line.startsWith("data:")) continue;
       let frame: unknown;
       try { frame = JSON.parse(line.slice(5).trim()); } catch { continue; }
-      if (isObject(frame) && typeof frame.method === "string" && (typeof frame.id === "string" || typeof frame.id === "number")) {
-        pending.push(onRequest(frame).catch(() => {}));
+      if (!isObject(frame) || typeof frame.method !== "string") continue;
+      if (typeof frame.id === "string" || typeof frame.id === "number") {
+        if (onRequest) pending.push(onRequest(frame).catch(() => {}));
+      } else if (onNotification) {
+        onNotification(frame);
       }
     }
     scanned = end + 1;
   }
   await Promise.all(pending);
   return text + decoder.decode();
+}
+
+/** Rebind a cached tools/list JSON-RPC result to the caller's request id. */
+function rewriteToolsListId(body: unknown, id: unknown): unknown {
+  if (!isObject(body)) return body;
+  return { ...body, id };
 }
 
 function rpcError(id: unknown, code: number, message: string): Json {
@@ -533,6 +555,7 @@ export class PerspicaxMcp {
       entry.servedTools = new Set(body.result.tools.filter(isObject).map((tool) => String(tool.name)).slice(0, 2000));
       entry.readOnlyTools = new Set(perspicaxReadOnlyToolsOf(body).slice(0, 2000));
       entry.twilioTools = new Set(twilioToolsOf(body).slice(0, 500));
+      entry.toolsListBody = body;
     }
     return body;
   }
@@ -832,6 +855,13 @@ export class PerspicaxMcp {
       if (frame.method === "tools/call" && entry.identity && !entry.identity.allows(String(params.name ?? ""))) {
         return { status: 200, body: this.identityRefusal(frame) };
       }
+      // Same MCP session and identity already listed tools (Sagax identity
+      // lease or an earlier engine list): serve that body. Invalidation is
+      // reopen, identity clear/invalidate, list_changed, retire.
+      if (frame.method === "tools/list" && entry.toolsListBody !== undefined && entry.mcpSessionId) {
+        const body = entry.identity?.catalog(entry.toolsListBody) ?? entry.toolsListBody;
+        return { status: 200, body: rewriteToolsListId(body, id) };
+      }
     }
     const usedSession = entry.mcpSessionId;
     const sent = entry.source === "delegation" && !notification
@@ -861,7 +891,12 @@ export class PerspicaxMcp {
       if (again === "unreachable") return { status: 200, body: rpcError(id, -32000, "Perspicax is unavailable") };
       ({ response, text } = again);
     }
-    if (notification) return { status: 202 };
+    // Client→server list_changed is unusual; clear before the 202 return so
+    // a later tools/list cannot serve a stale body. Server→client clears in send().
+    if (notification) {
+      if (frame.method === "notifications/tools/list_changed") entry.toolsListBody = undefined;
+      return { status: 202 };
+    }
     if (!response.ok) {
       let body: unknown = null;
       try {
@@ -876,6 +911,7 @@ export class PerspicaxMcp {
       let body = parseMcpBody(text, id);
       if (entry.identity && identityLapsed(body)) {
         entry.identity.invalidate();
+        entry.toolsListBody = undefined;
         await entry.identity.ensure(true);
         const params = isObject(frame.params) ? frame.params : {};
         if (frame.method !== "tools/call" || entry.identity.allows(String(params.name ?? ""))) {
@@ -901,6 +937,7 @@ export class PerspicaxMcp {
         entry.readOnlyTools = new Set(perspicaxReadOnlyToolsOf(body).slice(0, 2000));
         const named = twilioToolsOf(body);
         entry.twilioTools = new Set(named.slice(0, 500));
+        entry.toolsListBody = body;
       }
       return body === null ? { status: 200, body: rpcError(id, -32000, "Perspicax sent no answer") } : { status: 200, body };
     } catch {
@@ -1124,12 +1161,18 @@ export class PerspicaxMcp {
     }
     const session = response.headers.get("mcp-session-id");
     if (session && session.length <= 256) {
-      if (session !== entry.mcpSessionId) entry.identity?.invalidate();
+      if (session !== entry.mcpSessionId) {
+        entry.identity?.invalidate();
+        entry.toolsListBody = undefined;
+      }
       entry.mcpSessionId = session;
     }
     try {
       const onRequest = this.options.askGo ? (request: Json) => this.answerServerRequest(link, entry, request) : undefined;
-      return { response, text: await readBounded(response, PERSPICAX_RELAY_MAX_BYTES, onRequest) };
+      const onNotification = (note: Json) => {
+        if (note.method === "notifications/tools/list_changed") entry.toolsListBody = undefined;
+      };
+      return { response, text: await readBounded(response, PERSPICAX_RELAY_MAX_BYTES, onRequest, onNotification) };
     } catch {
       return "unreachable";
     }
@@ -1189,6 +1232,7 @@ export class PerspicaxMcp {
     if (entry.ended) return false;
     entry.mcpSessionId = undefined;
     entry.initialized = false;
+    entry.toolsListBody = undefined;
     entry.identity?.invalidate();
     const params = this.initParams.get(initKey(entry.threadId, entry.profileId)) ?? {
       protocolVersion: PERSPICAX_PROTOCOL_VERSION,
@@ -1251,6 +1295,7 @@ export class PerspicaxMcp {
       entry.servedTools = undefined;
       entry.readOnlyTools = undefined;
       entry.twilioTools = undefined;
+      entry.toolsListBody = undefined;
       if (keep && !entry.ended && entry.expiresAt - this.now() >= PERSPICAX_TOKEN_MIN_LIFE_MS) {
         const warm = warmKey(entry.threadId, entry.profileId, entry.principalId, entry.source);
         const previous = this.warm.get(warm);
@@ -1345,6 +1390,7 @@ export class PerspicaxMcp {
     entry.token = result.token;
     entry.expiresAt = Math.min(result.expiresAt, signIn.expiresAt);
     entry.identity?.invalidate();
+    entry.toolsListBody = undefined;
     void this.revoke(old);
     return true;
   }

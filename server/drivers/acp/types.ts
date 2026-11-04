@@ -429,6 +429,9 @@ export interface AcpSupport {
     currentModelId?: string;
     /** session/new's or session/load's `configOptions`, verbatim. */
     configOptions: Array<{ id?: unknown; currentValue?: unknown }>;
+    /** True when this turn prompts a live session that did not run
+     * session/new or session/load (same MCP mounts still connected). */
+    reused?: boolean;
     /** Show the person one plain line (a runtime.notice) for this turn:
      * for instance that the session runs another model than the one picked.
      * Said once per conversation for the same message. */

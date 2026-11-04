@@ -11,6 +11,14 @@ import { approvalChime } from "@/lib/notification-preferences";
 import { api, type Message } from "@/state/store";
 import { readableError } from "./plain-error";
 
+/** Where a card was raised, in words: its room, else its routine (a
+ * routine run's hidden task, 2026-11-04), else its conversation's title. */
+export function inboxWhere(entry: Pick<InboxApproval, "roomName" | "routineName" | "threadTitle">): string {
+  if (entry.roomName) return entry.roomName;
+  if (entry.routineName) return t("routines.post.routine", { name: entry.routineName });
+  return entry.threadTitle ?? "";
+}
+
 export async function loadInbox(history: boolean): Promise<InboxPayload> {
   return api<InboxPayload>(`/api/approvals${history ? "?history=1" : ""}`);
 }

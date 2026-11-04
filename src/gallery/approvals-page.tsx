@@ -3,6 +3,7 @@
 // local fetch stand-in. Served by Vite in dev at
 // /src/gallery/approvals-page.html; not part of the packaged app.
 // ?n=0|3|40&lang=fr|en&skin=<id>&scope=org (adds organization and team cards)
+// &routine=1 (2026-11-04: the oldest card is a routine run's, named by its routine)
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -19,6 +20,7 @@ await loadLocale(params.get("lang") ?? "fr");
 applySkin((params.get("skin") ?? "pulsatrix") as SkinId);
 const COUNT = Number(params.get("n") ?? 3);
 const ORG = params.get("scope") === "org";
+const ROUTINE = params.get("routine") === "1";
 const NOW = Date.now();
 const MIN = 60_000;
 
@@ -85,6 +87,9 @@ function fixtures(n: number): InboxApproval[] {
     else if (kind === 2) out.push(permission(i, i, i * 31, "Bash", { command: `git push origin feat/lot-${i}` }, { risk: "execute" }));
     else if (kind === 3) out.push(permission(i, i, i * 3, "WebFetch", { url: "https://example.com/docs/guide" }, { risk: "read" }));
     else out.push(permission(i, i, i * 50, "mcp__github__list_issues", { repo: "example/app", state: "open" }, { risk: "read" }));
+  }
+  if (ROUTINE && n > 0) {
+    out.push(permission(950, 3, 30 * 60, "WebFetch", { url: "https://example.com/rapports/matin" }, { risk: "read", routineName: "Revue du matin", threadTitle: "Revue du matin · 4 nov., 9 h 00", destination: "sandbox" }));
   }
   if (ORG && n > 0) {
     out.push({ ...permission(900, 3, 12, "Bash", { command: "kubectl rollout restart deploy/web" }, { risk: "execute", destination: "server", bulk: "special" }, { adminApproval: true }), scope: "org", ownerName: "Bob" });

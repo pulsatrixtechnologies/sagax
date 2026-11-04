@@ -83,7 +83,7 @@ const SOUL = [
   "Plain, direct, Quebec French when the person writes in French, English otherwise.",
   "Technical terms stay in English.",
   "",
-  "Pad: " + "latency-fixture-soul-line. ".repeat(40),
+  "Pad: " + "latency-fixture-soul-line. ".repeat(55),
 ].join("\n");
 
 type Engine = "claude" | "grok" | "http";

@@ -1,5 +1,16 @@
 # Sagax agent notes
 
+## Codex Perspicax discovery (2026-11-04)
+
+Codex 0.166 uses incremental tools instead of hosted `tool_search`. Its
+account Perspicax mount uses the private searched MCP gate with core tool
+pins and `search_tools` / `describe_tool` / `call_tool` for live discovery.
+The original mount keeps its existing approval mode. Gate configuration
+accepts scope or search; upstream credentials stay in its private record.
+Wrapped calls retain the target tool and arguments for grants and approval
+rules, and role changes invalidate the catalogue before returning.
+Verification: `server/drivers/codex.test.ts`, `server/mcp-gate.test.ts`.
+
 ## Peer approvals return to the human chat (2026-11-04)
 
 `server/approvals/origin-approvals.ts` links a delegated turn's actionable

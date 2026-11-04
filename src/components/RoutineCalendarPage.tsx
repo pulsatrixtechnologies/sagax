@@ -1,3 +1,6 @@
+import { modelEffortLevels } from "../../shared/model-capabilities";
+import type { EffortLevel } from "../../shared/model-selection";
+import { effortLabel } from "@/lib/effort-label";
 import { boatCapableEngine } from "@/lib/remote-desktop";
 import { boatComputerEnabled, routinesInConversationEnabled } from "@/lib/feature-flags";
 import {
@@ -585,6 +588,7 @@ function EventEditorBody({
   // its runs act as. Undefined: not chosen here (a saved routine keeps its
   // own; a duplicate starts from its source's).
   const [actAs, setActAs] = useState<string | undefined>(existingRoutine ? undefined : template?.actAs);
+  const [routineEffort, setRoutineEffort] = useState<EffortLevel | "">(template?.effort ?? "");
   const [recurrence, setRecurrence] = useState<RecurrenceChoice>(seed.limitReset ? "limit_reset" : recurrenceFor(schedule, initialAt, (routinesOnly ? "routine" : seed.kind) === "routine"));
   const [limitReset, setLimitReset] = useState<LimitResetChoice>(
     schedule.type === "limit_reset" ? { engine: schedule.engine, repeat: schedule.repeat } : { engine: seed.limitReset?.engine ?? "", repeat: "once" },
@@ -834,6 +838,7 @@ function EventEditorBody({
           // The person's choice; else, nothing chosen yet and the coverage
           // known, the minimal covering role (never over an explicit one).
           ...(() => { const role = routineTarget === "bot" ? actAsToSave(existingRoutine?.actAs, actAs, roleCoverage.answer) : undefined; return role !== undefined ? { actAs: role } : {}; })(),
+          effort: routineTarget === "bot" ? (routineEffort || null) : null,
           // Sent when on, or to remove a watch the routine had.
           ...(watchAllowed && watchBuilt.watch ? { precheck: watchBuilt.watch } : existingWatch ? { precheck: null } : {}),
           attachments: routineTarget === "room-goal" ? [] : attachments as RoutineContextAttachment[],
@@ -962,7 +967,7 @@ function EventEditorBody({
     setMoreOpen(open);
     rememberRoutineEditorMoreOpen(open);
   };
-  const editorSnapshot = JSON.stringify([requiredSkills, requiredMcp, requiresComputer, kind, name, description, recurrence, limitReset, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, routineModel, actAs, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
+  const editorSnapshot = JSON.stringify([requiredSkills, requiredMcp, requiresComputer, kind, name, description, recurrence, limitReset, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, routineModel, actAs, routineEffort, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
   const openedSnapshot = useRef(editorSnapshot);
   const dirty = editorSnapshot !== openedSnapshot.current;
   const requestClose = async () => {
@@ -1272,8 +1277,14 @@ function EventEditorBody({
                 const engine = state.instances.find((instance) => instance.instanceId === bots.find((bot) => bot.id === (lockedBotId ?? botIds[0]))?.modelSelection?.instanceId);
                 const choices = (engine?.models.options ?? []).map((option) => ({ value: option.id, label: option.label || option.id }));
                 if (routineModel && !choices.some((choice) => choice.value === routineModel)) choices.push({ value: routineModel, label: routineModel });
-                return <PanelSelect data-routine-model="" label={t("routines.model.label")} hint={t("routineEditor.hint.model")} viewing={viewing} value={routineModel} onChange={setRoutineModel}
-                  options={[{ value: "", label: t("routines.model.botDefault") }, ...choices]} />;
+                const botModel = bots.find((bot) => bot.id === (lockedBotId ?? botIds[0]))?.modelSelection.model;
+                const option = engine?.models.options.find((option) => option.id === (routineModel || botModel));
+                const efforts = modelEffortLevels(option, engine?.capabilities?.effortLevels);
+                if (routineEffort && !efforts.includes(routineEffort)) efforts.push(routineEffort);
+                return <><PanelSelect data-routine-model="" label={t("routines.model.label")} hint={t("routineEditor.hint.model")} viewing={viewing} value={routineModel} onChange={setRoutineModel}
+                  options={[{ value: "", label: t("routines.model.botDefault") }, ...choices]} />
+                  <PanelSelect<EffortLevel | ""> data-routine-effort="" label={t("routines.effort.label")} hint={t("routineEditor.hint.effort")} viewing={viewing} value={routineEffort} onChange={setRoutineEffort}
+                    options={[{ value: "", label: t("routines.effort.botDefault") }, ...efforts.map((effort) => ({ value: effort, label: effortLabel(effort) }))]} /></>;
               })()}
               {!isRoomGoal && <RoutineActAsField coverage={roleCoverage} value={actAs ?? existingRoutine?.actAs} onChange={setActAs} viewing={viewing} savedOnly={existingRoutine?.actAs}
                 {...(existingRoutine && (existingRoutine.canEdit !== false) ? { readiness: roleReadiness } : {})} />}

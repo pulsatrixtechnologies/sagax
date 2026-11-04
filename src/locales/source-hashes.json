@@ -17133,7 +17133,10 @@
       "rich.claudeArtifact.send": "f6f4688ff23d50c67053963c251fa0ce64a925cf283537cf066b1f362cb9b778",
       "rich.claudeArtifact.cancel": "19766ed6ccb2f4a32778eed80d1928d2c87a18d7c275ccb163ec6709d3eb2e27",
       "rich.claudeArtifact.resolve": "c8f193b315c86f3a9d5ff6c85697aa6112760966f93f92da5f7a4153f3c0bc8c",
-      "rich.claudeArtifact.commentFailed": "057c05e0305ab2cfcb3a8275431f6fbd1fb530807eae559fdc4bcb74dc393cce"
+      "rich.claudeArtifact.commentFailed": "057c05e0305ab2cfcb3a8275431f6fbd1fb530807eae559fdc4bcb74dc393cce",
+      "routines.effort.label": "4387e5d3966fc436532792769763cd1ab7cccd6464d4c01c2b91261894e96b77",
+      "routines.effort.botDefault": "a6f2b10be05387215e32f014b3db3c2a378d078db65fa84390757038af7e5dad",
+      "routineEditor.hint.effort": "87361e2d484e0e3a9ec607a0da9676b91370da2c4b80302a9d8a094ba99e3d18"
     },
     "hi": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",
@@ -25498,7 +25501,10 @@
       "botPanel.library.pageState.expired": "fa64ea1e82e1206f828ab2a02917c7e92accb98e3b95881a1b4ad52b914b66e3",
       "routines.model.label": "5e2c614c23f02239bc03c6c04fcb681950f9e72bf8fdff6be79c79841cbb10c0",
       "routines.model.botDefault": "52ff61bf21e95e8cf739372318bff3419c84d42681adf51117a491c56e1e4644",
-      "routineEditor.hint.model": "1e4801441d38abd465f72135feab7a2b811ddb57537c948ed2d04e6d6e576719"
+      "routineEditor.hint.model": "1e4801441d38abd465f72135feab7a2b811ddb57537c948ed2d04e6d6e576719",
+      "routines.effort.label": "4387e5d3966fc436532792769763cd1ab7cccd6464d4c01c2b91261894e96b77",
+      "routines.effort.botDefault": "a6f2b10be05387215e32f014b3db3c2a378d078db65fa84390757038af7e5dad",
+      "routineEditor.hint.effort": "87361e2d484e0e3a9ec607a0da9676b91370da2c4b80302a9d8a094ba99e3d18"
     },
     "uk": {
       "noEngines.title": "77a6e0966b7323ceae6973abb581b31d52263bb0ec8249e2b1c1b7ae1e586f04",

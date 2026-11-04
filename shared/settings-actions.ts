@@ -539,6 +539,8 @@ function routineField(key: string, field: string, value: SettingValue, label: st
 routineField("routine.name", "name", "string", "Name", "Automations > routine");
 routineField("routine.prompt", "prompt", "text", "Instructions", "Automations > routine");
 routineField("routine.schedule", "schedule", "object", "Schedule ({type: once|daily|cron|interval, ...})", "Automations > routine > Schedule");
+routineField("routine.model", "model", "string?", "Model for routine runs (null follows the bot)", "Automations > routine > Model");
+routineField("routine.effort", "effort", "string?", "Reasoning effort for routine runs (null follows the bot)", "Automations > routine > Effort");
 routineField("routine.enabled", "enabled", "boolean", "On or off", "Bot panel > Details > Routines; Automations");
 routineField("routine.engine", "runOn", "enum:maus|cloud", "Where it runs", "Automations > routine > Runs on");
 routineField("routine.bot", "botId", "string", "Bot that runs it", "Automations > routine > Bot");

@@ -2445,6 +2445,23 @@
             "type": "boolean",
             "description": "Only if asked: true makes the pre-run check wait for this bot's computer to be online (Automations > Requirements). false removes that need. Skills and MCP requirements stay as they are."
           },
+          "effort": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max",
+              "ultracode",
+              null
+            ],
+            "description": "Reasoning effort for routine runs and sub-agents on this bot's engine; chat keeps the bot's effort. null resets."
+          },
           "delete_when_finished": {
             "type": "boolean",
             "description": "Delete this routine automatically once its schedule has no more runs and the last run has settled (completed, failed, cancelled or missed). Only for a one-time routine or an interval with an end date. Defaults to false. Past runs stay in the calendar and the run log. Set false in an update to keep it listed after it ends."
@@ -2714,6 +2731,23 @@
               "requires_computer": {
                 "type": "boolean",
                 "description": "Only if asked: true makes the pre-run check wait for this bot's computer to be online (Automations > Requirements). false removes that need. Skills and MCP requirements stay as they are."
+              },
+              "effort": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "none",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh",
+                  "max",
+                  "ultracode",
+                  null
+                ],
+                "description": "Reasoning effort for routine runs and sub-agents on this bot's engine; chat keeps the bot's effort. null resets."
               },
               "delete_when_finished": {
                 "type": "boolean",

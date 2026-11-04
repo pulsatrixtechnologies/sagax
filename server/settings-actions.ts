@@ -257,8 +257,8 @@ function describe(value: unknown): string {
 /** The step-up classes a change belongs to: the act route's own (a write is
  * irreversible, a routine a standing grant, a delete destructive) plus the
  * setting's. Full answers every call, so entering it carries every class. */
-export function settingStepUpClasses(classes: readonly SettingClass[], route: { method: string; path: string }, approvalTo?: ApprovalMode, standingGrant = false): StepUpClass[] {
-  const out = new Set<StepUpClass>(botActClasses({ kind: "route", method: route.method, path: route.path }));
+export function settingStepUpClasses(classes: readonly SettingClass[], route: { method: string; path: string; body?: unknown }, approvalTo?: ApprovalMode, standingGrant = false): StepUpClass[] {
+  const out = new Set<StepUpClass>(botActClasses({ kind: "route", method: route.method, path: route.path, body: route.body }));
   if (standingGrant) out.add("always-grant");
   if (classes.includes("rule-change")) out.add("rule-change");
   if (classes.includes("delete")) out.add("destructive");

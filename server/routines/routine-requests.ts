@@ -13,6 +13,7 @@ import { redactSecretsInText } from "../redact.ts";
 import { loadRoutinePrecheck, parseRoutinePrecheck } from "./routine-precheck.ts";
 import type { RoutineWatchPrecheck } from "../../shared/routine-watch.ts";
 import { cleanRoutineFolder, ROUTINE_FOLDER_MAX } from "../../shared/routine-folders.ts";
+import { EFFORT_LEVELS } from "../../shared/model-selection.ts";
 import { parseRoutineModel } from "../../shared/routine-model.ts";
 import { parseRoutineActAs } from "../../shared/routine-act-as.ts";
 import { withRequiredComputer, type RoutineRequirements } from "../../shared/routine-readiness.ts";
@@ -135,6 +136,7 @@ const routineToolFieldsSchema = z.object({
   /** #1996: the routine needs its bot's computer online (Automations >
    * Requirements > computer); skills and MCP requirements are kept. */
   requiresComputer: z.boolean().optional(),
+  effort: z.union([z.enum(EFFORT_LEVELS), z.literal("")]).nullable().optional(),
   /** Create only: true starts the routine live, false paused; absent
    * follows `routines.newPaused`. A webhook or email trigger follows the
    * same rule. Pause and resume are actions of their own. */
@@ -306,9 +308,10 @@ const storedDefinitionSchema = z.object({
   model: z.string().min(1).max(200).optional(),
   actAs: z.string().max(120).optional(),
   requiresComputer: z.boolean().optional(),
+  effort: z.enum(EFFORT_LEVELS).optional(),
 }).strict();
 const storedChangesSchema = storedDefinitionSchema
-  .omit({ schedule: true, timeoutMinutes: true, watch: true, folder: true, model: true, actAs: true })
+  .omit({ schedule: true, timeoutMinutes: true, watch: true, folder: true, model: true, actAs: true, effort: true })
   .partial()
   .extend({
     schedule: storedScheduleChangesSchema.optional(),
@@ -317,6 +320,7 @@ const storedChangesSchema = storedDefinitionSchema
     folder: z.string().min(1).max(ROUTINE_FOLDER_MAX).nullable().optional(),
     model: z.string().min(1).max(200).nullable().optional(),
     actAs: z.string().max(120).nullable().optional(),
+    effort: z.enum(EFFORT_LEVELS).nullable().optional(),
   })
   .strict()
   .refine(
@@ -820,6 +824,7 @@ function normalizeDefinition(input: RoutineToolDefinitionInput, now: number): Ro
     ...(modelInput(input.model) ? { model: modelInput(input.model)! } : {}),
     ...(actAsInput(input.actAs) !== undefined ? { actAs: actAsInput(input.actAs)! } : {}),
     ...(input.requiresComputer === true ? { requiresComputer: true } : {}),
+    ...(input.effort ? { effort: input.effort } : {}),
   };
 }
 
@@ -843,6 +848,7 @@ function normalizeChanges(
   if (input.model !== undefined) changes.model = modelInput(input.model) ?? null;
   if (input.actAs !== undefined) changes.actAs = actAsInput(input.actAs) ?? null;
   if (input.requiresComputer !== undefined) changes.requiresComputer = input.requiresComputer === true;
+  if (input.effort !== undefined) changes.effort = input.effort || null;
   return changes;
 }
 
@@ -1141,9 +1147,10 @@ function effectiveDefinition(operation: RoutineRequestOperation, manager: Routin
     ...(existing.model ? { model: existing.model } : {}),
     ...(existing.actAs !== undefined ? { actAs: existing.actAs } : {}),
     ...(existing.requires?.computer ? { requiresComputer: true } : {}),
+    ...(existing.effort ? { effort: existing.effort } : {}),
   };
   if (operation.action !== "update") return base;
-  const { schedule, timeoutMinutes, watch, folder, model, actAs, ...changes } = operation.changes;
+  const { schedule, timeoutMinutes, watch, folder, model, actAs, effort, ...changes } = operation.changes;
   const merged: RoutineRequestDefinition = {
     ...base,
     ...changes,
@@ -1159,6 +1166,8 @@ function effectiveDefinition(operation: RoutineRequestOperation, manager: Routin
   else if (model !== undefined) merged.model = model;
   if (actAs === null) delete merged.actAs;
   else if (actAs !== undefined) merged.actAs = actAs;
+  if (effort === null) delete merged.effort;
+  else if (effort !== undefined) merged.effort = effort;
   return merged;
 }
 
@@ -1260,6 +1269,7 @@ function cardCopy(
       ...(definition.model ? [`Model: ${redactSecretsInText(definition.model)} (the bot's engine; chat keeps the bot's model)`] : []),
       ...(definition.actAs !== undefined ? [`Acts as: ${definition.actAs ? redactSecretsInText(definition.actAs) : "the person's own access"} (Perspicax role)`] : []),
       ...(definition.requiresComputer ? ["Needs its computer: yes (the pre-run check waits for the bot's computer to be online)"] : []),
+      ...(definition.effort ? [`Effort: ${definition.effort} (chat keeps the bot's effort)`] : []),
       // Last before the instructions: the one sentence that says what
       // confirming actually does, in the reader's terms.
       ...(operation.action === "create" || operation.action === "update"
@@ -1294,6 +1304,7 @@ function inputFromDefinition(definition: RoutineRequestDefinition, botId: string
     ...(definition.model ? { model: definition.model } : {}),
     ...(definition.actAs !== undefined ? { actAs: definition.actAs } : {}),
     ...(definition.requiresComputer ? { requires: { computer: true } } : {}),
+    ...(definition.effort ? { effort: definition.effort } : {}),
   };
 }
 
@@ -1318,6 +1329,7 @@ function updateFromChanges(
   if (changes.model !== undefined) patch.model = changes.model;
   if (changes.actAs !== undefined) patch.actAs = changes.actAs;
   if (changes.requiresComputer !== undefined) patch.requires = withRequiredComputer(currentRequires, changes.requiresComputer);
+  if (changes.effort !== undefined) patch.effort = changes.effort;
   return patch;
 }
 
@@ -1400,6 +1412,7 @@ function revalidateOperation(operation: RoutineRequestOperation, manager: Routin
         || (routine.model ?? "") !== (definition.model ?? "")
         || routine.actAs !== definition.actAs
         || Boolean(routine.requires?.computer) !== Boolean(definition.requiresComputer)
+        || routine.effort !== definition.effort
         || !isDeepStrictEqual(routine.precheck?.kind === "watch" ? routine.precheck : undefined, definition.watch)
         || (routine.attachments?.length ?? 0) > 0) return false;
       // An omitted start means "every N minutes", not a new phase each time
@@ -1494,6 +1507,7 @@ function routineSnapshot(routine: Routine): RoutineRequestSnapshot | undefined {
     ...(routine.model ? { model: routine.model } : {}),
     ...(routine.actAs !== undefined ? { actAs: routine.actAs } : {}),
     ...(routine.requires?.computer ? { requiresComputer: true } : {}),
+    ...(routine.effort ? { effort: routine.effort } : {}),
     enabled: routine.enabled,
     ...(routine.target === "room-goal" ? { target: "room-goal" as const } : {}),
     ...(routine.groupId ? { groupId: routine.groupId } : {}),
@@ -1522,6 +1536,7 @@ function restorePatch(before: RoutineRequestSnapshot, now: number, currentRequir
     model: before.model ?? null,
     actAs: before.actAs ?? null,
     requires: withRequiredComputer(currentRequires, before.requiresComputer === true),
+    effort: before.effort ?? null,
   };
 }
 
@@ -1794,6 +1809,8 @@ export class RoutineRequestService {
             ...(before.resultsThreadId ? { resultsThreadId: before.resultsThreadId } : {}),
             ...(before.folder ? { folder: before.folder } : {}),
             ...(before.requiresComputer ? { requires: { computer: true } } : {}),
+            ...(before.model ? { model: before.model } : {}),
+            ...(before.effort ? { effort: before.effort } : {}),
           }).id;
           break;
         }

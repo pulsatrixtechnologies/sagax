@@ -1,3 +1,6 @@
+import { parseRoutineEffort } from "../shared/routine-effort.ts";
+import { parseRoutineModel } from "../shared/routine-model.ts";
+import type { EffortLevel } from "../shared/model-selection.ts";
 // The agent-to-agent API: tools that let one agent (a Sagax bot, or a
 // person's AI client attached to Perspicax) find, create, prompt, read and
 // configure other Sagax bots, with the semantics, parameters and limits of the
@@ -285,6 +288,8 @@ export interface AgentSettingsResult {
 }
 
 export interface AgentRoutinePatch {
+  model?: string | null;
+  effort?: EffortLevel | null;
   enabled?: boolean;
   name?: string;
   instructions?: string;
@@ -1441,7 +1446,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
     },
 
     async update_routine(caller, args) {
-      const bad = onlyKeys(args, ["routine_id", "enabled", "name", "instructions", "schedule", "requires_computer"]);
+      const bad = onlyKeys(args, ["routine_id", "enabled", "name", "instructions", "schedule", "requires_computer", "model", "effort"]);
       if (bad) return bad;
       const routineId = typeof args.routine_id === "string" ? args.routine_id.trim() : "";
       if (!routineId || !ID.test(routineId)) {
@@ -1477,8 +1482,18 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         if (typeof args.requires_computer !== "boolean") return refuse(400, "bad_request", "requires_computer is true or false.");
         patch.requiresComputer = args.requires_computer;
       }
+      if (Object.hasOwn(args, "model")) {
+        const parsed = parseRoutineModel(args.model);
+        if (!parsed.ok) return refuse(400, "bad_request", parsed.error);
+        patch.model = parsed.model ?? null;
+      }
+      if (Object.hasOwn(args, "effort")) {
+        const parsed = parseRoutineEffort(args.effort);
+        if (!parsed.ok) return refuse(400, "bad_request", parsed.error);
+        patch.effort = parsed.effort ?? null;
+      }
       if (!Object.keys(patch).length) {
-        return refuse(400, "bad_request", "Pass at least one of enabled, name, instructions, schedule, requires_computer.");
+        return refuse(400, "bad_request", "Pass at least one of enabled, name, instructions, schedule, requires_computer, model, effort.");
       }
       const updated = await deps.updateRoutine(caller, routineId, patch);
       if (isRefusal(updated)) return updated;

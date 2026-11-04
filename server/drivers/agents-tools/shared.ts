@@ -1,3 +1,5 @@
+import { EFFORT_LEVELS } from "../../../shared/model-selection.ts";
+import { parseRoutineEffort } from "../../../shared/routine-effort.ts";
 // Shared schema fragments and call helpers for agents-tools families.
 // Definitions and handlers live beside each family; this module holds what
 // more than one family imports. Never import server/index.ts.
@@ -189,6 +191,11 @@ export const ROUTINE_FIELDS_SCHEMA = {
   requires_computer: {
     type: "boolean",
     description: "Only if asked: true makes the pre-run check wait for this bot's computer to be online (Automations > Requirements). false removes that need. Skills and MCP requirements stay as they are.",
+  },
+  effort: {
+    type: ["string", "null"],
+    enum: [...EFFORT_LEVELS, null],
+    description: "Reasoning effort for routine runs and sub-agents on this bot's engine; chat keeps the bot's effort. null resets.",
   },
   delete_when_finished: {
     type: "boolean",
@@ -565,6 +572,11 @@ export function routineFields(args: Json): { fields: Json; error?: string } {
   if (args.act_as !== undefined) {
     if (args.act_as !== null && typeof args.act_as !== "string") return { fields, error: "act_as must be a role slug, \"\" for the person's own access, or null." };
     fields.actAs = args.act_as;
+  }
+  if (args.effort !== undefined) {
+    const effort = parseRoutineEffort(args.effort);
+    if (!effort.ok) return { fields, error: effort.error };
+    fields.effort = effort.effort ?? null;
   }
   return { fields };
 }

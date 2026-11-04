@@ -71,6 +71,18 @@ describe("sagax_settings", () => {
     expect(h.audits).toEqual([expect.objectContaining({ key: "bot.approvalMode", value: "auto", how: "run", actor: "pr_owner" })]);
   });
 
+  it("applies routine model and effort as own settings without an access grant card", async () => {
+    for (const mode of ["auto", "full"] as const) {
+      const h = harness({ mode, keyRequired: (_person, classes) => classes.includes("always-grant") ? ["always-grant"] : [] });
+      for (const [key, value] of [["routine.model", "fast"], ["routine.effort", "low"], ["routine.effort", null]] as const) {
+        const result = await h.call({ action: "set", key, target: "r1", value });
+        expect(result.body.text).toContain("Done");
+        expect(h.planned.at(-1)?.effect).toBe("run");
+        expect(h.planned.at(-1)?.stepUpClasses).not.toContain("always-grant");
+      }
+    }
+  });
+
   it("applies the managed teams of the owner's Primary Bot and a routine's new name", async () => {
     const h = harness();
     await h.call({ action: "set", key: "bot.managedSections", value: ["Built-in"] });

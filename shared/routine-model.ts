@@ -52,3 +52,10 @@ export function routineTurnModel(turn: RoutineModelTurn): { model: string } | { 
   }
   return { model };
 }
+
+/** These settings change compute, never the routine's execution access. */
+export function routineExecutionSettingsOnly(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const keys = Object.keys(value);
+  return keys.length > 0 && keys.every(key => key === "model" || key === "effort");
+}

@@ -13318,5 +13318,8 @@
   "roles.missing.send": "Envoyer à l'admin",
   "roles.missing.sent": "Envoyé {when}",
   "roles.missing.someone": "Quelqu'un",
-  "roles.missing.adminMessage": "{person} demande une permission ConnectWise pour le bot {bot}. Le rôle {role} a été refusé : {permission}. À corriger : {fix}. Refusé {count} fois, la dernière le {when} (HE). Outils : {tools}."
+  "roles.missing.adminMessage": "{person} demande une permission ConnectWise pour le bot {bot}. Le rôle {role} a été refusé : {permission}. À corriger : {fix}. Refusé {count} fois, la dernière le {when} (HE). Outils : {tools}.",
+  "routines.effort.label": "Effort",
+  "routines.effort.botDefault": "Effort du bot",
+  "routineEditor.hint.effort": "Ses exécutions et leurs sous-agents utilisent cet effort. Le chat garde l’effort du bot."
 }

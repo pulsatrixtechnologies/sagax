@@ -213,6 +213,8 @@ export interface SendTurnInput {
    * starts itself (Claude: CLAUDE_CODE_SUBAGENT_MODEL). Part of the
    * process contract, so a chat turn never reuses a routine's process. */
   subagentModel?: string;
+  /** Routine effort inherited by native sub-agents; part of the spawn contract. */
+  subagentEffort?: EffortLevel;
   effort?: EffortLevel;
   variant?: string;
   resumeCursor?: unknown;

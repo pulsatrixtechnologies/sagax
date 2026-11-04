@@ -117,6 +117,28 @@ function cardFingerprint(card: RoutineRequestOptionCard, messageId: string): str
   return routineRequestFingerprint(card.routineRequest, messageId);
 }
 
+describe("routine compute settings", () => {
+  it("accepts effort, applies model and effort without an access card, and Undo restores both", async () => {
+    const { service, routines, store } = harness(undefined, undefined, undefined, () => "self");
+    const created = await service.submit({ botId: "bot-a", threadId: "thread", proposal: createProposal({ model: "fast", effort: "low" }) });
+    expect(created.state).toBe("applied");
+    const id = routines.listRoutines()[0]!.id;
+    expect(routines.listRoutines()[0]).toMatchObject({ model: "fast", effort: "low" });
+    const changed = await service.submit({ botId: "bot-a", threadId: "thread", proposal: { action: "update", routineId: id, changes: { model: null, effort: null } } });
+    expect(changed.state).toBe("applied");
+    expect(routines.listRoutines()[0]?.effort).toBeUndefined();
+    expect(routines.listRoutines()[0]?.model).toBeUndefined();
+    expect(store.messagesFor("thread").every(message => message.card?.dismissed)).toBe(true);
+    expect(service.undo({ botId: "bot-a", threadId: "thread", requestId: changed.requestId })).toMatchObject({ state: "undone" });
+    expect(routines.listRoutines()[0]).toMatchObject({ model: "fast", effort: "low" });
+  });
+
+  it("refuses effort values outside the bot effort contract", async () => {
+    const { service } = harness();
+    await expect(service.submit({ botId: "bot-a", threadId: "thread", proposal: malformedProposal({ action: "create", routine: { name: "Check", instructions: "Do the task", schedule: { type: "interval", everyMinutes: 60 }, effort: "invalid" } }) })).rejects.toThrow();
+  });
+});
+
 describe("RoutineRequestService", () => {
   describe("duplicate creation", () => {
     const existingInput: RoutineInput = {

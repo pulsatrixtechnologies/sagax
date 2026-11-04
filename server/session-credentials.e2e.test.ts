@@ -56,7 +56,9 @@ async function fixture(test: (f: any) => Promise<void>, { thisComputer = false }
     config.instances.opencodeGo = {
       driver: "opencodeGo", displayName: "ACP fixture",
       config: { cli: fileURLToPath(new URL("./testing/fake-acp-cli.ts", import.meta.url)) },
-      environment: { FAKE_ACP_MODELS: "fixture/warm", FAKE_ACP_RPC_APPEND_FILE: rpcPath, FAKE_ACP_DUMP: acpDump },
+      // 95e8f39e4 continues tool-only endings. Finish with a reply so these
+      // three messages exercise three turns on the same native session.
+      environment: { FAKE_ACP_MODE: "interleave", FAKE_ACP_MODELS: "fixture/warm", FAKE_ACP_RPC_APPEND_FILE: rpcPath, FAKE_ACP_DUMP: acpDump },
     };
     writeFileSync(configPath, JSON.stringify(config));
     const log = openSync(logPath, "a", 0o600);

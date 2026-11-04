@@ -13081,5 +13081,8 @@
   "routineReadiness.requiresComputer": "Ordinateur requis",
   "routineReadiness.requiresHelp": "Noms séparés par des virgules, jusqu’à 20 noms de 100 caractères chacun.",
   "routines.failures.grouped": "Exécutions de routine en échec ({count})",
-  "routineReadiness.flow_profile": "Cette routine Flow a besoin d’un profil Perspicax sur son bot pour accéder aux skills Flow. Choisis-en un dans Connecter des apps du bot."
+  "routineReadiness.flow_profile": "Cette routine Flow a besoin d’un profil Perspicax sur son bot pour accéder aux skills Flow. Choisis-en un dans Connecter des apps du bot.",
+  "approval.pending.expiredNote": "Cette approbation a expiré après {days} jours sans réponse; redemandez-la si elle est encore nécessaire.",
+  "settings.org.pendingApprovalExpireDays": "Les approbations en attente expirent après (jours)",
+  "settings.me.pendingApprovalExpireDays": "Mes approbations en attente expirent après (jours)"
 }

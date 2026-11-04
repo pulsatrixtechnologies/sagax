@@ -13081,5 +13081,8 @@
   "routineReadiness.requiresComputer": "Computer required",
   "routineReadiness.requiresHelp": "Names separated by commas, up to 20 names of 100 characters each.",
   "routines.failures.grouped": "Failed routine runs ({count})",
-  "routineReadiness.flow_profile": "This Flow routine needs a Perspicax profile on its bot to reach the Flow skills. Choose one in the bot’s Connect apps."
+  "routineReadiness.flow_profile": "This Flow routine needs a Perspicax profile on its bot to reach the Flow skills. Choose one in the bot’s Connect apps.",
+  "approval.pending.expiredNote": "This approval expired after {days} days without an answer; ask again if it is still needed.",
+  "settings.org.pendingApprovalExpireDays": "Pending approvals expire after (days)",
+  "settings.me.pendingApprovalExpireDays": "My pending approvals expire after (days)"
 }

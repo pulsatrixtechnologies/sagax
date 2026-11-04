@@ -1395,6 +1395,22 @@ export function openApprovalCardMessages(): Array<{ threadId: string; message: M
   return decodedWithThread(rows);
 }
 
+/** Every open inbox card (permission, question, request): still waiting on
+ * the person, with a requestId. Used by the age-based pending expiry policy
+ * (#1940), which covers every kind list_pending_approvals lists. */
+export function openPendingInboxCards(): Array<{ threadId: string; message: Message }> {
+  const rows = db()
+    .prepare(
+      "SELECT thread_id, id, json, sealed, key_id FROM messages " +
+      "WHERE json_extract(json, '$.card.requestId') IS NOT NULL " +
+      "AND json_extract(json, '$.card.answered') IS NULL " +
+      "AND COALESCE(json_extract(json, '$.card.dismissed'), 0) = 0 " +
+      "AND COALESCE(json_extract(json, '$.card.expired'), 0) = 0",
+    )
+    .all() as unknown as Array<StoredRow & { thread_id: string }>;
+  return decodedWithThread(rows);
+}
+
 function decodedWithThread(rows: Array<StoredRow & { thread_id: string }>): Array<{ threadId: string; message: Message }> {
   const out: Array<{ threadId: string; message: Message }> = [];
   for (const row of rows) {

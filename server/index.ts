@@ -293,6 +293,13 @@ import {
 } from "./digest.ts";
 import { expireApprovalsAfterRestart } from "./approvals/approval-restart.ts";
 import {
+  expirePendingApprovalIfDue,
+  pendingApprovalExpireDays,
+  pendingApprovalExpiresAt,
+  sweepPendingApprovalExpiry,
+  type PendingExpiryDeps,
+} from "./approvals/pending-approval-expiry.ts";
+import {
   actorLabel,
   appendDecision,
   decisionCall,
@@ -839,7 +846,7 @@ import { BUILT_IN_DRIVERS } from "./drivers/builtIn.ts";
 import { orgWithholdHostTools } from "./org/org-engine-admission.ts";
 import { openCodeProviderKeysAllowed, setOpenCodeProviderKeyPolicy } from "./drivers/acp/opencode-go.ts";
 import { getOrCreateChannel, mirrorActivity, mirrorReply, type CommsBus } from "./comms-visibility.ts";
-import { openApprovalCardMessages, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, threadsReferencingAsync, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
+import { openApprovalCardMessages, openPendingInboxCards, searchMessagesAsync, closeMessageSearch, closeMessageDb, chatFollowups, cancelledChatFollowup, settleChatFollowups, threadsReferencing, threadsReferencingAsync, configureContentEncryption, unlockContentKeys, eraseContentOwner, contentOwnerChanged, vacuumAfterSealing } from "./messages/message-db.ts";
 import { WORKSPACE_OWNER } from "./encryption/content-keys.ts";
 import { contentEncryptionFromEnv } from "./encryption/content-encryption-env.ts";
 import { briefCrossingLabel, claimRecallCrossings } from "./recall/recall-disclosure.ts";
@@ -16792,6 +16799,82 @@ function scheduleApprovalExpiry(
   timer.unref?.();
 }
 
+/** #1940: effective days before a pending approval expires for this person. */
+function pendingExpireDaysForPerson(principalId: string | null | undefined): number {
+  const owner = personSettingsOwner(principalId);
+  const personDays = owner ? personSettings.get(owner).pendingApprovalExpireDays : undefined;
+  return pendingApprovalExpireDays({
+    personDays: personDays ?? null,
+    orgDays: cfg.organization?.pendingApprovalExpireDays ?? null,
+  });
+}
+
+/** #1940: days for a card's answerer (bot owner), used when creating expiresAt. */
+function pendingExpireDaysForThread(threadId: string): number {
+  const bot = store.botByThread(threadId);
+  const ownerId = bot ? recordedBotOwner(bot) : null;
+  return pendingExpireDaysForPerson(ownerId);
+}
+
+/** #1940: age-based expiry deps (periodic, startup, lazy on read). */
+function pendingExpiryDeps(): PendingExpiryDeps {
+  return {
+    open: openPendingInboxCards,
+    daysFor: (row) => pendingExpireDaysForThread(row.threadId),
+    patch: (threadId, messageId, card) => { store.patchMessage(threadId, messageId, { card }); },
+    note: (threadId, text) => {
+      store.appendMessage(threadId, { role: "bot", kind: "text", text });
+    },
+    release: ({ threadId, requestId, note }) => {
+      const bot = store.botByThread(threadId);
+      const instanceId = bot?.modelSelection?.instanceId;
+      const instance = runningTurnEngines.get(threadId) ?? (instanceId ? registry.get(instanceId) : undefined);
+      void instance?.adapter.respondToRequest(threadId, requestId, { behavior: "deny", message: note }).catch(() => { /* request may already be gone */ });
+      askMessageByRequest.delete(`${threadId}:${requestId}`);
+      pendingCommandRules.delete(`${threadId}:${requestId}`);
+      settleWaitingActivity(threadId);
+    },
+    journal: ({ threadId, requestId, tool, summary, botId, botName }) => {
+      appendDecision(DATA_DIR, {
+        threadId, requestId, botId, botName, tool, summary,
+        decision: "expired", source: "timeout",
+      });
+    },
+    withdraw: withdrawApprovalNotice,
+    botOf: (threadId) => {
+      const bot = store.botByThread(threadId);
+      return bot ? { id: bot.id, name: bot.name } : undefined;
+    },
+    localeFor: (threadId) => {
+      const bot = store.botByThread(threadId);
+      const ownerId = bot ? recordedBotOwner(bot) : null;
+      const lang = (ownerId ? languageOfPerson(ownerId) : "en").toLowerCase();
+      return lang.startsWith("fr") ? "fr" : "en";
+    },
+  };
+}
+
+/** #1940: expire every due pending approval (startup, interval, lazy). */
+function runPendingApprovalExpirySweep(): number {
+  try {
+    return sweepPendingApprovalExpiry(pendingExpiryDeps());
+  } catch (error) {
+    console.warn(`[approval] pending age expiry failed: ${error instanceof Error ? error.message : String(error)}`);
+    return 0;
+  }
+}
+
+/** #1940: lazy expiry for one thread before list_pending_approvals / a read. */
+function expireDueApprovalsInThread(threadId: string): void {
+  const deps = pendingExpiryDeps();
+  for (const message of store.messagesFor(threadId)) {
+    if (!message.card?.requestId || message.card.answered || message.card.dismissed || message.card.expired) continue;
+    try {
+      expirePendingApprovalIfDue(deps, { threadId, message });
+    } catch { /* leave the card; the next sweep retries */ }
+  }
+}
+
 /** An approval was answered somewhere (or expired): every client takes its
  * banner down, and phones it buzzed hear it silently (server/push/hub.ts). */
 function withdrawApprovalNotice(threadId: string, requestId: string): void {
@@ -19879,7 +19962,14 @@ bus.subscribe((event: RuntimeEvent) => {
               return candidate ? { customRuleCandidate: candidate } : {};
             })()
             : {}),
-          ...(hiddenApproval ? { expiresAt: Date.now() + hiddenApprovalTtl } : {})
+          ...(hiddenApproval
+            ? { expiresAt: Date.now() + hiddenApprovalTtl }
+            : (() => {
+              // #1940: every inbox card carries expiresAt so clients see when it leaves.
+              const days = pendingExpireDaysForThread(event.threadId);
+              const at = pendingApprovalExpiresAt(Date.now(), days);
+              return at !== null ? { expiresAt: at } : {};
+            })())
         }
       });
       if (event.requestId) askMessageByRequest.set(`${event.threadId}:${event.requestId}`, message.id);
@@ -36671,7 +36761,10 @@ function orgSettings(): OrgSettings {
     github: { clientId: githubClientId() ?? null, fromEnvironment: !cfg.organization?.githubClientId && Boolean(process.env.SAGAX_GITHUB_CLIENT_ID?.trim()) },
     ...(IDENTITY.kind === "perspicax"
       ? { interimAttach: { until: interimWindowUntil(cfg.organization?.interimAttach, Date.now()), people: principals.listInterim().length } }
-      : {})
+      : {}),
+    pendingApprovalExpireDays: pendingApprovalExpireDays({
+      orgDays: cfg.organization?.pendingApprovalExpireDays ?? null,
+    }),
   };
 }
 
@@ -39087,6 +39180,7 @@ if (IDENTITY.kind === "perspicax") {
     // Slice 8: shorten, extend (at most 90 days from when it opened) or
     // close the window to attach people from before Perspicax.
     saveInterimAttachDays: (days, auth) => saveOrgInterimAttachDays(days, orgAuditActor(auth)),
+    savePendingApprovalExpireDays: (days, auth) => saveOrgPendingApprovalExpireDays(days, orgAuditActor(auth)),
     // Allow or refuse Full access for every bot of the organization
     // (org-full-access.ts). Turning it off makes stored Full run as Ask and
     // refuses new turns asking Full; nothing is rewritten.
@@ -41132,6 +41226,7 @@ const orgOpsDeps: OpsDeps = {
     if (changes.memberAutoApproval !== undefined) saveOrgMemberAutoApproval(changes.memberAutoApproval, actor);
     if (changes.allowVaultExport !== undefined) saveOrgAllowVaultExport(changes.allowVaultExport, actor);
     if (changes.interimAttachDays !== undefined) saveOrgInterimAttachDays(changes.interimAttachDays, actor);
+    if (changes.pendingApprovalExpireDays !== undefined) saveOrgPendingApprovalExpireDays(changes.pendingApprovalExpireDays, actor);
     if (changes.allowedEngines !== undefined) {
       const before = cfg.organization?.allowedEngines ?? null;
       const organization = { ...cfg.organization };
@@ -41195,6 +41290,16 @@ const orgOpsDeps: OpsDeps = {
 
 /** Slice 8: shorten, extend (at most 90 days from when it opened) or close
  * the window to attach people from before Perspicax. */
+function saveOrgPendingApprovalExpireDays(days: number, actor: AdminActor): void {
+  const before = cfg.organization?.pendingApprovalExpireDays ?? null;
+  saveConfig({ organization: { ...cfg.organization, pendingApprovalExpireDays: days } });
+  cfg.organization = { ...cfg.organization, pendingApprovalExpireDays: days };
+  orgAudit({
+    category: "org", action: "org.settings", target: { kind: "organization" }, changed: ["pendingApprovalExpireDays"],
+    before: { pendingApprovalExpireDays: before }, after: { pendingApprovalExpireDays: days }, actor
+  });
+}
+
 function saveOrgInterimAttachDays(days: number, actor: AdminActor): void {
   const before = cfg.organization?.interimAttach;
   const next = windowWithDays(before, days, Date.now());
@@ -42525,6 +42630,8 @@ const orgMember = createOrgMemberRoutes({
     return bot ? agentConversationsOf(bot, principalId) : [];
   },
   markAiClientLine,
+  expireDueApprovals: expireDueApprovalsInThread,
+  pendingApprovalExpireDays: (person) => pendingExpireDaysForPerson(person.principalId),
   approvalAnswerer: (threadId, requestId) => {
     const message = store.messagesFor(threadId).find((row) => row.card?.requestId === requestId);
     if (!message?.card) return null;
@@ -46390,9 +46497,13 @@ try {
     }
   });
   if (closed > 0) console.log(`[approval] expired ${closed} approval card(s) left open by the previous run`);
+  // #1940: age-based expiry of every inbox kind (permission, question, request).
+  const aged = runPendingApprovalExpirySweep();
+  if (aged > 0) console.log(`[approval] expired ${aged} pending approval(s) older than the configured age`);
 } catch (error) {
   console.warn(`[approval] startup expiry of open approval cards failed: ${error instanceof Error ? error.message : String(error)}`);
 }
+setInterval(() => { runPendingApprovalExpirySweep(); }, 60 * 60_000).unref();
 
 try {
   cleanupResumableUploads(Date.now(), recoverArchiveUpload);

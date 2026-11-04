@@ -17,6 +17,7 @@ import { closeMessageDb,
   insertMessage,
   latestPersonLineAts,
   openApprovalCardMessages,
+  openPendingInboxCards,
   latestSaidByBot,
   readMessageText,
   recentMessages,
@@ -88,6 +89,7 @@ describe("message-db", () => {
     insertMessage("ap1", msg("question", "", { role: "bot", kind: "options", card: card({ requestType: "question" }) }));
     insertMessage("ap2", msg("plain", "hello"));
     expect(openApprovalCardMessages().map((h) => `${h.threadId}/${h.message.id}`)).toEqual(["ap1/open"]);
+    expect(openPendingInboxCards().map((h) => `${h.threadId}/${h.message.id}`).sort()).toEqual(["ap1/open", "ap1/question"]);
   });
 
   it("persists inserts, updates, and the active leaf across a reopen", () => {

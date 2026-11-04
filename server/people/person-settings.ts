@@ -35,6 +35,10 @@ export interface PersonSettings {
    * bots, Auto and voice, as `<engine>/<model>` (shared/offered-models.ts).
    * Absent when none. */
   disabledModels?: string[];
+  /** #1940: days before a pending approval in this person's inbox expires
+   * (0 = never). Absent follows the organization setting, then the env /
+   * default (7). */
+  pendingApprovalExpireDays?: number;
 }
 
 export class PersonSettingsError extends Error {
@@ -84,7 +88,19 @@ function parse(value: unknown): PersonSettings {
     browserProfiles.push({ id, name });
   }
   const disabledModels = cleanDisabledModels(raw.disabledModels);
-  return { features, browserProfiles, ...(disabledModels.length ? { disabledModels } : {}) };
+  const pendingApprovalExpireDays = parseExpireDays(raw.pendingApprovalExpireDays);
+  return {
+    features,
+    browserProfiles,
+    ...(disabledModels.length ? { disabledModels } : {}),
+    ...(pendingApprovalExpireDays !== undefined ? { pendingApprovalExpireDays } : {}),
+  };
+}
+
+function parseExpireDays(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > 365) return undefined;
+  return value as number;
 }
 
 export class PersonSettingsStore {
@@ -137,6 +153,18 @@ export class PersonSettingsStore {
     const { disabledModels: _, ...rest } = current;
     const next = cleanDisabledModels(list);
     return this.save(principalId, { ...rest, ...(next.length ? { disabledModels: next } : {}) });
+  }
+
+  /** #1940: personal override for pending approval age. `null` clears it
+   * (follow org / env / default again). */
+  setPendingApprovalExpireDays(principalId: string, days: unknown): PersonSettings {
+    const current = this.get(principalId);
+    const { pendingApprovalExpireDays: _, ...rest } = current;
+    if (days === null || days === undefined) return this.save(principalId, rest);
+    if (!Number.isInteger(days) || (days as number) < 0 || (days as number) > 365) {
+      throw new PersonSettingsError("pendingApprovalExpireDays is a whole number from 0 to 365 (0 means never).");
+    }
+    return this.save(principalId, { ...rest, pendingApprovalExpireDays: days as number });
   }
 
   /** The whole list: an entry with no id is a new profile; an id must be one

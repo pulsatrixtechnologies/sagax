@@ -1246,6 +1246,7 @@ import type { RoutineScopeCaller, RoutineScopeDeps, RoutineScopeFacts } from "./
 import { recordRoutineChange, recordRoutineToggle, routineToggleForViewer } from "./routines/routine-chat-events.ts";
 import { botReplyQuoteId } from "./turns/reply-to-turn.ts";
 import { isTriggerSchedule } from "../shared/routines.ts";
+import { routineTurnModel } from "../shared/routine-model.ts";
 import {
   nextOccurrence,
   PREWARM_ENGINE_LEAD_MS,
@@ -21283,6 +21284,53 @@ function activeRoutineRunForThread(threadId: string): RoutineRun | null {
   return run && ["running", "waiting"].includes(run.status) ? run : null;
 }
 
+/** 2026-11-04 (shared/routine-model.ts): the models a live engine lists. */
+function engineModelIds(instance: { models: { default?: string; options: Array<{ id: string }> } }): string[] {
+  const ids = instance.models.options.map((option) => option.id);
+  return instance.models.default && !ids.includes(instance.models.default) ? [instance.models.default, ...ids] : ids;
+}
+
+/** Why `model` cannot be a routine model of this bot, or null. */
+function routineModelRefusal(botId: string, model: string): string | null {
+  const bot = store.bot(botId);
+  if (!bot) return null;
+  const instance = registry.get(bot.modelSelection.instanceId);
+  if (!instance) return null;
+  const offered = engineModelIds(instance);
+  if (offered.length && !offered.includes(model)) return `Model "${model}" is not offered by this bot's engine (${engineDisplayName(instance)}).`;
+  return modelSwitchRefusal(instance.instanceId, model, effectiveBotOwner(bot)) ?? null;
+}
+
+const routineModelNoticed = new Set<string>();
+
+/** The routine model this turn runs on: the run's model on the bot's own
+ * engine, unless a limit takeover moved the thread. A model that cannot
+ * apply is ignored with one line in the run, once. */
+function routineModelForTurn(botId: string, threadId: string, instance: { instanceId: string; models: { default?: string; options: Array<{ id: string }> } }): { model: string } | null {
+  const run = activeRoutineRunForThread(threadId);
+  if (!run?.model || run.botId !== botId) return null;
+  const bot = store.bot(botId);
+  if (!bot) return null;
+  const decided = routineTurnModel({
+    model: run.model,
+    botInstanceId: bot.modelSelection.instanceId,
+    turnInstanceId: instance.instanceId,
+    takenOver: Boolean(limitFailoverStore.failover(botId, threadId)),
+    offered: engineModelIds(instance),
+    refusal: modelSwitchRefusal(instance.instanceId, run.model, effectiveBotOwner(bot)),
+  });
+  if (decided && "ignored" in decided) {
+    if (!routineModelNoticed.has(run.id)) {
+      routineModelNoticed.add(run.id);
+      if (routineModelNoticed.size > 500) routineModelNoticed.delete(routineModelNoticed.values().next().value!);
+      console.info(`[routine-model] ${threadId}: ${decided.ignored}`);
+      store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: `notice: ${decided.ignored}`, ok: true } });
+    }
+    return null;
+  }
+  return decided;
+}
+
 function routineDelegationCanResume(threadId: string, routineRunId?: string): boolean {
   return !routineRunId || activeRoutineRunForThread(threadId)?.id === routineRunId;
 }
@@ -24732,6 +24780,7 @@ routines = new RoutineManager({
     await limitFailover.beforeTurn(run.botId, run.threadId, routineRunSpeaker(run), bot?.modelSelection);
   },
   engineForRun: (run) => routineReadinessEngine({ botId: run.botId, prompt: run.prompt ?? "" }, run),
+  checkModel: (botId, model) => routineModelRefusal(botId, model),
   botName: (botId) => store.bot(botId)?.name,
   evaluateWatch: (routine, watch) => routineWatchEvaluator(routine, watch),
   forgetWatch: (routineId) => routineWatchStates.forget(routineId),
@@ -46680,6 +46729,7 @@ const startTurnRunner = createStartTurn({
   turnContextBuckets,
   turnHolder,
   turnModelRequested,
+  routineModelForTurn,
   turnModelSwitches,
   turnNetworkProxy,
   turnOrigin,

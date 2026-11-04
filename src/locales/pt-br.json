@@ -2650,6 +2650,7 @@
   "routineEditor.hint.onlyPresent": "Pula execuções enquanto você está ausente.",
   "routineEditor.hint.deleteWhenFinished": "Depois que a última execução terminar.",
   "routineEditor.hint.mailAlias": "E-mail para nome+tag@ aciona só esta rotina.",
+  "routineEditor.hint.model": "As execuções e seus subagentes usam este modelo. O chat mantém o modelo do bot.",
   "routineEditor.hint.watch": "Verifica primeiro e só executa se houver mudança.",
   "routineWebhook.hint": "Envie JSON via POST com este cabeçalho para iniciar uma execução. O corpo é passado à rotina.",
   "routineDetail.active": "Ativa",
@@ -2688,5 +2689,7 @@
   "botPanel.library.pageState.org": "publicada para minha organização",
   "botPanel.library.pageState.link": "publicada para qualquer pessoa com o link",
   "botPanel.library.pageState.revoked": "revogada",
-  "botPanel.library.pageState.expired": "expirada"
+  "botPanel.library.pageState.expired": "expirada",
+  "routines.model.label": "Modelo",
+  "routines.model.botDefault": "Modelo do bot"
 }

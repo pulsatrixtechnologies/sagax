@@ -200,6 +200,9 @@ export interface Routine {
   deleteWhenFinished?: boolean;
   /** Confined runs: read Gmail/Calendar and write reply drafts only. */
   access?: RoutineAccess;
+  /** 2026-11-04 (shared/routine-model.ts): the model its runs use, on the
+   * bot's own engine. Absent: the bot's model. */
+  model?: string;
   nextRunAt: number | null;
   /** Scheduled slot a flexible routine advances from. Absent for exact timing. */
   nominalRunAt?: number;
@@ -302,6 +305,8 @@ export interface RoutineRun {
   redacted?: true;
   /** Snapshot of the routine's confined access for this run. */
   access?: RoutineAccess;
+  /** Snapshot of the routine's model for this run. */
+  model?: string;
   /** Items its routine's checks handed this run, so they are kept or released once it ends. */
   checkKey?: string;
 }
@@ -344,6 +349,9 @@ export interface RoutineInput {
   deleteWhenFinished?: boolean;
   /** `null` clears confined access; omission preserves it on updates. */
   access?: RoutineAccess | null;
+  /** The model its runs use; null or "" goes back to the bot's model,
+   * omission preserves it on updates. */
+  model?: string | null;
 }
 
 /** True when the schedule has a known last occurrence: a one-time run, or

@@ -73,10 +73,12 @@ export interface RoutineRequestDefinition {
   folder?: string;
   /** Delete once the schedule ends and the last run settles (#1648). */
   deleteWhenFinished?: boolean;
+  /** 2026-11-04 (shared/routine-model.ts): the model its runs use. */
+  model?: string;
 }
 
 export type RoutineRequestChanges =
-  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes" | "watch" | "folder">
+  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes" | "watch" | "folder" | "model">
   & {
     schedule?: RoutineRequestScheduleChanges;
     /** `null` removes an existing safety cap. */
@@ -85,6 +87,8 @@ export type RoutineRequestChanges =
     watch?: RoutineWatchPrecheck | null;
     /** `null` takes the routine out of its folder. */
     folder?: string | null;
+    /** `null` goes back to the bot's model. */
+    model?: string | null;
   };
 
 /** Another bot in the proposer's section that this proposal targets: a

@@ -142,6 +142,13 @@ describe("routine setup", () => {
     expect(html).toContain("data-routine-run-on");
     expect(html).toContain('aria-label="Runs on"');
   });
+  it("offers a Model choice that starts on the bot's model (2026-11-04)", () => {
+    fixture.state = { ...fixture.state!, instances: [{ instanceId: "test", models: { default: "test", options: [{ id: "test", label: "Test" }, { id: "fast", label: "Fast" }] } }] as unknown as AppState["instances"] };
+    const html = editorMarkup();
+    expect(html).toContain("data-routine-model");
+    expect(html).toContain('aria-label="Model"');
+    expect(html).toContain("Bot&#x27;s model");
+  });
 });
 
 describe("a routine's page (2026-10-29: its runs, then its Configuration, as cloud routines read)", () => {

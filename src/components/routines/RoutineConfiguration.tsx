@@ -80,6 +80,7 @@ export function RoutineConfiguration({ routine, run, bots, groups = [], viewerPr
             {routine.deleteWhenFinished && <li data-routine-delete-when-finished="">{t("routines.deleteWhenFinished.willDelete")}</li>}
             <li>{t("routines.autoPause.label")}: {routineAutoPauseOption(routineAutoPauseAfter(routine))}</li>
             {routine.mailAlias && <li>{t("routines.mailAlias.label")}: +{routine.mailAlias}</li>}
+            {routine.model && <li data-routine-config-model="">{t("routines.model.label")}: {routine.model}</li>}
             {routine.folder && <li>{t("routineDetail.folder")}: {routine.folder}</li>}
           </ul>
         </Row>}

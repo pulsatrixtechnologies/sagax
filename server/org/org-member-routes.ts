@@ -816,6 +816,162 @@ function botStatus(bot: Record<string, unknown> | undefined, archived: boolean):
 
 /** The routes, in one table. */
 function memberRoutes(deps: OrgMemberRouteDeps): MemberRoute[] {
+  const tools = memberRouteTools(deps);
+  const routes: MemberRoute[] = [
+    ...memberRoutesRead(deps, tools, () => routes),
+    ...memberRoutesWrite(deps, tools),
+  ];
+  return routes;
+}
+
+/** A run as an AI client reads it; `detail` adds the output and the error. */
+function wireRun(run: Record<string, unknown> | null | undefined, detail = false) {
+  if (!run || typeof run.id !== "string") return null;
+  const cut = (value: unknown, max: number) => (typeof value === "string" ? value.slice(0, max) : null);
+  return {
+    id: run.id,
+    routineId: str(run.routineId),
+    routineName: str(run.routineName),
+    botId: str(run.botId),
+    status: str(run.status),
+    threadId: str(run.threadId) ?? str(run.resultsThreadId) ?? str(run.executionThreadId),
+    startedAt: typeof run.startedAt === "number" ? run.startedAt : null,
+    endedAt: typeof run.finishedAt === "number" ? run.finishedAt : null,
+    // 2026-11-01: completed, but not all of it went right: never a plain success.
+    ...(typeof run.problems === "string" && run.problems ? { problems: readableRoutineProblems(scrubText(run.problems)).slice(0, 1_000) } : {}),
+    ...(detail ? { attention: cut(run.attention, 500), error: cut(run.error, 500), output: cut(run.output, MEMBER_REPLY_MAX) } : {}),
+  };
+}
+
+/** Write a streamed answer: NDJSON, one event per line, the last one
+ * `final` (or `error` when the work failed after the stream began). Stops
+ * early when the client goes away. */
+async function streamAnswer(res: ServerResponse, answer: StreamAnswer): Promise<void> {
+  let gone = false;
+  const onClose = () => {
+    gone = true;
+  };
+  // The response's close, not the request's: a request closes as soon as its
+  // body was read.
+  res.on("close", onClose);
+  res.writeHead(200, {
+    "content-type": "application/x-ndjson; charset=utf-8",
+    "x-sagax-member-api": "1",
+    "cache-control": "no-store",
+    "x-accel-buffering": "no",
+  });
+  const emit = (event: StreamEvent) => {
+    if (gone || res.writableEnded) return;
+    res.write(`${JSON.stringify(event)}\n`);
+  };
+  try {
+    const final = await answer.stream(emit, () => gone || res.writableEnded);
+    emit({ event: "final", ...final });
+  } catch (error) {
+    console.error(`[org-member] stream: ${error instanceof Error ? error.message : String(error)}`);
+    emit({ event: "error", code: "server_error", message: "The server could not finish this; its log has the details." });
+  } finally {
+    res.off("close", onClose);
+    if (!res.writableEnded) res.end();
+  }
+}
+
+/** The handler: true when the request was one of ours (answered). */
+export function createOrgMemberRoutes(deps: OrgMemberRouteDeps): (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean> {
+  const replay = new AssertionReplayCache();
+  const now = deps.now ?? Date.now;
+  const compiled = compileRoutes(memberRoutes(deps).map((route) => ({ method: route.method, path: route.path, min: "employee" as const, handle: () => ({ status: 500, body: null }), member: route })));
+  const answer = async (req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> => {
+    const path = url.pathname;
+    if (path !== "/api/org/member" && !path.startsWith(ORG_MEMBER_PREFIX)) return false;
+    const refuse = (status: number, code: string, message: string, extra: Record<string, unknown> = {}) => {
+      send(res, status, { code, message, reason: message, error: message, ...extra });
+      return true;
+    };
+    const method = req.method ?? "GET";
+    if (deps.identity !== "perspicax") return refuse(403, "identity_perspicax", "This server does not sign people in with Pulsatrix.");
+    const header = req.headers.authorization;
+    const bearer = typeof header === "string" ? /^Bearer\s+(\S+)\s*$/i.exec(header)?.[1] : undefined;
+    if (!bearer) return refuse(401, "assertion_missing", "A Perspicax assertion is required.");
+    const audience = deps.publicOrigin();
+    if (!audience || bearer.length > MAX_TOKEN_CHARS) {
+      return refuse(401, "assertion_invalid", audience ? "The assertion is too long." : "This server has no public address to check the assertion against.");
+    }
+    let assertion: ConsoleAssertion;
+    try {
+      assertion = await deps.verify(bearer, audience, deps.linkServerId());
+    } catch (error) {
+      return refuse(401, "assertion_invalid", (error instanceof Error ? error.message : "The assertion does not verify.").slice(0, 300));
+    }
+    if (!replay.admit(assertion.jti, assertion.exp * 1000, now())) return refuse(401, "assertion_replayed", "This assertion was already used.");
+    const found = deps.personFor(deps.issuer, assertion.sub);
+    if (!found) return refuse(403, "unknown_person", "This person is not in this server's directory yet.");
+    if (!found.active) return refuse(403, "person_disabled", "This person is turned off in Perspicax or on this server.");
+    const person: MemberPerson = {
+      principalId: found.principalId,
+      sub: assertion.sub,
+      name: found.name,
+      // Both must say admin: the assertion is fresh, the principal is ours.
+      admin: found.admin && assertion.role === "admin",
+      actor: assertion.actor,
+      ...(assertion.actor === "perspicax-mcp" && assertion.clientName ? { client: assertion.clientName } : {}),
+    };
+    const sub = path.startsWith(ORG_MEMBER_PREFIX) ? path.slice(ORG_MEMBER_PREFIX.length) : "";
+    const hits = matchRoutes(compiled, sub);
+    if (!hits.length) return refuse(404, "not_found", "No such member route.");
+    const hit = hits.find((candidate) => candidate.route.method === method);
+    if (!hit) {
+      const allowed = [...new Set(hits.map((candidate) => candidate.route.method))].join(", ");
+      res.setHeader("allow", allowed);
+      return refuse(405, "method_not_allowed", `Use ${allowed} here.`);
+    }
+    const route = (hit.route as unknown as { member: MemberRoute }).member;
+    if (route.permission && !can(person.admin ? { admin: true, permissions: [] } : deps.permissions(person.principalId), route.permission)) {
+      return refuse(403, "forbidden_permission", `Your profile does not include ${permissionLabel(route.permission, typeof assertion.locale === "string" ? assertion.locale : "en")}. Ask an admin to add it in Perspicax.`, { permission: route.permission });
+    }
+    let body: unknown = null;
+    if (method === "POST" || method === "PATCH") {
+      const max = sub === "agents/send_prompt" ? AGENT_SEND_BODY_BYTES : MAX_BODY_BYTES;
+      const declared = Number(req.headers["content-length"] ?? 0);
+      if (Number.isFinite(declared) && declared > max) return refuse(413, "too_large", `The body is larger than ${max} bytes.`);
+      body = await readSmallJson(req, max);
+      if (body === undefined) return refuse(400, "bad_request", `The body is not JSON, or larger than ${max} bytes.`);
+    }
+    try {
+      const aborted = new AbortController();
+      res.on("close", () => aborted.abort());
+      const reply = await route.handle({ person, params: hit.params, url, body, signal: aborted.signal });
+      if ("stream" in reply) {
+        await streamAnswer(res, reply);
+        return true;
+      }
+      send(res, reply.status, reply.body);
+    } catch (error) {
+      console.error(`[org-member] ${method} ${sub}: ${error instanceof Error ? error.message : String(error)}`);
+      refuse(500, "server_error", "The server could not do this; its log has the details.");
+    }
+    return true;
+  };
+  // 2026-10-20: a throw before the route's own try (the directory, the
+  // permissions, the body read) fell through to the server's generic 500,
+  // without the member API marker and without a log line: Perspicax then
+  // reports "does not offer the member API yet" with nothing to go on.
+  // Every answer under the prefix stays marked, and the throw is logged.
+  return async (req, res, url) => {
+    try {
+      return await answer(req, res, url);
+    } catch (error) {
+      const route = url.pathname.slice(ORG_MEMBER_PREFIX.length).split("/")[0] ?? "";
+      console.error(`[org-member] ${req.method ?? "GET"} ${route}: unhandled before the route: ${error instanceof Error ? error.message : String(error)}`);
+      if (!res.headersSent) send(res, 500, { code: "server_error", message: "The server could not do this; its log has the details.", reason: "The server could not do this; its log has the details.", error: "The server could not do this; its log has the details." });
+      else if (!res.writableEnded) res.end();
+      return true;
+    }
+  };
+}
+
+
+function memberRouteTools(deps: OrgMemberRouteDeps) {
   const now = deps.now ?? Date.now;
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
 
@@ -1096,12 +1252,21 @@ function memberRoutes(deps: OrgMemberRouteDeps): MemberRoute[] {
     });
     return { routines, runs };
   };
+  return {
+    readThread, isRead, holdsAnswerPermission, answerCheck, rawPage, watchTurn, cardIn,
+    answering, answerCard, pendingApprovals, withApproval, ownedBot, ownRoutineRows,
+  };
+}
 
-  const routes: MemberRoute[] = [
+type MemberRouteTools = ReturnType<typeof memberRouteTools>;
+
+function memberRoutesRead(deps: OrgMemberRouteDeps, tools: MemberRouteTools, allRoutes: () => MemberRoute[]): MemberRoute[] {
+  const { readThread, isRead, watchTurn, ownRoutineRows } = tools;
+  return [
     {
       method: "GET", path: "capabilities",
       async handle() {
-        return answer({ api: ORG_MEMBER_API_VERSION, version: deps.version?.() ?? "unknown", routes: routes.map((route) => `${route.method} ${route.path}`).sort() });
+        return answer({ api: ORG_MEMBER_API_VERSION, version: deps.version?.() ?? "unknown", routes: allRoutes().map((route) => `${route.method} ${route.path}`).sort() });
       },
     },
     {
@@ -1272,6 +1437,15 @@ function memberRoutes(deps: OrgMemberRouteDeps): MemberRoute[] {
         return answer({ routine: projectRoutine(found, rows.runs, true) });
       },
     },
+  ];
+}
+
+function memberRoutesWrite(deps: OrgMemberRouteDeps, tools: MemberRouteTools): MemberRoute[] {
+  const {
+    readThread, isRead, holdsAnswerPermission, answerCheck, rawPage, cardIn, answering,
+    answerCard, pendingApprovals, withApproval, ownedBot, ownRoutineRows,
+  } = tools;
+  return [
     {
       // 2026-11-01 (#1891): the person manages their own routine as themselves
       // (same as the Automations editor). Bot Ask/Auto still gates propose_*;
@@ -1562,151 +1736,4 @@ function memberRoutes(deps: OrgMemberRouteDeps): MemberRoute[] {
       },
     },
   ];
-  return routes;
-}
-
-/** A run as an AI client reads it; `detail` adds the output and the error. */
-function wireRun(run: Record<string, unknown> | null | undefined, detail = false) {
-  if (!run || typeof run.id !== "string") return null;
-  const cut = (value: unknown, max: number) => (typeof value === "string" ? value.slice(0, max) : null);
-  return {
-    id: run.id,
-    routineId: str(run.routineId),
-    routineName: str(run.routineName),
-    botId: str(run.botId),
-    status: str(run.status),
-    threadId: str(run.threadId) ?? str(run.resultsThreadId) ?? str(run.executionThreadId),
-    startedAt: typeof run.startedAt === "number" ? run.startedAt : null,
-    endedAt: typeof run.finishedAt === "number" ? run.finishedAt : null,
-    // 2026-11-01: completed, but not all of it went right: never a plain success.
-    ...(typeof run.problems === "string" && run.problems ? { problems: readableRoutineProblems(scrubText(run.problems)).slice(0, 1_000) } : {}),
-    ...(detail ? { attention: cut(run.attention, 500), error: cut(run.error, 500), output: cut(run.output, MEMBER_REPLY_MAX) } : {}),
-  };
-}
-
-/** Write a streamed answer: NDJSON, one event per line, the last one
- * `final` (or `error` when the work failed after the stream began). Stops
- * early when the client goes away. */
-async function streamAnswer(res: ServerResponse, answer: StreamAnswer): Promise<void> {
-  let gone = false;
-  const onClose = () => {
-    gone = true;
-  };
-  // The response's close, not the request's: a request closes as soon as its
-  // body was read.
-  res.on("close", onClose);
-  res.writeHead(200, {
-    "content-type": "application/x-ndjson; charset=utf-8",
-    "x-sagax-member-api": "1",
-    "cache-control": "no-store",
-    "x-accel-buffering": "no",
-  });
-  const emit = (event: StreamEvent) => {
-    if (gone || res.writableEnded) return;
-    res.write(`${JSON.stringify(event)}\n`);
-  };
-  try {
-    const final = await answer.stream(emit, () => gone || res.writableEnded);
-    emit({ event: "final", ...final });
-  } catch (error) {
-    console.error(`[org-member] stream: ${error instanceof Error ? error.message : String(error)}`);
-    emit({ event: "error", code: "server_error", message: "The server could not finish this; its log has the details." });
-  } finally {
-    res.off("close", onClose);
-    if (!res.writableEnded) res.end();
-  }
-}
-
-/** The handler: true when the request was one of ours (answered). */
-export function createOrgMemberRoutes(deps: OrgMemberRouteDeps): (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<boolean> {
-  const replay = new AssertionReplayCache();
-  const now = deps.now ?? Date.now;
-  const compiled = compileRoutes(memberRoutes(deps).map((route) => ({ method: route.method, path: route.path, min: "employee" as const, handle: () => ({ status: 500, body: null }), member: route })));
-  const answer = async (req: IncomingMessage, res: ServerResponse, url: URL): Promise<boolean> => {
-    const path = url.pathname;
-    if (path !== "/api/org/member" && !path.startsWith(ORG_MEMBER_PREFIX)) return false;
-    const refuse = (status: number, code: string, message: string, extra: Record<string, unknown> = {}) => {
-      send(res, status, { code, message, reason: message, error: message, ...extra });
-      return true;
-    };
-    const method = req.method ?? "GET";
-    if (deps.identity !== "perspicax") return refuse(403, "identity_perspicax", "This server does not sign people in with Pulsatrix.");
-    const header = req.headers.authorization;
-    const bearer = typeof header === "string" ? /^Bearer\s+(\S+)\s*$/i.exec(header)?.[1] : undefined;
-    if (!bearer) return refuse(401, "assertion_missing", "A Perspicax assertion is required.");
-    const audience = deps.publicOrigin();
-    if (!audience || bearer.length > MAX_TOKEN_CHARS) {
-      return refuse(401, "assertion_invalid", audience ? "The assertion is too long." : "This server has no public address to check the assertion against.");
-    }
-    let assertion: ConsoleAssertion;
-    try {
-      assertion = await deps.verify(bearer, audience, deps.linkServerId());
-    } catch (error) {
-      return refuse(401, "assertion_invalid", (error instanceof Error ? error.message : "The assertion does not verify.").slice(0, 300));
-    }
-    if (!replay.admit(assertion.jti, assertion.exp * 1000, now())) return refuse(401, "assertion_replayed", "This assertion was already used.");
-    const found = deps.personFor(deps.issuer, assertion.sub);
-    if (!found) return refuse(403, "unknown_person", "This person is not in this server's directory yet.");
-    if (!found.active) return refuse(403, "person_disabled", "This person is turned off in Perspicax or on this server.");
-    const person: MemberPerson = {
-      principalId: found.principalId,
-      sub: assertion.sub,
-      name: found.name,
-      // Both must say admin: the assertion is fresh, the principal is ours.
-      admin: found.admin && assertion.role === "admin",
-      actor: assertion.actor,
-      ...(assertion.actor === "perspicax-mcp" && assertion.clientName ? { client: assertion.clientName } : {}),
-    };
-    const sub = path.startsWith(ORG_MEMBER_PREFIX) ? path.slice(ORG_MEMBER_PREFIX.length) : "";
-    const hits = matchRoutes(compiled, sub);
-    if (!hits.length) return refuse(404, "not_found", "No such member route.");
-    const hit = hits.find((candidate) => candidate.route.method === method);
-    if (!hit) {
-      const allowed = [...new Set(hits.map((candidate) => candidate.route.method))].join(", ");
-      res.setHeader("allow", allowed);
-      return refuse(405, "method_not_allowed", `Use ${allowed} here.`);
-    }
-    const route = (hit.route as unknown as { member: MemberRoute }).member;
-    if (route.permission && !can(person.admin ? { admin: true, permissions: [] } : deps.permissions(person.principalId), route.permission)) {
-      return refuse(403, "forbidden_permission", `Your profile does not include ${permissionLabel(route.permission, typeof assertion.locale === "string" ? assertion.locale : "en")}. Ask an admin to add it in Perspicax.`, { permission: route.permission });
-    }
-    let body: unknown = null;
-    if (method === "POST" || method === "PATCH") {
-      const max = sub === "agents/send_prompt" ? AGENT_SEND_BODY_BYTES : MAX_BODY_BYTES;
-      const declared = Number(req.headers["content-length"] ?? 0);
-      if (Number.isFinite(declared) && declared > max) return refuse(413, "too_large", `The body is larger than ${max} bytes.`);
-      body = await readSmallJson(req, max);
-      if (body === undefined) return refuse(400, "bad_request", `The body is not JSON, or larger than ${max} bytes.`);
-    }
-    try {
-      const aborted = new AbortController();
-      res.on("close", () => aborted.abort());
-      const reply = await route.handle({ person, params: hit.params, url, body, signal: aborted.signal });
-      if ("stream" in reply) {
-        await streamAnswer(res, reply);
-        return true;
-      }
-      send(res, reply.status, reply.body);
-    } catch (error) {
-      console.error(`[org-member] ${method} ${sub}: ${error instanceof Error ? error.message : String(error)}`);
-      refuse(500, "server_error", "The server could not do this; its log has the details.");
-    }
-    return true;
-  };
-  // 2026-10-20: a throw before the route's own try (the directory, the
-  // permissions, the body read) fell through to the server's generic 500,
-  // without the member API marker and without a log line: Perspicax then
-  // reports "does not offer the member API yet" with nothing to go on.
-  // Every answer under the prefix stays marked, and the throw is logged.
-  return async (req, res, url) => {
-    try {
-      return await answer(req, res, url);
-    } catch (error) {
-      const route = url.pathname.slice(ORG_MEMBER_PREFIX.length).split("/")[0] ?? "";
-      console.error(`[org-member] ${req.method ?? "GET"} ${route}: unhandled before the route: ${error instanceof Error ? error.message : String(error)}`);
-      if (!res.headersSent) send(res, 500, { code: "server_error", message: "The server could not do this; its log has the details.", reason: "The server could not do this; its log has the details.", error: "The server could not do this; its log has the details." });
-      else if (!res.writableEnded) res.end();
-      return true;
-    }
-  };
 }

@@ -1,5 +1,19 @@
 # Sagax agent notes
 
+## Flow routine shadow readiness (#1991, 2026-11-04)
+
+Flow readiness calls `flow_run` on the bot's own profile with the run-as
+person's routine delegation and the usual MCP bot identity. It opens a
+shadow run, checks the first plan with the prompt's explicit server inputs,
+then finishes its run in `finally`, with an independent cleanup signal.
+An `already_running` answer keeps the live lease and reports that the plan
+was not checked. Actual Flow refusals are `flow_plan`; transport errors and
+timeouts remain `probe_error`, passing in run mode. The Flow probe runs
+beside the fast probes with its own 45-second budget and a per-routine,
+per-input cache. Tests: `perspicax-flow-readiness.test.ts`,
+`routine-flow-input.test.ts`, `routine-readiness.test.ts`,
+`routine-reliability.test.ts`.
+
 ## Routine readiness and failover (#1986, 2026-11-04)
 
 Routine pre-flight uses `limitFailover.backupFor` to check the same backup

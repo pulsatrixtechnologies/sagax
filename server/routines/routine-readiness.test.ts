@@ -43,6 +43,46 @@ describe("routine readiness", () => {
     expect((await checkRoutineReadiness(routine, { ...run, prompt: "Use ArtifactData." }, check)).ok).toBe(false);
     expect((await checkRoutineReadiness({ ...routine, prompt: "Use ArtifactData." }, { ...run, prompt: "Check the inbox." }, check)).ok).toBe(true);
   });
+  it("blocks a failed Flow shadow plan instead of passing only its access checks (#1991)", async () => {
+    const answer = await checkRoutineReadiness({ ...routine, prompt: "Use flow_run." }, run,
+      deps({ flow: async () => ({ step: "plan", error: "internal_error Plan failed." }) }));
+    expect(answer.ok).toBe(false);
+    expect(loadRoutineReadiness(answer.checks)?.find(check => check.kind === "flow")).toMatchObject({ code: "flow_plan", ok: false, params: { step: "plan", error: "internal_error Plan failed." } });
+  });
+  it.each([false, true])("checks artifact support on the backup beside a failed Flow plan (supported: %s)", async (supported) => {
+    const now = 60_000;
+    const engine = `flow-artifact-primary-${supported}`;
+    noteEngineRefusal({ engine, cause: "credits", at: now });
+    try {
+      const answer = await checkRoutineReadiness({ ...routine, prompt: "Use flow_run and ArtifactData." }, run, deps({
+        now: () => now,
+        engine: () => ({ engine, name: "Primary", driver: supported ? "codex" : "claudeAgent", accessVia: "subscription" }),
+        backup: () => ({ engine: "backup", name: "Backup", driver: supported ? "claudeAgent" : "codex", accessVia: "subscription" }),
+        flow: async () => ({ step: "plan", error: "missing_reads Read first." }),
+      }));
+      expect(answer.ok).toBe(false);
+      expect(answer.checks.filter(check => !check.ok).map(check => check.code)).toEqual(supported ? ["flow_plan"] : ["engine_artifacts", "flow_plan"]);
+      expect(loadRoutineReadiness(answer.checks)).toEqual(answer.checks);
+      if (!supported) expect(answer.checks.find(check => check.code === "engine_artifacts")?.params?.engine).toBe("Backup");
+    } finally { clearEngineRefusal(engine, undefined, now); }
+  });
+  it("caches shadow plans per routine and inputs without reusing another routine's result (#1991)", async () => {
+    let now = 0;
+    const flow = vi.fn(async () => ({}));
+    const check = deps({ now: () => now, flow });
+    const first = { ...routine, id: "morning", prompt: "Use flow_run.", requires: { skills: ["running-px-flow"] } };
+    await checkRoutineReadiness(first, run, check);
+    await checkRoutineReadiness(first, run, check, "check");
+    expect(flow).toHaveBeenCalledOnce();
+    await checkRoutineReadiness({ ...first, id: "evening" }, run, check);
+    await checkRoutineReadiness({ ...first, prompt: "Use flow_run with different inputs." }, run, check);
+    await checkRoutineReadiness(first, { ...run, runAs: "wren" }, check);
+    now = 60_000;
+    await checkRoutineReadiness(first, run, check);
+    expect(flow).toHaveBeenCalledTimes(5);
+    await checkRoutineReadiness(routine, run, check);
+    expect(flow).toHaveBeenCalledTimes(5);
+  });
   it("passes unknown facts, checks every category and never infers a successful run", async () => {
     expect(await checkRoutineReadiness(routine, run, deps())).toMatchObject({ ok: true, checks: expect.arrayContaining([
       { kind: "engine", ok: true, code: "ready", params: { kind: "engine" }, line: expect.any(String) },

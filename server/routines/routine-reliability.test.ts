@@ -26,6 +26,21 @@ function fixture(over: Partial<RoutineManagerOptions> = {}) {
   return { manager, routine, options, probes, flush, createTask, startTurn, onRunFailed, advance: (ms: number) => { now += ms; }, now: () => now, engine: dir };
 }
 describe("routine reliability in an isolated journal", () => {
+  it("blocks a failed Flow shadow plan before task creation and retains its notice across restart (#1991)", async () => {
+    const h = fixture();
+    h.manager.update(h.routine.id, { prompt: "Use flow_run.", requires: { skills: ["running-px-flow"] } });
+    h.probes.skills = () => ["using-px-flow", "running-px-flow"];
+    h.probes.flow = async () => ({ step: "plan", error: "missing_reads Read the selection first." });
+    h.manager.runNow(h.routine.id); await h.flush();
+    expect(h.createTask).not.toHaveBeenCalled();
+    expect(h.startTurn).not.toHaveBeenCalled();
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "blocked", readiness: expect.arrayContaining([expect.objectContaining({ code: "flow_plan", ok: false })]) });
+    const reloaded = new RoutineManager(h.options);
+    expect(reloaded.listRuns()[0]?.readiness).toEqual(h.manager.listRuns()[0]?.readiness);
+    reloaded.runNow(h.routine.id);
+    for (let i = 0; i < 10; i++) { await reloaded.tick(); await new Promise(resolve => setTimeout(resolve, 0)); }
+    expect(h.onRunFailed.mock.calls.at(-1)?.[1]).toBeNull();
+  });
   it.each(["credits", "usage_limit"] as const)("starts a run on its backup without dispatching the primary's recorded %s refusal (#1986)", async (cause) => {
     const h = fixture();
     const primary: ModelSelection = { instanceId: h.engine, model: "primary" };

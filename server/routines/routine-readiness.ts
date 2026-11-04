@@ -7,7 +7,8 @@ import type { OrgFlowPluginsStatus } from "../org/org-flow-plugins.ts";
 export const ROUTINE_READINESS_TIMEOUT_MS = 4_900;
 export const ROUTINE_READINESS_PROBE_TIMEOUT_MS = ROUTINE_READINESS_TIMEOUT_MS - 400;
 export const ROUTINE_READINESS_CACHE_MS = 60_000;
-export interface ReadinessRoutine { botId: string; prompt: string; requires?: RoutineRequirements; runAs?: string; runOn?: string }
+export const ROUTINE_FLOW_READINESS_TIMEOUT_MS = 45_000;
+export interface ReadinessRoutine { id?: string; botId: string; prompt: string; requires?: RoutineRequirements; runAs?: string; runOn?: string }
 export interface ReadinessRun { botId: string; prompt?: string; runAs?: string; runOn?: string; threadId?: string }
 export interface ReadinessEngine { engine: string; name: string; account?: string; signedIn?: boolean; signedInAt?: number; detail?: string;
   /** Resolved routing facts, not credentials. Absent means unknown. */
@@ -22,6 +23,7 @@ export function routineEngineRefusal(engine: ReadinessEngine, now: number): Engi
 }
 export interface ReadinessMcp { known: string[]; enabled: string[]; profileServer?: string; toolPrefixes?: Record<string, string> }
 export interface ReadinessComputer { name: string; online?: boolean; needed?: boolean }
+export interface ReadinessFlow { step?: string; error?: string; live?: boolean }
 interface ReadinessFlowSkills { hasProfile: boolean; installation: string }
 /** A held local install does not disable the pack's remote product documents (#1945). */
 export function routineFlowSkills(organization: boolean, declaration: FlowPluginsDeclaration | undefined, profiles: readonly string[], status: OrgFlowPluginsStatus): ReadinessFlowSkills | undefined {
@@ -44,10 +46,11 @@ export interface RoutineReadinessDeps {
   mcp(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): ReadinessMcp | undefined | Promise<ReadinessMcp | undefined>;
   perspicax?(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): Promise<{ refused?: boolean; profile?: string; detail?: string } | undefined>;
   computers?(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): Promise<ReadinessComputer[] | undefined> | ReadinessComputer[] | undefined;
+  flow?(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): Promise<ReadinessFlow | undefined>;
 }
 interface Probe { value?: unknown; error?: string }
 const cache = new WeakMap<RoutineReadinessDeps, Map<string, { at: number; result: Promise<Probe> }>>();
-const kinds: RoutineReadinessKind[] = ["engine", "skills", "mcp", "perspicax", "computer"];
+const kinds: RoutineReadinessKind[] = ["engine", "skills", "mcp", "perspicax", "computer", "flow"];
 const flow = /\b(?:px_flow|flow_run|[a-z-]*px-flow[a-z-]*)\b|Pulsatrix[ -]Flow|routine Flow/i;
 export const isFlowRoutine = (prompt: string): boolean => flow.test(prompt);
 export function routineNeededSkills(prompt: string, requires?: RoutineRequirements): string[] {
@@ -61,21 +64,30 @@ export function routineNeededSkills(prompt: string, requires?: RoutineRequiremen
 }
 const clean = (value: unknown) => redactSecretsInText(value instanceof Error ? value.message : String(value)).slice(0, 500);
 const ready = (kind: RoutineReadinessKind, detail?: string): RoutineReadinessCheck => ({ kind, ok: true, code: "ready", params: { kind }, line: `The ${kind} check has no known blocker. Run the routine when ready.`, ...(detail ? { detail } : {}) });
-function boundedProbe(work: (signal: AbortSignal) => unknown, timeoutMs = ROUTINE_READINESS_PROBE_TIMEOUT_MS): Promise<Probe> {
+function boundedProbe(work: (signal: AbortSignal) => unknown, timeoutMs = ROUTINE_READINESS_PROBE_TIMEOUT_MS, cleanupMs = 0): Promise<Probe> {
   return new Promise((resolve) => {
     const controller = new AbortController();
-    const timer = setTimeout(() => { controller.abort(); resolve({ error: "Readiness probe timed out. Try checking again." }); }, timeoutMs);
-    Promise.resolve().then(() => work(controller.signal)).then(value => resolve({ value }), error => resolve({ error: clean(error) })).finally(() => clearTimeout(timer));
+    const timeout = "Readiness probe timed out. Try checking again.";
+    let expired = false;
+    let cleanup: ReturnType<typeof setTimeout> | undefined;
+    const timer = setTimeout(() => {
+      expired = true;
+      controller.abort();
+      // Let Flow's finally close the shadow run and retain a known plan refusal.
+      if (cleanupMs) cleanup = setTimeout(() => resolve({ error: timeout }), cleanupMs);
+      else resolve({ error: timeout });
+    }, timeoutMs);
+    Promise.resolve().then(() => work(controller.signal)).then(value => resolve({ value }), error => resolve({ error: expired ? timeout : clean(error) })).finally(() => { clearTimeout(timer); clearTimeout(cleanup); });
   });
 }
 /** Bound checks at persistence boundaries as well as at probe creation. */
 export function loadRoutineReadiness(value: unknown): RoutineReadinessCheck[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const codes = new Set(["engine_credits", "engine_limit", "engine_signed_out", "engine_artifacts", "skill_missing", "flow_profile", "mcp_missing", "perspicax_profile", "computer_offline", "ready", "probe_error"]);
+  const codes = new Set(["engine_credits", "engine_limit", "engine_signed_out", "engine_artifacts", "skill_missing", "flow_profile", "flow_plan", "mcp_missing", "perspicax_profile", "computer_offline", "ready", "probe_error"]);
   return value.slice(0, 100).filter((check): check is RoutineReadinessCheck => Boolean(check && kinds.includes(check.kind) && codes.has(check.code) && typeof check.ok === "boolean" && typeof check.line === "string")).map(check => ({
     kind: check.kind, ok: check.ok, code: check.code, line: clean(check.line),
     ...(typeof check.detail === "string" ? { detail: clean(check.detail) } : {}),
-    ...(check.params && typeof check.params === "object" ? { params: Object.fromEntries(Object.entries(check.params).slice(0, 10).filter(([, value]) => typeof value === "string").map(([key, value]) => [key.slice(0, 100), clean(value).slice(0, 100)])) } : {}),
+    ...(check.params && typeof check.params === "object" ? { params: Object.fromEntries(Object.entries(check.params).slice(0, 10).filter(([, value]) => typeof value === "string").map(([key, value]) => [key.slice(0, 100), clean(value).slice(0, check.code === "flow_plan" && key === "error" ? 350 : 100)])) } : {}),
   }));
 }
 
@@ -87,13 +99,16 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
     let memo = cache.get(deps);
     if (!memo) { memo = new Map(); cache.set(deps, memo); }
     const context = JSON.stringify([routine.botId, run.runAs ?? routine.runAs, run.runOn ?? routine.runOn, routine.requires?.computer, deps.cacheKey?.(routine, run)]);
-    const works = [deps.engine, deps.skills, deps.mcp, deps.perspicax, deps.computers] as const;
+    const needsFlow = isFlowRoutine(run.prompt ?? routine.prompt) || routine.requires?.skills?.some(skill => isFlowRoutine(skill));
+    const works = [deps.engine, deps.skills, deps.mcp, deps.perspicax, deps.computers, needsFlow ? deps.flow : undefined] as const;
     const pending = works.map((work, i) => {
       if (!work) return Promise.resolve({} as Probe);
-      const key = `${context}:${kinds[i]}`;
+      const key = `${context}:${kinds[i]}${kinds[i] === "flow" ? JSON.stringify([routine.id, run.prompt ?? routine.prompt, routine.requires]) : ""}`;
       const old = memo!.get(key);
       if (old && now - old.at < ROUTINE_READINESS_CACHE_MS) return old.result;
-      const result = boundedProbe(signal => work(routine, run, signal));
+      const result = kinds[i] === "flow"
+        ? boundedProbe(signal => work(routine, run, signal), ROUTINE_FLOW_READINESS_TIMEOUT_MS - 1_500, 1_500)
+        : boundedProbe(signal => work(routine, run, signal));
       memo!.set(key, { at: now, result });
       if (memo!.size > 2_000) memo!.delete(memo!.keys().next().value!);
       return result;
@@ -108,8 +123,8 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
     const checks: RoutineReadinessCheck[] = [];
     for (let i = 0; i < kinds.length; i++) {
       const kind = kinds[i]!;
+      if (kind === "flow" && (!needsFlow || !deps.flow)) continue;
       const probe = probes[i]!;
-      const needsFlow = isFlowRoutine(run.prompt ?? routine.prompt) || routine.requires?.skills?.some(skill => isFlowRoutine(skill));
       const pack = kind === "skills" && needsFlow ? deps.flowSkills?.(routine, run) : undefined;
       if (pack) {
         // A Flow routine reads all its product skills from the active pack,
@@ -168,6 +183,13 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
         const profile = probe.value as { refused?: boolean; profile?: string; detail?: string } | undefined;
         if (profile?.refused) checks.push({ kind, ok: false, code: "perspicax_profile", params: { profile: profile.profile ?? "Perspicax" }, line: "Perspicax refused this person's profile (401/403 invalid_token). Choose the profile again in Settings > Perspicax.", ...(profile.detail ? { detail: clean(profile.detail) } : {}) });
         else if (profile?.detail) checks.push(ready(kind, clean(profile.detail)));
+      } else if (kind === "flow") {
+        const result = probe.value as ReadinessFlow | undefined;
+        if (result?.error) {
+          const step = clean(result.step ?? "plan");
+          const error = clean(result.error);
+          checks.push({ kind, ok: false, code: "flow_plan", params: { step, error }, line: `The Flow shadow check failed at ${step}: ${error}` });
+        } else if (result?.live) checks.push({ ...ready(kind, "A run is live, plan not checked."), params: { kind, live: "true" } });
       } else {
         const computers = probe.value as ReadinessComputer[] | undefined;
         const prompt = (run.prompt ?? routine.prompt).toLowerCase();
@@ -180,7 +202,7 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
       if (checks.length === start) checks.push(ready(kind));
     }
     const bounded = checks.sort((a, b) => Number(a.ok) - Number(b.ok)).slice(0, 100).map(check => ({ ...check,
-      line: clean(check.line), ...(check.params ? { params: Object.fromEntries(Object.entries(check.params).map(([key, value]) => [key, clean(value).slice(0, 100)])) } : {}),
+      line: clean(check.line), ...(check.params ? { params: Object.fromEntries(Object.entries(check.params).map(([key, value]) => [key, clean(value).slice(0, check.code === "flow_plan" && key === "error" ? 350 : 100)])) } : {}),
     }));
     return { ok: bounded.every(check => check.ok), checks: bounded };
   } catch (error) {

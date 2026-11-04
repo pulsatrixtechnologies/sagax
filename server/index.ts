@@ -1,4 +1,5 @@
 import { checkRoutineReadiness, routineEngineRefusal, routineFlowSkills, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer } from "./routines/routine-readiness.ts";
+import { routineFlowInput } from "./routines/routine-flow-input.ts";
 import { noteEngineRefusal, clearEngineRefusal } from "./engines/engine-refusals.ts";
 import { classifyRoutineFailure as readinessFailureClass } from "./routines/routine-recovery.ts";
 import { canUseMcpServer } from "../shared/tool-scope.ts";
@@ -24631,7 +24632,7 @@ const routineReadinessDeps: RoutineReadinessDeps = {
   cacheKey: (routine, run) => {
     const bot = store.bot(run.botId);
     const engine = routineReadinessEngine(routine, run);
-    return JSON.stringify([engine, bot?.modelSelection, bot?.mcpServers, bot?.toolScope, bot?.assignedSkills, bot?.perspicax, bot?.computer, bot?.remoteHosts]);
+    return JSON.stringify([engine, bot?.modelSelection, bot?.mcpServers, bot?.toolScope, bot?.assignedSkills, bot?.perspicax, bot?.perspicaxActAs, bot?.computer, bot?.remoteHosts]);
   },
   engine: (routine, run) => routineReadinessEngine(routine, run),
   backup: async (routine, run, primary) => {
@@ -24676,6 +24677,13 @@ const routineReadinessDeps: RoutineReadinessDeps = {
     const principal = effectiveRunAs(run);
     if (!bot || !principal) return undefined;
     return perspicaxMcp.probeReadiness(principal, routineReadinessProfiles(bot, principal), signal);
+  },
+  flow: async (routine, run, signal) => {
+    if (!perspicaxMcp) throw new Error("Perspicax Flow readiness is unavailable on this server.");
+    const bot = store.bot(run.botId);
+    const principal = effectiveRunAs({ ...run, runAs: run.runAs ?? routine.runAs });
+    if (!bot || !principal) throw new Error("Perspicax routine person or bot is unavailable.");
+    return perspicaxMcp.probeFlowReadiness(principal, bot.id, routineReadinessProfiles(bot, principal), routineFlowInput(run.prompt ?? routine.prompt), signal);
   },
   computers: async (routine, run, signal) => {
     const bot = store.bot(run.botId);

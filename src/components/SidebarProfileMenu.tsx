@@ -60,6 +60,7 @@ import {
 } from "lucide-react";
 import { usePerspicaxOrg } from "@/lib/perspicax-org";
 import { useOrgApprovalsCount } from "@/lib/org-approvals";
+import { waitingOnPersonCount } from "@/lib/bot-unread";
 
 import { InitialsAvatar } from "./Avatar";
 import { SidebarPopoverMenu, type SidebarMenuItem, type SidebarSubmenuEntry } from "./SidebarPopoverMenu";
@@ -634,7 +635,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   const triggerRef = useRef<HTMLSpanElement>(null);
   const achievements = useAchievements();
   // conversations waiting on the person's answer (a plain count, no hook)
-  const approvalsWaiting = useStoreSelector((current) => current.bots.filter((bot) => !bot.hidden).reduce((total, bot) => total + (bot.tasks ?? []).filter((task) => task.activity === "waiting-on-you").length, 0));
+  const approvalsWaiting = useStoreSelector((current) => waitingOnPersonCount(current.bots));
   const openAchievements = () => dispatch({ type: "showAchievements" });
   // The routines badge sits at the right edge of the row; under the name,
   // the viewer's own title and points, each only while its "Show my ..."

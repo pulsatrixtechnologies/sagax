@@ -8,7 +8,7 @@ import { inboxAge, inboxAgeTone, inboxRisky, type InboxApproval } from "../../..
 import { BotAvatar } from "@/components/Avatar";
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { inboxPreview, inboxTitle, withoutIds } from "@/lib/approvals-inbox";
+import { inboxPreview, inboxTitle, inboxWhere, withoutIds } from "@/lib/approvals-inbox";
 import type { Bot } from "@/state/store";
 
 const AGE_STYLE = {
@@ -91,7 +91,7 @@ export const ApprovalRow = memo(function ApprovalRow({
   const preview = inboxPreview(entry);
   // ticked only when a bulk answer may cover it (a Deny covers a needs-key card)
   const bulkable = entry.decidable && (entry.bulk === true || entry.bulk === "needs-key");
-  const where = withoutIds(entry.roomName ?? entry.threadTitle ?? "");
+  const where = withoutIds(inboxWhere(entry));
   return (
     <div
       role="option"

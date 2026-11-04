@@ -32,6 +32,11 @@ export function waitingParallelTasks(bot: Pick<Bot, "tasks"> | undefined, thread
     && task.parallelOf.reportedAt === undefined && task.activity === "waiting-on-you");
 }
 
+/** The bot's routine runs (their hidden execution tasks) waiting on the person. */
+export function routineRunsWaiting(bot: Pick<Bot, "tasks"> | undefined) {
+  return (bot?.tasks ?? []).filter((task) => Boolean(task.routineRunId) && task.activity === "waiting-on-you");
+}
+
 /** #1145: with threads hidden, a parallel task asked from the one
  * conversation gets no row of its own: its approvals and questions join
  * that conversation, and its answer is posted there. */
@@ -64,9 +69,16 @@ export function approvalSources(bot: Pick<Bot, "tasks" | "threadId" | "waitingAp
   if (!bot) return [];
   const parallel = waitingParallelTasks(bot, bot.threadId, stream).map((task) => ({ threadId: task.threadId, title: task.title, stamp: task.updatedAt ?? 0 }));
   const seen = new Set([bot.threadId, ...parallel.map((row) => row.threadId)]);
+  // 2026-11-04: a routine run's hidden task that waits on the person (an
+  // approval or a question its turn raised): its cards join the bot's
+  // conversation, where the run's line sits, named by the run's title. They
+  // were only on the phone (its dock reads every waiting task).
+  const runs = routineRunsWaiting(bot).filter((task) => !seen.has(task.threadId))
+    .map((task) => ({ threadId: task.threadId, title: task.title, stamp: task.updatedAt ?? 0 }));
+  for (const row of runs) seen.add(row.threadId);
   const interBot = (bot.waitingApprovals ?? []).filter((row) => !seen.has(row.threadId))
     .map((row) => ({ threadId: row.threadId, askedBy: row.openedByName?.trim() || "", stamp: row.updatedAt ?? 0 }));
-  return [...parallel, ...interBot];
+  return [...parallel, ...runs, ...interBot];
 }
 
 export function useParallelApprovals(bot: Bot | undefined, stream = false): Pending[] {

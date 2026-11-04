@@ -16,6 +16,8 @@ import { useShowThreads } from "@/lib/thread-preferences";
 import { ExchangeSheet } from "../BotExchangeChip";
 import { PRIMARY_PILL } from "../SettingsPrimitives";
 import { RunActivityState as ConnectedRunActivity } from "./RunActivityState";
+import { WaitingOnYou } from "../task/WaitingOnYou";
+import type { WaitingItem } from "@/lib/use-waiting-cards";
 
 function RoutineRunExchangeSheet({
   run,
@@ -25,6 +27,7 @@ function RoutineRunExchangeSheet({
   detail,
   detailError,
   reload,
+  waiting = [],
   onClose,
   onStop,
   onOpenRoom,
@@ -37,6 +40,8 @@ function RoutineRunExchangeSheet({
   detail: BotActivityDetail | null;
   detailError: boolean;
   reload: () => Promise<void>;
+  /** The run's open approvals and questions (RunActivityState). */
+  waiting?: readonly WaitingItem[];
   onClose: () => void;
   onStop?: () => void;
   onOpenRoom?: (id: string) => void;
@@ -99,9 +104,25 @@ function RoutineRunExchangeSheet({
     </div>
   );
 
+  // 2026-11-04: what the run waits on, answerable here as in its
+  // conversation (the same cards, the same answer).
+  const waitingItems: readonly WaitingItem[] = run.redacted ? [] : waiting;
+  const pinned = waitingItems.length > 0 ? (
+    <div data-run-waiting>
+      <WaitingOnYou
+        items={waitingItems}
+        threadId={run.threadId ?? ""}
+        botFor={(id) => bots.find((candidate) => candidate.id === id) ?? (id === bot.id ? bot : undefined)}
+        onCancel={() => onStop?.()}
+        onOpenThread={canContinue ? () => openContinue() : undefined}
+      />
+    </div>
+  ) : undefined;
+
   return (
     <ExchangeSheet
       run={exchange}
+      pinned={pinned}
       bots={[...bots]}
       showToolCalls
       onClose={onClose}
@@ -138,7 +159,7 @@ export function RoutineRunExchange({
   const liveRun = state.routineRuns.find((candidate) => candidate.id === run.id) ?? run;
 
   return (
-    <ConnectedRunActivity key={liveRun.id} run={liveRun}>{({ detail, error: detailError, reload }) => (
+    <ConnectedRunActivity key={liveRun.id} run={liveRun}>{({ detail, error: detailError, reload, waiting }) => (
       <RoutineRunExchangeSheet
         run={liveRun}
         routine={routine}
@@ -147,6 +168,7 @@ export function RoutineRunExchange({
         detail={detail}
         detailError={detailError}
         reload={reload}
+        waiting={waiting}
         onClose={onClose}
         onStop={onStop}
         onOpenRoom={onOpenRoom}

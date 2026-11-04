@@ -2,9 +2,9 @@
 // Chat-latency harness for the real Sagax turn path (perf/bench-harness).
 // Stages from the client's send through accept, server [turn-trace] steps,
 // dispatched, first_token, and settled. Fake engines only (claude / grok /
-// http). No credentials, no network beyond loopback.
+// codex / http). No credentials, no network beyond loopback.
 //
-//   pnpm bench:turn-latency [--engine claude|grok|http] [--mode warm|cold|both]
+//   pnpm bench:turn-latency [--engine claude|grok|codex|http] [--mode warm|cold|both]
 //     [--turns N] [--quick] [--history N] [--out file.json] [--baseline file.json]
 //     [--trace]
 //
@@ -86,7 +86,7 @@ const SOUL = [
   "Pad: " + "latency-fixture-soul-line. ".repeat(55),
 ].join("\n");
 
-type Engine = "claude" | "grok" | "http";
+type Engine = "claude" | "grok" | "codex" | "http";
 type Mode = "warm" | "cold";
 
 type StageStats = { p50: number; p95: number; min: number; max: number; n: number };
@@ -163,11 +163,11 @@ function parseCli(argv: string[]) {
   const engines: Engine[] = !engineGiven && quick
     ? ["http", "claude"]
     : engineRaw === "all" || engineRaw === "all-quick"
-      ? (engineRaw === "all-quick" ? ["http", "claude"] : ["claude", "grok", "http"])
+      ? (engineRaw === "all-quick" ? ["http", "claude"] : ["claude", "grok", "codex", "http"])
       : [engineRaw as Engine];
   for (const engine of engines) {
-    if (engine !== "claude" && engine !== "grok" && engine !== "http") {
-      throw new Error(`--engine must be claude|grok|http (got ${engineRaw})`);
+    if (engine !== "claude" && engine !== "grok" && engine !== "codex" && engine !== "http") {
+      throw new Error(`--engine must be claude|grok|codex|http (got ${engineRaw})`);
     }
   }
   const modes: Mode[] = !modeGiven && quick
@@ -323,7 +323,7 @@ function readLaunchCount(file: string | undefined): number {
   if (!file || !existsSync(file)) return 0;
   const raw = readFileSync(file, "utf8").trim();
   if (!raw) return 0;
-  // Claude: one JSON object per line. ACP: a single integer counter.
+  // Claude/Codex: one JSON object per launch. ACP: a single integer counter.
   if (/^\d+$/.test(raw)) return Number(raw);
   return raw.split("\n").filter(Boolean).length;
 }
@@ -583,8 +583,22 @@ async function runEngineMode(
     httpFixture = await startHttpFixture();
   }
 
-  const fixture: VerificationServer = await launchVerificationServer(parentEnv, undefined, undefined, undefined, undefined, undefined, [], undefined, undefined, {
+  const fixture: VerificationServer = await launchVerificationServer(parentEnv, undefined, undefined, undefined, undefined, undefined, engine === "codex" ? ["codex"] : [], undefined, undefined, {
     prepareDataDir(dataDir) {
+      if (engine === "codex") {
+        const path = join(dataDir, "config.json");
+        const config = JSON.parse(readFileSync(path, "utf8"));
+        config.instances.codex.environment = {
+          FAKE_CODEX_MODE: "voice",
+          FAKE_CODEX_STARTUP_DELAY_MS: String(COLD_MS),
+          FAKE_CODEX_FIRST_TOKEN_MS: String(FIRST_TOKEN_MS),
+          FAKE_CODEX_TOKEN_MS: String(TOKEN_MS),
+          FAKE_CODEX_VOICE_REPLY: VOICE_REPLY,
+          FAKE_CODEX_LAUNCH_LOG: launchFile,
+        };
+        writeFileSync(path, JSON.stringify(config, null, 2));
+        return;
+      }
       if (engine !== "grok") return;
       const configPath = join(dataDir, "config.json");
       const config = JSON.parse(readFileSync(configPath, "utf8")) as { instances: Record<string, unknown> };
@@ -619,6 +633,9 @@ async function runEngineMode(
     const bot = created.bot as { id: string; activeTaskId?: string; threadId?: string };
     await installBotFixture(api, bot.id);
 
+    if (engine === "codex") {
+      await api.control(["set-model", "--bot", bot.id, "--instance", "codex", "--model", "gpt-fake-default"]);
+    }
     if (engine === "grok") {
       await api.control(["set-model", "--bot", bot.id, "--instance", "grok", "--model", "grok-4.7-build-fast"]);
     }

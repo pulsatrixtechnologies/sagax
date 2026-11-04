@@ -417,6 +417,7 @@ process.stdin.on("data", (chunk) => {
 
     switch (msg.method) {
       case "initialize": {
+        if (process.env.FAKE_CODEX_LAUNCH_LOG) appendFileSync(process.env.FAKE_CODEX_LAUNCH_LOG, `${JSON.stringify({ pid: process.pid })}\n`);
         experimentalApi = msg.params?.capabilities?.experimentalApi === true;
         logStartup("initialize");
         const reply = () => out({ jsonrpc: "2.0", id: msg.id, result: { ok: true } });
@@ -607,6 +608,20 @@ process.stdin.on("data", (chunk) => {
       case "turn/start": {
         dump();
         logStartup("turn/start");
+        if (mode === "voice") {
+          out({ jsonrpc: "2.0", id: msg.id, result: { turn: { id: nativeTurnId } } });
+          const text = process.env.FAKE_CODEX_VOICE_REPLY ?? "done from fake codex";
+          void (async () => {
+            await new Promise(resolve => setTimeout(resolve, Number(process.env.FAKE_CODEX_FIRST_TOKEN_MS ?? 600)));
+            for (const delta of text.match(/\S+\s*/g) ?? [text]) {
+              notify("item/agentMessage/delta", { itemId: "m1", delta });
+              await new Promise(resolve => setTimeout(resolve, Number(process.env.FAKE_CODEX_TOKEN_MS ?? 25)));
+            }
+            notify("item/completed", { item: { id: "m1", type: "agentMessage", text } });
+            notify("turn/completed", { turn: { status: "completed" } });
+          })();
+          break;
+        }
         nativeThreadId = msg.params?.threadId ?? nativeThreadId;
         // crash script for close-path retry tests: die before
         // acknowledging turn/start. The launch count lives in a state

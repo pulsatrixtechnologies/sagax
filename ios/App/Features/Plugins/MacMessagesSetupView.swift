@@ -370,42 +370,60 @@ struct MacAppsInstalledSection: View {
     /// (a border, the card's fill), its 32 pt accent tile.
     private var desktopBody: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("This Mac").font(theme.font(13, .semibold)).foregroundStyle(theme.ink)
-                Spacer()
-                Button { push(.mac) } label: {
-                    Text("See all").font(theme.font(12, .medium)).foregroundStyle(theme.accentText)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("connect-apps-mac-see-all")
-            }
-            Button { push(.macMessages) } label: {
-                HStack(spacing: 12) {
-                    DesktopIconView(icon: .messageSquare, size: 16)
-                        .foregroundStyle(theme.accent)
-                        .frame(width: 32, height: 32)
-                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.accent.opacity(0.15)))
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Messages").font(theme.font(13, .medium)).foregroundStyle(theme.ink).lineLimit(1)
-                        Text(verbatim: MacMessagesCopy.rowSubtitle(status)).font(theme.font(11.5)).foregroundStyle(theme.inkSecondary).lineLimit(1)
-                    }
-                    Spacer(minLength: 8)
-                    DesktopIconView(icon: .chevronRight, size: 15).foregroundStyle(theme.inkSecondary)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(theme.card))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("connect-apps-installed-mac-messages")
+            AnyView(desktopHeading)
+            AnyView(desktopMessagesRow)
         }
         .padding(.top, 16)
         .padding(.bottom, 8)
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)
         .task { await refresh() }
+    }
+
+    private var desktopHeading: some View {
+        let ink: Color = theme.ink
+        let link: Color = theme.accentText
+        return HStack {
+            Text("This Mac").font(theme.font(13, .semibold)).foregroundStyle(ink)
+            Spacer()
+            Button { push(.mac) } label: {
+                Text("See all").font(theme.font(12, .medium)).foregroundStyle(link)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("connect-apps-mac-see-all")
+        }
+    }
+
+    private var desktopMessagesRow: some View {
+        let accent: Color = theme.accent
+        let ink: Color = theme.ink
+        let secondary: Color = theme.inkSecondary
+        let card: Color = theme.card
+        let border: Color = theme.border
+        let subtitle: String = MacMessagesCopy.rowSubtitle(status)
+        let tile = DesktopIconView(icon: .messageSquare, size: 16)
+            .foregroundStyle(accent)
+            .frame(width: 32, height: 32)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(accent.opacity(0.15)))
+        let texts = VStack(alignment: .leading, spacing: 1) {
+            Text("Messages").font(theme.font(13, .medium)).foregroundStyle(ink).lineLimit(1)
+            Text(verbatim: subtitle).font(theme.font(11.5)).foregroundStyle(secondary).lineLimit(1)
+        }
+        return Button { push(.macMessages) } label: {
+            HStack(spacing: 12) {
+                tile
+                texts
+                Spacer(minLength: 8)
+                DesktopIconView(icon: .chevronRight, size: 15).foregroundStyle(secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(card))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(border, lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("connect-apps-installed-mac-messages")
     }
 
     private var phoneBody: some View {

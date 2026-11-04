@@ -35,13 +35,12 @@ enum DesktopIcon: String, CaseIterable {
     // the pages sweep (2026-11-03): Automations' header (Menu, ChevronLeft,
     // Clock3, Pause, CircleAlert), Memory's tabs and lists (Tag, CircleCheck,
     // NotebookText), the map's settings (Settings2), fit and play
-    case messageSquare, messagesSquare, clipboardList, user, menu, chevronLeft, clock3, pause, circleAlert, tag, circleCheck, notebookText, settings2, maximize2, play
+    case messagesSquare, clipboardList, user, menu, chevronLeft, clock3, pause, circleAlert, tag, circleCheck, notebookText, settings2, maximize2, play
 
     /// Path data in the 24 pt viewBox.
     var paths: [String] {
         switch self {
         case .plus: ["M5 12h14", "M12 5v14"]
-        case .messageSquare: ["M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"]
         case .messagesSquare: ["M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z", "M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1"]
         case .clipboardList: [Self.rect(8, 2, 8, 4, 1), "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2", "M12 11h4", "M12 16h4", "M8 11h.01", "M8 16h.01"]
         case .user: ["M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2", Self.circle(12, 7, 4)]
@@ -255,7 +254,6 @@ enum DesktopIcon: String, CaseIterable {
         case .chevronsRight: "chevron.right.2"
         case .messageSquare: "message"
         case .pictureInPicture: "pip"
-        case .messageSquare: "message"
         case .messagesSquare: "bubble.left.and.bubble.right"
         case .clipboardList: "list.clipboard"
         case .user: "person"

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Rewrite PR body URLs that pointed at docs/ media on a product branch so they
-// point at the same path on the orphan `pr-assets` branch (issue #1386).
+// point at the same path on the orphan `pr-assets/shared` branch (issue #1386).
 //
 //   node scripts/repo/rewrite-pr-asset-links.mjs [pr-asset-refs.json]
 //     dry-run (default): print planned edits
@@ -17,7 +17,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = join(fileURLToPath(new URL("../..", import.meta.url)));
 const REPO = "pulsatrixtechnologies/sagax";
-const TARGET_REF = "pr-assets";
+const TARGET_REF = "pr-assets/shared";
 
 function loadRefs(path) {
   const value = JSON.parse(readFileSync(path, "utf8"));

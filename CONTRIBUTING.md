@@ -14,7 +14,7 @@ makes a PR easy to merge. Read it once before opening anything; it's short on pu
 - **Keep it green.** The local gates below must pass. Server changes need tests (see below).
 - **UI changes need screenshots.** Before/after images in the PR body; video for anything animated.
   Prefer MP4 or WebP over large GIFs. PR-only proofs that need a stable raw URL live on the
-  orphan branch `pr-assets` (same `docs/…` paths), never under tracked `docs/` on a product
+  orphan branch `pr-assets/shared` (same `docs/…` paths), never under tracked `docs/` on a product
   branch (see [`docs/pr-assets.md`](docs/pr-assets.md)). Match the existing palette and tone in
   [`src/styles.css`](src/styles.css).
 

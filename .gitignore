@@ -49,6 +49,6 @@ ios/.asc/
 dist-gallery
 
 # Local scratch folder for PR evidence drafts (see docs/pr-assets.md).
-# Durable proofs that need a raw URL live on the orphan branch `pr-assets`.
+# Durable proofs that need a raw URL live on the orphan branch `pr-assets/shared`.
 pr-assets/
 artifacts/shape-gen/

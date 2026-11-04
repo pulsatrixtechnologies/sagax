@@ -6,7 +6,7 @@ cites that media by path or by basename.
 
 ## Where PR evidence lives
 
-- **Orphan branch `pr-assets`** (same relative paths, for example
+- **Orphan branch `pr-assets/shared`** (same relative paths, for example
   `docs/screenshots/composer-one-line.webp`): durable home for PR visual
   proofs that a PR body links by a **branch-name** ref. Product branches
   (`main`, `feat/next-*`, release lines) never carry those files again.
@@ -17,24 +17,28 @@ cites that media by path or by basename.
   tracked file still references (a markdown path, a capture script, AGENTS
   notes, a plan). Keep those; they document shipped behavior.
 
-## How to push a proof to `pr-assets`
+Older per-PR proof branches use the same namespace (`pr-assets/<PR>-<topic>`, for
+example `pr-assets/1172-share`); a new proof goes on `pr-assets/shared` or on its
+own `pr-assets/<PR>-<topic>` branch.
+
+## How to push a proof to `pr-assets/shared`
 
 ```sh
-git fetch origin pr-assets
-git worktree add /tmp/sagax-pr-assets pr-assets
+git fetch origin pr-assets/shared
+git worktree add /tmp/sagax-pr-assets pr-assets/shared
 # copy the media to the same docs/… path the PR will link
 git -C /tmp/sagax-pr-assets add docs/screenshots/example.webp
 git -C /tmp/sagax-pr-assets commit -m "pr-assets: add example proof"
-git -C /tmp/sagax-pr-assets push origin pr-assets
+git -C /tmp/sagax-pr-assets push origin pr-assets/shared
 ```
 
 Point the PR body at one of:
 
-- `https://raw.githubusercontent.com/pulsatrixtechnologies/sagax/pr-assets/docs/screenshots/example.webp`
-- `https://github.com/pulsatrixtechnologies/sagax/blob/pr-assets/docs/screenshots/example.webp?raw=true`
+- `https://raw.githubusercontent.com/pulsatrixtechnologies/sagax/pr-assets/shared/docs/screenshots/example.webp`
+- `https://github.com/pulsatrixtechnologies/sagax/blob/pr-assets/shared/docs/screenshots/example.webp?raw=true`
 
 A link pinned to a **commit SHA** already keeps working after the file leaves
-a product branch; it does not need a copy on `pr-assets`.
+a product branch; it does not need a copy on `pr-assets/shared`.
 
 ## Formats
 
@@ -48,7 +52,7 @@ branches. A file counts as referenced when a tracked text file names its path,
 its basename, or one of its own folders (a capture script's reference set such
 as `docs/screenshots/shapes` is cited by its folder); the shared containers
 (`docs/screenshots`, `docs/verification/evidence`) do not count. Branch-name PR links were rewritten (or are rewritten with
-`scripts/repo/rewrite-pr-asset-links.mjs`) to the `pr-assets` branch. SHA-pinned
+`scripts/repo/rewrite-pr-asset-links.mjs`) to the `pr-assets/shared` branch. SHA-pinned
 links stay as they are.
 
 To list new orphans:

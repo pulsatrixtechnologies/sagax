@@ -1,5 +1,5 @@
 // #1386: tracked media under docs/ must be cited by a tracked text file.
-// PR-only visual proofs live on the orphan branch `pr-assets`, never on
+// PR-only visual proofs live on the orphan branch `pr-assets/shared`, never on
 // product branches. Prefer MP4 or WebP; no new GIF over 2 MiB under docs/.
 import { execFileSync } from "node:child_process";
 import { statSync } from "node:fs";
@@ -19,7 +19,7 @@ it(
     const orphans = listDocsMediaOrphans(root);
     expect(
       orphans.map((row) => `${row.path} (${row.bytes} bytes)`),
-      "orphan docs/ media belong on the pr-assets branch or must be deleted; see docs/pr-assets.md",
+      "orphan docs/ media belong on the pr-assets/shared branch or must be deleted; see docs/pr-assets.md",
     ).toEqual([]);
   },
 );

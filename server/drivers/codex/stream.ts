@@ -2,7 +2,7 @@
 import { describeSpawnFailure } from "../../procs.ts";
 import { appendNative } from "../native.ts";
 import { classifyError, RETRY_MAX_ATTEMPTS } from "../retry.ts";
-import { commandSummary, cwToolResult, toolDetailPreview, toolFailurePreview } from "../../tools/tool-summary.ts";
+import { commandSummary, cwToolResult, inputPreviewMax, toolDetailPreview, toolFailurePreview } from "../../tools/tool-summary.ts";
 import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../../shared/phone-tools.ts";
 import { filesField, writtenFilesFromToolInput } from "../../threads/thread-files.ts";
 import { extractMcpImages } from "../../mcp/mcp-tool-images.ts";
@@ -121,7 +121,7 @@ s.handleNotification = (msg: any) => {
           itemId: item.id,
           title,
           summary: item.type === "commandExecution" ? commandSummary({ command: item.command }) : undefined,
-          input: toolDetailPreview(item.type === "commandExecution" ? { command: item.command, cwd: item.cwd } : item.type === "mcpToolCall" ? (runs ? item.arguments?.arguments ?? {} : item.arguments) : item.type === "fileChange" ? item.changes : item.query),
+          input: toolDetailPreview(item.type === "commandExecution" ? { command: item.command, cwd: item.cwd } : item.type === "mcpToolCall" ? (runs ? item.arguments?.arguments ?? {} : item.arguments) : item.type === "fileChange" ? item.changes : item.query, item.type === "fileChange" ? inputPreviewMax("fileChange") : undefined),
           ...filesField(item.type === "fileChange"
             ? writtenFilesFromToolInput("edit", item.changes)
             : item.type === "mcpToolCall" ? writtenFilesFromToolInput(title, runs ? item.arguments?.arguments ?? {} : item.arguments) : []),

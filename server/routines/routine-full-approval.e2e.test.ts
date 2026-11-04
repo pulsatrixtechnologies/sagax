@@ -81,7 +81,7 @@ it("runs owner-authorized email and webhook routines at the chosen level while t
     const saved = hooks.webhooks.find((entry: any) => entry.id === hook.id);
     Object.assign(saved, { source: { type: "botmail", events: [], filters: {} }, enabled: true, verificationPending: false });
     writeFileSync(join(dataDir, "webhooks.json"), JSON.stringify(hooks));
-    const env = verificationServerEnvironment({}, dataDir, Number(new URL(url).port));
+    const env = verificationServerEnvironment({ SAGAX_LOCAL_VM_TEST_NAMESPACE: process.env.SAGAX_LOCAL_VM_TEST_NAMESPACE }, dataDir, Number(new URL(url).port));
     env.SAGAX_MISUSE_GUARDRAILS = "enforce";
     const queued = spawnSync(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", `
       import { RoutineManager } from ${JSON.stringify(new URL("./routines.ts", import.meta.url).href)};

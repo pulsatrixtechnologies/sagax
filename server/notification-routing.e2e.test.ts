@@ -179,7 +179,7 @@ beforeAll(async () => {
       ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
       HOME: home,
       USERPROFILE: home,
-      SAGAX_PORT: String(port),
+      SAGAX_PORT: String(port), SAGAX_LOCAL_VM_TEST_NAMESPACE: process.env.SAGAX_LOCAL_VM_TEST_NAMESPACE ?? "",
       SAGAX_WEBHOOK_PORT: String(port + 1),
       // the question-card test leaves its peer turn open on purpose; keep the
       // synchronous ask from parking for the production four minutes

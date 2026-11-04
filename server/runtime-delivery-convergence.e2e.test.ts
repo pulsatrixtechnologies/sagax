@@ -48,7 +48,7 @@ async function withFixture(test: (f: Fixture) => Promise<void>, options: { backu
     const log = openSync(logPath, "a", 0o600);
     server = spawn(process.execPath, ["--experimental-strip-types", fileURLToPath(new URL("./index.ts", import.meta.url))], {
       cwd: fileURLToPath(new URL("..", import.meta.url)),
-      env: { ...verificationServerEnvironment({}, dataDir, Number(new URL(url).port)), ...extra },
+      env: { ...verificationServerEnvironment({ SAGAX_LOCAL_VM_TEST_NAMESPACE: process.env.SAGAX_LOCAL_VM_TEST_NAMESPACE }, dataDir, Number(new URL(url).port)), ...extra },
       stdio: ["ignore", log, log],
     });
     closeSync(log);

@@ -639,6 +639,8 @@ export interface RoutineManagerOptions {
    * answer (ROUTINE_MEMORY_HINT_MAX_MS) starts the run as if not asked. */
   /** Account selected for refusal memory, resolved with the same worker pick as dispatch. */
   engineForRun?: (run: RoutineRun) => { engine: string; account?: string } | undefined;
+  /** Apply pre-flight failover before capturing the account that will actually run. */
+  prepareTurn?: (run: RoutineRun) => Promise<void>;
   /** Readiness probes run beside the pass, after admission and before createTask. */
   readiness?: (routine: Routine, run: RoutineRun, mode: "run" | "check") => Promise<RoutineReadinessResult>;
   /** Replaces the pure pre-check evaluator (tests, later wired checks). It
@@ -3323,8 +3325,6 @@ export class RoutineManager {
         }
         // Every run works in its own task (a webhook's too, since
         // 2026-10-28) and reports into the conversation it belongs to.
-        const engine = this.options.engineForRun?.(run);
-        if (engine) this.readinessEngines.set(run.id, engine);
         const startedAt = this.now();
         const title = this.runTitle(run.routineName, startedAt, run);
         const unstarted = this.unstartedTasks.get(run.id);
@@ -3371,6 +3371,12 @@ export class RoutineManager {
             this.failThread(task.threadId, "The routine was deleted before it could start");
             continue;
           }
+          if (run.target === "bot" && this.options.prepareTurn) {
+            await this.options.prepareTurn(cloneRun(run));
+            if (run.status !== "running") continue;
+          }
+          const engine = this.options.engineForRun?.(run);
+          if (engine) this.readinessEngines.set(run.id, engine);
           const triggerSource = run.triggerSource ?? (run.manual ? "manual" : "schedule");
           // Without the hook (a solo server) nothing is awaited here, so the
           // turn starts in the same tick as before.

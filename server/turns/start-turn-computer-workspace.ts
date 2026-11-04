@@ -20,6 +20,7 @@ export function createComputerWorkspaceStartTurn(host: StartTurnHost) {
     renderSkillInstructions,
     store,
     supportsWorkspaceFiles,
+    syncPluginsForTurn,
   } = host;
 
   return async function(state: TurnState): Promise<void> {
@@ -112,5 +113,8 @@ export function createComputerWorkspaceStartTurn(host: StartTurnHost) {
       botId: state.bot.id, threadId: state.threadId, generation: state.dispatchClaimId,
       customMcp: state.instance.adapter.capabilities.customMcp === true, principal: state.turnPlace.principal
     });
+    if (IDENTITY.kind === "perspicax" && state.turnPlace.principal) {
+      await syncPluginsForTurn(state.turnPlace.principal, state.dispatchClaimId, state.bot.id);
+    }
   };
 }

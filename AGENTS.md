@@ -10,6 +10,18 @@ primary's refusal. Credits keep the 30-minute refusal TTL, including in the
 failover store; a thread returns through the existing reset path.
 Tests: `routine-readiness.test.ts`, `routine-reliability.test.ts`,
 `limit-failover-host.test.ts`.
+## Skills follow the dispatched engine (#1987, 2026-11-04)
+
+Real turns project the scoped inventory into their private task folder's
+native skill directories (`server/skills/turn-skill-links.ts`), including
+organization Flow, personal and bot plugins on a limit backup. Claude keeps
+its native plugin loader; other file engines retain the same prompt paths
+alongside native discovery. Organization turns await the selected plugin
+copies in the person's environment before dispatch, on every engine.
+Readiness resolves the thread override and Auto choice for both the engine
+and skill probes (`server/routines/routine-readiness-target.ts`). Previews
+and receipts remain reads. Regressions: `turn-skill-links.test.ts` and
+`start-turn-computer-workspace.test.ts` (temporary files and fake dispatch).
 
 ## Codex retains one app-server per conversation (#1969, 2026-11-04)
 

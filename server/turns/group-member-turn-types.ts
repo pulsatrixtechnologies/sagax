@@ -158,6 +158,7 @@ export type GroupMemberTurnHost = {
   mountPersonalMcp: any,
   mountPluginMcp: any,
   mountUserSandbox: any,
+  syncPluginsForTurn: any,
   myChromePromptFor: any,
   namesEngine: any,
   noteBotRead: any,

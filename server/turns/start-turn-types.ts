@@ -263,6 +263,7 @@ export type StartTurnHost = {
   mountPersonalMcp: any,
   mountPluginMcp: any,
   mountUserSandbox: any,
+  syncPluginsForTurn: any,
   myChromePromptFor: any,
   namedTeammates: any,
   namesEngine: any,

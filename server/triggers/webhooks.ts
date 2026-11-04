@@ -630,10 +630,11 @@ const TELEPHONY_PREVIEW: Record<string, string> = {
 
 /** What an event log row may show of a delivery. Bot email keeps no message
  * text there (the log is saved in webhooks.json): the sender's domain only.
- * Bot phone: the kind and the masked number only. */
+ * Bot phone: the kind and the human caller label (or the masked number). */
 function attemptPreview(payload: JsonValue, normalized?: NormalizedTriggerEvent): string {
   if (normalized?.source === "telephony") {
-    return `${TELEPHONY_PREVIEW[normalized.kind] ?? "Phone event from"} ${maskedCaller(normalized.fields.sender)}`;
+    const who = normalized.senderLabel?.trim() || maskedCaller(normalized.fields.sender);
+    return `${TELEPHONY_PREVIEW[normalized.kind] ?? "Phone event from"} ${who}`;
   }
   if (normalized?.source === "botmail") {
     const sender = normalized.fields.sender;

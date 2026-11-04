@@ -64,6 +64,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 
+import { formatPhone } from "../../shared/outbound-call.ts";
 import type { NormalizedTriggerEvent } from "../../shared/trigger-sources.ts";
 import type { ConsoleAssertion, ConsoleAssertionActor } from "../auth/oidc-rp.ts";
 import { AssertionReplayCache } from "../org/org-admin-routes.ts";
@@ -162,6 +163,11 @@ const telephonySchema = z.object({
     id: oneLine(1, 256),
     name: oneLine(0, 200),
   }).optional(),
+  /** Optional human label Perspicax resolved for the caller. Never an id;
+   * Sagax derives one from `person.name` or the number when this is absent. */
+  sender: z.object({
+    label: oneLine(1, 200).optional(),
+  }).optional(),
   content: z.object({
     trust: z.literal("caller"),
     text: printable(TELEPHONY_TEXT_MAX),
@@ -206,19 +212,42 @@ const TITLES: Record<string, string> = {
   "call.summary": "Call summary",
 };
 
+/** Human label for who called or texted: Perspicax's `sender.label`, else
+ * the verified person's name, else a formatted E.164 number, else the
+ * already-masked `***1234`. Never `person.id` or any other raw id. */
+export function telephonySenderLabel(event: Pick<TelephonyEvent, "from" | "person" | "sender">): string {
+  const fromSender = event.sender?.label?.trim();
+  if (fromSender) return fromSender;
+  const fromPerson = event.person?.name?.trim();
+  if (fromPerson) return fromPerson;
+  if (E164.test(event.from)) return formatPhone(event.from);
+  return event.from;
+}
+
 /** The normalized event every telephony trigger receives, or null for a
  * notice. The title holds no caller text (it is metadata); the short header
  * (event, numbers, PIN check, person) sits in the same text as the caller's
- * words, so it stays inside the fence as data. */
+ * words, so it stays inside the fence as data. `fields.sender` stays the
+ * E.164 number so filters keep matching; `senderLabel` is the human label
+ * for the bot turn, the event log and the UI. */
 export function telephonyTriggerEvent(event: TelephonyEvent): NormalizedTriggerEvent | null {
   const kind = TELEPHONY_WAKE_KINDS[event.event];
   if (!kind) return null;
+  const label = telephonySenderLabel(event);
+  const personName = event.person?.name?.trim();
   const header = [
     `Event: ${event.event}`,
+    `Caller: ${label}`,
     `From: ${event.from}`,
     `Line: ${event.line.number}`,
     `Caller authenticated: ${event.authenticated ? "yes" : "no"}`,
-    ...(event.person ? [`Person (as Perspicax identified the caller): ${event.person.name.trim() || "(no name)"}`] : []),
+    ...(personName && personName !== label
+      ? [`Person (as Perspicax identified the caller): ${personName}`]
+      : !event.authenticated && personName
+        ? [`Display name (unverified): ${personName}`]
+        : event.person && !personName
+          ? [`Person (as Perspicax identified the caller): (no name)`]
+          : []),
   ];
   const text = event.content?.text ?? "";
   return {
@@ -227,6 +256,7 @@ export function telephonyTriggerEvent(event: TelephonyEvent): NormalizedTriggerE
     title: TITLES[kind] ?? "Phone event",
     occurredAt: new Date(Date.parse(event.receivedAt)).toISOString(),
     fields: { sender: event.from },
+    senderLabel: label,
     text: `${header.join("\n")}\n\n${text}`,
     resource: event.eventId,
     directives: { thirdPartyCall: event.directives.thirdPartyCall, clientPhoneSource: event.directives.clientPhoneSource },
@@ -269,8 +299,9 @@ export interface TelephonyRouteDeps {
   /** The line owner texting their bot from their own verified number: a
    * turn of their conversation, answered by text. False: it could not
    * start, the text goes to the phone triggers as before. Absent: always
-   * the triggers. */
-  ownText?(input: { ownerPrincipalId: string; sub: string; botId: string; from: string; text: string }): Promise<boolean>;
+   * the triggers. `label` is the human caller label for message metadata
+   * and the UI (never a raw id). */
+  ownText?(input: { ownerPrincipalId: string; sub: string; botId: string; from: string; text: string; label: string }): Promise<boolean>;
   /** WebhookManager.ingest: throws an Error with `status` on a refusal. */
   ingest(triggerId: string, event: NormalizedTriggerEvent, dedupeKey: string): WebhookReceiveResult | null;
   record(row: TelephonyDeliveryRow): void;
@@ -435,7 +466,14 @@ export function createBotInboundTelephonyRoute(deps: TelephonyRouteDeps): (req: 
 
     // 2026-10-29: the person texting their own bot: their conversation
     if (deps.ownText && isOwnText({ event: event.event, authenticated: event.authenticated, personId: event.person?.id, sub: assertion.sub, text: event.content?.text })) {
-      const started = await deps.ownText({ ownerPrincipalId: owner.principalId, sub: assertion.sub, botId: bot.id, from: event.from, text: event.content!.text.trim() });
+      const started = await deps.ownText({
+        ownerPrincipalId: owner.principalId,
+        sub: assertion.sub,
+        botId: bot.id,
+        from: event.from,
+        text: event.content!.text.trim(),
+        label: telephonySenderLabel(event),
+      });
       if (started) {
         seen.add(seenKey, now());
         deps.record({

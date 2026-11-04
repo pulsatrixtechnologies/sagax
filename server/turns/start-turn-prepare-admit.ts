@@ -4,7 +4,10 @@ import { randomUUID } from "node:crypto";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState, PrepareResult } from "./start-turn-state.ts";
 
-export function createPrepareAdmitStartTurn(host: StartTurnHost) {
+export function createPrepareAdmitStartTurn(
+  host: StartTurnHost,
+  claim: (state: TurnState) => PrepareResult,
+) {
   const {
     IDENTITY,
     SMALL_TALK_TURN_NOTE,
@@ -379,6 +382,6 @@ export function createPrepareAdmitStartTurn(host: StartTurnHost) {
     state.line = { engine: state.connectorSwitch.engineLabel, connector: state.connectorSwitch.connector };
     store.appendMessage(state.threadId, { role: "bot", kind: "activity", tool: { name: `notice: ${connectorSwitchText(state.line)}`, ok: true, connectorSwitch: state.line } });
   }
-  return { kind: "continue" };
+  return claim(state);
   };
 }

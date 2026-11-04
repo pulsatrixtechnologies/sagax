@@ -44,8 +44,8 @@ describe("startTurn leaf modules (#1388 w4 step 3)", () => {
     }
     expect(src).toMatch(/createFinishStartTurn\(host\)/);
     expect(src).toMatch(/createStreamStartTurn\(host\)/);
-    expect(src).toMatch(/createPrepareValidateStartTurn\(host\)/);
-    expect(src).toMatch(/createPrepareAdmitStartTurn\(host\)/);
+    expect(src).toMatch(/createPrepareValidateStartTurn\(host, prepareAdmitStartTurn\)/);
+    expect(src).toMatch(/createPrepareAdmitStartTurn\(host, prepareClaimStartTurn\)/);
     expect(src).toMatch(/createPrepareClaimStartTurn\(host\)/);
     expect(src).toMatch(/createDispatchStartTurn\(host\)/);
     expect(src).toMatch(/createPromptStartTurn\(host\)/);
@@ -53,8 +53,8 @@ describe("startTurn leaf modules (#1388 w4 step 3)", () => {
     expect(src).toMatch(/await finishFinally\(state\)/);
     expect(src).toMatch(/await streamStartTurn\(state\)/);
     expect(src).toMatch(/await prepareValidateStartTurn\(state\)/);
-    expect(src).toMatch(/await prepareAdmitStartTurn\(state\)/);
-    expect(src).toMatch(/await prepareClaimStartTurn\(state\)/);
+    expect(src).not.toMatch(/await prepareAdmitStartTurn\(state\)/);
+    expect(src).not.toMatch(/await prepareClaimStartTurn\(state\)/);
     expect(src).toMatch(/await dispatchStartTurn\(state\)/);
     expect(src).toMatch(/createPromptStartTurn\(host\)/);
     expect(src).toMatch(/await promptStartTurn\(state\)/);

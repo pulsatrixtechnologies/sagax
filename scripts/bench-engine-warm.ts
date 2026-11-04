@@ -436,7 +436,7 @@ async function benchCodex(): Promise<EngineReport> {
     const bots = await (await fetch(`${url}/api/bots`, { headers: { origin: url } })).json() as { bots: Array<{ id: string; activeTaskId: string }> };
     const botId = bots.bots[0]?.id;
     if (!botId) throw new Error("no bot");
-    await runControlOmb(["set-model", "--bot", botId, "--instance", "codex", "--model", "gpt-5"], { env });
+    await runControlOmb(["set-model", "--bot", botId, "--instance", "codex", "--model", "gpt-fake-default"], { env });
     const threadId = bots.bots[0]!.activeTaskId;
     events = await openEvents(url);
     const warm: TurnSample[] = [];
@@ -450,7 +450,7 @@ async function benchCodex(): Promise<EngineReport> {
     const cold: TurnSample[] = [];
     for (let i = 0; i < COLD; i++) {
       const created = await runControlOmb(["new-bot", "--name", `ColdCodex${i}`], { env }) as { bot: { id: string; activeTaskId: string } };
-      await runControlOmb(["set-model", "--bot", created.bot.id, "--instance", "codex", "--model", "gpt-5"], { env });
+      await runControlOmb(["set-model", "--bot", created.bot.id, "--instance", "codex", "--model", "gpt-fake-default"], { env });
       const before = countLaunches(startupLog);
       cold.push(await sendAndMeasure({
         url, botId: created.bot.id, threadId: created.bot.activeTaskId, text: `cold turn ${i + 1}`, events, log,

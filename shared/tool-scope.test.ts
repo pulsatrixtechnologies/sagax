@@ -116,3 +116,11 @@ describe("per-bot tool selection", () => {
     expect(toolScopeWidens({ allow: null }, { allow: ["native:read"] })).toBe(true);
   });
 });
+
+describe("tool namespace of a long Perspicax profile server (#1935)", () => {
+  it("strips a 33 to 40 character server namespace from a tool name", async () => {
+    const { TOOL_NAMESPACE } = await import("./tool-surface");
+    expect("perspicax_read_only_dispatch_view__cw_psa_query".replace(TOOL_NAMESPACE, "")).toBe("cw_psa_query");
+    expect(`${"p".repeat(40)}__cw_psa_query`.replace(TOOL_NAMESPACE, "")).toBe("cw_psa_query");
+  });
+});

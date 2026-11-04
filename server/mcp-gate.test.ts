@@ -369,7 +369,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
   const PROFILE_UPSTREAM = `
 const { createInterface } = require("node:readline");
 const send = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\\n");
-const names = ["api_search", "api_describe", "api_result_query", "api_list", "cw_psa_query", "cw_psa_write", "cw_psa_action", "sentinelone_query",
+const names = ["api_search", "api_describe", "api_result_query", "api_list", "cw_psa_query", "cw_psa_write", "cw_psa_action", "backup_query",
   ...Array.from({ length: 14 }, (_, i) => "cw_psa_find_thing_" + i)];
 createInterface({ input: process.stdin }).on("line", (line) => {
   const msg = JSON.parse(line);
@@ -383,7 +383,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     start({}, { SAGAX_GATE_SEARCH: JSON.stringify({ pinned: ["api_describe", "api_result_query", "api_search"], pinnedSuffixes: ["_action", "_query", "_write"] }) }, PROFILE_UPSTREAM);
     send({ jsonrpc: "2.0", id: 1, method: "tools/list" });
     const listed = JSON.parse(await nextLine()).result.tools.map((tool: { name: string }) => tool.name);
-    expect(listed).toEqual(expect.arrayContaining(["api_search", "api_describe", "api_result_query", "cw_psa_query", "cw_psa_write", "cw_psa_action", "sentinelone_query", "search_tools", "describe_tool", "call_tool"]));
+    expect(listed).toEqual(expect.arrayContaining(["api_search", "api_describe", "api_result_query", "cw_psa_query", "cw_psa_write", "cw_psa_action", "backup_query", "search_tools", "describe_tool", "call_tool"]));
     expect(listed).not.toContain("cw_psa_find_thing_0");
     expect(listed).not.toContain("api_list");
     // a pinned tool runs by its own name; the rest stays behind call_tool

@@ -24,7 +24,7 @@ export const SCREEN_TOUCHING_TOOLS: ReadonlySet<string> = new Set([
 
 // Keep legacy MCP namespaces accepted; desktop server__tool names follow
 // MCP_NAME in mcp-registry.ts (lowercase letters, digits, underscores, hyphens).
-export const TOOL_NAMESPACE = /^(?:mcp__.+?|[a-z][a-z0-9_-]{0,31})__/;
+export const TOOL_NAMESPACE = /^(?:mcp__.+?|[a-z][a-z0-9_-]{0,39})__/;
 
 /** The same tool reaches the poke site as `mcp__computer__click`,
  * `computer__click`, bare `click`, or pi's `computer_click`. A single-underscore

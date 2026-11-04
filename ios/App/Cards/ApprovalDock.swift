@@ -191,7 +191,11 @@ struct ApprovalDock: View {
                             .disabled(answering)
                             .accessibilityIdentifier("approval-allow-read-only")
                         }
-                    }) : nil
+                    }) : nil,
+                    // toolApprovalView's summary: with no command or text to
+                    // show, the plain line of what the tool does
+                    summary: proposal || TeammateAsk.parse(card) != nil || Self.desktopDetail(card) != nil || (card.toolInput ?? "").isEmpty == false
+                        ? nil : DesktopApprovalLine.fallback(ApprovalRiskClassifier.risk(of: card))
                 )
                 if let ask = TeammateAsk.parse(card) {
                     let ink = ApprovalInk.of(theme, accent: theme.accent)

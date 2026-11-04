@@ -99,6 +99,8 @@ struct ChatView: View {
     @StateObject var finder = ChatFindModel()
     /// A room's composer hint: Jev routes an Auto room (`jevRoomRoutingOn`).
     @State var roomJevOn = false
+    /// The height of the top inset (header and banners), for DesktopBannerClip.
+    @State var desktopBannerTop: CGFloat = 0
     @StateObject var follow = BottomFollow()
     @StateObject var citations = CitationDrafts()
     @State var shareFile: ShareFile?
@@ -921,6 +923,12 @@ struct ChatView: View {
                         if let desktopRoom {
                             DesktopRoomBanners(room: desktopRoom)
                         }
+                        // ChatNotice: in the banner stack, under the header
+                        if let notice = desktopChat?.notice {
+                            DesktopChatNotice(notice: notice)
+                                .padding(.bottom, 8)
+                                .transition(.opacity)
+                        }
                         // A confidential thread's band: in the reserved
                         // inset, so the transcript never moves under it.
                         if ConfidentialBanner.shows(for: current) {
@@ -929,7 +937,15 @@ struct ChatView: View {
                         Color.clear.frame(height: (pinnedPreview == nil ? 0 : Self.pinnedBannerHeight)
                             + (callPillShown ? CallBarMetrics.inset(scale: callBarScale) : 0))
                     }
+                    .background(GeometryReader { proxy in
+                        Color.clear
+                            .onAppear { desktopBannerTop = proxy.size.height }
+                            .onValueChange(of: proxy.size.height) { desktopBannerTop = $0 }
+                    })
                 }
+                // a desktop banner (a notice, a group's band) is opaque: the
+                // transcript is cut under it rather than showing through
+                .modifier(DesktopBannerClip(top: desktopChat != nil && (desktopRoom != nil || desktopChat?.notice != nil) ? desktopBannerTop : 0))
                 // iPad desktop: an open find bar sits in the column's flow,
                 // so the transcript is cut under it (ChatView.tsx)
                 .modifier(DesktopFindClip(open: desktopChat != nil && finder.isOpen && session.surfaceGate.allows(.findInConversation)))
@@ -950,7 +966,7 @@ struct ChatView: View {
                         .padding(.top, Self.topBarHeight + 6)
                 }
                 .overlay(alignment: .bottom) {
-                    if !follow.following, !transcript.isEmpty {
+                    if !follow.following, !follow.held, !transcript.isEmpty {
                         if desktopChat != nil {
                             // JumpToLatestPill.tsx: 16 above the composer
                             DesktopJumpToLatestPill {

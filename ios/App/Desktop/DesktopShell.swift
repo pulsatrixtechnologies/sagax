@@ -505,11 +505,9 @@ struct DesktopContent: View {
             case .memory: AnyView(DesktopMemoryPage())
             }
         } else if let chat = model.selected {
+            // the notice is in the chat's own banner stack (DesktopChatChrome.notice)
             AnyView(DesktopChatColumn(chat: chat))
                 .id(chat.threadId)
-                .overlay(alignment: .top) {
-                    if let notice = model.notice { DesktopChatNotice(notice: notice).padding(.top, 54) }
-                }
         } else {
             ZStack {
                 DesktopAppGlow()

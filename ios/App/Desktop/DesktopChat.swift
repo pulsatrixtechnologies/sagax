@@ -28,6 +28,8 @@ struct DesktopChatChrome {
     var openEngines: () -> Void = {}
     /// `/loop status`: the Automations page (`showRoutines`, the list).
     var openRoutines: (String) -> Void = { _ in }
+    /// The in-app notice (ChatNotice in ChatView.tsx's banner stack).
+    var notice: DesktopNotice? = nil
 }
 
 private struct DesktopChatKey: EnvironmentKey {
@@ -132,7 +134,8 @@ struct DesktopChatColumn: View {
                 model.settingsSection = .engines
                 model.modal = .settings
             },
-            openRoutines: { _ in model.page = .automations }
+            openRoutines: { _ in model.page = .automations },
+            notice: model.notice
         ))
         return stack
     }
@@ -336,6 +339,26 @@ extension ChatView {
 /// Cuts the transcript under the open find bar: the header's 52 pt and
 /// the bar's 37, as the desktop's column lays the bar out before the
 /// scroll view (its header still floats over the glow above).
+/// The desktop's banner stack (`chat-banners pt-[52px]`, a group's band
+/// and notices) sits in the column's flow: the transcript starts under it
+/// and never shows through it. `top`: the stack's height, 0 without one.
+struct DesktopBannerClip: ViewModifier {
+    let top: CGFloat
+
+    func body(content: Content) -> some View {
+        if top > 0 {
+            content.mask(alignment: .top) {
+                VStack(spacing: 0) {
+                    Color.clear.frame(height: top)
+                    Color.black
+                }
+            }
+        } else {
+            content
+        }
+    }
+}
+
 struct DesktopFindClip: ViewModifier {
     let open: Bool
 
@@ -395,8 +418,13 @@ struct DesktopChatHeader: View {
         ZStack(alignment: .top) {
             Button(action: openProfile) {
                 HStack(spacing: 8) {
-                    ChatAvatarView(chat: chat, size: 24, state: MausState.forChat(chat, in: session.state), background: theme.chrome)
-                        .frame(width: 24, height: 24)
+                    if case let .room(room) = chat, room.peopleDm != true {
+                        // GroupAvatarStack (GroupPanel.tsx): the group's faces
+                        DesktopGroupAvatarStack(members: room.memberIds.compactMap { session.state.bot($0) }, size: 24)
+                    } else {
+                        ChatAvatarView(chat: chat, size: 24, state: MausState.forChat(chat, in: session.state), background: theme.chrome)
+                            .frame(width: 24, height: 24)
+                    }
                     Text(verbatim: PeopleDirectory.shared.name(chat, session: session))
                         .font(theme.font(14, .medium))
                         .foregroundStyle(theme.ink)
@@ -512,7 +540,7 @@ extension DesktopChatHeader {
             }
         }
         .padding(6)
-        .frame(width: 218, alignment: .leading)
+        .frame(width: 240, alignment: .leading)
         .background(theme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.border, lineWidth: 0.5))
         .fixedSize()
@@ -878,5 +906,46 @@ struct DesktopRoomBanners: View {
         guard draft != room.bulletin else { return }
         let text = draft
         Task { _ = await session.patchRoom(room, RoomPatch(bulletin: text)) }
+    }
+}
+
+// MARK: - A group's faces
+
+/// `GroupAvatarStack` (src/components/GroupPanel.tsx): up to three members'
+/// faces in one square. One face fills it; two sit at the top-left and the
+/// bottom-right at 62 % of the side; three at 56 %: top-left, right at 18 %
+/// down, and 22 % in at the bottom, each drawn over the one before.
+struct DesktopGroupAvatarStack: View {
+    let members: [Bot]
+    let size: CGFloat
+
+    var body: some View {
+        let shown = Array(members.prefix(3))
+        ZStack(alignment: .topLeading) {
+            if shown.count <= 1 {
+                if let bot = shown.first {
+                    BotMascotView(bot: bot, size: size, state: .happy, animated: false)
+                }
+            } else {
+                let face = (size * (shown.count == 2 ? 0.62 : 0.56)).rounded()
+                ForEach(Array(shown.enumerated()), id: \.element.id) { index, bot in
+                    BotMascotView(bot: bot, size: face, state: .happy, animated: false)
+                        .frame(width: face, height: face)
+                        .offset(Self.spot(index, count: shown.count, size: size, face: face))
+                }
+            }
+        }
+        .frame(width: size, height: size, alignment: .topLeading)
+        .accessibilityHidden(true)
+    }
+
+    /// The face's top-left corner in the square.
+    static func spot(_ index: Int, count: Int, size: CGFloat, face: CGFloat) -> CGSize {
+        if count == 2 { return index == 0 ? .zero : CGSize(width: size - face, height: size - face) }
+        switch index {
+        case 0: return .zero
+        case 1: return CGSize(width: size - face, height: size * 0.18)
+        default: return CGSize(width: size * 0.22, height: size - face)
+        }
     }
 }

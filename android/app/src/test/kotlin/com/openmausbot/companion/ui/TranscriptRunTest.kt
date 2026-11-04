@@ -188,6 +188,7 @@ class ChatActionsTest {
                 ChatActionId.FILES,
                 ChatActionId.NEW_TASK,
                 ChatActionId.TASKS,
+                ChatActionId.GROUP_INFO,
                 ChatActionId.SHARE_MARKDOWN,
                 ChatActionId.SHARE_JSON,
             ),
@@ -211,7 +212,13 @@ class ChatActionsTest {
     fun `a legacy room has no tasks, no computer and nothing to interrupt`() {
         val busyRoom = Chat.RoomChat(room().copy(busyBotId = "bot-1"))
         assertEquals(
-            listOf(ChatActionId.PHOTOS, ChatActionId.FILES, ChatActionId.SHARE_MARKDOWN, ChatActionId.SHARE_JSON),
+            listOf(
+                ChatActionId.PHOTOS,
+                ChatActionId.FILES,
+                ChatActionId.GROUP_INFO,
+                ChatActionId.SHARE_MARKDOWN,
+                ChatActionId.SHARE_JSON,
+            ),
             sheet(busyRoom).map { it.id },
         )
     }
@@ -226,6 +233,7 @@ class ChatActionsTest {
                 ChatActionId.FILES,
                 ChatActionId.NEW_TASK,
                 ChatActionId.TASKS,
+                ChatActionId.GROUP_INFO,
                 ChatActionId.SHARE_MARKDOWN,
                 ChatActionId.SHARE_JSON,
             ),

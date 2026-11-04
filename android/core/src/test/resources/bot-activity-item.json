@@ -1,0 +1,59 @@
+{
+  "item": {
+    "id": "thread:th-coding-1",
+    "kind": "session",
+    "botId": "wren",
+    "botName": "Wren",
+    "title": "Keep the board column order",
+    "retry": true,
+    "status": "running",
+    "startedAt": 1730000000000,
+    "updatedAt": 1730000005000,
+    "threadId": "th-coding-1",
+    "coding": true,
+    "canStop": true,
+    "currentStep": "pnpm test",
+    "code": {
+      "folder": "/workspace/bots/wren/dispatch-board",
+      "branch": "feat/column",
+      "repo": "acme/board",
+      "pullRequests": [
+        {
+          "number": 12,
+          "url": "https://github.com/acme/board/pull/12",
+          "action": "opened",
+          "branch": "feat/column",
+          "at": 1730000003000
+        }
+      ],
+      "branches": [],
+      "commits": [
+        {
+          "sha": "abcdef1234",
+          "message": "Keep column order",
+          "branch": "feat/column",
+          "pushed": true,
+          "at": 1730000002500
+        }
+      ]
+    },
+    "engine": {
+      "instanceId": "claude",
+      "model": "claude-sonnet"
+    },
+    "steps": [
+      {
+        "id": "step-1",
+        "name": "Bash",
+        "summary": "pnpm test",
+        "ok": true,
+        "at": 1730000004000,
+        "input": "{\"command\":\"pnpm test\"}"
+      }
+    ],
+    "stepsTruncated": false,
+    "files": ["src/board/column.ts"],
+    "children": [],
+    "note": null
+  }
+}

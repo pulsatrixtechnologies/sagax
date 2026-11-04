@@ -1554,6 +1554,79 @@ class Session(
         }
     }
 
+    /** `patchGroup`: true when the computer kept it. */
+    suspend fun patchRoom(room: Room, patch: RoomPatch): Boolean {
+        val activeClient = client ?: return false
+        return try {
+            val updated = activeClient.patchRoom(room.id, patch)
+            currentCoroutineContext().ensureActive()
+            _state.update { it.apply(Frame.Room(updated)) }
+            true
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            _actionError.value = error.message
+            false
+        }
+    }
+
+    /** `deleteGroup`: the room, its messages and threads go; its bots stay. */
+    suspend fun deleteRoom(room: Room): Boolean {
+        val activeClient = client ?: return false
+        return try {
+            activeClient.deleteRoom(room.id)
+            currentCoroutineContext().ensureActive()
+            _state.update { it.apply(Frame.RoomDeleted(room.id)) }
+            true
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            _actionError.value = error.message
+            false
+        }
+    }
+
+    /** #1480 `leaveGroup`: the person leaves; the room leaves this device. */
+    suspend fun leaveRoom(room: Room): Boolean {
+        val activeClient = client ?: return false
+        return try {
+            activeClient.leaveRoom(room.id)
+            currentCoroutineContext().ensureActive()
+            _state.update { it.apply(Frame.RoomDeleted(room.id)) }
+            true
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            _actionError.value = error.message
+            false
+        }
+    }
+
+    suspend fun loadGroupMemory(room: Room): GroupMemoryView? {
+        val activeClient = client ?: return null
+        return try {
+            activeClient.groupMemory(room.id)
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            _actionError.value = error.message
+            null
+        }
+    }
+
+    suspend fun saveGroupMemory(
+        room: Room,
+        text: String? = null,
+        expectedHash: String? = null,
+        enabled: Boolean? = null,
+    ): GroupMemoryView? {
+        val activeClient = client ?: return null
+        return try {
+            activeClient.putGroupMemory(room.id, text = text, expectedHash = expectedHash, enabled = enabled)
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            if (error is GroupMemoryConflict) throw error
+            _actionError.value = error.message
+            null
+        }
+    }
+
     /**
      * Create or extend a derived sidebar section in one server transaction.
      * The desktop has no standalone section resource yet, so we merge the
@@ -2179,6 +2252,133 @@ class Session(
             if (error is CancellationException) throw error
             if (!quiet && _connection.value?.id == connectionId) _actionError.value = error.message
             null
+        }
+    }
+
+    /** Quiet read of GET /api/bots/:id/activity. */
+    suspend fun loadBotActivity(botId: String, filter: String? = null, quiet: Boolean = true): BotActivityList? {
+        val activeClient = client ?: return null
+        val connectionId = _connection.value?.id
+        return try {
+            val list = activeClient.botActivity(botId, filter)
+            currentCoroutineContext().ensureActive()
+            list.takeIf { _connection.value?.id == connectionId }
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            if (!quiet && _connection.value?.id == connectionId) _actionError.value = error.message
+            null
+        }
+    }
+
+    /** Quiet read of GET /api/bots/:id/activity/item. */
+    suspend fun loadBotActivityItem(
+        botId: String,
+        itemId: String,
+        quiet: Boolean = true,
+    ): BotActivityDetail? {
+        val activeClient = client ?: return null
+        val connectionId = _connection.value?.id
+        return try {
+            val detail = activeClient.botActivityItem(botId, itemId)
+            currentCoroutineContext().ensureActive()
+            detail.takeIf { _connection.value?.id == connectionId }
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            if (!quiet && _connection.value?.id == connectionId) _actionError.value = error.message
+            null
+        }
+    }
+
+    /**
+     * Stop a coding task: cloud cancel, parallel stop, or interrupt, chosen
+     * from [itemId] and optional [detail]/[parallel] (CodingChat.tsx stop).
+     */
+    suspend fun stopCodingTask(
+        botId: String,
+        itemId: String,
+        detail: BotActivityDetail? = null,
+        quiet: Boolean = true,
+    ): Boolean {
+        val activeClient = client ?: return false
+        val connectionId = _connection.value?.id
+        return try {
+            val ids = codingChatItemIds(itemId)
+            when {
+                ids.cloudId != null -> activeClient.cancelCloudAgent(botId, ids.cloudId)
+                else -> {
+                    val threadId = detail?.threadId ?: ids.threadId ?: return false
+                    if (detail?.parallel == true) {
+                        activeClient.stopParallelTask(botId, threadId)
+                    } else {
+                        activeClient.interrupt(botId, threadId)
+                    }
+                }
+            }
+            currentCoroutineContext().ensureActive()
+            _connection.value?.id == connectionId
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            if (!quiet && _connection.value?.id == connectionId) _actionError.value = error.message
+            false
+        }
+    }
+
+    /** Side transcript for the coding chat: does not merge into the open chat. */
+    suspend fun loadCodingThread(threadId: String, limit: Int = 200): ThreadPage? {
+        val activeClient = client ?: return null
+        val connectionId = _connection.value?.id
+        return try {
+            val page = activeClient.messages(threadId, limit = limit)
+            currentCoroutineContext().ensureActive()
+            page.takeIf { _connection.value?.id == connectionId }
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            null
+        }
+    }
+
+    /** Older page of a coding side transcript. */
+    suspend fun loadCodingThreadOlder(threadId: String, before: String?): ThreadPage? {
+        val activeClient = client ?: return null
+        val connectionId = _connection.value?.id
+        return try {
+            val page = activeClient.messages(threadId, before = before, limit = 200)
+            currentCoroutineContext().ensureActive()
+            page.takeIf { _connection.value?.id == connectionId }
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            null
+        }
+    }
+
+    /**
+     * Follow-up into a coding task's thread. While the task runs the send
+     * steers (`busyMode: "steer"`), matching CodingChat.tsx.
+     */
+    suspend fun sendCodingFollowUp(
+        botId: String,
+        threadId: String,
+        text: String,
+        steer: Boolean,
+        quiet: Boolean = true,
+    ): Boolean {
+        val activeClient = client ?: return false
+        val connectionId = _connection.value?.id
+        val words = text.trim()
+        if (words.isEmpty()) return false
+        return try {
+            activeClient.sendToBot(
+                botId = botId,
+                text = words,
+                threadId = threadId,
+                busyMode = if (steer) "steer" else null,
+            )
+            currentCoroutineContext().ensureActive()
+            _connection.value?.id == connectionId
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            if (!quiet && _connection.value?.id == connectionId) _actionError.value = error.message
+            false
         }
     }
 

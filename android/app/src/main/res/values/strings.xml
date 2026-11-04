@@ -772,4 +772,23 @@
     <string name="mobile_density_compact">Compact</string>
     <string name="mobile_density_comfortable_caption">Larger faces, with each bot\'s latest message under its name.</string>
     <string name="mobile_density_compact_caption">One line per bot. Bots with more than one active thread show how many; tap the number to list them.</string>
+
+    <string name="mobile_coding_title">Coding</string>
+    <string name="mobile_coding_loading">Loading activity…</string>
+    <string name="mobile_coding_empty">No coding jobs in the last 7 days.</string>
+    <string name="mobile_coding_continue">Continue</string>
+    <string name="mobile_coding_stop">Stop</string>
+    <string name="mobile_coding_close">Close chat</string>
+    <string name="mobile_group_panel_done">Done</string>
+    <string name="mobile_group_title">Group</string>
+    <string name="mobile_group_action_subtitle">Members, instructions, memory and computer</string>
+    <string name="mobile_group_tab_details">Details</string>
+    <string name="mobile_group_tab_members">Members</string>
+    <string name="mobile_group_tab_instructions">Instructions</string>
+    <string name="mobile_group_tab_memory">Memory</string>
+    <string name="mobile_group_tab_library">Library</string>
+    <string name="mobile_group_tab_computer">Computer</string>
+    <string name="mobile_group_owner_only">Only the group\'s owner can change these settings.</string>
+    <string name="mobile_group_leave">Leave group</string>
 </resources>
+

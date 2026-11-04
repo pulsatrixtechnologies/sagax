@@ -379,7 +379,8 @@ struct AutomationsWeekView: View {
             .padding(.top, 8)
             DesktopMiniMonth(day: $day)
                 .padding(12)
-            Rectangle().fill(theme.hairline.opacity(0.4)).frame(height: 0.5).padding(.horizontal, 16)
+            // `mx-4 border-t border-hairline/40`
+            Rectangle().fill(theme.hairline.opacity(0.4)).frame(height: 1).padding(.horizontal, 16)
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     DesktopIconView(icon: .calendarClock, size: 13)
@@ -397,7 +398,8 @@ struct AutomationsWeekView: View {
                         ForEach(upcoming) { item in
                             Button { onAction(.open, item) } label: {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(verbatim: item.name).font(theme.font(12.5, .medium)).foregroundStyle(theme.ink).lineLimit(1)
+                                    // RoutineList variant "upcoming": 13/18, the when line 13/18 secondary
+                                    Text(verbatim: item.name).font(theme.font(13)).foregroundStyle(theme.ink).lineLimit(1)
                                     HStack(spacing: 4) {
                                         if let bot = item.botId.flatMap({ id in bots.first { $0.id == id } }) {
                                             BotMascotView(bot: bot, size: 14).frame(width: 14, height: 14)
@@ -405,7 +407,7 @@ struct AutomationsWeekView: View {
                                         }
                                         Text(verbatim: "· ") + Self.whenText(item.date)
                                     }
-                                    .font(theme.font(11)).foregroundStyle(theme.inkSecondary).lineLimit(1)
+                                    .font(theme.font(13)).foregroundStyle(theme.inkSecondary).lineLimit(1)
                                 }
                                 .padding(.horizontal, 4)
                                 .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)

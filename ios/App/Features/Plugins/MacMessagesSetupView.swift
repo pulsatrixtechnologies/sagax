@@ -358,8 +358,57 @@ struct MacAppsInstalledSection: View {
     let push: (ConnectAppsRoute) -> Void
     @State private var status: MessagesSetupStatus?
     @EnvironmentObject private var session: Session
+    @Environment(\.capabilitiesDesktop) private var desktop
+    @Environment(\.desktopTheme) private var theme
 
     var body: some View {
+        if desktop { desktopBody } else { phoneBody }
+    }
+
+    /// MacAppsView.tsx `MacAppsInstalledSection`: "This Mac" 13 semibold,
+    /// See all in the accent's text colour, Messages in a rounded-2xl card
+    /// (a border, the card's fill), its 32 pt accent tile.
+    private var desktopBody: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("This Mac").font(theme.font(13, .semibold)).foregroundStyle(theme.ink)
+                Spacer()
+                Button { push(.mac) } label: {
+                    Text("See all").font(theme.font(12, .medium)).foregroundStyle(theme.accentText)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("connect-apps-mac-see-all")
+            }
+            Button { push(.macMessages) } label: {
+                HStack(spacing: 12) {
+                    DesktopIconView(icon: .messageSquare, size: 16)
+                        .foregroundStyle(theme.accent)
+                        .frame(width: 32, height: 32)
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.accent.opacity(0.15)))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Messages").font(theme.font(13, .medium)).foregroundStyle(theme.ink).lineLimit(1)
+                        Text(verbatim: MacMessagesCopy.rowSubtitle(status)).font(theme.font(11.5)).foregroundStyle(theme.inkSecondary).lineLimit(1)
+                    }
+                    Spacer(minLength: 8)
+                    DesktopIconView(icon: .chevronRight, size: 15).foregroundStyle(theme.inkSecondary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(theme.card))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("connect-apps-installed-mac-messages")
+        }
+        .padding(.top, 16)
+        .padding(.bottom, 8)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .task { await refresh() }
+    }
+
+    private var phoneBody: some View {
         Section {
             Button { push(.macMessages) } label: {
                 HStack(spacing: 12) {

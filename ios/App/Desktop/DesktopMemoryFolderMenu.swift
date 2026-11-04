@@ -23,6 +23,7 @@
 //     }
 import CompanionCore
 import SwiftUI
+import UIKit
 
 /// What the hint of a row shows, for a link.
 struct DesktopMemoryLinkHint: View {
@@ -50,6 +51,14 @@ struct DesktopMemoryLinkMark: View {
     @EnvironmentObject private var session: Session
     let bot: LinkBot
 
+    /// `relativeLuminance(...) < 0.035`.
+    static func dark(_ name: String) -> Bool {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(MausPalette.color(name)).getRed(&r, green: &g, blue: &b, alpha: &a)
+        func channel(_ c: CGFloat) -> CGFloat { c <= 0.03928 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
+        return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b) < 0.035
+    }
+
     var body: some View {
         Group {
             if bot.avatarUrl != nil, bot.avatarCrop != "mascot", let full = session.state.bot(bot.id) {
@@ -57,6 +66,8 @@ struct DesktopMemoryLinkMark: View {
             } else {
                 Circle()
                     .fill(MausPalette.color(bot.color ?? "green"))
+                    // `swatchStyle`: a dark colour keeps an inset 1.5 ring of white at 32 %
+                    .overlay(Circle().strokeBorder(Color.white.opacity(Self.dark(bot.color ?? "green") ? 0.32 : 0), lineWidth: 1.5))
                     .frame(width: 10, height: 10)
                     .padding(.horizontal, 2)
             }

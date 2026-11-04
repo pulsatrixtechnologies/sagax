@@ -796,6 +796,16 @@
         }
       }
     },
+    "%@ did not answer when its connectors were read.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ n'a pas répondu pendant la lecture de ses connecteurs."
+          }
+        }
+      }
+    },
     "%@ failing": {
       "localizations": {
         "fr": {
@@ -20736,6 +20746,16 @@
         }
       }
     },
+    "Connectors of your %@ account": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecteurs de votre compte %@"
+          }
+        }
+      }
+    },
     "Constellation": {
       "localizations": {
         "fr": {
@@ -33166,6 +33186,16 @@
         }
       }
     },
+    "Grok's connectors reach bots on an organization server only, and only on the person's own Grok sign-in.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les connecteurs de Grok n'atteignent les bots que sur un serveur d'organisation, et seulement avec le compte Grok de la personne elle-même."
+          }
+        }
+      }
+    },
     "Grok: its connectors do not reach bots in Sagax.": {
       "localizations": {
         "en": {
@@ -41486,6 +41516,22 @@
         }
       }
     },
+    "Manage on %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gérer sur %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gerenciar no %@"
+          }
+        }
+      }
+    },
     "Manage on claude.ai": {
       "localizations": {
         "en": {
@@ -45898,6 +45944,26 @@
         }
       }
     },
+    "No %@ account is connected. Connect one to use its connectors (mail, calendar, Teams) in your bots.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun compte %@ n'est connecté. Connectez-en un pour utiliser ses connecteurs (courriel, calendrier, Teams) dans vos bots."
+          }
+        }
+      }
+    },
+    "No %@ engine is set up yet. Add one to use the connectors of your %@ account.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun moteur %@ n'est encore configuré. Ajoutez-en un pour utiliser les connecteurs de votre compte %@."
+          }
+        }
+      }
+    },
     "No Claude engine on this server.": {
       "localizations": {
         "en": {
@@ -49642,6 +49708,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ainda não arrumado."
+          }
+        }
+      }
+    },
+    "Not verifiable: Grok catalog": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non vérifiable : catalogue Grok"
           }
         }
       }
@@ -60402,6 +60478,16 @@
         }
       }
     },
+    "Reading the connectors of your %@ account…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lecture des connecteurs de votre compte %@…"
+          }
+        }
+      }
+    },
     "Reading the vault…": {
       "localizations": {
         "fr": {
@@ -67979,7 +68065,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Voir tout"
+            "value": "Tout voir"
           }
         }
       }
@@ -76756,6 +76842,16 @@
         }
       }
     },
+    "The %@ sign-in on this computer belongs to its owner: its connectors are theirs, not yours.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La connexion %@ de cet ordinateur appartient à son propriétaire : ses connecteurs sont les siens, pas les vôtres."
+          }
+        }
+      }
+    },
     "The MCP servers on the computer, for every compatible bot. Add or change them in Sagax on the computer.": {
       "localizations": {
         "en": {
@@ -80108,6 +80204,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pensando…"
+          }
+        }
+      }
+    },
+    "This %@ engine runs on an API key. Connectors come only with a %@ subscription sign-in.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce moteur %@ utilise une clé API. Les connecteurs viennent seulement avec une connexion par abonnement %@."
           }
         }
       }
@@ -91234,6 +91340,16 @@
         }
       }
     },
+    "You are not signed in to %@ with your own account here. Sign in to see and use its connectors.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vous n'êtes pas connecté à %@ avec votre propre compte ici. Connectez-vous pour voir et utiliser ses connecteurs."
+          }
+        }
+      }
+    },
     "You are responsible for how your bots use your phone line.": {
       "localizations": {
         "en": {
@@ -91776,6 +91892,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Você está offline."
+          }
+        }
+      }
+    },
+    "Your %@ account has no connector yet. Add one on %@.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre compte %@ n'a encore aucun connecteur. Ajoutez-en un sur %@."
           }
         }
       }
@@ -92604,6 +92730,16 @@
         }
       }
     },
+    "Your organization restricts MCP servers on this computer, so your %@ connectors are not used here.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre organisation restreint les serveurs MCP sur cet ordinateur : vos connecteurs %@ n'y sont pas utilisés."
+          }
+        }
+      }
+    },
     "Your organization restricts MCP servers on this computer.": {
       "localizations": {
         "en": {
@@ -92776,6 +92912,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Seu bot principal é seu contato principal: ele coordena seus outros bots."
+          }
+        }
+      }
+    },
+    "Your provider accounts serve all your bots, whatever the install scope.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vos comptes de fournisseurs servent tous vos bots, quelle que soit la portée d'installation."
           }
         }
       }

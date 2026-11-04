@@ -216,12 +216,12 @@ struct DesktopNewBotModal: View {
                 .foregroundStyle(theme.inkSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(alignment: .top, spacing: 12) {
-                modeCard(icon: "bubble.left.and.bubble.right", title: "Guided with my bot",
+                modeCard(icon: .messagesSquare, title: "Guided with my bot",
                          body: guideBody, id: "guided") {
                     close()
                     BotWizardPresenter.shared.open(startMode: .guided)
                 }
-                modeCard(icon: "list.clipboard", title: "I'll fill it in myself",
+                modeCard(icon: .clipboardList, title: "I'll fill it in myself",
                          body: Text("The same steps as a form, page by page, with suggestions ready to pick."), id: "manual") {
                     close()
                     BotWizardPresenter.shared.open(startMode: .manual)
@@ -244,16 +244,16 @@ struct DesktopNewBotModal: View {
         return Text("Your Bot designer asks you the questions and fills in each step live. It is created for you, as your own bot, the moment you choose this.")
     }
 
-    private func modeCard(icon: String, title: LocalizedStringKey, body: Text, id: String, action: @escaping () -> Void) -> some View {
+    private func modeCard(icon: DesktopIcon, title: LocalizedStringKey, body: Text, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 18))
+                DesktopIconView(icon: icon, size: 22)
                     .foregroundStyle(theme.accent)
                     .frame(width: 44, height: 44)
                     .background(theme.accent.opacity(0.15), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                Text(title).font(theme.font(16, .semibold)).foregroundStyle(theme.ink)
-                body.font(theme.font(13)).lineSpacing(5).foregroundStyle(theme.inkSecondary)
+                Text(title).font(theme.font(16, .bold)).foregroundStyle(theme.ink)
+                // 13 px, leading-relaxed (21)
+                body.font(theme.font(13)).lineSpacing(6).foregroundStyle(theme.ink.opacity(0.72))
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
             }

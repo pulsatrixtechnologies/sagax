@@ -7,6 +7,15 @@
 // 44rem (704 pt) the page's controls take a second line.
 import SwiftUI
 
+/// The Automations page column's width (the iPad desktop shell measures it).
+private struct AutomationsPageWidthKey: EnvironmentKey { static let defaultValue: CGFloat = 1100 }
+extension EnvironmentValues {
+    var automationsPageWidth: CGFloat {
+        get { self[AutomationsPageWidthKey.self] }
+        set { self[AutomationsPageWidthKey.self] = newValue }
+    }
+}
+
 /// What the header's width allows (`@container/page-header`).
 struct DesktopHeaderFit: Equatable {
     /// Under 60rem: icon-only segment and Filters.
@@ -22,7 +31,7 @@ struct DesktopHeaderFit: Equatable {
     init() {}
 }
 
-private struct DesktopHeaderWidthKey: PreferenceKey {
+struct DesktopHeaderWidthKey: PreferenceKey {
     static let defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
@@ -35,7 +44,8 @@ struct DesktopContentPageHeader<Primary: View, Actions: View>: View {
     var section: LocalizedStringKey?
     @ViewBuilder var primary: (DesktopHeaderFit) -> Primary
     @ViewBuilder var actions: (DesktopHeaderFit) -> Actions
-    @State private var width: CGFloat = 1100
+    /// The column's width, measured by the page around the header.
+    var width: CGFloat = 1100
 
     var body: some View {
         let fit = DesktopHeaderFit(width: width)
@@ -54,12 +64,7 @@ struct DesktopContentPageHeader<Primary: View, Actions: View>: View {
         .padding(.leading, 24)
         .padding(.trailing, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(GeometryReader { proxy in
-            Color.clear.preference(key: DesktopHeaderWidthKey.self, value: proxy.size.width)
-        })
-        .onPreferenceChange(DesktopHeaderWidthKey.self) { value in
-            if value > 0 { width = value }
-        }
+
         .background(theme.app)
         .overlay(alignment: .bottom) { Rectangle().fill(theme.hairline.opacity(0.5)).frame(height: 0.5) }
         .accessibilityElement(children: .contain)

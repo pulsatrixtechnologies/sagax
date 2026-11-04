@@ -39,6 +39,10 @@ struct TasksRoutinesView: View {
     @State private var panelRoutine: Routine?
     /// The paused list (the ☰ menu's Paused routines) in the side panel.
     @State private var pausedOpen = false
+    /// The page column's width: the header folds as the desktop's does
+    /// (the side panel, 476 pt, takes its share).
+    @Environment(\.automationsPageWidth) private var columnWidth
+    private var pageWidth: CGFloat { columnWidth - (desktop && (pausedOpen || panelRoutine != nil) ? 476.5 : 0) }
     /// The run logs' bot (RoutineLogs.tsx keeps it in the logs).
     @State private var logBotId: String?
     @State private var confirmClearLogs = false
@@ -244,8 +248,15 @@ struct TasksRoutinesView: View {
         DesktopContentPageHeader(
             icon: .calendarDays,
             title: "Automations",
-            section: section == .logs ? "Run logs" : nil
-        ) { fit in
+            section: section == .logs ? "Run logs" : nil,
+            primary: { fit in AnyView(desktopPrimary(fit)) },
+            actions: { fit in AnyView(desktopActions(fit)) },
+            width: pageWidth
+        )
+    }
+
+    @ViewBuilder
+    private func desktopPrimary(_ fit: DesktopHeaderFit) -> some View {
             if section == .routines {
                 DesktopPageSegment(
                     label: "Schedule view",
@@ -265,7 +276,10 @@ struct TasksRoutinesView: View {
                     )
                 }
             }
-        } actions: { fit in
+    }
+
+    @ViewBuilder
+    private func desktopActions(_ fit: DesktopHeaderFit) -> some View {
             if seenAllowed && unseenFailures > 0 {
                 Button {
                     section = .logs
@@ -355,7 +369,6 @@ struct TasksRoutinesView: View {
             }
             .accessibilityLabel(Text("Create an automation"))
             .accessibilityIdentifier("automations-new")
-        }
     }
 
     /// The paused list (`PausedList`) in the side panel: each routine, its

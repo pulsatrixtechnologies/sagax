@@ -78,6 +78,9 @@ struct AutomationsWeekView: View {
                 }
             }
             .background(theme.app)
+            // the grid runs to the window's foot, as the sidebar does
+            .ignoresSafeArea(.container, edges: .bottom)
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("automations-week")
         } else {
             phoneBody

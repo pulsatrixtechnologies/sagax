@@ -604,13 +604,17 @@ struct DesktopAutomationsPage: View {
     var body: some View {
         // its navigation bar is the page's header: the title and the
         // routines' own actions (New, the view pickers)
-        NavigationStack {
-            TasksRoutinesView(page: .automations)
-                .navigationBarTitleDisplayMode(.inline)
-                // the desktop's week, not the phone's day
-                .environment(\.automationsGridDays, 7)
-                // lot 4: the desktop's header and right column
-                .environment(\.automationsDesktop, true)
+        // the column's width: the page header folds as the desktop's does
+        GeometryReader { proxy in
+            NavigationStack {
+                TasksRoutinesView(page: .automations)
+                    .navigationBarTitleDisplayMode(.inline)
+                    // the desktop's week, not the phone's day
+                    .environment(\.automationsGridDays, 7)
+                    // lot 4: the desktop's header and right column
+                    .environment(\.automationsDesktop, true)
+                    .environment(\.automationsPageWidth, proxy.size.width)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(theme.app)

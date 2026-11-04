@@ -31,6 +31,7 @@ export type ClaudeTurnCtx = SendTurnDeps & {
   newSessionId: string | null;
   requestedMode: string;
   autoAllowlist: boolean;
+  fullAllowlist: boolean;
   permissionMode: string;
   controlsHost: boolean;
   args: string[];

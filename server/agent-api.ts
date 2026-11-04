@@ -32,6 +32,22 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import { parseWakePriority, planPriorityWake, releasePriorityNow, wakeSenderId, type PriorityDelivery } from "./proactive/priority-wake.ts";
 import { TEMP_AGENT_IDLE_HOURS_MAX } from "./temporary-agents.ts";
+import { AGENT_SETTINGS_FIELDS } from "./fleet-agent-settings.ts";
+
+export {
+  AGENT_PRIMARY_FIELD,
+  AGENT_SETTINGS_FIELDS,
+  RUNTIME_SETTINGS_FIELDS,
+  formatEngineCandidates,
+  isAgentSettingsField,
+  isRuntimeSettingsField,
+  partitionAgentSettings,
+  plainFieldRefusalReason,
+  resolveEngineInstance,
+  type EngineCandidate,
+  type ResolveEngineResult,
+  type RuntimeSettingsField,
+} from "./fleet-agent-settings.ts";
 
 export const AGENT_TOOL_NAMES = [
   "list_agents",
@@ -257,14 +273,10 @@ export interface AgentModelChoice {
   auto?: boolean;
 }
 
-/** Fields update_agent_settings may send (Edit bot window / MEMBER_BOT_FIELDS
- * without modelSelection, which is update_agent_model). */
-export const AGENT_SETTINGS_FIELDS = [
-  "name", "title", "description", "soul", "notifications", "avatarUrl", "requireAvailableModel",
-  "unread", "pinned", "pinnedMessageId", "color", "mascotExpression", "mascotBody", "mascotSkin", "mascotLook",
-  "avatarCrop", "avatarZoom", "avatarFocusX", "avatarFocusY",
-] as const;
-export type AgentSettingsField = (typeof AGENT_SETTINGS_FIELDS)[number];
+/** Fields update_agent_settings may send: derived in fleet-agent-settings.ts
+ * from MEMBER_BOT_FIELDS + BOT_FIELD_PERMISSIONS + runtime-settings + primary.
+ * modelSelection stays on update_agent_model. */
+export type AgentSettingsField = string;
 
 export interface AgentSettingsResult {
   changed: string[];
@@ -1387,10 +1399,10 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
     async update_agent_settings(caller, args) {
       const bad = onlyKeys(args, ["agent_id", ...AGENT_SETTINGS_FIELDS]);
       if (bad) {
-        // Name the refused key plainly when it is an Edit-bot field we do not take here.
+        // Name the refused key plainly when it is a model field (wrong tool).
         const keys = args && typeof args === "object" && !Array.isArray(args) ? Object.keys(args as object) : [];
-        const unknown = keys.find((key) => key !== "agent_id" && !(AGENT_SETTINGS_FIELDS as readonly string[]).includes(key));
-        if (unknown === "modelSelection" || unknown === "model" || unknown === "instance_id" || unknown === "engine") {
+        const unknown = keys.find((key) => key !== "agent_id" && !AGENT_SETTINGS_FIELDS.includes(key));
+        if (unknown === "modelSelection" || unknown === "model" || unknown === "instance_id" || unknown === "instance" || unknown === "engine" || unknown === "effort" || unknown === "auto") {
           return refuse(400, "bad_request", "Model changes use update_agent_model, not update_agent_settings.");
         }
         return bad;
@@ -1407,7 +1419,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         if (Object.hasOwn(args, key)) fields[key] = args[key];
       }
       if (!Object.keys(fields).length) {
-        return refuse(400, "bad_request", `Pass at least one editable field (${AGENT_SETTINGS_FIELDS.join(", ")}).`);
+        return refuse(400, "bad_request", "Pass at least one Edit bot field (name, approval level, tools, computer, runtime, primary, …). Call get_agent first; the same checks as the Sagax Edit bot window apply.");
       }
       const updated = await deps.updateSettings(caller, agentId, fields);
       if (isRefusal(updated)) return updated;

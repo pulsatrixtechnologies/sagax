@@ -1,6 +1,7 @@
 // Agents tool family: Agent-to-agent API and run_with_engine.
 // Never import server/index.ts.
 import { agentToolAnnotations } from "../../tools/agent-tool-policy.ts";
+import { AGENT_SETTINGS_FIELDS } from "../../fleet-agent-settings.ts";
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
 
@@ -9,6 +10,11 @@ import type { Json } from "../agents-client.ts";
  * lands in that agent's single chat with its person (#1170), the sender named. */
 const AGENT_ID = { type: "string", description: "The agent's id, exactly as list_agents or find_agents returned it." } as const;
 const AGENT_CURSOR = { type: "string", description: "next_cursor of the previous page: entries before it." } as const;
+
+/** Loose property for every Edit-bot / runtime / primary field the agent API accepts. */
+const AGENT_SETTINGS_PROPERTIES: Record<string, Record<string, unknown>> = Object.fromEntries(
+  AGENT_SETTINGS_FIELDS.map((field) => [field, { description: `Edit bot field "${field}" (same value as PATCH /api/bots/:id or runtime-settings / primary).` }]),
+);
 export const AGENT_API_TOOLS = [
   {
     name: "list_agents",
@@ -129,31 +135,13 @@ export const AGENT_API_TOOLS = [
   },
   {
     name: "update_agent_settings",
-    description: "Partial patch of an agent's Edit bot fields (name, title, description, soul, notifications, avatarUrl, requireAvailableModel, look fields). Same rights as the UI. Returns changed and refused (each with a plain reason). Model changes use update_agent_model.",
+    description: "Partial patch of an agent's Edit bot fields: identity and look, permission-gated settings (approval level, tools, computer, workspace, visibility, section, cwd, voice notes, …), runtime settings (maxConcurrentThreads and the rest), and primary (true/false for the Primary Bot switch). Same rights as the Sagax Edit bot window: the server checks each field. Returns changed and refused (each with a plain reason). Model changes use update_agent_model.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
       properties: {
         agent_id: AGENT_ID,
-        name: { type: "string", minLength: 1, maxLength: 80 },
-        title: { type: "string", maxLength: 120 },
-        description: { type: "string", maxLength: 1000 },
-        soul: { type: "string", maxLength: 24000, description: "Standing instructions." },
-        notifications: {},
-        avatarUrl: { type: ["string", "null"] },
-        requireAvailableModel: { type: "boolean" },
-        unread: { type: "boolean" },
-        pinned: { type: "boolean" },
-        pinnedMessageId: { type: ["string", "null"] },
-        color: { type: "string" },
-        mascotExpression: { type: "string" },
-        mascotBody: { type: "string" },
-        mascotSkin: { type: "string" },
-        mascotLook: {},
-        avatarCrop: {},
-        avatarZoom: { type: "number" },
-        avatarFocusX: { type: "number" },
-        avatarFocusY: { type: "number" },
+        ...AGENT_SETTINGS_PROPERTIES,
       },
       required: ["agent_id"],
     },

@@ -2414,7 +2414,11 @@ import {
 import {
   agentPromptWithFiles,
   createAgentApi,
+  formatEngineCandidates,
+  partitionAgentSettings,
+  plainFieldRefusalReason,
   refuse as agentRefuse,
+  resolveEngineInstance,
   SEND_FILE_MAX_BYTES as AGENT_SEND_FILE_MAX_BYTES,
   type AgentCaller,
   type AgentScope,
@@ -42329,16 +42333,20 @@ const agentApi = createAgentApi({
     const current = bot.modelSelection;
     let instanceId = selection.instanceId?.trim() || current?.instanceId || "";
     let model = selection.model?.trim() || current?.model || "";
-    // Resolve a short engine family name (claude, grok, …) to an instance id.
+    // Exact id first; unique fuzzy match; several matches refuse with the list.
     if (selection.instanceId && !registry.get(instanceId)) {
-      const needle = selection.instanceId.trim().toLowerCase();
-      const match = registry.instances().find((entry) => {
-        const id = entry.instanceId.toLowerCase();
-        const kind = String(entry.driverKind ?? "").toLowerCase();
-        const name = String(entry.displayName ?? "").toLowerCase();
-        return id === needle || kind === needle || kind.startsWith(needle) || name === needle || name.includes(needle);
-      });
-      if (match) instanceId = match.instanceId;
+      const candidates = registry.instances().map((entry) => ({
+        instanceId: entry.instanceId,
+        driverKind: entry.driverKind ?? null,
+        displayName: entry.displayName ?? null,
+      }));
+      const resolved = resolveEngineInstance(selection.instanceId, candidates);
+      if (resolved.ok) {
+        instanceId = resolved.instanceId;
+      } else if (resolved.reason === "ambiguous") {
+        return agentRefuse(400, "ambiguous_engine", `Several engines match "${selection.instanceId.trim()}": ${formatEngineCandidates(resolved.candidates)}. Pass the exact instance_id from list_agent_models.`);
+      }
+      // unknown: keep the needle; PATCH / model check names valid choices below
     }
     if (!instanceId || (!model && selection.auto !== true)) {
       const choices = await (async () => {
@@ -42390,37 +42398,72 @@ const agentApi = createAgentApi({
     if (caller.kind !== "person") {
       return agentRefuse(403, "forbidden_caller", "update_agent_settings is for a person's AI client. A bot uses propose_team_setup or asks the person in Sagax.");
     }
+    const { patch, runtime, primary, primaryInvalid } = partitionAgentSettings(fields);
     const changed: string[] = [];
     const refused: Array<{ field: string; reason: string }> = [];
-    // Try the whole patch first (same as the Edit bot save). On a field
-    // refusal, retry one field at a time so the answer names what landed.
-    const whole = await performAsMember(memberForAgentCaller(caller), {
-      method: "PATCH",
-      path: `/api/bots/${encodeURIComponent(agentId)}`,
-      body: fields,
-    });
-    if (whole.status >= 200 && whole.status < 300) {
-      return { changed: Object.keys(fields), refused: [], agent: agentSummary(store.bot(agentId) ?? bot) };
+    const member = memberForAgentCaller(caller);
+    const refuseOne = (field: string, body: unknown) => {
+      const record = body && typeof body === "object" ? body as { error?: unknown; message?: unknown; permission?: unknown } : {};
+      refused.push({ field, reason: plainFieldRefusalReason(field, record) });
+    };
+
+    if (primaryInvalid) {
+      refused.push({ field: "primary", reason: "primary is true (make Primary Bot) or false (clear it)." });
     }
-    for (const [field, value] of Object.entries(fields)) {
-      const one = await performAsMember(memberForAgentCaller(caller), {
+
+    // Primary Bot switch: same routes as the Edit bot window.
+    if (primary === true) {
+      const made = await performAsMember(member, { method: "POST", path: `/api/bots/${encodeURIComponent(agentId)}/primary`, body: {} });
+      if (made.status >= 200 && made.status < 300) changed.push("primary");
+      else refuseOne("primary", made.body);
+    } else if (primary === false) {
+      const cleared = await performAsMember(member, { method: "DELETE", path: `/api/bots/${encodeURIComponent(agentId)}/primary` });
+      if (cleared.status >= 200 && cleared.status < 300) changed.push("primary");
+      else refuseOne("primary", cleared.body);
+    }
+
+    // Runtime panel: PATCH /api/bots/:id/runtime-settings.
+    if (Object.keys(runtime).length) {
+      const runtimePatch = await performAsMember(member, {
         method: "PATCH",
-        path: `/api/bots/${encodeURIComponent(agentId)}`,
-        body: { [field]: value },
+        path: `/api/bots/${encodeURIComponent(agentId)}/runtime-settings`,
+        body: runtime,
       });
-      if (one.status >= 200 && one.status < 300) {
-        changed.push(field);
+      if (runtimePatch.status >= 200 && runtimePatch.status < 300) {
+        changed.push(...Object.keys(runtime));
       } else {
-        refused.push({
-          field,
-          reason: String((one.body as { error?: unknown; message?: unknown })?.error
-            ?? (one.body as { message?: unknown })?.message
-            ?? `Field ${field} was refused.`),
-        });
+        // Name each runtime field when the whole patch is refused.
+        for (const field of Object.keys(runtime)) refuseOne(field, runtimePatch.body);
       }
     }
+
+    // Edit bot PATCH /api/bots/:id: try the whole patch, then one field at a time.
+    if (Object.keys(patch).length) {
+      const whole = await performAsMember(member, {
+        method: "PATCH",
+        path: `/api/bots/${encodeURIComponent(agentId)}`,
+        body: patch,
+      });
+      if (whole.status >= 200 && whole.status < 300) {
+        changed.push(...Object.keys(patch));
+      } else {
+        for (const [field, value] of Object.entries(patch)) {
+          const one = await performAsMember(member, {
+            method: "PATCH",
+            path: `/api/bots/${encodeURIComponent(agentId)}`,
+            body: { [field]: value },
+          });
+          if (one.status >= 200 && one.status < 300) changed.push(field);
+          else refuseOne(field, one.body);
+        }
+      }
+    }
+
+    if (!changed.length && !refused.length) {
+      return agentRefuse(400, "bad_request", "Pass at least one Edit bot field.");
+    }
     if (!changed.length && refused.length) {
-      return agentRefuse(whole.status >= 400 ? whole.status : 403, "settings_refused", refused[0]!.reason, {
+      return agentRefuse(403, "settings_refused", refused[0]!.reason, {
         refused,
         hint: "Only fields the Edit bot window lets you change on this agent are accepted; ownership and grants apply as in Sagax.",
       });

@@ -6,8 +6,9 @@ import { describe, expect, it } from "vitest";
 import { createHmac } from "node:crypto";
 
 import {
-  AGENT_TOOL_NAMES, AGENT_TOOL_POLICY, agentPromptWithFiles, AWAIT_RECOMMENDED_WAIT_MS, AWAIT_TIMEOUT_MS_DEFAULT, AWAIT_TIMEOUT_MS_MAX, COLD_PAGE_SIZE, createAgentApi, ENTRY_TEXT_MAX, decodeCursor, encodeCursor, FIND_LIMIT_MAX,
+  AGENT_SETTINGS_FIELDS, AGENT_TOOL_NAMES, AGENT_TOOL_POLICY, agentPromptWithFiles, AWAIT_RECOMMENDED_WAIT_MS, AWAIT_TIMEOUT_MS_DEFAULT, AWAIT_TIMEOUT_MS_MAX, COLD_PAGE_SIZE, createAgentApi, ENTRY_TEXT_MAX, decodeCursor, encodeCursor, FIND_LIMIT_MAX,
   HANDLE_TTL_MS, matchScore, SEND_FILES_MAX, signHandle, signTurnHandle, turnLabel, verifyHandle,
+  formatEngineCandidates, partitionAgentSettings, plainFieldRefusalReason, resolveEngineInstance,
   type AgentApiDeps, type AgentCaller, type AgentModelChoice, type AgentModelSummary, type AgentRoutinePatch, type AgentScope, type AgentSettingsResult, type AgentSummary, type AuditEntry, type FileInput, type StoredMessage, type TurnState,
 } from "./agent-api.ts";
 import { PRIORITY_DOWNGRADED_NOTE, resetPriorityWakeForTests, type PriorityDelivery } from "./proactive/priority-wake.ts";
@@ -21,14 +22,20 @@ function world(options: { replyAfterPolls?: number; reply?: (prompt: string) => 
   let clock = 1_791_500_000_000;
   let ids = 0;
   const agents: AgentSummary[] = [
-    { id: "bot-a", name: "Alpha", description: "Answers questions about invoices", status: "idle", owner: null, model: { instance_id: "claude", model: "claude-sonnet", effort: "high" } },
+    { id: "bot-a", name: "Alpha", description: "Answers questions about invoices", status: "idle", owner: null, model: { instance_id: "claude-work", model: "claude-sonnet", effort: "high" } },
     { id: "bot-b", name: "Beta", description: "Dispatch and scheduling of technicians", status: "idle", owner: null, model: { instance_id: "grok", model: "grok-3" } },
     { id: "bot-c", name: "Gamma Reports", description: "Writes weekly reports", status: "running", owner: null, model: { instance_id: "codex", model: "gpt-5" } },
   ];
   const modelCatalog: AgentModelChoice[] = [
-    { instance_id: "claude", label: "Claude", models: [{ id: "claude-sonnet", label: "Sonnet" }, { id: "claude-opus", label: "Opus" }], effort_levels: ["low", "high"], auto: true },
+    { instance_id: "claude-work", label: "Claude Work", models: [{ id: "claude-sonnet", label: "Sonnet" }, { id: "claude-opus", label: "Opus" }], effort_levels: ["low", "high"], auto: true },
+    { instance_id: "claude-home", label: "Claude Home", models: [{ id: "claude-sonnet", label: "Sonnet" }], auto: true },
     { instance_id: "grok", label: "Grok", models: [{ id: "grok-3", label: "Grok 3" }, { id: "grok-4", label: "Grok 4" }], auto: true },
   ];
+  /** Permission keys the person holds (simulates BOT_FIELD_PERMISSIONS checks). */
+  const heldPermissions = new Map<string, Set<string>>();
+  const runtimeByBot = new Map<string, Record<string, unknown>>();
+  const primaryByOwner = new Map<string, string>();
+  const settingsByBot = new Map<string, Record<string, unknown>>();
   const routines = new Map<string, { id: string; name: string; enabled: boolean; instructions: string; owner: string }>([
     ["r-own", { id: "r-own", name: "Morning brief", enabled: true, instructions: "Summarise the inbox.", owner: "person:pr_1" }],
     ["r-other", { id: "r-other", name: "Other brief", enabled: true, instructions: "Not yours.", owner: "person:pr_2" }],
@@ -104,7 +111,26 @@ function world(options: { replyAfterPolls?: number; reply?: (prompt: string) => 
       if (ownerKey && !isOwner && caller.admin !== true) {
         return { status: 403, code: "forbidden_owner", message: "Only the owner or an organization admin changes this agent's model." };
       }
-      const instanceId = selection.instanceId ?? agent.model?.instance_id;
+      let instanceId = selection.instanceId ?? agent.model?.instance_id;
+      if (selection.instanceId) {
+        const candidates = modelCatalog.map((entry) => ({
+          instanceId: entry.instance_id,
+          driverKind: entry.instance_id.startsWith("claude") ? "claude" : entry.instance_id,
+          displayName: entry.label,
+        }));
+        const exact = modelCatalog.some((entry) => entry.instance_id === selection.instanceId);
+        if (!exact) {
+          const resolved = resolveEngineInstance(selection.instanceId, candidates);
+          if (!resolved.ok && resolved.reason === "ambiguous") {
+            return {
+              status: 400,
+              code: "ambiguous_engine",
+              message: `Several engines match "${selection.instanceId}": ${formatEngineCandidates(resolved.candidates)}. Pass the exact instance_id from list_agent_models.`,
+            };
+          }
+          if (resolved.ok) instanceId = resolved.instanceId;
+        }
+      }
       const modelId = selection.model ?? agent.model?.model;
       if (selection.auto !== true) {
         const engine = modelCatalog.find((entry) => entry.instance_id === instanceId);
@@ -129,23 +155,81 @@ function world(options: { replyAfterPolls?: number; reply?: (prompt: string) => 
         return { status: 403, code: "forbidden_caller", message: "update_agent_settings is for a person's AI client." };
       }
       const ownerKey = owners.get(agentId);
-      if (ownerKey && ownerKey !== key(caller) && caller.admin !== true) {
+      const isOwner = ownerKey === key(caller);
+      if (ownerKey && !isOwner && caller.admin !== true) {
         return { status: 403, code: "forbidden_owner", message: "Only the owner or an organization admin edits this agent." };
       }
+      const held = heldPermissions.get(key(caller)) ?? new Set<string>();
+      const needs: Record<string, string> = {
+        voiceNotes: "bots.behaviour",
+        approvalMode: "bots.approvalLevel",
+        cwd: "folders.botWorkingFolder",
+        toolScope: "bots.tools",
+        cloudBackend: "bots.computer",
+        maxConcurrentThreads: "bots.behaviour",
+      };
+      // Admin-only in this fixture (not in MEMBER_BOT_FIELDS / BOT_FIELD_PERMISSIONS).
+      const adminOnly = new Set(["cacheKeepWarm"]);
+      const { patch, runtime, primary, primaryInvalid } = partitionAgentSettings(fields);
       const changed: string[] = [];
       const refused: AgentSettingsResult["refused"] = [];
-      for (const [field, value] of Object.entries(fields)) {
-        if (field === "name" && typeof value === "string" && value.trim()) {
-          agent.name = value.trim();
-          changed.push(field);
-        } else if (field === "description" && typeof value === "string") {
-          agent.description = value;
-          changed.push(field);
-        } else if (field === "soul" || field === "title") {
-          changed.push(field);
+      if (primaryInvalid) {
+        refused.push({ field: "primary", reason: "primary is true (make Primary Bot) or false (clear it)." });
+      }
+      if (primary === true) {
+        if (!isOwner && caller.admin !== true) {
+          refused.push({ field: "primary", reason: "only the owner can make or clear the Primary Bot" });
         } else {
-          refused.push({ field, reason: `Field ${field} is not editable in this fixture.` });
+          primaryByOwner.set(key(caller), agentId);
+          changed.push("primary");
         }
+      } else if (primary === false) {
+        if (primaryByOwner.get(key(caller)) === agentId) primaryByOwner.delete(key(caller));
+        changed.push("primary");
+      }
+      for (const [field, value] of Object.entries(runtime)) {
+        const need = needs[field];
+        if (need && !held.has(need) && caller.admin !== true) {
+          refused.push({
+            field,
+            reason: plainFieldRefusalReason(field, { permission: need, message: `Your profile does not include ${need}. Ask an admin to add it in Perspicax.` }),
+          });
+          continue;
+        }
+        const current = runtimeByBot.get(agentId) ?? {};
+        current[field] = value;
+        runtimeByBot.set(agentId, current);
+        changed.push(field);
+      }
+      for (const [field, value] of Object.entries(patch)) {
+        if (!AGENT_SETTINGS_FIELDS.includes(field)) {
+          refused.push({ field, reason: `Field ${field} is not editable in this fixture.` });
+          continue;
+        }
+        if (adminOnly.has(field) && caller.admin !== true) {
+          refused.push({
+            field,
+            reason: plainFieldRefusalReason(field, { error: `forbidden: a member may change their bot's name, look, instructions and model, not "${field}"` }),
+          });
+          continue;
+        }
+        const need = needs[field];
+        if (need && !held.has(need) && caller.admin !== true) {
+          refused.push({
+            field,
+            reason: plainFieldRefusalReason(field, { permission: need, message: `Your profile does not include ${need}. Ask an admin to add it in Perspicax.` }),
+          });
+          continue;
+        }
+        if (field === "name" && typeof value === "string" && value.trim()) agent.name = value.trim();
+        if (field === "description" && typeof value === "string") agent.description = value;
+        const stored = settingsByBot.get(agentId) ?? {};
+        stored[field] = value;
+        settingsByBot.set(agentId, stored);
+        changed.push(field);
+      }
+      if (!changed.length && refused.length) {
+        return { status: 403, code: "settings_refused", message: refused[0]!.reason, extra: { refused } };
       }
       return { changed, refused, agent };
     },
@@ -204,7 +288,11 @@ function world(options: { replyAfterPolls?: number; reply?: (prompt: string) => 
       tick();
     },
   };
-  return { deps, api: createAgentApi(deps), agents, owners, archived, created, threads, messages, state, audits, notified, interrupted, turnStateCalls, posted, add, advance: (ms: number) => { clock += ms; }, settle: async () => { for (let i = 0; i < 50; i++) await deps.sleep!(400); } };
+  return {
+    deps, api: createAgentApi(deps), agents, owners, archived, created, threads, messages, state, audits, notified, interrupted, turnStateCalls, posted,
+    heldPermissions, runtimeByBot, primaryByOwner, settingsByBot,
+    add, advance: (ms: number) => { clock += ms; }, settle: async () => { for (let i = 0; i < 50; i++) await deps.sleep!(400); },
+  };
 }
 
 const bot = (id: string, scopes: AgentScope[] = ALL): AgentCaller => ({ kind: "bot", id, name: id, scopes: new Set(scopes), via: "agents-mcp", sourceThreadId: `src-${id}` });
@@ -1086,11 +1174,11 @@ describe("fleet tools (#1944)", () => {
     const listed = await w.api.call(person("pr_1"), "list_agents", {});
     expect(listed.status).toBe(200);
     expect((listed.body.agents as AgentSummary[]).find((a) => a.id === "bot-a")?.model).toEqual({
-      instance_id: "claude", model: "claude-sonnet", effort: "high",
+      instance_id: "claude-work", model: "claude-sonnet", effort: "high",
     });
     const got = await w.api.call(person("pr_1"), "get_agent", { agent_id: "bot-a" });
     expect(got.status).toBe(200);
-    expect(got.body.model).toEqual({ instance_id: "claude", model: "claude-sonnet", effort: "high" });
+    expect(got.body.model).toEqual({ instance_id: "claude-work", model: "claude-sonnet", effort: "high" });
     expect((got.body.agent as AgentSummary).model).toEqual(got.body.model);
   });
 
@@ -1101,8 +1189,8 @@ describe("fleet tools (#1944)", () => {
     const other = person("pr_2");
     const listed = await w.api.call(owner, "list_agent_models", { agent_id: "bot-a" });
     expect(listed.status).toBe(200);
-    expect(listed.body.models).toHaveLength(2);
-    expect((listed.body.current as AgentModelSummary).instance_id).toBe("claude");
+    expect(listed.body.models).toHaveLength(3);
+    expect((listed.body.current as AgentModelSummary).instance_id).toBe("claude-work");
 
     const changed = await w.api.call(owner, "update_agent_model", {
       agent_id: "bot-a", instance_id: "grok", model: "grok-4",
@@ -1112,7 +1200,7 @@ describe("fleet tools (#1944)", () => {
     expect(((await w.api.call(owner, "get_agent", { agent_id: "bot-a" })).body.model as AgentModelSummary).model).toBe("grok-4");
 
     const refused = await w.api.call(other, "update_agent_model", {
-      agent_id: "bot-a", instance_id: "claude", model: "claude-opus",
+      agent_id: "bot-a", instance_id: "claude-work", model: "claude-opus",
     });
     expect(refused.status).toBe(403);
     expect(refused.body.code).toBe("forbidden_owner");
@@ -1120,31 +1208,114 @@ describe("fleet tools (#1944)", () => {
     const admin = person("pr_admin");
     admin.admin = true;
     expect((await w.api.call(admin, "update_agent_model", {
-      agent_id: "bot-a", instance_id: "claude", model: "claude-opus",
+      agent_id: "bot-a", instance_id: "claude-work", model: "claude-opus",
     })).status).toBe(200);
 
     const bad = await w.api.call(owner, "update_agent_model", {
-      agent_id: "bot-a", instance_id: "claude", model: "no-such-model",
+      agent_id: "bot-a", instance_id: "claude-work", model: "no-such-model",
     });
     expect(bad.status).toBe(400);
     expect(String(bad.body.hint || bad.body.message)).toMatch(/claude-sonnet|Valid choices/i);
   });
 
-  it("update_agent_settings patches editable fields and names refused ones", async () => {
+  it("update_agent_model refuses an ambiguous engine with the candidate list", async () => {
+    const w = world();
+    w.owners.set("bot-a", "person:pr_1");
+    const ambiguous = await w.api.call(person("pr_1"), "update_agent_model", {
+      agent_id: "bot-a", instance_id: "claude", model: "claude-sonnet",
+    });
+    expect(ambiguous.status).toBe(400);
+    expect(ambiguous.body.code).toBe("ambiguous_engine");
+    expect(String(ambiguous.body.message)).toMatch(/claude-work/);
+    expect(String(ambiguous.body.message)).toMatch(/claude-home/);
+    expect(String(ambiguous.body.message)).not.toMatch(/bots\./);
+  });
+
+  it("update_agent_settings patches editable fields; non-owner refused", async () => {
     const w = world();
     w.owners.set("bot-a", "person:pr_1");
     const ok = await w.api.call(person("pr_1"), "update_agent_settings", {
-      agent_id: "bot-a", name: "Osprey", description: "Fleet scout", color: "teal",
+      agent_id: "bot-a", name: "Osprey", description: "Fleet scout",
     });
     expect(ok.status).toBe(200);
     expect(ok.body.changed).toEqual(expect.arrayContaining(["name", "description"]));
-    expect(ok.body.refused).toEqual([{ field: "color", reason: expect.stringContaining("color") }]);
+    expect(ok.body.refused).toEqual([]);
     expect((ok.body.agent as AgentSummary).name).toBe("Osprey");
 
     const other = await w.api.call(person("pr_2"), "update_agent_settings", {
       agent_id: "bot-a", name: "Hijack",
     });
     expect(other.status).toBe(403);
+  });
+
+  it("member owner changes a held permission-gated field and is refused on one they do not hold (plain reason)", async () => {
+    const w = world();
+    w.owners.set("bot-a", "person:pr_1");
+    w.heldPermissions.set("person:pr_1", new Set(["bots.behaviour"]));
+    const owner = person("pr_1");
+
+    const held = await w.api.call(owner, "update_agent_settings", {
+      agent_id: "bot-a", voiceNotes: false,
+    });
+    expect(held.status).toBe(200);
+    expect(held.body.changed).toEqual(["voiceNotes"]);
+    expect(w.settingsByBot.get("bot-a")?.voiceNotes).toBe(false);
+
+    const denied = await w.api.call(owner, "update_agent_settings", {
+      agent_id: "bot-a", cwd: "/tmp/osprey",
+    });
+    expect(denied.status).toBe(403);
+    const refused = (denied.body.refused as Array<{ field: string; reason: string }>)
+      ?? (denied.body.extra as { refused?: Array<{ field: string; reason: string }> })?.refused;
+    expect(refused?.[0]?.field).toBe("cwd");
+    expect(refused?.[0]?.reason).toMatch(/does not allow changing where this bot's files live/i);
+    expect(refused?.[0]?.reason).not.toMatch(/folders\.botWorkingFolder|Perspicax|console\//);
+  });
+
+  it("admin changes an admin-only field on another person's bot", async () => {
+    const w = world();
+    w.owners.set("bot-a", "person:pr_1");
+    const owner = person("pr_1");
+    const denied = await w.api.call(owner, "update_agent_settings", {
+      agent_id: "bot-a", cacheKeepWarm: true,
+    });
+    expect(denied.status).toBe(403);
+    const refused = (denied.body.refused as Array<{ field: string; reason: string }>)
+      ?? (denied.body.extra as { refused?: Array<{ field: string; reason: string }> })?.refused;
+    expect(refused?.[0]?.field).toBe("cacheKeepWarm");
+    expect(refused?.[0]?.reason).toMatch(/cacheKeepWarm/i);
+    expect(refused?.[0]?.reason).not.toMatch(/\b[a-z]+\.[a-z]+\b|Perspicax|console\//);
+
+    const admin = person("pr_admin");
+    admin.admin = true;
+    const ok = await w.api.call(admin, "update_agent_settings", {
+      agent_id: "bot-a", cacheKeepWarm: true,
+    });
+    expect(ok.status).toBe(200);
+    expect(ok.body.changed).toEqual(["cacheKeepWarm"]);
+    expect(w.settingsByBot.get("bot-a")?.cacheKeepWarm).toBe(true);
+  });
+
+  it("runtime setting round trip and Primary Bot switch", async () => {
+    const w = world();
+    w.owners.set("bot-a", "person:pr_1");
+    w.heldPermissions.set("person:pr_1", new Set(["bots.behaviour"]));
+    const owner = person("pr_1");
+
+    const runtime = await w.api.call(owner, "update_agent_settings", {
+      agent_id: "bot-a", maxConcurrentThreads: 3, primary: true,
+    });
+    expect(runtime.status).toBe(200);
+    expect(runtime.body.changed).toEqual(expect.arrayContaining(["maxConcurrentThreads", "primary"]));
+    expect(w.runtimeByBot.get("bot-a")?.maxConcurrentThreads).toBe(3);
+    expect(w.primaryByOwner.get("person:pr_1")).toBe("bot-a");
+
+    const cleared = await w.api.call(owner, "update_agent_settings", {
+      agent_id: "bot-a", primary: false,
+    });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.changed).toEqual(["primary"]);
+    expect(w.primaryByOwner.has("person:pr_1")).toBe(false);
   });
 
   it("update_routine enables and disables a routine the caller owns", async () => {

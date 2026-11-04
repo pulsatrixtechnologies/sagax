@@ -1305,6 +1305,8 @@ public struct Room: Codable, Hashable, Identifiable, Sendable {
     /// A direct conversation's own turn limit, minutes (#216); nil follows
     /// the server's default.
     public var turnTimeoutMinutes: Int? = nil
+    /// `@all` notifies every person in the room (`mentionAll`); absent is off.
+    public var mentionAll: Bool? = nil
 }
 
 // MARK: - Responses

@@ -401,6 +401,7 @@ struct DesktopShell: View {
     private func columns(width: CGFloat, theme: DesktopTheme) -> some View {
         let docked = DesktopShellRules.docksPanel(width: width)
         let botOpen = model.panelOpen && selectedBot != nil && model.page == nil
+        let roomOpen = model.panelOpen && selectedPanelRoom != nil && model.page == nil
         return ZStack(alignment: .topLeading) {
             HStack(spacing: 0) {
                 AnyView(DesktopSidebar())
@@ -412,6 +413,13 @@ struct DesktopShell: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if docked, botOpen, let bot = selectedBot {
                     AnyView(BotPanel(bot: bot, docked: true))
+                        .frame(width: model.panelWidth)
+                        .overlay(alignment: .leading) { DesktopPanelResizeHandle(model: model) }
+                        .transition(.move(edge: .trailing))
+                }
+                // a group's panel docks in the same slot (GroupPanel.swift)
+                if docked, roomOpen, let room = selectedPanelRoom {
+                    AnyView(DesktopGroupPanel(room: room, docked: true))
                         .frame(width: model.panelWidth)
                         .overlay(alignment: .leading) { DesktopPanelResizeHandle(model: model) }
                         .transition(.move(edge: .trailing))
@@ -428,6 +436,14 @@ struct DesktopShell: View {
                 Color.black.opacity(0.001)
                     .onTapGesture { model.togglePanel() }
                 AnyView(BotPanel(bot: bot, docked: false))
+                    .frame(width: min(model.panelWidth, width))
+                    .frame(maxHeight: .infinity)
+                    .transition(.move(edge: .leading))
+            }
+            if !docked, roomOpen, let room = selectedPanelRoom {
+                Color.black.opacity(0.001)
+                    .onTapGesture { model.togglePanel() }
+                AnyView(DesktopGroupPanel(room: room, docked: false))
                     .frame(width: min(model.panelWidth, width))
                     .frame(maxHeight: .infinity)
                     .transition(.move(edge: .leading))
@@ -492,6 +508,12 @@ struct DesktopShell: View {
     private var selectedBot: Bot? {
         guard case let .bot(bot) = model.selected else { return nil }
         return session.state.bot(bot.id) ?? bot
+    }
+
+    /// The selected group, whose panel the header pill opens.
+    private var selectedPanelRoom: Room? {
+        guard let chat = model.selected, chat.opensGroupPanel, case let .room(room) = chat else { return nil }
+        return session.state.rooms.first { $0.id == room.id } ?? room
     }
 }
 
@@ -727,10 +749,12 @@ private struct DesktopShellRouting: ViewModifier {
         default: model.presetDensity(.comfortable)
         }
         for _ in 0..<150 {
-            if screen == .groupChat {
-                // the room chat (Peer Managers), as the reference selects it
+            if screen == .groupChat || screen == .groupPanel {
+                // the room chat (Peer Managers), as the reference selects it;
+                // group-panel: its header pill opened the panel
                 if let room = session.state.rooms.first(where: { $0.name == "Peer Managers" }) {
                     model.open(.room(room))
+                    if screen == .groupPanel { model.panelOpen = true }
                     return
                 }
             } else if let ara = session.state.bots.first(where: { $0.name == "Ara" }) {

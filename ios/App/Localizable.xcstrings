@@ -1292,6 +1292,16 @@
         }
       }
     },
+    "%@ minutes": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ minutes"
+          }
+        }
+      }
+    },
     "%@ moves": {
       "localizations": {
         "fr": {
@@ -4968,6 +4978,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "@ para chamar um bot"
+          }
+        }
+      }
+    },
+    "@all notifies everyone": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@all avise tout le monde"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@all notifica todo mundo"
+          }
+        }
+      }
+    },
+    "@all notifies nobody. A person tagged by name is always notified.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@all n'avise personne. Une personne mentionnée par son nom est toujours avisée."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@all não notifica ninguém. Quem for marcado pelo nome sempre é notificado."
+          }
+        }
+      }
+    },
+    "@all sends a notification to every person in this group chat. A person tagged by name is always notified.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@all envoie une notification à chaque personne de ce groupe. Une personne mentionnée par son nom est toujours avisée."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "@all envia uma notificação para cada pessoa deste grupo. Quem for marcado pelo nome sempre é notificado."
           }
         }
       }
@@ -24060,6 +24118,16 @@
         }
       }
     },
+    "Default (%@ min)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Par défaut (%@ min)"
+          }
+        }
+      }
+    },
     "Default (%@)": {
       "localizations": {
         "en": {
@@ -26741,7 +26809,7 @@
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "A pasta de cada bot, ou um caminho absoluto"
+            "value": "A pasta de cada bot — ou um caminho absoluto"
           }
         }
       }
@@ -30791,13 +30859,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fixé pour ce fil après son premier tour. Commencez un nouveau fil pour travailler ailleurs."
+            "value": "Fixé pour ce fil après son premier tour. Démarrez un nouveau fil pour travailler ailleurs."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Fixada para esta conversa após o primeiro turno. Comece uma nova conversa para trabalhar em outro lugar."
+            "value": "Fixado para esta conversa após o primeiro turno. Comece uma nova conversa para trabalhar em outro lugar."
           }
         }
       }
@@ -33614,6 +33682,16 @@
         }
       }
     },
+    "Group panel": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Panneau du groupe"
+          }
+        }
+      }
+    },
     "Group turns": {
       "localizations": {
         "en": {
@@ -34841,7 +34919,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Combien de temps un bot peut travailler dans cette conversation avant que le tour s'arrête. Par défaut utilise la limite de tour des groupes dans les Réglages. Un nouveau choix s'applique au prochain tour."
+            "value": "Durée pendant laquelle un bot peut continuer à travailler dans cette conversation avant que le tour s'arrête. Par défaut utilise la limite de tour de groupe dans les Réglages. Un nouveau choix s'applique au prochain tour."
           }
         },
         "pt-BR": {
@@ -37721,7 +37799,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Jev est désactivé, donc les messages simples vont à %@ ; les @mentions priment"
+            "value": "Jev est désactivé, donc les messages ordinaires vont à %@ ; les @mentions ont priorité"
           }
         },
         "pt-BR": {
@@ -37765,7 +37843,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Jev choisit qui répond à chaque message simple ; les @mentions priment"
+            "value": "Jev choisit qui répond à chaque message ordinaire ; les @mentions ont priorité"
           }
         },
         "pt-BR": {
@@ -41454,6 +41532,16 @@
         }
       }
     },
+    "Manage bots": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gérer les bots"
+          }
+        }
+      }
+    },
     "Manage command allowlist": {
       "localizations": {
         "en": {
@@ -42382,6 +42470,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Manutenção da memória"
+          }
+        }
+      }
+    },
+    "Mentions": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mentions"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Menções"
           }
         }
       }
@@ -52114,6 +52218,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Seule une personne connectée avec Pulsatrix peut changer cette photo."
+          }
+        }
+      }
+    },
+    "Only an organization admin can change the working folder.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seul un administrateur de l'organisation peut modifier le dossier de travail."
           }
         }
       }
@@ -84848,6 +84962,16 @@
         }
       }
     },
+    "Turn limit for this conversation": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limite de tour pour cette conversation"
+          }
+        }
+      }
+    },
     "Turn limit reached": {
       "localizations": {
         "en": {
@@ -89779,13 +89903,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "L'endroit où chaque bot de ce groupe exécute son terminal et ses outils de fichiers."
+            "value": "Là où chaque bot de ce groupe exécute son shell et ses outils de fichiers."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Onde cada bot deste grupo executa o terminal e as ferramentas de arquivos."
+            "value": "Onde cada bot deste grupo roda o shell e as ferramentas de arquivo."
           }
         }
       }

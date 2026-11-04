@@ -480,7 +480,8 @@ struct DesktopMemoryPage: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 10)
+            // the section's pt-4 and the header's mb-3
+            .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 14)
             HStack(spacing: 8) {
                 // the named view (MemoryNotesList.tsx): Active, All, Archived, Aging
                 Menu {
@@ -489,13 +490,14 @@ struct DesktopMemoryPage: View {
                     }
                 } label: {
                     // FIELD, h-8 w-auto max-w-[220px]: the whole label, its chevron at the end
-                    HStack(spacing: 24) {
+                    HStack(spacing: 0) {
                         Text("View · \(String(localized: viewLabel(listView)))").font(theme.font(12.5)).foregroundStyle(theme.ink).lineLimit(1)
+                        Spacer(minLength: 8)
                         Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(theme.ink)
                     }
+                    // a select is as wide as its widest option (220 at most)
                     .padding(.horizontal, 10).frame(height: 32, alignment: .leading)
-                    .frame(maxWidth: 220, alignment: .leading)
-                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(width: 193, alignment: .leading)
                     .background(theme.ink.opacity(0.03), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
                 }

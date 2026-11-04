@@ -603,15 +603,19 @@ struct ConnectAppsMain: View {
         CapabilitiesList(desktop: desktop) {
             if desktop {
                 if model.marketplaces.isEmpty {
+                    // `mt-2 rounded-lg bg-inset px-3 py-2 text-[12px]` (18 line)
                     Text("No marketplace yet. Add one in Capabilities > Sources.")
                         .font(theme.font(12))
                         .foregroundStyle(theme.inkSecondary)
+                        .frame(minHeight: 18)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         // the title block's pr-12: it ends with the search field
                         .padding(.trailing, 16)
+                        .padding(.top, 6)
+                        .padding(.bottom, 6)
                 }
                 desktopTabs
             } else {

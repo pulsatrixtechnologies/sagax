@@ -443,7 +443,8 @@ struct TasksRoutinesView: View {
                 }
             }
             .padding(24)
-            .frame(maxWidth: 944, alignment: .leading)
+            // max-w-4xl with border-box padding: 896 in all
+            .frame(maxWidth: 896, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
         .background(dtheme.app)

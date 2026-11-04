@@ -13079,5 +13079,6 @@
   "routineReadiness.requiresSkills": "Skills requis",
   "routineReadiness.requiresMcp": "Serveurs MCP requis",
   "routineReadiness.requiresComputer": "Ordinateur requis",
-  "routineReadiness.requiresHelp": "Noms séparés par des virgules, jusqu’à 20 noms de 100 caractères chacun."
+  "routineReadiness.requiresHelp": "Noms séparés par des virgules, jusqu’à 20 noms de 100 caractères chacun.",
+  "routines.failures.grouped": "Exécutions de routine en échec ({count})"
 }

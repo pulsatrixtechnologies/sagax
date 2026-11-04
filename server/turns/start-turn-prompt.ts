@@ -2,6 +2,7 @@
 // #1388 wave 4 step 3: startTurn prompt build (sections through state.prompt).
 // Never imports server/index.ts.
 import { hideServerPathsInSections } from "../server-path-prompt.ts";
+import { turnTracePayloadHash } from "./turn-trace.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 
@@ -117,6 +118,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       kind: state.computerKind,
       vmPrivate: localVmMode(cfg) === "per-bot"
     });
+    if (!state.warmOnly) turnTrace(state.threadId, "prompt-start");
     state.coordinationNode = state.opts?.coordination ? coordinator.node(state.opts.coordination.id) : undefined;
     if (state.opts?.coordination && (!state.coordinationNode || state.coordinationNode.status !== "running" || roomHandoffProblem(state.coordinationNode,
       state.coordinationNode.parentId ? coordinator.node(state.coordinationNode.parentId) : undefined))) {
@@ -234,6 +236,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       if (hidden.leaked.length) console.warn(`[prompt] server paths hidden for ${state.bot.id} (no server file tools): ${hidden.leaked.join(", ")}`);
       state.promptParts = hidden.sections;
     }
+    if (!state.warmOnly) turnTrace(state.threadId, "prompt-sections");
     state.builtPrompt = buildSystemPrompt(state.persona, state.liveBot?.soul ?? state.bot.soul ?? "", state.coldPrompt ? lightenColdPrompt(state.promptParts) : state.promptParts, state.stablePrompt || state.instance.driverKind === "claudeAgent"
       ? new Set([
         ...(state.instance.driverKind === "claudeAgent" ? CLAUDE_REUSE_VOLATILE_SECTIONS : []),
@@ -255,6 +258,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
     else turnContextBuckets.delete(state.threadId);
     // the dev panel's Connectors card: what this turn really reached
     if (!state.warmOnly) store.patchTask(state.bot.id, state.threadId, { connectors: turnConnectorsFor(state.liveBot ?? state.bot, state.instance, state.speaker, state.integrations, state.turnPlace.principal, state.instance.adapter.capabilities.customMcp === true) });
+    if (!state.warmOnly) turnTrace(state.threadId, "connectors-patched");
     if (!state.warmOnly) turnTrace(state.threadId, "state.prompt-built");
     // the Files list's "last used": what this turn's prompt carried
     markWorkspaceUse(state.bot.id, promptSectionPaths(state.prompt.sections));
@@ -270,6 +274,21 @@ export function createPromptStartTurn(host: StartTurnHost) {
       userName: botUserName(state.bot),
       ...(state.onCall ? { budget: CALL_RECALL_BUDGET } : state.compactPrompt ? { budget: LOCAL_RECALL_BUDGET } : {})
     });
+    if (!state.warmOnly) turnTrace(state.threadId, "recall");
+    if (!state.warmOnly && process.env.SAGAX_TURN_TRACE === "1") {
+      turnTracePayloadHash(state.threadId, {
+        system: `${state.prompt.stable}${state.prompt.volatile}`,
+        systemStable: state.prompt.stable,
+        systemVolatile: state.prompt.volatile,
+        transcript: state.transcript,
+        text: state.recalled ? `${state.recalled}\n\n${state.dispatchContext.turnText}` : state.dispatchContext.turnText,
+        integrations: state.integrations,
+        model: String(state.model ?? ""),
+        effort: state.effort ?? null,
+        resumeCursor: typeof state.dispatchContext.resumeCursor === "string" ? state.dispatchContext.resumeCursor : "",
+        sessionReset: state.dispatchContext.sessionReset === true,
+      });
+    }
     runningTurnEngines.set(state.threadId, state.instance);
     if (!state.warmOnly) limitFailover.noteDispatch(state.threadId, {
       botId: state.bot.id, engine: { instanceId: state.instance.instanceId, driverKind: state.instance.driverKind }, selection: state.bot.modelSelection,

@@ -1,5 +1,25 @@
 # Sagax agent notes
 
+## Desktop store subscriptions
+
+Shell selects routing and chrome; BotSurface and GroupSurface subscribe to
+conversation records at the leaves. ChatView, its viewport, focus and unread
+hooks use useStoreSelector scoped by thread or bot. Event handlers use
+useStoreGetter, not a captured workspace. Peer lists use view-slices.ts and
+never subscribe to other conversations' transcripts; ownership, grants,
+hiding and task navigation still invalidate them.
+TransientNotice groups fresh routine failures in one dismissible banner, with
+each run still available in its details. It remembers the whole burst and
+does not extend the first notice's timer as failures arrive. Access cards
+keep their separate settlement behavior. Regression: TransientNotice.dom.test.ts.
+StoreCommandsContext carries flush/refresh services independently of state,
+including inside BotEditorStore. Use useStoreCommands for them. Sidebar
+layout helpers take SidebarState; rows memoize record fields and every
+callback, and row selectors scope queues, motion and deletion to their bot.
+The profile foot selects counts, not whole run or bot lists.
+Render regression: src/components/StoreSubscriptions.renders.dom.test.ts
+(real desktop, scoped store, neutral fixture, no network or visible window).
+
 ## Perspicax identities (2026-11-03)
 
 `perspicaxActAs` is an explicit per-bot profile choice (slug and human name),

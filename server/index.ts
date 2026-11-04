@@ -1763,7 +1763,7 @@ import {
 import { createBotGrantRoutes, visibleGrants, wireGrants } from "./bots/bot-grants.ts";
 import { createBotPerspicaxRoutes } from "./bots/bot-perspicax.ts";
 import { identityWarning } from "./perspicax/perspicax-identity.ts";
-import { OrgFlowPlugins, guarded as orgFlowGuarded } from "./org/org-flow-plugins.ts";
+import { OrgFlowPlugins, flowSkillsNote, guarded as orgFlowGuarded } from "./org/org-flow-plugins.ts";
 import { applyIdentityMigration, principalIdFor, rewritePeopleForAttach } from "./people/identity-migration.ts";
 import { ThreadStarters } from "./threads/thread-starters.ts";
 import {
@@ -10216,8 +10216,18 @@ function scopedSkillsPrompt(bot: BotRecord, instance: { driverKind: string } | n
   // skills_list/workspace_read allowed they are named by alias and those
   // tools reach the rest; tools off, the prompt is all it gets. Cold /
   // automation turns pass indexOnly so chat engines stay on the index too.
-  if (!instance || !(options.managedTools || !engineWorksInFiles(kind) || options.fileAccess)) return undefined;
   const person = IDENTITY.kind === "perspicax" ? principal ?? effectiveBotOwner(bot) : localPrincipalId();
+  // Incident 2026-11-03: a Perspicax bot whose turn gets no Flow folder is
+  // told where the Flow skills are (server/org/org-flow-plugins.ts).
+  const flowNote = IDENTITY.kind === "perspicax" ? flowSkillsNote({
+    declaration: perspicaxDirectory?.flowPlugins(),
+    loadedDirs: orgFlowPlugins.dirsFor(person, []),
+    perspicaxBot: (bot.perspicax?.profiles?.length ?? 0) > 0,
+    member: Boolean(person) && orgMemberActive(person),
+  }) : "";
+  if (!instance || !(options.managedTools || !engineWorksInFiles(kind) || options.fileAccess)) {
+    return flowNote ? { text: flowNote, byCapability: {}, index: { bytes: Buffer.byteLength(flowNote, "utf8"), maxBytes: 0, skills: 0, maxSkills: 0, omitted: 0, parts: { skills: 0, commands: 0, agents: 0 } } } : undefined;
+  }
   const inventory = scopedSkillInventory(bot, instance, principal);
   const plugins = scopedPluginFolders(bot, person);
   const personalRoot = skillsLibraryEnabled(cfg) && person ? personalSkills.root(person) : undefined;
@@ -10232,8 +10242,9 @@ function scopedSkillsPrompt(bot: BotRecord, instance: { driverKind: string } | n
       return file.nextOffset === null ? file.text : null;
     } catch { return null; }
   };
-  return capabilityPrompt(kind, capabilityPromptGroups(kind, inventory.rows, { managedTools: options.managedTools, read }),
+  const prompt = capabilityPrompt(kind, capabilityPromptGroups(kind, inventory.rows, { managedTools: options.managedTools, read }),
     { managedTools: options.managedTools, incomplete: inventory.incomplete && kind !== "claudeAgent", indexOnly: options.indexOnly === true });
+  return flowNote ? { ...prompt, text: prompt.text + flowNote } : prompt;
 }
 // ── a bot's capabilities: one resolved list (server/capabilities/capabilities.ts) ──
 /** Everything a bot receives on top of its engine, for the person looking

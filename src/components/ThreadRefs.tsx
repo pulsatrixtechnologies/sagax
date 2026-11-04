@@ -3,10 +3,12 @@
 // memoized transcript subscribe to this context, not to the store, so a
 // stream delta or an unrelated bot patch never re-renders their markdown —
 // only a new, renamed or removed thread does.
+import { useStoreDispatch, useStoreGetter, useStoreSelector } from "@/state/store-selector";
+import { equalRows } from "@/state/view-slices";
 import { MentionText } from "./MentionText";
 import type { MentionPeer } from "@/lib/mentions";
-import { createContext, Fragment, useContext, useMemo, useRef, type ReactNode } from "react";
-import { botOpensTo, openBot, openThread, useStore, type Action, type AppState, type Bot, type Group, type ThreadTarget } from "@/state/store";
+import { createContext, Fragment, useContext, useMemo, type ReactNode } from "react";
+import { botOpensTo, openBot, openThread, type Action, type AppState, type Bot, type Group, type ThreadTarget } from "@/state/store";
 import { useShowThreads } from "@/lib/thread-preferences";
 import { t } from "@/lib/i18n";
 import { parseBotRefUrl, parseThreadRefUrl, resolveThreadRefAddress, splitThreadRefsForDisplay, type ThreadRefCandidate } from "@/lib/thread-refs";
@@ -45,19 +47,9 @@ export function collectThreadRefs(
   return refs;
 }
 
-const signatureOf = (refs: ThreadRefCandidate[]) =>
-  refs.map((ref) => `${ref.botId}\u0000${ref.threadId}\u0000${ref.title}\u0000${ref.activeAt ?? ""}\u0000${ref.botName}`).join("\u0001");
-
 export function ThreadRefsProvider({ children }: { children: ReactNode }) {
-  const { state } = useStore();
-  const next = collectThreadRefs(state.bots, state.groups);
-  const signature = signatureOf(next);
-  // keep the array's identity while its contents are unchanged, so context
-  // consumers only re-render for a real thread change
-  const cache = useRef({ signature, threads: next });
-  if (cache.current.signature !== signature) cache.current = { signature, threads: next };
-  const threads = cache.current.threads;
-  const currentBotId = state.selectedId;
+  const threads = useStoreSelector((current) => collectThreadRefs(current.bots, current.groups), equalRows);
+  const currentBotId = useStoreSelector((current) => current.selectedId);
   const value = useMemo(() => ({ threads, currentBotId }), [threads, currentBotId]);
   return <ThreadRefsContext.Provider value={value}>{children}</ThreadRefsContext.Provider>;
 }
@@ -70,13 +62,14 @@ export interface ThreadLinkTarget extends ThreadTarget {
 /** A "#Title" mention. A button, not an anchor: there is no URL, and it
  * must work from the keyboard. Looks like the links around it. */
 export function ThreadLink({ target, ambiguous, children }: { target: ThreadLinkTarget; ambiguous: boolean; children?: ReactNode }) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const getState = useStoreGetter();
   const showThreads = useShowThreads();
   return (
     <button
       type="button"
       data-thread-link={target.threadId}
-      onClick={() => openThread(dispatch, target, state, showThreads)}
+      onClick={() => openThread(dispatch, target, getState(), showThreads)}
       title={ambiguous ? t("chat.openThreadOn", { title: target.title, name: target.botName }) : t("chat.openThread", { title: target.title })}
       className="inline break-words text-start text-accent underline decoration-accent/40 hover:decoration-accent"
     >

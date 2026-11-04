@@ -141,6 +141,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     state.selection = selectReplay(context, { budgetBytes: cfg.context?.rebuildBytes ?? DEFAULT_REBUILD_BYTES, excludedIds: skipTranscript, compaction: state.record });
     state.transcript = state.selection.transcript.map(({ role, text }: any) => ({ role, text }));
     state.contextReset = state.selection.compacted > 0 && state.record?.id !== state.task.appliedCompactionId;
+    if (!state.warmOnly) turnTrace(state.threadId, "context-selected");
     // Whether this engine had a session here is decided on the cursors
     // from before the reset below: a fold is a continuation, not a new
     // engine joining (turn-context.ts COMPACTED_PREAMBLE).
@@ -346,6 +347,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     if (!state.warmOnly) {
       const drift = checkSoulDrift(state.bot.id, state.bot.soul ?? "", state.bot.soulHash ?? "");
       if (drift.drift !== Boolean(state.bot.soulDrift)) store.patchBot(state.bot.id, { soulDrift: drift.drift });
+      turnTrace(state.threadId, "soul-drift");
     }
     if (!state.warmOnly && state.dispatchContext.handoff) handoffs.begin(state.threadId, state.dispatchClaimId, state.dispatchContext.handoff);
 
@@ -360,6 +362,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
       ],
       availableSkills(),
     );
+    if (!state.warmOnly) turnTrace(state.threadId, "skills-selected");
     if (state.selectedSkills.some((skill: any) => skill.manifest.requiredCapabilities.includes("phoneMcp"))) {
       state.integrations.phone = phoneIntegration(state.bot.id, state.threadId, state.dispatchClaimId);
     }
@@ -369,9 +372,11 @@ export function createSetupStartTurn(host: StartTurnHost) {
     // never pre-allowed, so every call rides the normal permission flow.
     if (state.instance.adapter.capabilities.customMcp === true) {
       await refreshMcpOAuth(state.bot);
+      if (!state.warmOnly) turnTrace(state.threadId, "oauth-refreshed");
       const mounted = mcpServersAsPerson(state.bot, orgSpeakerPrincipal(state.bot, state.speaker), state.threadId);
       attachCustomMcp(state.integrations, mounted.servers, cfg);
       state.githubWithheld = mounted.githubWithheld;
+      if (!state.warmOnly) turnTrace(state.threadId, "mcp-mounted");
     }
     // Slice 5: the bot's Perspicax profiles, as the person who speaks.
     state.perspicaxPrompt = "";

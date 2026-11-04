@@ -27,8 +27,16 @@ import { HelpTip } from "./SettingsPrimitives";
 import { GroupBotPayers } from "./GroupBotPayers";
 import { useAdvancedMode } from "@/lib/interface-mode";
 import { GROUP_PANEL_TABS, groupLeadBotId, visibleGroupPanelTabs, type GroupPanelTab } from "@/lib/group-panel";
-import { GroupDetailsTab } from "./group-panel/GroupDetailsTab";
-import { GroupComputerTab, groupComputerBots } from "./group-panel/GroupComputerTab";
+import { lazyScreen } from "./lazy-screen";
+
+// The Details and Computer tabs pull the routines page, the computer panel and
+// the diff view: loaded when the tab opens, never on the launch path.
+const GroupDetailsTab = lazyScreen("GroupDetailsTab", async () => (await import("./group-panel/GroupDetailsTab")).GroupDetailsTab);
+const GroupComputerTab = lazyScreen("GroupComputerTab", async () => (await import("./group-panel/GroupComputerTab")).GroupComputerTab);
+
+function groupComputerBots(ownBots: readonly Bot[]): Bot[] {
+  return ownBots.filter((bot) => bot.computer !== "off");
+}
 import { GroupLibraryTab } from "./bot-settings/LibraryTab";
 
 export { GROUP_PANEL_TABS, type GroupPanelTab };

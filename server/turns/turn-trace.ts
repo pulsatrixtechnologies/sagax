@@ -4,6 +4,7 @@
 // long until the first answer text. They are numbers only. Never the words,
 // never a secret, never more than the thread id's first 8 characters on the
 // optional line.
+import { createHash } from "node:crypto";
 
 const enabled = () => process.env.SAGAX_TURN_TRACE === "1";
 const MAX_CLOCKS = 500;
@@ -68,6 +69,10 @@ export function noteFirstResponse(threadId: string, at = Date.now()): void {
   const from = row.sentAt ?? row.startedAt ?? row.queuedAt;
   if (from !== undefined) row.firstResponseMs = Math.max(0, Math.round(at - from));
   publish(threadId, row);
+  // Same stderr line as turnTrace steps: server-side TTFT for the harness.
+  if (!enabled()) return;
+  const start = row.startedAt ?? row.sentAt ?? row.queuedAt ?? at;
+  console.error(`[turn-trace] ${threadId.slice(0, 8)} first-token ${at} +${at - start}`);
 }
 
 /** Queue wait and time to first answer. Null until that moment has happened. */
@@ -108,4 +113,41 @@ export function turnTrace(threadId: string, step: string, first = false): void {
   if (!enabled()) return;
   const start = row.startedAt ?? now;
   console.error(`[turn-trace] ${threadId.slice(0, 8)} ${step} ${now} +${now - start}`);
+}
+
+/** Stable sha256 of the material the prepare/setup/prompt path built for
+ * the engine. Off unless SAGAX_TURN_TRACE=1. Never prints the words. */
+export function turnTracePayloadHash(
+  threadId: string,
+  payload: {
+    system?: string;
+    systemStable?: string;
+    systemVolatile?: string;
+    transcript?: ReadonlyArray<{ role: string; text: string }>;
+    text?: string;
+    integrations?: ReadonlyArray<string> | Record<string, unknown>;
+    model?: string;
+    effort?: string | null;
+    resumeCursor?: string;
+    sessionReset?: boolean;
+  },
+): void {
+  if (!enabled() || !threadId) return;
+  const integrations = Array.isArray(payload.integrations)
+    ? [...payload.integrations].sort()
+    : Object.keys(payload.integrations ?? {}).sort();
+  const body = JSON.stringify({
+    system: payload.system ?? "",
+    systemStable: payload.systemStable ?? "",
+    systemVolatile: payload.systemVolatile ?? "",
+    transcript: payload.transcript ?? [],
+    text: payload.text ?? "",
+    integrations,
+    model: payload.model ?? "",
+    effort: payload.effort ?? null,
+    resumeCursor: payload.resumeCursor ?? "",
+    sessionReset: payload.sessionReset === true,
+  });
+  const hash = createHash("sha256").update(body).digest("hex");
+  console.error(`[turn-trace] ${threadId.slice(0, 8)} payload-hash ${hash}`);
 }

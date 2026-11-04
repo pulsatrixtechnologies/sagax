@@ -75,7 +75,7 @@ import { serverModeBridge } from "@/lib/launch";
 import { openExternalLink } from "@/lib/app-links";
 import { canViewUsage } from "@/lib/viewer";
 import { ShortcutHint } from "./ShortcutHint";
-import { useStore } from "@/state/store";
+import { shallowEqual, useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import { useUpdaterState, type UpdaterState } from "@/lib/updater";
 import { openUpdatePrompt, requestUpdateCheck } from "@/lib/update-prompt";
 import { brand } from "../lib/brand";
@@ -573,10 +573,10 @@ interface AccountMenuData {
  * as Settings > Usage; and Switch organization ›'s saved servers. Read once
  * the menu first opens; each part stays empty when it cannot be read. */
 function useAccountMenuData(enabled: boolean, refresh = 0): AccountMenuData {
-  const { state } = useStore();
+  const config = useStoreSelector((current) => current.config);
   const favorite = useUsageFavorite();
   const org = usePerspicaxOrg();
-  const plans = enabled && (org !== null || canViewUsage(state.config));
+  const plans = enabled && (org !== null || canViewUsage(config));
   const [rows, setRows] = useState<PlanRow[]>([]);
   const [monthCost, setMonthCost] = useState<string | null>(null);
   const [environments, setEnvironments] = useState<Parameters<typeof listSwitchTargets>[0]>(null);
@@ -625,7 +625,8 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
    * shortcuts take the room above the row */
   memberLine?: boolean;
 }) {
-  const { state, dispatch } = useStore();
+  const dispatch = useStoreDispatch();
+  const state = useStoreSelector((current) => ({ config: current.config, activeView: current.activeView, memoryManagerOpen: current.memoryManagerOpen }), shallowEqual);
   const update = useUpdateItem();
   // the menu's figures (plan, cost, saved servers) are read the first time
   // it opens, not with every sidebar
@@ -633,9 +634,7 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
   const triggerRef = useRef<HTMLSpanElement>(null);
   const achievements = useAchievements();
   // conversations waiting on the person's answer (a plain count, no hook)
-  const approvalsWaiting = state.bots
-    .filter((bot) => !bot.hidden)
-    .reduce((total, bot) => total + (bot.tasks ?? []).filter((task) => task.activity === "waiting-on-you").length, 0);
+  const approvalsWaiting = useStoreSelector((current) => current.bots.filter((bot) => !bot.hidden).reduce((total, bot) => total + (bot.tasks ?? []).filter((task) => task.activity === "waiting-on-you").length, 0));
   const openAchievements = () => dispatch({ type: "showAchievements" });
   // The routines badge sits at the right edge of the row; under the name,
   // the viewer's own title and points, each only while its "Show my ..."
@@ -1027,10 +1026,10 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
  * (2026-10-16: it had vanished with the avatar-only foot). A failed run
  * not seen yet turns its label into a warning. */
 export function SidebarRoutinesBadge() {
-  const { state, dispatch } = useStore();
-  const activeRoutines = activeRoutineCount(state.routines, state.bots, viewerActorId(state.config));
+  const dispatch = useStoreDispatch();
+  const activeRoutines = useStoreSelector((current) => activeRoutineCount(current.routines, current.bots, viewerActorId(current.config)));
   const badgeEnabled = useShowRoutinesBadge();
-  const routineAttention = state.routineRuns.some((run) => isRoutineProblemRun(run) && !run.seenAt);
+  const routineAttention = useStoreSelector((current) => current.routineRuns.some((run) => isRoutineProblemRun(run) && !run.seenAt));
   if (!badgeEnabled || activeRoutines <= 0) return null;
   const routinesLabel = t(
     routineAttention

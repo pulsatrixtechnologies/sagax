@@ -99,12 +99,19 @@ describe("encodeSseDataFrame and runtime delta coalesce", () => {
         providerInstanceId: "p",
       },
     });
+    // the stream's first text is flushed at once (#1952); the rest coalesces
     expect(coalescer.offer(delta("Hel", "a"))).toBe(true);
-    expect(coalescer.offer(delta("lo", "b"))).toBe(true);
-    expect(flushed).toEqual([]);
-    expect(coalescer.offer({ kind: "runtime", event: { type: "turn.completed", threadId: "t1", ok: true } })).toBe(false);
     expect(flushed).toHaveLength(1);
-    expect((flushed[0]!.event as { delta: string }).delta).toBe("Hello");
+    expect((flushed[0]!.event as { delta: string }).delta).toBe("Hel");
+    expect(coalescer.offer(delta("lo", "b"))).toBe(true);
+    expect(coalescer.offer(delta(" world", "c"))).toBe(true);
+    expect(flushed).toHaveLength(1);
+    expect(coalescer.offer({ kind: "runtime", event: { type: "turn.completed", threadId: "t1", ok: true } })).toBe(false);
+    expect(flushed).toHaveLength(2);
+    expect((flushed[1]!.event as { delta: string }).delta).toBe("lo world");
+    // after a non-delta frame the next text is a first text again
+    expect(coalescer.offer(delta("Next", "d"))).toBe(true);
+    expect(flushed).toHaveLength(3);
     vi.useRealTimers();
   });
 });

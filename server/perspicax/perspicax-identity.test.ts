@@ -89,11 +89,48 @@ describe("Perspicax per-turn identity", () => {
       expect(await f.call()).toMatchObject({ ok: true, value: { acting: "redacted" } });
       expect(f.calls.map((c) => c.name ?? c.method)).toEqual(["initialize", "notifications/initialized", "tools/list", "identity_switch", "tools/list", "api_list"]);
       expect(new Set(f.calls.slice(1).map((c) => c.session)).size).toBe(1);
+      const before = f.calls.length;
       const listing = await f.mcp.relay({ threadId: "thread", generation: "turn", botId: "bot", profileId: "P1", frame: { jsonrpc: "2.0", id: 10, method: "tools/list" } });
       expect(JSON.stringify(listing.body)).toContain("bot_write");
       expect(JSON.stringify(listing.body)).not.toContain("person_write");
+      // Engine tools/list after Sagax's identity list is served from that
+      // cache: no third tools/list round trip on the same session.
+      expect(f.calls.slice(before).some((c) => c.method === "tools/list")).toBe(false);
+      expect(f.calls).toHaveLength(before);
     } finally { await f.mcp.endAll(); }
     expect(f.calls.at(-1)?.args).toEqual({ clear: true });
+  });
+
+  it("drops the tools/list cache when the MCP session id changes", async () => {
+    const f = fixture();
+    try {
+      await f.prepare();
+      await f.call();
+      // Cache would short-circuit tools/list; a tools/call with a rotated
+      // session header clears toolsListBody in send(), then the next list
+      // must hit the network again.
+      const before = f.calls.filter((c) => c.method === "tools/list").length;
+      f.rotateSession();
+      expect(await f.call()).toMatchObject({ ok: true });
+      const listing = await f.mcp.relay({ threadId: "thread", generation: "turn", botId: "bot", profileId: "P1", frame: { jsonrpc: "2.0", id: 11, method: "tools/list" } });
+      expect(listing.status).toBe(200);
+      expect(f.calls.filter((c) => c.method === "tools/list").length).toBeGreaterThan(before);
+    } finally { await f.mcp.endAll(); }
+  });
+
+  it("drops the tools/list cache after notifications/tools/list_changed", async () => {
+    const f = fixture();
+    try {
+      await f.prepare();
+      await f.call();
+      const before = f.calls.filter((c) => c.method === "tools/list").length;
+      // Relay treats a tools/list_changed notification as a frame that
+      // clears the cache; the next list must go to the network.
+      await f.mcp.relay({ threadId: "thread", generation: "turn", botId: "bot", profileId: "P1", frame: { jsonrpc: "2.0", method: "notifications/tools/list_changed" } });
+      const listing = await f.mcp.relay({ threadId: "thread", generation: "turn", botId: "bot", profileId: "P1", frame: { jsonrpc: "2.0", id: 12, method: "tools/list" } });
+      expect(listing.status).toBe(200);
+      expect(f.calls.filter((c) => c.method === "tools/list").length).toBeGreaterThan(before);
+    } finally { await f.mcp.endAll(); }
   });
 
   it("renews in the background before the 15-minute lease expires and stops the timer at turn end", async () => {

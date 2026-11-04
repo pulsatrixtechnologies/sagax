@@ -38,7 +38,12 @@ export function readShownNotices(): Set<string> {
 }
 
 export function rememberShownNotice(shown: Set<string>, id: string): void {
-  shown.add(id);
+  rememberShownNotices(shown, [id]);
+}
+
+/** Persist a burst once, including every dismissed run. */
+export function rememberShownNotices(shown: Set<string>, ids: readonly string[]): void {
+  for (const id of ids) shown.add(id);
   try {
     globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify([...shown].slice(-KEEP)));
   } catch {

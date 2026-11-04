@@ -5,13 +5,14 @@
 import { createElement, useReducer, type ReactNode } from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { initialState, type Action, type AppState } from "./store";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BotEditorStore, initialState, type Action, type AppState } from "./store";
 import {
   createStoreSource,
   shallowEqual,
   StoreSourceContext,
   usePublishedStoreSource,
+  useStoreCommands,
   useStoreDispatch,
   useStoreGetter,
   useStoreSelector,
@@ -126,6 +127,32 @@ describe("useStoreSelector", () => {
     act(() => send!({ type: "notice", notice: "from a handler" } as unknown as Action));
     expect(read!().notice?.botName).toBe("from a handler");
     expect(renders).toBe(1);
+  });
+
+  it("keeps imperative services independent of state and scoped to their provider", async () => {
+    const flush = vi.fn(async () => null);
+    const innerFlush = vi.fn(async () => null);
+    const services = { flushBotPatches: flush, refreshInstances: async () => {}, refreshModels: async () => {} };
+    let renders = 0;
+    let commands: ReturnType<typeof useStoreCommands> | undefined;
+    function Reader() { commands = useStoreCommands(); renders++; return null; }
+    function CommandsHost({ children }: { children: ReactNode }) {
+      const [state, dispatch] = useReducer(testReducer, initialState);
+      dispatchOut = dispatch;
+      return createElement(BotEditorStore, { value: { state, dispatch: dispatch as unknown as (action: Action) => void, ...services }, children });
+    }
+    const child = createElement(Reader);
+    act(() => root.render(createElement(CommandsHost, null, child)));
+    act(() => dispatchOut!({ type: "notice", notice: "unrelated" }));
+    expect(renders).toBe(1);
+    await commands!.flushBotPatches("osprey");
+    expect(flush).toHaveBeenCalledWith("osprey");
+    act(() => root.render(createElement(CommandsHost, null, createElement(BotEditorStore, {
+      value: { state: initialState, dispatch: () => {}, ...services, flushBotPatches: innerFlush }, children: child,
+    }))));
+    await commands!.flushBotPatches("wren");
+    expect(innerFlush).toHaveBeenCalledWith("wren");
+    expect(flush).toHaveBeenCalledTimes(1);
   });
 
   it("reads a scoped source inside it, not the outer one", () => {

@@ -173,6 +173,9 @@ public struct OptionCard: Codable, Hashable, Sendable {
     public var ruleSaved: SavedOwnerRule? = nil
     /// A change the person took back (Undo).
     public var undone: Bool? = nil
+    /// The bot's change applied without a person (self / Full): clients show
+    /// a one-line receipt with Undo (#1982). Nil on older servers.
+    public var autoApplied: Bool? = nil
     /// How the card was answered when not by a tap (`CardAnswerer.via`).
     public var answeredBy: CardAnsweredBy? = nil
     /// 2026-10-28: the person's own "Ask first" rule that kept this card.

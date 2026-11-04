@@ -7,6 +7,7 @@ import { CodexDriver } from "../codex.ts";
 import type { ProviderInstance, SendTurnInput } from "../../contracts.ts";
 import { recordEvents, type EventRecorder } from "../../testing/events.ts";
 import { removeTempDir } from "../../testing/cleanup.ts";
+import * as procs from "../../procs.ts";
 
 const cli = fileURLToPath(new URL("../../testing/fake-codex-app-server.ts", import.meta.url));
 const alive = (pid: number) => { try { process.kill(pid, 0); return true; } catch { return false; } };
@@ -37,6 +38,7 @@ describe("Codex retained app-server", () => {
   };
   afterEach(async () => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     events?.stop();
     await instance?.dispose();
     if (scratch) removeTempDir(scratch);
@@ -151,7 +153,7 @@ describe("Codex retained app-server", () => {
     expect(alive(pid)).toBe(false);
   });
 
-  it.each(["before-ack", "after-ack"])("respawns once after a %s crash and completes the same logical turn", async phase => {
+  it.each(["before-ack", "before-ack-output", "after-ack"])("respawns once after a %s crash and completes the same logical turn", async phase => {
     vi.stubEnv("FAKE_CODEX_RETRY_SCALE", "0.001");
     crashFile = join(tmpdir(), `codex-crash-${crypto.randomUUID()}`);
     await create({ FAKE_CODEX_CRASH_ONCE: crashFile, FAKE_CODEX_CRASH_PHASE: phase });
@@ -160,9 +162,9 @@ describe("Codex retained app-server", () => {
     expect(events.events.filter(e => e.type === "turn.started")).toHaveLength(1);
     expect(events.events.filter(e => e.type === "turn.retrying")).toHaveLength(1);
     expect(events.events.filter(e => e.type === "turn.completed")).toHaveLength(1);
-    if (phase === "after-ack") {
+    if (phase !== "before-ack") {
       expect(seen().calls.some(c => c.method === "thread/resume")).toBe(true);
-      expect(JSON.stringify(seen().calls.find(c => c.method === "turn/start")?.params.input)).toContain("crash-step");
+      if (phase === "after-ack") expect(JSON.stringify(seen().calls.find(c => c.method === "turn/start")?.params.input)).toContain("crash-step");
     }
   });
 
@@ -239,5 +241,18 @@ describe("Codex retained app-server", () => {
     const { pid, env } = seen();
     writeFileSync(join(env.CODEX_HOME, "auth.json"), '{"fixture":"rotated"}');
     await expect.poll(() => alive(pid), { timeout: 5000 }).toBe(false);
+  });
+
+  it("never reuses an idle process whose requested shutdown was unconfirmed", async () => {
+    await create();
+    await send();
+    const pid = seen().pid;
+    const stop = vi.spyOn(procs, "killCliTree").mockResolvedValueOnce(false);
+    instance.adapter.releaseWarmSession?.("thread-osprey");
+    await expect.poll(() => stop.mock.calls.length).toBe(1);
+    expect(alive(pid)).toBe(true);
+    await send({ resumeCursor: "codex-thread-1" });
+    expect(seen().pid).not.toBe(pid);
+    expect(alive(pid)).toBe(false);
   });
 });

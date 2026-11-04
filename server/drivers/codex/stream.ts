@@ -380,9 +380,9 @@ const close = (code: number | null, signal: NodeJS.Signals | null) => {
     recentStderr ? `: ${recentStderr.slice(-300)}` : hadStreamedOutput && s.stderr.trim() ? "; no stderr after the last app-server output" : ""
   }`;
   // One unexpected process loss gets a replacement within this logical turn.
-  // After acknowledgement, resume native history with an explicit continuation
+  // After acknowledgement or native output, resume history with a continuation
   // and the received steps; never replay the original request as a new root.
-  if (s.recoverCrash(s.codexThreadId, s.codexTurnId !== null)) {
+  if (s.recoverCrash(s.codexThreadId, s.codexTurnId !== null || s.earlyNotifications.length > 0)) {
     void s.relaunch("app_server_exit", exitMessage, "exit_before_result").catch(() => {});
     return;
   }

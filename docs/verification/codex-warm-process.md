@@ -13,6 +13,8 @@ interrupted turns close their tree. `releaseWarmSession`, `stopAll`, auth
 transitions and disposal close idle holders too. The store lifecycle listener
 retires idle Codex sessions on deletion, ownership, engine or model changes.
 Idle auth/config file watchers cover sign-ins performed outside Sagax.
+An unconfirmed idle shutdown remains marked closing; a later turn must
+confirm that tree's exit before starting its replacement.
 
 The private launch digest includes the CLI and argv, environment, account
 files, cwd, person, payer, bot, model, effort, permissions, tool selection,
@@ -31,8 +33,9 @@ changes restart the process because native Codex 0.166.0 ignores instruction
 overrides when resuming an already loaded thread. Volatile context remains
 in user input and does not restart it.
 
-An unexpected exit gets one respawn. Before ACK the original input is still
-pending. After ACK the replacement resumes the native cursor and continues
+An unexpected exit gets one respawn. Before ACK and any native output the
+original input is still pending. After ACK or observed native output the
+replacement resumes the native cursor and continues
 with the original request and received steps, telling the model to reconcile
 an interrupted action before repeating it. Both attempts keep one logical
 turn id and completion. A second crash fails explicitly. Stop aborts setup,

@@ -620,7 +620,7 @@ process.stdin.on("data", (chunk) => {
         if (process.env.FAKE_CODEX_CRASH_ONCE && !existsSync(process.env.FAKE_CODEX_CRASH_ONCE)) {
           writeFileSync(process.env.FAKE_CODEX_CRASH_ONCE, "1");
           if (process.env.FAKE_CODEX_CRASH_PHASE !== "before-ack") {
-            out({ jsonrpc: "2.0", id: msg.id, result: { turn: { id: nativeTurnId } } });
+            if (process.env.FAKE_CODEX_CRASH_PHASE !== "before-ack-output") out({ jsonrpc: "2.0", id: msg.id, result: { turn: { id: nativeTurnId } } });
             notify("item/started", { item: { id: "crash-step", type: "commandExecution", command: "echo fixture" } });
             notify("item/completed", { item: { id: "crash-step", type: "commandExecution", status: "completed", aggregatedOutput: "fixture" } });
           }

@@ -28,6 +28,7 @@ export type CodexProcess = {
   key: string;
   identity: string;
   initialized: boolean;
+  closing?: boolean;
   session?: CodexSession;
   idle?: ReturnType<typeof setTimeout>;
   unwatch?: () => void;
@@ -53,7 +54,7 @@ export class CodexSessions {
     process.unwatch?.();
     process.unwatch = undefined;
     const s = process.session;
-    if (!reset && process.key === key && s?.state.settled && !s.stopping &&
+    if (!reset && !process.closing && process.key === key && s?.state.settled && !s.stopping &&
         s.child.exitCode === null && s.child.signalCode === null && s.child.stdin?.writable) {
       s.detachStream();
       return process;
@@ -89,6 +90,7 @@ export class CodexSessions {
     const process = this.sessions.get(threadId);
     const s = process?.session;
     if (!s) return true;
+    process!.closing = true;
     if (process?.idle) clearTimeout(process.idle);
     process?.unwatch?.();
     const stopped = s.state.settled ? await s.terminate() : await s.stop();

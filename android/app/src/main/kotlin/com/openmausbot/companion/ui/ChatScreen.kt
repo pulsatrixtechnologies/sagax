@@ -294,6 +294,7 @@ private fun LoadedChat(
     // Saveable: the profile form is a form, and a rotation must not throw away
     // what was typed into it — the sheet has to come back for that to matter.
     var showingProfile by rememberSaveable { mutableStateOf(false) }
+    var showingGroupPanel by rememberSaveable { mutableStateOf(false) }
     var showingPlus by remember(threadId) { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
@@ -709,6 +710,11 @@ private fun LoadedChat(
                 if (bot != null) onOpenComputer(bot.id)
             }
             ChatActionId.SETTINGS -> if (bot != null) showingProfile = true
+            ChatActionId.GROUP_INFO -> {
+                dictation.stop()
+                focusManager.clearFocus()
+                showingGroupPanel = true
+            }
             ChatActionId.SHARE_MARKDOWN -> share(scope, environment, threadId, ShareFormat.MARKDOWN)
             ChatActionId.SHARE_JSON -> share(scope, environment, threadId, ShareFormat.JSON)
             ChatActionId.INTERRUPT -> if (bot != null) scope.launch { session.interrupt(bot) }
@@ -1010,16 +1016,15 @@ private fun LoadedChat(
                         }
                     },
                     showCall = liveCallsEnabled && LiveCallRules.offersCall(liveCall, state.liveCall),
-                    // A bot's face and its name pill are both the door to its
-                    // profile; a room has no profile, so its pill opens the same
-                    // sheet the + does.
+                    // A bot's face opens its profile; a room opens the group panel.
                     onOpenProfile = {
-                        if (bot != null) {
-                            showingProfile = true
-                        } else {
-                            dictation.stop()
-                            focusManager.clearFocus()
-                            showingPlus = true
+                        when (chat) {
+                            is Chat.BotChat -> showingProfile = true
+                            is Chat.RoomChat -> {
+                                dictation.stop()
+                                focusManager.clearFocus()
+                                showingGroupPanel = true
+                            }
                         }
                     },
                     modifier = Modifier
@@ -1160,6 +1165,21 @@ private fun LoadedChat(
             onOpenOverview = {
                 onOpenOverview(it)
                 showingProfile = false
+            },
+        )
+    }
+
+    if (showingGroupPanel && chat is Chat.RoomChat) {
+        GroupPanelSheet(
+            roomId = chat.room.id,
+            onDismiss = { showingGroupPanel = false },
+            onOpenComputer = {
+                showingGroupPanel = false
+                onOpenComputer(it)
+            },
+            onOpenRoutines = {
+                showingGroupPanel = false
+                // Routines live under Settings; the roster + sheet stays the entry.
             },
         )
     }
@@ -1310,16 +1330,14 @@ private fun ChatHeader(
                 chat = chat,
                 size = 60.dp,
                 state = face,
-                modifier = if (chat is Chat.BotChat) {
-                    Modifier
-                        .clickable(role = Role.Button, onClick = onOpenProfile)
-                        .localizedSemantics(contentDescription = {
-                            stringResource(R.string.mobile_a11y_open_chat_settings, chat.name)
-                        })
-                } else {
-                    Modifier
-                },
+                modifier = Modifier
+                    .clickable(role = Role.Button, onClick = onOpenProfile)
+                    .localizedSemantics(contentDescription = {
+                        stringResource(R.string.mobile_a11y_open_chat_settings, chat.name)
+                    }),
             )
+            // Bot / room without tasks: settings. Task-capable room: threads
+            // (group settings stay on the avatar and the + sheet).
             NamePill(chat = chat, onOpen = if (chat.supportsTasks) onOpenThreads else onOpenProfile)
         }
     }
@@ -1522,6 +1540,7 @@ private fun localizedChatActionTitle(id: ChatActionId): String = when (id) {
     ChatActionId.TASKS -> stringResource(R.string.mobile_threads_bb12e8aa)
     ChatActionId.WATCH_COMPUTER -> stringResource(R.string.mobile_watch_computer_c96208ca)
     ChatActionId.SETTINGS -> stringResource(R.string.mobile_bot_settings_7092a294)
+    ChatActionId.GROUP_INFO -> stringResource(R.string.mobile_group_title)
     ChatActionId.SHARE_MARKDOWN -> stringResource(R.string.mobile_share_transcript_004e223a)
     ChatActionId.SHARE_JSON -> stringResource(R.string.mobile_share_as_json_df80c8e6)
     ChatActionId.INTERRUPT -> stringResource(R.string.mobile_interrupt_d5db4549)
@@ -1538,6 +1557,7 @@ private fun localizedChatActionSubtitle(id: ChatActionId, chat: Chat): String = 
     ChatActionId.TASKS -> stringResource(R.string.mobile_action_manage_threads)
     ChatActionId.WATCH_COMPUTER -> stringResource(R.string.mobile_action_live_computer, (chat as Chat.BotChat).bot.name)
     ChatActionId.SETTINGS -> stringResource(R.string.mobile_action_bot_settings)
+    ChatActionId.GROUP_INFO -> stringResource(R.string.mobile_group_action_subtitle)
     ChatActionId.SHARE_MARKDOWN -> stringResource(R.string.mobile_action_markdown_transcript)
     ChatActionId.SHARE_JSON -> stringResource(R.string.mobile_action_structured_transcript)
     ChatActionId.INTERRUPT -> stringResource(R.string.mobile_action_stop_turn)
@@ -1583,7 +1603,7 @@ private fun ChatActionIcon(id: ChatActionId, tint: Color) {
             Icon(Icons.AutoMirrored.Filled.List, null, tint = tint, modifier = modifier)
         ChatActionId.WATCH_COMPUTER ->
             Icon(painterResource(R.drawable.ic_display), null, tint = tint, modifier = modifier)
-        ChatActionId.SETTINGS ->
+        ChatActionId.SETTINGS, ChatActionId.GROUP_INFO ->
             Icon(Icons.Filled.Settings, null, tint = tint, modifier = modifier)
         ChatActionId.SHARE_MARKDOWN, ChatActionId.SHARE_JSON ->
             Icon(Icons.Filled.Share, null, tint = tint, modifier = modifier)

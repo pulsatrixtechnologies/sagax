@@ -183,7 +183,19 @@ object SearchPolicy {
  * with a task list get the same task controls as an agent. Exporting is not a
  * bot idea — a room has a transcript like anything else.
  */
-enum class ChatActionId { PHOTOS, FILES, NEW_TASK, TASKS, WATCH_COMPUTER, SETTINGS, SHARE_MARKDOWN, SHARE_JSON, INTERRUPT }
+enum class ChatActionId {
+    PHOTOS,
+    FILES,
+    NEW_TASK,
+    TASKS,
+    WATCH_COMPUTER,
+    SETTINGS,
+    /** Non-DM room: the group side panel (Details / Members / …). */
+    GROUP_INFO,
+    SHARE_MARKDOWN,
+    SHARE_JSON,
+    INTERRUPT,
+}
 
 data class ChatAction(
     val id: ChatActionId,
@@ -243,20 +255,27 @@ object ChatActions {
                 title = "Watch computer",
                 subtitle = "Live view of what ${bot.name} is doing",
             )
-        } else if (chat.supportsTasks) {
+        } else if (chat is Chat.RoomChat && chat.room.dm != true) {
+            if (chat.supportsTasks) {
+                out += ChatAction(
+                    id = ChatActionId.NEW_TASK,
+                    title = "New thread",
+                    subtitle = "Start a fresh conversation in ${chat.name}",
+                    // iOS: `disabled: current.busy || hasPendingApproval`, on the room
+                    // branch only — a channel waiting on an answer does not get a
+                    // second thread started over it.
+                    enabled = !chat.busy && !hasPendingApproval,
+                )
+                out += ChatAction(
+                    id = ChatActionId.TASKS,
+                    title = "Threads",
+                    subtitle = "Switch, rename or remove one",
+                )
+            }
             out += ChatAction(
-                id = ChatActionId.NEW_TASK,
-                title = "New thread",
-                subtitle = "Start a fresh conversation in ${chat.name}",
-                // iOS: `disabled: current.busy || hasPendingApproval`, on the room
-                // branch only — a channel waiting on an answer does not get a
-                // second thread started over it.
-                enabled = !chat.busy && !hasPendingApproval,
-            )
-            out += ChatAction(
-                id = ChatActionId.TASKS,
-                title = "Threads",
-                subtitle = "Switch, rename or remove one",
+                id = ChatActionId.GROUP_INFO,
+                title = "Group",
+                subtitle = "Members, instructions, memory and computer",
             )
         }
         out += ChatAction(

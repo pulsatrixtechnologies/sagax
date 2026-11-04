@@ -1,0 +1,59 @@
+{
+  "cli": "codex-cli 0.166.0",
+  "provider": "synthetic loopback Responses API",
+  "turns": 3,
+  "statuses": [
+    true,
+    true,
+    true
+  ],
+  "pids": [
+    54021,
+    54021,
+    54085
+  ],
+  "reused": true,
+  "stableChangeRespawn": true,
+  "updatedDeveloperSlot": true,
+  "updatedAnywhere": true,
+  "developerCount": 3,
+  "developerRules": [
+    {
+      "first": false,
+      "updated": false
+    },
+    {
+      "first": true,
+      "updated": false
+    },
+    {
+      "first": false,
+      "updated": true
+    }
+  ],
+  "keys": [
+    "model",
+    "stream",
+    "input",
+    "tools",
+    "tool_choice",
+    "parallel_tool_calls",
+    "reasoning",
+    "store",
+    "include",
+    "prompt_cache_key",
+    "client_metadata"
+  ],
+  "roles": [
+    "developer",
+    "developer",
+    "user",
+    "user",
+    "assistant",
+    "user",
+    "assistant",
+    "developer",
+    "user"
+  ],
+  "requestCount": 3
+}

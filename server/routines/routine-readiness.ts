@@ -9,7 +9,11 @@ export const ROUTINE_READINESS_PROBE_TIMEOUT_MS = ROUTINE_READINESS_TIMEOUT_MS -
 export const ROUTINE_READINESS_CACHE_MS = 60_000;
 export interface ReadinessRoutine { botId: string; prompt: string; requires?: RoutineRequirements; runAs?: string; runOn?: string }
 export interface ReadinessRun { botId: string; prompt?: string; runAs?: string; runOn?: string; threadId?: string }
-export interface ReadinessEngine { engine: string; name: string; account?: string; signedIn?: boolean; signedInAt?: number; detail?: string }
+export interface ReadinessEngine {
+  engine: string; name: string; account?: string; signedIn?: boolean; signedInAt?: number; detail?: string;
+  /** Resolved routing facts, not credentials. Absent means unknown. */
+  driver?: string; accessVia?: string; keyBacked?: boolean;
+}
 export interface ReadinessMcp { known: string[]; enabled: string[]; profileServer?: string; toolPrefixes?: Record<string, string> }
 export interface ReadinessComputer { name: string; online?: boolean; needed?: boolean }
 interface ReadinessFlowSkills { hasProfile: boolean; installation: string }
@@ -59,7 +63,7 @@ function boundedProbe(work: (signal: AbortSignal) => unknown): Promise<Probe> {
 /** Bound checks at persistence boundaries as well as at probe creation. */
 export function loadRoutineReadiness(value: unknown): RoutineReadinessCheck[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const codes = new Set(["engine_credits", "engine_limit", "engine_signed_out", "skill_missing", "flow_profile", "mcp_missing", "perspicax_profile", "computer_offline", "ready", "probe_error"]);
+  const codes = new Set(["engine_credits", "engine_limit", "engine_signed_out", "engine_artifacts", "skill_missing", "flow_profile", "mcp_missing", "perspicax_profile", "computer_offline", "ready", "probe_error"]);
   return value.slice(0, 100).filter((check): check is RoutineReadinessCheck => Boolean(check && kinds.includes(check.kind) && codes.has(check.code) && typeof check.ok === "boolean" && typeof check.line === "string")).map(check => ({
     kind: check.kind, ok: check.ok, code: check.code, line: clean(check.line),
     ...(typeof check.detail === "string" ? { detail: clean(check.detail) } : {}),
@@ -104,6 +108,12 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
       if (kind === "engine") {
         const engine = probe.value as ReadinessEngine | undefined;
         if (engine) {
+          const artifactTool = (run.prompt ?? routine.prompt).match(/\b(ArtifactData|ArtifactComments|Artifact)\b/)?.[1];
+          const cannotOfferArtifacts = (engine.driver !== undefined && engine.driver !== "claudeAgent") ||
+            (engine.accessVia !== undefined && engine.accessVia !== "subscription" && engine.accessVia !== "server") ||
+            (engine.accessVia !== "subscription" && engine.keyBacked === true);
+          if (artifactTool && cannotOfferArtifacts) checks.push({ kind, ok: false, code: "engine_artifacts", params: { engine: engine.name, tool: artifactTool },
+            line: `This routine needs ${artifactTool}, which ${engine.name} cannot offer with this account. Choose Claude with a claude.ai subscription sign-in for this bot; API keys and other engines do not provide claude.ai artifact tools.` });
           const recorded = activeEngineRefusal(engine.engine, engine.account, now);
           if (engine.signedIn === true && (engine.signedInAt === undefined || engine.signedInAt > (recorded?.at ?? -Infinity))) clearEngineRefusal(engine.engine, engine.account, now, true);
           const refusal = activeEngineRefusal(engine.engine, engine.account, now);

@@ -41,7 +41,7 @@ export const CLAUDE_HOST_TOOLS: readonly string[] = [
   "EnterWorktree", "ExitWorktree", "Workflow", "DesignSync",
   // 2.1.288: TaskStop and TaskOutput are the current names of KillShell and
   // BashOutput (background commands); the Task* list keeps its tasks in the
-  // CLI's folder on this machine; Artifact and Projects upload a local file;
+  // CLI's folder on this machine; Projects uploads a local file;
   // Config rewrites the CLI's settings; LSP, REPL and JavaScript start a
   // process; WebBrowser drives a browser here; TeamCreate and TeamDelete
   // start and stop teammates; SendFeedback writes a local draft;
@@ -49,7 +49,7 @@ export const CLAUDE_HOST_TOOLS: readonly string[] = [
   // ShowOnboardingRolePicker installs a plugin. None is offered to a
   // withheld turn today: naming one in --tools turns some of them on.
   "TaskStop", "TaskOutput", "TaskCreate", "TaskGet", "TaskUpdate", "TaskList",
-  "Artifact", "Projects", "Config", "LSP", "REPL", "JavaScript", "WebBrowser",
+  "Projects", "Config", "LSP", "REPL", "JavaScript", "WebBrowser",
   "TeamCreate", "TeamDelete", "SendFeedback", "ReadNotifications", "ShowOnboardingRolePicker",
 ];
 
@@ -61,16 +61,20 @@ export const CLAUDE_HOST_TOOLS: readonly string[] = [
  * The first eight are exactly what a withheld turn of the pinned 2.1.288
  * offered the model under the deny list alone (init event and model
  * requests, subagents included; ToolSearch with tool search on).
- * The rest only work on the conversation or on Sagax's MCP servers and
- * the CLI turns them on under a condition of its own (an MCP server with
+ * The optional conversation/MCP tools are enabled under CLI conditions
+ * of their own (an MCP server with
  * resources, brief mode, a JSON schema, a goal); naming one in `--tools`
  * does not turn it on (probed one by one on 2.1.288), so a turn keeps
  * exactly what it had. `Agent` is the current name of `Task`; Sagax MCP
- * tools (`mcp__*`) are not built-ins and `--tools` leaves them alone. */
+ * tools (`mcp__*`) are not built-ins and `--tools` leaves them alone.
+ * The artifact family uses the signed-in person's claude.ai account. */
 export const CLAUDE_ORG_TOOLS: readonly string[] = [
   "Task", "Agent", "AskUserQuestion", "EnterPlanMode", "ExitPlanMode", "SendMessage", "Skill", "ToolSearch", "WebSearch",
   "TodoWrite", "ListMcpResourcesTool", "ReadMcpResourceTool", "ReadMcpResourceDirTool", "RefreshMcpTools",
   "SendUserMessage", "StructuredOutput", "ProposeGoal",
+  // Account-backed artifacts belong to the signed-in person, including
+  // their shared database and comments. A parent deny also hides its add-ons.
+  "Artifact", "ArtifactData", "ArtifactComments",
 ];
 const CLAUDE_ORG_TOOL_SET: ReadonlySet<string> = new Set(CLAUDE_ORG_TOOLS);
 const CLAUDE_ORG_TOOL_ARG = CLAUDE_ORG_TOOLS.join(",");

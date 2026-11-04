@@ -11,6 +11,38 @@ function deps(over: Partial<RoutineReadinessDeps> = {}): RoutineReadinessDeps {
 }
 afterEach(() => vi.useRealTimers());
 describe("routine readiness", () => {
+  it.each([
+    { driver: "codex", accessVia: "subscription" },
+    { driver: "grokAgent", accessVia: "subscription" },
+    { driver: "claudeAgent", accessVia: "org-key" },
+    { driver: "claudeAgent", accessVia: "owner-key" },
+    { driver: "claudeAgent", accessVia: "speaker-key" },
+    { driver: "claudeAgent", accessVia: "server", keyBacked: true },
+  ])("explains an unavailable native artifact tool before running on %j (#1990)", async (selection) => {
+    const check = deps({ engine: () => ({ engine: "fixture-engine", name: "Selected engine", signedIn: true, ...selection }) });
+    for (const tool of ["ArtifactData", "ArtifactComments", "Artifact"]) {
+      const answer = await checkRoutineReadiness({ ...routine, prompt: `Use ${tool} on https://claude.ai/code/artifact/00000000-0000-4000-8000-000000000000.` }, run, check);
+      expect(answer.ok).toBe(false);
+      const blocker = answer.checks.find(row => !row.ok)!;
+      expect(blocker).toMatchObject({ kind: "engine", code: "engine_artifacts", params: { engine: "Selected engine", tool } });
+      expect(blocker.line).toContain("claude.ai subscription sign-in");
+      expect(loadRoutineReadiness([blocker])).toEqual([blocker]);
+    }
+    expect((await checkRoutineReadiness(routine, run, check)).ok).toBe(true);
+  });
+  it.each([
+    { driver: "claudeAgent", accessVia: "subscription", keyBacked: true },
+    { driver: "claudeAgent", accessVia: "server", keyBacked: false },
+    {},
+  ])("keeps supported or unknown artifact accounts runnable: %j (#1990)", async (selection) => {
+    const check = deps({ engine: () => ({ engine: "fixture-engine", name: "Selected engine", signedIn: true, ...selection }) });
+    expect((await checkRoutineReadiness({ ...routine, prompt: "Use ArtifactData to read last-pass." }, run, check)).ok).toBe(true);
+  });
+  it("uses the run's effective prompt for artifact readiness (#1990)", async () => {
+    const check = deps({ engine: () => ({ engine: "fixture-engine", name: "Selected engine", driver: "codex" }) });
+    expect((await checkRoutineReadiness(routine, { ...run, prompt: "Use ArtifactData." }, check)).ok).toBe(false);
+    expect((await checkRoutineReadiness({ ...routine, prompt: "Use ArtifactData." }, { ...run, prompt: "Check the inbox." }, check)).ok).toBe(true);
+  });
   it("passes unknown facts, checks every category and never infers a successful run", async () => {
     expect(await checkRoutineReadiness(routine, run, deps())).toMatchObject({ ok: true, checks: expect.arrayContaining([
       { kind: "engine", ok: true, code: "ready", params: { kind: "engine" }, line: expect.any(String) },

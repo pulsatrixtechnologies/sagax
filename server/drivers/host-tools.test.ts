@@ -28,6 +28,11 @@ describe("Claude Code host tools", () => {
 });
 
 describe("Claude Code organization allowlist", () => {
+  it.each(["Artifact", "ArtifactData", "ArtifactComments"])("keeps selected account-backed %s tools on organization turns (#1990)", (tool) => {
+    expect(claudeOrgTools([tool], true)).toBe(tool);
+    expect(claudeDisallowedTools(undefined, true, true)).not.toContain(tool);
+    expect(claudeDisallowedTools([tool], true, true)).toContain(tool);
+  });
   it("names the allowlist on an organization server and nothing on a solo one", () => {
     expect(claudeOrgTools(undefined, true)).toBe(CLAUDE_ORG_TOOLS.join(","));
     expect(claudeOrgTools(undefined, false)).toBeNull();

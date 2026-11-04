@@ -13066,6 +13066,7 @@
   "routineReadiness.engine_credits": "{engine}'s account is out of credit (provider's last refusal: {at}). Add credit with the provider, or choose another engine for this bot.",
   "routineReadiness.engine_limit": "{engine} reached its usage limit (reset: {until}). Wait for the reset, or choose another engine for this bot.",
   "routineReadiness.engine_signed_out": "{engine} is signed out for this bot. Reconnect it in Settings > Model providers.",
+  "routineReadiness.engine_artifacts": "This routine needs {tool}, which {engine} cannot offer with this account. Choose Claude with a claude.ai subscription sign-in for this bot; API keys and other engines do not provide claude.ai artifact tools.",
   "routineReadiness.skill_missing": "Skill `{skill}` is not among this bot’s skills. Install its plugin for this bot (Connect apps > Sources) or assign the skill to it.",
   "routineReadiness.mcp_missing": "MCP server `{server}` is not connected for this bot. Connect it in the bot’s Connect apps.",
   "routineReadiness.perspicax_profile": "Perspicax refused this person’s profile `{profile}` (401/403 invalid_token). Choose the profile again in Settings > Perspicax.",

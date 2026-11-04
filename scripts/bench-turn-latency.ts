@@ -652,6 +652,8 @@ async function runEngineMode(
         text: `Bench turn ${i}: summarize the fixture plan in one short paragraph.`,
       });
       samples.push(sample);
+      // Brief gap so a reused CLI drains its previous result before the next send.
+      await sleep(100);
     }
 
     const first = samples[0] ?? null;

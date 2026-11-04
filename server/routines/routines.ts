@@ -1,3 +1,6 @@
+import { loadRoutineReadiness } from "./routine-readiness.ts";
+import { noteEngineRefusal, clearEngineRefusal } from "../engines/engine-refusals.ts";
+import type { RoutineRequirements, RoutineReadinessAnswer, RoutineReadinessResult } from "../../shared/routine-readiness.ts";
 import type { GroupGoalRunStatus } from "../../shared/group-goal-run.ts";
 import type { RoutineRun, RoutineContextAttachment, RoutineTarget, RoutineGoalStatus, RoutineRunOn, RoutineRunStatus, RoutineRunTrigger, RoutineMemoryHint, RoutineRunProactive, ProactiveDryRunEntry } from "./routine-run-types.ts";
 export type { RoutineRun, RoutineContextAttachment, RoutineTarget, RoutineGoalStatus, RoutineRunOn, RoutineRunStatus, RoutineRunTrigger, RoutineMemoryHint, RoutineRunProactive, ProactiveDryRunEntry } from "./routine-run-types.ts";
@@ -66,7 +69,7 @@ import {
 } from "../engines/engine-reconnect-ahead.ts";
 import type { LoginDriver } from "../engines/principal-engine-logins.ts";
 import {
-  dispatchRefusal, engineFacts, loadOwnerNotices, recoverRun, retryNote, weekRuns,
+  classifyRoutineFailure, firstOwnerNotice, dispatchRefusal, engineFacts, loadOwnerNotices, recoverRun, retryNote, weekRuns,
   type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,
 } from "./routine-recovery.ts";
 import { ROUTINE_DEFERRAL_NOTICE_MS, ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST, ROUTINE_TURN_LOST_MS, skipNeedsNotice, supersededBy } from "./routine-execution.ts";
@@ -120,6 +123,7 @@ export type RoutineScheduleInput =
 const persistedSourceThreadId = z.string().trim().min(1).optional().catch(undefined);
 
 export interface Routine {
+  requires?: RoutineRequirements;
   id: string;
   name: string;
   prompt: string;
@@ -393,6 +397,7 @@ type RoutineRequestCommitFor<Action extends RoutineRequestOperation["action"]> =
   Omit<RoutineRequestCommit, "action"> & { action: Action };
 
 export interface RoutineInput {
+  requires?: RoutineRequirements | null;
   name: string;
   prompt: string;
   target?: RoutineTarget;
@@ -632,6 +637,10 @@ export interface RoutineManagerOptions {
    * similar work the organization memory knows of, and the note the bot
    * reads with the run's prompt. Fails open: a throw, a null or a slow
    * answer (ROUTINE_MEMORY_HINT_MAX_MS) starts the run as if not asked. */
+  /** Account selected for refusal memory, resolved with the same worker pick as dispatch. */
+  engineForRun?: (run: RoutineRun) => { engine: string; account?: string } | undefined;
+  /** Readiness probes run beside the pass, after admission and before createTask. */
+  readiness?: (routine: Routine, run: RoutineRun) => Promise<RoutineReadinessResult>;
   /** Replaces the pure pre-check evaluator (tests, later wired checks). It
    * runs under ROUTINE_PRECHECK_TIMEOUT_MS; a throw or timeout fails the run. */
   evaluatePrecheck?: (precheck: RoutinePrecheck, facts: RoutinePrecheckFacts) => Promise<RoutinePrecheckVerdict> | RoutinePrecheckVerdict;
@@ -700,14 +709,14 @@ export interface RoutineChangeNote {
 }
 
 /** Slice 6: routine fields whose edit moves runAs to the editor. */
-const WORK_FIELDS = ["prompt", "botId", "groupId", "target", "attachments", "precheck"] as const;
+const WORK_FIELDS = ["prompt", "botId", "groupId", "target", "attachments", "precheck", "requires"] as const;
 
 /** Fields whose edit is a definition change worth an "Updated routine" line
  * (everything the editor exposes but the bare enabled flip). */
 const ROUTINE_DEFINITION_FIELDS = [
   "name", "prompt", "target", "botId", "groupId", "runOn", "schedule",
   "durationMinutes", "timeoutMinutes", "attachments", "continuity", "overlap",
-  "onlyWhenPresent", "precheck", "autoPauseAfter", "mailAlias", "deleteWhenFinished",
+  "onlyWhenPresent", "precheck", "requires", "autoPauseAfter", "mailAlias", "deleteWhenFinished",
 ] as const;
 
 /** A run still in flight: auto-delete waits until none of these remain. */
@@ -886,6 +895,7 @@ function cloneRoutine(routine: Routine): Routine {
   return {
     ...routine,
     schedule: cloneSchedule(routine.schedule),
+    ...(routine.requires ? { requires: structuredClone(routine.requires) } : {}),
     attachments: cloneAttachments(routine.attachments),
     ...(routine.suspended ? { suspended: { ...routine.suspended } } : {}),
     ...(routine.awaySkips ? { awaySkips: { ...routine.awaySkips } } : {}),
@@ -897,6 +907,8 @@ function cloneRoutine(routine: Routine): Routine {
 function cloneRun(run: RoutineRun): RoutineRun {
   return {
     ...run,
+    ...(run.readiness ? { readiness: structuredClone(run.readiness) } : {}),
+    ...(run.requires ? { requires: structuredClone(run.requires) } : {}),
     attachments: cloneAttachments(run.attachments),
     denials: run.denials ? [...run.denials] : undefined,
     ...(run.memoryHint ? { memoryHint: structuredClone(run.memoryHint) } : {}),
@@ -1289,6 +1301,18 @@ function keepTiming(
   };
 }
 
+function parseRoutineRequirements(value: unknown): RoutineRequirements | undefined {
+  if (value == null) return undefined;
+  const schema = z.object({
+    skills: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
+    mcpServers: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
+    computer: z.boolean().optional(),
+  }).strict();
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) throw new RoutineInputError("Requirements accept at most 20 skill or MCP names, each at most 100 characters, and a computer switch");
+  return parsed.data;
+}
+
 function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" | "createdAt" | "updatedAt" | "nextRunAt"> {
   const name = String(input.name ?? "").trim().slice(0, 80);
   const prompt = String(input.prompt ?? "").trim().slice(0, 20_000);
@@ -1330,6 +1354,7 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
     }
     if (target === "room-goal") throw new RoutineInputError("Room goals do not watch for changes yet");
   }
+  const requires = parseRoutineRequirements(input.requires);
   const precheck = input.precheck == null ? undefined : parseRoutinePrecheck(input.precheck);
   const autoPauseAfter = cleanRoutineAutoPauseAfter(input.autoPauseAfter);
   const mailAlias = parseMailAlias(input.mailAlias);
@@ -1354,6 +1379,7 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
     ...(typeof input.postResults === "boolean" ? { postResults: input.postResults } : {}),
     ...(mailAlias.alias ? { mailAlias: mailAlias.alias } : {}),
     ...(precheck ? { precheck } : {}),
+    ...(requires ? { requires } : {}),
     ...(autoPauseAfter === undefined ? {} : { autoPauseAfter }),
     ...(folder ? { folder } : {}),
     // Only meaningful on a schedule with a known end; ignore otherwise.
@@ -1510,6 +1536,7 @@ export class RoutineManager {
               mailAlias: loadMailAlias(routine.mailAlias),
               awaySkips: loadAwaySkips(routine.awaySkips),
               precheck: loadRoutinePrecheck(routine.precheck),
+              requires: parseRoutineRequirements(routine.requires),
               autoPauseAfter: loadAutoPauseAfter(routine.autoPauseAfter),
               autoPaused: routine.enabled ? undefined : loadAutoPaused(routine.autoPaused),
               failuresClearedAt: Number.isSafeInteger(routine.failuresClearedAt) && routine.failuresClearedAt! >= 0 && routine.failuresClearedAt! <= MAX_DATE_MS ? routine.failuresClearedAt : undefined,
@@ -1567,6 +1594,7 @@ export class RoutineManager {
             const target = loadTarget(run.target);
             const loaded: RoutineRun = {
               ...run,
+              readiness: loadRoutineReadiness(run.readiness),
               target,
               goalStatus: loadGoalStatus(run.goalStatus, target),
               groupId: loadGroupId(run.groupId, target),
@@ -1672,6 +1700,7 @@ export class RoutineManager {
       }
       if (run.status === "waiting" && run.target !== "room-goal" && run.threadId && this.options.teammatesContinue?.(run.threadId)) continue;
       // 2026-11-03: a question card survives the restart, and its answer starts the next turn
+      if (run.status === "waiting" && isEngineReconnectAttention(run.attention)) continue;
       if (run.status === "waiting" && run.target !== "room-goal" && run.threadId && this.options.awaitsPerson?.(run.threadId)) continue;
       if (run.status === "running" || run.status === "waiting") {
         run.status = "failed";
@@ -1679,7 +1708,7 @@ export class RoutineManager {
         run.error = ROUTINE_RESTARTED;
         run.attention = undefined;
         run.finishedAt = this.now();
-        // A restart failure counts like any other toward the auto-pause.
+        // Restarts never count toward auto-pause.
         const paused = this.autoPauseAfterFailure(run);
         if (paused) recovered.push(...paused.cancelled.map(cloneRun));
         recovered.push(cloneRun(run));
@@ -1746,7 +1775,7 @@ export class RoutineManager {
   /** Successful delegated/provider turns are not successful runs until the
    * routine settles. Cancellation and missed schedules are not attempts. */
   private outcomesNewestFirst(routineId: string, exceptRunId?: string): RoutineRun[] {
-    return this.runs.filter(run => run.routineId === routineId && run.id !== exceptRunId && (run.status === "failed" || run.status === "completed")).reverse()
+    return this.runs.filter(run => run.routineId === routineId && run.id !== exceptRunId && ((run.status === "failed" && run.error !== ROUTINE_RESTARTED) || run.status === "completed")).reverse()
       .sort((a, b) => (b.finishedAt ?? b.createdAt) - (a.finishedAt ?? a.createdAt) || b.createdAt - a.createdAt);
   }
 
@@ -1769,6 +1798,7 @@ export class RoutineManager {
    * the person's own Pause (no next run, its queued runs cancelled), and
    * the run records why. Mutates only; the caller saves and emits. */
   private autoPauseAfterFailure(run: RoutineRun): { routine: Routine; cancelled: RoutineRun[] } | null {
+    if (run.error === ROUTINE_RESTARTED) return null;
     const routine = this.routines.find(candidate => candidate.id === run.routineId);
     if (!routine || !routine.enabled) return null;
     // 2026-11-01 (#1891): a webhook or email trigger (Incoming texts, Voice
@@ -2058,6 +2088,7 @@ export class RoutineManager {
       postResults: Object.hasOwn(patch, "postResults") ? (patch.postResults ?? undefined) : routine.postResults,
       mailAlias: Object.hasOwn(patch, "mailAlias") ? (patch.mailAlias ?? undefined) : routine.mailAlias,
       precheck: Object.hasOwn(patch, "precheck") ? patch.precheck : routine.precheck,
+      requires: Object.hasOwn(patch, "requires") ? patch.requires : routine.requires,
       autoPauseAfter: Object.hasOwn(patch, "autoPauseAfter") ? patch.autoPauseAfter : routine.autoPauseAfter,
       // null takes it out of its folder; omission keeps it where it is.
       folder: Object.hasOwn(patch, "folder") ? patch.folder : routine.folder,
@@ -2139,6 +2170,7 @@ export class RoutineManager {
       if (clean.postResults === undefined) delete routine.postResults;
       if (clean.mailAlias === undefined) delete routine.mailAlias;
       if (!clean.precheck) delete routine.precheck;
+      if (!clean.requires) delete routine.requires;
       if (clean.autoPauseAfter === undefined) delete routine.autoPauseAfter;
       if (clean.folder === undefined) delete routine.folder;
       if (!clean.deleteWhenFinished) delete routine.deleteWhenFinished;
@@ -2419,6 +2451,7 @@ export class RoutineManager {
     const run: RoutineRun = {
       id: randomUUID(),
       ...(owned?.runAs ? { runAs: owned.runAs } : {}),
+      ...(owned?.requires ? { requires: structuredClone(owned.requires) } : {}),
       routineId: input.routineId ?? input.webhookId,
       routineName: input.webhookName,
       prompt: input.prompt,
@@ -3083,7 +3116,7 @@ export class RoutineManager {
         const triggerSource = run.triggerSource ?? (run.manual ? "manual" : "schedule");
         // Login engine already expired: wait for reconnect instead of starting
         // a turn that would fail the same way again (scheduled and proactive).
-        if ((triggerSource === "schedule" || triggerSource === "proactive") && run.target === "bot") {
+        if (!this.options.readiness && (triggerSource === "schedule" || triggerSource === "proactive") && run.target === "bot") {
           const expiredEngine = this.engineReconnectPauseBots.get(run.botId) ?? this.botEngineExpired(run.botId);
           if (expiredEngine) {
             if (run.status === "queued") {
@@ -3241,17 +3274,38 @@ export class RoutineManager {
                 this.emitRun(run);
                 continue;
               }
-              this.failRun(run, admission.skipped ?? ROUTINE_RATE_LIMITED_SKIPPED);
+              this.blockRun(run, admission.skipped ?? ROUTINE_RATE_LIMITED_SKIPPED);
               continue;
             }
-            this.failRun(run, admission.error);
+            if (!admission.suspend && (admission.skipped || /this run is skipped/i.test(admission.error))) this.blockRun(run, admission.skipped ?? admission.error);
+            else this.failRun(run, admission.error);
             const current = this.runs.find((candidate) => candidate.id === run.id) ?? run;
             if (admission.suspend) this.suspendRoutine(run.routineId, admission.suspend, current);
             continue;
           }
         }
+        if (this.options.readiness) {
+          const routine = this.routines.find(candidate => candidate.id === run.routineId);
+          if (routine) {
+            const readiness = this.readinessSettled.get(run.id);
+            if (!readiness) { this.startReadiness(routine, run); continue; }
+            this.readinessSettled.delete(run.id);
+            if (run.status !== "queued") continue;
+            run.readiness = readiness.checks;
+            if (!readiness.ok) {
+              const blocker = readiness.checks.find(check => !check.ok)!;
+              const cause = blocker.code === "engine_credits" ? "credits" : blocker.code === "engine_limit" ? "usage_limit"
+                : blocker.code === "engine_signed_out" ? "signed_out" : blocker.code === "ready" ? "probe_error" : blocker.code;
+              const alert = firstOwnerNotice(this.ownerNotices, run.botId, cause, this.now()) ? { detail: blocker.line } : null;
+              this.blockRun(run, blocker.line, alert);
+              continue;
+            }
+          }
+        }
         // Every run works in its own task (a webhook's too, since
         // 2026-10-28) and reports into the conversation it belongs to.
+        const engine = this.options.engineForRun?.(run);
+        if (engine) this.readinessEngines.set(run.id, engine);
         const startedAt = this.now();
         const title = this.runTitle(run.routineName, startedAt, run);
         const unstarted = this.unstartedTasks.get(run.id);
@@ -3655,6 +3709,8 @@ export class RoutineManager {
       run.problems = readable.length > 1_000 ? `${readable.slice(0, 999).trimEnd()}…` : readable;
       delete run.quiet;
     } else delete run.problems;
+    const engine = this.readinessEngines.get(run.id) ?? this.options.engineForRun?.(run);
+    if (engine) clearEngineRefusal(engine.engine, engine.account, this.now());
     // A run that completes ends the owner's open notices for its bot.
     this.ownerNotices = this.ownerNotices.filter((notice) => notice.botId !== run.botId);
     return false;
@@ -3671,6 +3727,9 @@ export class RoutineManager {
     this.failureFacts.delete(run.id);
     this.runTrouble.delete(run.id);
     delete run.waitingOn;
+    const refusal = classifyRoutineFailure(failure, facts);
+    const engine = this.readinessEngines.get(run.id) ?? this.options.engineForRun?.(run);
+    if (engine && refusal.kind === "owner" && refusal.cause !== "setup") noteEngineRefusal({ ...engine, cause: refusal.cause, resetsAt: refusal.resetsAt, at: this.now() });
     const recovery = recoverRun(run, redactSecretsInText(failure), facts, this.now(), this.ownerNotices);
     if ("waiting" in recovery && recovery.waiting) {
       this.wait(run, recovery.attention);
@@ -3940,6 +3999,19 @@ export class RoutineManager {
     return resumed.map(cloneRoutine);
   }
 
+  /** A check never creates a run or task. The caller applies Run now authorization. */
+  async checkReadiness(routine: Routine, run?: RoutineRun): Promise<RoutineReadinessAnswer> {
+    const checkedAt = this.now();
+    const context = run ?? { botId: routine.botId, runAs: routine.runAs, runOn: routine.runOn } as RoutineRun;
+    try {
+      const result = await this.options.readiness?.(cloneRoutine(routine), context) ?? { ok: true, checks: [] };
+      return { ...result, checks: loadRoutineReadiness(result.checks) ?? [], checkedAt };
+    } catch (error) {
+      return { ok: false, checkedAt, checks: [{ kind: "engine", ok: false, code: "probe_error", params: { kind: "engine" },
+        line: "The readiness check could not finish. Check the routine again.", detail: redactSecretsInText(String(error)).slice(0, 500) }] };
+    }
+  }
+
   /** Slice 6: the routine's definition, for the wiring. */
   getRoutine(id: string): Routine | null {
     const routine = this.routines.find((candidate) => candidate.id === id);
@@ -3977,7 +4049,7 @@ export class RoutineManager {
 
   /** Flow refused this run (previous unclosed / unknown / run_exists): blocked
    * with the tool's reason, no proactive wake (onRunFailed still fires). */
-  private blockRun(run: RoutineRun, message: string) {
+  private blockRun(run: RoutineRun, message: string, alert: RoutineAlert | null = null) {
     this.runTrouble.delete(run.id);
     delete run.waitingOn;
     run.status = "blocked";
@@ -3988,11 +4060,26 @@ export class RoutineManager {
     delete run.quiet;
     this.save();
     this.emitRun(run);
-    this.options.onRunFailed?.(cloneRun(run), null);
+    this.options.onRunFailed?.(cloneRun(run), alert);
   }
 
   /** Facts from the routine's own receipts, then the evaluator under its
    * hard timeout. Never throws: an error is a failed run, never a pass. */
+  private readinessEngines = new Map<string, { engine: string; account?: string }>();
+  private readinessPending = new Set<string>();
+  private readinessSettled = new Map<string, RoutineReadinessAnswer>();
+
+  private startReadiness(routine: Routine, run: RoutineRun): void {
+    if (this.readinessPending.has(run.id)) return;
+    this.readinessPending.add(run.id);
+    void this.checkReadiness({ ...routine, requires: run.requires }, cloneRun(run)).then(result => {
+      this.readinessPending.delete(run.id);
+      if (run.status !== "queued") return;
+      this.readinessSettled.set(run.id, result);
+      this.tickInBackground();
+    });
+  }
+
   private async precheckRun(routine: Routine, precheck: RoutinePrecheck): Promise<
     { ok: true; verdict: RoutinePrecheckVerdict } | { ok: false; error: string }
   > {
@@ -4169,6 +4256,7 @@ export class RoutineManager {
       routineId: routine.id,
       routineName: routine.name,
       prompt: routine.prompt,
+      ...(routine.requires ? { requires: structuredClone(routine.requires) } : {}),
       durationMinutes: routine.durationMinutes,
       ...(routine.timeoutMinutes === undefined ? {} : { timeoutMinutes: routine.timeoutMinutes }),
       attachments: cloneAttachments(routine.attachments),
@@ -4442,6 +4530,7 @@ export class RoutineManager {
   private emitRun(run: RoutineRun) {
     this.options.emit?.({ kind: "routine.run", run: cloneRun(run) });
     if (run.status !== "queued") this.precheckPassed.delete(run.id);
+    if (!ACTIVE_RUN_STATUSES.has(run.status)) { this.readinessEngines.delete(run.id); this.readinessSettled.delete(run.id); }
     if (this.awaitingPrecheck(run)) return;
     this.notifyRunChanged(run);
     if (run.status === "completed" || run.status === "failed" || run.status === "blocked") {

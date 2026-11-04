@@ -83,3 +83,11 @@ describe("routineRunFallbackText", () => {
       .toBe("Routine “[Dispatch] New tickets” failed\n\nThe engine stopped");
   });
 });
+
+// The card keeps readiness codes so the client translates the blocked reason.
+it("carries independent readiness checks for a blocked run", () => {
+  const readiness = [{ kind: "skills", ok: false, code: "skill_missing", params: { skill: "inbox-review" }, line: "Missing skill. Assign it." }] as const;
+  const card = routineRunCard({ id: "run-check", routineId: "r1", routineName: "Inbox", botId: "osprey", target: "bot", runOn: "maus", status: "blocked", scheduledFor: 1, createdAt: 1, manual: true, readiness: [...readiness] });
+  expect(card.readiness).toEqual(readiness);
+  expect(card.readiness).not.toBe(readiness);
+});

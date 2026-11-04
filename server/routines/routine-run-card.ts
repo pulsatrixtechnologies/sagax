@@ -36,6 +36,7 @@ export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullRepor
   if (run.threadId) card.executionThreadId = run.threadId;
   if (summary) card.summary = summary;
   if (error) card.error = error;
+  if (run.readiness) card.readiness = structuredClone(run.readiness);
   if (run.autoPaused) card.autoPausedAfter = run.autoPaused.failures;
   if (run.status === "completed" && run.problems) card.problems = readableRoutineProblems(redactSecretsInText(run.problems)).slice(0, 1_000);
   if (run.status === "queued" && run.attention) card.attention = redactSecretsInText(run.attention).slice(0, 500);

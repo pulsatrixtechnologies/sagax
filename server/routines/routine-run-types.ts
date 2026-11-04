@@ -1,3 +1,4 @@
+import type { RoutineRequirements, RoutineReadinessCheck } from "../../shared/routine-readiness.ts";
 import type { GroupGoalRunStatus } from "../../shared/group-goal-run.ts";
 import type { ProactiveMode } from "../../shared/proactive-mode.ts";
 import type { RoutineAccess, RoutineRetryCause, RoutineRunHandoff } from "../../shared/routines.ts";
@@ -34,6 +35,8 @@ export type RoutineRunStatus =
   | "nothing_to_report";
 
 export interface RoutineRun {
+  readiness?: RoutineReadinessCheck[];
+  requires?: RoutineRequirements;
   id: string;
   routineId: string;
   routineName: string;

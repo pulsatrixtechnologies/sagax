@@ -1,4 +1,5 @@
 import CompanionCore
+import GameController
 import SwiftUI
 
 // Settings > Workspace > Threads & Routines: the routines and their run logs
@@ -35,6 +36,7 @@ struct TasksRoutinesView: View {
     let page: Page
     /// The iPad desktop shell: the desktop's header, no navigation bar.
     @Environment(\.automationsDesktop) private var desktop
+    @Environment(\.desktopTheme) private var dtheme
     /// Lot 5: the routine open in the desktop's side panel.
     @State private var panelRoutine: Routine?
     /// The paused list (the ☰ menu's Paused routines) in the side panel.
@@ -201,6 +203,8 @@ struct TasksRoutinesView: View {
                                 Text("Routines").font(Theme.font(15, .semibold)).foregroundStyle(Theme.textPrimary)
                                 Text("All schedules, including paused and finished routines.").font(Theme.font(12)).foregroundStyle(Theme.textSecondary)
                             }
+                            // PAGE_COLUMN's p-6: the heading 24 pt under the header
+                            .padding(.top, -16)
                             .listRowBackground(Color.clear)
                         }
                     }
@@ -440,8 +444,8 @@ struct TasksRoutinesView: View {
             .padding(.horizontal, 12)
             .frame(height: 34)
             .frame(maxWidth: 200)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.card))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.hairline.opacity(0.5), lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 8).fill(dtheme.panel))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(dtheme.hairline.opacity(0.5), lineWidth: 1))
             .fixedSize(horizontal: true, vertical: false)
         }
         .accessibilityIdentifier(id)
@@ -468,8 +472,8 @@ struct TasksRoutinesView: View {
                     }
                     .padding(.horizontal, 12)
                     .frame(minWidth: 180, maxWidth: .infinity, minHeight: 34)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.card))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.hairline.opacity(0.5), lineWidth: 1))
+                    .background(RoundedRectangle(cornerRadius: 8).fill(dtheme.panel))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(dtheme.hairline.opacity(0.5), lineWidth: 1))
                     desktopSelect(RoutineRunWording.status(statusFilter), selection: Binding(get: { statusFilter }, set: { statusFilter = $0; logLimit = 50 }), id: "routines-status-filter") {
                         ForEach(RoutineRunStatusFilter.allCases, id: \.self) { filter in
                             Text(verbatim: RoutineRunWording.status(filter)).tag(filter)
@@ -500,8 +504,8 @@ struct TasksRoutinesView: View {
                             .foregroundStyle(Theme.textPrimary)
                             .padding(.horizontal, 12)
                             .frame(height: 34)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.card))
-                            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.hairline.opacity(0.5), lineWidth: 1))
+                            .background(RoundedRectangle(cornerRadius: 8).fill(dtheme.panel))
+                            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(dtheme.hairline.opacity(0.5), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .disabled(runs.isEmpty)
@@ -556,6 +560,7 @@ struct TasksRoutinesView: View {
             .frame(maxWidth: 1024)
             .frame(maxWidth: .infinity)
         }
+        .background(dtheme.app)
         .confirmationDialog("Clear run logs?", isPresented: $confirmClearLogs, titleVisibility: .visible) {
             Button("Clear logs", role: .destructive) { Task { await clearAllLogs() } }
             Button("Cancel", role: .cancel) {}
@@ -937,6 +942,9 @@ struct TasksRoutinesView: View {
                 }
                 .accessibilityLabel(Text(String(format: String(localized: "More for %@"), name)))
                 .accessibilityIdentifier("routine-group-more.\(botId)")
+                // RoutineGroupedList.tsx: on hover with a pointer, always on touch (`touch:flex`)
+                .opacity(groupActionsShown(key) ? 1 : 0)
+                .allowsHitTesting(groupActionsShown(key))
                 Button { quickSlot = AutomationsSlot(at: RoutineScheduleForm.nextHour(), botId: botId) } label: {
                     DesktopIconView(icon: .plus, size: 14)
                         .foregroundStyle(Theme.textTertiary)
@@ -944,14 +952,21 @@ struct TasksRoutinesView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .opacity(hoveredGroup == key ? 1 : 0)
-                .allowsHitTesting(hoveredGroup == key)
-                .accessibilityHidden(hoveredGroup != key)
+                .opacity(groupActionsShown(key) ? 1 : 0)
+                .allowsHitTesting(groupActionsShown(key))
+                .accessibilityHidden(!groupActionsShown(key))
                 .accessibilityLabel(Text(String(format: String(localized: "New routine for %@"), name)))
             }
         }
         .onHover { inside in hoveredGroup = inside ? key : (hoveredGroup == key ? nil : hoveredGroup) }
         .textCase(nil)
+    }
+
+    /// The desktop's `group-hover/section:flex touch:flex`: a pointer
+    /// (a trackpad or a mouse) shows a header's ⋯ and + on hover; without
+    /// one (`pointer: coarse`) they stay shown.
+    private func groupActionsShown(_ key: String) -> Bool {
+        hoveredGroup == key || GCMouse.current == nil
     }
 
     private func botAvatar(_ botId: String) -> some View {
@@ -1066,8 +1081,11 @@ struct TasksRoutinesView: View {
             .accessibilityLabel(Text(routine.enabled ? "Pause" : "Resume"))
             .accessibilityValue(Text(routine.enabled ? "On" : "Off"))
         }
-        .padding(.vertical, 4)
+        // RoutineGroupedList.tsx: `pl-4` under the group, rows py-1.5
+        .padding(.leading, groupBy == .none ? 0 : 16)
+        .padding(.vertical, 6)
         .contentShape(Rectangle())
+        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
         .listRowSeparator(.hidden)
         .onTapGesture { panelRoutine = routine }
         .listRowBackground(Color.clear)

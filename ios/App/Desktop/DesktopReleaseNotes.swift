@@ -332,17 +332,19 @@ struct DesktopReleaseMarkdown: View {
                 case let .paragraph(text):
                     inline(text)
                         .font(theme.font(13.5))
-                        .lineSpacing(5)
+                        .lineSpacing(4)
                         .foregroundStyle(theme.ink)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 8)
                 case let .bullet(text):
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(verbatim: "•").font(theme.font(13.5)).foregroundStyle(theme.inkTertiary)
+                        // the list's disc, filled in the text's colour
+                        Circle().fill(theme.ink).frame(width: 5, height: 5)
+                            .alignmentGuide(.firstTextBaseline) { $0[.bottom] + 4 }
                         inline(text)
                             .font(theme.font(13.5))
-                            .lineSpacing(5)
+                            .lineSpacing(4)
                             .foregroundStyle(theme.ink)
                             .fixedSize(horizontal: false, vertical: true)
                     }

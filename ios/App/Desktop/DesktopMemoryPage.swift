@@ -258,7 +258,7 @@ struct DesktopMemoryPage: View {
                 .accessibilityIdentifier("desktop-memory.rail-hide")
                 Spacer()
             }
-            .padding(.horizontal, 8).padding(.top, 8)
+            .padding(.horizontal, 8).padding(.top, 8).padding(.bottom, 4)
             ScrollView {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 8) {
@@ -275,14 +275,14 @@ struct DesktopMemoryPage: View {
                     .frame(height: 32)
                     .background(theme.ink.opacity(0.03), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
-                    .padding(.bottom, 6)
+                    .padding(.bottom, 10)
                     group(Text("Lists"))
                     placeRow(.all, Text("All notes"), .notebookText, count(.all))
                     placeRow(.teams, Text("Teams"), .users, count(.teams))
                     placeRow(.pinned, Text("Pinned"), .pin, count(.pinned))
                     placeRow(.recent, Text("Recent"), .clock3, count(.recent))
                     placeRow(.review, Text("Review"), .circleCheck, count(.review))
-                    group(Text("Tiers")).padding(.top, 10)
+                    group(Text("Tiers")).padding(.top, 14)
                     let bots = sources.filter { $0.kind == .bot }
                     if !bots.isEmpty {
                         tierHeader(id: "mine", name: Text("My memory"), colour: theme.success, count: entries.filter { $0.source.kind == .bot }.count, place: nil)
@@ -355,7 +355,7 @@ struct DesktopMemoryPage: View {
             Button { if let target { place = target; opened = nil; tab = .notes } } label: {
                 HStack(spacing: 6) {
                     Circle().fill(colour).frame(width: 7, height: 7)
-                    DesktopText(name, size: 13, weight: .medium, line: 18).lineLimit(1)
+                    DesktopText(name, size: 13, weight: .bold, line: 18).lineLimit(1)
                     Spacer(minLength: 0)
                     DesktopText(Text(verbatim: "\(count)"), size: 11.5, line: 16, color: \.inkSecondary)
                 }
@@ -400,8 +400,11 @@ struct DesktopMemoryPage: View {
             .buttonStyle(.plain)
             .accessibilityLabel(Text(verbatim: "\(source.name), \(desktopMemoryLinkTitle(link))"))
         }
-        .padding(.leading, 22).padding(.trailing, 8).frame(minHeight: 30)
+        .padding(.leading, 12).padding(.trailing, 8).frame(minHeight: 30)
         .background(place == .source(source.id) ? theme.selected : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        // `ml-[13px] border-l border-hairline-weak` around a tier's folders
+        .overlay(alignment: .leading) { Rectangle().fill(theme.hairlineWeak).frame(width: 1) }
+        .padding(.leading, 13)
         .contextMenu { menu }
         .accessibilityIdentifier("desktop-memory.folder.\(source.id)")
     }
@@ -409,7 +412,7 @@ struct DesktopMemoryPage: View {
     private func navRow(_ title: Text, _ icon: DesktopIcon, _ count: Int?, current: Bool) -> some View {
         HStack(spacing: 8) {
             DesktopIconView(icon: icon, size: 16).foregroundStyle(theme.inkSecondary)
-            DesktopText(title, size: 13, line: 18).lineLimit(1)
+            DesktopText(title, size: 13, weight: current ? .semibold : .regular, line: 18).lineLimit(1)
             Spacer(minLength: 0)
             if let count { DesktopText(Text(verbatim: "\(count)"), size: 11.5, line: 16, color: \.inkSecondary).monospacedDigit() }
         }
@@ -484,11 +487,15 @@ struct DesktopMemoryPage: View {
                         Button { listView = option } label: { Text(String(localized: viewLabel(option))) }
                     }
                 } label: {
-                    HStack(spacing: 6) {
-                        Text("View · \(String(localized: viewLabel(listView)))").font(theme.font(12.5)).foregroundStyle(theme.ink)
-                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(theme.inkSecondary)
+                    // FIELD, h-8 w-auto max-w-[220px]: the whole label, its chevron at the end
+                    HStack(spacing: 24) {
+                        Text("View · \(String(localized: viewLabel(listView)))").font(theme.font(12.5)).foregroundStyle(theme.ink).lineLimit(1)
+                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(theme.ink)
                     }
-                    .padding(.horizontal, 10).frame(width: 140, height: 32, alignment: .leading)
+                    .padding(.horizontal, 10).frame(height: 32, alignment: .leading)
+                    .frame(maxWidth: 220, alignment: .leading)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .background(theme.ink.opacity(0.03), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline, lineWidth: 1))
                 }
                 .accessibilityLabel(Text("Named view"))

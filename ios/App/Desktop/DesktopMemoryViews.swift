@@ -271,7 +271,10 @@ struct DesktopBrainMap: View {
     /// Radial: the console's brain (BrainMap.tsx).
     private func radial(brain: MemoryBrain.Brain, lit: Set<Int>?, tiers: [MapTier], tags: [String]) -> some View {
         GeometryReader { geometry in
-            let base = MemoryBrain.fit(brain, width: geometry.size.width, height: geometry.size.height)
+            // BrainMap.tsx `fitView`: `brainBounds` (the outer ring and 120), pad 24, 0.04 to 2.2
+            let bound = (brain.rings.last ?? 0) + 120
+            let fitScale = max(0.04, min(2.2, min((geometry.size.width - 48) / (bound * 2), (geometry.size.height - 48) / (bound * 2))))
+            let base = (scale: fitScale, tx: geometry.size.width / 2, ty: geometry.size.height / 2)
             let s = base.scale * zoom * pinch
             let tx = base.tx + pan.width + drag.width
             let ty = base.ty + pan.height + drag.height
@@ -559,6 +562,13 @@ struct DesktopBrainMap: View {
             let r = MemoryBrain.nodeSize(node, scale: s)
             let dim = lit.map { !$0.contains(index) } ?? false
             let fill = node.kind == .root ? theme.accent : colour(node)
+            // the glow: the root most, then recent notes and branches
+            let glow = node.kind == .root ? 1 : node.kind == .note ? node.recency * 0.8 : 0.35 + 0.5 * node.recency
+            if glow > 0.05, !dim {
+                let g = r * (node.kind == .root ? 5 : 4.2) / 2
+                context.fill(Path(ellipseIn: CGRect(x: p.x - g, y: p.y - g, width: g * 2, height: g * 2)),
+                             with: .radialGradient(Gradient(colors: [fill.opacity(0.55 * glow), fill.opacity(0)]), center: p, startRadius: 0, endRadius: g))
+            }
             let circle = Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2))
             context.fill(circle, with: .color(fill.opacity(dim ? 0.15 : (node.age >= MemoryBrain.staleDays && node.kind == .note ? 0.5 : 1))))
             if node.kind != .note {
@@ -599,9 +609,11 @@ struct DesktopBrainMap: View {
                 let box = CGRect(x: centre.x - w / 2, y: centre.y - h / 2, width: w, height: h)
                 if placed.contains(where: { $0.intersects(box.insetBy(dx: 2, dy: 2)) }) { continue }
                 placed.append(box)
-                let capsule = Path(roundedRect: box, cornerRadius: h / 2)
-                context.fill(capsule, with: .color(theme.card.opacity(0.92)))
+                // the root's and a tier's in a bordered capsule; a topic's is the
+                // map's own colour (the desktop's card, which is its ground)
                 if node.kind != .topic {
+                    let capsule = Path(roundedRect: box, cornerRadius: h / 2)
+                    context.fill(capsule, with: .color(theme.card.opacity(0.92)))
                     context.stroke(capsule, with: .color((node.kind == .root ? theme.accent : colour(node)).opacity(0.6)), lineWidth: 1)
                 }
                 context.draw(text, at: CGPoint(x: centre.x, y: centre.y + 0.5), anchor: .center)
@@ -729,9 +741,10 @@ struct DesktopMemoryQuality: View {
         let duplicates = Dictionary(grouping: entries, by: { "\($0.source.id)|\($0.row.title.lowercased())" }).values.filter { $0.count > 1 }.reduce(0) { $0 + $1.count }
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Quality").font(theme.font(17, .semibold)).foregroundStyle(theme.ink)
-                    Text("How the memory holds up: its size, its age, its doubles, its writes.").font(theme.font(12)).foregroundStyle(theme.inkSecondary)
+                // MemoryQualityView.tsx: h2 20 semibold, the line 13 under it (mt-1)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Quality").font(theme.font(20, .semibold)).foregroundStyle(theme.ink)
+                    Text("How the memory holds up: its size, its age, its doubles, its writes.").font(theme.font(13)).foregroundStyle(theme.inkSecondary)
                 }
                 // Health | Journal (the desktop's segmented pair)
                 HStack(spacing: 2) {
@@ -741,17 +754,19 @@ struct DesktopMemoryQuality: View {
                 .padding(2)
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
                 if view == .health {
-                    HStack(spacing: 12) {
+                    // the grid's row: every tile as tall as the tallest, top aligned
+                    HStack(alignment: .top, spacing: 12) {
                         DesktopStatCard(title: Text("Active notes"), value: "\(entries.count)", caption: nil)
                         DesktopStatCard(title: Text("In review"), value: "0", caption: Text("Proposals waiting"))
                         DesktopStatCard(title: Text("Aging"), value: "\(aging)", caption: Text("No change in \(String(Int(Self.agingDays))) days"))
                         DesktopStatCard(title: Text("Duplicates"), value: "\(duplicates)", caption: Text("Same title in one tier"))
                     }
-                    HStack(alignment: .top, spacing: 12) {
+                    .fixedSize(horizontal: false, vertical: true)
+                    HStack(alignment: .top, spacing: 16) {
                         let weeks = weekly()
                         chart(title: Text("Active notes per tier, 26 weeks"), hint: weeks.isEmpty ? nil : Text("Today's notes by the week they were written.")) {
                             if weeks.isEmpty {
-                                Text("Nothing to chart yet.").font(theme.font(12.5)).foregroundStyle(theme.inkSecondary)
+                                Text("Nothing to chart yet.").font(theme.font(13)).foregroundStyle(theme.inkSecondary)
                             } else {
                                 Chart(weeks, id: \.id) { bar in
                                     BarMark(x: .value("Week", bar.week, unit: .weekOfYear), y: .value("Notes", bar.count))
@@ -764,7 +779,7 @@ struct DesktopMemoryQuality: View {
                         let written = writes()
                         chart(title: Text("Writes per week"), hint: nil) {
                             if written.isEmpty {
-                                Text("Nothing to chart yet.").font(theme.font(12.5)).foregroundStyle(theme.inkSecondary)
+                                Text("Nothing to chart yet.").font(theme.font(13)).foregroundStyle(theme.inkSecondary)
                             } else {
                                 Chart(written, id: \.week) { bar in
                                     BarMark(x: .value("Week", bar.week, unit: .weekOfYear), y: .value("Writes", bar.count))
@@ -831,15 +846,22 @@ struct DesktopMemoryQuality: View {
         return grouped.map { ($0.key, $0.value.count) }.sorted { $0.week < $1.week }
     }
 
+    /// `MemoryCard`: rounded-xl, a hairline/50 border, the panel; the title
+    /// 14 semibold (pt-4, pb-2), the body px-4 pb-4.
     private func chart<Content: View>(title: Text, hint: Text?, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            title.font(theme.font(13, .semibold)).foregroundStyle(theme.ink)
-            if let hint { hint.font(theme.font(12)).foregroundStyle(theme.inkSecondary) }
-            content()
+        VStack(alignment: .leading, spacing: 0) {
+            title.font(theme.font(14, .semibold)).foregroundStyle(theme.ink)
+                .padding(.top, 16).padding(.bottom, 8)
+            VStack(alignment: .leading, spacing: 4) {
+                content()
+                if let hint { hint.font(theme.font(11.5)).foregroundStyle(theme.inkTertiary) }
+            }
+            .padding(.bottom, 16)
         }
-        .padding(14)
+        .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
     }
 
     private func loadJournal() async {
@@ -861,15 +883,17 @@ struct DesktopStatCard: View {
     let caption: Text?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            title.font(theme.font(12)).foregroundStyle(theme.inkSecondary)
+        // StatGrid's tile: px-4 py-3, 12 label, 22/28 semibold, 11.5 caption (mt-0.5)
+        VStack(alignment: .leading, spacing: 0) {
+            title.font(theme.font(12)).foregroundStyle(theme.inkSecondary).lineLimit(1)
             Text(verbatim: value).font(theme.font(22, .semibold)).foregroundStyle(theme.ink).monospacedDigit()
-            caption?.font(theme.font(11.5)).foregroundStyle(theme.inkTertiary)
+                .frame(height: 28).padding(.top, 4)
+            caption?.font(theme.font(11.5)).foregroundStyle(theme.inkTertiary).lineLimit(1).padding(.top, 2)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(theme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
     }
 }
 

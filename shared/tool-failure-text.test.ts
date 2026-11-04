@@ -89,4 +89,14 @@ describe("toolFailureText, a connector write refused", () => {
     expect(toolFailureText({ type: "MCP", output: { Error: JSON.stringify(body) }, is_error: true }))
       .toBe("timeEntry object is invalid (upstream_error)\nbody.timeStart: Unsupported format applied to timeStart");
   });
+  it("reads a Perspicax refusal inside a Codex mcpToolCall result (error null), as a routine card stores it", () => {
+    // 2026-11-04, a routine's flow_run read ["run", "close"]: Codex item {status: failed, error: null, result}
+    const body = { code: "params_invalid", details: { status: 400 }, hint: "call flow_run with {\"command\": \"run.finish\"}", message: "flow_run read only runs read commands, and `run close` is not one: call flow_run {\"command\": \"run.finish\"} instead" };
+    const result = { content: [{ type: "text", text: JSON.stringify(body) }], structuredContent: body, _meta: null };
+    const text = toolFailureText(result);
+    expect(text).toContain("call flow_run {\"command\": \"run.finish\"} instead (params_invalid)");
+    expect(text).toContain("call flow_run with");
+    // the stored preview reads the same when the card opens
+    expect(toolFailureText(text)).toBe(text);
+  });
 });

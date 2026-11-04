@@ -159,6 +159,14 @@ data class ToolActivity(
      * characters and already redacted. Older computers omit it.
      */
     val output: String? = null,
+    /** Short command or title the chat shows on the chip. Older computers omit it. */
+    val summary: String? = null,
+    /** Bounded, redacted arguments preview. Older computers omit it. */
+    val input: String? = null,
+    /** How long the call ran, in milliseconds. Older computers omit it. */
+    val durationMs: Double? = null,
+    /** Files the call wrote or touched. Older computers omit it. */
+    val files: List<String>? = null,
 )
 
 /**

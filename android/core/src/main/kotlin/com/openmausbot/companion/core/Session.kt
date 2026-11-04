@@ -2182,6 +2182,74 @@ class Session(
         }
     }
 
+    /** Quiet read of GET /api/bots/:id/activity. */
+    suspend fun loadBotActivity(botId: String, filter: String? = null, quiet: Boolean = true): BotActivityList? {
+        val activeClient = client ?: return null
+        val connectionId = _connection.value?.id
+        return try {
+            val list = activeClient.botActivity(botId, filter)
+            currentCoroutineContext().ensureActive()
+            list.takeIf { _connection.value?.id == connectionId }
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            if (!quiet && _connection.value?.id == connectionId) _actionError.value = error.message
+            null
+        }
+    }
+
+    /** Quiet read of GET /api/bots/:id/activity/item. */
+    suspend fun loadBotActivityItem(
+        botId: String,
+        itemId: String,
+        quiet: Boolean = true,
+    ): BotActivityDetail? {
+        val activeClient = client ?: return null
+        val connectionId = _connection.value?.id
+        return try {
+            val detail = activeClient.botActivityItem(botId, itemId)
+            currentCoroutineContext().ensureActive()
+            detail.takeIf { _connection.value?.id == connectionId }
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            if (!quiet && _connection.value?.id == connectionId) _actionError.value = error.message
+            null
+        }
+    }
+
+    /**
+     * Stop a coding task: cloud cancel, parallel stop, or interrupt, chosen
+     * from [itemId] and optional [detail]/[parallel] (CodingChat.tsx stop).
+     */
+    suspend fun stopCodingTask(
+        botId: String,
+        itemId: String,
+        detail: BotActivityDetail? = null,
+        quiet: Boolean = true,
+    ): Boolean {
+        val activeClient = client ?: return false
+        val connectionId = _connection.value?.id
+        return try {
+            val ids = codingChatItemIds(itemId)
+            when {
+                ids.cloudId != null -> activeClient.cancelCloudAgent(botId, ids.cloudId)
+                else -> {
+                    val threadId = detail?.threadId ?: ids.threadId ?: return false
+                    if (detail?.parallel == true) {
+                        activeClient.stopParallelTask(botId, threadId)
+                    } else {
+                        activeClient.interrupt(botId, threadId)
+                    }
+                }
+            }
+            currentCoroutineContext().ensureActive()
+            _connection.value?.id == connectionId
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            if (!quiet && _connection.value?.id == connectionId) _actionError.value = error.message
+            false
+        }
+    }
+
     suspend fun loadRoutineRunAvailability(): RoutineRunAvailability? {
         val activeClient = client ?: return null
         return try {

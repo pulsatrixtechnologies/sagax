@@ -793,16 +793,25 @@ export class PerspicaxMcp {
     /** The turn descends from a routine or other automation (a hop it
      * asked, a thread it opened, a room goal it runs). */
     routine?: boolean;
+    /** #1941: when the speaker id is empty, mount as this bot's owner
+     * (conversation uses the speaker; routine uses the owner; unresolved
+     * falls back to the owner only, never another person). A named unknown
+     * principal still refuses as unknown_speaker. */
+    ownerPrincipalId?: string;
   }): Promise<PerspicaxTurnPlan> {
     const plan: PerspicaxTurnPlan = { mounted: [], unavailable: [] };
     const link = this.options.link();
     const selected = input.bot.perspicaxActAs;
     const profiles = [...new Set(input.bot.perspicax?.profiles ?? [])];
+    // #1941: empty speaker → bot owner; a named unknown principal stays refused.
+    const speakerTrimmed = input.speakerPrincipalId.trim();
+    const ownerTrimmed = input.ownerPrincipalId?.trim() ?? "";
+    const resolvedPrincipalId = speakerTrimmed || ownerTrimmed;
     if (!profiles.length && selected && link) {
       // The base connection needs a held profile even when the chosen identity
       // has since been removed. That lets identity_switch report the refusal
       // and keep the person's read plane available.
-      const held = this.options.heldProfiles?.(input.speakerPrincipalId);
+      const held = this.options.heldProfiles?.(resolvedPrincipalId);
       const profileId = held ? held[0] : link.profileCatalog().find((profile) => profile.slug === selected.slug)?.id;
       if (profileId) profiles.push(profileId);
     }
@@ -816,7 +825,7 @@ export class PerspicaxMcp {
     refuse(profiles.filter((id) => !catalog.has(id)), "unknown_profile");
     if (!known.length) return plan;
     const source: Entry["source"] = input.speakerOrigin === "owner-routine" || input.routine === true ? "delegation" : "session";
-    const principalId = input.speakerPrincipalId.trim();
+    const principalId = resolvedPrincipalId;
     const subject = principalId ? this.options.subjectOf(principalId) : null;
     if (!subject || subject.iss !== this.options.issuer) {
       refuse(known, "unknown_speaker");

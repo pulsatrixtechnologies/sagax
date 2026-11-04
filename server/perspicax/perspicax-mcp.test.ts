@@ -268,13 +268,36 @@ describe("PerspicaxMcp", () => {
       mounted: [], unavailable: [{ profileId: "P1", name: "Dispatch", reason: "no_delegation" }],
     });
     expect(h.subjectCalls).toEqual([]);
+    // #1941: empty speaker with no owner fallback still refuses; with owner
+    // fallback mounts as the owner. A named unknown principal never widens.
     expect(await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: "", speakerOrigin: "person" })).toMatchObject({ mounted: [], unavailable: [{ reason: "unknown_speaker" }] });
-    expect(await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: "pr_nobody", speakerOrigin: "peer" })).toMatchObject({ mounted: [], unavailable: [{ reason: "unknown_speaker" }] });
+    expect(await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: "", speakerOrigin: "person", ownerPrincipalId: BOB })).toEqual({
+      mounted: [{ profileId: "P1", slug: "dispatch", name: "Dispatch" }], unavailable: [],
+    });
+    // Peer hop / a2a wake with no source principal: owner fallback (never another person).
+    expect(await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: "", speakerOrigin: "peer", ownerPrincipalId: BOB })).toEqual({
+      mounted: [{ profileId: "P1", slug: "dispatch", name: "Dispatch" }], unavailable: [],
+    });
+    expect(await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: "pr_nobody", speakerOrigin: "peer", ownerPrincipalId: BOB })).toMatchObject({ mounted: [], unavailable: [{ reason: "unknown_speaker" }] });
     expect(await h.mcp.prepareTurn({ ...turn, bot: { id: "x", perspicax: { profiles: ["GONE"] } }, speakerPrincipalId: BOB, speakerOrigin: "person" })).toMatchObject({ mounted: [], unavailable: [{ profileId: "GONE", name: "GONE", reason: "unknown_profile" }] });
     expect(await h.mcp.prepareTurn({ ...turn, bot: { id: "x" }, speakerPrincipalId: BOB, speakerOrigin: "person" })).toEqual({ mounted: [], unavailable: [] });
-    expect(h.exchanges).toEqual([]);
     const solo = new PerspicaxMcp({ issuer: ISS, link: () => null, subjectOf: () => null, subjectToken: async () => ({ ok: false, error: "no_session" }), botProfiles: () => ["P1"], version: "1" });
     expect(await solo.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" })).toEqual({ mounted: [], unavailable: [] });
+  });
+
+  it("#1941 owner-routine with empty speaker mounts via the bot owner (delegation)", async () => {
+    const h = harness();
+    h.delegations.add(BOB);
+    expect(await h.mcp.prepareTurn({
+      ...turn, bot, speakerPrincipalId: "", speakerOrigin: "owner-routine", routine: true, ownerPrincipalId: BOB,
+    })).toEqual({
+      mounted: [{ profileId: "P1", slug: "dispatch", name: "Dispatch" }], unavailable: [],
+    });
+    expect(h.delegationCalls).toEqual([BOB]);
+    // Empty without owner still refuses; never widens to another person.
+    expect(await h.mcp.prepareTurn({
+      ...turn, bot, speakerPrincipalId: "", speakerOrigin: "owner-routine", routine: true,
+    })).toMatchObject({ mounted: [], unavailable: [{ reason: "unknown_speaker" }] });
   });
 
   it("a turn in a routine's lineage never uses a sign-in, even for a peer hop that names a live person", async () => {

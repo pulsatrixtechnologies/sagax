@@ -7364,15 +7364,19 @@ async function perspicaxTurnPrepare(input: {
   const live = store.bot(input.bot.id) ?? input.bot;
   if (!live.perspicax?.profiles.length && !live.perspicaxActAs) return null;
   const routine = routineLineage(input.speaker);
-  const speakerPrincipalId = input.speaker.origin === "peer" && input.speaker.principalId === undefined
-    ? ""
-    : orgSpeakerPrincipal(live, input.speaker);
+  // #1941: conversation uses the speaker; routine uses the owner/run-as;
+  // if still unresolved, fall back to this bot's owner only (never another
+  // person). A peer hop without a principal used to force "" and lose the
+  // mount (unknown_speaker); owner fallback restores the owner's profiles.
+  const ownerPrincipalId = effectiveBotOwner(live) ?? "";
+  const speakerPrincipalId = orgSpeakerPrincipal(live, input.speaker).trim() || ownerPrincipalId;
   const plan = await perspicaxMcp.prepareTurn({
     threadId: input.threadId,
     generation: input.generation,
     bot: { id: live.id, perspicax: live.perspicax, perspicaxActAs: live.perspicaxActAs },
     speakerPrincipalId,
     speakerOrigin: input.speaker.origin,
+    ownerPrincipalId,
     ...(routine ? { routine: true } : {})
   });
   // Handshake beside setup: open/verify the MCP session and identity lease
@@ -14179,7 +14183,11 @@ const remoteSessions = createRemoteSessionService({
     const threadId = `remote-close-${randomUUID()}`;
     const generation = randomUUID();
     try {
-      const plan = await mcp.prepareTurn({ threadId, generation, bot: { id: live.id, perspicax: live.perspicax }, speakerPrincipalId: principalId, speakerOrigin: "person" });
+      const plan = await mcp.prepareTurn({
+        threadId, generation, bot: { id: live.id, perspicax: live.perspicax },
+        speakerPrincipalId: principalId, speakerOrigin: "person",
+        ownerPrincipalId: effectiveBotOwner(live),
+      });
       if (!plan.mounted.length) return;
       await mcp.callTool({ threadId, generation, botId: live.id, name: "remote_support_close", args: { code, outcome: "ended" } });
     } finally {
@@ -14238,7 +14246,11 @@ const unattendedHosts = createUnattendedHosts({
     if (!bot?.perspicax) return { error: "None of your bots is linked to Perspicax, so Sagax cannot reach it for you." };
     const threadId = bot.threadId;
     const generation = randomUUID();
-    const plan = await mcp.prepareTurn({ threadId, generation, bot: { id: bot.id, perspicax: bot.perspicax }, speakerPrincipalId: principalId, speakerOrigin: "person" });
+    const plan = await mcp.prepareTurn({
+      threadId, generation, bot: { id: bot.id, perspicax: bot.perspicax },
+      speakerPrincipalId: principalId, speakerOrigin: "person",
+      ownerPrincipalId: effectiveBotOwner(bot),
+    });
     if (!plan.mounted.length) {
       await mcp.endGeneration(threadId, generation).catch(() => {});
       const first = plan.unavailable[0];
@@ -14370,7 +14382,11 @@ async function remoteSupportSeat(target: SupportWatchTarget): Promise<string | n
   let seat = remoteSupportSeats.get(target.code);
   if (!seat) {
     const generation = randomUUID();
-    const ready = mcp.prepareTurn({ threadId: target.threadId, generation, bot: { id: bot.id, perspicax: bot.perspicax }, speakerPrincipalId: target.principalId, speakerOrigin: "person" })
+    const ready = mcp.prepareTurn({
+      threadId: target.threadId, generation, bot: { id: bot.id, perspicax: bot.perspicax },
+      speakerPrincipalId: target.principalId, speakerOrigin: "person",
+      ownerPrincipalId: effectiveBotOwner(bot),
+    })
       .then((plan) => plan.mounted.length > 0, () => false);
     seat = { generation, ready };
     remoteSupportSeats.set(target.code, seat);
@@ -31000,7 +31016,8 @@ async function perspicaxReadAlone(input: { botId: string; principalId: string; t
   try {
     const plan = await mcp.prepareTurn({
       threadId, generation, bot: { id: live.id, perspicax: live.perspicax },
-      speakerPrincipalId: input.principalId, speakerOrigin: "owner-routine"
+      speakerPrincipalId: input.principalId, speakerOrigin: "owner-routine",
+      ownerPrincipalId: effectiveBotOwner(live),
     });
     const profile = plan.mounted.find((candidate) => candidate.slug && tool.startsWith(`${candidate.slug}__`)) ?? plan.mounted[0];
     if (!profile) {
@@ -38728,7 +38745,11 @@ async function reachMeVoice(person: string, botId: string, tool: "voice_line" | 
       const threadId = `reach-me-${randomBytes(6).toString("hex")}`;
       const generation = "1";
       try {
-        const plan = await perspicaxMcp.prepareTurn({ threadId, generation, bot: { id: bot.id, perspicax: { profiles: [profileId] }, perspicaxActAs: bot.perspicaxActAs }, speakerPrincipalId: person, speakerOrigin: "owner-routine", routine: true });
+        const plan = await perspicaxMcp.prepareTurn({
+          threadId, generation, bot: { id: bot.id, perspicax: { profiles: [profileId] }, perspicaxActAs: bot.perspicaxActAs },
+          speakerPrincipalId: person, speakerOrigin: "owner-routine", routine: true,
+          ownerPrincipalId: effectiveBotOwner(bot),
+        });
         if (!plan.mounted.length) { last = plan.unavailable[0]?.reason ?? "not mounted"; continue; }
         const answer = await perspicaxMcp.callTool({ threadId, generation, botId: bot.id, name: tool, args });
         if (answer.ok && !answer.isError) return { ok: true, value: answer.value };

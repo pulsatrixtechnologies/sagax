@@ -6276,7 +6276,9 @@ function shouldIgnoreProviderEvent(event: RuntimeEvent): boolean {
   // but its returned turn id is not available to retire yet. Quarantine the
   // narrow pre-id window and tombstone any id it reveals; the broad gate is
   // time-bounded so a broken promise cannot suppress a later turn forever.
-  if (isTurnEventQuarantined(pendingCancelledProviderHandshakes, retiredProviderTurns, event)) return true;
+  const owner = directRequestOwners.get(event.threadId);
+  const currentTurnId = owner?.generation === directTurnGenerationByThread.get(event.threadId) ? owner?.turnId ?? undefined : undefined;
+  if (isTurnEventQuarantined(pendingCancelledProviderHandshakes, retiredProviderTurns, event, currentTurnId)) return true;
   if (event.type !== "session.exited" || event.turnId !== undefined) return false;
   const bot = store.botByThread(event.threadId);
   return Boolean(bot && threadBusy(bot.id, event.threadId)) || Boolean(store.groupByThread(event.threadId)?.busyBotId);
@@ -20170,7 +20172,9 @@ bus.subscribe((event: RuntimeEvent) => {
       const clientStopped = stoppedTurns.has(event.threadId)
         && (stoppedTurnId === undefined || completedTurnId === undefined || stoppedTurnId === completedTurnId);
       stoppedTurns.delete(event.threadId);
-      const stopped = event.stopReason === "interrupted" || clientStopped;
+      // ACP and Pi acknowledge a clean Stop as cancelled, without a text
+      // or error row. It must not become an unfinished-turn continuation.
+      const stopped = event.stopReason === "interrupted" || event.stopReason === "cancelled" || clientStopped;
       // The turn is over: no call or sub-agent of it can still be at work.
       closeCutToolRows(event.threadId, endedToolOutput({ stopped }));
       // Hang up only when the goodbye finished. A failed or interrupted

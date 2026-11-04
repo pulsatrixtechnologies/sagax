@@ -38,6 +38,13 @@ data class RoomViewer(
     companion object {
         fun norm(value: String?): String? =
             value?.trim()?.lowercase()
+
+        /** iOS `RoomViewer(account:)`: the signed-in session names the person. */
+        fun from(account: AuthSession?): RoomViewer = RoomViewer(
+            principalId = account?.principalId,
+            email = account?.email,
+            role = account?.role,
+        )
     }
 }
 

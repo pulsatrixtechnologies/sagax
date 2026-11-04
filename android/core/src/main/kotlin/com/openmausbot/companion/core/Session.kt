@@ -113,6 +113,18 @@ class Session(
     /** All locally paired computers. Only [connection] has an active runtime. */
     val connections: StateFlow<List<Connection>> = _connections.asStateFlow()
 
+    /**
+     * Who this phone is signed in as (`GET /api/auth/session`). Drives
+     * [RoomViewer] for group Members, lead control and Leave group. Cleared
+     * when the active runtime stops; refreshed off the hydrate path.
+     */
+    private val _account = MutableStateFlow<AuthSession?>(null)
+    val account: StateFlow<AuthSession?> = _account.asStateFlow()
+
+    /** The person the room panel judges, from [account]. */
+    val roomViewer: RoomViewer
+        get() = RoomViewer.from(_account.value)
+
     private val _status = MutableStateFlow<Status>(Status.Unpaired)
     val status: StateFlow<Status> = _status.asStateFlow()
 
@@ -576,6 +588,7 @@ class Session(
         token = null
         rotation = CandidateRotation(emptyList())
         _state.value = CompanionState()
+        _account.value = null
         notificationSink.setBadge(0)
     }
 
@@ -914,6 +927,23 @@ class Session(
                 throw error
             } catch (_: Exception) {
                 emptySet()
+            }
+        }
+        // Who is looking: Members, lead control and Leave group need the
+        // signed-in principal. Off the critical path; an older harness that
+        // omits /api/auth/session leaves RoomViewer on its local-owner fallback.
+        scope.launch {
+            val session = try {
+                activeClient.authSession()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                return@launch
+            }
+            gate.withLock {
+                if (streamGeneration == generation && client === activeClient) {
+                    _account.value = session
+                }
             }
         }
         // The fleet snapshot does not carry the Live call. A phone that
@@ -1625,6 +1655,29 @@ class Session(
             _actionError.value = error.message
             null
         }
+    }
+
+    /** Quiet read of `GET /api/threads/:id/files`. */
+    suspend fun loadThreadFiles(threadId: String, quiet: Boolean = true): List<ThreadFile> {
+        val activeClient = client ?: return emptyList()
+        return try {
+            activeClient.threadFiles(threadId)
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            if (!quiet) _actionError.value = error.message
+            emptyList()
+        }
+    }
+
+    /**
+     * The group's Library: files of its open conversation and each of its
+     * threads, newest first. Failures on one thread leave the others.
+     */
+    suspend fun loadGroupLibraryFiles(room: Room): List<ThreadFile> {
+        val threads = groupThreadIds(room)
+        if (threads.isEmpty()) return emptyList()
+        val byThread = threads.associateWith { loadThreadFiles(it, quiet = true) }
+        return LibraryRules.groupFiles(threads, byThread)
     }
 
     /**

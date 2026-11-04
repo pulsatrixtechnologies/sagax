@@ -25,7 +25,7 @@ final class InstructionsPagesTests: XCTestCase {
         XCTAssertEqual(WrittenSkill.problem(name: "check", description: "x", instructions: " \n"), .instructions)
         XCTAssertNil(WrittenSkill.problem(name: "check-2", description: "x", instructions: "y"))
         XCTAssertEqual(WrittenSkill.typedName("My Check"), "my-check")
-        XCTAssertEqual(WrittenSkill.description("  \"two\n lines\" "), "two lines")
+        XCTAssertEqual(WrittenSkill.description("\"two\n  lines\""), "two lines")
     }
 
     func testWrittenCommandMarkdownMatchesTheDesktop() throws {

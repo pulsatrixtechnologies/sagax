@@ -73,6 +73,25 @@ final class DesktopPersonaInstructionsUITests: XCTestCase {
         XCTFail("never true: \(what)")
     }
 
+    /// Taps a field and makes sure it took the keyboard: a field low on the
+    /// page sits under the on-screen keyboard the previous field opened, so
+    /// the tap lands on the keyboard. Hide it, bring the field up, tap again.
+    @MainActor
+    private func focus(_ app: XCUIApplication, _ field: XCUIElement) {
+        func focused() -> Bool { (field.value(forKey: "hasKeyboardFocus") as? Bool) == true }
+        field.tap()
+        for _ in 0..<3 where !focused() {
+            let keyboard = app.keyboards.firstMatch
+            if keyboard.exists {
+                let hide = keyboard.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'keyboard'")).firstMatch
+                if hide.exists { hide.tap() } else { app.swipeUp() }
+            } else {
+                app.swipeUp()
+            }
+            field.tap()
+        }
+    }
+
     private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {
         app.descendants(matching: .any)[id].firstMatch
     }
@@ -115,7 +134,7 @@ final class DesktopPersonaInstructionsUITests: XCTestCase {
         let condition = element(app, "finish-until-condition")
         XCTAssertTrue(condition.waitForExistence(timeout: 5), "the condition field")
         XCTAssertTrue(element(app, "finish-until-rounds").exists, "Relaunches at most")
-        condition.tap()
+        focus(app, condition)
         condition.typeText("the tests pass")
         element(app, "finish-until-save").tap()
         try eventually("the condition is stored") { (try ara())?["finishUntil"] as? String == "the tests pass" }
@@ -138,13 +157,13 @@ final class DesktopPersonaInstructionsUITests: XCTestCase {
 
         let name = element(app, "desktop-skills.command-name")
         XCTAssertTrue(name.waitForExistence(timeout: 10), "the command's name")
-        name.tap()
+        focus(app, name)
         name.typeText(command)
         let description = element(app, "desktop-skills.command-description")
-        description.tap()
+        focus(app, description)
         description.typeText("Checks the fixture")
         let body = element(app, "desktop-skills.command-instructions")
-        body.tap()
+        focus(app, body)
         body.typeText("Run the fixture check and report.")
         let save = element(app, "desktop-skills.command-save")
         XCTAssertTrue(save.isEnabled, "Save command once the draft is complete")

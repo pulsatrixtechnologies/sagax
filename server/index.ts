@@ -47734,7 +47734,7 @@ async function runtimeDelegationStatus(taskId: string, from: BotRecord, fromThre
       return [200, { status, toBotName, result: node.result }];
     }
     // A person's card cannot advance while this caller waits. Preserve the
-    // legacy poll's immediate answer for runtime work too (MOCA-274).
+    // legacy poll's immediate answer for runtime work too.
     const awaitingPerson = node.status === "queued" ? undefined : openPersonCard(node.threadId);
     if (Date.now() >= deadline || awaitingPerson) {
       return [200, node.status === "queued"

@@ -1,3 +1,4 @@
+import { effortLabel } from "@/lib/effort-label";
 // The Configuration section of a routine's page and of a run's detail
 // (2026-10-29): what to do, who does it, when, where, how long, and every
 // other setting the editor holds, read-only and complete. A run shows the
@@ -81,6 +82,7 @@ export function RoutineConfiguration({ routine, run, bots, groups = [], viewerPr
             <li>{t("routines.autoPause.label")}: {routineAutoPauseOption(routineAutoPauseAfter(routine))}</li>
             {routine.mailAlias && <li>{t("routines.mailAlias.label")}: +{routine.mailAlias}</li>}
             {routine.model && <li data-routine-config-model="">{t("routines.model.label")}: {routine.model}</li>}
+            {routine.effort && <li data-routine-config-effort="">{t("routines.effort.label")}: {effortLabel(routine.effort)}</li>}
             {routine.folder && <li>{t("routineDetail.folder")}: {routine.folder}</li>}
           </ul>
         </Row>}

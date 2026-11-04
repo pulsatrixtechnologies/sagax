@@ -2691,5 +2691,8 @@
   "botPanel.library.pageState.revoked": "revogada",
   "botPanel.library.pageState.expired": "expirada",
   "routines.model.label": "Modelo",
-  "routines.model.botDefault": "Modelo do bot"
+  "routines.model.botDefault": "Modelo do bot",
+  "routines.effort.label": "Esforço",
+  "routines.effort.botDefault": "Esforço do bot",
+  "routineEditor.hint.effort": "As execuções e seus subagentes usam este esforço. O chat mantém o esforço do bot."
 }

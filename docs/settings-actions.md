@@ -232,6 +232,8 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | Name | Automations > routine | `sagax_settings` get, set `routine.name` | simple |
 | Instructions | Automations > routine | `sagax_settings` get, set `routine.prompt` | simple |
 | Schedule ({type: once/daily/cron/interval, ...}) | Automations > routine > Schedule | `sagax_settings` get, set `routine.schedule` | simple |
+| Model for routine runs (null follows the bot) | Automations > routine > Model | `sagax_settings` get, set `routine.model` | simple |
+| Reasoning effort for routine runs (null follows the bot) | Automations > routine > Effort | `sagax_settings` get, set `routine.effort` | simple |
 | On or off | Bot panel > Details > Routines; Automations | `sagax_settings` get, set `routine.enabled` | simple |
 | Where it runs | Automations > routine > Runs on | `sagax_settings` get, set `routine.engine` | simple |
 | Bot that runs it | Automations > routine > Bot | `sagax_settings` get, set `routine.bot` | simple |
@@ -452,6 +454,7 @@ Full), élargit les droits, secret, autrui, en lot, suppression, organisation
 | New conversations confidential | Settings > Organization > Privacy | `sagax_settings` get, set `org.confidentialByDefault` | organisation |
 | Allow vault export | Settings > Organization > Credentials | `sagax_settings` get, set `org.allowVaultExport` | organisation |
 | People from before: days | Settings > Organization > People | `sagax_settings` get, set `org.interimAttachDays` | organisation |
+| Pending approvals expire after (days) | Settings > Organization > Approvals | `sagax_settings` get, set `org.pendingApprovalExpireDays` | organisation |
 | Plugin marketplaces | Capabilities > Sources > Organization sources and access | `sagax_settings` get, set `org.pluginMarketplaces` | organisation |
 | Public links for published pages | Settings > Pages > Organization pages | `sagax_settings` get, set `org.pagesLinkSharing` | organisation |
 | Reader comments on published pages | Settings > Pages > Organization pages | `sagax_settings` get, set `org.pagesReaderComments` | organisation |

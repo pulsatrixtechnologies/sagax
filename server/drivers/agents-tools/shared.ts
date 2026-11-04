@@ -1,3 +1,5 @@
+import { EFFORT_LEVELS } from "../../../shared/model-selection.ts";
+import { parseRoutineEffort } from "../../../shared/routine-effort.ts";
 // Shared schema fragments and call helpers for agents-tools families.
 // Definitions and handlers live beside each family; this module holds what
 // more than one family imports. Never import server/index.ts.
@@ -180,6 +182,11 @@ export const ROUTINE_FIELDS_SCHEMA = {
     type: ["string", "null"],
     maxLength: 200,
     description: "Only if asked: a model id of this bot's engine for its runs and sub-agents; chat keeps the bot's. null resets.",
+  },
+  effort: {
+    type: ["string", "null"],
+    enum: [...EFFORT_LEVELS, null],
+    description: "Reasoning effort for routine runs and sub-agents on this bot's engine; chat keeps the bot's effort. null resets.",
   },
   delete_when_finished: {
     type: "boolean",
@@ -545,6 +552,11 @@ export function routineFields(args: Json): { fields: Json; error?: string } {
   if (args.model !== undefined) {
     if (args.model !== null && typeof args.model !== "string") return { fields, error: "model must be a model id, or null for the bot's model." };
     fields.model = args.model;
+  }
+  if (args.effort !== undefined) {
+    const effort = parseRoutineEffort(args.effort);
+    if (!effort.ok) return { fields, error: effort.error };
+    fields.effort = effort.effort ?? null;
   }
   return { fields };
 }

@@ -41,7 +41,7 @@ describe("the settings registry", () => {
 
   it("covers what Owner listed: model, effort, approval level, managed teams, title, persona, mascot, skin, routine schedule, conversation, on/off and engine", () => {
     for (const key of ["bot.model", "bot.effort", "bot.approvalMode", "bot.managedSections", "bot.title", "bot.persona", "bot.mascot", "bot.skin",
-      "routine.schedule", "routine.enabled", "routine.engine", "group.name", "section.bots", "org.allowFullAccess",
+      "routine.schedule", "routine.enabled", "routine.engine", "routine.model", "routine.effort", "group.name", "section.bots", "org.allowFullAccess",
       "credentials.item", "connections.mcpServer", "notifications.sounds", "appearance.skin", "server.showToolCalls"]) {
       expect(settingSpec(key), key).toBeDefined();
     }

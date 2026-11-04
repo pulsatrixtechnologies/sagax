@@ -335,6 +335,9 @@ env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = "1";
 // the routine's model, never the CLI's default (Opus on a subscription).
 const subagentModel = turn.subagentModel ? (turn.subagentModel === turn.model ? injected.model ?? turn.subagentModel : turn.subagentModel) : null;
 if (subagentModel) env.CLAUDE_CODE_SUBAGENT_MODEL = subagentModel;
+// Native sub-agents inherit this turn's routine effort.
+const subagentEffort = turn.subagentEffort ?? null;
+if (subagentEffort) env.CLAUDE_CODE_EFFORT_LEVEL = subagentEffort;
 // Command variables the person exposed to this bot (credential-command-env.ts).
 for (const [name, value] of cleanCommandVariables(turn.commandEnvironment)) env[name] = value;
 // Desktop bridge: this turn's own network traffic leaves through the
@@ -363,6 +366,7 @@ const contract = {
   model: injected.model ?? null,
   // a routine's sub-agent model is another launch (a chat turn never reuses it)
   subagentModel,
+  subagentEffort,
   base: env.ANTHROPIC_BASE_URL ?? null,
   configDir: env.CLAUDE_CONFIG_DIR ?? null,
   // another person's computer (or none) never reuses this process

@@ -1,3 +1,4 @@
+import { ROUTINE_FIELDS_SCHEMA } from "./shared.ts";
 // Agents tool family: Agent-to-agent API and run_with_engine.
 // Never import server/index.ts.
 import { agentToolAnnotations } from "../../tools/agent-tool-policy.ts";
@@ -158,6 +159,8 @@ export const AGENT_API_TOOLS = [
         name: { type: "string", minLength: 1, maxLength: 120 },
         instructions: { type: "string", minLength: 1, maxLength: 32000 },
         schedule: { type: "object", description: "cron, daily, interval, once, webhook or event schedule object." },
+        model: ROUTINE_FIELDS_SCHEMA.model,
+        effort: ROUTINE_FIELDS_SCHEMA.effort,
       },
       required: ["routine_id"],
     },

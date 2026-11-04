@@ -1,3 +1,4 @@
+import type { EffortLevel } from "../../shared/model-selection.ts";
 import { loadRoutineReadiness } from "./routine-readiness.ts";
 import { noteEngineRefusal, clearEngineRefusal } from "../engines/engine-refusals.ts";
 import type { RoutineRequirements, RoutineReadinessAnswer, RoutineReadinessResult } from "../../shared/routine-readiness.ts";
@@ -31,6 +32,7 @@ import {
 } from "./routine-precheck.ts";
 import { ROUTINE_WATCH_LIMITS, type RoutineWatchPrecheck } from "../../shared/routine-watch.ts";
 import { parseMailAlias } from "../../shared/routine-mail-alias.ts";
+import { loadRoutineEffort, parseRoutineEffort } from "../../shared/routine-effort.ts";
 import { loadRoutineModel, parseRoutineModel } from "../../shared/routine-model.ts";
 import { watchNoteBlock } from "./routine-watch.ts";
 import { awayDecision, awayReportDue, loadAwaySkips, recordAwaySkip, type AwayVerdict, type RoutineAwaySkips } from "./routine-away.ts";
@@ -202,6 +204,8 @@ export interface Routine {
    * bot's own engine (sub-agents too on Claude). Absent: the bot's model.
    * A model the bot's engine does not offer is ignored at run start. */
   model?: string;
+  /** Reasoning effort for runs only; absent follows the bot. */
+  effort?: EffortLevel;
   /** Confined runs: read Gmail/Calendar and write reply drafts only. */
   access?: RoutineAccess;
   nextRunAt: number | null;
@@ -441,6 +445,8 @@ export interface RoutineInput {
   /** The model its runs use; null or "" goes back to the bot's model,
    * omission preserves it on updates. */
   model?: string | null;
+  /** null resets to the bot; omission preserves it on updates. */
+  effort?: EffortLevel | null;
 }
 
 interface RoutineFile {
@@ -652,6 +658,7 @@ export interface RoutineManagerOptions {
   /** 2026-11-04: why a routine model cannot be saved for this bot (not
    * offered by its engine, turned off), or null. Absent: any id that reads. */
   checkModel?: (botId: string, model: string) => string | null;
+  checkEffort?: (botId: string, effort: EffortLevel, model?: string) => string | null;
   /** Readiness probes run beside the pass, after admission and before createTask. */
   readiness?: (routine: Routine, run: RoutineRun, mode: "run" | "check") => Promise<RoutineReadinessResult>;
   /** Replaces the pure pre-check evaluator (tests, later wired checks). It
@@ -729,7 +736,7 @@ const WORK_FIELDS = ["prompt", "botId", "groupId", "target", "attachments", "pre
 const ROUTINE_DEFINITION_FIELDS = [
   "name", "prompt", "target", "botId", "groupId", "runOn", "schedule",
   "durationMinutes", "timeoutMinutes", "attachments", "continuity", "overlap",
-  "onlyWhenPresent", "precheck", "requires", "autoPauseAfter", "mailAlias", "deleteWhenFinished", "model",
+  "onlyWhenPresent", "precheck", "requires", "autoPauseAfter", "mailAlias", "deleteWhenFinished", "model", "effort",
 ] as const;
 
 /** A run still in flight: auto-delete waits until none of these remain. */
@@ -1373,6 +1380,9 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
   const mailAlias = parseMailAlias(input.mailAlias);
   if (!mailAlias.ok) throw new RoutineInputError(mailAlias.error);
   const folder = cleanRoutineFolder(input.folder);
+  const effort = parseRoutineEffort(input.effort);
+  if (!effort.ok) throw new RoutineInputError(effort.error);
+  if (effort.effort && target === "room-goal") throw new RoutineInputError("Choose the effort on a bot routine; room goals follow each bot.");
   const model = parseRoutineModel(input.model);
   if (!model.ok) throw new RoutineInputError(model.error);
   if (model.model && target === "room-goal") throw new RoutineInputError("A room goal runs on each bot's own model: choose the model on a bot routine");
@@ -1402,6 +1412,7 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
     ...(input.deleteWhenFinished === true && scheduleHasKnownEnd(input.schedule) ? { deleteWhenFinished: true } : {}),
     ...(input.access === "read-and-draft" ? { access: "read-and-draft" as const } : {}),
     ...(model.model ? { model: model.model } : {}),
+    ...(effort.effort ? { effort: effort.effort } : {}),
   };
 }
 
@@ -1561,8 +1572,10 @@ export class RoutineManager {
               deleteWhenFinished: routine.deleteWhenFinished === true && scheduleHasKnownEnd(schedule) ? true : undefined,
               access: routine.access === "read-and-draft" ? "read-and-draft" as const : undefined,
               model: loadRoutineModel(routine.model),
+              effort: loadRoutineEffort(routine.effort),
             };
             if (loaded.model === undefined) delete loaded.model;
+            if (loaded.effort === undefined) delete loaded.effort;
             if (loaded.folder === undefined) delete loaded.folder;
             if (loaded.precheck === undefined) delete loaded.precheck;
             if (loaded.autoPauseAfter === undefined) delete loaded.autoPauseAfter;
@@ -1845,6 +1858,12 @@ export class RoutineManager {
     return { routine, cancelled };
   }
 
+  private assertEffort(clean: { botId: string; effort?: EffortLevel; model?: string }): void {
+    if (!clean.effort) return;
+    const refusal = this.options.checkEffort?.(clean.botId, clean.effort, clean.model);
+    if (refusal) throw new RoutineInputError(refusal);
+  }
+
   private assertModel(clean: { botId: string; model?: string }): void {
     if (!clean.model || !this.options.checkModel) return;
     const refusal = this.options.checkModel(clean.botId, clean.model);
@@ -2047,6 +2066,7 @@ export class RoutineManager {
     const clean = validInput(input, at);
     if (this.targetState(clean) === "missing") throw new RoutineInputError(this.missingTargetMessage(clean.target));
     this.assertModel(clean);
+    this.assertEffort(clean);
     if (clean.folder) clean.folder = this.admitFolder(clean.botId, clean.folder);
     const id = randomUUID();
     const placed = clean.enabled ? this.placeInitial(id, clean.schedule, at, clean) : { start: null as number | null };
@@ -2124,11 +2144,13 @@ export class RoutineManager {
       access: Object.hasOwn(patch, "access") ? patch.access : routine.access,
       // null or "" goes back to the bot's model; omission keeps it.
       model: Object.hasOwn(patch, "model") ? patch.model : routine.model,
+      effort: Object.hasOwn(patch, "effort") ? patch.effort : routine.effort,
     }, now);
     if (this.targetState(clean) === "missing") throw new RoutineInputError(this.missingTargetMessage(clean.target));
     // Checked when it is chosen or the bot changes; a kept model whose
     // engine moved on is ignored at run start instead (shared/routine-model.ts).
     if (clean.model !== routine.model || clean.botId !== routine.botId) this.assertModel(clean);
+    if (clean.effort !== routine.effort || clean.botId !== routine.botId) this.assertEffort(clean);
     if (clean.folder) clean.folder = this.admitFolder(clean.botId, clean.folder);
     const previousBotId = routine.botId;
     const scheduleChanged = JSON.stringify(clean.schedule) !== JSON.stringify(routine.schedule);
@@ -2207,6 +2229,7 @@ export class RoutineManager {
       if (!clean.deleteWhenFinished) delete routine.deleteWhenFinished;
       if (!clean.access) delete routine.access;
       if (!clean.model) delete routine.model;
+      if (!clean.effort) delete routine.effort;
       foldersChanged = this.settleFolders(routine.botId);
       if (previousBotId !== routine.botId) this.settleFolders(previousBotId);
       // Turned back on (Resume on the notice, the switch, the editor): the
@@ -2499,6 +2522,7 @@ export class RoutineManager {
       attachments: [],
       ...(owned?.access === "read-and-draft" ? { access: "read-and-draft" as const } : {}),
       ...(owned?.model ? { model: owned.model } : {}),
+      ...(owned?.effort ? { effort: owned.effort } : {}),
       ...(input.eventSource ? { eventSource: input.eventSource } : {}),
       ...(input.resultsThreadId ? { resultsThreadId: input.resultsThreadId } : {}),
       createdAt: this.now(),
@@ -4333,6 +4357,7 @@ export class RoutineManager {
       resultsThreadId,
       ...(routine.access === "read-and-draft" ? { access: "read-and-draft" as const } : {}),
       ...(routine.target === "bot" && routine.model ? { model: routine.model } : {}),
+      ...(routine.target === "bot" && routine.effort ? { effort: routine.effort } : {}),
       createdAt: this.now(),
     };
     this.runs.push(run);

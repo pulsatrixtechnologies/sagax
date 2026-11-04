@@ -4638,6 +4638,21 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(seen.argv.filter((a: string) => a === "--effort")).toHaveLength(1);
   });
 
+  it("passes routine effort to native sub-agents without keeping it on chat", async () => {
+    await create();
+    const dump = join(scratch, "routine-effort.json");
+    process.env.FAKE_CLAUDE_DUMP = dump;
+    await instance.adapter.sendTurn({ threadId: "t-routine-effort", text: "Run", effort: "low", subagentEffort: "low" });
+    await recorder.until((event) => event.type === "turn.completed");
+    expect(JSON.parse(readFileSync(dump, "utf8")).env.CLAUDE_CODE_EFFORT_LEVEL).toBe("low");
+    const next = await instance.adapter.sendTurn({ threadId: "t-routine-effort", text: "Chat", effort: "low" });
+    expect(next.reused).not.toBe(true);
+    await recorder.until((event) => event.type === "turn.completed" && event.turnId === next.turnId);
+    const chat = JSON.parse(readFileSync(dump, "utf8"));
+    expect(chat.env.CLAUDE_CODE_EFFORT_LEVEL).toBeUndefined();
+    expect(chat.argv[chat.argv.indexOf("--effort") + 1]).toBe("low");
+  });
+
   it("adds no effort flag when the turn has none", async () => {
     await create();
     const dump = join(scratch, "no-effort.json");

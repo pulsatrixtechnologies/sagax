@@ -1244,6 +1244,7 @@ import type { RoutineScopeCaller, RoutineScopeDeps, RoutineScopeFacts } from "./
 import { recordRoutineChange, recordRoutineToggle, routineToggleForViewer } from "./routines/routine-chat-events.ts";
 import { botReplyQuoteId } from "./turns/reply-to-turn.ts";
 import { isTriggerSchedule } from "../shared/routines.ts";
+import { routineTurnEffort } from "../shared/routine-effort.ts";
 import { routineTurnModel } from "../shared/routine-model.ts";
 import {
   nextOccurrence,
@@ -21328,6 +21329,32 @@ function routineModelForTurn(botId: string, threadId: string, instance: { instan
   return decided;
 }
 
+const routineEffortNoticed = new Set<string>();
+
+/** Resolve against the model selected for this turn, without changing chat. */
+function routineEffortForTurn(botId: string, threadId: string, instance: ProviderInstance, model: string): { effort: EffortLevel } | null {
+  const run = activeRoutineRunForThread(threadId);
+  const bot = store.bot(botId);
+  if (!run?.effort || run.botId !== botId || !bot) return null;
+  const decided = routineTurnEffort({
+    effort: run.effort,
+    botInstanceId: bot.modelSelection.instanceId,
+    turnInstanceId: instance.instanceId,
+    takenOver: Boolean(limitFailoverStore.failover(botId, threadId)),
+    option: instance.models.options.find(option => option.id === model),
+    levels: instance.adapter.capabilities.effortLevels,
+  });
+  if (decided && "ignored" in decided) {
+    if (!routineEffortNoticed.has(run.id)) {
+      routineEffortNoticed.add(run.id);
+      if (routineEffortNoticed.size > 500) routineEffortNoticed.delete(routineEffortNoticed.values().next().value!);
+      store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: `notice: ${decided.ignored}`, ok: true } });
+    }
+    return null;
+  }
+  return decided;
+}
+
 function routineDelegationCanResume(threadId: string, routineRunId?: string): boolean {
   return !routineRunId || activeRoutineRunForThread(threadId)?.id === routineRunId;
 }
@@ -24775,6 +24802,15 @@ routines = new RoutineManager({
   },
   engineForRun: (run) => routineReadinessEngine({ botId: run.botId, prompt: run.prompt ?? "" }, run),
   checkModel: (botId, model) => routineModelRefusal(botId, model),
+  checkEffort: (botId, effort, model) => {
+    const bot = store.bot(botId);
+    const instance = bot && registry.get(bot.modelSelection.instanceId);
+    if (!instance || !bot) return null;
+    const decided = routineTurnEffort({ effort, botInstanceId: instance.instanceId, turnInstanceId: instance.instanceId,
+      takenOver: false, levels: instance.adapter.capabilities.effortLevels,
+      option: instance.models.options.find(option => option.id === (model ?? bot.modelSelection.model)) });
+    return decided && "ignored" in decided ? `Effort "${effort}" is not offered by this bot's engine for this model.` : null;
+  },
   botName: (botId) => store.bot(botId)?.name,
   evaluateWatch: (routine, watch) => routineWatchEvaluator(routine, watch),
   forgetWatch: (routineId) => routineWatchStates.forget(routineId),
@@ -42802,6 +42838,8 @@ const agentApi = createAgentApi({
     if (patch.name !== undefined) body.name = patch.name;
     if (patch.instructions !== undefined) body.prompt = patch.instructions;
     if (patch.schedule !== undefined) body.schedule = patch.schedule;
+    if (patch.model !== undefined) body.model = patch.model;
+    if (patch.effort !== undefined) body.effort = patch.effort;
     const patched = await performAsMember(memberForAgentCaller(caller), {
       method: "PATCH",
       path: `/api/routines/${encodeURIComponent(routineId)}`,
@@ -46763,6 +46801,7 @@ const startTurnRunner = createStartTurn({
   turnHolder,
   turnModelRequested,
   routineModelForTurn,
+  routineEffortForTurn,
   turnModelSwitches,
   turnNetworkProxy,
   turnOrigin,

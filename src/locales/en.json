@@ -13095,5 +13095,8 @@
   "limitFailover.ownerExhaustedNoTime": "This bot's owner hit usage limits on {tried}: no other engine could answer. Pick another model, add credit, or try again later.",
   "routineReadiness.flow_plan": "The Flow shadow check failed at {step}: {error}",
   "routineReadiness.ready.flow": "The Flow shadow plan has no known blocker. Run the routine when ready.",
-  "routineReadiness.flow_live": "A Flow run is live, plan not checked."
+  "routineReadiness.flow_live": "A Flow run is live, plan not checked.",
+  "routines.effort.label": "Effort",
+  "routines.effort.botDefault": "Bot's effort",
+  "routineEditor.hint.effort": "Its runs and their sub-agents use this effort. Chat keeps the bot's effort."
 }

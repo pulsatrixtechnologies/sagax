@@ -1,3 +1,4 @@
+import type { EffortLevel } from "../../shared/model-selection.ts";
 // Internal harness routes for routine / profile / model / rule proposals,
 // team-setup and bot-deletion requests (#1388 I3). Behind the agents
 // capability checked in server/index.ts before dispatchInternalRoutes.
@@ -56,6 +57,7 @@ export interface InternalRequestsRoutine {
   folder?: string;
   /** 2026-11-04: the routine's model (shared/routine-model.ts). */
   model?: string;
+  effort?: EffortLevel;
   enabled: boolean;
   runOn: string;
   durationMinutes: number;
@@ -259,6 +261,7 @@ function agentRoutine(routine: InternalRequestsRoutine, latestRun?: InternalRequ
     name: safeName,
     ...(routine.folder ? { folder: redactSecretsInText(routine.folder) } : {}),
     ...(routine.model ? { model: routine.model } : {}),
+    ...(routine.effort ? { effort: routine.effort } : {}),
     instructions: safeInstructions.slice(0, 2_000),
     instructionsTruncated: safeInstructions.length > 2_000,
     continuity: routine.continuity === true,

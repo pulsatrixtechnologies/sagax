@@ -13,6 +13,7 @@ import { redactSecretsInText } from "../redact.ts";
 import { loadRoutinePrecheck, parseRoutinePrecheck } from "./routine-precheck.ts";
 import type { RoutineWatchPrecheck } from "../../shared/routine-watch.ts";
 import { cleanRoutineFolder, ROUTINE_FOLDER_MAX } from "../../shared/routine-folders.ts";
+import { EFFORT_LEVELS } from "../../shared/model-selection.ts";
 import { parseRoutineModel } from "../../shared/routine-model.ts";
 import { describeCondition } from "./routine-watch.ts";
 import { parseJson, schemaIssue, type JsonObject, type JsonValue } from "../schema.ts";
@@ -128,6 +129,7 @@ const routineToolFieldsSchema = z.object({
   deleteWhenFinished: z.boolean().optional(),
   /** 2026-11-04: the model its runs use; null in an update goes back to the bot's. */
   model: z.string().max(200).nullable().optional(),
+  effort: z.union([z.enum(EFFORT_LEVELS), z.literal("")]).nullable().optional(),
   /** Create only: true starts the routine live, false paused; absent
    * follows `routines.newPaused`. A webhook or email trigger follows the
    * same rule. Pause and resume are actions of their own. */
@@ -297,9 +299,10 @@ const storedDefinitionSchema = z.object({
   folder: z.string().min(1).max(ROUTINE_FOLDER_MAX).optional(),
   deleteWhenFinished: z.boolean().optional(),
   model: z.string().min(1).max(200).optional(),
+  effort: z.enum(EFFORT_LEVELS).optional(),
 }).strict();
 const storedChangesSchema = storedDefinitionSchema
-  .omit({ schedule: true, timeoutMinutes: true, watch: true, folder: true, model: true })
+  .omit({ schedule: true, timeoutMinutes: true, watch: true, folder: true, model: true, effort: true })
   .partial()
   .extend({
     schedule: storedScheduleChangesSchema.optional(),
@@ -307,6 +310,7 @@ const storedChangesSchema = storedDefinitionSchema
     watch: z.custom<RoutineWatchPrecheck | null>((value) => value === null || loadRoutinePrecheck(value)?.kind === "watch").optional(),
     folder: z.string().min(1).max(ROUTINE_FOLDER_MAX).nullable().optional(),
     model: z.string().min(1).max(200).nullable().optional(),
+    effort: z.enum(EFFORT_LEVELS).nullable().optional(),
   })
   .strict()
   .refine(
@@ -801,6 +805,7 @@ function normalizeDefinition(input: RoutineToolDefinitionInput, now: number): Ro
     ...(cleanRoutineFolder(input.folder) ? { folder: cleanRoutineFolder(input.folder)! } : {}),
     ...(input.deleteWhenFinished === true ? { deleteWhenFinished: true } : {}),
     ...(modelInput(input.model) ? { model: modelInput(input.model)! } : {}),
+    ...(input.effort ? { effort: input.effort } : {}),
   };
 }
 
@@ -822,6 +827,7 @@ function normalizeChanges(
   if (input.folder !== undefined) changes.folder = cleanRoutineFolder(input.folder) ?? null;
   if (input.deleteWhenFinished !== undefined) changes.deleteWhenFinished = input.deleteWhenFinished === true;
   if (input.model !== undefined) changes.model = modelInput(input.model) ?? null;
+  if (input.effort !== undefined) changes.effort = input.effort || null;
   return changes;
 }
 
@@ -1118,9 +1124,10 @@ function effectiveDefinition(operation: RoutineRequestOperation, manager: Routin
     ...(existing.folder ? { folder: existing.folder } : {}),
     ...(existing.deleteWhenFinished ? { deleteWhenFinished: true } : {}),
     ...(existing.model ? { model: existing.model } : {}),
+    ...(existing.effort ? { effort: existing.effort } : {}),
   };
   if (operation.action !== "update") return base;
-  const { schedule, timeoutMinutes, watch, folder, model, ...changes } = operation.changes;
+  const { schedule, timeoutMinutes, watch, folder, model, effort, ...changes } = operation.changes;
   const merged: RoutineRequestDefinition = {
     ...base,
     ...changes,
@@ -1134,6 +1141,8 @@ function effectiveDefinition(operation: RoutineRequestOperation, manager: Routin
   else if (folder !== undefined) merged.folder = folder;
   if (model === null) delete merged.model;
   else if (model !== undefined) merged.model = model;
+  if (effort === null) delete merged.effort;
+  else if (effort !== undefined) merged.effort = effort;
   return merged;
 }
 
@@ -1233,6 +1242,7 @@ function cardCopy(
       ...(definition.folder ? [`Folder: ${redactSecretsInText(definition.folder)}`] : []),
       ...(definition.deleteWhenFinished ? ["Delete once finished: yes"] : []),
       ...(definition.model ? [`Model: ${redactSecretsInText(definition.model)} (the bot's engine; chat keeps the bot's model)`] : []),
+      ...(definition.effort ? [`Effort: ${definition.effort} (chat keeps the bot's effort)`] : []),
       // Last before the instructions: the one sentence that says what
       // confirming actually does, in the reader's terms.
       ...(operation.action === "create" || operation.action === "update"
@@ -1265,6 +1275,7 @@ function inputFromDefinition(definition: RoutineRequestDefinition, botId: string
     ...(definition.folder ? { folder: definition.folder } : {}),
     ...(definition.deleteWhenFinished ? { deleteWhenFinished: true } : {}),
     ...(definition.model ? { model: definition.model } : {}),
+    ...(definition.effort ? { effort: definition.effort } : {}),
   };
 }
 
@@ -1286,6 +1297,7 @@ function updateFromChanges(
   if (changes.folder !== undefined) patch.folder = changes.folder;
   if (changes.deleteWhenFinished !== undefined) patch.deleteWhenFinished = changes.deleteWhenFinished;
   if (changes.model !== undefined) patch.model = changes.model;
+  if (changes.effort !== undefined) patch.effort = changes.effort;
   return patch;
 }
 
@@ -1366,6 +1378,7 @@ function revalidateOperation(operation: RoutineRequestOperation, manager: Routin
         || (routine.overlap ?? "skip") !== (definition.overlap ?? "skip")
         || Boolean(routine.deleteWhenFinished) !== Boolean(definition.deleteWhenFinished)
         || (routine.model ?? "") !== (definition.model ?? "")
+        || routine.effort !== definition.effort
         || !isDeepStrictEqual(routine.precheck?.kind === "watch" ? routine.precheck : undefined, definition.watch)
         || (routine.attachments?.length ?? 0) > 0) return false;
       // An omitted start means "every N minutes", not a new phase each time
@@ -1458,6 +1471,7 @@ function routineSnapshot(routine: Routine): RoutineRequestSnapshot | undefined {
     ...(routine.precheck ? { precheck: structuredClone(routine.precheck) } : {}),
     ...(routine.folder ? { folder: routine.folder } : {}),
     ...(routine.model ? { model: routine.model } : {}),
+    ...(routine.effort ? { effort: routine.effort } : {}),
     enabled: routine.enabled,
     ...(routine.target === "room-goal" ? { target: "room-goal" as const } : {}),
     ...(routine.groupId ? { groupId: routine.groupId } : {}),
@@ -1484,6 +1498,7 @@ function restorePatch(before: RoutineRequestSnapshot, now: number): Partial<Rout
     precheck: before.precheck === undefined ? null : structuredClone(before.precheck) as RoutineInput["precheck"],
     folder: before.folder ?? null,
     model: before.model ?? null,
+    effort: before.effort ?? null,
   };
 }
 
@@ -1755,6 +1770,8 @@ export class RoutineRequestService {
             ...(before.precheck !== undefined ? { precheck: structuredClone(before.precheck) as RoutineInput["precheck"] } : {}),
             ...(before.resultsThreadId ? { resultsThreadId: before.resultsThreadId } : {}),
             ...(before.folder ? { folder: before.folder } : {}),
+            ...(before.model ? { model: before.model } : {}),
+            ...(before.effort ? { effort: before.effort } : {}),
           }).id;
           break;
         }

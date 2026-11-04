@@ -60,6 +60,7 @@ export function createPrepareAdmitStartTurn(
     repeatsShownFailure,
     resolveTurnSpeaker,
     routineModelForTurn,
+    routineEffortForTurn,
     routineLineage,
     sandboxPrincipalForTurn,
     settleInputRequests,
@@ -170,11 +171,13 @@ export function createPrepareAdmitStartTurn(
     state.model = routineModel.model;
     state.routineModel = routineModel.model;
   }
-  const askedEffort = state.bot.modelSelection.effort;
-  state.variant = state.routineModel ? undefined : state.bot.modelSelection.variant;
+  const routineEffort = state.warmOnly ? null : routineEffortForTurn?.(state.bot.id, state.threadId, state.instance, state.model);
+  state.routineEffort = routineEffort?.effort;
+  const askedEffort = state.routineEffort ?? state.bot.modelSelection.effort;
+  state.variant = state.routineModel || state.routineEffort ? undefined : state.bot.modelSelection.variant;
   // What this turn runs on, kept for the bot text it writes (a quiet line
   // under the reply shows it). A warm-up writes no reply.
-  if (!state.warmOnly) turnRunByThread.set(state.threadId, turnRunFor(state.routineModel ? { ...state.bot.modelSelection, model: state.routineModel } : state.bot.modelSelection, turnModelRequested.get(state.threadId)));
+  if (!state.warmOnly) turnRunByThread.set(state.threadId, turnRunFor({ ...state.bot.modelSelection, model: state.model, effort: askedEffort, variant: state.variant }, turnModelRequested.get(state.threadId)));
   assertModelVariantSupported({ variant: state.variant, effort: askedEffort }, state.instance.adapter.capabilities);
   // A selection can be persisted while its engine is offline. Re-check when
   // the engine returns so an old or unsupported value never reaches a CLI.

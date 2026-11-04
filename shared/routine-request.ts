@@ -1,3 +1,4 @@
+import type { EffortLevel } from "./model-selection.ts";
 /**
  * Durable payload carried by a chat routine confirmation card.
  *
@@ -75,10 +76,12 @@ export interface RoutineRequestDefinition {
   deleteWhenFinished?: boolean;
   /** 2026-11-04 (shared/routine-model.ts): the model its runs use. */
   model?: string;
+  /** Reasoning effort for runs only; absent follows the bot. */
+  effort?: EffortLevel;
 }
 
 export type RoutineRequestChanges =
-  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes" | "watch" | "folder" | "model">
+  & Omit<Partial<RoutineRequestDefinition>, "schedule" | "timeoutMinutes" | "watch" | "folder" | "model" | "effort">
   & {
     schedule?: RoutineRequestScheduleChanges;
     /** `null` removes an existing safety cap. */
@@ -89,6 +92,8 @@ export type RoutineRequestChanges =
     folder?: string | null;
     /** `null` goes back to the bot's model. */
     model?: string | null;
+    /** null resets to the bot; omission preserves it on updates. */
+    effort?: EffortLevel | null;
   };
 
 /** Another bot in the proposer's section that this proposal targets: a

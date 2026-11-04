@@ -1,5 +1,18 @@
 # Sagax agent notes
 
+## Routine reasoning effort (#1999, 2026-11-04)
+
+`Routine.effort` and `RoutineRun.effort` follow the model override, using
+`EffortLevel` and `shared/routine-effort.ts`. Omitted follows the bot; null
+on update clears it. Admission applies it per turn, never to chat or the
+thread. A limit takeover wins. An unsupported engine/model level gets one
+notice per run and falls back to the bot's effort. Claude receives
+`subagentEffort` through its spawn contract and inherited
+`CLAUDE_CODE_EFFORT_LEVEL`. The routine editor, HTTP API, routine tools and
+settings registry carry it. Model/effort-only changes are compute settings,
+not standing grants (`shared/step-up.ts`). Regression coverage includes
+`routine-effort.test.ts` and `start-turn-prepare-admit.test.ts`.
+
 ## Routine model override (2026-11-04)
 
 `Routine.model` (`shared/routine-model.ts`) is the model its runs use on the

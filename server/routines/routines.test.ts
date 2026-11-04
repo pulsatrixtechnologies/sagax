@@ -4585,6 +4585,33 @@ describe("postResults migration and per-routine choice (Owner 2026-10-22)", () =
       schedule: { type: "once", at: new Date(2026, 7, 18).getTime() } })).toThrow(RoutineInputError);
   });
 
+  it("persists routine effort, snapshots runs, preserves omissions and clears null", async () => {
+    const h = harness();
+    const routine = h.manager.create({ name: "R", prompt: "Do the task", botId: "maus-1", effort: "low",
+      schedule: { type: "once", at: new Date(2026, 7, 18).getTime() } });
+    expect(routine.effort).toBe("low");
+    expect(h.manager.update(routine.id, { name: "R2" })?.effort).toBe("low");
+    h.manager.runNow(routine.id); await h.manager.tick();
+    expect(h.manager.listRuns()[0]?.effort).toBe("low");
+    const reloaded = new RoutineManager(h.options);
+    expect(reloaded.listRoutines()[0]?.effort).toBe("low");
+    expect(reloaded.listRuns()[0]?.effort).toBe("low");
+    expect(h.manager.update(routine.id, { effort: null })?.effort).toBeUndefined();
+    expect(h.manager.listRuns()[0]?.effort).toBe("low");
+  });
+
+  it("checks effort when selected, while an unchanged old effort can still be edited", () => {
+    const h = harness();
+    const checkEffort = vi.fn((_botId: string, effort: string) => effort === "max" ? "Unsupported effort" : null);
+    const manager = new RoutineManager({ ...h.options, checkEffort });
+    const routine = manager.create({ name: "R", prompt: "Do the task", botId: "maus-1", effort: "low",
+      schedule: { type: "once", at: new Date(2026, 7, 18).getTime() } });
+    expect(checkEffort).toHaveBeenCalledWith("maus-1", "low", undefined);
+    expect(() => manager.update(routine.id, { effort: "max" })).toThrow("Unsupported effort");
+    expect(manager.update(routine.id, { name: "Renamed" })?.effort).toBe("low");
+    expect(checkEffort).toHaveBeenCalledTimes(2);
+  });
+
   it("asks checkModel when a routine model is chosen and refuses what it refuses (2026-11-04)", () => {
     const h = harness();
     const asked: string[] = [];

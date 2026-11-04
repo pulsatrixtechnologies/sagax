@@ -81,6 +81,15 @@ describe("hardening (security review)", () => {
     expect(stepUpClassesForCard({ ...base, routineRequest: { operation: { action: "update" } } as never })).toEqual(["always-grant"]);
   });
 
+  it("does not class routine model or effort changes as a standing grant", () => {
+    for (const changes of [{ model: "fast" }, { effort: "low" }, { model: null, effort: null }]) {
+      expect(botActClasses({ kind: "route", method: "PATCH", path: "/api/routines/r1", body: changes })).not.toContain("always-grant");
+      expect(botActClasses({ kind: "ui", command: "updateRoutine", input: { patch: changes } })).not.toContain("always-grant");
+      expect(stepUpClassesForCard({ ...base, routineRequest: { operation: { action: "update", changes } } as never })).not.toContain("always-grant");
+    }
+    expect(botActClasses({ kind: "route", method: "PATCH", path: "/api/routines/r1", body: { effort: "low", enabled: true } })).toContain("always-grant");
+  });
+
   it("knows which approval level changes loosen", () => {
     expect(approvalModeLoosens("ask", "auto")).toBe(true);
     expect(approvalModeLoosens("ask", "edits")).toBe(true);

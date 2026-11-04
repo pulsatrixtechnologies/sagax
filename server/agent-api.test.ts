@@ -36,6 +36,7 @@ function world(options: { replyAfterPolls?: number; reply?: (prompt: string) => 
   const runtimeByBot = new Map<string, Record<string, unknown>>();
   const primaryByOwner = new Map<string, string>();
   const settingsByBot = new Map<string, Record<string, unknown>>();
+  const routinePatches: AgentRoutinePatch[] = [];
   const routines = new Map<string, { id: string; name: string; enabled: boolean; instructions: string; owner: string }>([
     ["r-own", { id: "r-own", name: "Morning brief", enabled: true, instructions: "Summarise the inbox.", owner: "person:pr_1" }],
     ["r-other", { id: "r-other", name: "Other brief", enabled: true, instructions: "Not yours.", owner: "person:pr_2" }],
@@ -234,6 +235,7 @@ function world(options: { replyAfterPolls?: number; reply?: (prompt: string) => 
       return { changed, refused, agent };
     },
     async updateRoutine(caller, routineId, patch: AgentRoutinePatch) {
+      routinePatches.push(patch);
       if (caller.kind !== "person") {
         return { status: 403, code: "forbidden_caller", message: "update_routine is for a person's AI client." };
       }
@@ -289,7 +291,7 @@ function world(options: { replyAfterPolls?: number; reply?: (prompt: string) => 
     },
   };
   return {
-    deps, api: createAgentApi(deps), agents, owners, archived, created, threads, messages, state, audits, notified, interrupted, turnStateCalls, posted,
+    routinePatches, deps, api: createAgentApi(deps), agents, owners, archived, created, threads, messages, state, audits, notified, interrupted, turnStateCalls, posted,
     heldPermissions, runtimeByBot, primaryByOwner, settingsByBot,
     add, advance: (ms: number) => { clock += ms; }, settle: async () => { for (let i = 0; i < 50; i++) await deps.sleep!(400); },
   };
@@ -1316,6 +1318,16 @@ describe("fleet tools (#1944)", () => {
     expect(cleared.status).toBe(200);
     expect(cleared.body.changed).toEqual(["primary"]);
     expect(w.primaryByOwner.has("person:pr_1")).toBe(false);
+  });
+
+  it("update_routine accepts and clears routine model and effort", async () => {
+    const w = world();
+    const answer = await w.api.call(person("pr_1"), "update_routine", { routine_id: "r-own", model: "fast", effort: "low" });
+    expect(answer.status).toBe(200);
+    expect(w.routinePatches.at(-1)).toEqual({ model: "fast", effort: "low" });
+    expect((await w.api.call(person("pr_1"), "update_routine", { routine_id: "r-own", model: null, effort: null })).status).toBe(200);
+    expect(w.routinePatches.at(-1)).toEqual({ model: null, effort: null });
+    expect((await w.api.call(person("pr_1"), "update_routine", { routine_id: "r-own", effort: "invalid" })).status).toBe(400);
   });
 
   it("update_routine enables and disables a routine the caller owns", async () => {

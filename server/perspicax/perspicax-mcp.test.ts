@@ -981,6 +981,19 @@ describe("PerspicaxMcp keep-alive (#1955)", () => {
     expect(h.mcpCalls.some((c) => c.body?.method === "ping")).toBe(false);
   });
 
+  it("does not re-arm when the token is near expiry", async () => {
+    const h = harness({ engineWarm: warm, keepaliveMs: 90_000, keepaliveJitterMs: 0 });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    h.mcp.noteEngineCold("t1");
+    // Exchange minted expiresAt = now + 900_000; leave under PERSPICAX_TOKEN_MIN_LIFE_MS (60 s).
+    h.advance(850_000);
+    h.mcp.noteEngineWarm("t1");
+    h.advance(90_000);
+    await h.runDue();
+    expect(h.mcpCalls.some((c) => c.body?.method === "ping")).toBe(false);
+  });
+
   it("a failed ping ends the entry; the next turn reopens", async () => {
     let failPing = false;
     const engineWarm = new Set(["t1"]);

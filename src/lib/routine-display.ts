@@ -1,3 +1,5 @@
+import { routineReadinessLine } from "./routine-readiness";
+import type { RoutineReadinessCheck } from "../../shared/routine-readiness";
 import type { Routine, RoutineRun } from "./routines";
 import { activeLocale, t } from "./i18n";
 import { scheduleLabel } from "./schedule-label";
@@ -226,8 +228,9 @@ function plainReason(text: string | undefined): string {
 /** A blocked run's one line: "Blocked: <why>", the teammate it waits on, or
  * a plain line when its reason was lost. The run list, the run's bubble and
  * its chat card all show this. */
-export function routineRunBlockedLine(run: { error?: string; attention?: string; handedTo?: ReadonlyArray<{ name?: string; status: string }> }): string {
-  const reason = plainReason(run.error) || plainReason(run.attention);
+export function routineRunBlockedLine(run: { error?: string; attention?: string; readiness?: RoutineReadinessCheck[]; handedTo?: ReadonlyArray<{ name?: string; status: string }> }): string {
+  const blocker = run.readiness?.find(check => !check.ok);
+  const reason = (blocker ? routineReadinessLine(blocker) : "") || plainReason(run.error) || plainReason(run.attention);
   if (reason) return t("routineRun.blockedLine", { reason: reason.replace(/^blocked\s*[:—-]\s*/i, "") });
   const waitingOn = run.handedTo?.find((entry) => !["completed", "failed", "cancelled", "expired"].includes(entry.status));
   if (waitingOn) return t("routineRun.blockedWaitingFor", { name: waitingOn.name || t("routineRun.aTeammate") });
@@ -237,7 +240,7 @@ export function routineRunBlockedLine(run: { error?: string; attention?: string;
 /** What a run has to say, the same for its row, its bubble and its card:
  * its problems, that it was quiet, why it is blocked, what it waits on, its
  * error, or its report in plain sentences. */
-export function routineRunSummary(run: Pick<RoutineRun, "status" | "quiet" | "attention" | "error" | "output" | "problems" | "handedTo">): { text: string; details?: string } {
+export function routineRunSummary(run: Pick<RoutineRun, "status" | "quiet" | "attention" | "error" | "output" | "problems" | "handedTo" | "readiness">): { text: string; details?: string } {
   if (run.status === "completed" && run.problems) return { text: routineRunProblems(run) };
   if (run.status === "completed" && run.quiet) return { text: t("routineRun.quiet") };
   if (run.status === "blocked") return { text: routineRunBlockedLine(run) };
@@ -246,7 +249,7 @@ export function routineRunSummary(run: Pick<RoutineRun, "status" | "quiet" | "at
 }
 
 /** The first line of what a run has to say (routineRunSummary). */
-export function routineRunPreview(run: Pick<RoutineRun, "status" | "quiet" | "attention" | "error" | "output" | "problems" | "handedTo">): string {
+export function routineRunPreview(run: Pick<RoutineRun, "status" | "quiet" | "attention" | "error" | "output" | "problems" | "handedTo" | "readiness">): string {
   const text = routineRunSummary(run).text;
   const line = text.split("\n").map((part) => part.trim()).find((part) => part && !/^\|?\s*:?-{2,}/.test(part)) ?? "";
   const plain = line.startsWith("|") ? line.split("|").map((cell) => cell.trim()).filter(Boolean).join(" · ") : line;

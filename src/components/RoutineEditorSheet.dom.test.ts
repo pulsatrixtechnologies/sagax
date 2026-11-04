@@ -364,9 +364,10 @@ describe("the routine panel, edit mode", () => {
     mount({
       ...routine({ type: "cron", expression: "30 8,12 * * 1-5", timeZone: "America/Toronto", timing: "flexible", windowEarlyMinutes: 10, windowLateMinutes: 5 } as Routine["schedule"]),
       timeoutMinutes: 45, overlap: "queue", autoPauseAfter: 3, continuity: true, onlyWhenPresent: true, postResults: false, mailAlias: "reports", attachments: [attachment],
+      requires: { skills: ["inbox-review"], mcpServers: ["outlook"], computer: true },
     } as Routine, onClose);
     const summary = host.querySelector("[data-routine-advanced-summary]")?.textContent ?? "";
-    for (const part of ["Attachments: 1", "Extra times: 1", "Flexible timing", "Stops if still running after 45 min", "Queue one run", "Remember the last run", "Only when I'm here", "Mail tag +reports"]) expect(summary).toContain(part);
+    for (const part of ["Attachments: 1", "Extra times: 1", "Flexible timing", "Stops if still running after 45 min", "Queue one run", "Remember the last run", "Only when I'm here", "Mail tag +reports", "Required skills", "Required MCP servers", "Computer required"]) expect(summary).toContain(part);
     edit();
     flushSync(() => button("Save")!.click());
     await vi.waitFor(() => expect(fixture.lastUpsert).not.toBeNull());
@@ -374,6 +375,7 @@ describe("the routine panel, edit mode", () => {
       name: "Weekly digest", prompt: "Summarise the week, see [the board](https://example.test/board)", botId: bot.id, runOn: "maus",
       schedule: { type: "cron", expression: "30 8,12 * * 1-5", timeZone: "America/Toronto", timing: "flexible", windowEarlyMinutes: 10, windowLateMinutes: 5 },
       timeoutMinutes: 45, overlap: "queue", autoPauseAfter: 3, continuity: true, onlyWhenPresent: true, postResults: false, mailAlias: "reports", attachments: [attachment],
+      requires: { skills: ["inbox-review"], mcpServers: ["outlook"], computer: true },
     });
     await vi.waitFor(() => expect(host.querySelector("[data-routine-editor-actions=view]")).not.toBeNull());
     expect(onClose).not.toHaveBeenCalled();

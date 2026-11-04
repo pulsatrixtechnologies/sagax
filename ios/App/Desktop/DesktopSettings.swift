@@ -406,19 +406,9 @@ struct DesktopSettingsPage: View {
 /// Providers (2026-10-30): every account, key and server of this computer
 /// that pays for a turn or a voice, in one page; API keys are its card.
 struct DesktopProvidersSettings: View {
-    @Environment(\.desktopSettingsQuery) private var query
-
     var body: some View {
-        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let keys = q.count >= 3 && DesktopSettingsSection.connections.matches(q, label: "")
+        // the keys are reached from "Add a provider" (Paste a key, a server)
         AnyView(DesktopEnginesSettings())
-        DesktopSettingsCard(Text("API keys"), summary: Text("Providers and connected apps"), open: keys, identifier: "engines.keys") {
-            VStack(alignment: .leading, spacing: 12) {
-                AnyView(DesktopAPIKeysSettings())
-            }
-        }
-        .id("keys-\(keys)")
-        .padding(.top, 12)
     }
 }
 
@@ -447,6 +437,8 @@ extension IPadParityScreen {
         case .pluginsMcp: (.plugins, nil, .mcp)
         case .capabilities: (.plugins, nil, nil)
         case .settingsGeneral, .settingsGeneralScrolled: (.settings, .general, nil)
+        // the desktop opens Account for its former Cloud account section
+        case .settingsCloudAccount: (.settings, .general, nil)
         case .settingsOrganization: (.settings, .organization, nil)
         case .settingsAppearance: (.settings, .appearance, nil)
         case .settingsExperimental: (.settings, .experimental, nil)

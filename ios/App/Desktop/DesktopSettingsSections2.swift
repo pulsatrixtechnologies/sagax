@@ -25,10 +25,14 @@ struct DesktopOrganizationSettings: View {
     @State private var pendingRemoval: Connection?
 
     var body: some View {
-        if let active = session.connection {
-            AnyView(computerCard(active))
-        } else {
-            DesktopText("Not connected", color: \.inkSecondary)
+        // Settings > Organization on a solo computer (OrganizationSettings.tsx):
+        // the Servers heading over "Your servers" (this iPad's paired
+        // computers: switch or forget one) and the "Connect to a server" card
+        DesktopSettingsGroup(Text("Servers"), plain: true, identifier: "servers") {
+            AnyView(DesktopConnectServerCard())
+            if let active = session.connection {
+                AnyView(serversCard(active))
+            }
         }
         if session.surfaceGate.allows(.organizationSettings) {
             organizationRow
@@ -38,9 +42,55 @@ struct DesktopOrganizationSettings: View {
         if session.surfaceGate.allows(.myComputer) {
             myComputerRow
         }
-        // This iPad's own pairing (#518): Pair devices left the app, the
-        // device's own connection stays here
-        AnyView(DesktopThisDeviceCard(open: false))
+    }
+
+    private func serversCard(_ active: Connection) -> some View {
+        DesktopSettingsCard(Text("Your servers"), summary: Text(verbatim: active.name), open: false, identifier: "organization.servers") {
+            VStack(spacing: 0) {
+                ForEach([active] + session.connections.filter { $0.id != active.id }) { computer in
+                    HStack(spacing: 12) {
+                        DesktopSettingsIconView(icon: .monitor, size: 18).foregroundStyle(theme.inkSecondary)
+                        VStack(alignment: .leading, spacing: 0) {
+                            DesktopText(verbatim: computer.name, weight: .medium)
+                            if computer.id == active.id {
+                                DesktopText(session.status.desktopText, size: 12, line: 16, color: \.inkSecondary)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                        if computer.id == active.id {
+                            HStack(spacing: 4) {
+                                DesktopSettingsIconView(icon: .check, size: 13)
+                                DesktopText(Text("Current"), size: 12, line: 16, color: \.inkSecondary)
+                            }
+                            .foregroundStyle(theme.inkSecondary)
+                        } else {
+                            Button("Switch") { session.switchComputer(to: computer.id) }
+                                .buttonStyle(DesktopButtonStyle(kind: .control))
+                                .accessibilityLabel(Text(verbatim: String(format: AppStrings.localized("Switch to %@"), computer.name)))
+                                .accessibilityIdentifier("desktop-settings.use-computer")
+                        }
+                        Button("Forget") { pendingRemoval = computer }
+                            .buttonStyle(DesktopButtonStyle(kind: .control))
+                            .accessibilityLabel(Text(verbatim: String(format: AppStrings.localized("Forget %@"), computer.name)))
+                    }
+                    .padding(.vertical, 12)
+                    .overlay(alignment: .top) {
+                        if computer.id != active.id { Rectangle().fill(theme.hairline.opacity(0.4)).frame(height: 1) }
+                    }
+                }
+            }
+        }
+        .confirmationDialog(
+            Text(verbatim: String(format: AppStrings.localized("Forget %@? This app stops connecting to it; the server and its bots stay as they are."), pendingRemoval?.name ?? "")),
+            isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Forget", role: .destructive) {
+                if let pendingRemoval { session.forgetConnection(id: pendingRemoval.id) }
+                pendingRemoval = nil
+            }
+            Button("Cancel", role: .cancel) { pendingRemoval = nil }
+        }
     }
 
     private var myComputerRow: some View {
@@ -69,83 +119,208 @@ struct DesktopOrganizationSettings: View {
         }
     }
 
-    private func computerCard(_ active: Connection) -> some View {
-            DesktopSettingsCard(Text("This computer"), summary: Text(verbatim: active.name), identifier: "organization.computer") {
-                HStack(spacing: 12) {
-                    Circle().fill(session.status == .live ? theme.success : theme.warning).frame(width: 8, height: 8)
-                    VStack(alignment: .leading, spacing: 2) {
-                        DesktopText(verbatim: active.name, weight: .medium, line: 19.5)
-                        DesktopText(session.status.desktopText, size: 12.5, line: 18, color: \.inkSecondary)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .padding(.bottom, 8)
-                ForEach(session.connections.filter { $0.id != active.id }) { computer in
-                    HStack(spacing: 12) {
-                        DesktopText(verbatim: computer.name, line: 19.5)
-                        Spacer(minLength: 0)
-                        Button("Use") { session.switchComputer(to: computer.id) }
-                            .buttonStyle(DesktopButtonStyle(kind: .control))
-                            .accessibilityIdentifier("desktop-settings.use-computer")
-                        Button("Remove") { pendingRemoval = computer }
-                            .buttonStyle(DesktopButtonStyle(kind: .ghost))
-                    }
-                    .padding(.vertical, 6)
-                    .overlay(alignment: .top) { Rectangle().fill(theme.hairline.opacity(0.4)).frame(height: 1) }
-                }
-                Button("Connect another computer") { session.beginPairing() }
-                    .buttonStyle(DesktopButtonStyle(kind: .outline))
-                    .padding(.top, 8)
-                    .accessibilityIdentifier("desktop-settings.connect-computer")
-                DesktopText("Each computer is paired separately. Only the selected computer is active at a time.",
-                            size: 12, line: 17, color: \.inkSecondary)
-                    .padding(.top, 8)
-            }
-            .confirmationDialog(
-                Text("Remove \(pendingRemoval?.name ?? "")?"),
-                isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
-                titleVisibility: .visible
-            ) {
-                Button("Remove from this device", role: .destructive) {
-                    if let pendingRemoval { session.forgetConnection(id: pendingRemoval.id) }
-                    pendingRemoval = nil
-                }
-                Button("Cancel", role: .cancel) { pendingRemoval = nil }
-            } message: {
-                Text("This removes the saved connection from this device only.")
-            }
+}
 
+/// "Connect to a server" (ConnectServerWizard.tsx): what to connect to,
+/// then its steps. Your organization's Perspicax server: copy your own
+/// bots (JoinPerspicaxCard, the served page's form: the copy file). A
+/// Sagax server: this iPad pairs with it, by its code or link.
+struct DesktopConnectServerCard: View {
+    @Environment(\.desktopTheme) private var theme
+    @EnvironmentObject private var session: Session
+    @State private var target = "perspicax"
+    @State private var choices: [String: OrgJoinChoice] = [:]
+    @State private var preview: OrgExportAnswer?
+    @State private var busy = false
+    @State private var error: String?
+    @State private var file: URL?
+
+    /// The person's own bots (`offeredBots`); on the computer's own pairing
+    /// every visible bot is the owner's, as on the solo desktop.
+    private var bots: [Bot] {
+        let principal = session.surfaceGate.viewer?.principalId ?? session.account?.principalId
+        if session.surfaceGate.scope == .sidecar { return session.state.bots.filter { $0.hidden != true } }
+        return OrgJoin.offered(session.state.bots, principalId: principal)
+    }
+
+    var body: some View {
+        DesktopSettingsCard(
+            Text("Connect to a server"),
+            summary: target == "perspicax" ? Text("Your organization's Perspicax server") : Text("A Sagax server"),
+            subtitle: Text("Pick what you connect this app to, then follow its steps."),
+            open: true, identifier: "organization.connect"
+        ) {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(spacing: 6) {
+                    option("perspicax", Text("Your organization's Perspicax server"), Text("Join it, and copy your own bots there if you want."))
+                    option("server", Text("A Sagax server"), Text("By its address or a pairing link from that server."))
+                }
+                if target == "perspicax" { joinBody } else {
+                    Button("Connect") { session.beginPairing() }
+                        .buttonStyle(DesktopButtonStyle(kind: .accent))
+                        .accessibilityIdentifier("desktop-settings.connect-computer")
+                }
+            }
+        }
+    }
+
+    private func option(_ id: String, _ title: Text, _ hint: Text) -> some View {
+        Button { target = id } label: {
+            VStack(alignment: .leading, spacing: 0) {
+                DesktopText(title)
+                DesktopText(hint, size: 12, line: 19, color: \.inkSecondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(target == id ? theme.accent.opacity(0.1) : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(target == id ? theme.accent.opacity(0.5) : theme.hairline.opacity(0.4), lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(target == id ? .isSelected : [])
+        .accessibilityIdentifier("desktop-settings.connect-target.\(id)")
+    }
+
+    private var joinBody: some View {
+        let request = OrgJoin.request(bots, choices)
+        return VStack(alignment: .leading, spacing: 12) {
+            DesktopText(Text("Copy your own bots into your organization's Sagax. They arrive private and yours, and they stay here too."), line: 20, color: \.inkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if bots.isEmpty {
+                DesktopText(Text("You have no bots of your own to copy."), color: \.inkSecondary)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(bots.enumerated()), id: \.element.id) { index, bot in
+                        let choice = choices[bot.id] ?? .default
+                        HStack(spacing: 16) {
+                            HStack(spacing: 8) {
+                                DesktopCheckbox(checked: choice.copy, label: Text(verbatim: bot.name), identifier: "desktop-settings.join.\(bot.id)") {
+                                    choices = OrgJoin.with(choices, bot: bot.id, copy: !choice.copy); preview = nil
+                                }
+                                DesktopText(verbatim: bot.name).lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            HStack(spacing: 6) {
+                                DesktopCheckbox(checked: choice.copy && choice.threads, label: Text("Conversations"), disabled: !choice.copy) {
+                                    choices = OrgJoin.with(choices, bot: bot.id, threads: !(choice.copy && choice.threads)); preview = nil
+                                }
+                                DesktopText(Text("Conversations"), color: \.inkSecondary)
+                            }
+                            HStack(spacing: 6) {
+                                DesktopCheckbox(checked: choice.copy && choice.memory, label: Text("Memory"), disabled: !choice.copy) {
+                                    choices = OrgJoin.with(choices, bot: bot.id, memory: !(choice.copy && choice.memory)); preview = nil
+                                }
+                                DesktopText(Text("Memory"), color: \.inkSecondary)
+                            }
+                        }
+                        .padding(.vertical, 6)
+                        .overlay(alignment: .top) {
+                            if index > 0 { Rectangle().fill(theme.hairline.opacity(0.4)).frame(height: 1) }
+                        }
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(Text("Your bots"))
+            }
+            DesktopText(Text("Never copied: keys, files, pictures, model settings, connections, computer and browser access. Secrets in messages and memory are removed."), size: 12, line: 16, color: \.inkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("See what will be copied") { Task { await runExport(request) } }
+                .buttonStyle(DesktopButtonStyle(kind: .control))
+                .disabled(busy || request.isEmpty)
+            if let summary = preview?.summary {
+                VStack(alignment: .leading, spacing: 4) {
+                    DesktopText(verbatim: String(format: AppStrings.localized("%@ bots, %@ rooms and %@ routines will be copied."), "\(summary.bots.count)", "\(summary.groups.count)", "\(summary.routines.count)"))
+                    if !summary.routines.isEmpty { DesktopText(Text("Routines start paused in the organization."), color: \.inkSecondary) }
+                    if summary.redacted > 0 { DesktopText(verbatim: String(format: AppStrings.localized("%@ secrets will be removed."), "\(summary.redacted)"), color: \.inkSecondary) }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Button("Download the copy file") { Task { await runExport(request, save: true) } }
+                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .disabled(busy || request.isEmpty)
+                    if let file {
+                        ShareLink(item: file) { DesktopText(verbatim: file.lastPathComponent, size: 12, color: \.accentText) }
+                    }
+                }
+                DesktopText(Text("Keep this file as a copy or backup of these bots. Copying bots into an organization is only done from the local Sagax of a Sagax desktop app, in Settings > Organization > Join and copy."), color: \.inkSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let error { DesktopText(verbatim: error, color: \.danger) }
+        }
+    }
+
+    private func runExport(_ request: [[String: Any]], save: Bool = false) async {
+        guard let client = session.settingsClient, !request.isEmpty else { return }
+        busy = true
+        error = nil
+        defer { busy = false }
+        do {
+            let answer = try await client.orgExport(request)
+            preview = answer
+            if save {
+                let url = FileManager.default.temporaryDirectory.appendingPathComponent(answer.filename.isEmpty ? "sagax-bots.json" : answer.filename)
+                try answer.document.write(to: url, options: .atomic)
+                file = url
+            }
+        } catch {
+            self.error = AppStrings.localized("The copy could not be prepared.")
+        }
     }
 }
 
 // MARK: - Appearance
 
+/// Simple or Advanced (`sagax.interfaceMode.v1`, interface-mode.ts): one
+/// choice per person, Advanced by default; on an organization server the key
+/// is one of the person's synced preferences.
+@MainActor
+final class DesktopInterfaceMode: ObservableObject {
+    static let shared = DesktopInterfaceMode()
+    @Published private(set) var advanced = UserDefaults.standard.string(forKey: ModelMenu.interfaceModeKey) != "simple"
+
+    func load(_ session: Session) async {
+        guard let record = try? await session.settingsClient?.sidebarPreferenceRecord(),
+              let raw = record.preferences[ModelMenu.interfaceModeKey] else { return }
+        UserDefaults.standard.set(raw, forKey: ModelMenu.interfaceModeKey)
+        advanced = raw != "simple"
+    }
+
+    func set(_ on: Bool, session: Session) {
+        let raw = on ? "advanced" : "simple"
+        advanced = on
+        UserDefaults.standard.set(raw, forKey: ModelMenu.interfaceModeKey)
+        guard let client = session.settingsClient else { return }
+        Task { _ = try? await client.saveSidebarPreferences([ModelMenu.interfaceModeKey: raw]) }
+    }
+}
+
 struct DesktopAppearanceSettings: View {
-    @Environment(\.themePalette) private var themePalette
     @EnvironmentObject private var session: Session
     @ObservedObject private var themes = ThemeStore.shared
+    @ObservedObject private var mode = DesktopInterfaceMode.shared
     @AppStorage(PrefKey.desktopSidebarDensity) private var density = DesktopSidebarDensity.comfortable.rawValue
     @AppStorage(SidebarLogoPreference.key) private var showSidebarLogo = SidebarLogoPreference.defaultEnabled
     @AppStorage(RunCardPreference.key) private var showRunCard = true
-    @AppStorage(NotificationSounds.key) private var sounds = true
     @AppStorage(DesktopInspectorButton.key) private var showInspector = false
     @ObservedObject private var prefs = SidebarPrefsModel.shared
     @ObservedObject private var toolCalls = ToolCallsSetting.shared
 
     var body: some View {
-        DesktopSettingsCard(
-            Text("Skin"),
-            summary: Text(verbatim: SkinPlace.of(themePalette.id, tint: themePalette.tint).family.name),
-            subtitle: Text("Applies instantly and is remembered on this machine."),
-            identifier: "appearance.skin"
-        ) {
-            // the families and their variants, as the iPhone's picker (#1126) and the desktop's SkinPicker
-            DesktopSkinFamilies()
-        }
-        DesktopSettingsGroup {
-            let font = themes.effective.mode == .computer ? (themes.effective.computerFont ?? .skin) : themes.effective.font
-            DesktopSettingRow(title: Text("Interface font"), subtitle: Text("Overrides the skin's font on this device.")) {
-                DesktopSelect(
+        let advanced = mode.advanced
+        DesktopSettingsGroup(Text("Interface"), identifier: "interface") {
+            DesktopDescribedRow(Text("Advanced mode"), description: Text("Show technical controls. Saved choices stay either way."), identifier: "advancedMode") {
+                DesktopSwitch(isOn: advanced, label: Text("Advanced mode"), identifier: "desktop-settings.advanced-mode") {
+                    mode.set(!advanced, session: session)
+                }
+            }
+            DesktopCompactRow(Text("Interface font"), identifier: "font") {
+                let font = themes.effective.mode == .computer ? (themes.effective.computerFont ?? .skin) : themes.effective.font
+                DesktopPillSelect(
                     options: [(SkinFontChoice.skin, AppStrings.localized("Skin default")),
                               (.system, AppStrings.localized("System")), (.serif, AppStrings.localized("Serif"))],
                     selection: font == .inter || font == .poppins ? .system : font,
@@ -153,119 +328,299 @@ struct DesktopAppearanceSettings: View {
                     identifier: "desktop-settings.font"
                 ) { themes.chooseFont($0, client: session.settingsClient) }
             }
-            DesktopSettingRow(
-                title: Text("Sidebar density"),
-                subtitle: Text("How much room each bot and thread takes in the sidebar, on this device only.")
-            ) {
-                DesktopSelect(
-                    options: [(DesktopSidebarDensity.comfortable.rawValue, AppStrings.localized("Comfortable")),
-                              (DesktopSidebarDensity.compact.rawValue, AppStrings.localized("Compact")),
-                              (DesktopSidebarDensity.icons.rawValue, AppStrings.localized("Avatars only"))],
-                    selection: density,
-                    label: Text("Sidebar density"),
-                    identifier: "desktop-settings.density"
-                ) { density = $0 }
-            }
-            if SidebarLogoRuntime.showsSetting {
-                DesktopSettingRow(
-                    title: Text("Sidebar logo"),
-                    subtitle: Text("Show the Sagax logo and name at the top of the sidebar.")
-                ) {
-                    DesktopSwitch(
-                        isOn: showSidebarLogo,
-                        label: Text("Show the sidebar logo"),
-                        identifier: "desktop-settings.sidebar-logo"
-                    ) {
-                        showSidebarLogo.toggle()
-                    }
-                }
-            }
-            // a display preference: an organization member opens the
-            // Inspector on the bots they own (2026-10-26)
-            if session.surfaceGate.allows(.inspector) || session.surfaceGate.isOrgMemberSession {
-                DesktopSettingRow(
-                    title: Text("Inspector button"),
-                    subtitle: Text("Show the Inspector (run log, events, raw) button in the chat header.")
-                ) {
-                    DesktopSwitch(isOn: showInspector, label: Text("Show the Inspector button"), identifier: "desktop-settings.inspector-button") {
-                        showInspector.toggle()
-                    }
-                }
-            }
-            DesktopSettingRow(title: Text("Notification sounds"), subtitle: Text("Play a sound when an agent finishes or needs you.")) {
-                DesktopSwitch(isOn: sounds, label: Text("Notification sounds"), identifier: "desktop-settings.sounds") {
-                    let next = !sounds
-                    sounds = next
-                    Task { await NotificationSounds.set(next, session: session) }
-                }
-            }
-            DesktopSettingRow(
-                title: Text("This run"),
-                subtitle: Text("Show a list of the shell commands a bot ran for your current request.")
-            ) {
-                DesktopSwitch(isOn: showRunCard, label: Text("This run"), identifier: "desktop-settings.run-card") {
-                    showRunCard.toggle()
-                }
-            }
-            DesktopSettingRow(
-                title: Text("Tool calls"),
-                subtitle: Text("Show tool calls in chat. Off: the chat shows the messages, a turn's steps fold away. The same switch as on your computer.")
-            ) {
-                DesktopSwitch(isOn: toolCalls.showToolCalls, label: Text("Show tool calls in chat"), identifier: "desktop-settings.tool-calls", disabled: toolCalls.saving) {
-                    let next = !toolCalls.showToolCalls
-                    Task { await toolCalls.set(session, next) }
-                }
-            }
-            DesktopSettingRow(title: Text("Use bot color as accent"), subtitle: Text("The accent follows the open bot's color.")) {
+        }
+        DesktopSettingsGroup(Text("Skin"), identifier: "skin") {
+            // the families and their variants, as the iPhone's picker (#1126) and the desktop's SkinPicker
+            DesktopSkinFamilies()
+            DesktopDescribedRow(Text("Use bot color as accent"), description: Text("The accent follows the open bot's color."), identifier: "botAccent") {
                 DesktopSwitch(isOn: prefs.botAccent, label: Text("Use bot color as accent"), identifier: "desktop-settings.bot-accent") {
                     prefs.setBotAccent(session, !prefs.botAccent)
                 }
             }
-            DesktopSettingRow(title: Text("Color 1:1 messages with the bot color"), subtitle: Text("Assistant bubbles and cards in a one-to-one chat use the bot's color. Off leaves them in the skin's color.")) {
-                DesktopSwitch(isOn: prefs.botBubble, label: Text("Color 1:1 messages with the bot color"), identifier: "desktop-settings.bot-bubble") {
-                    prefs.setBotBubble(session, !prefs.botBubble)
-                }
-            }
-            DesktopSettingRow(title: Text("Show replies as they are written"), subtitle: Text("Show a bot reply word by word while it is written, instead of all at once when it is finished")) {
-                DesktopSwitch(isOn: prefs.streamReplies, label: Text("Show replies as they are written"), identifier: "desktop-settings.stream-replies") {
+        }
+        DesktopSettingsGroup(Text("Background effects"), identifier: "backgroundEffects") {
+            DesktopBackgroundEffectsPicker()
+        }
+        DesktopSettingsGroup(Text("Conversations"), identifier: "conversation") {
+            DesktopCompactRow(Text("Show replies as they are written"), identifier: "streamReplies") {
+                DesktopSwitch(isOn: prefs.streamReplies, label: Text("Show a bot reply word by word while it is written, instead of all at once when it is finished"), identifier: "desktop-settings.stream-replies") {
                     prefs.setStreamReplies(session, !prefs.streamReplies)
                 }
             }
-            DesktopSettingRow(title: Text("Show suggestions"), subtitle: Text("Show the Suggestions card in the bot panel")) {
-                DesktopSwitch(isOn: prefs.showSuggestions, label: Text("Show suggestions"), identifier: "desktop-settings.show-suggestions") {
-                    prefs.setShowSuggestions(session, !prefs.showSuggestions)
+            if advanced {
+                DesktopDescribedRow(Text("Tool calls"), description: Text("Show tool calls in chat. Off: the chat shows the messages, a turn's steps fold away. The same switch as on your computer."), identifier: "toolCalls") {
+                    DesktopSwitch(isOn: toolCalls.showToolCalls, label: Text("Show tool calls in chat"), identifier: "desktop-settings.tool-calls", disabled: toolCalls.saving) {
+                        let next = !toolCalls.showToolCalls
+                        Task { await toolCalls.set(session, next) }
+                    }
                 }
-            }
-            DesktopSettingRow(
-                title: Text("HD mascots"),
-                subtitle: Text("Detailed art for the characters that have it. Colors and skins apply to the classic look.")
-            ) {
-                DesktopSwitch(isOn: prefs.hdMascots, label: Text("HD mascots"), identifier: "desktop-settings.hd-mascots") {
-                    prefs.setHdMascots(session, !prefs.hdMascots)
+                DesktopCompactRow(Text("This run"), identifier: "runCard") {
+                    DesktopSwitch(isOn: showRunCard, label: Text("Show the run card"), identifier: "desktop-settings.run-card") {
+                        showRunCard.toggle()
+                    }
                 }
-            }
-            DesktopSettingRow(title: Text("Notification sound"), subtitle: Text("Play a sound when an agent finishes or needs you.")) {
-                DesktopSelect(
-                    options: NotificationSoundChoice.allCases.map { ($0, AppStrings.localized($0.label)) },
-                    selection: prefs.notificationSound,
-                    label: Text("Notification sound"),
-                    identifier: "desktop-settings.notification-sound"
-                ) { choice in
-                    prefs.setNotificationSound(session, choice)
-                    NotificationSounds.preview(choice)
-                }
-            }
-            if prefs.synced {
-                DesktopSettingRow(title: Text("Send read receipts"), subtitle: Text("Off: you do not see other people's either.")) {
-                    DesktopSwitch(isOn: prefs.readReceipts, label: Text("Send read receipts"), identifier: "desktop-settings.read-receipts") {
-                        prefs.setReadReceipts(session, !prefs.readReceipts)
+                // a display preference: an organization member opens the
+                // Inspector on the bots they own (2026-10-26)
+                if session.surfaceGate.allows(.inspector) || session.surfaceGate.isOrgMemberSession {
+                    DesktopCompactRow(Text("Inspector button"), identifier: "inspectorButton") {
+                        DesktopSwitch(isOn: showInspector, label: Text("Show the Inspector button"), identifier: "desktop-settings.inspector-button") {
+                            showInspector.toggle()
+                        }
                     }
                 }
             }
         }
-        .task(id: session.connection?.id) {
-            await toolCalls.load(session)
-            await prefs.readComputerHdMascots(session)
+        DesktopSettingsGroup(Text("Sidebar"), identifier: "sidebar") {
+            DesktopCompactRow(Text("Sidebar density"), identifier: "sidebarDensity") {
+                DesktopPillSelect(
+                    options: [(DesktopSidebarDensity.comfortable.rawValue, AppStrings.localized("Comfortable")),
+                              (DesktopSidebarDensity.compact.rawValue, AppStrings.localized("Compact")),
+                              (DesktopSidebarDensity.icons.rawValue, AppStrings.localized("Avatars only"))],
+                    selection: density,
+                    label: Text("Choose sidebar density"),
+                    identifier: "desktop-settings.density"
+                ) { density = $0 }
+            }
+            if advanced && SidebarLogoRuntime.showsSetting {
+                DesktopCompactRow(Text("Sidebar logo"), identifier: "sidebarLogo") {
+                    DesktopSwitch(isOn: showSidebarLogo, label: Text("Show the sidebar logo"), identifier: "desktop-settings.sidebar-logo") {
+                        showSidebarLogo.toggle()
+                    }
+                }
+            }
+            DesktopCompactRow(Text("Show suggestions"), identifier: "showSuggestions") {
+                DesktopSwitch(isOn: prefs.showSuggestions, label: Text("Show the Suggestions card in the bot panel"), identifier: "desktop-settings.show-suggestions") {
+                    prefs.setShowSuggestions(session, !prefs.showSuggestions)
+                }
+            }
+        }
+        DesktopSettingsGroup(Text("Mascots"), identifier: "mascots") {
+            DesktopDescribedRow(Text("HD mascots"), description: Text("Detailed art for the characters that have it. Colors and skins apply to the classic look."), identifier: "hdMascots") {
+                DesktopSwitch(isOn: prefs.hdMascots, label: Text("HD mascots"), identifier: "desktop-settings.hd-mascots") {
+                    prefs.setHdMascots(session, !prefs.hdMascots)
+                }
+            }
+        }
+        Color.clear.frame(height: 0)
+            .task(id: session.connection?.id) {
+                await mode.load(session)
+                await toolCalls.load(session)
+                await prefs.readComputerHdMascots(session)
+            }
+    }
+}
+
+/// Settings > Appearance > Background effects (BackgroundEffectsPicker.tsx):
+/// the preview, the gallery and, for an effect, its colour and intensity.
+/// The choice is kept on this device under the desktop's key
+/// (`sagax-background-effect`); the effects themselves are drawn behind the
+/// conversation on a desktop, as the hint says.
+struct DesktopBackgroundEffectsPicker: View {
+    @Environment(\.desktopTheme) private var theme
+    @AppStorage("sagax-background-effect") private var raw = ""
+
+    static let effects: [(id: String, palettes: [String])] = [
+        ("none", []),
+        ("glyphs", ["theme", "aurora", "ocean", "ember", "neon", "violet", "gold", "mono"]),
+        ("matrix", ["aurora", "theme", "ocean", "ember", "neon", "mono"]),
+        ("starfield", ["ocean", "theme", "violet", "gold", "ember", "mono"]),
+        ("aurora", ["aurora", "violet", "ocean", "ember", "neon", "theme"]),
+        ("magnetic", ["theme", "ocean", "ember", "neon", "gold", "mono"]),
+        ("synthwave", ["neon", "violet", "ocean", "ember", "aurora", "theme"]),
+        ("ink", ["violet", "ocean", "ember", "aurora", "theme", "mono"]),
+        ("bubbles", ["ocean", "neon", "violet", "aurora", "theme", "gold"]),
+        ("constellation", ["theme", "ocean", "gold", "violet", "aurora", "mono"]),
+        ("sonar", ["aurora", "ocean", "ember", "theme", "neon", "mono"]),
+        ("fireflies", ["gold", "aurora", "ember", "ocean", "violet", "theme"]),
+        ("crystal", ["ocean", "violet", "aurora", "gold", "theme", "mono"]),
+    ]
+
+    private struct Prefs: Codable { var effect = "none"; var palettes: [String: String] = [:]; var intensity = "medium" }
+
+    private var prefs: Prefs {
+        (raw.data(using: .utf8)).flatMap { try? JSONDecoder().decode(Prefs.self, from: $0) } ?? Prefs()
+    }
+
+    private func save(_ edit: (inout Prefs) -> Void) {
+        var next = prefs
+        edit(&next)
+        if let data = try? JSONEncoder().encode(next) { raw = String(decoding: data, as: UTF8.self) }
+    }
+
+    private func palette(_ effect: String) -> String {
+        let offered = Self.effects.first { $0.id == effect }?.palettes ?? []
+        if let chosen = prefs.palettes[effect], offered.contains(chosen) { return chosen }
+        return offered.first ?? "theme"
+    }
+
+    static func name(_ id: String) -> String {
+        switch id {
+        case "none": AppStrings.localized("None")
+        case "glyphs": AppStrings.localized("Glyph ripple")
+        case "matrix": AppStrings.localized("Digital rain")
+        case "starfield": AppStrings.localized("Starfield")
+        case "aurora": AppStrings.localized("Aurora")
+        case "magnetic": AppStrings.localized("Magnetic field")
+        case "synthwave": AppStrings.localized("Neon horizon")
+        case "ink": AppStrings.localized("Ink in water")
+        case "bubbles": AppStrings.localized("Bubbles")
+        case "constellation": AppStrings.localized("Constellation")
+        case "sonar": AppStrings.localized("Sonar")
+        case "fireflies": AppStrings.localized("Fireflies")
+        default: AppStrings.localized("Crystal")
+        }
+    }
+
+    static func paletteName(_ id: String) -> String {
+        switch id {
+        case "theme": AppStrings.localized("Theme")
+        case "aurora": AppStrings.localized("Aurora")
+        case "ocean": AppStrings.localized("Ocean")
+        case "ember": AppStrings.localized("Ember")
+        case "neon": AppStrings.localized("Neon")
+        case "violet": AppStrings.localized("Violet")
+        case "gold": AppStrings.localized("Gold")
+        default: AppStrings.localized("Mono")
+        }
+    }
+
+    /// The palettes' three colours (background-effects.ts PALETTES, dark).
+    private func swatch(_ id: String) -> [Color] {
+        func c(_ hex: UInt32) -> Color { SkinColor(hex).color }
+        let dark = theme.dark
+        switch id {
+        case "aurora": return dark ? [c(0x3dffa8), c(0x2fd5ff), c(0xc3a2ff)] : [c(0x0b9e62), c(0x0a7fa8), c(0x7a3fd1)]
+        case "ocean": return dark ? [c(0x3d8bff), c(0x35e0ff), c(0xd2f6ff)] : [c(0x1f5fd1), c(0x0a8fb0), c(0x0b3d8c)]
+        case "ember": return dark ? [c(0xff8a3d), c(0xff3d5a), c(0xffe0a3)] : [c(0xd4570b), c(0xc21f3a), c(0x8a4a00)]
+        case "neon": return dark ? [c(0xff3dcb), c(0x35e8ff), c(0xfff06b)] : [c(0xc2189a), c(0x0a8fb0), c(0x7a6200)]
+        case "violet": return dark ? [c(0xa06bff), c(0xff6bd5), c(0xebdcff)] : [c(0x6a3fd1), c(0xb0228a), c(0x3d1f8c)]
+        case "gold": return dark ? [c(0xffc54d), c(0xff9a3d), c(0xfff3cf)] : [c(0xa87400), c(0xb0570b), c(0x5c3e00)]
+        case "mono": return [theme.ink, theme.inkSecondary, theme.ink]
+        default: return [theme.accent, theme.accentText, theme.accent]
+        }
+    }
+
+    private func gradient(_ id: String) -> AngularGradient {
+        let colors = swatch(id)
+        return AngularGradient(colors: colors + [colors[0]], center: .center, angle: .degrees(120))
+    }
+
+    var body: some View {
+        let current = prefs
+        VStack(alignment: .leading, spacing: 4) {
+            preview(current.effect)
+            DesktopText("Behind the conversation, on a desktop. Nothing moves when animations are reduced, and the effect stops when the window is hidden or in the background.",
+                        size: 12, line: 16, color: \.inkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 14)
+                .padding(.top, 4)
+            grid(current)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+            if current.effect != "none" {
+                let offered = Self.effects.first { $0.id == current.effect }?.palettes ?? []
+                DesktopCompactRow(Text("Colour"), identifier: "backgroundPalette") {
+                    HStack(spacing: 6) {
+                        ForEach(offered, id: \.self) { id in
+                            let selected = id == palette(current.effect)
+                            Button { save { $0.palettes[current.effect] = id } } label: {
+                                Circle().fill(gradient(id)).frame(width: 22, height: 22)
+                                    .overlay(Circle().strokeBorder(selected ? Color.clear : theme.hairline, lineWidth: 1))
+                                    .padding(selected ? 2 : 0)
+                                    .overlay(Circle().strokeBorder(selected ? theme.accentBorder : Color.clear, lineWidth: 2))
+                                    .padding(selected ? 0 : 2)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(Text(verbatim: Self.paletteName(id)))
+                            .accessibilityAddTraits(selected ? .isSelected : [])
+                        }
+                    }
+                }
+                DesktopCompactRow(Text("Intensity"), identifier: "backgroundIntensity") {
+                    DesktopPillSelect(
+                        options: [("low", AppStrings.localized("Low")), ("medium", AppStrings.localized("Medium")), ("high", AppStrings.localized("High"))],
+                        selection: current.intensity,
+                        label: Text("Intensity"),
+                        identifier: "desktop-settings.background-intensity"
+                    ) { level in save { $0.intensity = level } }
+                }
+            }
+        }
+        .accessibilityIdentifier("desktop-settings.background-effects")
+    }
+
+    private func preview(_ effect: String) -> some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.app)
+            if effect != "none" {
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(gradient(palette(effect))).opacity(0.3)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Spacer(minLength: 0)
+                    DesktopText("Can you sum up this week's open tickets?")
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .background(theme.bubbleUser, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                DesktopText("Fourteen are open: three wait on the client and two are ready to bill.", line: 19)
+                Spacer(minLength: 0)
+                DesktopText(effect == "none" ? "No effect behind the conversation." : "Move the pointer and click here to try it.",
+                            size: 12, line: 16, color: \.inkTertiary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+        }
+        .frame(height: 168)
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.6), lineWidth: 1))
+        .padding(.horizontal, 8)
+    }
+
+    private func grid(_ current: Prefs) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 132), spacing: 8)], alignment: .leading, spacing: 8) {
+            ForEach(Self.effects, id: \.id) { entry in
+                let selected = entry.id == current.effect
+                Button { save { $0.effect = entry.id } } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ZStack(alignment: .topLeading) {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.app)
+                            if entry.id != "none" {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(gradient(palette(entry.id))).opacity(0.3)
+                            }
+                            GeometryReader { geometry in
+                                let w = geometry.size.width
+                                RoundedRectangle(cornerRadius: 6).fill(theme.bubbleUser.opacity(0.9))
+                                    .frame(width: w * 0.42, height: 11)
+                                    .position(x: w - 8 - w * 0.21, y: 9 + 5.5)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Capsule().fill(theme.ink.opacity(0.45)).frame(width: w * 0.62, height: 2)
+                                    Capsule().fill(theme.ink.opacity(0.45)).frame(width: w * 0.62 * 0.82, height: 2)
+                                    Capsule().fill(theme.inkSecondary.opacity(0.4)).frame(width: w * 0.62 * 0.58, height: 2)
+                                }
+                                .offset(x: 8, y: 28)
+                            }
+                        }
+                        .frame(height: 78)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(selected ? theme.accentBorder : theme.hairline.opacity(0.6), lineWidth: selected ? 2 : 1))
+                        HStack(spacing: 6) {
+                            DesktopText(verbatim: Self.name(entry.id)).lineLimit(1)
+                            Spacer(minLength: 0)
+                            if selected {
+                                DesktopSettingsIconView(icon: .check, size: 13).foregroundStyle(theme.accentText)
+                            }
+                        }
+                        .padding(.horizontal, 2)
+                    }
+                    .padding(6)
+                    .background(selected ? theme.selected : .clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text(verbatim: Self.name(entry.id)))
+                .accessibilityAddTraits(selected ? .isSelected : [])
+                .accessibilityIdentifier("desktop-settings.background-effect.\(entry.id)")
+            }
         }
     }
 }
@@ -333,33 +688,30 @@ struct DesktopSkinCard: View {
 
     var body: some View {
         let t = drawn ?? DesktopTheme.of(skin)
-        VStack(alignment: .leading, spacing: 10) {
+        // 0.5.6 (SkinPicker.tsx): the picture, the name and a check; the
+        // tagline is the tile's accessible description, not drawn
+        VStack(alignment: .leading, spacing: 6) {
             miniature(t)
-                .frame(height: 104)
+                .frame(height: 78)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(t.hairline, lineWidth: 1))
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    DesktopText(verbatim: name ?? skin.name, weight: .medium, line: 19.5)
-                    Spacer(minLength: 0)
-                    if selected {
-                        DesktopSettingsIconView(icon: .check, size: 14)
-                            .foregroundStyle(theme.ink)
-                    }
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(selected ? theme.accentBorder : t.hairline.opacity(0.6), lineWidth: selected ? 2 : 1))
+            HStack(spacing: 6) {
+                DesktopText(verbatim: name ?? skin.name)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if selected {
+                    DesktopSettingsIconView(icon: .check, size: 13)
+                        .foregroundStyle(theme.accentText)
                 }
-                DesktopText(Text(LocalizedStringKey(tagline ?? skin.tagline)), size: 12, line: 16.5, color: \.inkSecondary)
-                    .padding(.trailing, selected ? 0 : 0)
             }
             .padding(.horizontal, 2)
         }
-        .padding(11)
+        .padding(6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(selected ? theme.control : .clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(selected ? theme.accentBorder : theme.hairline.opacity(0.4), lineWidth: 1)
-        )
+        .background(selected ? theme.selected : .clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .contentShape(Rectangle())
+        .accessibilityHint(Text(LocalizedStringKey(tagline ?? skin.tagline)))
     }
 
     /// The renderer's miniature (`SkinPreview`): a rail, a sidebar with a
@@ -674,47 +1026,41 @@ struct DesktopEnginesSettings: View {
     /// The desktop's Show filter (`providers.filter.*`): All, Mine, This computer.
     @State private var filter = "all"
 
+    @State private var adding = false
+    @State private var addStep = "choose"
+
     /// Settings > Providers (ProvidersSettings.tsx, 2026-10-30): "Providers"
-    /// over one card, the connected providers as rows (their mark, the name,
-    /// how it is reached, "Connected"), then "To connect" with its count,
-    /// folded; a row opens the provider's card with its setup.
+    /// with its help and the Show filter over one card: "Add a provider",
+    /// the connected providers as rows (their mark, the name, who pays and
+    /// where the key lives, "Connected"), "To connect" folded under its
+    /// count, then the cloud coding agents' keys.
     var body: some View {
-        HStack(spacing: 8) {
-            DesktopSettingsHeading(Text("Providers"))
-            Spacer(minLength: 0)
-            HStack(spacing: 4) {
-                ForEach([("all", String(localized: "All")), ("mine", String(localized: "Mine")), ("computer", String(localized: "This computer"))], id: \.0) { option in
-                    Button { filter = option.0 } label: {
-                        DesktopText(Text(verbatim: option.1), size: 12, line: 16, color: filter == option.0 ? \.ink : \.inkSecondary)
-                            .padding(.horizontal, 8)
-                            .frame(minHeight: 30)
-                            .background(filter == option.0 ? theme.selected : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        DesktopSettingsGroup(Text("Providers"), accessory: AnyView(header), identifier: "providers") {
+            if adding {
+                addProvider
+            } else {
+                Button { addStep = "choose"; adding = true } label: {
+                    HStack(spacing: 12) {
+                        DesktopSettingsIconView(icon: .plus, size: 14)
+                        DesktopText(Text("Add a provider"), color: \.accentText)
+                        Spacer(minLength: 0)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(filter == option.0 ? .isSelected : [])
-                    .accessibilityIdentifier("desktop-settings.providers.filter.\(option.0)")
+                    .foregroundStyle(theme.accentText)
+                    .padding(.horizontal, 8)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(DesktopHoverFill(radius: 8))
+                .padding(.horizontal, 6)
+                .accessibilityIdentifier("desktop-settings.providers.add")
             }
-            Button { Task { await load() } } label: {
-                HStack(spacing: 6) {
-                    DesktopSettingsIconView(icon: .refreshCw, size: 13)
-                    Text(checking ? "Checking…" : "Check again")
-                }
-                .foregroundStyle(theme.inkSecondary)
-            }
-            .buttonStyle(DesktopButtonStyle(kind: .ghost, size: 12, weight: .medium, height: 34, horizontal: 10))
-            .disabled(checking)
-            .accessibilityIdentifier("desktop-settings.engines-refresh")
-        }
-        .task { if engines == nil { await load() } }
-        if let all = engines {
-            let engines = all.filter { filter == "all" || (filter == "computer") == Self.onThisComputer($0) }
-            let ready = engines.filter(\.ready)
-            let rest = engines.filter { !$0.ready }
-            VStack(alignment: .leading, spacing: 0) {
-                if engines.isEmpty {
-                    DesktopText("No model provider apps detected yet.", color: \.inkSecondary)
-                        .padding(14)
+            if let all = engines {
+                let engines = all.filter { filter == "all" || (filter == "computer") == Self.onThisComputer($0) }
+                let ready = engines.filter(\.ready)
+                let rest = engines.filter { !$0.ready }
+                if ready.isEmpty {
+                    DesktopText("No provider connected yet. Add one to start.", color: \.inkSecondary)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
                 }
                 ForEach(ready) { engine in
                     providerRow(engine)
@@ -727,38 +1073,117 @@ struct DesktopEnginesSettings: View {
                     }
                 }
                 if !rest.isEmpty {
-                    if !ready.isEmpty { Rectangle().fill(theme.hairlineWeak).frame(height: 0.5).padding(.horizontal, 14) }
-                    Button { withAnimation(.easeOut(duration: 0.15)) { toConnectOpen.toggle() } } label: {
-                        HStack(spacing: 8) {
-                            DesktopText(Text("To connect"))
-                            Spacer(minLength: 0)
-                            DesktopText(Text(verbatim: "\(rest.count)"), color: \.inkSecondary).monospacedDigit()
-                            DesktopSettingsIconView(icon: toConnectOpen ? .chevronUp : .chevronDown, size: 12, strokeWidth: 2.5)
-                                .foregroundStyle(theme.inkSecondary)
+                    DesktopDescribedRow(Text("To connect"), identifier: "providers.toConnect") {
+                        DesktopCountPill(count: rest.count, open: toConnectOpen, label: Text("To connect"), identifier: "desktop-settings.providers.to-connect") {
+                            withAnimation(.easeOut(duration: 0.15)) { toConnectOpen.toggle() }
                         }
-                        .padding(.horizontal, 14)
-                        .frame(minHeight: 44)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(DesktopHoverFill(radius: 0))
-                    .accessibilityIdentifier("desktop-settings.providers.to-connect")
-                    if toConnectOpen {
-                        DesktopEngineGrid(engines: rest, open: $open, client: session.settingsClient, reload: { await load() }) { _ in
-                            shell.settingsSection = .connections
+                    } below: {
+                        if toConnectOpen {
+                            VStack(spacing: 0) {
+                                ForEach(rest) { engine in
+                                    providerRow(engine)
+                                    if open == engine.id {
+                                        DesktopEngineGrid(engines: [engine], open: $open, client: session.settingsClient, reload: { await load() }) { _ in
+                                            shell.settingsSection = .connections
+                                        }
+                                        .padding(.bottom, 10)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, -14)
+                            .padding(.top, 8)
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.bottom, 10)
                     }
                 }
+            } else if let error {
+                DesktopText(verbatim: error, color: \.danger).padding(14)
+            } else {
+                ProgressView().controlSize(.small).padding(14)
             }
-            .padding(1)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .desktopHairlineBox()
-        } else if let error {
-            DesktopText(verbatim: error, color: \.danger)
-        } else {
-            ProgressView().controlSize(.small)
+            DesktopCloudAgentKeys()
         }
+        .task { if engines == nil { await load() } }
+    }
+
+    private var header: some View {
+        HStack(spacing: 4) {
+            DesktopHelpTip(help: Text("A provider is an account, a key or a server. Each row says who pays, where its key lives and what it brings. Bots, Auto and voice only choose among them."))
+            Spacer(minLength: 0)
+            ForEach([("all", AppStrings.localized("All")), ("mine", AppStrings.localized("Mine")), ("computer", AppStrings.localized("This computer"))], id: \.0) { option in
+                Button { filter = option.0 } label: {
+                    DesktopText(Text(verbatim: option.1), size: 12, line: 16, color: filter == option.0 ? \.ink : \.inkSecondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(filter == option.0 ? theme.selected : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(filter == option.0 ? .isSelected : [])
+                .accessibilityIdentifier("desktop-settings.providers.filter.\(option.0)")
+            }
+        }
+    }
+
+    /// "Add a provider" (AddProvider): an account, a key or a server. An
+    /// account opens its row under To connect; a key and a server open
+    /// the API keys page, where they are saved.
+    private var addProvider: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if addStep == "key" || addStep == "server" {
+                // the keys and the OpenAI-compatible server, saved on the computer
+                AnyView(DesktopAPIKeysSettings())
+            } else if addStep == "account" {
+                let rest = (engines ?? []).filter { !$0.ready }
+                if rest.isEmpty {
+                    DesktopText("Every account is connected already.", size: 12.5, color: \.inkSecondary).padding(.horizontal, 8)
+                }
+                ForEach(rest) { engine in
+                    Button {
+                        adding = false
+                        toConnectOpen = true
+                        open = engine.id
+                    } label: {
+                        HStack(spacing: 12) {
+                            DesktopText(verbatim: engine.name).lineLimit(1)
+                            Spacer(minLength: 0)
+                            DesktopText(engine.providerLine.map { Text(verbatim: $0) } ?? Text("To connect"), size: 12, color: \.inkSecondary).lineLimit(1)
+                        }
+                        .padding(.horizontal, 8).frame(minHeight: 36).contentShape(Rectangle())
+                    }
+                    .buttonStyle(DesktopHoverFill(radius: 8))
+                }
+            } else {
+                ForEach([("account", Text("Connect an account"), Text("Claude, ChatGPT, Grok, Kimi and the other subscriptions"), DesktopSettingsIcon.user),
+                         ("key", Text("Paste a key"), Text("Anthropic, OpenAI, xAI, OpenRouter, Mistral, ElevenLabs, Fish Audio…"), .keyRound),
+                         ("server", Text("An OpenAI-compatible server"), Text("Azure AI Foundry, vLLM, a gateway: each server is a provider of its own, under its name"), .monitor)], id: \.0) { way in
+                    Button {
+                        addStep = way.0
+                    } label: {
+                        HStack(alignment: .top, spacing: 12) {
+                            DesktopSettingsIconView(icon: way.3, size: 14).foregroundStyle(theme.inkSecondary).padding(.top, 2)
+                            VStack(alignment: .leading, spacing: 0) {
+                                DesktopText(way.1)
+                                DesktopText(way.2, size: 12, line: 16, color: \.inkSecondary)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(8).contentShape(Rectangle())
+                    }
+                    .buttonStyle(DesktopHoverFill(radius: 8))
+                    .accessibilityIdentifier("desktop-settings.providers.add.\(way.0)")
+                }
+            }
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+                if addStep != "choose" {
+                    Button("Back") { addStep = "choose" }.buttonStyle(DesktopButtonStyle(kind: .control))
+                }
+                Button("Cancel") { adding = false }.buttonStyle(DesktopButtonStyle(kind: .control))
+            }
+        }
+        .padding(8)
+        .background(theme.inset.opacity(0.4), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(.horizontal, 6)
+        .padding(.bottom, 6)
     }
 
     /// A model server of this computer (a local endpoint), not an account or a key.
@@ -775,25 +1200,30 @@ struct DesktopEnginesSettings: View {
 
     private func providerRow(_ engine: DesktopEngine) -> some View {
         Button { withAnimation(.easeOut(duration: 0.15)) { open = open == engine.id ? nil : engine.id } } label: {
-            HStack(spacing: 10) {
-                DesktopText(Text(verbatim: String((engine.displayName ?? engine.driverKind).prefix(2))), size: 11, weight: .semibold, line: 14, color: \.inkSecondary)
-                    .frame(width: 24, height: 24)
-                    .background(theme.raised, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                VStack(alignment: .leading, spacing: 1) {
-                    DesktopText(Text(verbatim: engine.displayName ?? engine.driverKind), size: 13, weight: .medium, line: 18)
-                    // who pays · where its key is (ProvidersSettings.tsx rowDetail)
-                    DesktopText(Text(verbatim: Self.detail(engine)), size: 12, line: 16, color: \.inkSecondary)
+            HStack(spacing: 12) {
+                ProviderMarkView(driverKind: engine.driverKind, size: 16)
+                    .frame(width: 28, height: 28)
+                    .background(theme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+                VStack(alignment: .leading, spacing: 0) {
+                    DesktopText(Text(verbatim: engine.displayName ?? engine.driverKind)).lineLimit(1)
+                    // who pays · where its key is (ProvidersSettings.tsx providerLine)
+                    DesktopText(Text(verbatim: Self.detail(engine)), size: 12, line: 16, color: \.inkSecondary).lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                DesktopText(Text("Connected"), size: 12.5, weight: .medium, line: 18, color: \.success)
-                DesktopSettingsIconView(icon: open == engine.id ? .chevronUp : .chevronDown, size: 12, strokeWidth: 2.5)
+                if engine.ready {
+                    DesktopText(Text("Connected"), size: 12, weight: .medium, line: 16, color: \.success)
+                }
+                DesktopSettingsIconView(icon: open == engine.id ? .chevronUp : .chevronDown, size: 13)
                     .foregroundStyle(theme.inkSecondary)
             }
-            .padding(.horizontal, 14)
-            .frame(minHeight: 48)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
-        .buttonStyle(DesktopHoverFill(radius: 0))
+        .buttonStyle(DesktopHoverFill(radius: 8))
+        .padding(.horizontal, 6)
         .accessibilityIdentifier("desktop-settings.provider.\(engine.id)")
     }
 
@@ -802,6 +1232,127 @@ struct DesktopEnginesSettings: View {
         checking = true
         defer { checking = false }
         do { engines = try await client.desktopEngines() } catch { self.error = error.localizedDescription }
+    }
+}
+
+/// Cloud coding agents (CloudAgentProvidersSettings.tsx): a folding row of
+/// the Providers card, each provider's key saved, tested, replaced or removed.
+struct DesktopCloudAgentKeys: View {
+    @Environment(\.desktopTheme) private var theme
+    @EnvironmentObject private var session: Session
+    @State private var rows: [CloudAgentProviderRow]?
+    @State private var error: String?
+    @State private var open = false
+
+    var body: some View {
+        Group {
+            if let rows, !rows.isEmpty {
+                DesktopDescribedRow(
+                    Text("Cloud coding agents"),
+                    description: CloudAgentProviderRow.anyConfigured(rows) ? Text("At least one provider connected") : Text("No keys saved"),
+                    help: Text("Keys you save here are encrypted on this server and used when you launch cloud coding agents (Cursor, Claude Code, Codex). They are never shown again after you save them."),
+                    identifier: "connections.cloudAgents"
+                ) {
+                    DesktopCountPill(count: rows.count, open: open, label: Text("Cloud coding agents"), identifier: "desktop-settings.cloud-agents") {
+                        withAnimation(.easeOut(duration: 0.15)) { open.toggle() }
+                    }
+                } below: {
+                    if open {
+                        VStack(spacing: 8) {
+                            ForEach(rows) { row in DesktopCloudAgentRow(row: row) { await load() } }
+                        }
+                        .padding(.top, 8)
+                    }
+                }
+            } else if rows == nil, let error {
+                DesktopText(verbatim: error, size: 12.5, line: 18, color: \.danger).padding(.horizontal, 14).padding(.vertical, 10)
+            }
+        }
+        Color.clear.frame(height: 0)
+            .task { await load() }
+    }
+
+    private func load() async {
+        guard let client = session.settingsClient else { return }
+        do { rows = try await client.cloudAgentProviders(); error = nil }
+        catch { if rows == nil { self.error = AppStrings.localized("Your cloud agent keys could not be loaded. Try again in a moment.") } }
+    }
+}
+
+struct DesktopCloudAgentRow: View {
+    @Environment(\.desktopTheme) private var theme
+    @EnvironmentObject private var session: Session
+    let row: CloudAgentProviderRow
+    let changed: () async -> Void
+    @State private var token = ""
+    @State private var busy = false
+    @State private var note: String?
+    @State private var editing: Bool?
+
+    var body: some View {
+        let isEditing = editing ?? !row.configured
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 0) {
+                    DesktopText(verbatim: row.label)
+                    if row.configured && !isEditing {
+                        DesktopText(verbatim: String(format: AppStrings.localized("Saved key ····%@"), row.last4 ?? "····"), size: 12, line: 16, color: \.inkSecondary)
+                    }
+                }
+                Spacer(minLength: 0)
+                if row.configured && !isEditing {
+                    Button("Test connection") { run { try await $0.testCloudAgentProvider(row.provider, token: nil); return AppStrings.localized("Connection succeeded.") } }
+                        .buttonStyle(DesktopButtonStyle(kind: .control)).disabled(busy)
+                    Button("Replace") { editing = true; note = nil }
+                        .buttonStyle(DesktopButtonStyle(kind: .control)).disabled(busy)
+                    Button { run { try await $0.removeCloudAgentProvider(row.provider); return nil } } label: { Text("Remove").foregroundStyle(theme.danger) }
+                        .buttonStyle(DesktopButtonStyle(kind: .control)).disabled(busy)
+                }
+            }
+            if isEditing {
+                SecureField(text: $token, prompt: Text("Paste an API key or token").foregroundColor(theme.inkSecondary)) { Text("Paste an API key or token") }
+                    .font(theme.font(13))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(.horizontal, 10).frame(minHeight: 32)
+                    .background(theme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+                    .accessibilityIdentifier("desktop-settings.cloud-agent.\(row.provider).token")
+                HStack(spacing: 8) {
+                    Button("Save key") { let value = token; run { try await $0.saveCloudAgentProvider(row.provider, token: value); return nil } }
+                        .buttonStyle(DesktopButtonStyle(kind: .accent))
+                        .disabled(busy || token.trimmingCharacters(in: .whitespaces).isEmpty)
+                    Button("Test connection") { let value = token; run { try await $0.testCloudAgentProvider(row.provider, token: value); return AppStrings.localized("Connection succeeded.") } }
+                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .disabled(busy || token.trimmingCharacters(in: .whitespaces).isEmpty)
+                    if row.configured {
+                        Button("Cancel") { editing = false; token = ""; note = nil }
+                            .buttonStyle(DesktopButtonStyle(kind: .ghost)).disabled(busy)
+                    }
+                }
+            }
+            if let note { DesktopText(verbatim: note, size: 12, line: 16, color: \.inkSecondary) }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func run(_ work: @escaping (CompanionClient) async throws -> String?) {
+        guard let client = session.settingsClient else { return }
+        busy = true
+        note = nil
+        Task {
+            defer { busy = false }
+            do {
+                let said = try await work(client)
+                await changed()
+                token = ""
+                editing = false
+                note = said
+            } catch {
+                note = AppStrings.localized("That did not work. Check the key and try again.")
+            }
+        }
     }
 }
 
@@ -1226,6 +1777,284 @@ struct DesktopEngineSetup: View {
 
 // MARK: - Local VM
 
+/// The rows above the Bots' computer group: "Allow control of this
+/// computer" (the Mac's Accessibility and Screen Recording, set on the Mac),
+/// "Use Messages" and Computer care (Recover or Update now, Reset,
+/// Scheduled update, Disk saver).
+struct DesktopComputerTopRows: View {
+    @Environment(\.desktopTheme) private var theme
+    @EnvironmentObject private var session: Session
+    @EnvironmentObject private var shell: DesktopShellModel
+    @State private var messages: MessagesSetupStatus?
+    @State private var macOpen = false
+    @State private var messagesError: String?
+    @State private var computer: ComputerStatus?
+    @State private var maintenance: ComputerMaintenance?
+    @State private var careHidden = false
+    @State private var careBusy: String?
+    @State private var careError: String?
+    @State private var confirming: String?
+    @State private var preview: DiskSaverPreview?
+    @State private var selection: Set<String> = []
+    @State private var freed: Double?
+
+    var body: some View {
+        if messages?.available == true {
+            VStack(alignment: .leading, spacing: 0) {
+                Button { withAnimation(.easeOut(duration: 0.15)) { macOpen.toggle() } } label: {
+                    HStack(spacing: 12) {
+                        DesktopSettingsIconView(icon: .shield, size: 15).foregroundStyle(theme.inkSecondary)
+                        DesktopText(Text("Allow control of this computer"), weight: .medium, color: \.inkSecondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        DesktopSettingsIconView(icon: .chevronDown, size: 16).foregroundStyle(theme.inkSecondary)
+                            .rotationEffect(.degrees(macOpen ? 180 : 0))
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 10).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("desktop-settings.mac-control")
+                if macOpen {
+                    DesktopText(Text("Local computer control is not ready. Sagax needs Accessibility and Screen Recording to use this Mac. Check Driver detail or System Settings, then click Retry."),
+                                size: 12.5, line: 20, color: \.inkSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 16).padding(.bottom, 14)
+                }
+            }
+            .desktopHairlineBox(radius: 12)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            DesktopText(Text("Use Messages"), weight: .medium)
+                            DesktopHelpTip(help: Text("Reading Messages needs Full Disk Access for Sagax. Sending needs Automation for Messages. Nothing is sent to someone who is not on the bot's allowed recipients without a card."))
+                        }
+                        DesktopText(Text("Lets Sagax read and send messages on the Mac where this app runs. Not from a server, and not through another Mac."), size: 12, line: 16, color: \.inkSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    DesktopSwitch(isOn: messages?.useMessages == true, label: Text("Use Messages"), identifier: "desktop-settings.use-messages") {
+                        Task { await setMessages(!(messages?.useMessages ?? false)) }
+                    }
+                }
+                Button { shell.modal = .plugins } label: {
+                    DesktopText(Text("Open Messages setup in Capabilities"), size: 12.5, weight: .medium, color: \.accentText)
+                }
+                .buttonStyle(.plain)
+                if let messagesError { DesktopText(verbatim: messagesError, size: 12, line: 16, color: \.danger) }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 12)
+            .desktopHairlineBox(radius: 12)
+        }
+        if !careHidden {
+            DesktopSettingsGroup(Text("Computer care"), identifier: "computerCare") {
+                if let computer, let action = Self.action(computer) {
+                    let recover = action == "recover"
+                    DesktopDescribedRow(recover ? Text("Recover computer") : Text("Update now"),
+                                        description: careBusy == "update" ? (recover ? Text("Recovering… This can take a few minutes.") : Text("Updating… This can take a few minutes."))
+                                            : recover ? Text("It is not answering. Recover rebuilds it from the current image: your files stay, installed apps and packages are removed.")
+                                                      : Text("Moves the computer to the latest version now. Files and logins stay, installed apps and packages are removed."),
+                                        identifier: "computerRecover") {
+                        Button(recover ? "Recover" : "Update") { confirming = recover ? "recover" : "update" }
+                            .buttonStyle(DesktopButtonStyle(kind: .control))
+                            .disabled(careBusy != nil)
+                            .accessibilityIdentifier("desktop-settings.computer-recover")
+                    }
+                }
+                if computer?.configured == true {
+                    DesktopDescribedRow(Text("Reset computer"),
+                                        description: careBusy == "reset" ? Text("Resetting… This can take a few minutes.")
+                                            : Text("Rebuild the computer from the last snapshot. More than an update: anything set up since the snapshot is lost. Use it only when Update does not fix the problem."),
+                                        identifier: "computerReset") {
+                        Button { confirming = "reset" } label: { Text("Reset").fontWeight(.medium).foregroundStyle(Color.white) }
+                            .buttonStyle(DesktopDangerButtonStyle())
+                            .disabled(careBusy != nil)
+                            .accessibilityIdentifier("desktop-settings.computer-reset")
+                    }
+                }
+                DesktopDescribedRow(Text("Scheduled update"), description: Text(verbatim: maintenanceSummary),
+                                    help: Text("Rebuilds the bot's computer from the current image in a maintenance window, which updates its system and packages. Its working folder is kept. It never runs while the computer is in use: it waits inside the window, and is postponed to the next one when the computer stays busy."),
+                                    identifier: "maintenance") {
+                    DesktopSwitch(isOn: maintenance?.schedule.enabled == true, label: Text("Scheduled update"), identifier: "desktop-settings.scheduled-update",
+                                  disabled: maintenance == nil || careBusy == "schedule") {
+                        Task { await toggleSchedule() }
+                    }
+                }
+                DesktopDescribedRow(Text("Disk saver"), description: Text("Measures caches and old files on the bot's computer and shows what a cleanup would free. Nothing is deleted until you choose."), identifier: "diskSaver") {
+                    Button { Task { await scan() } } label: {
+                        HStack(spacing: 6) {
+                            DesktopSettingsIconView(icon: .refreshCw, size: 12)
+                            Text(preview == nil ? "Analyze" : "Analyze again")
+                        }
+                    }
+                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .disabled(careBusy == "scan" || careBusy == "clean")
+                    .accessibilityIdentifier("desktop-settings.disk-saver")
+                    if let preview, !selection.isEmpty {
+                        Button(String(format: AppStrings.localized("Free %@"), Self.size(preview.bytes(of: selection)))) { confirming = "clean" }
+                            .buttonStyle(DesktopButtonStyle(kind: .control))
+                            .disabled(careBusy == "clean")
+                    }
+                } below: {
+                    if let preview {
+                        VStack(alignment: .leading, spacing: 6) {
+                            if !preview.computerRunning {
+                                DesktopText(Text("The bot's computer is not running, so only this server's files were measured. Start it to measure its caches."), size: 12, line: 16, color: \.inkSecondary)
+                            }
+                            ForEach(preview.items) { item in
+                                HStack(spacing: 8) {
+                                    DesktopCheckbox(checked: selection.contains(item.id), label: Text(verbatim: Self.diskLabel(item.id)), disabled: item.bytes <= 0) {
+                                        if selection.contains(item.id) { selection.remove(item.id) } else { selection.insert(item.id) }
+                                    }
+                                    DesktopText(verbatim: Self.diskLabel(item.id), size: 12.5)
+                                    if item.userFiles { DesktopText(Text("your files"), size: 12, color: \.danger) }
+                                    Spacer(minLength: 0)
+                                    DesktopText(verbatim: Self.size(item.bytes), size: 12, color: \.inkSecondary).monospacedDigit()
+                                }
+                            }
+                            if let freed { DesktopText(verbatim: String(format: AppStrings.localized("Freed %@."), Self.size(freed)), size: 12, color: \.success) }
+                        }
+                        .padding(.top, 8)
+                    }
+                }
+                if let careError {
+                    DesktopText(verbatim: careError, size: 12, line: 16, color: \.danger).padding(.horizontal, 14).padding(.bottom, 8)
+                }
+            }
+            .confirmationDialog(Text(verbatim: confirmText), isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }), titleVisibility: .visible) {
+                Button(confirming == "clean" ? AppStrings.localized("Delete") : confirming == "reset" ? AppStrings.localized("Reset") : AppStrings.localized("Confirm"), role: .destructive) {
+                    let what = confirming
+                    confirming = nil
+                    Task { await run(what) }
+                }
+                Button("Cancel", role: .cancel) { confirming = nil }
+            }
+        }
+        Color.clear.frame(height: 0).task { await load() }
+    }
+
+    static func action(_ status: ComputerStatus) -> String? {
+        guard status.configured else { return nil }
+        if ComputerCare.needsRecover(configured: status.configured, state: status.state, problem: status.problem, waking: status.waking != nil) { return "recover" }
+        if status.waking != nil { return nil }
+        return ["running", "ready", "idle"].contains(status.state) ? "update" : nil
+    }
+
+    private var confirmText: String {
+        switch confirming {
+        case "recover": AppStrings.localized("Recover your bots' computer? It is rebuilt from the current image: your files and logins stay, installed apps and packages are removed. It waits until no bot is working on it.")
+        case "update": AppStrings.localized("Update your bots' computer now? It moves to the latest version: your files and logins stay, installed apps and packages are removed. It waits until no bot is working on it.")
+        case "reset": AppStrings.localized("Reset your bots' computer? It is rebuilt from the last snapshot. This is more than an update: anything set up since is lost, and it cannot be undone.")
+        case "clean":
+            if let preview, preview.touchesUserFiles(selection) {
+                String(format: AppStrings.localized("Delete the selected items (%@), including everything in the trash of the bot's computer? Files in the trash cannot be recovered."), Self.size(preview.bytes(of: selection)))
+            } else {
+                String(format: AppStrings.localized("Delete the selected caches and old files (%@)? Your working folder is not touched."), Self.size(preview?.bytes(of: selection) ?? 0))
+            }
+        default: ""
+        }
+    }
+
+    private var maintenanceSummary: String {
+        guard let maintenance else { return AppStrings.localized("Loading…") }
+        if maintenance.running { return AppStrings.localized("Updating now…") }
+        if maintenance.schedule.enabled, let next = maintenance.nextWindowAt {
+            let when = Date(timeIntervalSince1970: next / 1000).formatted(date: .abbreviated, time: .shortened)
+            return String(format: AppStrings.localized("Next window: %@."), when)
+        }
+        return AppStrings.localized("Off. Update the computer yourself from its menu.")
+    }
+
+    static func size(_ bytes: Double) -> String { ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file) }
+
+    static func diskLabel(_ id: String) -> String {
+        switch id {
+        case "packageCaches": AppStrings.localized("Package caches (pip, npm, pnpm, yarn, Go, Cargo)")
+        case "browserCache": AppStrings.localized("Browser cache")
+        case "thumbnails": AppStrings.localized("Thumbnails")
+        case "tempFiles": AppStrings.localized("Temporary files older than a day")
+        case "trash": AppStrings.localized("Trash")
+        default: AppStrings.localized("Turn checkpoints older than 30 days (those turns can no longer be undone)")
+        }
+    }
+
+    private func load() async {
+        guard let client = session.settingsClient else { return }
+        messages = try? await client.messagesSetup()
+        computer = try? await client.computerStatus()
+        do { maintenance = try await client.computerMaintenance() }
+        catch let APIError.status(code, _) where [403, 404, 409].contains(code) { careHidden = true }
+        catch {}
+    }
+
+    private func setMessages(_ on: Bool) async {
+        guard let client = session.settingsClient else { return }
+        messagesError = nil
+        do { messages = try await client.setMessagesEnabled(on) } catch { messagesError = error.localizedDescription }
+    }
+
+    private func toggleSchedule() async {
+        guard let client = session.settingsClient, var schedule = maintenance?.schedule else { return }
+        careBusy = "schedule"
+        defer { careBusy = nil }
+        schedule.enabled.toggle()
+        schedule.timeZone = TimeZone.current.identifier
+        do { maintenance = try await client.setComputerMaintenance(schedule) } catch { careError = error.localizedDescription }
+    }
+
+    private func scan() async {
+        guard let client = session.settingsClient else { return }
+        careBusy = "scan"
+        careError = nil
+        freed = nil
+        defer { careBusy = nil }
+        do {
+            let next = try await client.diskSaverPreview()
+            preview = next
+            selection = next.defaultSelection
+        } catch { careError = error.localizedDescription }
+    }
+
+    private func run(_ what: String?) async {
+        guard let client = session.settingsClient, let what else { return }
+        careError = nil
+        careBusy = what == "recover" ? "update" : what
+        defer { careBusy = nil }
+        do {
+            switch what {
+            case "recover", "update": computer = try await client.updateComputer()
+            case "reset": computer = try await client.resetComputer()
+            case "clean":
+                guard let preview else { return }
+                let result = try await client.diskSaverClean(selection, userFiles: preview.touchesUserFiles(selection))
+                freed = result.freedBytes
+                self.preview = result.preview
+                selection = result.preview.defaultSelection
+            default: break
+            }
+        } catch {
+            careError = what == "reset" ? AppStrings.localized("The computer could not be reset. Try again.")
+                : what == "clean" ? error.localizedDescription
+                : what == "recover" ? AppStrings.localized("The computer could not be recovered. Try again.")
+                : AppStrings.localized("The computer could not be updated. Try again.")
+        }
+    }
+}
+
+/// `DANGER_PILL`: the filled red pill of a reset that erases.
+struct DesktopDangerButtonStyle: ButtonStyle {
+    @Environment(\.desktopTheme) private var theme
+    @Environment(\.isEnabled) private var enabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(theme.font(13, .medium))
+            .padding(.horizontal, 12)
+            .frame(height: 31.5)
+            .background(theme.danger.opacity(configuration.isPressed ? 0.85 : 1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .opacity(enabled ? 1 : 0.5)
+    }
+}
+
 struct DesktopComputerSettings: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
@@ -1242,38 +2071,24 @@ struct DesktopComputerSettings: View {
         let statusText: Text = loading ? Text("Checking…")
             : status == nil ? Text("Status unavailable")
             : ready ? Text("Ready") : Text(verbatim: status?.problem ?? AppStrings.localized("Not ready"))
-        DesktopSettingsCard(
-            Text("Local VM"),
-            summary: statusText,
-            subtitle: perBot
-                ? Text("Private Cua Linux desktops on the computer, with one container and durable folder per bot. Distinct bots can work concurrently and unused desktops stop after 10 minutes.")
-                : Text("A shared Cua Linux sandbox on the computer for bots to browse and work in: isolated, backed by one durable folder, and stopped automatically after 10 minutes without use."),
-            identifier: "computer.main"
-        ) {
-            HStack(spacing: 8) {
-                HStack(spacing: 6) {
-                    if loading { ProgressView().controlSize(.mini) }
-                    else if ready { DesktopSettingsIconView(icon: .check, size: 12) }
-                    else { DesktopSettingsIconView(icon: .circle, size: 9) }
-                    statusText.font(theme.font(12.5)).lineLimit(1)
-                }
-                .foregroundStyle(ready ? theme.success : theme.inkSecondary)
-                .padding(.horizontal, 10)
-                .frame(height: 26.8)
-                .background(ready ? theme.success.opacity(0.15) : theme.control, in: Capsule())
+        // LocalComputerSection.tsx: control of the Mac, Messages, Computer
+        // care, then the Bots' computer group and its folded cards
+        AnyView(DesktopComputerTopRows())
+        DesktopSettingsGroup(Text("Bots' computer"), identifier: "botsComputer") {
+            DesktopDescribedRow(Text("Local VM"), description: ready ? Text(verbatim: "✓ ") + statusText : Text(verbatim: "○ ") + statusText, identifier: "localVm") {
                 Button { Task { await load() } } label: {
                     HStack(spacing: 6) {
                         DesktopSettingsIconView(icon: .refreshCw, size: 12)
                         Text("Re-check")
                     }
                 }
-                .buttonStyle(DesktopRecheckStyle())
+                .buttonStyle(DesktopButtonStyle(kind: .control))
                 .disabled(loading || pending != nil)
                 .accessibilityIdentifier("desktop-settings.vm-recheck")
-                Spacer(minLength: 0)
-            }
-            if let error {
-                DesktopText(verbatim: error, size: 12, line: 17, color: \.danger).padding(.top, 10)
+            } below: {
+                if let error {
+                    DesktopText(verbatim: error, size: 12, line: 16, color: \.danger).padding(.top, 8)
+                }
             }
         }
         .task { await load() }

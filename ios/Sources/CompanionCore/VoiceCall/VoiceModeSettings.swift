@@ -35,7 +35,39 @@ public struct VoiceModeSettings: Codable, Equatable, Sendable {
         self.extraJSON = extraJSON
     }
 
-    public static let ttsProviders = ["xai", "openai", "elevenlabs"]
+    public static let ttsProviders = ["xai", "openai", "elevenlabs", "fish", "system", "chatterbox"]
+    /// shared/voice-providers.ts VOICE_STT_PROVIDERS.
+    public static let sttProviders = ["xai", "openai"]
+
+    /// The person's own picks (Settings > Voice), "auto" when none.
+    public var personTts: String { (extra["tts"] as? String).flatMap { Self.ttsProviders.contains($0) ? $0 : nil } ?? "auto" }
+    public var personStt: String { (extra["stt"] as? String).flatMap { Self.sttProviders.contains($0) ? $0 : nil } ?? "auto" }
+
+    /// Settings > Voice > Speech to text: the person's provider, nil for Auto.
+    public func withStt(_ provider: String?) -> VoiceModeSettings {
+        var out = self
+        out.ttsProvider = nil
+        out.resolvedFor = nil
+        var record = extra
+        if let provider, Self.sttProviders.contains(provider) { record["stt"] = provider } else { record["stt"] = nil }
+        out.extraJSON = Self.json(record)
+        return out
+    }
+
+    /// The voice picked for one provider, for no bot.
+    public func personVoice(of provider: String) -> String { voice(of: provider, botId: nil) }
+
+    /// `installedVoiceSettings` (shared/voice-mode.ts): a solo installation's
+    /// voice (`config.tts`) as the person's choice, the first time nothing is
+    /// stored; a provider that is not one of the six falls back to ElevenLabs.
+    public static func installed(provider: String?, voice: String?) -> VoiceModeSettings {
+        let picked = provider.flatMap { ttsProviders.contains($0) ? $0 : nil } ?? "elevenlabs"
+        var out = VoiceModeSettings().withTts(picked)
+        if let voice, !voice.isEmpty {
+            out = picked == "xai" ? { var x = out; x.voice = voice; return x }() : out.withVoice(voice, forBot: nil)
+        }
+        return out
+    }
 
     private var extra: [String: Any] {
         guard !extraJSON.isEmpty, let data = extraJSON.data(using: .utf8) else { return [:] }

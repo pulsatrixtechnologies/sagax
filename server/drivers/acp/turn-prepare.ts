@@ -248,6 +248,28 @@ export async function prepareAcpTurn(deps: SendTurnDeps, turn: SendTurnInput): P
     }
     const pooled = sessions.get(threadId);
     let session: AcpSession;
+    if (process.env.SAGAX_ACP_REUSE_DIAG === "1") {
+      if (!pooled) console.error(`[acp-reuse-diag] thread=${threadId.slice(0, 8)} why=none`);
+      else {
+        const contractMismatch = pooled.contractKey !== contractKey;
+        const sessionMismatch = Boolean(support.restartOnMcpChange) && pooled.sessionKey !== sessionKey;
+        const why = pooled.dead ? "dead" : pooled.closing ? "closing" : contractMismatch ? "contract" : sessionMismatch ? "sessionKey" : "reuse";
+        let diffHint = "";
+        if (contractMismatch) {
+          try {
+            const before = JSON.parse(pooled.contractKey) as unknown[];
+            const after = JSON.parse(contractKey) as unknown[];
+            const labels = ["command", "args", "spawnArgs", "cwd", "fullAuto", "envFingerprint", "spawnFingerprint", "toolScope", "inheritedScope"];
+            const parts: string[] = [];
+            for (let i = 0; i < Math.max(before.length, after.length); i++) {
+              if (JSON.stringify(before[i]) !== JSON.stringify(after[i])) parts.push(`${labels[i] ?? i}`);
+            }
+            diffHint = ` fields=${parts.join(",")}`;
+          } catch { /* ignore */ }
+        }
+        console.error(`[acp-reuse-diag] thread=${threadId.slice(0, 8)} why=${why}${diffHint} sessionKeyChanged=${pooled.sessionKey !== sessionKey} exit=${pooled.child.exitCode} dead=${pooled.dead} closing=${pooled.closing} sid=${pooled.sessionId}`);
+      }
+    }
     if (pooled && !pooled.dead && !pooled.closing && pooled.contractKey === contractKey
         && (!support.restartOnMcpChange || pooled.sessionKey === sessionKey)) {
       // adoption cancels the idle countdown — a running turn is not quiet

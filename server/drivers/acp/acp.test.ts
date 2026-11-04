@@ -3320,6 +3320,43 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       ]);
     });
 
+    it("keeps the Grok warm session pooled across many turns (#1970)", async () => {
+      countFile = join(scratch, "launches");
+      rpcFile = join(scratch, "rpc.json");
+      process.env.FAKE_ACP_LAUNCH_COUNT_FILE = countFile;
+      process.env.FAKE_ACP_RPC_DUMP = rpcFile;
+      const latency: string[] = [];
+      const spy = vi.spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+        if (typeof args[0] === "string" && args[0].startsWith("[turn-latency]")) latency.push(args[0]);
+      });
+      try {
+        instance = await GrokAgentDriver.create({
+          instanceId: "acp-test", displayName: "ACP Test", enabled: true,
+          environment: { HOME: scratch, USERPROFILE: scratch },
+          config: { cli: FAKE_CLI, fullAuto: false },
+        });
+        recorder = recordEvents(instance.adapter);
+        const threadId = "t-pool-many-warm";
+        for (let i = 0; i < 8; i++) {
+          const started = await instance.adapter.sendTurn({
+            threadId, text: `warm ${i + 1}`,
+            ...(i > 0 ? { resumeCursor: "fake-acp-session" } : {}),
+          });
+          expect(await recorder.until((e) => e.type === "turn.completed" && e.turnId === started.turnId)).toMatchObject({ ok: true });
+        }
+        expect(launches()).toBe(1);
+        expect(rpc().filter((m) => m === "initialize")).toHaveLength(1);
+        expect(rpc().filter((m) => m === "session/new")).toHaveLength(1);
+        expect(rpc().filter((m) => m === "session/load")).toHaveLength(0);
+        expect(rpc().filter((m) => m === "session/prompt")).toHaveLength(8);
+        const paths = latency.map((line) => /path=(\S+)/.exec(line)?.[1]);
+        expect(paths[0]).toBe("spawn");
+        expect(paths.slice(1)).toEqual(Array(7).fill("pooled"));
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
     it("closes the idle process and resumes on the next turn", async () => {
       // Ten seconds is the lowest window the floor allows now; exercise the
       // close at the floor itself and give the poll room past it.

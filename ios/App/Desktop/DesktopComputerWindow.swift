@@ -216,7 +216,10 @@ struct DesktopComputerWindowView: View {
                 } else {
                     waiting
                 }
-                if controller.isHeld { pointer(width: size.width, height: size.height) }
+                // the drawn arrow is the touch trackpad's: with a trackpad or
+                // a mouse the iPad's own pointer moves over the screen, as the
+                // desktop's does, and no second one is drawn
+                if controller.isHeld, !DesktopPointer.shared.present { pointer(width: size.width, height: size.height) }
                 TrackpadSurface { controller.handle($0) }
                     .frame(width: size.width, height: size.height)
                 RemoteKeyboardField(

@@ -120,7 +120,7 @@ struct DesktopChatColumn: View {
         .environment(\.desktopBubbleCap, DesktopChatMetrics.bubbleCap(column: column))
         .environment(\.desktopWideCap, DesktopChatMetrics.wideCap(column: column))
         .environment(\.desktopChat, DesktopChatChrome(
-            panelOpen: model.panelOpen && chat.isBot,
+            panelOpen: model.panelOpen && (chat.isBot || chat.opensGroupPanel),
             // the shell docks the panel at 1024: this column is then
             // the window less the sidebar and the panel
             panelDocked: model.panelOpen && model.panelDocked,
@@ -157,7 +157,10 @@ extension ChatView {
             if let desktop = desktopChat {
                 // the find bar opens under the header (ChatView.tsx), 20 in
                 AnyView(VStack(spacing: 0) {
-                    DesktopChatHeader(chat: current, chrome: desktop, export: exportConversation, copyMarkdown: copyConversationMarkdown, devPods: devPodsAvailable ? { openDevPods() } : nil, devPodsOpen: showingDevPods) { openProfile() }
+                    DesktopChatHeader(chat: current, chrome: desktop, export: exportConversation, copyMarkdown: copyConversationMarkdown, devPods: devPodsAvailable ? { openDevPods() } : nil, devPodsOpen: showingDevPods) {
+                        // a group's pill toggles its docked panel (GroupPanel.swift)
+                        if current.opensGroupPanel { desktop.togglePanel() } else { openProfile() }
+                    }
                         .frame(height: 52, alignment: .top)
                     if finder.isOpen && session.surfaceGate.allows(.findInConversation) {
                         ChatFindBar(model: finder, threadId: threadId)
@@ -806,6 +809,9 @@ struct DesktopRoomBanners: View {
                 HStack(alignment: .top, spacing: 8) {
                     Text("Group conversations use more: every bot in the group reads the whole thread. For a simple question, chat with a single bot instead.")
                         .font(theme.font(13))
+                        // CSS's 1.5 line box (19.5 pt), not the face's own line
+                        .lineSpacing(max(0, 19.5 - theme.uiFont(13).lineHeight))
+                        .frame(minHeight: 19.5)
                         .foregroundStyle(theme.inkSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -870,7 +876,8 @@ struct DesktopRoomBanners: View {
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 8)
-                .frame(height: 30)
+                // `py-1.5` around a 12.5 pt line at 1.5 (18.75)
+                .frame(height: 30.75)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

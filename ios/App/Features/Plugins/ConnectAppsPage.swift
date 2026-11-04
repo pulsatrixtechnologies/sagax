@@ -462,7 +462,7 @@ struct ConnectAppRow: View {
             ConnectAppIcon(item: item, size: 44)
             VStack(alignment: .leading, spacing: 2) {
                 Text(verbatim: item.name)
-                    .font(theme.font(13, .semibold))
+                    .font(theme.font(13, .medium))
                     .foregroundStyle(theme.ink)
                     .lineLimit(1)
                 if !item.description.isEmpty {
@@ -495,9 +495,10 @@ struct ConnectAppRow: View {
         }
         // a cell of the desktop's two-column grid (CATEGORY_MODAL.grid): the
         // description truncates and the action sits beside it
+        // PluginRow: rounded-2xl p-2.5 in a 414 pt cell
+        .padding(10)
         .frame(maxWidth: 414, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 4)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("connect-apps-row.\(item.key)")
@@ -602,14 +603,19 @@ struct ConnectAppsMain: View {
         CapabilitiesList(desktop: desktop) {
             if desktop {
                 if model.marketplaces.isEmpty {
+                    // `mt-2 rounded-lg bg-inset px-3 py-2 text-[12px]` (18 line)
                     Text("No marketplace yet. Add one in Capabilities > Sources.")
                         .font(theme.font(12))
                         .foregroundStyle(theme.inkSecondary)
+                        .frame(minHeight: 18)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .padding(.bottom, 8)
+                        // the title block's pr-12: it ends with the search field
+                        .padding(.trailing, 16)
+                        .padding(.top, 6)
+                        .padding(.bottom, 6)
                 }
                 desktopTabs
             } else {
@@ -683,7 +689,6 @@ struct ConnectAppsMain: View {
             }
             Rectangle().fill(theme.hairlineWeak).frame(height: 1)
         }
-        .padding(.top, 4)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("connect-apps-tabs")
     }
@@ -1118,6 +1123,8 @@ struct ConnectAppsManage: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .background(theme.inset, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                // the tools row's mb-3
+                .padding(.top, 12)
             }
         }
         .listRowBackground(Color.clear)
@@ -1770,15 +1777,14 @@ struct CapabilitiesList<Content: View>: View {
 
     var body: some View {
         if desktop {
-            List {
-                Group(content: content)
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+            // a plain stack (no list section gaps): the body's px-8
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    Group(content: content)
+                }
+                .padding(.horizontal, 32)
+                .padding(.bottom, 28)
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .padding(.horizontal, 20)
             .background(theme.app)
         } else {
             ThemedList(content: content)

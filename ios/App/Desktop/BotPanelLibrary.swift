@@ -37,17 +37,9 @@ struct BotPanelLibrary: View {
     @State private var view: BotPanelLibraryView = .files
 
     /// panel-library-skills / -plugins: the reference opens that view.
-    private static var parityView: BotPanelLibraryView {
-        #if DEBUG
-        switch ParityLaunch.current?.iPadScreen {
-        case .panelLibrarySkills: return .skills
-        case .panelLibraryPlugins: return .plugins
-        default: return .files
-        }
-        #else
-        return .files
-        #endif
-    }
+    /// The files: the desktop's Library is the list alone (the Skills and
+    /// Plugins surfaces are retired, 2026-11-04).
+    private static var parityView: BotPanelLibraryView { .files }
 
     /// Files only; the tabs show only if a view is added back.
     private var views: [BotPanelLibraryView] { [.files] }

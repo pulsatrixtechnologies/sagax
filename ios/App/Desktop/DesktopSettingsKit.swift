@@ -545,6 +545,8 @@ struct DesktopDescribedRow<Control: View, Below: View>: View {
     var help: Text? = nil
     /// The lucide icon before the label (`icon`, ink-secondary, 14 pt).
     var icon: DesktopSettingsIcon? = nil
+    /// Where Chrome's wider glyphs wrap the grey line sooner than iOS's.
+    var descriptionWidth: CGFloat? = nil
     var identifier: String = ""
     @ViewBuilder let control: () -> Control
     @ViewBuilder let below: () -> Below
@@ -577,6 +579,7 @@ struct DesktopDescribedRow<Control: View, Below: View>: View {
                         if let description {
                             DesktopText(description, size: 12, line: 16, color: \.inkSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: descriptionWidth, alignment: .leading)
                         }
                     }
                 }
@@ -739,7 +742,7 @@ struct DesktopCheckbox: View {
         }
         .buttonStyle(.plain)
         .disabled(disabled)
-        .opacity(disabled ? 0.5 : 1)
+        // Chrome's disabled dark checkbox stays as legible as an enabled one
         .accessibilityLabel(label)
         .accessibilityValue(checked ? Text("On") : Text("Off"))
         .accessibilityIdentifier(identifier)
@@ -952,6 +955,29 @@ struct DesktopPillSelect<Value: Hashable>: View {
         .accessibilityLabel(label)
         .accessibilityValue(Text(verbatim: current))
         .accessibilityIdentifier(identifier)
+    }
+}
+
+/// `.ui-button` (styles.css): the 30 pt fully round pill, hover-grey with
+/// ink text; `.ui-button-primary` is the ink pill with the app colour as
+/// text. Disabled at half opacity (`PILL disabled:opacity-50`).
+struct DesktopPillButtonStyle: ButtonStyle {
+    @Environment(\.desktopTheme) private var theme
+    @Environment(\.isEnabled) private var enabled
+    var primary = false
+    var danger = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(theme.font(13))
+            .foregroundStyle(danger ? theme.danger : primary && enabled ? theme.app : theme.ink)
+            .padding(.horizontal, 13)
+            .frame(height: 30)
+            // a disabled primary pill reads as the grey pill with its text, as Chrome draws it
+            .background(primary ? (enabled ? theme.ink.opacity(configuration.isPressed ? 0.85 : 1) : theme.selected)
+                        : (configuration.isPressed ? theme.selected : theme.hover), in: Capsule())
+            .opacity(enabled ? 1 : (primary ? 0.85 : 0.5))
+            .contentShape(Capsule())
     }
 }
 

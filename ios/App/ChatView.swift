@@ -806,10 +806,9 @@ struct ChatView: View {
                                 if row.id == newDividerBefore {
                                     if desktopChatText != nil {
                                         // NewMessagesDivider.tsx, a row of its own
-                                        // measured on the reference: about 50 pt between
-                                        // the bubbles around it (12 + 6 + 20 + 12)
+                                        // (the rows around it reserve the message
+                                        // bar's height, which made up the rest)
                                         DesktopNewMessagesDivider()
-                                            .padding(.top, 6)
                                             .padding(.bottom, DesktopChatMetrics.rowGap)
                                     } else {
                                         NewMessagesLine()

@@ -59,7 +59,8 @@ struct DesktopProvidersSection: View {
                 }
             }
         }
-        .padding(.top, 24)
+        // `mt-6`, after the empty line's own bottom margin
+        .padding(.top, 32)
         .frame(maxWidth: .infinity, alignment: .leading)
         .listRowBackground(Color.clear)
         .listRowSeparator(.hidden)

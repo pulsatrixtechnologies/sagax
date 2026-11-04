@@ -372,7 +372,7 @@ final class MarkdownUITextView: UITextView {
         return [
             command("b", .command, String(localized: "Bold"), #selector(kBold)),
             command("i", .command, String(localized: "Italic"), #selector(kItalic)),
-            command("k", .command, String(localized: "Link"), #selector(kLink)),
+            command("k", .command, String(localized: "markdownEditor.link"), #selector(kLink)),
             command("e", .command, String(localized: "Code"), #selector(kCode)),
             command("1", [.command, .alternate], String(localized: "Heading 1"), #selector(kH1)),
             command("2", [.command, .alternate], String(localized: "Heading 2"), #selector(kH2)),
@@ -470,7 +470,7 @@ final class MarkdownToolbar: UIInputView {
         Item(action: .indent, symbol: "increase.indent", label: String(localized: "Nest list item")),
         Item(action: .quote, symbol: "text.quote", label: String(localized: "Quote")),
         Item(action: .code, symbol: "chevron.left.forwardslash.chevron.right", label: String(localized: "Code")),
-        Item(action: .link, symbol: "link", label: String(localized: "Link")),
+        Item(action: .link, symbol: "link", label: String(localized: "markdownEditor.link")),
         Item(action: .table, symbol: "tablecells", label: String(localized: "Table")),
         Item(action: .rule, symbol: "minus", label: String(localized: "Divider line")),
         Item(action: .format, symbol: "wand.and.stars", label: String(localized: "Tidy up the formatting")),

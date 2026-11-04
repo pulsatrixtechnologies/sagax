@@ -45,7 +45,7 @@ struct DesktopSecuritySettings: View {
                                 Text("Remove")
                             }
                         }
-                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .buttonStyle(DesktopPillButtonStyle())
                         .disabled(busy)
                         .accessibilityLabel(Text(verbatim: String(format: AppStrings.localized("Remove %@"), key.name)))
                     }
@@ -67,7 +67,7 @@ struct DesktopSecuritySettings: View {
                         // (`fresh=1`) whose invite renews this iPad's session, then the key
                         if session.surfaceGate.organization, let origin = session.connection?.baseURL {
                             Button("Sign in again") { signInAgain(origin) }
-                                .buttonStyle(DesktopButtonStyle(kind: .accent))
+                                .buttonStyle(DesktopPillButtonStyle(primary: true))
                                 .disabled(busy || webSignIn.running)
                                 .accessibilityIdentifier("desktop-settings.security.sign-in-again")
                         }
@@ -90,7 +90,7 @@ struct DesktopSecuritySettings: View {
                             .disabled(busy)
                             .accessibilityIdentifier("desktop-settings.security.key-name")
                         Button("Add a key") { Task { await addKey() } }
-                            .buttonStyle(DesktopButtonStyle(kind: .accent))
+                            .buttonStyle(DesktopPillButtonStyle(primary: true))
                             .disabled(busy || !httpsServer)
                             .accessibilityIdentifier("desktop-settings.security.add-key")
                     }
@@ -292,40 +292,109 @@ struct DesktopVaultSettings: View {
                         color: \.inkSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 4)
-            HStack(spacing: 4) {
-                ForEach([("all", String(localized: "All")), ("login", String(localized: "Logins")), ("payment", String(localized: "Payments")), ("contact", String(localized: "Contacts"))], id: \.0) { option in
+            // the filter chips, each with its count (`categoryChipClass`, vaultTabCounts)
+            HStack(spacing: 8) {
+                ForEach([("all", AppStrings.localized("Everything in the vault")), ("login", AppStrings.localized("Logins")), ("payment", AppStrings.localized("Payments")), ("contact", AppStrings.localized("Contacts"))], id: \.0) { option in
+                    let active = filter == option.0
                     Button { filter = option.0 } label: {
-                        DesktopText(Text(verbatim: option.1), size: 12, line: 16, color: filter == option.0 ? \.ink : \.inkSecondary)
-                            .padding(.horizontal, 8)
-                            .frame(minHeight: 30)
-                            .background(filter == option.0 ? theme.selected : .clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        Text(verbatim: "\(option.1) · \(Self.count(option.0, list))")
+                            .font(theme.font(12.5))
+                            .foregroundStyle(active ? theme.accentInk : theme.inkSecondary)
+                            .padding(.horizontal, 12)
+                            .frame(height: 28)
+                            .background(active ? theme.accent : .clear, in: Capsule())
+                            .overlay(Capsule().strokeBorder(active ? Color.clear : theme.border, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(active ? .isSelected : [])
                     .accessibilityIdentifier("desktop-settings.vault.filter.\(option.0)")
                 }
                 Spacer(minLength: 0)
-                Button("Add an item") { managing = true }
-                    .buttonStyle(DesktopButtonStyle(kind: .control))
             }
-            DesktopSettingsGroup {
-                let items = list.items.filter { filter == "all" || Self.kind($0.kind) == filter }
-                if items.isEmpty {
-                    DesktopSettingsTextRow(Text("Nothing in your vault yet."))
-                }
-                ForEach(items) { item in
-                    Button { managing = true } label: {
-                        DesktopDescribedRow(Text(verbatim: item.name), description: item.domains.isEmpty ? nil : Text(verbatim: item.domains.joined(separator: ", "))) {
-                            DesktopSettingsIconView(icon: .chevronRight, size: 14).foregroundStyle(theme.inkSecondary)
-                        }
-                        .contentShape(Rectangle())
+            if filter != "payment" {
+                DesktopSettingsGroup(Text("Your vault"), identifier: "credentials.items") {
+                    DesktopSettingsTextRow(Text("Encrypted on this computer with the system keychain, or with the server's key."))
+                    let items = list.items.filter { filter == "all" ? $0.kind != "card" : Self.kind($0.kind) == filter }
+                    if items.isEmpty {
+                        DesktopSettingsTextRow(Text("Your vault is empty. Add a login here, or save one when a bot asks."))
                     }
-                    .buttonStyle(DesktopHoverFill(radius: 0))
+                    ForEach(items) { item in
+                        Button { managing = true } label: {
+                            DesktopDescribedRow(Text(verbatim: item.name), description: item.domains.isEmpty ? nil : Text(verbatim: item.domains.joined(separator: ", "))) {
+                                DesktopSettingsIconView(icon: .chevronRight, size: 14).foregroundStyle(theme.inkSecondary)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(DesktopHoverFill(radius: 0))
+                    }
+                    HStack(spacing: 8) {
+                        Spacer(minLength: 0)
+                        Button("Import") { managing = true }.buttonStyle(DesktopPillButtonStyle())
+                        Button("Export") { managing = true }.buttonStyle(DesktopPillButtonStyle()).disabled(list.items.isEmpty)
+                        Button("Add an item") { managing = true }.buttonStyle(DesktopPillButtonStyle(primary: true))
+                            .accessibilityIdentifier("desktop-settings.vault.add")
+                    }
+                    .padding(.horizontal, 14).padding(.vertical, 10)
                 }
             }
-            .sheet(isPresented: $managing, onDismiss: { Task { await load() } }) {
-                NavigationStack { VaultSettingsView() }
-                    .environmentObject(session)
+            if filter == "all" || filter == "payment" {
+                DesktopSettingsGroup(Text("Payment methods"), identifier: "credentials.payments.methods") {
+                    DesktopSettingsTextRow(Text("Cards you saved and wallets you already have. The bot never sees a full card number."))
+                    DesktopSettingsTextRow(Text("PayPal and other account providers without a vault link stay card-only: save the card you use with them."))
+                    ForEach(list.methods) { method in
+                        DesktopDescribedRow(Text(verbatim: method.label), description: method.detail.isEmpty ? nil : Text(verbatim: method.detail)) { EmptyView() }
+                    }
+                }
+                DesktopSettingsGroup(Text("One-time card"), identifier: "credentials.wallets") {
+                    DesktopSettingsTextRow(Text("Shop Pay and Link are wallets you already have. Sagax asks that wallet for a one-time card only after you allow the purchase, through the wallet's own command line tool signed in on this computer. The site does not receive a saved card number, and the bot never sees it."))
+                    ForEach(["shop_pay", "link"], id: \.self) { wallet in
+                        let row = (wallets ?? list.wallets)?[wallet]
+                        let label = wallet == "shop_pay" ? AppStrings.localized("Shop Pay") : AppStrings.localized("Link")
+                        DesktopDescribedRow(Text(verbatim: label), description: Text(verbatim: row?.chosen == true
+                            ? (row?.ready == true ? String(format: AppStrings.localized("Live: %@ is signed in on this computer. Sagax asks it for a one-time card after you allow a purchase."), label)
+                                                  : String(format: AppStrings.localized("Chosen. Not live yet: %@. Nothing is charged."), row?.missing ?? ""))
+                            : AppStrings.localized("Not connected. Turn this on to use the account you already have. Nothing is charged.")),
+                                            identifier: "wallet-\(wallet)") {
+                            DesktopSwitch(isOn: row?.chosen == true, label: Text(verbatim: label), identifier: "desktop-settings.vault.wallet.\(wallet)", disabled: walletBusy) {
+                                Task { await chooseWallet(wallet, !(row?.chosen == true)) }
+                            }
+                        }
+                    }
+                    HStack {
+                        Spacer(minLength: 0)
+                        Button("Add a card") { managing = true }.buttonStyle(DesktopPillButtonStyle(primary: true))
+                    }
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                }
             }
+            Color.clear.frame(height: 0)
+                .sheet(isPresented: $managing, onDismiss: { Task { await load() } }) {
+                    NavigationStack { VaultSettingsView() }
+                        .environmentObject(session)
+                }
+        }
+    }
+
+    @State private var wallets: [String: WalletLinkPublic]?
+    @State private var walletBusy = false
+
+    private func chooseWallet(_ wallet: String, _ chosen: Bool) async {
+        guard let client = session.settingsClient else { return }
+        walletBusy = true
+        defer { walletBusy = false }
+        wallets = try? await client.chooseWallet(wallet, chosen: chosen)
+    }
+
+    /// `vaultTabCounts`: all items, logins (login, API key, note), payments
+    /// (cards, chosen wallets, pending and settled purchases), contacts.
+    static func count(_ tab: String, _ list: VaultList) -> Int {
+        switch tab {
+        case "login": return list.items.filter { ["login", "apiKey", "note"].contains($0.kind) }.count
+        case "contact": return list.items.filter { ["address", "contact"].contains($0.kind) }.count
+        case "payment":
+            let wallets = ["shop_pay", "link"].filter { list.wallets?[$0]?.chosen == true }.count
+            return list.items.filter { $0.kind == "card" }.count + wallets + list.purchases.filter { $0.status == "pending" }.count + list.history.count
+        default: return list.items.count
         }
     }
 
@@ -391,7 +460,7 @@ struct DesktopNotificationsSettings: View {
             if authorized != true {
                 DesktopCompactRow(Text("Let your bots notify you when something needs your attention"), identifier: "notificationInvite") {
                     Button("Enable") { Task { await enable() } }
-                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .buttonStyle(DesktopPillButtonStyle())
                         .accessibilityIdentifier("desktop-settings.notifications.enable")
                 }
             }
@@ -450,7 +519,7 @@ struct DesktopNotificationsSettings: View {
                 ForEach(session.blockedPeople, id: \.id) { person in
                     DesktopCompactRow(person.name.isEmpty ? Text("Someone") : Text(verbatim: person.name), identifier: "blocked-\(person.id)") {
                         Button("Unblock") { Task { _ = await session.unblock(person.id) } }
-                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .buttonStyle(DesktopPillButtonStyle())
                     }
                 }
             }
@@ -511,7 +580,7 @@ struct DesktopNotificationsSettings: View {
                             catch { reportsError = error.localizedDescription }
                         }
                     }
-                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .buttonStyle(DesktopPillButtonStyle())
                 } else {
                     DesktopText("Handled", size: 12, line: 16, color: \.inkSecondary)
                 }
@@ -612,7 +681,7 @@ struct DesktopImportSettings: View {
                         .onSubmit { readLink() })
                         .accessibilityIdentifier("desktop-settings.import.link")
                     Button(readingLink ? "Reading..." : "Read the link") { readLink() }
-                        .buttonStyle(DesktopButtonStyle(kind: .control, size: 12))
+                        .buttonStyle(DesktopPillButtonStyle())
                         .disabled(link.trimmingCharacters(in: .whitespaces).isEmpty || readingLink)
                         .accessibilityIdentifier("desktop-settings.import.grok")
                 }
@@ -624,7 +693,7 @@ struct DesktopImportSettings: View {
                             DesktopText(Text(verbatim: card.description), size: 12, line: 18, color: \.inkSecondary).padding(.top, 4)
                         }
                         Button("Start from the description") { staged = card.starterReply; marketplaceSlug = nil; importing = true }
-                            .buttonStyle(DesktopButtonStyle(kind: .control, size: 12))
+                            .buttonStyle(DesktopPillButtonStyle())
                             .padding(.top, 8)
                             .accessibilityIdentifier("desktop-settings.import.from-description")
                     }
@@ -641,7 +710,7 @@ struct DesktopImportSettings: View {
                                 Text(copied ? "Copied" : "Copy export prompt")
                             }
                         }
-                        .buttonStyle(DesktopButtonStyle(kind: .control, size: 12))
+                        .buttonStyle(DesktopPillButtonStyle())
                         .accessibilityIdentifier("desktop-settings.import.copy-prompt")
                     }
                     DesktopText(verbatim: "2. " + AppStrings.localized("Paste its reply below, or choose the .json file you saved it in."), size: 12.5, line: 20, color: \.inkSecondary)
@@ -653,7 +722,7 @@ struct DesktopImportSettings: View {
                         .scrollContentBackground(.hidden)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
-                        .frame(minHeight: 96)
+                        .frame(minHeight: 106)
                         .accessibilityLabel(Text("Grok Bot's reply"))
                         .accessibilityIdentifier("desktop-settings.import.reply")
                     if reply.isEmpty {
@@ -667,9 +736,21 @@ struct DesktopImportSettings: View {
                 .padding(.horizontal, 6).padding(.vertical, 2)
                 .background(theme.inset, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
+                // the textarea's resize grip (`rows={5}`, Chrome's two strokes)
+                .overlay(alignment: .bottomTrailing) {
+                    Canvas { context, size in
+                        var path = Path()
+                        path.move(to: CGPoint(x: size.width, y: 2)); path.addLine(to: CGPoint(x: 2, y: size.height))
+                        path.move(to: CGPoint(x: size.width, y: 6)); path.addLine(to: CGPoint(x: 6, y: size.height))
+                        context.stroke(path, with: .color(theme.inkSecondary), lineWidth: 1)
+                    }
+                    .frame(width: 9, height: 9)
+                    .padding(3)
+                    .allowsHitTesting(false)
+                }
                 HStack(spacing: 8) {
                     Button("Preview") { staged = reply; importing = true }
-                        .buttonStyle(DesktopButtonStyle(kind: .control, size: 12))
+                        .buttonStyle(DesktopPillButtonStyle())
                         .disabled(reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .accessibilityIdentifier("desktop-settings.import.preview")
                     Button { choosingFile = true } label: {
@@ -678,7 +759,7 @@ struct DesktopImportSettings: View {
                             Text("Choose a .json file")
                         }
                     }
-                    .buttonStyle(DesktopButtonStyle(kind: .control, size: 12))
+                    .buttonStyle(DesktopPillButtonStyle())
                     .accessibilityIdentifier("desktop-settings.import.file")
                 }
                 if let grokError { DesktopText(verbatim: grokError, size: 12, line: 16, color: \.danger) }

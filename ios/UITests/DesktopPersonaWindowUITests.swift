@@ -125,7 +125,7 @@ final class DesktopPersonaWindowUITests: XCTestCase {
         XCTAssertFalse(element(app, "persona-appearance").exists, "Appearance left the pane")
         element(app, "desktop-persona-window.nav.overview").tap()
         XCTAssertTrue(element(app, "desktop-persona-window.page.overview").waitForExistence(timeout: 5), "the Identity page")
-        XCTAssertTrue(element(app, "panel-edit-name").waitForExistence(timeout: 5), "Identity edits the name")
+        XCTAssertTrue(element(app, "persona-overview.name").waitForExistence(timeout: 5), "Identity edits the name in place")
 
         // the search narrows the column
         let search = element(app, "desktop-persona-window.search")

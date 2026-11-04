@@ -503,7 +503,11 @@ struct DesktopContent: View {
     @EnvironmentObject private var model: DesktopShellModel
 
     var body: some View {
-        if let page = model.page {
+        if model.modal == .plugins {
+            // App.tsx `mainIsApps`: Capabilities takes the main column's
+            // place, the chat is not drawn behind its window
+            theme.app
+        } else if let page = model.page {
             switch page {
             case .teamMap: AnyView(DesktopTeamMapPage())
             case .automations: AnyView(DesktopAutomationsPage())

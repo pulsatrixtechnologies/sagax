@@ -176,7 +176,9 @@ struct AutomationsWeekView: View {
                     .font(desktop ? theme.font(12, .medium) : Theme.font(9.5))
                     .foregroundStyle(desktop ? theme.inkSecondary : Theme.textTertiary)
                     .frame(width: gutter, alignment: .center)
-                    .frame(maxHeight: .infinity)
+                    // the cell's py-3: its line at the top, beside the day names
+                    .padding(.top, desktop ? 12 : 0)
+                    .frame(maxHeight: .infinity, alignment: desktop ? .top : .center)
                     .overlay(alignment: .bottom) { Rectangle().fill(Theme.hairline.opacity(desktop ? 0.4 : 1)).frame(height: 0.5) }
                     .overlay(alignment: .trailing) { Rectangle().fill(Theme.hairline.opacity(desktop ? 0.4 : 1)).frame(width: 0.5) }
                 ForEach(days, id: \.self) { date in
@@ -207,6 +209,8 @@ struct AutomationsWeekView: View {
                 .font(Theme.font(desktop ? 11 : 10, .medium))
                 .tracking(desktop ? 0 : 1.4)
                 .foregroundStyle(today ? Theme.accent : Theme.textSecondary)
+                // text-[11px] on a 16.5 line
+                .frame(height: desktop ? 16.5 : nil)
             Text(verbatim: date.formatted(.dateTime.day()))
                 .font(Theme.font(15, .medium))
                 .foregroundStyle(today ? Color.white : Theme.textPrimary)
@@ -288,7 +292,7 @@ struct AutomationsWeekView: View {
                     let width = proxy.size.width / CGFloat(layout.columns)
                     let parts = Calendar.current.dateComponents([.hour, .minute], from: item.date)
                     let top = CGFloat((parts.hour ?? 0) * 60 + (parts.minute ?? 0)) / 60 * Self.hourHeight
-                    AutomationsEventCard(item: item, bot: item.botId.flatMap { id in bots.first { $0.id == id } })
+                    AutomationsEventCard(item: item, bot: item.botId.flatMap { id in bots.first { $0.id == id } }, compact: desktop)
                         .frame(width: max(0, width - 4), height: max(16, CGFloat(item.durationMinutes) / 60 * Self.hourHeight))
                         .offset(x: CGFloat(layout.column) * width + 2, y: top)
                         .onTapGesture { onAction(.open, item) }

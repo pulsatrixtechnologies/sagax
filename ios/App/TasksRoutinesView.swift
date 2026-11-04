@@ -191,6 +191,8 @@ struct TasksRoutinesView: View {
             }
         } else if desktop && section == .logs {
             desktopLogs
+        } else if desktop {
+            desktopRoutinesPage
         } else {
             ThemedList {
                 if desktop {
@@ -419,6 +421,34 @@ struct TasksRoutinesView: View {
             }
         }
         .accessibilityIdentifier("automations-paused-panel")
+    }
+
+    // MARK: The desktop's List (RoutineCalendarPage.tsx PAGE_SCROLL / PAGE_COLUMN)
+
+    /// The column: max-w-4xl (896) centred, p-6, space-y-4; `PageHeading`
+    /// (16 semibold, the line 12 mt-1), then the grouped list.
+    private var desktopRoutinesPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if organization {
+                    scopePicker
+                    scopeNote
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Routines").font(Theme.font(16, .semibold)).foregroundStyle(Theme.textPrimary)
+                    Text("All schedules, including paused and finished routines.").font(Theme.font(12)).foregroundStyle(Theme.textSecondary)
+                }
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    desktopGroupedContent
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: 944, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+        .background(dtheme.app)
+        .refreshable { await reload() }
+        .accessibilityIdentifier("desktop-routines-list")
     }
 
     // MARK: The desktop's run logs (routines/RoutineLogs.tsx)

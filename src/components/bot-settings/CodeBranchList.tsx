@@ -7,12 +7,17 @@
 // person's list, the branch kept; "Show archived" brings it back) and
 // Delete the local branch (confirmed; work not on origin needs a second
 // confirmation). Each action shows its progress on the row, then one line
-// saying what happened or what went wrong.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+// saying what happened or what went wrong. When the computer that holds the
+// branch cannot be reached (off, not known, Windows, its folder not known),
+// the menu says why in plain words and what to do, and each action asks the
+// bot to do it instead, in the conversation the branch came from. Where
+// reading it again can help (the computer was off or busy, its OS not known
+// yet), "Try again" reads it again: the row then acts, or says why not.
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   Archive, ArchiveRestore, ExternalLink, FileDiff, FolderOpen, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest,
-  GitPullRequestClosed, Loader2, Monitor, MoreHorizontal, Trash2, Upload,
+  GitPullRequestClosed, Loader2, Monitor, MoreHorizontal, RefreshCw, Trash2, Upload,
 } from "lucide-react";
 
 import { ApiError, useStore } from "@/state/store";
@@ -23,8 +28,8 @@ import { openExternalLink } from "@/lib/app-links";
 import { writeComputerPanelView } from "@/lib/computer-panel-view";
 import { GROUPED_CARD, GROUPED_ROW } from "@/lib/grouped-card";
 import {
-  branchAction, branchActions, branchCounts, branchStatus, branchUnavailable, codingBranchKey, deleteNeedsSecondConfirm, loadBranchDiff, loadBranchInfo, loadBranchPull, remoteActionNeedsConfirm,
-  type BotBranchDiff, type BotBranchInfo, type BotBranchPull, type BranchTone, type CodingBranch,
+  branchAction, branchActions, branchAskText, branchAway, branchCanReadAgain, branchCounts, branchStatus, branchUnavailable, branchWhere, codingBranchKey, deleteNeedsSecondConfirm, loadBranchDiff, loadBranchInfo, loadBranchPull, remoteActionNeedsConfirm,
+  type BotBranchDiff, type BotBranchInfo, type BotBranchPull, type BranchAskAction, type BranchTone, type CodingBranch,
 } from "@/lib/code-branches";
 import { codeWorkWhen } from "@/lib/bot-activity";
 import { useHeldMenuMotion } from "../MenuMotion";
@@ -55,7 +60,12 @@ const ERROR_KEYS: Record<string, LocaleKey> = {
   commit_failed: "botPanel.branch.error.commitFailed",
   no_person: "botPanel.branch.error.noPerson",
   no_author: "botPanel.branch.error.noAuthor",
+  no_git_identity: "botPanel.branch.error.noGitIdentity",
   unsafe_config: "botPanel.branch.error.unsafeConfig",
+  busy: "botPanel.branch.error.busy",
+  too_long: "botPanel.branch.error.tooLong",
+  commit_too_long: "botPanel.branch.error.commitTooLong",
+  message_too_long_for_computer: "botPanel.branch.error.messageTooLong",
 };
 
 /** The words for a refused action: ours for the known codes, else the
@@ -89,6 +99,8 @@ const TONE_PILL: Record<BranchTone, string> = {
 
 export interface BranchListActions {
   botId: string;
+  /** The bot's name: "Ask <bot> to do it". */
+  botName: string;
   /** Archive or bring back one branch (by `codingBranchKey`). */
   onArchive: (key: string, archived: boolean) => Promise<void>;
   /** Refresh the Coding list after a change. */
@@ -98,7 +110,7 @@ export interface BranchListActions {
 /** One branch row: icon, name, status pill, where and when, the "..." menu,
  * and the last action's line. `info` is the branch read now (absent until
  * it loads, or where it cannot be read). */
-export function BranchRow({ branch, now, info, pull, busy, note, archived = false, actions, onAct }: {
+export function BranchRow({ branch, now, info, pull, busy, note, archived = false, readFailed = false, actions, onAct }: {
   branch: CodingBranch;
   now: number;
   info?: BotBranchInfo;
@@ -106,14 +118,15 @@ export function BranchRow({ branch, now, info, pull, busy, note, archived = fals
   busy?: boolean;
   note?: { tone: "ok" | "error"; text: string };
   archived?: boolean;
+  /** The branch could not be read now (the menu offers to ask the bot). */
+  readFailed?: boolean;
   actions?: BranchListActions;
   onAct?: (action: BranchMenuAction) => void;
 }) {
   const status = branchStatus(branch, info?.state, pull);
   const tone = TONE_ICON[status.tone];
   const Icon = tone.icon;
-  const onComputer = info?.place === "remote" && info.host ? t("botPanel.branch.onComputer", { host: info.host }) : undefined;
-  const subtitle = [branch.repo ?? info?.repo ?? info?.folderName, onComputer, ...branchCounts(info?.state), codeWorkWhen(branch.at, now)].filter(Boolean).join(" · ");
+  const subtitle = [branch.repo ?? info?.repo ?? info?.folderName, branchWhere(info), ...branchCounts(info?.state), codeWorkWhen(branch.at, now)].filter(Boolean).join(" · ");
   const url = branch.url;
   const body = (
     <>
@@ -145,7 +158,7 @@ export function BranchRow({ branch, now, info, pull, busy, note, archived = fals
         {actions && onAct && (
           busy
             ? <span role="status" aria-label={t("botPanel.branch.working")} className="flex size-7 shrink-0 items-center justify-center text-ink-secondary"><Loader2 size={14} className="animate-spin" aria-hidden="true" /></span>
-            : <BranchMenu branch={branch} info={info} pull={pull} archived={archived} onAct={onAct} />
+            : <BranchMenu branch={branch} info={info} pull={pull} archived={archived} botName={actions.botName} readFailed={readFailed} onAct={onAct} />
         )}
       </div>
       {note && (
@@ -157,7 +170,7 @@ export function BranchRow({ branch, now, info, pull, busy, note, archived = fals
   );
 }
 
-export type BranchMenuAction = "commit" | "push" | "pr" | "openPr" | "diff" | "reveal" | "computer" | "archive" | "unarchive" | "delete";
+export type BranchMenuAction = "retry" | "commit" | "push" | "pr" | "openPr" | "diff" | "reveal" | "computer" | "archive" | "unarchive" | "delete";
 
 function revealBridge(): ((path: string) => Promise<"shown" | "missing" | "invalid">) | undefined {
   const ogb = typeof window === "undefined" ? undefined : window.ogb;
@@ -165,11 +178,13 @@ function revealBridge(): ((path: string) => Promise<"shown" | "missing" | "inval
 }
 
 /** The "..." button and its menu (portalled: the grouped card clips). */
-export function BranchMenu({ branch, info, pull, archived, onAct }: {
+export function BranchMenu({ branch, info, pull, archived, botName, readFailed = false, onAct }: {
   branch: CodingBranch;
   info?: BotBranchInfo;
   pull?: BotBranchPull | null;
   archived: boolean;
+  botName: string;
+  readFailed?: boolean;
   onAct: (action: BranchMenuAction) => void;
 }) {
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
@@ -207,46 +222,6 @@ export function BranchMenu({ branch, info, pull, archived, onAct }: {
     };
   }, [anchor, close]);
 
-  const can = branchActions(info, pull, branch);
-  const state = info?.state;
-  const blocked = info?.publishBlocked;
-  const publishHint = blocked === "github_not_connected" ? t("botPanel.branch.hint.githubNotConnected") : blocked === "elsewhere" || info?.place === "elsewhere" ? t("botPanel.branch.hint.elsewhere") : undefined;
-  const unavailableKey = branchUnavailable(info, branch);
-  const unavailable = unavailableKey ? t(unavailableKey) : undefined;
-  const commitHint = unavailable ?? (!state ? undefined : !state.worktree ? t("botPanel.branch.hint.notCheckedOut") : state.changes.length === 0 ? t("botPanel.branch.hint.nothingToCommit") : undefined);
-  const pushHint = unavailable ?? publishHint ?? (state?.isDefault ? t("botPanel.branch.hint.default") : state && state.pushed && state.ahead === 0 ? t("botPanel.branch.hint.alreadyPushed") : undefined);
-  const prHint = unavailable ?? publishHint ?? (state && !state.pushed ? t("botPanel.branch.hint.pushFirst") : !(branch.repo ?? info?.repo) ? t("botPanel.branch.hint.notGithub") : undefined);
-  const prNumber = pull?.number ?? branch.pull?.number;
-  const reveal = revealBridge();
-  const worktree = state?.worktree;
-  const canReveal = Boolean(reveal && worktree && /^(?:\/(?!\/)|[a-zA-Z]:[\\/])/.test(worktree));
-
-  const item = (id: BranchMenuAction, icon: ReactNode, label: string, opts?: { disabled?: boolean; hint?: string; danger?: boolean }) => (
-    <button
-      key={id}
-      type="button"
-      role="menuitem"
-      data-menu-item={id}
-      disabled={opts?.disabled}
-      title={opts?.disabled ? opts.hint : undefined}
-      onClick={() => { close(); onAct(id); }}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px]",
-        opts?.danger ? "text-danger" : "text-ink",
-        opts?.disabled ? "cursor-default opacity-40" : "hover:bg-hover",
-      )}
-    >
-      <span className="shrink-0 [&>svg]:size-4">{icon}</span>
-      {opts?.disabled && opts.hint ? (
-        <span className="flex min-w-0 flex-col">
-          <span>{label}</span>
-          <span data-menu-item-reason="" className="text-[11.5px] leading-4 text-ink-secondary">{opts.hint}</span>
-        </span>
-      ) : <span className="min-w-0 flex-1 truncate">{label}</span>}
-    </button>
-  );
-  const divider = (key: string) => <div key={key} className="mx-2 my-1 h-[0.5px] bg-border" aria-hidden="true" />;
-
   return (
     <>
       <button
@@ -270,30 +245,139 @@ export function BranchMenu({ branch, info, pull, archived, onAct }: {
         <div
           ref={menuRef}
           data-branch-menu={branch.name}
-          role="menu"
-          aria-label={t("botPanel.branch.menu", { name: branch.name })}
-          onKeyDown={navigateThreadMenu}
           style={{ top: shown.y, left: shown.x }}
-          className={cn("fixed z-[60] flex max-h-[calc(100dvh-16px)] w-[260px] max-w-[calc(100vw-16px)] flex-col gap-0.5 overflow-y-auto overscroll-contain rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]", motion.className)}
+          className={cn("fixed z-[60] flex max-h-[calc(100dvh-16px)] w-[260px] max-w-[calc(100vw-16px)] flex-col overflow-y-auto overscroll-contain rounded-xl border-[0.5px] border-border popover-surface bg-elevated p-1.5 text-[13px] leading-[18px]", motion.className)}
           {...motion.exitProps}
         >
-          {item("commit", <GitCommitHorizontal />, `${t("botPanel.branch.commit")}…`, { disabled: !can.commit, hint: commitHint })}
-          {item("push", <Upload />, t("botPanel.branch.push"), { disabled: !can.push, hint: pushHint })}
-          {can.prUrl
-            ? item("openPr", <ExternalLink />, prNumber !== undefined ? t("botPanel.branch.viewPr", { number: prNumber }) : t("botPanel.branch.viewPrPlain"))
-            : item("pr", <GitPullRequest />, t("botPanel.branch.openPr"), { disabled: !can.openPr, hint: prHint })}
-          {item("diff", <FileDiff />, t("botPanel.branch.diff"), { disabled: !can.diff, hint: unavailable })}
-          {divider("places")}
-          {canReveal && item("reveal", <FolderOpen />, t("botPanel.branch.reveal"))}
-          {item("computer", <Monitor />, t("botPanel.branch.openIn", { tab: t("botPanel.tab.computer") }))}
-          {divider("list")}
-          {archived
-            ? item("unarchive", <ArchiveRestore />, t("botPanel.branch.unarchive"))
-            : item("archive", <Archive />, t("botPanel.branch.archive"))}
-          {item("delete", <Trash2 />, `${t("botPanel.branch.delete")}…`, { disabled: !can.remove, hint: unavailable ?? (state?.isDefault ? t("botPanel.branch.hint.default") : undefined), danger: true })}
+          <BranchMenuPanel branch={branch} info={info} pull={pull} archived={archived} botName={botName} readFailed={readFailed} onPick={(action) => { close(); onAct(action); }} />
         </div>,
         document.body,
       )}
+    </>
+  );
+}
+
+/** Why the panel cannot act on this branch itself (a locale key), or null:
+ * then each action asks the bot instead. */
+function menuAwayKey(info: BotBranchInfo | undefined, branch: CodingBranch, readFailed: boolean): LocaleKey | null {
+  return branchUnavailable(info, branch) ? null : branchAway(info, readFailed);
+}
+
+/** The open menu: where the panel cannot reach the branch's computer, one
+ * plain reason first (what is wrong and what to do), outside the menu that
+ * it describes (aria-describedby: a menu holds only its items), then the
+ * menu. */
+export function BranchMenuPanel({ branch, info, pull, archived, botName, readFailed = false, onPick }: {
+  branch: CodingBranch;
+  info?: BotBranchInfo;
+  pull?: BotBranchPull | null;
+  archived: boolean;
+  botName: string;
+  readFailed?: boolean;
+  onPick: (action: BranchMenuAction) => void;
+}) {
+  const reasonId = useId();
+  const awayKey = menuAwayKey(info, branch, readFailed);
+  return (
+    <>
+      {awayKey && (
+        <p id={reasonId} data-branch-away={awayKey} className="px-2 pb-1.5 pt-0.5 text-[12px] leading-[17px] text-ink-secondary">
+          {t(awayKey, { bot: botName })}
+        </p>
+      )}
+      <div
+        role="menu"
+        aria-label={t("botPanel.branch.menu", { name: branch.name })}
+        aria-describedby={awayKey ? reasonId : undefined}
+        onKeyDown={navigateThreadMenu}
+        className="flex flex-col gap-0.5"
+      >
+        <BranchMenuItems branch={branch} info={info} pull={pull} archived={archived} botName={botName} readFailed={readFailed} onPick={onPick} />
+      </div>
+    </>
+  );
+}
+
+/** The menu's rows. Where the panel can act: each action, or why not.
+ * Where it cannot reach the branch's computer (BranchMenuPanel says why):
+ * "Try again" first where reading it again can help, then each action as
+ * one click that asks the bot to do it. While the branch is read: the
+ * actions wait, saying so. */
+export function BranchMenuItems({ branch, info, pull, archived, botName, readFailed = false, onPick }: {
+  branch: CodingBranch;
+  info?: BotBranchInfo;
+  pull?: BotBranchPull | null;
+  archived: boolean;
+  botName: string;
+  readFailed?: boolean;
+  onPick: (action: BranchMenuAction) => void;
+}) {
+  const can = branchActions(info, pull, branch);
+  const state = info?.state;
+  const blocked = info?.publishBlocked;
+  const unavailableKey = branchUnavailable(info, branch);
+  const awayKey = menuAwayKey(info, branch, readFailed);
+  const reading = !info && !readFailed && Boolean(branch.threadId);
+  const unavailable = unavailableKey ? t(unavailableKey) : reading ? t("botPanel.branch.reading") : undefined;
+  const publishHint = blocked === "github_not_connected" ? t("botPanel.branch.hint.githubNotConnected") : undefined;
+  const commitHint = unavailable ?? (!state ? undefined : !state.worktree ? t("botPanel.branch.hint.notCheckedOut") : state.changes.length === 0 ? t("botPanel.branch.hint.nothingToCommit") : undefined);
+  const pushHint = unavailable ?? publishHint ?? (state?.isDefault ? t("botPanel.branch.hint.default") : state && state.pushed && state.ahead === 0 ? t("botPanel.branch.hint.alreadyPushed") : undefined);
+  const prHint = unavailable ?? publishHint ?? (state && !state.pushed ? t("botPanel.branch.hint.pushFirst") : !(branch.repo ?? info?.repo) ? t("botPanel.branch.hint.notGithub") : undefined);
+  const prNumber = pull?.number ?? branch.pull?.number;
+  const reveal = revealBridge();
+  const worktree = state?.worktree;
+  // a folder on this computer only: this server's (a solo one) or the person's own computer
+  const canReveal = Boolean(reveal && worktree && (info?.place === "server" || info?.computer === "desktop") && /^(?:\/(?!\/)|[a-zA-Z]:[\\/])/.test(worktree));
+  const ask = t("botPanel.branch.ask", { bot: botName });
+
+  const item = (id: BranchMenuAction, icon: ReactNode, label: string, opts?: { disabled?: boolean; hint?: string; danger?: boolean; ask?: boolean }) => (
+    <button
+      key={id}
+      type="button"
+      role="menuitem"
+      data-menu-item={id}
+      data-menu-item-ask={opts?.ask ? "" : undefined}
+      disabled={opts?.disabled}
+      title={opts?.disabled ? opts.hint : undefined}
+      onClick={() => onPick(id)}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px]",
+        opts?.danger ? "text-danger" : "text-ink",
+        opts?.disabled ? "cursor-default opacity-40" : "hover:bg-hover",
+      )}
+    >
+      <span className="shrink-0 [&>svg]:size-4">{icon}</span>
+      {(opts?.disabled && opts.hint) || opts?.ask ? (
+        <span className="flex min-w-0 flex-col">
+          <span>{label}</span>
+          <span data-menu-item-reason="" className="text-[11.5px] leading-4 text-ink-secondary">{opts?.ask ? ask : opts?.hint}</span>
+        </span>
+      ) : <span className="min-w-0 flex-1 truncate">{label}</span>}
+    </button>
+  );
+  const divider = (key: string) => <div key={key} className="mx-2 my-1 h-[0.5px] bg-border" aria-hidden="true" />;
+  const away = awayKey !== null;
+  const act = (enabled: boolean, hint: string | undefined) => (away ? { ask: true } : { disabled: !enabled, hint });
+  const readAgain = away && branchCanReadAgain(info, readFailed);
+
+  return (
+    <>
+      {readAgain && item("retry", <RefreshCw />, t("botPanel.branch.tryAgain"))}
+      {readAgain && divider("retry")}
+      {item("commit", <GitCommitHorizontal />, `${t("botPanel.branch.commit")}${away ? "" : "…"}`, act(can.commit, commitHint))}
+      {item("push", <Upload />, t("botPanel.branch.push"), act(can.push, pushHint))}
+      {can.prUrl
+        ? item("openPr", <ExternalLink />, prNumber !== undefined ? t("botPanel.branch.viewPr", { number: prNumber }) : t("botPanel.branch.viewPrPlain"))
+        : item("pr", <GitPullRequest />, t("botPanel.branch.openPr"), act(can.openPr, prHint))}
+      {item("diff", <FileDiff />, t("botPanel.branch.diff"), act(can.diff, unavailable))}
+      {divider("places")}
+      {canReveal && item("reveal", <FolderOpen />, t("botPanel.branch.reveal"))}
+      {item("computer", <Monitor />, t("botPanel.branch.openIn", { tab: t("botPanel.tab.computer") }))}
+      {divider("list")}
+      {archived
+        ? item("unarchive", <ArchiveRestore />, t("botPanel.branch.unarchive"))
+        : item("archive", <Archive />, t("botPanel.branch.archive"))}
+      {item("delete", <Trash2 />, `${t("botPanel.branch.delete")}…`, { ...act(can.remove, unavailable ?? (state?.isDefault ? t("botPanel.branch.hint.default") : undefined)), danger: true })}
     </>
   );
 }
@@ -303,7 +387,12 @@ interface RowState {
   pull?: BotBranchPull | null;
   busy?: boolean;
   note?: { tone: "ok" | "error"; text: string };
+  /** The last read failed (no answer, or refused). */
+  readFailed?: boolean;
 }
+
+/** Menu actions the bot can be asked to do instead. */
+const ASKABLE: Partial<Record<BranchMenuAction, BranchAskAction>> = { commit: "commit", push: "push", pr: "pr", diff: "diff", delete: "delete" };
 
 /** The branches card: rows read live, the menus' actions, their dialogs,
  * and "Show archived". Without `actions` the rows draw without a menu. */
@@ -321,28 +410,52 @@ export function CodeBranchList({ branches, archivedBranches = [], now, actions, 
   const [diffOf, setDiffOf] = useState<CodingBranch | null>(null);
   const [deleting, setDeleting] = useState<{ branch: CodingBranch; second: boolean } | null>(null);
   const [confirming, setConfirming] = useState<{ branch: CodingBranch; action: "push" | "pr" } | null>(null);
+  const [askingDelete, setAskingDelete] = useState<CodingBranch | null>(null);
   const botId = actions?.botId;
   const patch = useCallback((key: string, next: Partial<RowState>) => setRows((current) => ({ ...current, [key]: { ...current[key], ...next } })), []);
 
-  const read = useCallback(async (branch: CodingBranch) => {
-    if (!botId || !branch.threadId) return;
+  /** Read the branch now; its info, or undefined when the read failed. */
+  const read = useCallback(async (branch: CodingBranch): Promise<BotBranchInfo | undefined> => {
+    if (!botId || !branch.threadId) return undefined;
     try {
       const info = await loadBranchInfo(botId, branch.threadId, branch.name);
-      patch(codingBranchKey(branch), { info });
-      // The pull request as GitHub has it now (one opened by hand too).
-      if (info.state?.pushed && info.canPublish && (branch.repo ?? info.repo)) {
+      patch(codingBranchKey(branch), { info, readFailed: false });
+      // The pull request as GitHub has it now (one opened by hand too). On
+      // the bot's computer there is no live read (nothing runs there for it):
+      // the row keeps what the bot's calls said.
+      if (info.place !== "remote" && info.state?.pushed && info.canPublish && (branch.repo ?? info.repo)) {
         const pull = await loadBranchPull(botId, branch.threadId, branch.name).catch(() => undefined);
         if (pull !== undefined) patch(codingBranchKey(branch), { pull });
       }
+      return info;
     } catch {
-      // the row keeps what the bot's calls said
+      // the row keeps what the bot's calls and its last read said (its place
+      // and counts); its menu says it could not read it now, offers Try
+      // again and to ask the bot, and never acts on that earlier read
+      patch(codingBranchKey(branch), { readFailed: true });
+      return undefined;
     }
   }, [botId, patch]);
 
   const listed = showArchived ? [...branches, ...archivedBranches] : branches;
   const readKeys = listed.map((branch) => `${codingBranchKey(branch)}@${branch.threadId ?? ""}:${branch.at}`).join("|");
+  // What each conversation's rows were last read at: a change (the bot ran
+  // git again) reads that conversation's rows again, never every row (each
+  // read is a command on the bot's computer, the desktop app runs one at a
+  // time). Its rows share a folder, so they are read together.
+  const readAt = useRef(new Map<string, string>());
   useEffect(() => {
-    for (const branch of listed) void read(branch);
+    const threads = new Map<string, CodingBranch[]>();
+    for (const branch of listed) {
+      const thread = `${botId ?? ""}\n${branch.threadId ?? ""}`;
+      threads.set(thread, [...(threads.get(thread) ?? []), branch]);
+    }
+    for (const [thread, rows] of threads) {
+      const signature = rows.map((branch) => `${codingBranchKey(branch)}:${branch.at}`).sort().join("|");
+      if (readAt.current.get(thread) === signature) continue;
+      readAt.current.set(thread, signature);
+      for (const branch of rows) void read(branch);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readKeys, read]);
 
@@ -386,10 +499,47 @@ export function CodeBranchList({ branches, archivedBranches = [], now, actions, 
     });
   };
 
+  /** Send the bot the request for that action on that branch, in the
+   * conversation the branch came from, as the person's own message. */
+  const askBot = (branch: CodingBranch, action: BranchAskAction) => {
+    if (!actions || !botId || !branch.threadId) return;
+    const key = codingBranchKey(branch);
+    const bot = actions.botName;
+    patch(key, { note: { tone: "ok", text: t("botPanel.branch.asked", { bot }) } });
+    dispatch({
+      type: "send",
+      botId,
+      threadId: branch.threadId,
+      text: branchAskText(action, branch.name),
+      onError: () => patch(key, { note: { tone: "error", text: t("botPanel.branch.askFailed", { bot }) } }),
+    });
+  };
+
+  /** "Try again": read the branch again (the row shows it working). Still
+   * out of reach: the row says why; not read at all: what the last read
+   * said (stopped, not known) may no longer hold, so the row says it could
+   * not be read now (keeping its place and counts, as a read again that
+   * fails on its own does); readable: the menu acts itself. */
+  const readAgain = async (branch: CodingBranch) => {
+    const key = codingBranchKey(branch);
+    patch(key, { busy: true, note: undefined });
+    const info = await read(branch);
+    const reason = info ? (branchUnavailable(info, branch) ? null : branchAway(info)) : "botPanel.branch.away.unread";
+    patch(key, { busy: false, ...(reason ? { note: { tone: "error", text: t(reason, { bot: actions?.botName ?? "" }) } } : {}) });
+  };
+
   const act = (branch: CodingBranch) => (action: BranchMenuAction) => {
     if (!actions || !botId) return;
     const key = codingBranchKey(branch);
     const row = rows[key];
+    if (action === "retry") { void readAgain(branch); return; }
+    // The panel cannot reach the branch's computer: the bot is asked instead.
+    const askable = ASKABLE[action];
+    if (askable && !branchUnavailable(row?.info, branch) && branchAway(row?.info, row?.readFailed === true)) {
+      if (askable === "delete") setAskingDelete(branch);
+      else askBot(branch, askable);
+      return;
+    }
     switch (action) {
       case "commit": setCommitting(branch); return;
       case "diff": setDiffOf(branch); return;
@@ -465,6 +615,7 @@ export function CodeBranchList({ branches, archivedBranches = [], now, actions, 
         busy={state?.busy}
         note={state?.note}
         archived={archived}
+        readFailed={state?.readFailed === true}
         actions={actions}
         onAct={act(branch)}
       />
@@ -521,6 +672,19 @@ export function CodeBranchList({ branches, archivedBranches = [], now, actions, 
         }}
       />
       <ConfirmDialog
+        open={askingDelete !== null}
+        tone="danger"
+        title={t("botPanel.branch.askDelete.title", { bot: actions?.botName ?? "", branch: askingDelete?.name ?? "" })}
+        body={t("botPanel.branch.askDelete.body", { bot: actions?.botName ?? "" })}
+        confirmLabel={t("botPanel.branch.askDelete.confirm", { bot: actions?.botName ?? "" })}
+        onCancel={() => setAskingDelete(null)}
+        onConfirm={() => {
+          const branch = askingDelete;
+          setAskingDelete(null);
+          if (branch) askBot(branch, "delete");
+        }}
+      />
+      <ConfirmDialog
         open={deleting !== null}
         tone="danger"
         title={deleting?.second ? t("botPanel.branch.delete.unpushedTitle") : t("botPanel.branch.delete.title", { branch: deleting?.branch.name ?? "" })}
@@ -534,7 +698,11 @@ export function CodeBranchList({ branches, archivedBranches = [], now, actions, 
 }
 
 /** Commit the branch's changes: the proposed message (editable) and the
- * changed files, all chosen to start with. */
+ * changed files, all chosen to start with. Every file checked commits every
+ * change of the repository, also those the list does not show (past the
+ * 500 it lists, past what that computer's connection carries back, made
+ * since it was read), wherever the branch is, and the dialog says so; some
+ * of them checked commits exactly those. */
 export function CommitDialog({ botId, branch, info, onClose, onCommitted }: {
   botId: string;
   branch: CodingBranch;
@@ -616,6 +784,9 @@ export function CommitDialog({ botId, branch, info, onClose, onCommitted }: {
               </li>
             ))}
           </ul>
+          {changes.length > 0 && chosen.size === changes.length && (
+            <p data-branch-commit-scope="" className="text-[12px] leading-4 text-ink-secondary">{t("botPanel.branch.commit.everyChange")}</p>
+          )}
         </fieldset>
         {error && <p role="alert" className="text-[12.5px] text-danger">{error}</p>}
       </DialogFrame>

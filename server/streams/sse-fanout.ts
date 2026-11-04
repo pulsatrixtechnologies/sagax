@@ -30,6 +30,124 @@ export const SSE_MAX_BUFFERED_BYTES = 4 * 1024 * 1024;
 
 export type SseFanoutOutcome = "sent" | "dropped" | "disconnected";
 
+/** One SSE data frame. Broadcast builds this once and hands the same string
+ * to every client that receives the unfiltered payload. */
+export function encodeSseDataFrame(streamId: string, seq: number, payload: unknown): string {
+  return `id: ${streamId}:${seq}\ndata: ${JSON.stringify(payload)}\n\n`;
+}
+
+/** High-frequency kinds that must not re-check email membership on every
+ * token or screen capture. Membership still runs on durable frames. */
+export function sseKindSkipsMembershipRecheck(kind: string): boolean {
+  return kind === "runtime" || kind === "screen";
+}
+
+type RuntimeDeltaEvent = {
+  type?: unknown;
+  threadId?: unknown;
+  turnId?: unknown;
+  itemId?: unknown;
+  streamKind?: unknown;
+  delta?: unknown;
+  synthetic?: unknown;
+  eventId?: unknown;
+  provider?: unknown;
+  providerInstanceId?: unknown;
+};
+
+/** Stable key for one streamed text lane (same identity the bus merges on). */
+export function runtimeDeltaStreamKey(event: RuntimeDeltaEvent): string | null {
+  if (event.type !== "content.delta" || typeof event.threadId !== "string") return null;
+  if (typeof event.delta !== "string") return null;
+  return [
+    event.threadId,
+    String(event.provider ?? ""),
+    String(event.providerInstanceId ?? ""),
+    String(event.turnId ?? ""),
+    String(event.itemId ?? ""),
+    String(event.streamKind ?? ""),
+    event.synthetic === true ? "1" : "0",
+  ].join("\0");
+}
+
+/** Merge two runtime content.delta payloads that share a stream. Returns
+ * null when they cannot share one frame. Wire shape stays a content.delta
+ * with concatenated text; eventId stays the first one's. */
+export function mergeRuntimeDeltaEvents(
+  current: Record<string, unknown>,
+  next: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (current.kind !== "runtime" || next.kind !== "runtime") return null;
+  const a = current.event as RuntimeDeltaEvent | undefined;
+  const b = next.event as RuntimeDeltaEvent | undefined;
+  if (!a || !b) return null;
+  const keyA = runtimeDeltaStreamKey(a);
+  const keyB = runtimeDeltaStreamKey(b);
+  if (!keyA || keyA !== keyB) return null;
+  return {
+    ...current,
+    event: { ...a, delta: `${String(a.delta)}${String(b.delta)}` },
+  };
+}
+
+/** How long a broadcast may hold consecutive content.delta frames for one
+ * stream before flushing one shared SSE frame to every client. */
+export const SSE_DELTA_COALESCE_MS = 16;
+
+/** Holds consecutive content.delta runtime payloads and flushes one shared
+ * serialized frame per stream. Used by broadcast so 20 SSE clients do not
+ * each pay a stringify, and so a token burst becomes one write per client. */
+export class SseRuntimeDeltaCoalescer {
+  private pending = new Map<string, { payload: Record<string, unknown>; timer: ReturnType<typeof setTimeout> }>();
+  private readonly flush: (payload: Record<string, unknown>) => void;
+  private readonly coalesceMs: number;
+
+  constructor(flush: (payload: Record<string, unknown>) => void, coalesceMs = SSE_DELTA_COALESCE_MS) {
+    this.flush = flush;
+    this.coalesceMs = coalesceMs;
+  }
+
+  /** Queue or merge a runtime frame. Returns true when this call owns it
+   * (caller must not fan it out itself). */
+  offer(payload: Record<string, unknown>): boolean {
+    if (payload.kind !== "runtime" || !payload.event || typeof payload.event !== "object") return false;
+    const key = runtimeDeltaStreamKey(payload.event as RuntimeDeltaEvent);
+    if (!key) {
+      this.flushAll();
+      return false;
+    }
+    const existing = this.pending.get(key);
+    if (existing) {
+      const merged = mergeRuntimeDeltaEvents(existing.payload, payload);
+      if (merged) {
+        existing.payload = merged;
+        return true;
+      }
+      this.release(key);
+    }
+    const timer = setTimeout(() => this.release(key), this.coalesceMs);
+    timer.unref?.();
+    this.pending.set(key, { payload, timer });
+    return true;
+  }
+
+  flushAll(): void {
+    while (this.pending.size > 0) {
+      const key = this.pending.keys().next().value;
+      if (key === undefined) break;
+      this.release(key);
+    }
+  }
+
+  private release(key: string): void {
+    const entry = this.pending.get(key);
+    if (!entry) return;
+    this.pending.delete(key);
+    clearTimeout(entry.timer);
+    this.flush(entry.payload);
+  }
+}
+
 /** One client's fate for one frame.
  *
  * Screen captures are replaceable: once a client is backpressured, skip them

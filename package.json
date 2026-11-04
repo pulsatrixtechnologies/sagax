@@ -55,6 +55,7 @@
     "voice:acceptance:real": "node --experimental-transform-types --import ./scripts/voice-benchmark/register-asset-urls.mjs scripts/voice-benchmark/cli.ts --profile real",
     "bench:observation": "node --experimental-strip-types scripts/bench-observation.ts",
     "bench:persistence": "node --experimental-strip-types scripts/bench-persistence.ts",
+    "bench:server-hot-paths": "node --experimental-strip-types scripts/bench-server-hot-paths.ts",
     "bench:routine-watch": "node --experimental-strip-types --expose-gc scripts/bench-routine-watch.ts",
     "test:watch": "vitest",
     "test:unit": "node scripts/testing/vitest-shards.mjs --group unit",

@@ -495,6 +495,31 @@ describe("messages_thread_at", () => {
       raw.close();
     }
   });
+
+  it("plans key_id, followup-thread and open-approval lookups on their indexes", () => {
+    insertMessage("thread-0", msg("m-0", "hello", { role: "bot", at: 1 }));
+    insertMessage("ap1", msg("open", "", {
+      role: "bot",
+      kind: "options",
+      card: { title: "t", subtitle: "s", options: ["Allow"], requestType: "permission", requestId: "r" },
+    }));
+    closeMessageDb();
+    const raw = new DatabaseSync(join(DATA_DIR, "messages.db"));
+    const planOf = (sql: string) => raw.prepare(`EXPLAIN QUERY PLAN ${sql}`).all()
+      .map((row) => String((row as { detail: string }).detail))
+      .join("\n");
+    try {
+      expect(planOf("SELECT DISTINCT thread_id FROM messages WHERE key_id IN (?)")).toMatch(/messages_key_id|SEARCH/i);
+      expect(planOf("SELECT rowid, id, payload FROM chat_followups WHERE thread_id = ?")).toContain("chat_followups_thread");
+      expect(planOf(
+        "SELECT thread_id, id FROM messages WHERE json_extract(json, '$.card.requestType') = 'permission' " +
+        "AND json_extract(json, '$.card.requestId') IS NOT NULL AND json_extract(json, '$.card.answered') IS NULL " +
+        "AND COALESCE(json_extract(json, '$.card.dismissed'), 0) = 0 AND COALESCE(json_extract(json, '$.card.expired'), 0) = 0",
+      )).toContain("messages_open_permission_cards");
+    } finally {
+      raw.close();
+    }
+  });
 });
 
 describe("describeMissingFts5", () => {

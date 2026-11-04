@@ -65,7 +65,8 @@ const EXACT: Record<string, number> = {
   // 17: wave 3 T1 moved cw-actions/read/messages/files/export/reactions/events path.match (#1388).
   // 15: wave 4 moved pairing/:id and sessions/:id path.match (#1388).
   // Remaining avatar, activity/outbound and credential routes moved to modules (#1388).
-  "path.match(": 10,
+  // 2: bot model/read/Auto/allowlist/always-allow/PATCH/DELETE/request routes moved to bots-mutate.ts (#1388).
+  "path.match(": 2,
   // 13: wave 2 P5 moved hostedModels path.startsWith(/api/instances/) (#1388).
   // 12: wave 4 moved shared-computers path.startsWith (#1388).
   // 13: live count on origin/main 0.8.27 (c4c248539); pin matched after #1909.

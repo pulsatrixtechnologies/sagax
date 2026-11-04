@@ -465,7 +465,7 @@ const TOOL_NAME: Partial<Record<Kind, LocaleKey>> = {
 };
 
 export function stepToolName(tool: Pick<StepTool, "name" | "product">): string {
-  const name = tool.name.trim();
+  const name = (tool.name ?? "").trim();
   const kind = kindOf(name);
   const key = kind ? TOOL_NAME[kind] : undefined;
   if (key) return t(key);

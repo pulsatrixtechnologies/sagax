@@ -445,6 +445,13 @@ export async function callCoreTool(name: string, args: Json, context: ToolCallCo
     // a red error. A real refusal still carries error and stays isError.
     return { text: JSON.stringify(r), ...(r.error ? { isError: true } : {}) };
   }
+  return callCoreMessagingTool(name, args, context);
+}
+
+/** Messaging, memory, credential and session tools of the core family. */
+async function callCoreMessagingTool(name: string, args: Json, context: ToolCallContext): Promise<ToolCallResult | null> {
+  const { botId: BOT_ID, threadId: THREAD_ID, depth: DEPTH, externalRuntime: EXTERNAL_RUNTIME, coordinating: COORDINATING } = context;
+  const { api, apiResponse } = context.client;
   if (name === "send_to_bot") {
     const botId = String(args.bot_id ?? "").trim();
     const title = String(args.title ?? "").trim();

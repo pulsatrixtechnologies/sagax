@@ -2323,6 +2323,65 @@ class Session(
         }
     }
 
+    /** Side transcript for the coding chat: does not merge into the open chat. */
+    suspend fun loadCodingThread(threadId: String, limit: Int = 200): ThreadPage? {
+        val activeClient = client ?: return null
+        val connectionId = _connection.value?.id
+        return try {
+            val page = activeClient.messages(threadId, limit = limit)
+            currentCoroutineContext().ensureActive()
+            page.takeIf { _connection.value?.id == connectionId }
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            null
+        }
+    }
+
+    /** Older page of a coding side transcript. */
+    suspend fun loadCodingThreadOlder(threadId: String, before: String?): ThreadPage? {
+        val activeClient = client ?: return null
+        val connectionId = _connection.value?.id
+        return try {
+            val page = activeClient.messages(threadId, before = before, limit = 200)
+            currentCoroutineContext().ensureActive()
+            page.takeIf { _connection.value?.id == connectionId }
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            null
+        }
+    }
+
+    /**
+     * Follow-up into a coding task's thread. While the task runs the send
+     * steers (`busyMode: "steer"`), matching CodingChat.tsx.
+     */
+    suspend fun sendCodingFollowUp(
+        botId: String,
+        threadId: String,
+        text: String,
+        steer: Boolean,
+        quiet: Boolean = true,
+    ): Boolean {
+        val activeClient = client ?: return false
+        val connectionId = _connection.value?.id
+        val words = text.trim()
+        if (words.isEmpty()) return false
+        return try {
+            activeClient.sendToBot(
+                botId = botId,
+                text = words,
+                threadId = threadId,
+                busyMode = if (steer) "steer" else null,
+            )
+            currentCoroutineContext().ensureActive()
+            _connection.value?.id == connectionId
+        } catch (error: Throwable) {
+            if (error is CancellationException) throw error
+            if (!quiet && _connection.value?.id == connectionId) _actionError.value = error.message
+            false
+        }
+    }
+
     suspend fun loadRoutineRunAvailability(): RoutineRunAvailability? {
         val activeClient = client ?: return null
         return try {

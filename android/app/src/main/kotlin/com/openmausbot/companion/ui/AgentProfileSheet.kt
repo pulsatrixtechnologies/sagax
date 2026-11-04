@@ -231,6 +231,8 @@ internal fun AgentProfileSheet(bot: Bot, onDismiss: () -> Unit, onOpenOverview: 
                     )
                 }
 
+                CodingActivitySection(botId = current.id)
+
                 FormSection(header = "Model", footer = ModelRules.FOOTER) {
                     val instanceChoices = ModelRules.instanceChoices(instances, savedModel)
                     if (!modelsLoaded) {

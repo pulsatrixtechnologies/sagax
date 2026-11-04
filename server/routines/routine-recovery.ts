@@ -12,6 +12,7 @@ import {
   isEngineReconnectCondition,
 } from "../engines/engine-reconnect-ahead.ts";
 import { classifyError, USAGE_LIMIT } from "../drivers/retry.ts";
+import { limitResetFromText } from "../usage/limit-reset-time.ts";
 import { isEngineEmptyFailure } from "../peers/incidents.ts";
 import {
   routineLimitCreditsText, routineLimitStoppedText, routineLimitSwitchedText, routineLimitUnknownEngineText, routineLimitWaitingText,
@@ -112,7 +113,11 @@ export function classifyRoutineFailure(failure: string, facts: RoutineFailureFac
     return { kind: "owner", cause: "credits" };
   }
   if (facts.limitResetsAt || facts.stopReason === "quota" || USAGE_LIMIT.test(failure)) {
-    return { kind: "owner", cause: "usage_limit", ...(facts.limitResetsAt ? { resetsAt: facts.limitResetsAt } : {}) };
+    // An engine that names its reset only in its words (an ACP error's "Your
+    // plan resets at ...") still holds until then, never for the generic
+    // refusal TTL: the conversation goes back to it once the limit resets.
+    const resetsAt = facts.limitResetsAt ?? limitResetFromText(failure, Date.now());
+    return { kind: "owner", cause: "usage_limit", ...(resetsAt ? { resetsAt } : {}) };
   }
   if (isEngineReconnectCondition(failure) || facts.stopReason === "auth_required" || reason === "auth") return { kind: "owner", cause: "signed_out" };
   if (reason === "quota") return { kind: "owner", cause: "credits" };

@@ -114,6 +114,14 @@ describe("classifyRoutineFailure", () => {
     expect(classifyRoutineFailure(failure, facts)).toEqual(verdict);
   });
 
+  it("holds a usage limit until the reset its words name when the engine gives no reset field", () => {
+    const resetsAt = Math.ceil((Date.now() + 3_600_000) / 1_000) * 1_000;
+    const failure = `rpc -32603: Internal error: You've hit your usage limit (429). Your plan resets at ${new Date(resetsAt).toISOString()} (session/prompt)`;
+    expect(classifyRoutineFailure(failure, {})).toEqual({ kind: "owner", cause: "usage_limit", resetsAt });
+    // The engine's own field still wins over its words.
+    expect(classifyRoutineFailure(failure, { limitResetsAt: resetsAt + 60_000 })).toEqual({ kind: "owner", cause: "usage_limit", resetsAt: resetsAt + 60_000 });
+  });
+
   it("reads a busy refusal from its code, never its words", () => {
     expect(dispatchRefusal(Object.assign(new Error(BUSY), { status: 409, code: "thread_busy" }))).toEqual({ cause: "busy" });
     expect(dispatchRefusal(Object.assign(new Error("this provider account is being updated"), { status: 409, code: "settling" }))).toEqual({ cause: "busy" });

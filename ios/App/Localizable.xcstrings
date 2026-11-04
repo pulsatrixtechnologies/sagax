@@ -12,6 +12,22 @@
         }
       }
     },
+    " (not saved)": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " (non enregistré)"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": " (não salvo)"
+          }
+        }
+      }
+    },
     " The app keeps retrying automatically.": {
       "localizations": {
         "en": {
@@ -89,7 +105,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@ %2$@ · %3$@"
+            "value": "%@ %@ · %@"
           }
         },
         "pt-BR": {
@@ -348,6 +364,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ adicionou %2$lld linhas a %3$@"
+          }
+        }
+      }
+    },
+    "%@ added, switched off. Read each one, then switch it on below.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ajoutée(s), désactivée(s). Relisez chacune, puis activez-la plus bas."
           }
         }
       }
@@ -1200,6 +1226,16 @@
         }
       }
     },
+    "%@ is too large: a SKILL.md is at most 256 KB, a .zip at most 5 MB, and one upload at most 10 MB.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ est trop volumineux : un SKILL.md fait au plus 256 Ko, un .zip au plus 5 Mo et un téléversement au plus 10 Mo."
+          }
+        }
+      }
+    },
     "%@ is using this browser. The preview appears when it's free…": {
       "localizations": {
         "en": {
@@ -1582,6 +1618,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aperçu de %@"
+          }
+        }
+      }
+    },
+    "%@ proposal is waiting for a decision in chat.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ proposition attend une décision dans le clavardage."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ proposta espera uma decisão no chat."
+          }
+        }
+      }
+    },
+    "%@ proposals are waiting for a decision in chat.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ propositions attendent une décision dans le clavardage."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ propostas esperam uma decisão no chat."
           }
         }
       }
@@ -2084,6 +2152,22 @@
         }
       }
     },
+    "%@ words · %@ characters": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ mots · %@ caractères"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ palavras · %@ caracteres"
+          }
+        }
+      }
+    },
     "%@ · %@ notes": {
       "localizations": {
         "fr": {
@@ -2458,6 +2542,26 @@
         }
       }
     },
+    "%@: a path leaves the skill folder, or is a link. Nothing was extracted.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : un chemin sort du dossier de la compétence ou est un lien. Rien n'a été extrait."
+          }
+        }
+      }
+    },
+    "%@: a skill inside another skill's folder.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : une compétence dans le dossier d'une autre compétence."
+          }
+        }
+      }
+    },
     "%@: add": {
       "localizations": {
         "en": {
@@ -2474,6 +2578,46 @@
         }
       }
     },
+    "%@: more than 30 skills in one zip.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : plus de 30 compétences dans un même zip."
+          }
+        }
+      }
+    },
+    "%@: no SKILL.md in this zip.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : aucun SKILL.md dans ce zip."
+          }
+        }
+      }
+    },
+    "%@: not UTF-8 text.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : pas du texte UTF-8."
+          }
+        }
+      }
+    },
+    "%@: not a SKILL.md file or a .zip.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : ni un fichier SKILL.md ni un .zip."
+          }
+        }
+      }
+    },
     "%@: read": {
       "localizations": {
         "en": {
@@ -2486,6 +2630,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ : lecture"
+          }
+        }
+      }
+    },
+    "%@: the front matter needs a name (lowercase letters, digits and hyphens) and a description. %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : l'en-tête (front matter) doit avoir un name (minuscules, chiffres et traits d'union) et une description. %@"
+          }
+        }
+      }
+    },
+    "%@: this bot already has a skill with this name. Remove it first, or rename the skill.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : ce bot a déjà une compétence de ce nom. Retirez-la d'abord ou renommez la compétence."
           }
         }
       }
@@ -2508,6 +2672,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@: este bot trabalha aqui"
+          }
+        }
+      }
+    },
+    "%@: this name is in the upload twice.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : ce nom figure deux fois dans le téléversement."
+          }
+        }
+      }
+    },
+    "%@: this zip cannot be read (%@).": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : ce zip ne peut pas être lu (%@)."
+          }
+        }
+      }
+    },
+    "%@: too large (a SKILL.md is at most 256 KB, a .zip at most 5 MB).": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : trop volumineux (un SKILL.md fait au plus 256 Ko, un .zip au plus 5 Mo)."
           }
         }
       }
@@ -6920,6 +7114,16 @@
         }
       }
     },
+    "Add %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter (%@)"
+          }
+        }
+      }
+    },
     "Add %@ to favorites": {
       "localizations": {
         "fr": {
@@ -7232,6 +7436,16 @@
         }
       }
     },
+    "Add a one-line description.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajoutez une description d’une ligne."
+          }
+        }
+      }
+    },
     "Add a person": {
       "localizations": {
         "en": {
@@ -7384,6 +7598,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Adicione um nome de servidor e um comando executável."
+          }
+        }
+      }
+    },
+    "Add a skill from the library": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter une compétence de la bibliothèque"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicionar uma habilidade da biblioteca"
+          }
+        }
+      }
+    },
+    "Add a skill from the library…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter une compétence de la bibliothèque…"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adicionar uma habilidade da biblioteca…"
           }
         }
       }
@@ -8118,6 +8364,16 @@
         }
       }
     },
+    "Add the instructions the bot should follow.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajoutez les instructions que le bot doit suivre."
+          }
+        }
+      }
+    },
     "Add the reminder “%@”.": {
       "localizations": {
         "en": {
@@ -8162,6 +8418,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Adicione a chave compartilhada do Fish Audio no Sagax no computador. A chave nunca é devolvida ao iOS."
+          }
+        }
+      }
+    },
+    "Add these skills?": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter ces compétences ?"
           }
         }
       }
@@ -8277,7 +8543,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ajouté"
+            "value": "Ajoutée"
           }
         },
         "pt-BR": {
@@ -12438,6 +12704,16 @@
         }
       }
     },
+    "At most %@ files at once.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Au plus %@ fichiers à la fois."
+          }
+        }
+      }
+    },
     "At most %@ files, %@ MB a note, %@ MB an image or PDF.": {
       "localizations": {
         "fr": {
@@ -13826,6 +14102,22 @@
         }
       }
     },
+    "Bold": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gras"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Negrito"
+          }
+        }
+      }
+    },
     "Bot": {
       "localizations": {
         "en": {
@@ -14904,6 +15196,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Funções integradas"
+          }
+        }
+      }
+    },
+    "Bulleted list": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liste à puces"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lista com marcadores"
           }
         }
       }
@@ -16876,6 +17184,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verificando…"
+          }
+        }
+      }
+    },
+    "Checklist": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liste de cases à cocher"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lista de verificação"
           }
         }
       }
@@ -19310,6 +19634,22 @@
         }
       }
     },
+    "Column %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Colonne %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Coluna %@"
+          }
+        }
+      }
+    },
     "Columns": {
       "localizations": {
         "fr": {
@@ -19508,6 +19848,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aprovação de comando solicitada"
+          }
+        }
+      }
+    },
+    "Command name": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nom de la commande"
           }
         }
       }
@@ -22548,6 +22898,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Não foi possível atualizar a imagem: %@"
+          }
+        }
+      }
+    },
+    "Could not save that command.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible d’enregistrer cette commande."
           }
         }
       }
@@ -26578,6 +26938,22 @@
         }
       }
     },
+    "Divider line": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ligne de séparation"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linha divisória"
+          }
+        }
+      }
+    },
     "Do not change": {
       "localizations": {
         "en": {
@@ -28547,13 +28923,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Activer la compétence revue"
+            "value": "Activer la compétence relue"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ativar habilidade revisada"
+            "value": "Ativar a habilidade revisada"
           }
         }
       }
@@ -29646,6 +30022,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cada turno concluído, guardado mês a mês no servidor. Escolha um período, agrupe ou exporte para uma fatura."
+          }
+        }
+      }
+    },
+    "Every skill in the library is already assigned to this bot.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toutes les compétences de la bibliothèque sont déjà assignées à ce bot."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todas as habilidades da biblioteca já estão atribuídas a este bot."
           }
         }
       }
@@ -32254,6 +32646,22 @@
         }
       }
     },
+    "Formatting": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mise en forme"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formatação"
+          }
+        }
+      }
+    },
     "Forward": {
       "localizations": {
         "en": {
@@ -33362,6 +33770,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lui donner un nom et un rôle"
+          }
+        }
+      }
+    },
+    "Give the bot a short command for something you ask often. Type /name in a chat to run it. Anything after the name fills in %@.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Donnez au bot une commande courte pour ce que vous demandez souvent. Tapez /nom dans une discussion pour l’exécuter. Tout ce qui suit le nom remplace %@."
           }
         }
       }
@@ -34860,6 +35278,22 @@
         }
       }
     },
+    "Heading": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Titre"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Título"
+          }
+        }
+      }
+    },
     "Health": {
       "localizations": {
         "fr": {
@@ -35690,6 +36124,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Le temps de pause qui termine ce que vous dites. Une phrase inachevée a toujours plus de temps."
+          }
+        }
+      }
+    },
+    "How many turns Sagax starts on its own while the condition is not met, before it waits for you. A message from you starts the count over.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Combien de tours Sagax lance de lui-même tant que la condition n'est pas remplie, avant de vous attendre. Un message de votre part remet le compte à zéro."
           }
         }
       }
@@ -38332,6 +38776,22 @@
         }
       }
     },
+    "Italic": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Italique"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Itálico"
+          }
+        }
+      }
+    },
     "Its MCP servers and skills are available to every bot. A server that runs a command starts off: test it, then turn it on. Skills start off until you read them.": {
       "localizations": {
         "en": {
@@ -39146,6 +39606,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Garder l’en-tête comme propriétés"
+          }
+        }
+      }
+    },
+    "Keep the saved version": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Garder la version enregistrée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manter a versão salva"
           }
         }
       }
@@ -40679,6 +41155,12 @@
     "Link": {
       "localizations": {
         "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link"
+          }
+        },
+        "pt-BR": {
           "stringUnit": {
             "state": "translated",
             "value": "Link"
@@ -42882,6 +43364,22 @@
         }
       }
     },
+    "Markdown preview": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aperçu du markdown"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pré-visualização do markdown"
+          }
+        }
+      }
+    },
     "Marketing": {
       "localizations": {
         "en": {
@@ -43900,6 +44398,22 @@
         }
       }
     },
+    "Mirrored to": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recopié vers"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Espelhado em"
+          }
+        }
+      }
+    },
     "Missed": {
       "localizations": {
         "en": {
@@ -44698,6 +45212,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mover a pasta para cima"
+          }
+        }
+      }
+    },
+    "Move instructions into SOUL.md": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déplacer les instructions dans SOUL.md"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mover as instruções para SOUL.md"
           }
         }
       }
@@ -48089,7 +48619,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucune compétence installée pour l'instant."
+            "value": "Aucune compétence installée."
           }
         },
         "pt-BR": {
@@ -50360,6 +50890,16 @@
         }
       }
     },
+    "Not imported (only SKILL.md is): %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non importés (seul SKILL.md l'est) : %@"
+          }
+        }
+      }
+    },
     "Not installed": {
       "localizations": {
         "en": {
@@ -51082,6 +51622,16 @@
         }
       }
     },
+    "Nothing can be added until the files marked here are fixed or removed.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien ne peut être ajouté tant que les fichiers signalés ici ne sont pas corrigés ou retirés."
+          }
+        }
+      }
+    },
     "Nothing changed recently.": {
       "localizations": {
         "en": {
@@ -51252,6 +51802,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rien d'installé pour l'instant. Trouvez des apps, des plugins et des compétences dans Découvrir."
+          }
+        }
+      }
+    },
+    "Nothing is added until you confirm. Skills arrive switched off.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien n'est ajouté avant votre confirmation. Les compétences arrivent désactivées."
           }
         }
       }
@@ -51628,6 +52188,22 @@
         }
       }
     },
+    "Nothing to preview yet.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rien à afficher pour l'instant."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nada para pré-visualizar ainda."
+          }
+        }
+      }
+    },
     "Nothing to search yet": {
       "localizations": {
         "en": {
@@ -51900,6 +52476,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Secousses · Sur cet iPad"
+          }
+        }
+      }
+    },
+    "Numbered list": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liste numérotée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lista numerada"
           }
         }
       }
@@ -52914,6 +53506,16 @@
         }
       }
     },
+    "On. Sagax relaunches the bot up to %@ times while the condition is not met.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activé. Sagax relance le bot jusqu'à %@ fois tant que la condition n'est pas remplie."
+          }
+        }
+      }
+    },
     "On. Sagax relaunches the bot up to %lld times while the condition is not met.": {
       "localizations": {
         "en": {
@@ -53208,6 +53810,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Um por pessoa"
+          }
+        }
+      }
+    },
+    "One sentence that must be true before this bot finishes, for example \"the tests pass\". After each reply in a conversation with this bot, Sagax checks it. While it is not true, Sagax relaunches the bot on its own in the same conversation, up to the number of relaunches below. Each relaunch is a normal turn and costs like one. Stop ends the relaunches.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Une phrase qui doit être vraie avant que ce bot termine, par exemple « les tests passent ». Après chaque réponse dans une conversation avec ce bot, Sagax la vérifie. Tant qu'elle n'est pas vraie, Sagax relance le bot de lui-même dans la même conversation, jusqu'au nombre de relances ci-dessous. Chaque relance est un tour normal et coûte comme un tour. Arrêter met fin aux relances."
           }
         }
       }
@@ -55826,6 +56438,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "En rupture de stock"
+          }
+        }
+      }
+    },
+    "Outside any skill folder, not imported: %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hors de tout dossier de compétence, non importés : %@"
           }
         }
       }
@@ -61052,6 +61674,22 @@
         }
       }
     },
+    "Quote": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Citation"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Citação"
+          }
+        }
+      }
+    },
     "Quote the selected text in the message": {
       "localizations": {
         "fr": {
@@ -61330,6 +61968,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ler tudo"
+          }
+        }
+      }
+    },
+    "Read by the bot on every turn.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le bot le lit à chaque tour."
           }
         }
       }
@@ -61884,6 +62532,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lecture..."
+          }
+        }
+      }
+    },
+    "Reading…": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lecture…"
           }
         }
       }
@@ -62816,6 +63474,16 @@
         }
       }
     },
+    "Relaunches at most": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relances au maximum"
+          }
+        }
+      }
+    },
     "Relaunches at most: %lld": {
       "localizations": {
         "en": {
@@ -63220,6 +63888,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remover %@ da lista de reserva"
+          }
+        }
+      }
+    },
+    "Remove %@ from the upload": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer %@ du téléversement"
           }
         }
       }
@@ -65429,7 +66107,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Revoir %@ avant de l'activer"
+            "value": "Relire %@ avant de l'activer"
           }
         },
         "pt-BR": {
@@ -67088,6 +67766,22 @@
         }
       }
     },
+    "SOUL.md on disk was edited outside the app.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SOUL.md sur le disque a été modifié hors de l'application."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O SOUL.md no disco foi editado fora do aplicativo."
+          }
+        }
+      }
+    },
     "SOUL.md, MEMORY.md and RULES.md stay in place.": {
       "localizations": {
         "fr": {
@@ -67458,6 +68152,16 @@
         }
       }
     },
+    "Save a bot's verification run as a skill from the Verify card, or import one here. Each new or changed skill shows in the chat with Undo.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrez la vérification d'un bot comme compétence depuis la carte Vérifier, ou importez-en une ici. Chaque compétence nouvelle ou modifiée s'affiche dans le chat avec Annuler."
+          }
+        }
+      }
+    },
     "Save a key below to turn this on.": {
       "localizations": {
         "en": {
@@ -67536,6 +68240,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Salvar como skill"
+          }
+        }
+      }
+    },
+    "Save command": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistrer la commande"
           }
         }
       }
@@ -67930,6 +68644,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Salva. Cole uma nova chave para substituí-la."
+          }
+        }
+      }
+    },
+    "Saved. Type /%@ in a chat with this bot to run it.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enregistré. Tapez /%@ dans une discussion avec ce bot pour l’exécuter."
           }
         }
       }
@@ -70928,6 +71652,16 @@
         }
       }
     },
+    "Share with my bots": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partager avec mes bots"
+          }
+        }
+      }
+    },
     "Share “%@”": {
       "localizations": {
         "en": {
@@ -72686,6 +73420,22 @@
         }
       }
     },
+    "Side by side": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Côte à côte"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lado a lado"
+          }
+        }
+      }
+    },
     "Sidebar": {
       "localizations": {
         "en": {
@@ -73409,7 +74159,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "La création de compétences est désactivée, mais les compétences déjà activées restent sous votre contrôle ici."
+            "value": "La création de compétences est désactivée, mais celles que vous avez activées restent gérables ici."
           }
         },
         "pt-BR": {
@@ -73551,7 +74301,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les compétences que partage votre organisation. En ajouter une la met sur ce bot, activée."
+            "value": "Les compétences que votre organisation partage. En ajouter une la met sur ce bot, activée."
           }
         },
         "pt-BR": {
@@ -75767,7 +76517,17 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Arrêter le partage"
+            "value": "Arrêter de partager"
+          }
+        }
+      }
+    },
+    "Stop sharing “%@” on this bot? This bot keeps its own copy; other bots keep the shared one.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arrêter de partager « %@ » sur ce bot? Ce bot garde sa propre copie; les autres bots gardent la version partagée."
           }
         }
       }
@@ -78408,6 +79168,16 @@
         }
       }
     },
+    "That name is taken by a built-in command.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce nom est réservé à une commande intégrée."
+          }
+        }
+      }
+    },
     "That reply is larger than 4 MB.": {
       "localizations": {
         "en": {
@@ -78928,6 +79698,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "O bot está usando o navegador…"
+          }
+        }
+      }
+    },
+    "The bot keeps using the saved version until you choose. File:": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le bot continue d'utiliser la version enregistrée tant que vous ne choisissez pas. Fichier :"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O bot continua usando a versão salva até você escolher. Arquivo:"
           }
         }
       }
@@ -79540,6 +80326,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "A área de transferência do computador está vazia."
+          }
+        }
+      }
+    },
+    "The condition could not be saved.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La condition n'a pas pu être enregistrée."
           }
         }
       }
@@ -81159,13 +81955,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Le contenu de la compétence n'est pas disponible : retirez-la puis importez-la ou faites-la apprendre de nouveau."
+            "value": "Le contenu de la compétence n'est pas disponible. Retirez-la, puis importez-la ou faites-la apprendre de nouveau."
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "O conteúdo da habilidade não está disponível; remova e importe ou aprenda de novo."
+            "value": "O conteúdo da habilidade não está disponível. Remova e importe ou faça o bot aprendê-la de novo."
           }
         }
       }
@@ -81362,6 +82158,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "A linha do troféu abaixo do seu nome."
+          }
+        }
+      }
+    },
+    "The upload failed: %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le téléversement a échoué : %@"
           }
         }
       }
@@ -82004,6 +82810,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Este bot"
+          }
+        }
+      }
+    },
+    "This bot already has a skill with that name.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce bot a déjà une compétence portant ce nom."
           }
         }
       }
@@ -84808,6 +85624,22 @@
         }
       }
     },
+    "Tidy up the formatting": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettre la mise en forme au propre"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Organizar a formatação"
+          }
+        }
+      }
+    },
     "Tidying…": {
       "localizations": {
         "en": {
@@ -86904,6 +87736,16 @@
         }
       }
     },
+    "Unassign “%@” from this bot? The skill stays in the library.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer l'assignation de « %@ » pour ce bot? La compétence reste dans la bibliothèque."
+          }
+        }
+      }
+    },
     "Unassigned": {
       "localizations": {
         "en": {
@@ -88068,6 +88910,26 @@
         }
       }
     },
+    "Upload SKILL.md files or zipped skill folders": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Téléverser des fichiers SKILL.md ou des dossiers de compétence zippés"
+          }
+        }
+      }
+    },
+    "Upload a SKILL.md file, or a .zip of a skill folder (SKILL.md and its files); several at once. Only SKILL.md is imported; the other files are listed. Skills arrive switched off: read each one, then switch it on.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Téléversez un fichier SKILL.md ou un .zip d'un dossier de compétence (SKILL.md et ses fichiers) ; plusieurs à la fois. Seul SKILL.md est importé ; les autres fichiers sont listés. Les compétences arrivent désactivées : relisez chacune, puis activez-la."
+          }
+        }
+      }
+    },
     "Upload image": {
       "localizations": {
         "fr": {
@@ -88450,6 +89312,16 @@
         }
       }
     },
+    "Use lowercase letters, numbers, and single dashes for the name.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilisez des lettres minuscules, des chiffres et des tirets simples pour le nom."
+          }
+        }
+      }
+    },
     "Use mascot": {
       "localizations": {
         "fr": {
@@ -88622,6 +89494,22 @@
         }
       }
     },
+    "Use the file": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utiliser le fichier"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usar o arquivo"
+          }
+        }
+      }
+    },
     "Use the mascot": {
       "localizations": {
         "fr": {
@@ -88691,13 +89579,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Utilisée quand le bot la juge pertinente"
+            "value": "Utilisée quand le bot la juge utile"
           }
         },
         "pt-BR": {
           "stringUnit": {
             "state": "translated",
-            "value": "Usada quando o bot acha relevante"
+            "value": "Usada quando o bot decide que ela é relevante"
           }
         }
       }
@@ -89158,6 +90046,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vídeos"
+          }
+        }
+      }
+    },
+    "View": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affichage"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visualização"
           }
         }
       }
@@ -90888,6 +91792,16 @@
         }
       }
     },
+    "What it does, in one line": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce qu’elle fait, en une ligne"
+          }
+        }
+      }
+    },
     "What it never does": {
       "localizations": {
         "en": {
@@ -90998,6 +91912,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "O que o bot fez a cada dia, com as palavras dele. Não é carregado nas conversas."
+          }
+        }
+      }
+    },
+    "What the bot should do. Use %@ for the text typed after the command.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce que le bot doit faire. Utilisez %@ pour le texte tapé après la commande."
           }
         }
       }
@@ -91960,6 +92884,16 @@
         }
       }
     },
+    "Who this bot is and the rules it never breaks.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qui est ce bot et les règles qu'il ne brise jamais."
+          }
+        }
+      }
+    },
     "Who this bot is and the rules it never breaks. Always in its context.": {
       "localizations": {
         "en": {
@@ -91978,6 +92912,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quem é este bot e as regras que ele nunca quebra. Sempre no contexto dele."
+          }
+        }
+      }
+    },
+    "Who this bot is and the rules it never breaks. Keep it short; put step-by-step procedure into a skill.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qui est ce bot et les règles qu'il ne brise jamais. Restez bref. Mettez la procédure étape par étape dans une compétence."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quem é este bot e as regras que ele nunca quebra. Seja breve. Coloque o procedimento passo a passo numa habilidade."
           }
         }
       }
@@ -92681,7 +93631,13 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Écriture"
+            "value": "Écrire"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escrever"
           }
         }
       }
@@ -92692,6 +93648,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Écris une cadence, puis la consigne. Exemple : /loop 5m vérifier le tableau"
+          }
+        }
+      }
+    },
+    "Write a command": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Écrire une commande"
           }
         }
       }
@@ -97168,6 +98134,22 @@
         }
       }
     },
+    "bold text": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "texte en gras"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "texto em negrito"
+          }
+        }
+      }
+    },
     "botTasks.state.doing": {
       "localizations": {
         "en": {
@@ -97372,6 +98354,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nouveaux"
+          }
+        }
+      }
+    },
+    "code": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "code"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "código"
           }
         }
       }
@@ -98950,6 +99948,22 @@
         }
       }
     },
+    "italic text": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "texte en italique"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "texto em itálico"
+          }
+        }
+      }
+    },
     "its person": {
       "localizations": {
         "en": {
@@ -99158,6 +100172,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "less than"
+          }
+        }
+      }
+    },
+    "link text": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "texte du lien"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "texto do link"
           }
         }
       }
@@ -102156,6 +103186,16 @@
         }
       }
     },
+    "name": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nom"
+          }
+        }
+      }
+    },
     "name (optional)": {
       "localizations": {
         "en": {
@@ -102586,6 +103626,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "pontos"
+          }
+        }
+      }
+    },
+    "private": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "privée"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "privada"
           }
         }
       }
@@ -103172,6 +104228,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "© 2026 Pulsatrix Technologies Inc. Tous droits réservés."
+          }
+        }
+      }
+    },
+    "shared": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partagée"
           }
         }
       }

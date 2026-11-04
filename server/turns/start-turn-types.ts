@@ -418,6 +418,8 @@ export type StartTurnHost = {
   turnContextBuckets: any,
   turnHolder: any,
   turnModelRequested: any,
+  /** 2026-11-04: the routine model for this turn, a line saying it is ignored, or null. */
+  routineModelForTurn: any,
   turnModelSwitches: any,
   turnNetworkProxy: any,
   turnOrigin: any,

@@ -1802,7 +1802,12 @@ import {
 import { serviceThreadViewer, serviceViewerClosed } from "./cli/service-viewer.ts";
 import { browserNavigationRefusal } from "./browser/browser-navigation.ts";
 import { describeBrand, loadBrand } from "./brand.ts";
-import { deliverSseFrame } from "./streams/sse-fanout.ts";
+import {
+  deliverSseFrame,
+  encodeSseDataFrame,
+  SseRuntimeDeltaCoalescer,
+  sseKindSkipsMembershipRecheck,
+} from "./streams/sse-fanout.ts";
 import {
   PhoneSecretBridge,
   PhoneSecretError,
@@ -14431,30 +14436,31 @@ function cursorSeq(raw: string | string[] | undefined): number | null {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
-/** `adminOnly` frames (a workspace spend notice) reach admin streams and
- * are withheld from client sessions, live and on replay. */
-function broadcast(payload: Record<string, unknown>, options: { adminOnly?: boolean } = {}) {
+/** Fan one already-sequenced payload out to every SSE client. Serialization
+ * of the shared frame happens once here; per-client narrowing may build a
+ * different string only when that client cannot reuse it. */
+function fanoutSsePayload(payload: Record<string, unknown>, options: { adminOnly?: boolean } = {}): void {
   observeAchievementFrame(payload);
   observePushFrame(payload);
   observeLiveActivityFrame(payload);
-  // Membership may also change through fleet/CLI config writes. Close stale
-  // email streams before any further workspace data is delivered.
-  sessions.revalidateEmailSessions();
-  const seq = ++lastSeq;
   const kind = String(payload.kind ?? "");
-  const frame = `id: ${STREAM_ID}:${seq}\ndata: ${JSON.stringify({ ...payload, seq })}\n\n`;
+  // Membership may change through fleet/CLI config writes. Recheck on durable
+  // frames only: a content.delta storm must not rescan email sessions.
+  if (!sseKindSkipsMembershipRecheck(kind)) sessions.revalidateEmailSessions();
+  const seq = ++lastSeq;
+  const frame = encodeSseDataFrame(STREAM_ID, seq, { ...payload, seq });
   // Store both projections as immutable frames: live and reconnecting clients
   // must receive the same filtered config without changing the admin event.
   const clientFrame = options.adminOnly
     ? null
     : kind === "config"
-      ? `id: ${STREAM_ID}:${seq}\ndata: ${JSON.stringify({ ...configForAccess(payload as ReturnType<typeof configStatus>, false), seq })}\n\n`
+      ? encodeSseDataFrame(STREAM_ID, seq, { ...configForAccess(payload as ReturnType<typeof configStatus>, false), seq })
       : frame;
   // Live desktop captures can each be hundreds of kilobytes and become stale
   // as soon as the next one arrives. Keep their sequence slots so resume-gap
   // detection stays honest, but never retain their base64 payloads.
   replayBuffer.push({ seq, kind, frame: kind === "screen" ? null : frame, clientFrame: kind === "screen" ? null : clientFrame, payload: kind === "screen" ? null : payload });
-  for (const client of Array.from(sseClients)) {
+  for (const client of sseClients) {
     if (!wants(client, kind)) continue;
     // Admin-only frames (clientFrame null) never reach members, and a member never falls back to the admin frame.
     // A signed-in admin has a viewerId and goes through memberFrame so hidden
@@ -14474,6 +14480,18 @@ function broadcast(payload: Record<string, unknown>, options: { adminOnly?: bool
     const card = (payload.message as { card?: { adminApproval?: unknown } }).card;
     if (card?.adminApproval) scheduleAdminApprovalsAnnounce();
   }
+}
+
+/** Coalesce consecutive content.delta runtime frames into one shared SSE
+ * write per stream, then fan out through fanoutSsePayload. */
+const runtimeDeltaCoalescer = new SseRuntimeDeltaCoalescer((payload) => fanoutSsePayload(payload));
+
+/** `adminOnly` frames (a workspace spend notice) reach admin streams and
+ * are withheld from client sessions, live and on replay. */
+function broadcast(payload: Record<string, unknown>, options: { adminOnly?: boolean } = {}) {
+  if (!options.adminOnly && runtimeDeltaCoalescer.offer(payload)) return;
+  runtimeDeltaCoalescer.flushAll();
+  fanoutSsePayload(payload, options);
 }
 
 function approvalHostOf(bot: BotRecord): BotHost {
@@ -15630,7 +15648,7 @@ function sseFrameFor(
     (Array.isArray((payload.group as { unreadFor?: unknown }).unreadFor) || (payload.group as { peopleDm?: unknown }).peopleDm === true)) {
     const carried = payload.group as { peopleDm?: boolean; unread?: boolean; unreadFor?: string[]; tasks?: Array<{ threadId: string; unreadFor?: string[] }> };
     payload = { ...payload, group: peopleDmForViewer(carried, client.viewerId || client.approvalUserId || localPrincipalId()) };
-    const serialized = `id: ${STREAM_ID}:${seq}\ndata: ${JSON.stringify({ ...payload, seq })}\n\n`;
+    const serialized = encodeSseDataFrame(STREAM_ID, seq, { ...payload, seq });
     frame = serialized;
     if (clientFrame !== null) clientFrame = serialized;
   }
@@ -15672,7 +15690,7 @@ function sseFrameFor(
     if (scoped.action === "drop") return null;
     if (scoped.action === "replace") {
       payload = scoped.payload;
-      const serialized = `id: ${STREAM_ID}:${seq}\ndata: ${JSON.stringify({ ...payload, seq })}\n\n`;
+      const serialized = encodeSseDataFrame(STREAM_ID, seq, { ...payload, seq });
       frame = serialized;
       clientFrame = serialized;
     }
@@ -15693,7 +15711,7 @@ function sseFrameFor(
     }
     if (narrowed !== payload) {
       payload = narrowed;
-      const serialized = `id: ${STREAM_ID}:${seq}\ndata: ${JSON.stringify({ ...payload, seq })}\n\n`;
+      const serialized = encodeSseDataFrame(STREAM_ID, seq, { ...payload, seq });
       frame = serialized;
       if (clientFrame !== null) clientFrame = serialized;
     }
@@ -15703,7 +15721,7 @@ function sseFrameFor(
   if (payload?.kind === "config" && clientFrame !== null && client.identity) {
     const identity = client.identity();
     const projected = orgXaiMediaView(configForPerson(configForAccess(payload as ReturnType<typeof configStatus>, client.admin), identity), identity);
-    return `id: ${STREAM_ID}:${seq}\ndata: ${JSON.stringify({ ...projected, seq })}\n\n`;
+    return encodeSseDataFrame(STREAM_ID, seq, { ...projected, seq });
   }
   // A live screen of a person's cloud computer reaches that person only.
   // This is before the admin short-circuit: an admin does not see it.
@@ -15726,7 +15744,7 @@ function memberFrame(client: SseClient, seq: number, payload: Record<string, unk
   // Slice 4: an organization member hears only the section names they see.
   if (IDENTITY.kind === "perspicax" && client.viewerId && payload.kind === "sections" && Array.isArray(payload.sections)) {
     const sections = orgVisibleSections(payload.sections.filter((name): name is string => typeof name === "string"), client.viewerId);
-    return memberFrame({ ...client, viewerId: undefined }, seq, { ...payload, sections }, `id: ${STREAM_ID}:${seq}\ndata: ${JSON.stringify({ ...payload, sections, seq })}\n\n`);
+    return memberFrame({ ...client, viewerId: undefined }, seq, { ...payload, sections }, encodeSseDataFrame(STREAM_ID, seq, { ...payload, sections, seq }));
   }
   if (client.viewer.kind === "all") return clientFrame;
   const visible = visibleTo(client.viewer);
@@ -15736,7 +15754,7 @@ function memberFrame(client: SseClient, seq: number, payload: Record<string, unk
   }
   const narrowed = frameForMember(payload, memberFrameContext(visible, approvalViewerOf(client)), client.seen);
   if (!narrowed) return null;
-  return narrowed === payload ? clientFrame : `id: ${STREAM_ID}:${seq}\ndata: ${JSON.stringify({ ...narrowed, seq })}\n\n`;
+  return narrowed === payload ? clientFrame : encodeSseDataFrame(STREAM_ID, seq, { ...narrowed, seq });
 }
 onSteeredQueueChange(() => broadcast({ kind: "bot.queued", queues: publicBotQueuedMessages() }));
 
@@ -47987,6 +48005,7 @@ const gracefulShutdown = createGracefulShutdown({
     () => flushUsageLedger(DATA_DIR),
     () => flushDecisionLog(DATA_DIR),
     () => flushAdminActivity(DATA_DIR),
+    () => runtimeDeltaCoalescer.flushAll(),
     () => bus.flush(),
     () => closeMessageSearch(),
   ],

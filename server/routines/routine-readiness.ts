@@ -1,5 +1,5 @@
 import type { RoutineRequirements, RoutineReadinessCheck, RoutineReadinessKind, RoutineReadinessResult } from "../../shared/routine-readiness.ts";
-import { activeEngineRefusal, clearEngineRefusal } from "../engines/engine-refusals.ts";
+import { activeEngineRefusal, clearEngineRefusal, type EngineRefusal } from "../engines/engine-refusals.ts";
 import { redactSecretsInText } from "../redact.ts";
 import type { FlowPluginsDeclaration } from "../perspicax/perspicax-link.ts";
 import type { OrgFlowPluginsStatus } from "../org/org-flow-plugins.ts";
@@ -10,6 +10,13 @@ export const ROUTINE_READINESS_CACHE_MS = 60_000;
 export interface ReadinessRoutine { botId: string; prompt: string; requires?: RoutineRequirements; runAs?: string; runOn?: string }
 export interface ReadinessRun { botId: string; prompt?: string; runAs?: string; runOn?: string; threadId?: string }
 export interface ReadinessEngine { engine: string; name: string; account?: string; signedIn?: boolean; signedInAt?: number; detail?: string }
+/** Refusal facts stay live even when the sign-in probe is cached. */
+export function routineEngineRefusal(engine: ReadinessEngine, now: number): EngineRefusal | undefined {
+  const recorded = activeEngineRefusal(engine.engine, engine.account, now);
+  if (engine.signedIn === true && (engine.signedInAt === undefined || engine.signedInAt > (recorded?.at ?? -Infinity))) clearEngineRefusal(engine.engine, engine.account, now, true);
+  return engine.signedIn === false ? { engine: engine.engine, account: engine.account, cause: "signed_out", at: now }
+    : activeEngineRefusal(engine.engine, engine.account, now);
+}
 export interface ReadinessMcp { known: string[]; enabled: string[]; profileServer?: string; toolPrefixes?: Record<string, string> }
 export interface ReadinessComputer { name: string; online?: boolean; needed?: boolean }
 interface ReadinessFlowSkills { hasProfile: boolean; installation: string }
@@ -26,6 +33,8 @@ export interface RoutineReadinessDeps {
   /** Include the current selection, account and configuration revision. No credentials. */
   cacheKey?(routine: ReadinessRoutine, run: ReadinessRun): string;
   engine(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): ReadinessEngine | undefined | Promise<ReadinessEngine | undefined>;
+  /** The failover host picks with the run's payer, order and access rules. Never cache its refusal decision. */
+  backup?(routine: ReadinessRoutine, run: ReadinessRun, primary: ReadinessEngine, signal: AbortSignal): ReadinessEngine | undefined | Promise<ReadinessEngine | undefined>;
   skills(routine: ReadinessRoutine, run: ReadinessRun, signal: AbortSignal): string[] | undefined | Promise<string[] | undefined>;
   /** Organization declaration present: the active pack serves product skills remotely. */
   flowSkills?(routine: ReadinessRoutine, run: ReadinessRun): ReadinessFlowSkills | undefined;
@@ -49,10 +58,10 @@ export function routineNeededSkills(prompt: string, requires?: RoutineRequiremen
 }
 const clean = (value: unknown) => redactSecretsInText(value instanceof Error ? value.message : String(value)).slice(0, 500);
 const ready = (kind: RoutineReadinessKind, detail?: string): RoutineReadinessCheck => ({ kind, ok: true, code: "ready", params: { kind }, line: `The ${kind} check has no known blocker. Run the routine when ready.`, ...(detail ? { detail } : {}) });
-function boundedProbe(work: (signal: AbortSignal) => unknown): Promise<Probe> {
+function boundedProbe(work: (signal: AbortSignal) => unknown, timeoutMs = ROUTINE_READINESS_PROBE_TIMEOUT_MS): Promise<Probe> {
   return new Promise((resolve) => {
     const controller = new AbortController();
-    const timer = setTimeout(() => { controller.abort(); resolve({ error: "Readiness probe timed out. Try checking again." }); }, ROUTINE_READINESS_PROBE_TIMEOUT_MS);
+    const timer = setTimeout(() => { controller.abort(); resolve({ error: "Readiness probe timed out. Try checking again." }); }, timeoutMs);
     Promise.resolve().then(() => work(controller.signal)).then(value => resolve({ value }), error => resolve({ error: clean(error) })).finally(() => clearTimeout(timer));
   });
 }
@@ -71,11 +80,12 @@ export function loadRoutineReadiness(value: unknown): RoutineReadinessCheck[] | 
 export async function checkRoutineReadiness(routine: ReadinessRoutine, run: ReadinessRun, deps: RoutineReadinessDeps, mode: RoutineReadinessMode = "run"): Promise<RoutineReadinessResult> {
   try {
     const now = deps.now?.() ?? Date.now();
+    const deadline = performance.now() + ROUTINE_READINESS_PROBE_TIMEOUT_MS;
     let memo = cache.get(deps);
     if (!memo) { memo = new Map(); cache.set(deps, memo); }
     const context = JSON.stringify([routine.botId, run.runAs ?? routine.runAs, run.runOn ?? routine.runOn, routine.requires?.computer, deps.cacheKey?.(routine, run)]);
     const works = [deps.engine, deps.skills, deps.mcp, deps.perspicax, deps.computers] as const;
-    const probes = await Promise.all(works.map((work, i) => {
+    const pending = works.map((work, i) => {
       if (!work) return Promise.resolve({} as Probe);
       const key = `${context}:${kinds[i]}`;
       const old = memo!.get(key);
@@ -84,7 +94,14 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
       memo!.set(key, { at: now, result });
       if (memo!.size > 2_000) memo!.delete(memo!.keys().next().value!);
       return result;
-    }));
+    });
+    // Start failover discovery as soon as the primary is known, beside the other probes.
+    const backupProbe = pending[0]!.then(probe => {
+      const primary = probe.value as ReadinessEngine | undefined;
+      if (probe.error || !primary || !deps.backup || !routineEngineRefusal(primary, now)) return {} as Probe;
+      return boundedProbe(signal => deps.backup!(routine, run, primary, signal), Math.max(0, deadline - performance.now()));
+    });
+    const [probes, backup] = await Promise.all([Promise.all(pending), backupProbe]);
     const checks: RoutineReadinessCheck[] = [];
     for (let i = 0; i < kinds.length; i++) {
       const kind = kinds[i]!;
@@ -104,10 +121,12 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
       if (kind === "engine") {
         const engine = probe.value as ReadinessEngine | undefined;
         if (engine) {
-          const recorded = activeEngineRefusal(engine.engine, engine.account, now);
-          if (engine.signedIn === true && (engine.signedInAt === undefined || engine.signedInAt > (recorded?.at ?? -Infinity))) clearEngineRefusal(engine.engine, engine.account, now, true);
-          const refusal = activeEngineRefusal(engine.engine, engine.account, now);
-          if (engine.signedIn === false || refusal?.cause === "signed_out") {
+          const refusal = routineEngineRefusal(engine, now);
+          if (refusal && deps.backup) {
+            const candidate = backup.value as ReadinessEngine | undefined;
+            if (candidate && !routineEngineRefusal(candidate, now)) { checks.push(ready(kind)); continue; }
+          }
+          if (refusal?.cause === "signed_out") {
             checks.push({ kind, ok: false, code: "engine_signed_out", params: { engine: engine.name }, line: `${engine.name} is signed out for this bot. Reconnect it in Settings > Model providers.`, ...(engine.detail ? { detail: clean(engine.detail) } : {}) });
           } else if (refusal) {
             const at = new Date(refusal.at).toISOString();

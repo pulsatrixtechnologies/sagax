@@ -1,4 +1,4 @@
-import { checkRoutineReadiness, routineFlowSkills, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer } from "./routines/routine-readiness.ts";
+import { checkRoutineReadiness, routineEngineRefusal, routineFlowSkills, type RoutineReadinessDeps, type ReadinessRoutine, type ReadinessRun, type ReadinessComputer } from "./routines/routine-readiness.ts";
 import { noteEngineRefusal, clearEngineRefusal } from "./engines/engine-refusals.ts";
 import { classifyRoutineFailure as readinessFailureClass } from "./routines/routine-recovery.ts";
 import { canUseMcpServer } from "../shared/tool-scope.ts";
@@ -16366,7 +16366,7 @@ const limitFailover = createLimitFailoverHost({
     if (IDENTITY.kind !== "perspicax" && (!engineProbes.size || [...engineProbes.values()].some((probe) => Date.now() - probe.at > ENGINE_PROBE_TTL_MS))) {
       await probeEngines().catch(() => {});
     }
-    const bot = store.projectBotForTask(botId, threadId);
+    const bot = threadId ? store.projectBotForTask(botId, threadId) : store.bot(botId);
     if (!bot) return [];
     const guestConfined = cloudGuestDriven(threadId) || botmailConfined(threadId);
     return autoEnginesFor(bot, (speaker ?? { origin: "person" }) as TurnSpeaker, guestConfined).map((engine) => ({
@@ -16375,7 +16375,7 @@ const limitFailover = createLimitFailoverHost({
     }));
   },
   preferred: (botId, threadId) => {
-    const bot = store.projectBotForTask(botId, threadId);
+    const bot = threadId ? store.projectBotForTask(botId, threadId) : store.bot(botId);
     const orgDefault = cfg.newBotDefaults?.profile.modelSelection ?? cfg.defaultModelSelection;
     return [...botRecoveryBackups(bot, cfg), ...(orgDefault ? [{ instanceId: orgDefault.instanceId, model: orgDefault.model }] : [])];
   },
@@ -16386,6 +16386,11 @@ const limitFailover = createLimitFailoverHost({
   payer: (botId, speaker) => {
     const bot = store.bot(botId);
     return bot ? autoPayerKey(bot, (speaker ?? { origin: "person" }) as TurnSpeaker) : "server";
+  },
+  refusal: (botId, threadId, speaker, instanceId) => {
+    const bot = threadId ? store.projectBotForTask(botId, threadId) : store.bot(botId);
+    const engine = bot && routineEngineForBot(bot, (speaker ?? { origin: "person" }) as TurnSpeaker, instanceId);
+    return engine ? routineEngineRefusal(engine, Date.now()) : undefined;
   },
   ownerPays: (botId, speaker) => {
     const bot = store.bot(botId);
@@ -24580,13 +24585,15 @@ const directChatOf = (botId: string, threadId: string): boolean => {
   return source !== null && !source.group;
 };
 /** Resolve the same worker Auto pick and account plan as routine startTurn. */
-function routineReadinessEngine(routine: ReadinessRoutine, run: ReadinessRun) {
+function routineReadinessBot(routine: ReadinessRoutine, run: ReadinessRun) {
   const original = run.threadId ? botForThread(run.botId, run.threadId) : store.bot(run.botId);
   if (!original) return undefined;
   const speaker = routineRunSpeaker({ botId: run.botId, runAs: run.runAs ?? routine.runAs });
   const pick = autoPickForTurn({ bot: original, threadId: run.threadId ?? "", speaker, role: "worker", text: run.prompt ?? routine.prompt });
-  const bot = pick ? { ...original, modelSelection: pick.pick.selection } : original;
-  const instance = registry.get(bot.modelSelection.instanceId);
+  return pick ? { ...original, modelSelection: pick.pick.selection } : original;
+}
+function routineEngineForBot(bot: BotRecord, speaker: TurnSpeaker, instanceId = bot.modelSelection.instanceId) {
+  const instance = registry.get(instanceId);
   if (!instance) return undefined;
   const plan = resolveEngineAccess(orgEngineInput(bot, instance, speaker));
   const account = refusalAccount(plan.ok ? plan.via : "subscription", plan.payerPrincipalId, turnSlotFor(bot, instance));
@@ -24595,6 +24602,10 @@ function routineReadinessEngine(routine: ReadinessRoutine, run: ReadinessRun) {
   return { engine: instance.instanceId, name: engineDisplayName(instance), account, signedIn,
     ...(IDENTITY.kind !== "perspicax" ? { signedInAt: engineProbes.get(instance.instanceId)?.at } : {}),
     ...(!plan.ok ? { detail: plan.cause ?? plan.reason } : {}) };
+}
+function routineReadinessEngine(routine: ReadinessRoutine, run: ReadinessRun) {
+  const bot = routineReadinessBot(routine, run);
+  return bot ? routineEngineForBot(bot, routineRunSpeaker({ botId: run.botId, runAs: run.runAs ?? routine.runAs })) : undefined;
 }
 function refusalAccount(via: string, principal?: string, slot = "primary"): string {
   return JSON.stringify([via === "owner-key" || via === "speaker-key" ? "key" : via, principal ?? "organization", slot]);
@@ -24613,6 +24624,12 @@ const routineReadinessDeps: RoutineReadinessDeps = {
     return JSON.stringify([engine, bot?.modelSelection, bot?.mcpServers, bot?.toolScope, bot?.assignedSkills, bot?.perspicax, bot?.computer, bot?.remoteHosts]);
   },
   engine: (routine, run) => routineReadinessEngine(routine, run),
+  backup: async (routine, run, primary) => {
+    const speaker = routineRunSpeaker({ botId: run.botId, runAs: run.runAs ?? routine.runAs });
+    const backup = await limitFailover.backupFor(run.botId, run.threadId ?? "", speaker, primary.engine);
+    const bot = run.threadId ? botForThread(run.botId, run.threadId) : store.bot(run.botId);
+    return backup && bot ? routineEngineForBot({ ...bot, modelSelection: backup }, speaker) : undefined;
+  },
   skills: (_routine, run) => {
     const bot = store.bot(run.botId);
     if (!bot) return undefined;
@@ -24683,6 +24700,11 @@ const routineReadinessDeps: RoutineReadinessDeps = {
 };
 routines = new RoutineManager({
   readiness: (routine, run, mode) => checkRoutineReadiness(routine, run, routineReadinessDeps, mode),
+  prepareTurn: async (run) => {
+    if (!run.threadId) return;
+    const bot = routineReadinessBot({ botId: run.botId, prompt: run.prompt ?? "" }, run);
+    await limitFailover.beforeTurn(run.botId, run.threadId, routineRunSpeaker(run), bot?.modelSelection);
+  },
   engineForRun: (run) => routineReadinessEngine({ botId: run.botId, prompt: run.prompt ?? "" }, run),
   botName: (botId) => store.bot(botId)?.name,
   evaluateWatch: (routine, watch) => routineWatchEvaluator(routine, watch),

@@ -98,6 +98,54 @@ describe("routine readiness", () => {
   it("blocks known sign-out before any provider turn", async () => {
     expect((await checkRoutineReadiness(routine, run, deps({ engine: () => ({ engine: "codex", name: "Codex", signedIn: false }) }))).checks[0]).toMatchObject({ code: "engine_signed_out", ok: false });
   });
+  it.each(["credits", "usage_limit", "signed_out"] as const)("passes a primary %s refusal when a backup is ready (#1986)", async (cause) => {
+    const now = Date.UTC(2026, 10, 4);
+    const engine = `primary-with-backup-${cause}`;
+    noteEngineRefusal({ engine, cause, at: now });
+    const backup = vi.fn(() => ({ engine: "backup", name: "Backup", signedIn: true }));
+    const answer = await checkRoutineReadiness(routine, run, deps({ now: () => now,
+      engine: () => ({ engine, name: "Primary" }), backup }));
+    expect(answer.ok).toBe(true);
+    expect(answer.checks.find(check => check.kind === "engine")).toMatchObject({ ok: true, code: "ready" });
+    expect(backup).toHaveBeenCalledOnce();
+  });
+  it.each(["missing", "credits", "usage_limit", "signed_out"] as const)("keeps the primary reason when its backup is %s (#1986)", async (cause) => {
+    const now = Date.UTC(2026, 10, 4);
+    const engine = `primary-without-backup-${cause}`;
+    const backupEngine = `unavailable-backup-${cause}`;
+    noteEngineRefusal({ engine, cause: "credits", at: now });
+    if (cause !== "missing") noteEngineRefusal({ engine: backupEngine, cause, at: now });
+    const answer = await checkRoutineReadiness(routine, run, deps({ now: () => now,
+      engine: () => ({ engine, name: "Primary" }),
+      backup: () => cause === "missing" ? undefined : { engine: backupEngine, name: "Backup" } }));
+    expect(answer.ok).toBe(false);
+    expect(answer.checks[0]).toMatchObject({ ok: false, code: "engine_credits", params: { engine: "Primary" } });
+  });
+  it("rechecks backup refusals while primary probe facts are cached (#1986)", async () => {
+    const now = Date.UTC(2026, 10, 4);
+    const engine = "cached-primary-with-backup";
+    const backupEngine = "fresh-backup-refusal";
+    noteEngineRefusal({ engine, cause: "credits", at: now });
+    const primary = vi.fn(() => ({ engine, name: "Primary" }));
+    const check = deps({ now: () => now, engine: primary,
+      backup: () => ({ engine: backupEngine, name: "Backup" }) });
+    expect((await checkRoutineReadiness(routine, run, check)).ok).toBe(true);
+    noteEngineRefusal({ engine: backupEngine, cause: "credits", at: now });
+    expect((await checkRoutineReadiness(routine, run, check)).ok).toBe(false);
+    expect(primary).toHaveBeenCalledOnce();
+  });
+  it("keeps backup discovery inside the readiness probe deadline (#1986)", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    const now = Date.UTC(2026, 10, 4);
+    const engine = "slow-primary-with-backup";
+    noteEngineRefusal({ engine, cause: "credits", at: now });
+    const answer = checkRoutineReadiness(routine, run, deps({ now: () => now,
+      engine: () => new Promise(resolve => setTimeout(() => resolve({ engine, name: "Primary" }), 4_000)),
+      backup: () => new Promise(() => {}) }));
+    await vi.advanceTimersByTimeAsync(ROUTINE_READINESS_PROBE_TIMEOUT_MS);
+    expect((await answer).checks[0]).toMatchObject({ code: "engine_credits", ok: false });
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it("blocks a refused profile, while unreachable Perspicax stays a passing detail", async () => {
     expect((await checkRoutineReadiness(routine, run, deps({ perspicax: async () => ({ refused: true, profile: "dispatch", detail: "401 invalid_token" }) }))).ok).toBe(false);
     const offline = await checkRoutineReadiness(routine, run, deps({ perspicax: async () => ({ detail: "unreachable" }) }));

@@ -96,7 +96,7 @@ async function runNow(auth: Auth, routineId: string): Promise<Run> {
   expect(started.status, started.text).toBe(201);
   const id = started.body.run.id as string;
   return waitFor(async () => (((await api("GET", "/api/routines", auth)).body.runs ?? []) as Run[])
-    .find((r) => r.id === id && ["completed", "failed", "cancelled"].includes(r.status)), 60_000);
+    .find((r) => r.id === id && ["completed", "failed", "blocked", "cancelled"].includes(r.status)), 60_000);
 }
 type Option = { principalId: string; name: string; selectable: boolean; reason?: string; pending?: true };
 const optionsFor = async (auth: Auth, query: string) => {
@@ -286,7 +286,12 @@ posixOnly("routine modal: Runs as", () => {
     const run = await runNow(alice, bobRoutine);
     expect(run.status, run.error).toBe("completed");
     expect(run.runAs).toBe(ids.bob);
-    expect(idp.exchanges.slice(exchangesBefore).map((exchange) => exchange.sub)).toEqual([BOB.sub]);
+    // 9e3630a72 probes the same person's profile before the engine turn.
+    const exchanges = idp.exchanges.slice(exchangesBefore);
+    expect(exchanges.map(exchange => ({ sub: exchange.sub, profile: exchange.profile, ok: exchange.ok }))).toEqual([
+      { sub: BOB.sub, profile: PROFILE.id, ok: true },
+      { sub: BOB.sub, profile: PROFILE.id, ok: true },
+    ]);
   }, 90_000);
 
   it("Run now: the person it runs as may, someone else with run may not; one run in flight; audited as manual; a paused routine stays paused", async () => {
@@ -305,7 +310,7 @@ posixOnly("routine modal: Runs as", () => {
     const started = (first.status === 201 ? first : second).body.run as Run & { manual?: boolean; triggerSource?: string };
     expect(started.runAs).toBe(ids.bob);
     const finished = await waitFor(async () => (((await api("GET", "/api/routines", bob)).body.runs ?? []) as Run[])
-      .find((r) => r.id === started.id && ["completed", "failed", "cancelled"].includes(r.status)), 60_000);
+      .find((r) => r.id === started.id && ["completed", "failed", "blocked", "cancelled"].includes(r.status)), 60_000);
     expect(finished.status, finished.error).toBe("completed");
     // the routine was off (enabled: false) and stays off
     expect((await api("GET", "/api/routines", alice)).body.routines.find((r: { id: string }) => r.id === bobRoutine).enabled).toBe(false);
@@ -320,7 +325,8 @@ posixOnly("routine modal: Runs as", () => {
     const routineId = created.body.routine.id as string;
     expect((await optionsFor(alice, `routineId=${routineId}`)).current).toEqual({ principalId: ids.erin, name: "Erin", pending: true });
     const skipped = await runNow(alice, routineId);
-    expect(skipped).toMatchObject({ status: "failed", error: "Perspicax did not issue Erin's routine access yet; this run is skipped and the next one tries again" });
+    // b0cec80619: an admission refusal blocks this run, without pausing the routine.
+    expect(skipped).toMatchObject({ status: "blocked", error: "Perspicax did not issue Erin's routine access yet; this run is skipped and the next one tries again" });
     const routine = (await api("GET", "/api/routines", alice)).body.routines.find((r: { id: string }) => r.id === routineId);
     expect(routine.suspended).toBeUndefined();
     expect(routine.runAs).toEqual({ principalId: ids.erin, name: "Erin" });

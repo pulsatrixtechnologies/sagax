@@ -36,12 +36,12 @@ describe("one skills discovery contract", () => {
     expect(found.find((entry) => entry.name === "skill-64")?.description).toBe(rows[64]!.description);
   });
 
-  it("omits an oversized reference whole and keeps the smaller ones of the same capability", () => {
+  it("keeps long retrieval aliases out of the managed index, with both references still discoverable", () => {
     const index = skillDiscoveryIndex([row(1, { path: "p".repeat(6000) }), row(2, { description: "Short" })]);
-    expect(index.metrics).toMatchObject({ skills: 1, omitted: 1 });
+    expect(index.metrics).toMatchObject({ skills: 2, omitted: 0 });
     expect(index.text).toContain("skill-2");
     expect(index.text).not.toContain("p".repeat(6000));
-    expect(Buffer.byteLength(index.text, "utf8")).toBeLessThanOrEqual(CAPABILITY_PROMPT_MAX_BYTES + 400);
+    expect(Buffer.byteLength(index.text, "utf8")).toBeLessThanOrEqual(CAPABILITY_PROMPT_MAX_BYTES + 600);
   });
 
   it("filters before paging, preserves plugin namespaces and hides disabled metadata", () => {
@@ -73,7 +73,7 @@ describe("one skills discovery contract", () => {
     for (const name of ["skills_list", "workspace_read"]) expect(skillDiscoveryAvailable(true, { deny: [`mcp:agents:${name}`] })).toBe(false);
     expect(skillDiscoveryAvailable(true, { allow: ["mcp:agents:skills_list"] })).toBe(false);
     const index = skillDiscoveryIndex([row(0, { filePath: "/native/skills/skill-0/SKILL.md" })], false, false);
-    expect(index.text).toContain('Read "/native/skills/skill-0/SKILL.md"');
+    expect(index.text).toContain('("/native/skills/skill-0/SKILL.md")');
     expect(index.text).not.toContain("workspace_read");
     expect(index.text).not.toContain("skills_list");
     const partial = skillDiscoveryIndex([], true);

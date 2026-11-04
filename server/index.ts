@@ -1174,6 +1174,7 @@ import { approvalLevelPrompt, peerContactPrompt } from "./approvals/approval-lev
 import { fullAccessActs, fullAccessChoiceAnswer, fullAccessChoiceLine, fullAccessDecision, peerContactCardRequired } from "./approvals/full-access-gate.ts";
 import { expandLearnTurnText } from "./skills/skill-learn.ts";
 import { expandSetupTurnText, setupModeActive, setupSystemPrompt } from "./setup-mode.ts";
+import { onDemandPromptParts, promptReferencesAvailable } from "./context/prompt-references.ts";
 import type { SkillRequestCardData } from "../shared/skill-request.ts";
 import {
   checkSoulDrift
@@ -10261,19 +10262,18 @@ function scopedSkillInventory(bot: BotRecord, instance: { driverKind: string } |
 }
 /** The selected skill and plugin instructions of one turn, budgeted per
  * capability (server/capabilities/capability-prompt.ts): file engines get readable paths,
- * engines without files the whole files, read through the same checks as
- * workspace_read. `syncNative` refreshes the active engine's links on a real turn
+ * engines without retrieval get whole files, read through the same checks as
+ * workspace_read. Managed reads use a short index on every engine. `syncNative`
+ * refreshes the active engine's links on a real turn
  * only: the preview and the receipt never touch them. */
 function scopedSkillsPrompt(bot: BotRecord, instance: { driverKind: string } | null | undefined, principal: string | undefined, options: { managedTools: boolean; fileAccess: boolean; syncNative?: boolean; nativeWorkspace?: string; indexOnly?: boolean }) {
   const kind = instance?.driverKind ?? "";
   const names = new Set(personalSkillInputs(bot, principal).filter((skill) => skill.enabled && !skill.shadowed).map((skill) => skill.name));
   if (options.syncNative) syncSkillLinks(bot.id, { excludeNames: names });
   // A file engine needs its files or the managed tools (paths to read). An
-  // engine without files always receives the whole instruction files inline
-  // within each capability's budget (Q8 C, say then fill): with
-  // skills_list/workspace_read allowed they are named by alias and those
-  // tools reach the rest; tools off, the prompt is all it gets. Cold /
-  // automation turns pass indexOnly so chat engines stay on the index too.
+  // engine without files receives an index when skills_list/workspace_read
+  // are available. Without that retrieval route it receives whole files
+  // within the per-capability budget. Native Claude plugins remain native.
   const person = IDENTITY.kind === "perspicax" ? principal ?? effectiveBotOwner(bot) : localPrincipalId();
   // Incident 2026-11-03: a Perspicax bot whose turn gets no Flow folder is
   // told where the Flow skills are (server/org/org-flow-plugins.ts).
@@ -10877,7 +10877,7 @@ function previewSystemPrompt(bot: BotRecord, principal?: string) {
   // 2026-11-02: the preview names no server path where the turn would not
   // (server/server-path-prompt.ts)
   const previewHidden = instance && withholdHostToolsFor(instance) ? hideServerPathsInSections(previewParts, serverPathView(bot.id)).sections : previewParts;
-  const built = buildSystemPrompt(persona, bot.soul ?? "", previewHidden, instance?.driverKind === "claudeAgent" ? CLAUDE_REUSE_VOLATILE_SECTIONS : undefined);
+  const built = buildSystemPrompt(persona, bot.soul ?? "", onDemandPromptParts(previewHidden, promptReferencesAvailable(agentsMounted, bot.toolScope)), instance?.driverKind === "claudeAgent" ? CLAUDE_REUSE_VOLATILE_SECTIONS : undefined);
   const totalBytes = built.sections.reduce((n, s) => n + s.bytes, 0);
   return {
     sections: built.sections,

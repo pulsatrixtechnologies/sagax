@@ -16,14 +16,14 @@ describe("the same instructions for every engine, budgeted per capability", () =
       expect(prompt.byCapability.packing).toMatchObject({ skills: 1, omitted: 0 });
     }
   });
-  it("gives chat-only engines the whole file by name with tools off, and by alias with tools on (Q8 C)", () => {
+  it("inlines whole files only without managed reads, otherwise publishes an index", () => {
     for (const managedTools of [false, true]) {
       const prompt = capabilityPrompt("grok", [{ key: "packing", name: "Packing", files: [file("ship")] }], { managedTools });
-      expect(prompt.text).toContain("Verify the package.");
-      expect(prompt.text).toContain("Prompt budget: 1/1 files, at most 30 files and 4000 bytes per capability; 0 omitted.");
+      expect(prompt.text.includes("Verify the package.")).toBe(!managedTools);
+      expect(prompt.text).toContain("1/1 references; 0 omitted.");
       expect(prompt.text.includes('skill "ship"')).toBe(!managedTools);
-      expect(prompt.text.includes("/workspace/sagax-plugins/packing/skills/ship/SKILL.md")).toBe(managedTools);
-      expect(prompt.text.includes("skills_list")).toBe(false);
+      expect(prompt.text).not.toContain("/workspace/sagax-plugins/packing/skills/ship/SKILL.md");
+      expect(prompt.text.includes("skills_list")).toBe(managedTools);
     }
   });
   it("keeps files whole and reports count/byte omissions without starving the next capability", () => {
@@ -50,9 +50,29 @@ describe("the same instructions for every engine, budgeted per capability", () =
     const input = file("ship");
     input.read = () => { throw new Error("must not open on cold"); };
     const prompt = capabilityPrompt("grok", [{ key: "packing", name: "Packing", files: [input] }], { managedTools: true, indexOnly: true });
-    expect(prompt.text).toContain("/workspace/sagax-plugins/packing/skills/ship/SKILL.md");
+    expect(prompt.text).toContain("- skill ship: Verify packing");
     expect(prompt.text).not.toContain("Verify the package.");
     expect(prompt.text).toContain("file index");
+  });
+  it.each(["grok", "openai-compat", "minimax", "mistral", "cerebras", "groq"])("%s never opens bodies for an index, and keeps the tools-off fallback even on cold turns", engine => {
+    const input = file("ship");
+    input.read = () => { throw new Error("index must not read"); };
+    expect(capabilityPrompt(engine, [{ key: "packing", name: "Packing", files: [input] }], { managedTools: true }).text).toContain("- skill ship:");
+    expect(capabilityPrompt(engine, [{ key: "packing", name: "Packing", files: [file("ship")] }], { managedTools: false, indexOnly: true }).text).toContain("Verify the package.");
+  });
+  it("uses one-line discovery copy, distinct capability headings, and one shared read rule", () => {
+    const input = { ...file("ship"), description: "Verify packing.\n" + "Extra discovery detail. ".repeat(40) };
+    const prompt = capabilityPrompt("grok", [
+      { key: "one", name: "Osprey", files: [input] },
+      { key: "two", name: "Wren", files: [{ ...input, path: "plugins/wren/ship/SKILL.md" }] },
+    ], { managedTools: true });
+    expect(prompt.text).toContain("- skill ship: Verify packing.\n");
+    expect(prompt.text).not.toContain("Extra discovery detail");
+    expect(prompt.text).toContain('Capability "Osprey"');
+    expect(prompt.text).toContain('Capability "Wren"');
+    expect(prompt.text.split("Before matching work,")).toHaveLength(2);
+    expect(prompt.text).toContain("exact scoped path");
+    expect(prompt.index.skills).toBe(2);
   });
   it("counts only the kinds that reached the prompt when another part is omitted", () => {
     const prompt = capabilityPrompt("grok", [{ key: "mixed", name: "Mixed", files: [

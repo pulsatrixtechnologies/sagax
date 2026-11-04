@@ -137,10 +137,9 @@ export const CAPABILITIES_PATH = (botId: string) => `/api/bots/${encodeURICompon
 
 /** Engines with no local folder of their own (server/workspace/workspace.ts
  * supportsWorkspaceFiles): API engines, whose turn is a chat request. They
- * have no native file tools. Their chat request always receives whole
- * instructions within each capability's visible prompt budget (say then
- * fill, Q8 C); when skills_list and workspace_read are allowed those tools
- * reach the rest. */
+ * have no native file tools. Managed skills_list/workspace_read allow a
+ * short index with bodies loaded on demand (#1997); without those reads,
+ * the prompt carries whole files within each capability's visible budget. */
 export const ENGINES_WITHOUT_FILES: readonly string[] = ["grok", "openai-compat", "minimax", "mistral", "cerebras", "groq"];
 
 export function engineWorksInFiles(driverKind: string): boolean {
@@ -161,9 +160,8 @@ export interface EngineParts {
   /** skills read only through the prompt index (a library skill: no native
    * link, so Claude reads it from the prompt too) */
   indexOnly?: boolean;
-  /** Managed skills_list/workspace_read is actually mounted for the turn.
-   * Informative since Q8 C: an engine without files receives the files
-   * inline with or without it. */
+  /** Managed skills_list/workspace_read is mounted: instruction bodies can
+   * be loaded on demand from the prompt index, including on an API engine. */
   skillDiscovery?: boolean;
 }
 
@@ -179,10 +177,9 @@ const GROK_KINDS = new Set(["grok", "grokAgent"]);
  *   skills, commands and agents named in the turn prompt with their path
  *   (server/turns/plugin-turn.ts), and the bot's skills in the skills index.
  * - Engines without files (`grok`, `openai-compat`, `minimax`, `mistral`,
- *   `cerebras`, `groq`) get whole instruction files within a visible budget
- *   per plugin, skill or Flow capability (server/capabilities/capability-prompt.ts),
- *   tools on or off; with skills_list and workspace_read allowed those
- *   tools reach the rest. Plugin hooks and LSP stay out of
+ *   `cerebras`, `groq`) get a short index when managed reads are allowed,
+ *   otherwise whole files within the visible per-capability budget
+ *   (server/capabilities/capability-prompt.ts). Plugin hooks and LSP stay out of
  *   discovery on every non-Claude engine; MCP is proxied when customMcp is
  *   on.
  * - MCP follows `customMcp`: an engine with files connects to the servers
@@ -196,8 +193,7 @@ export function engineReceipt(driverKind: string, form: CapabilityForm, parts: E
   const fileReceipt = (): Receipt => {
     if (claude) return parts.indexOnly ? "prompt" : "native";
     // Every other engine reads them through the prompt: file engines by
-    // path, engines without files as whole files inline (Q8 C, with or
-    // without skills_list and workspace_read).
+    // path or managed reads; API engines without retrieval get files inline.
     return "prompt";
   };
   if (form === "plugin" || form === "skill" || form === "flow") {

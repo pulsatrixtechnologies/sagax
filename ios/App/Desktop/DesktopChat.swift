@@ -395,8 +395,13 @@ struct DesktopChatHeader: View {
         ZStack(alignment: .top) {
             Button(action: openProfile) {
                 HStack(spacing: 8) {
-                    ChatAvatarView(chat: chat, size: 24, state: MausState.forChat(chat, in: session.state), background: theme.chrome)
-                        .frame(width: 24, height: 24)
+                    // a group wears the desktop's GroupAvatarStack (SplitWorkspace.tsx)
+                    if case let .room(room) = chat, PeopleDirectory.shared.peer(room, session: session) == nil {
+                        DesktopGroupAvatarStack(members: room.memberIds.compactMap { session.state.bot($0) }, size: 24)
+                    } else {
+                        ChatAvatarView(chat: chat, size: 24, state: MausState.forChat(chat, in: session.state), background: theme.chrome)
+                            .frame(width: 24, height: 24)
+                    }
                     Text(verbatim: PeopleDirectory.shared.name(chat, session: session))
                         .font(theme.font(14, .medium))
                         .foregroundStyle(theme.ink)

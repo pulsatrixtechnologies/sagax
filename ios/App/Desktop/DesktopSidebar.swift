@@ -742,7 +742,7 @@ struct DesktopSidebarFooter: View {
                     } label: {
                         HStack(alignment: .top, spacing: 8) {
                             initialsCircle
-                            DesktopLineText(text: displayName, size: 14, weight: .regular, color: theme.sidebarInk, lineHeight: 18)
+                            DesktopLineText(text: displayName, size: 14, weight: .medium, color: theme.sidebarInk, lineHeight: 18)
                             Spacer(minLength: 0)
                         }
                         .padding(.leading, 2)

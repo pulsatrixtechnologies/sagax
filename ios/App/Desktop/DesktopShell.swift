@@ -415,6 +415,9 @@ struct DesktopShell: View {
                         .transition(.move(edge: .trailing))
                 }
             }
+            // the computer window's veil blurs what it covers
+            // (SandboxDesktopModal: `bg-black/60 backdrop-blur-[2px]`)
+            .blur(radius: model.computerWindow != nil ? 2 : 0)
             // Settings open: the window stays drawn behind the centred
             // modal, as the desktop's (2026-11-03 references).
             if !docked, botOpen, let bot = selectedBot {

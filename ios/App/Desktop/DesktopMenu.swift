@@ -66,7 +66,7 @@ enum DesktopMenuStyle {
         switch self {
         case .standard: 228
         case .section: 220
-        case .profile: 259
+        case .profile: 228 // min-w-[228px] (SidebarProfileMenu.tsx), measured on 11
         case .new: 240
         }
     }

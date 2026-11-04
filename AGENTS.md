@@ -1,5 +1,15 @@
 # Sagax agent notes
 
+## MCP after a cold cloud start (2026-11-04)
+
+Turn setup can preopen Perspicax before the person's cloud environment is
+ready. If its idle session expires before the engine's first `initialize`,
+`PerspicaxMcp.relayFrame` reopens once through the entry's single flight and
+returns the fresh initialize result with the engine's request id. Reopening
+retains the same person, bot and generation, clears the old catalogue and
+restores a selected role. It never replays a tool call. Regression:
+`server/perspicax/perspicax-mcp.test.ts`.
+
 ## Codex Perspicax discovery (2026-11-04)
 
 Codex 0.166 uses incremental tools instead of hosted `tool_search`. Its

@@ -105,7 +105,8 @@ struct DesktopSkinFamilies: View {
             wear(variant, mode: ThemeSelection.carry(state.mode, to: variant, worn: state.place.scheme))
         } label: {
             ZStack {
-                Circle().fill(palette.bg.color)
+                // `var(--color-app)` of the variant's own skin, then its colour
+                Circle().fill(DesktopTheme.of(look.skin).app)
                 Circle().trim(from: 0, to: 0.5)
                     .fill(gradient.count > 1
                           ? AnyShapeStyle(LinearGradient(colors: gradient.map(\.color), startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -113,10 +114,11 @@ struct DesktopSkinFamilies: View {
                     .rotationEffect(.degrees(-45))
             }
             .frame(width: 22, height: 22)
-            .overlay(Circle().strokeBorder(selected ? Color.clear : theme.hairline, lineWidth: 1))
-            .padding(selected ? 2 : 0)
-            .overlay(Circle().strokeBorder(selected ? theme.accentBorder : Color.clear, lineWidth: 2))
-            .padding(selected ? 0 : 2)
+            // `ring-1 ring-hairline`, or once chosen `ring-2 ring-accent-border
+            // ring-offset-2`: a 2 pt gap, then the ring, outside the swatch
+            .overlay(Circle().strokeBorder(theme.hairline, lineWidth: 1).opacity(selected ? 0 : 1))
+            .overlay(Circle().stroke(theme.accentBorder, lineWidth: 2).frame(width: 28, height: 28).opacity(selected ? 1 : 0))
+            .padding(.vertical, 3)
             .contentShape(Circle())
         }
         .buttonStyle(.plain)

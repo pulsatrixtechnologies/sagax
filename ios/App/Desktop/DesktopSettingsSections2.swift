@@ -78,6 +78,16 @@ struct DesktopOrganizationSettings: View {
                         if computer.id != active.id { Rectangle().fill(theme.hairline.opacity(0.4)).frame(height: 1) }
                     }
                 }
+                // ServerLinkForm's place: another computer or Sagax server, by its code or link
+                HStack {
+                    DesktopText(Text("By its address or a pairing link from that server."), size: 12, line: 16, color: \.inkSecondary)
+                    Spacer(minLength: 0)
+                    Button("Connect") { session.beginPairing() }
+                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .accessibilityIdentifier("desktop-settings.connect-computer")
+                }
+                .padding(.vertical, 10)
+                .overlay(alignment: .top) { Rectangle().fill(theme.hairline.opacity(0.4)).frame(height: 1) }
             }
         }
         .confirmationDialog(
@@ -128,7 +138,6 @@ struct DesktopOrganizationSettings: View {
 struct DesktopConnectServerCard: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
-    @State private var target = "perspicax"
     @State private var choices: [String: OrgJoinChoice] = [:]
     @State private var preview: OrgExportAnswer?
     @State private var busy = false
@@ -146,40 +155,14 @@ struct DesktopConnectServerCard: View {
     var body: some View {
         DesktopSettingsCard(
             Text("Connect to a server"),
-            summary: target == "perspicax" ? Text("Your organization's Perspicax server") : Text("A Sagax server"),
+            summary: Text("Your organization's Perspicax server"),
             subtitle: Text("Pick what you connect this app to, then follow its steps."),
             open: true, identifier: "organization.connect"
         ) {
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(spacing: 6) {
-                    option("perspicax", Text("Your organization's Perspicax server"), Text("Join it, and copy your own bots there if you want."))
-                    option("server", Text("A Sagax server"), Text("By its address or a pairing link from that server."))
-                }
-                if target == "perspicax" { joinBody } else {
-                    Button("Connect") { session.beginPairing() }
-                        .buttonStyle(DesktopButtonStyle(kind: .accent))
-                        .accessibilityIdentifier("desktop-settings.connect-computer")
-                }
-            }
+            // one way in here, as the served page: no choice cards; this
+            // iPad's own pairing is under Your servers
+            joinBody
         }
-    }
-
-    private func option(_ id: String, _ title: Text, _ hint: Text) -> some View {
-        Button { target = id } label: {
-            VStack(alignment: .leading, spacing: 0) {
-                DesktopText(title)
-                DesktopText(hint, size: 12, line: 19, color: \.inkSecondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(target == id ? theme.accent.opacity(0.1) : .clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(target == id ? theme.accent.opacity(0.5) : theme.hairline.opacity(0.4), lineWidth: 1))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(target == id ? .isSelected : [])
-        .accessibilityIdentifier("desktop-settings.connect-target.\(id)")
     }
 
     private var joinBody: some View {
@@ -525,10 +508,9 @@ struct DesktopBackgroundEffectsPicker: View {
                             let selected = id == palette(current.effect)
                             Button { save { $0.palettes[current.effect] = id } } label: {
                                 Circle().fill(gradient(id)).frame(width: 22, height: 22)
-                                    .overlay(Circle().strokeBorder(selected ? Color.clear : theme.hairline, lineWidth: 1))
-                                    .padding(selected ? 2 : 0)
-                                    .overlay(Circle().strokeBorder(selected ? theme.accentBorder : Color.clear, lineWidth: 2))
-                                    .padding(selected ? 0 : 2)
+                                    .overlay(Circle().strokeBorder(theme.hairline, lineWidth: 1).opacity(selected ? 0 : 1))
+                                    .overlay(Circle().stroke(theme.accentBorder, lineWidth: 2).frame(width: 28, height: 28).opacity(selected ? 1 : 0))
+                                    .padding(.vertical, 3)
                             }
                             .buttonStyle(.plain)
                             .accessibilityLabel(Text(verbatim: Self.paletteName(id)))
@@ -1821,6 +1803,7 @@ struct DesktopComputerTopRows: View {
                 }
             }
             .desktopHairlineBox(radius: 12)
+            .padding(.top, 16)
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -1842,8 +1825,9 @@ struct DesktopComputerTopRows: View {
                 .buttonStyle(.plain)
                 if let messagesError { DesktopText(verbatim: messagesError, size: 12, line: 16, color: \.danger) }
             }
-            .padding(.horizontal, 16).padding(.vertical, 12)
+            .padding(.horizontal, 16).padding(.vertical, 16)
             .desktopHairlineBox(radius: 12)
+            .padding(.top, 16)
         }
         if !careHidden {
             DesktopSettingsGroup(Text("Computer care"), identifier: "computerCare") {
@@ -1853,7 +1837,7 @@ struct DesktopComputerTopRows: View {
                                         description: careBusy == "update" ? (recover ? Text("Recovering… This can take a few minutes.") : Text("Updating… This can take a few minutes."))
                                             : recover ? Text("It is not answering. Recover rebuilds it from the current image: your files stay, installed apps and packages are removed.")
                                                       : Text("Moves the computer to the latest version now. Files and logins stay, installed apps and packages are removed."),
-                                        identifier: "computerRecover") {
+                                        icon: .rotateCcw, identifier: "computerRecover") {
                         Button(recover ? "Recover" : "Update") { confirming = recover ? "recover" : "update" }
                             .buttonStyle(DesktopButtonStyle(kind: .control))
                             .disabled(careBusy != nil)
@@ -1864,7 +1848,7 @@ struct DesktopComputerTopRows: View {
                     DesktopDescribedRow(Text("Reset computer"),
                                         description: careBusy == "reset" ? Text("Resetting… This can take a few minutes.")
                                             : Text("Rebuild the computer from the last snapshot. More than an update: anything set up since the snapshot is lost. Use it only when Update does not fix the problem."),
-                                        identifier: "computerReset") {
+                                        icon: .rotateCcw, identifier: "computerReset") {
                         Button { confirming = "reset" } label: { Text("Reset").fontWeight(.medium).foregroundStyle(Color.white) }
                             .buttonStyle(DesktopDangerButtonStyle())
                             .disabled(careBusy != nil)
@@ -1879,7 +1863,7 @@ struct DesktopComputerTopRows: View {
                         Task { await toggleSchedule() }
                     }
                 }
-                DesktopDescribedRow(Text("Disk saver"), description: Text("Measures caches and old files on the bot's computer and shows what a cleanup would free. Nothing is deleted until you choose."), identifier: "diskSaver") {
+                DesktopDescribedRow(Text("Disk saver"), description: Text("Measures caches and old files on the bot's computer and shows what a cleanup would free. Nothing is deleted until you choose."), icon: .hardDrive, identifier: "diskSaver") {
                     Button { Task { await scan() } } label: {
                         HStack(spacing: 6) {
                             DesktopSettingsIconView(icon: .refreshCw, size: 12)

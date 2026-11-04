@@ -13,7 +13,7 @@ import CompanionCore
 // MARK: - Icons
 
 enum DesktopSettingsIcon: String, CaseIterable {
-    case user, building2, palette, flaskConical, keyRound, zap, terminal, tabletSmartphone, monitor, coins, mail, archive, users, scrollText, search, x, chevronDown, chevronUp, circleQuestionMark, refreshCw, check, externalLink, download, upload, arrowUpRight, loaderCircle, shield, rotateCcw, triangleAlert, clipboardPaste, plus, circlePower, pencil, trash2, globe, plugZap, plug, circle, circleCheck, audioLines, info, bell, chevronRight, copy, fileUp, fingerprint
+    case user, building2, palette, flaskConical, keyRound, zap, terminal, tabletSmartphone, monitor, coins, mail, archive, users, scrollText, search, x, chevronDown, chevronUp, circleQuestionMark, refreshCw, check, externalLink, download, upload, arrowUpRight, loaderCircle, shield, rotateCcw, triangleAlert, clipboardPaste, plus, circlePower, pencil, trash2, globe, plugZap, plug, circle, circleCheck, audioLines, info, bell, chevronRight, copy, fileUp, fingerprint, hardDrive
 
     /// Path data in the 24 pt viewBox (lucide-react 0.539, ISC).
     var paths: [String] {
@@ -61,6 +61,7 @@ enum DesktopSettingsIcon: String, CaseIterable {
         case .info: ["M2 12A10 10 0 1 0 22 12A10 10 0 1 0 2 12Z","M12 16v-4","M12 8h.01"]
         case .bell: ["M10.268 21a2 2 0 0 0 3.464 0","M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"]
         case .chevronRight: ["m9 18 6-6-6-6"]
+        case .hardDrive: ["M22 12H2","M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z","M6 16h.01","M10 16h.01"]
         case .copy: ["M10 8H20A2 2 0 0 1 22 10V20A2 2 0 0 1 20 22H10A2 2 0 0 1 8 20V10A2 2 0 0 1 10 8Z","M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"]
         case .fileUp: ["M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z","M14 2v4a2 2 0 0 0 2 2h4","M12 12v6","m15 15-3-3-3 3"]
         case .fingerprint: ["M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4","M14 13.12c0 2.38 0 6.38-1 8.88","M17.29 21.02c.12-.6.43-2.3.5-3.02","M2 12a10 10 0 0 1 18-6","M2 16h.01","M21.8 16c.2-2 .131-5.354 0-6","M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2","M8.65 22c.21-.66.45-1.32.57-2","M9 6.8a6 6 0 0 1 9 5.2v2"]
@@ -538,18 +539,22 @@ struct DesktopCompactRow<Control: View>: View {
 /// `DescribedRow`: the label and its one grey line (12/16) at the left, the
 /// control at the right (`px-3.5 py-2.5`, `min-h-[28px]`), what it opens below.
 struct DesktopDescribedRow<Control: View, Below: View>: View {
+    @Environment(\.desktopTheme) private var theme
     let label: Text
     var description: Text? = nil
     var help: Text? = nil
+    /// The lucide icon before the label (`icon`, ink-secondary, 14 pt).
+    var icon: DesktopSettingsIcon? = nil
     var identifier: String = ""
     @ViewBuilder let control: () -> Control
     @ViewBuilder let below: () -> Below
 
-    init(_ label: Text, description: Text? = nil, help: Text? = nil, identifier: String = "",
+    init(_ label: Text, description: Text? = nil, help: Text? = nil, icon: DesktopSettingsIcon? = nil, identifier: String = "",
          @ViewBuilder control: @escaping () -> Control, @ViewBuilder below: @escaping () -> Below) {
         self.label = label
         self.description = description
         self.help = help
+        self.icon = icon
         self.identifier = identifier
         self.control = control
         self.below = below
@@ -558,14 +563,21 @@ struct DesktopDescribedRow<Control: View, Below: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 20) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        DesktopText(label)
-                        if let help { DesktopHelpTip(help: help) }
+                HStack(alignment: .top, spacing: 8) {
+                    if let icon {
+                        DesktopSettingsIconView(icon: icon, size: 14)
+                            .foregroundStyle(theme.inkSecondary)
+                            .padding(.top, 2)
                     }
-                    if let description {
-                        DesktopText(description, size: 12, line: 16, color: \.inkSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            DesktopText(label)
+                            if let help { DesktopHelpTip(help: help) }
+                        }
+                        if let description {
+                            DesktopText(description, size: 12, line: 16, color: \.inkSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -583,9 +595,9 @@ struct DesktopDescribedRow<Control: View, Below: View>: View {
 }
 
 extension DesktopDescribedRow where Below == EmptyView {
-    init(_ label: Text, description: Text? = nil, help: Text? = nil, identifier: String = "",
+    init(_ label: Text, description: Text? = nil, help: Text? = nil, icon: DesktopSettingsIcon? = nil, identifier: String = "",
          @ViewBuilder control: @escaping () -> Control) {
-        self.init(label, description: description, help: help, identifier: identifier, control: control, below: { EmptyView() })
+        self.init(label, description: description, help: help, icon: icon, identifier: identifier, control: control, below: { EmptyView() })
     }
 }
 
@@ -711,10 +723,11 @@ struct DesktopCheckbox: View {
     var body: some View {
         Button(action: action) {
             ZStack {
+                // Chrome's dark checkbox: a filled grey square, the accent once checked
                 RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .fill(checked ? theme.accent : Color.clear)
+                    .fill(checked ? theme.accent : theme.ink.opacity(0.2))
                 RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .strokeBorder(checked ? theme.accent : theme.inkSecondary, lineWidth: 1)
+                    .strokeBorder(checked ? theme.accent : theme.ink.opacity(0.28), lineWidth: 0.5)
                 if checked {
                     DesktopSettingsIconView(icon: .check, size: 10, strokeWidth: 3)
                         .foregroundStyle(theme.accentInk)
@@ -972,7 +985,8 @@ struct DesktopButtonStyle: ButtonStyle {
 
     private var foreground: Color {
         switch kind {
-        case .accent: theme.accentInk
+        // a disabled primary pill is the grey control (`ui-button-primary:disabled`)
+        case .accent: enabled ? theme.accentInk : theme.ink
         case .ghost: theme.inkSecondary
         default: theme.ink
         }
@@ -981,7 +995,7 @@ struct DesktopButtonStyle: ButtonStyle {
     private func background(pressed: Bool) -> Color {
         switch kind {
         case .control: pressed ? theme.raised : theme.control
-        case .accent: pressed ? theme.accent.opacity(0.85) : theme.accent
+        case .accent: !enabled ? theme.control : pressed ? theme.accent.opacity(0.85) : theme.accent
         case .hover: theme.hover
         case .ghost, .outline: pressed ? theme.hover : .clear
         }

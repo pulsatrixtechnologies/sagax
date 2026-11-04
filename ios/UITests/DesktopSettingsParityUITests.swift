@@ -124,7 +124,6 @@ final class DesktopSettingsParityUITests: XCTestCase {
     @MainActor
     func testConnectToAServerListsEachBotWithConversationsAndMemory() throws {
         let app = launch("settings-organization")
-        XCTAssertTrue(app.buttons["desktop-settings.connect-target.perspicax"].waitForExistence(timeout: 10))
         let first = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'desktop-settings.join.'")).firstMatch
         XCTAssertTrue(first.waitForExistence(timeout: 10), "a checkbox per bot")
         XCTAssertEqual(first.value as? String, "Off")

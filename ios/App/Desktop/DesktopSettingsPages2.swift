@@ -370,7 +370,10 @@ struct DesktopNotificationsSettings: View {
     @State private var authorized: Bool?
     /// "Keep notifications on screen": iPadOS keeps a banner up when its
     /// style is Persistent (`alertStyle == .alert`), set in the iPad's Settings.
-    @State private var persistent = false
+    /// The desktop's `persistentNotifications`, on by default; on iPadOS
+    /// it holds once the banner style is Persistent in the iPad's Settings.
+    @AppStorage("sagax.notifications.persistent") private var persistent = true
+    @State private var persistentStyle = false
     @State private var reports: [Moderation.Report]?
     @State private var reportsError: String?
 
@@ -413,7 +416,9 @@ struct DesktopNotificationsSettings: View {
             }
             DesktopDescribedRow(Text("Keep notifications on screen"), description: Text("On the iPad, choose Persistent banners in Settings > Notifications > Sagax."), identifier: "persistentNotifications") {
                 DesktopSwitch(isOn: persistent, label: Text("Keep notifications on screen"), identifier: "desktop-settings.notifications.persistent") {
-                    if let url = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(url) }
+                    persistent.toggle()
+                    // the banner style is the iPad's own: open it where it is set
+                    if persistent != persistentStyle, let url = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(url) }
                 }
             }
             DesktopCompactRow(Text("Unread count on the app icon"), identifier: "dockBadge") {
@@ -471,14 +476,14 @@ struct DesktopNotificationsSettings: View {
                 await session.loadModeration()
                 let settings = await UNUserNotificationCenter.current().notificationSettings()
                 authorized = settings.authorizationStatus == .authorized
-                persistent = settings.alertStyle == .alert
+                persistentStyle = settings.alertStyle == .alert
                 if admin { await loadReports() }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
                 Task {
                     let settings = await UNUserNotificationCenter.current().notificationSettings()
                     authorized = settings.authorizationStatus == .authorized
-                    persistent = settings.alertStyle == .alert
+                    persistentStyle = settings.alertStyle == .alert
                 }
             }
     }

@@ -368,7 +368,21 @@ struct DesktopVoiceSettings: View {
                     .padding(.horizontal, 14).padding(.bottom, 8)
             }
         }
+        // VoiceSettingsPage: `flex-col gap-6`
         if model.config?.tts != nil {
+            AnyView(advanced).padding(.top, 12)
+        }
+        AnyView(audio).padding(.top, 12)
+        Color.clear.frame(height: 0)
+            .task(id: model.loaded) {
+                serverURL = model.config?.tts?.baseUrl ?? ""
+                serverModel = model.config?.tts?.model ?? ""
+                seedInstalledVoice()
+                await loadStatus()
+            }
+    }
+
+    private var advanced: some View {
             DesktopSettingsGroup(Text("Advanced"), identifier: "voice-options") {
                 DesktopDescribedRow(Text("Fish Audio model"),
                                     help: Text("Pick the model your Fish Audio plan covers. It applies to every agent on this installation."), identifier: "fishModel") {
@@ -401,7 +415,7 @@ struct DesktopVoiceSettings: View {
                                 }
                             }
                             .buttonStyle(DesktopButtonStyle(kind: .control))
-                            .disabled(savingServer || serverURL.trimmingCharacters(in: .whitespaces).isEmpty)
+                            .disabled(savingServer)
                         }
                         field(Text("Model id, default chatterbox-turbo"), text: $serverModel, url: false)
                         if let serverError { DesktopText(Text(verbatim: serverError), size: 12, line: 16, color: \.danger) }
@@ -416,7 +430,9 @@ struct DesktopVoiceSettings: View {
                     }
                 }
             }
-        }
+    }
+
+    private var audio: some View {
         DesktopSettingsGroup(Text("Audio"), identifier: "audio") {
             HStack(spacing: 20) {
                 HStack(alignment: .top, spacing: 8) {
@@ -435,13 +451,6 @@ struct DesktopVoiceSettings: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
         }
-        Color.clear.frame(height: 0)
-            .task(id: model.loaded) {
-                serverURL = model.config?.tts?.baseUrl ?? ""
-                serverModel = model.config?.tts?.model ?? ""
-                seedInstalledVoice()
-                await loadStatus()
-            }
     }
 
     private func field(_ prompt: Text, text: Binding<String>, url: Bool) -> some View {

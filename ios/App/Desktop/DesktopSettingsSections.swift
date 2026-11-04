@@ -820,9 +820,10 @@ struct DesktopUsageSettings: View {
             AnyView(cost).padding(.horizontal, 14).padding(.vertical, 10)
         }
         .task(id: session.connection?.id) { await personal.load(session.settingsClient) }
-        if personal.usage != nil { AnyView(DesktopSpendCapGroup()) }
-        AnyView(DesktopPlanUsageCard())
-        AnyView(DesktopUsageTraces())
+        // UsageLayout: `flex-col gap-6` between Cost, the limit, Plan and the traces
+        if personal.usage != nil { AnyView(DesktopSpendCapGroup()).padding(.top, 12) }
+        AnyView(DesktopPlanUsageCard()).padding(.top, 12)
+        AnyView(DesktopUsageTraces()).padding(.top, 12)
         if let usage = personal.usage, !usage.isEmpty {
             DesktopSettingsCard(Text("By bot and by model"), summary: Text("This month"), open: false, identifier: "usage.breakdown") {
                 VStack(alignment: .leading, spacing: 16) {

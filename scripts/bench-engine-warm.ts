@@ -346,7 +346,6 @@ async function benchGrok(): Promise<EngineReport> {
     dataDir,
   };
   const server = await startGrokServer(paths);
-  const env = { SAGAX_URL: server.url };
   let events: SseTap | null = null;
   try {
     // Default bot is Claude-less: create a Grok bot via API.
@@ -419,7 +418,7 @@ async function benchCodex(): Promise<EngineReport> {
         };
         if (cfg.instances.codex) {
           cfg.instances.codex.environment = {
-            ...(cfg.instances.codex.environment ?? {}),
+            ...cfg.instances.codex.environment,
             FAKE_CODEX_STARTUP_LOG: startupLog,
             FAKE_CODEX_STARTUP_DELAY_MS: delayMs,
           };

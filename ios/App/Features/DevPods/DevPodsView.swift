@@ -518,10 +518,16 @@ struct DevPodsView: View {
 struct DevPodsPresentation<Pods: View>: ViewModifier {
     @Binding var isPresented: Bool
     let inspector: Bool
+    /// Settings > Experimental's pods are on. Off, no inspector or sheet is
+    /// attached at all, so nothing can present the pods (a stray
+    /// "Development context" sheet showed on the iPad parity launches).
+    var enabled = true
     @ViewBuilder let pods: () -> Pods
 
     func body(content: Content) -> some View {
-        if inspector, #available(iOS 17.0, *) {
+        if !enabled {
+            content
+        } else if inspector, #available(iOS 17.0, *) {
             content.inspector(isPresented: $isPresented) {
                 pods().inspectorColumnWidth(min: 280, ideal: 320, max: 380)
             }

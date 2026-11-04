@@ -1097,3 +1097,29 @@ struct DesktopJumpToLatestPill: View {
         .transition(.scale(scale: 0.9).combined(with: .opacity))
     }
 }
+
+/// NewMessagesDivider.tsx: a 1 pt rule fading in from each side to the
+/// accent at 60 %, "NEW" between (11 pt semibold, 0.08 em tracking, the
+/// accent text), 2 pt above and below the 16 pt line.
+struct DesktopNewMessagesDivider: View {
+    @Environment(\.desktopTheme) private var theme
+
+    var body: some View {
+        HStack(spacing: 12) {
+            LinearGradient(colors: [theme.accent.opacity(0), theme.accent.opacity(0.6)], startPoint: .leading, endPoint: .trailing)
+                .frame(height: 1)
+            Text(String(localized: "chat.newMessages", defaultValue: "New"))
+                .textCase(.uppercase)
+                .font(theme.font(11, .semibold))
+                .tracking(11 * 0.08)
+                .foregroundStyle(theme.accent)
+                .frame(height: 16)
+            LinearGradient(colors: [theme.accent.opacity(0.6), theme.accent.opacity(0)], startPoint: .leading, endPoint: .trailing)
+                .frame(height: 1)
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement()
+        .accessibilityLabel(Text("New messages"))
+        .accessibilityIdentifier("desktop-new-messages")
+    }
+}

@@ -542,7 +542,8 @@ extension DesktopChatHeader {
         .padding(6)
         .frame(width: 240, alignment: .leading)
         .background(theme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.border, lineWidth: 0.5))
+        // the reference draws its 0.5 px border as one point (two pixels)
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
         .fixedSize()
         // 4 pt under the 36 pt button, its trailing edge on the button's
         .offset(y: 40)

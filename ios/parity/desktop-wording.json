@@ -1258,5 +1258,15 @@
   "Give every group member a voice before starting a group call.": "callView.groupVoiceReason",
   "Set up ElevenLabs, Fish Audio, Chatterbox, or a built-in Mac voice so the bot can speak during calls.": "callView.setupReason",
   "Call unavailable": "callView.unavailable",
-  "Open agent settings": "callView.openAgentSettings"
+  "Open agent settings": "callView.openAgentSettings",
+  "Uses a tool.": "approval.line.other",
+  "Only reads data. Nothing changes.": "approval.line.read",
+  "Makes changes.": "approval.line.write",
+  "Runs an action.": "approval.line.execute",
+  "Deletes data.": "approval.line.destructive",
+  "Open the table in full screen": "rich.table.fullscreen",
+  "Table": "rich.table.region",
+  "Close table": "table.close",
+  "chat.newMessages": "chat.newMessages",
+  "New messages": "chat.newMessagesAria"
 }

@@ -405,7 +405,7 @@ struct ChatView: View {
                 filePreview = nil
             }
         }
-        .modifier(DevPodsPresentation(isPresented: $showingDevPods, inspector: desktopChat != nil) {
+        .modifier(DevPodsPresentation(isPresented: $showingDevPods, inspector: desktopChat != nil, enabled: devPodsEnabled || showingDevPods) {
             devPodsContent
         })
         .onValueChange(of: devPodsSignature, initial: true) { _ in evaluateDevPods() }
@@ -805,8 +805,14 @@ struct ChatView: View {
                                 } else if index > 0 {
                                     Color.clear.frame(height: Self.rowGap)
                                 }
-                                if desktopChatText == nil, row.id == newDividerBefore {
-                                    NewMessagesLine()
+                                if row.id == newDividerBefore {
+                                    if desktopChatText != nil {
+                                        // NewMessagesDivider.tsx, a row of its own
+                                        DesktopNewMessagesDivider()
+                                            .padding(.bottom, DesktopChatMetrics.rowGap)
+                                    } else {
+                                        NewMessagesLine()
+                                    }
                                 }
                                 // WP15 (RM21): another person's name over their run
                                 if case let .person(_, name, initials, personId)? = roomPersonLabel(at: index, in: transcript) {
@@ -909,6 +915,10 @@ struct ChatView: View {
                         pendingTopicReveal = nil
                     }
                 }
+                // a desktop banner (a notice, a group's band) is opaque: the
+                // transcript is cut under it rather than showing through (the
+                // banners themselves are the inset below, drawn over it)
+                .modifier(DesktopBannerClip(top: desktopChat != nil && (desktopRoom != nil || desktopChat?.notice != nil) ? desktopBannerTop : 0))
                 // The transcript starts under the top bar and scrolls
                 // beneath it: a clear inset the height of the bar, then the
                 // fade and the glass controls float over the content.
@@ -943,9 +953,7 @@ struct ChatView: View {
                             .onValueChange(of: proxy.size.height) { desktopBannerTop = $0 }
                     })
                 }
-                // a desktop banner (a notice, a group's band) is opaque: the
-                // transcript is cut under it rather than showing through
-                .modifier(DesktopBannerClip(top: desktopChat != nil && (desktopRoom != nil || desktopChat?.notice != nil) ? desktopBannerTop : 0))
+
                 // iPad desktop: an open find bar sits in the column's flow,
                 // so the transcript is cut under it (ChatView.tsx)
                 .modifier(DesktopFindClip(open: desktopChat != nil && finder.isOpen && session.surfaceGate.allows(.findInConversation)))

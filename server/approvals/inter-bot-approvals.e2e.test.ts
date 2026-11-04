@@ -12,6 +12,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, it } from "vitest";
+import { readHandoffs } from "../testing/handoff-rows.ts";
 import { launchVerificationServer, runControlOmb } from "../../scripts/control-omb.ts";
 
 it("answers each teammate's exact approval from the human initiating chat and keeps models free", async () => {
@@ -100,6 +101,78 @@ it("answers each teammate's exact approval from the human initiating chat and ke
       history: history.filter(entry => [mirror.card.approvalOrigin.requestId, other.card.approvalOrigin.requestId].includes(entry.requestId)),
     }, null, 2));
   } finally {
+    await fixture.close();
+  }
+}, 120_000);
+
+it("returns a nested room delegation's approval to its exact human room request", async () => {
+  const fixture = await launchVerificationServer(process.env, undefined, undefined, undefined, undefined, { scripted: true });
+  const { url, dataDir } = fixture.info;
+  const api = async (method: string, path: string, body?: unknown) => {
+    const response = await fetch(`${url}${path}`, {
+      method, headers: { "content-type": "application/json", origin: url },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    return { status: response.status, body: await response.json().catch(() => ({})) as any };
+  };
+  const messages = async (threadId: string): Promise<any[]> => (await api("GET", `/api/threads/${threadId}/messages?limit=100`)).body.messages ?? [];
+  let roomThread: string | undefined;
+  try {
+    const bots: any[] = [];
+    for (const name of ["Room lead", "Middle", "Worker"]) {
+      const created = await api("POST", "/api/bots", { name });
+      expect(created.status).toBe(201);
+      bots.push(created.body.bot);
+      await api("PATCH", `/api/bots/${created.body.bot.id}`, { approvalMode: "ask" });
+    }
+    const [lead, middle, worker] = bots;
+    const { body: { group } } = await api("POST", "/api/groups", {
+      name: "Human origin", memberIds: [lead.id, middle.id],
+      setup: { bulletin: "", defaultResponder: { kind: "member", botId: lead.id } },
+    });
+    roomThread = group.threadId;
+    const { body: { group: workRoom } } = await api("POST", "/api/groups", {
+      name: "Worker room", memberIds: [worker.id],
+      setup: { bulletin: "", defaultResponder: { kind: "member", botId: worker.id } },
+    });
+    writeFileSync(join(dataDir, "room-plan.json"), JSON.stringify({
+      [lead.id]: { script: [
+        { key: "send", match: ["ROOM: list through Middle"], steps: [{ arguments: { bot_ids: [middle.id], message: "MIDDLE: ask Worker to list" } }], reply: "Handed on." },
+        { key: "resume", match: ["Your downstream room requests have settled."], reply: "Room done." },
+      ] },
+      [middle.id]: { script: [
+        { key: "send", match: ["MIDDLE: ask Worker to list"], steps: [{ arguments: { group_id: workRoom.id, bot_ids: [worker.id], message: "WORKER: list the folder" } }], reply: "Handed on again." },
+        { key: "resume", match: ["Your downstream room requests have settled."], reply: "Middle done." },
+      ] },
+      [worker.id]: { script: [
+        { key: "list", match: ["WORKER: list the folder"], approve: { tool_name: "Bash", input: { command: "ls room-origin" } }, reply: "Listed." },
+      ] },
+    }));
+    const sent = await api("POST", `/api/groups/${group.id}/messages`, { threadId: group.threadId, text: "ROOM: list through Middle" });
+    expect(sent.status, JSON.stringify(sent.body)).toBe(202);
+    await expect.poll(async () => (await messages(group.threadId)).filter(row => row.card?.approvalOrigin).length, { timeout: 30_000 }).toBe(1);
+    const view = (await messages(group.threadId)).find(row => row.card?.approvalOrigin);
+    expect(view.from.botId).toBe(worker.id);
+    expect(view.card.approvalOrigin.threadId).toBe(workRoom.threadId);
+    expect(readHandoffs(dataDir).find(row => !row.parentId && row.threadId === group.threadId))
+      .toMatchObject({ request: sent.body.message.id, origin: { kind: "outside" } });
+    const answer = await api("POST", `/api/threads/${group.threadId}/respond`, { requestId: view.card.requestId, behavior: "allow" });
+    expect(answer.status, JSON.stringify(answer.body)).toBe(200);
+    await expect.poll(async () => (await messages(group.threadId)).find(row => row.id === view.id)?.card?.answered).toBe("allow");
+    const source = (await messages(view.card.approvalOrigin.threadId)).find(row => row.id === view.card.approvalOrigin.messageId);
+    expect(source.card.answered).toBe("allow");
+    expect((await api("GET", "/api/approvals")).body.pending).toHaveLength(0);
+    const history = (await api("GET", "/api/approvals?history=1")).body.history as any[];
+    expect(history.filter(row => row.requestId === view.card.approvalOrigin.requestId && row.decision === "user-approved")).toHaveLength(1);
+    expect(history.some(row => row.requestId === view.card.requestId)).toBe(false);
+  } finally {
+    const state = (await api("GET", "/api/bots?messages=100")).body;
+    writeFileSync(`${fixture.info.logPath}.room-origin.json`, JSON.stringify({
+      room: roomThread ? await messages(roomThread) : [],
+      handoffs: readHandoffs(dataDir),
+      bots: await Promise.all((state.bots ?? []).map(async (bot: any) => ({ name: bot.name,
+        tasks: await Promise.all((bot.tasks ?? []).map(async (task: any) => ({ title: task.title, messages: await messages(task.threadId) }))) }))),
+    }, null, 2));
     await fixture.close();
   }
 }, 120_000);

@@ -118,6 +118,7 @@ export interface InternalBotChatDeps {
   };
   threadStarters: Map<string, string | undefined>;
   directRequestOwners: Map<string, { messageId?: string } | undefined>;
+  coordinationRequestId?: (threadId: string) => string | undefined;
   engineEligibility(bot: InternalBotChatBot): string | undefined;
   connectorThread(botId: string, threadId: string): { group?: InternalBotChatGroup } | null;
   pollOnlyCaller(capability: InternalCapabilityView): boolean;
@@ -694,7 +695,7 @@ export function createInternalBotChatRoutes(deps: InternalBotChatDeps): Internal
               parsed.data.relay && !destination && targets.length === 1,
               parsed.data.doneWhen,
               // The request the root answers: one request, one root (I11).
-              destination ? undefined : directRequestOwners.get(address.threadId)?.messageId,
+              deps.coordinationRequestId?.(address.threadId) ?? directRequestOwners.get(address.threadId)?.messageId,
               parsed.data.defaultAnswer ? { defaultAnswer: parsed.data.defaultAnswer } : {});
             // A repeat lands on the request already made, possibly in a
             // thread the person archived meanwhile; a thread opened for it

@@ -2,26 +2,34 @@
 // must be able to answer it where they asked for the work. A linked card in
 // that human conversation is only a view: every answer uses the original
 // thread's owner, security key, rule and resolver checks.
-import type { Coordinator } from "../runtime/coordinator-types.ts";
+import type { Coordinator, HandoffView } from "../runtime/coordinator-types.ts";
 import type { Message, Store, StoreChange } from "../store.ts";
 
 type RelayStore = Pick<Store, "onChange" | "messagesFor" | "appendMessage" | "patchMessage" | "isConfidentialThread">;
 
-export function humanApprovalRoot(coordinator: Pick<Coordinator, "assignerOf" | "node">, threadId: string): string | undefined {
+export function humanApprovalRoot(coordinator: Pick<Coordinator, "assignerOf" | "node"> & Partial<Pick<Coordinator, "active">>, threadId: string,
+  humanRoomRequest: (root: HandoffView) => boolean = () => false, sourceBotId?: string): string | undefined {
   const parent = coordinator.assignerOf(threadId);
-  const root = parent && coordinator.node(parent.rootId);
-  // Outside/background work has no human chat to route to. A room can have
-  // several people reading it, so its existing approval route stays in use.
-  return root?.origin?.kind === "user" && !root.groupId && root.threadId !== threadId ? root.threadId : undefined;
+  // assignerOf covers direct work. A room's current speaker identifies its
+  // exact running assignment, even when other bots also have queued work.
+  const assignment = !parent && sourceBotId ? coordinator.active?.().find(row =>
+    row.threadId === threadId && row.botId === sourceBotId && row.status === "running" && row.parentId) : undefined;
+  const rootId = parent?.rootId ?? assignment?.rootId;
+  const root = rootId ? coordinator.node(rootId) : undefined;
+  // Room provenance stays separate from permission to act. Its exact human
+  // request can prove where an approval belongs without granting anything.
+  return root && (root.origin?.kind === "user" || Boolean(root.groupId && humanRoomRequest(root)))
+    && root.threadId !== threadId ? root.threadId : undefined;
 }
 
 export interface OriginApprovalsDeps {
   store: RelayStore;
-  rootFor(threadId: string): string | undefined;
+  rootFor(threadId: string, message: Message): string | undefined;
   /** Rechecked on every copy and answer: same answerer, current read access,
    * existing threads and bot visibility. Never derives authority from text. */
   mayRelay(source: string, destination: string, message: Message): boolean;
-  speaker(threadId: string): Message["from"];
+  speaker(threadId: string, message: Message): Message["from"];
+  withdraw(threadId: string, requestId: string): void;
 }
 
 const open = (card: Message["card"]) => Boolean(card?.requestId && !card.answered && !card.dismissed && !card.expired);
@@ -29,17 +37,32 @@ const open = (card: Message["card"]) => Boolean(card?.requestId && !card.answere
 export function createOriginApprovals(deps: OriginApprovalsDeps) {
   const { store } = deps;
   const copying = new Set<string>();
-  const linked = new Map<string, { source: string; threadId: string; messageId: string }>();
+  const linked = new Map<string, { source: string; sourceMessageId: string; threadId: string; messageId: string; requestId: string }>();
   const allowed = (source: string, destination: string, message: Message) => source !== destination
     && !store.isConfidentialThread(source) && !store.isConfidentialThread(destination)
     && deps.mayRelay(source, destination, message);
+  const detach = (threadId: string, message: Message) => {
+    const key = `${threadId}:${message.id}`;
+    const { approvalDestination: _destination, ...card } = message.card!;
+    linked.delete(key);
+    copying.add(key);
+    try { store.patchMessage(threadId, message.id, { card }); }
+    finally { copying.delete(key); }
+  };
 
   const observe = (change: StoreChange) => {
     if (change.type === "thread.deleted") {
       for (const [key, link] of linked) {
         if (link.source !== change.threadId && link.threadId !== change.threadId) continue;
         linked.delete(key);
-        if (link.source !== change.threadId) continue;
+        deps.withdraw(link.threadId, link.requestId);
+        if (link.source !== change.threadId) {
+          const source = store.messagesFor(link.source).find(row => row.id === link.sourceMessageId);
+          if (source?.card?.approvalDestination?.threadId === change.threadId) {
+            detach(link.source, source);
+          }
+          continue;
+        }
         const mirror = store.messagesFor(link.threadId).find(row => row.id === link.messageId);
         if (open(mirror?.card)) store.patchMessage(link.threadId, link.messageId, { card: { ...mirror!.card!, dismissed: true } });
       }
@@ -52,16 +75,19 @@ export function createOriginApprovals(deps: OriginApprovalsDeps) {
     const key = `${threadId}:${message.id}`;
     if (copying.has(key)) return;
     const existing = card.approvalDestination;
-    if (existing && open(card)) linked.set(key, { source: threadId, ...existing });
+    if (existing && open(card)) linked.set(key, { source: threadId, sourceMessageId: message.id, ...existing, requestId: `origin:${message.id}` });
     else if (!open(card)) linked.delete(key);
-    const destination = existing?.threadId ?? (open(card) ? deps.rootFor(threadId) : undefined);
+    const destination = existing?.threadId ?? (open(card) ? deps.rootFor(threadId, message) : undefined);
     if (!destination) return;
     if (!allowed(threadId, destination, message)) {
       // A revoked route receives no later words or private names. Its old
       // view becomes inert; the original owner keeps the ordinary route.
       if (existing) {
+        deps.withdraw(destination, `origin:${message.id}`);
         const mirror = store.messagesFor(destination).find(row => row.id === existing.messageId);
         if (open(mirror?.card)) store.patchMessage(destination, existing.messageId, { card: { ...mirror!.card!, dismissed: true } });
+        // Also repairs a deletion interrupted before this observer ran.
+        detach(threadId, message);
       }
       return;
     }
@@ -85,8 +111,8 @@ export function createOriginApprovals(deps: OriginApprovalsDeps) {
       const saved = store.messagesFor(destination).find(row => row.card?.approvalOrigin?.threadId === threadId && row.card.approvalOrigin.messageId === message.id);
       // full-access: exempt (linked view, the original card already holds the turn)
       const mirror = saved ? store.patchMessage(destination, saved.id, { card: mirrored })!
-        : store.appendMessage(destination, { role: "bot", kind: "options", from: deps.speaker(threadId), card: mirrored });
-      linked.set(key, { source: threadId, threadId: destination, messageId: mirror.id });
+        : store.appendMessage(destination, { role: "bot", kind: "options", from: deps.speaker(threadId, message), card: mirrored });
+      linked.set(key, { source: threadId, sourceMessageId: message.id, threadId: destination, messageId: mirror.id, requestId: mirrored.requestId });
       store.patchMessage(threadId, message.id, { card: { ...card, approvalDestination: { threadId: destination, messageId: mirror.id } } });
     } finally {
       copying.delete(key);
@@ -96,6 +122,19 @@ export function createOriginApprovals(deps: OriginApprovalsDeps) {
   return {
     subscribe: () => store.onChange(observe),
     observe,
+    /** Re-read after asynchronous review: a deleted/revoked view must never
+     * receive a late notification, and the original remains the fallback. */
+    notificationFor(threadId: string, messageId: string): { threadId: string; requestId: string } | undefined {
+      const source = store.messagesFor(threadId).find(row => row.id === messageId);
+      if (!source || !open(source.card)) return undefined;
+      const destination = source.card!.approvalDestination;
+      const mirror = destination && store.messagesFor(destination.threadId).find(row => row.id === destination.messageId);
+      return destination && mirror?.card?.requestId && open(mirror.card)
+        && mirror.card.approvalOrigin?.threadId === threadId && mirror.card.approvalOrigin.messageId === messageId
+        && allowed(threadId, destination.threadId, source)
+        ? { threadId: destination.threadId, requestId: mirror.card.requestId }
+        : { threadId, requestId: source.card!.requestId! };
+    },
     /** null: ordinary card; false: stale/revoked view; otherwise the exact
      * execution address, before the existing respond pipeline runs. */
     sourceFor(threadId: string, requestId: string): { threadId: string; requestId: string } | false | null {

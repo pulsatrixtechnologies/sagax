@@ -113,6 +113,7 @@ describe("view: an Assignment as the legacy node", () => {
       approvalGranted: true, kind: "work", origin: { kind: "user", request: "Ship the CSV export" }, restarts: 1, restart: "rerun", requestBatchKey: "b1",
     });
     const plain = view(base);
+    expect(view(row({ request: "human-room-message" })).request).toBe("human-room-message");
     expect(plain).toMatchObject({ reported: false, approvalGranted: false, restarts: 0, lastProgressAt: 2_000 });
     for (const absent of ["startedAt", "restart", "requestBatchKey", "groupId"]) expect(absent in plain).toBe(false);
   });

@@ -1005,6 +1005,7 @@ import {
   peerProvenanceNote,
   reportNote,
   requestWorkOrigin,
+  workOrigin,
   webhookPostText,
   type WorkOrigin
 } from "./peers/peer-provenance.ts";
@@ -11662,6 +11663,8 @@ type GroupTurnOperation = {
   cancelled: boolean;
   cancellation: AbortController;
   providerHandshakePending: boolean;
+  /** Exact client message whose room round this is, only for approval routing. */
+  humanRequestMessageId?: string;
   /** The coalesced burst that started this turn (M2): member turns recover
    * every burst line from the transcript by these stable queueIds, so each
    * line's context text and attachments survive the fold into one turn. */
@@ -11697,6 +11700,7 @@ const groupTurnOperations = new Map<string, Set<GroupTurnOperation>>();
 // Group threads: the fold needs to know who is talking. The turn engine
 // records the active member here before dispatching its turn.
 const groupSpeakers = new Map<string, { botId: string; name: string; color: string }>();
+const groupApprovalRequests = new Map<string, { messageId: string }>();
 
 function groupThreadIsWorking(groupId: string, threadId: string): boolean {
   if (groupSpeakers.has(threadId)) return true;
@@ -13039,22 +13043,29 @@ const coordinator: Coordinator = createCoordinator({
 threadsWithActiveCoordination = () => coordinator.activeDirectThreads();
 const originApprovals = createOriginApprovals({
   store,
-  rootFor: threadId => humanApprovalRoot(coordinator, threadId),
+  rootFor: (threadId, message) => humanApprovalRoot(coordinator, threadId, root => Boolean(root.request
+    && workOrigin(store.messagesFor(root.threadId).find(row => row.id === root.request)).kind === "user"), botForApproval(threadId, message)?.id),
   mayRelay: (source, destination, message) => {
-    const sourceBot = store.botByThread(source);
-    const destinationBot = store.botByThread(destination);
-    if (!sourceBot || !destinationBot || sourceBot.hidden || destinationBot.hidden) return false;
-    const sourceTask = store.taskByThread(sourceBot.id, source);
-    const destinationTask = store.taskByThread(destinationBot.id, destination);
-    if (!sourceTask || !destinationTask || destinationTask.archivedAt) return false;
+    const sourceBot = botForApproval(source, message);
+    const sourceRoom = store.groupByThread(source);
+    if (!sourceBot || sourceBot.hidden || (!sourceRoom && !store.taskByThread(sourceBot.id, source))) return false;
     const person = cardAnswererId(sourceBot, source, message.card);
+    if (sourceRoom ? privateThreads() && !groupVisible(sourceRoom, person) : !botThreadReadable(sourceBot, source, person)) return false;
+    const room = store.groupByThread(destination);
+    if (room) return (!privateThreads() || groupVisible(room, person))
+      && (room.dm ? room.threadId === destination : Boolean(store.groupTaskByThread(room.id, destination)));
+    const destinationBot = store.botByThread(destination);
+    if (!destinationBot || destinationBot.hidden) return false;
+    const destinationTask = store.taskByThread(destinationBot.id, destination);
+    if (!destinationTask || destinationTask.archivedAt) return false;
     return privateThreadOwner(destinationTask, effectiveBotOwner(destinationBot)) === person
-      && botThreadReadable(sourceBot, source, person) && botThreadReadable(destinationBot, destination, person);
+      && botThreadReadable(destinationBot, destination, person);
   },
-  speaker: threadId => {
-    const bot = store.botByThread(threadId);
+  speaker: (threadId, message) => {
+    const bot = botForApproval(threadId, message);
     return bot ? { botId: bot.id, name: bot.name, color: bot.color } : undefined;
-  }
+  },
+  withdraw: (threadId, requestId) => withdrawApprovalNotice(threadId, requestId)
 });
 /** The input-request cards still open per waiting work thread, so the answer
  * marks them answered (in memory: a restart parks again and re-posts). */
@@ -14877,6 +14888,9 @@ function approvalViewerOf(client: SseClient): ApprovalViewer {
 function isApprovalCardMessage(message: { kind?: unknown; card?: unknown }): boolean {
   if (message.kind !== "options" || !message.card || typeof message.card !== "object") return false;
   const card = message.card as Record<string, unknown>;
+  // A linked question carries the same private source audience as a linked
+  // permission, even when its initiating chat is a room.
+  if (card.approvalOrigin) return true;
   if (card.questionRequest) return false;
   return Boolean(
     card.tool || card.allowKey || card.commandAllowlist || card.approvalScope
@@ -15606,7 +15620,8 @@ function scopeChannelApproval(
       const viewerId = viewer.userId.toLowerCase();
       return viewerId && note.audience.some((id) => typeof id === "string" && id.toLowerCase() === viewerId) ? { action: "same" } : { action: "drop" };
     }
-    if (note.kind !== "approval") return { action: "same" };
+    if (note.kind !== "approval" && !(note.kind === "question"
+      && noteCard(note.threadId, (note as { requestId?: unknown }).requestId)?.approvalOrigin)) return { action: "same" };
     const bot = approvalBot(note);
     if (!bot) return { action: "drop" };
     const audience = approvalAudience({ ownerUserId: cardAnswererId(bot, typeof note.threadId === "string" ? note.threadId : undefined, noteCard(note.threadId, (note as { requestId?: unknown }).requestId)), host: approvalHostOf(bot) });
@@ -20099,6 +20114,8 @@ bus.subscribe((event: RuntimeEvent) => {
         const card = store.messagesFor(event.threadId).find((candidate) => candidate.id === message.id)?.card;
         if (card && !card.answered) {
           const tellThePerson = () => {
+            const notification = originApprovals.notificationFor(event.threadId, message.id);
+            if (!notification) return;
             // the bot is not working now. it is waiting on a person
             if (bot) store.setTaskActivity(bot.id, event.threadId, "waiting-on-you");
             // A routine run's card waits in its hidden task: its one message in
@@ -20107,12 +20124,10 @@ bus.subscribe((event: RuntimeEvent) => {
             if (waitingRun?.status === "waiting") syncRoutineRunToSource(waitingRun);
             else if (asker.busy) store.setActivity(asker.id, "waiting-on-you");
             if (event.requestId) showWaitingOnPersonChip(event.threadId, event.requestId, asker, permission ? "approval" : "answer");
-            const notificationThread = card.approvalDestination?.threadId ?? event.threadId;
-            const notificationBot = (card.approvalDestination && store.botByThread(notificationThread))
+            const notificationThread = notification.threadId;
+            const notificationBot = (notificationThread !== event.threadId && store.botByThread(notificationThread))
               || (routineRun && routineSourceOwner(routineRun)?.bot) || asker;
-            const notificationRequest = card.approvalDestination
-              ? store.messagesFor(notificationThread).find(row => row.id === card.approvalDestination!.messageId)?.card?.requestId
-              : event.requestId;
+            const notificationRequest = notification.requestId;
             // A peer view routes back to the execution; routines keep their
             // execution thread (#1743). Allow and withdrawal use the same address.
             notify(deliverableNotification(
@@ -26802,11 +26817,19 @@ async function runGroupMemberTurn(
   /** Transcript or handoff id of this call. Absent means this call is not a held turn. */
   heldTurnId?: string,
 ): Promise<boolean> {
-  return runGroupMemberTurnRunner(
-    groupId, threadId, botId, hop, spoken, cardContinuation, onDispatchError,
-    isCancelled, onProviderHandshakeStarted, onProviderHandshakeSettled,
-    skillAuthoringClaim, orchestration, operation, setupRetry, heldTurnId,
-  );
+  // Capture the admitted round, never the latest line in a busy room. The
+  // runtime persists its id on the root before the round ends or hands on.
+  const request = operation?.humanRequestMessageId ? { messageId: operation.humanRequestMessageId } : undefined;
+  if (request) groupApprovalRequests.set(threadId, request);
+  try {
+    return await runGroupMemberTurnRunner(
+      groupId, threadId, botId, hop, spoken, cardContinuation, onDispatchError,
+      isCancelled, onProviderHandshakeStarted, onProviderHandshakeSettled,
+      skillAuthoringClaim, orchestration, operation, setupRetry, heldTurnId,
+    );
+  } finally {
+    if (groupApprovalRequests.get(threadId) === request) groupApprovalRequests.delete(threadId);
+  }
 }
 
 /** A room goal's worker assignment on the job runtime (lot 3): poll root of
@@ -27576,6 +27599,9 @@ function startGroupTurn(
     threadId,
     goalCoordinator || autoRoute ? [] : responders.map((responder) => responder.id),
   );
+  if ((options.trigger?.kind === "user" || options.trigger?.kind === "owner") && workOrigin(message).kind === "user") {
+    operation.humanRequestMessageId = message.id;
+  }
   // Asked now, in parallel with any earlier room work still queued: the
   // answer is waited for only when this round's turn comes up. It never
   // rejects; a Stop aborts it through the operation's signal.
@@ -31776,6 +31802,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     incidentLedger,
     threadStarters: threadStarters as unknown as Map<string, string | undefined>,
     directRequestOwners: directRequestOwners as unknown as Map<string, { messageId?: string } | undefined>,
+    coordinationRequestId,
     engineEligibility: (bot) => engineEligibility(bot as unknown as BotRecord),
     connectorThread: (botId, threadId) => {
       const owner = connectorThread(botId, threadId);
@@ -31818,6 +31845,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     delegationWatch: delegationWatch as unknown as Map<string, Record<string, unknown>>,
     threadStarters: threadStarters as unknown as Map<string, string | undefined>,
     directRequestOwners: directRequestOwners as unknown as Map<string, { messageId?: string } | undefined>,
+    coordinationRequestId,
     roomPostBudgets,
     personAskAt,
     turnAttachmentsByTurn: turnAttachmentsByTurn as unknown as Parameters<typeof createInternalRoomsRoutes>[0]["turnAttachmentsByTurn"],
@@ -47022,6 +47050,12 @@ function joinPerson(threadId: string): string | undefined {
   return IDENTITY.kind === "perspicax" ? undefined : "solo-owner";
 }
 
+/** The admitted request, not a later room line. This changes only the
+ * approval's return address; turnOrigin still owns the work's provenance. */
+function coordinationRequestId(threadId: string): string | undefined {
+  return directRequestOwners.get(threadId)?.messageId ?? groupApprovalRequests.get(threadId)?.messageId;
+}
+
 /** An external runtime's idempotency key for one delegate_bot or ask_bot
  * call (body `idempotencyKey`, or the Idempotency-Key header): a retry after
  * a dropped connection sends the same key and gets the same request back.
@@ -47133,7 +47167,7 @@ async function delegateOnRuntime(from: BotRecord, target: BotRecord, message: st
       ? coordinator.enqueueExternal(address, { threadId: task.threadId, botId: target.id }, message, approvalGranted, mode, key)
       : coordinator.enqueue(address, capability.generation, capability.roomHandoffId,
         { threadId: task.threadId, botId: target.id }, target.id, message, approvalGranted, false, sourceText, undefined,
-        turnOrigin(capability), mode, joinPerson(address.threadId), false, undefined, directRequestOwners.get(address.threadId)?.messageId);
+        turnOrigin(capability), mode, joinPerson(address.threadId), false, undefined, coordinationRequestId(address.threadId));
     // An external caller has no turn to end: its check reads at once.
     if (!external) delegated(node.id);
     else coordinator.tick();

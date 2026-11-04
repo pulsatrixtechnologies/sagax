@@ -131,6 +131,7 @@ export interface InternalRoomsDeps {
   delegationWatch: Map<string, Record<string, unknown>>;
   threadStarters: Map<string, string | undefined>;
   directRequestOwners: Map<string, { messageId?: string } | undefined>;
+  coordinationRequestId?: (threadId: string) => string | undefined;
   roomPostBudgets: Map<string, RoomPostBudget>;
   personAskAt: Map<string, number>;
   turnAttachmentsByTurn: Map<string, Array<{ kind: string; path: string; mime: string }>>;
@@ -834,7 +835,7 @@ export function createInternalRoomsRoutes(deps: InternalRoomsDeps): InternalRout
           : coordinator.enqueue(address, internalCapability.generation, internalCapability.roomHandoffId, destination, target.id, handed, false, false,
             [...store.messagesFor(fromThreadId)].reverse().find(m => m.role === "user" && m.kind === "text")?.text ?? "", undefined,
             turnOrigin(internalCapability), oneWay ? "notify" : "work", joinPerson(fromThreadId), false, undefined,
-            directRequestOwners.get(fromThreadId)?.messageId, extra).node;
+            deps.coordinationRequestId?.(fromThreadId) ?? directRequestOwners.get(fromThreadId)?.messageId, extra).node;
       } catch (error) {
         if (wakePlan.reported === "now") releasePriorityNow(from.id);
         // nothing will ever run there: take the row back before the person

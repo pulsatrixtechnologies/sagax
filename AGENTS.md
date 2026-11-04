@@ -13,6 +13,12 @@ Source patches mirror settlement; views create no inbox or journal decision
 and never expire the source independently. Same answerer and current read
 access are rechecked; confidential threads never relay. Background work
 without a proven human root keeps the existing route.
+Human room rounds retain their admitted message id on the runtime root,
+including nested work. Their linked cards keep the source answerer's audience;
+room membership grants no approval rights. This routing proof does not change
+the room work's provenance or permission level. Deleting the destination
+withdraws its notice and removes the source backlink. A late model review
+re-reads the live address and falls back to the original execution thread.
 Verification: `docs/verification/peer-approvals.md`.
 
 ## Desktop store subscriptions

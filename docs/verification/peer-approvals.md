@@ -7,6 +7,11 @@ request before the normal answerer, security-key, rule and resolver checks.
 Settlement follows the original card, with one inbox entry and one decision.
 Confidential threads and another person's data remain isolated. Work with
 no proven human root retains its existing route.
+Human room requests use the admitted message's durable id, through nested
+handoffs, without changing work provenance. Existing audience projection
+withholds card details and answer rights from other room members. Deleting
+the destination withdraws its exact notification and clears the source
+backlink; a late review notifies the original execution instead.
 
 Run the focused root-chat checks:
 
@@ -24,6 +29,13 @@ provider ids reused across threads, revoked access, confidential threads,
 source deletion, interrupted backlink writes, expiry, restart and the source's
 answerer/security-key gates. Always allow retains the source bot's exact
 grant, including on clients that only send the card's legacy grant key.
+The second isolated workflow starts in room A, passes through a teammate in
+A and then a worker in room B, and answers B's exact call from A. Its runtime
+root retains the admitted human message id while work provenance stays
+outside. The `.room-origin.json` evidence records the linked transcripts and
+runtime rows. Unit checks cover the original answerer's audience, destination
+deletion, exact notice withdrawal, interrupted deletion recovery and a late
+review's fallback address.
 This proves the server workflow and desktop action wiring; it does not
 drive a native phone UI or a physical security key.
 

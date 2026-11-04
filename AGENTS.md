@@ -1,6 +1,19 @@
 # Sagax agent notes
 
 ## Routine readiness and failover (#1986, 2026-11-04)
+## Skills follow the dispatched engine (#1987, 2026-11-04)
+
+Real turns project the scoped inventory into their private task folder's
+native skill directories (`server/skills/turn-skill-links.ts`), including
+organization Flow, personal and bot plugins on a limit backup. Claude keeps
+its native plugin loader; other file engines retain the same prompt paths
+alongside native discovery. Organization turns await the selected plugin
+copies in the person's environment before dispatch, on every engine.
+Readiness resolves the thread override and Auto choice for both the engine
+and skill probes (`server/routines/routine-readiness-target.ts`). Previews
+and receipts remain reads. Regressions: `turn-skill-links.test.ts` and
+`start-turn-computer-workspace.test.ts` (temporary files and fake dispatch).
+
 
 Routine pre-flight uses `limitFailover.backupFor` to check the same backup
 order and access rules as dispatch. Account refusals stay live outside the

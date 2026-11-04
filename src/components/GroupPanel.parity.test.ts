@@ -74,14 +74,14 @@ describe("group panel header matches the bot panel header", () => {
   });
 
   it("lays Details out with the same vertical rhythm as the bot panel", () => {
-    expect(groupPanel).toMatch(/flex flex-col gap-6 px-4 pb-6 pt-2/);
+    expect(read("./group-panel/GroupDetailsTab.tsx")).toMatch(/flex flex-col gap-6 px-4 pb-6 pt-2/);
     expect(botPanel).toMatch(/flex flex-col gap-6 px-4 pb-6 pt-2/);
   });
 });
 
 const group = { id: "room", name: "Ops", bulletin: "", memberIds: [], messages: [], defaultResponder: { kind: "auto" } } as unknown as Group;
 const render = (props: Partial<Parameters<typeof GroupPanel>[0]>) =>
-  renderToStaticMarkup(createElement(GroupPanel, { group, members: [], details: null, advanced: null, canEdit: true, ...props }));
+  renderToStaticMarkup(createElement(GroupPanel, { group, members: [], roster: null, advanced: null, canEdit: true, ...props }));
 
 describe("group panel renders the shared header", () => {
   it("sizes the group avatar box like the bot mascot (144)", () => {

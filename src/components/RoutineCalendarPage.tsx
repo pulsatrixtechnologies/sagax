@@ -201,6 +201,8 @@ type EventSeed = {
   mode?: "view" | "edit";
   /** A routine not on the server yet (a new bot's draft): edit only, no Pause, no trash. */
   unmanaged?: boolean;
+  /** 2026-11-03: a new routine made from a group's panel is that group's team goal. */
+  groupId?: string;
 };
 
 function activeRoomMembers(group: Group | undefined, bots: Bot[]): Bot[] {
@@ -601,8 +603,8 @@ function EventEditorBody({
     : toLocalDateInput(addDays(startOfDay(Math.max(Date.now(), initialAt)), 7)));
   const [botIds, setBotIds] = useState(lockedBotId ? [lockedBotId] : template ? [template.botId] : existingCall?.botIds ?? seed.botIds);
   const selectBots = (ids: string[]) => setBotIds(ids);
-  const [routineTarget, setRoutineTarget] = useState<RoutineTarget>(template?.target ?? "bot");
-  const [groupId, setGroupId] = useState(template?.groupId ?? "");
+  const [routineTarget, setRoutineTarget] = useState<RoutineTarget>(template?.target ?? (seed.groupId ? "room-goal" : "bot"));
+  const [groupId, setGroupId] = useState(template?.groupId ?? seed.groupId ?? "");
   const [runOn, setRunOn] = useState<RoutineRunOn>(template?.runOn ?? defaultRunOn ?? "maus");
   const [attachments, setAttachments] = useState<Array<RoutineContextAttachment | CalendarCallAttachment>>(
     template?.target === "room-goal" ? [] : template?.attachments ?? existingCall?.attachments ?? [],
@@ -2586,6 +2588,7 @@ export function RoutineEditor({
   onDismiss,
   onDeleted,
   onDuplicate,
+  group,
 }: {
   routine?: Routine;
   /** 2026-10-29: a new routine prefilled from this one (Duplicate). */
@@ -2608,10 +2611,12 @@ export function RoutineEditor({
   onDeleted?: () => void;
   /** Advanced's Duplicate. */
   onDuplicate?: (routine: Routine) => void;
+  /** A new routine from a group's panel: that group's team goal, led by `lead`. */
+  group?: { id: string; leadBotId?: string };
 }) {
   const source = routine ?? copyOf;
   const at = routineEditorAt(source);
-  return <EventEditor seed={{ kind: "routine", at, durationMinutes: source?.durationMinutes ?? 30, botIds: lockedBotId ? [lockedBotId] : source ? [source.botId] : [], routine, ...(copyOf && !routine ? { copyOf } : {}), ...(folder && !routine ? { folder } : {}), ...(mode ? { mode } : {}), ...(!manage ? { unmanaged: true } : {}) }} bots={bots} lockedBotId={lockedBotId} defaultRunOn={defaultRunOn} presentation={presentation} onClose={onClose} onDismiss={onDismiss} onDeleted={onDeleted} onDuplicate={onDuplicate} onSavedCall={() => {}} />;
+  return <EventEditor seed={{ kind: "routine", at, durationMinutes: source?.durationMinutes ?? 30, botIds: lockedBotId ? [lockedBotId] : source ? [source.botId] : group?.leadBotId ? [group.leadBotId] : [], routine, ...(copyOf && !routine ? { copyOf } : {}), ...(group && !source ? { groupId: group.id } : {}), ...(folder && !routine ? { folder } : {}), ...(mode ? { mode } : {}), ...(!manage ? { unmanaged: true } : {}) }} bots={bots} lockedBotId={lockedBotId} defaultRunOn={defaultRunOn} presentation={presentation} onClose={onClose} onDismiss={onDismiss} onDeleted={onDeleted} onDuplicate={onDuplicate} onSavedCall={() => {}} />;
 }
 
 /** The slices of the store the Automations page reads (2026-11-02): it

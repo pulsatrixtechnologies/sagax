@@ -57,6 +57,7 @@ import type { OrgDirectoryPerson } from "@/lib/perspicax-org";
 import { StatusActivityRow } from "@/components/StatusActivityRow";
 import { normalizeState } from "@/lib/mascot";
 import { defaultResponderName, effectiveDefaultResponder, groupResponseHint, jevRoomRoutingOn } from "@/lib/group-routing";
+import { groupLeadBotId, leadResponder } from "@/lib/group-panel";
 import { openSettings } from "@/lib/settings-link";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { CHAT_COLUMN_CLASS } from "@/lib/chat-bubble-width";
@@ -1316,6 +1317,18 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
   const canAddRosterBot = addableBots.length > 0;
   // "Manage members": anyone who can change something in the roster.
   const canManageRoster = ownsRoom || roster.canAddHuman || ownBotIds.size > 0;
+  // 2026-11-03: under Members > Advanced (it opens both pickers at once; the
+  // inline Add rows open one at a time).
+  const manageMembersButton = (
+    <button
+      type="button"
+      data-manage-members-open=""
+      onClick={() => toggleRoster(roster.canAddHuman ? "both" : "bots")}
+      className="self-start rounded-lg bg-raised px-3 py-2 text-[13px] text-ink hover:bg-raised-hover"
+    >
+      {t(roster.canAddHuman ? "room.members.manage" : "room.members.manageBots")}
+    </button>
+  );
   const addHuman = (principalId: string) => {
     const id = principalId.trim().toLowerCase();
     if (!id) return;
@@ -1802,7 +1815,9 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
           members={members}
           canEdit={editable}
           readOnlyNote={!remoteClient && !ownsRoom}
-          details={
+          canAddBot={canAddRosterBot}
+          {...(mayLeave ? { onLeave: () => setLeaving(true) } : {})}
+          roster={
             <>
               <PanelSection title={t("groupPanel.people")}>
                 <ChannelMembers
@@ -1844,6 +1859,8 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
                   })}
                   {...roster}
                   addBotLabel={ownsRoom ? undefined : t("channelMembers.addMyBot")}
+                  leadBotId={groupLeadBotId(group, members)}
+                  {...(ownsRoom && !remoteClient ? { onSetLead: (id: string) => dispatch({ type: "patchGroup", groupId: group.id, patch: { defaultResponder: leadResponder(group, members, id) } }) } : {})}
                   onRemoveBot={(id) => {
                     dispatch({ type: "patchGroup", groupId: group.id, patch: { memberIds: group.memberIds.filter((memberId) => memberId !== id) } });
                   }}
@@ -1866,32 +1883,15 @@ export function GroupView({ group: stored, pane }: { group: Group; pane?: SideCh
                     {t("room.people.done")}
                   </button>
                 )}
-                {canManageRoster && (
-                  <button
-                    type="button"
-                    data-manage-members-open=""
-                    onClick={() => toggleRoster(roster.canAddHuman ? "both" : "bots")}
-                    className="mt-2 rounded-lg bg-raised px-3 py-2 text-[13px] text-ink hover:bg-raised-hover"
-                  >
-                    {t(roster.canAddHuman ? "room.members.manage" : "room.members.manageBots")}
-                  </button>
-                )}
               </PanelSection>
-              {mayLeave && (
-                <button
-                  type="button"
-                  data-leave-group=""
-                  onClick={() => setLeaving(true)}
-                  className="self-start rounded-lg px-3 py-2 text-[13px] text-danger hover:bg-hover"
-                >
-                  {t("groupPanel.leave")}
-                </button>
-              )}
             </>
           }
           advanced={
-            remoteClient ? null : (
+            remoteClient ? (canManageRoster ? manageMembersButton : null) : (
               <>
+                {/* Opens the People and Bots pickers together, above: the
+                    inline Add rows do the same one list at a time. */}
+                {canManageRoster && manageMembersButton}
                 <PanelSection title={t("room.responder.aria")}>
                   <DefaultResponderSelect group={group} members={members} disabled={!ownsRoom} />
                 </PanelSection>

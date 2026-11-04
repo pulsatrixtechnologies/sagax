@@ -63,6 +63,8 @@ describe("startTurn characterization (#1388 w4 step 3)", () => {
     const setup = readFileSync(join(here, "start-turn-setup.ts"), "utf8");
     expect(stream).toMatch(/DirectTurnSetupCancelled\("turn stopped during provider setup"\)/);
     expect(setup).toMatch(/DirectTurnSetupCancelled\("turn stopped during context setup"\)/);
+    expect(setup).toMatch(/await settlePerspicaxPrepare\(\)/);
+    expect(setup).toMatch(/DirectTurnSetupCancelled\("turn stopped during Perspicax setup"\)/);
     expect(body).toMatch(/await setupStartTurn\(state\)/);
     expect(finishSrc).toMatch(/handoffs\.abandon\(state\.threadId, state\.dispatchClaimId\)/);
     expect(finishSrc).toMatch(/e instanceof DirectTurnSetupCancelled/);

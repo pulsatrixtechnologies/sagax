@@ -48,6 +48,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     personalSkillInputs,
     personalSkills,
     perspicaxTurnIntegration,
+    perspicaxTurnPrepare,
     phoneIntegration,
     promptWithReply,
     refreshMcpOAuth,
@@ -88,6 +89,18 @@ export function createSetupStartTurn(host: StartTurnHost) {
       await state.enginesRead;
       if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) throw new DirectTurnSetupCancelled("turn stopped while the engines were read");
     }
+    // #1955: Perspicax token exchange, session open/verify, identity switch
+    // and tools/list do not need custom mount names. Start them beside
+    // compaction, context selection and prompt build; await before mounts.
+    const perspicaxPrepared = IDENTITY.kind === "perspicax" && state.instance.adapter.capabilities.customMcp === true
+      && (store.bot(state.bot.id) ?? state.bot).perspicax?.profiles.length
+      ? perspicaxTurnPrepare({ bot: state.bot, threadId: state.threadId, generation: state.dispatchClaimId, speaker: state.speaker, ...(state.warmOnly ? { quiet: true } : {}) })
+      : null;
+    // Let an in-flight early prepare finish so revoke/endGeneration can see
+    // what it opened (a cancelled turn must still release those entries).
+    const settlePerspicaxPrepare = async () => {
+      if (perspicaxPrepared) await perspicaxPrepared.catch(() => {});
+    };
     // A call warm must not compact or rewrite the resume cursor. The first
     // spoken turn decides that, and a reset discards this process.
     if (!state.warmOnly) {
@@ -96,6 +109,7 @@ export function createSetupStartTurn(host: StartTurnHost) {
     if (state.opts?.runOn === "cloud") {
       const readiness = await cloudRoutineReadiness(state.botId, state.threadId);
       if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) {
+        await settlePerspicaxPrepare();
         throw new DirectTurnSetupCancelled("turn stopped during cloud readiness");
       }
       if (!readiness.ready) throw new Error(readiness.reason ?? "The cloud computer is not ready");
@@ -105,8 +119,12 @@ export function createSetupStartTurn(host: StartTurnHost) {
     if (!state.voiceCallTurn) await compactConversation({ bot: state.bot, threadId: state.threadId, generation: state.dispatchClaimId, instance: state.instance, model: state.model,
       excludedIds: new Set([state.userMessage.id, ...(state.opts?.excludeMessageIds ?? [])]), manual: state.opts?.compactOnly === true });
     turnTrace(state.threadId, "compacted");
-    if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) throw new DirectTurnSetupCancelled("turn stopped during context setup");
+    if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) {
+      await settlePerspicaxPrepare();
+      throw new DirectTurnSetupCancelled("turn stopped during context setup");
+    }
     if (state.opts?.compactOnly) {
+      await settlePerspicaxPrepare();
       clearDirectTurnDispatch(state.threadId, state.dispatchClaimId);
       revokeInternalCapabilityGeneration(state.threadId, state.dispatchClaimId);
       settleDirectFollowup(state.dispatchClaimId);
@@ -379,9 +397,26 @@ export function createSetupStartTurn(host: StartTurnHost) {
       if (!state.warmOnly) turnTrace(state.threadId, "mcp-mounted");
     }
     // Slice 5: the bot's Perspicax profiles, as the person who speaks.
+    // Mount naming still runs after custom mounts (`taken`); the early
+    // prepare/handshake started above is awaited here (#1955).
     state.perspicaxPrompt = "";
-    if (IDENTITY.kind === "perspicax" && state.instance.adapter.capabilities.customMcp === true && (store.bot(state.bot.id) ?? state.bot).perspicax?.profiles.length) {
-      const perspicax = await perspicaxTurnIntegration({ bot: state.bot, threadId: state.threadId, generation: state.dispatchClaimId, speaker: state.speaker, taken: Object.keys(state.integrations.custom ?? {}), ...(state.warmOnly ? { quiet: true } : {}) });
+    if (perspicaxPrepared || (IDENTITY.kind === "perspicax" && state.instance.adapter.capabilities.customMcp === true && (store.bot(state.bot.id) ?? state.bot).perspicax?.profiles.length)) {
+      if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) {
+        await settlePerspicaxPrepare();
+        throw new DirectTurnSetupCancelled("turn stopped during Perspicax setup");
+      }
+      const perspicax = await perspicaxTurnIntegration({
+        bot: state.bot,
+        threadId: state.threadId,
+        generation: state.dispatchClaimId,
+        speaker: state.speaker,
+        taken: Object.keys(state.integrations.custom ?? {}),
+        ...(state.warmOnly ? { quiet: true } : {}),
+        ...(perspicaxPrepared ? { prepared: perspicaxPrepared } : {}),
+      });
+      if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) {
+        throw new DirectTurnSetupCancelled("turn stopped during Perspicax setup");
+      }
       if (Object.keys(perspicax.custom).length) state.integrations.custom = { ...state.integrations.custom, ...perspicax.custom };
       state.perspicaxPrompt = perspicax.prompt;
     }

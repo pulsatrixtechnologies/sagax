@@ -174,6 +174,7 @@ export type GroupMemberTurnHost = {
   personalFeatureOn: any,
   perspicaxMcp: any,
   perspicaxTurnIntegration: any,
+  perspicaxTurnPrepare: any,
   phoneIntegration: any,
   pluginDirsFor: any,
   policyModelRefusal: any,

@@ -297,6 +297,7 @@ export type StartTurnHost = {
   personalSkillInputs: any,
   personalSkills: any,
   perspicaxTurnIntegration: any,
+  perspicaxTurnPrepare: any,
   phoneIntegration: any,
   phoneToolTaintedThreads: any,
   pickFastSentenceModel: any,

@@ -371,19 +371,6 @@ export function CodingChatSheet({ item, detail, messages, loaded, failed, hasMor
             <span aria-hidden="true">·</span>
             <span data-coding-elapsed className="tabular-nums">{elapsed}</span>
           </span>
-          {canStop && (
-            <button
-              type="button"
-              data-coding-stop-header
-              onClick={onStop}
-              disabled={stopping}
-              aria-label={t("botPanel.activity.stopAria", { title: activityTitle(shown) })}
-              title={t("botPanel.activity.stop")}
-              className="flex size-6 items-center justify-center rounded-md text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:opacity-60"
-            >
-              {stopping ? <Loader2 size={12} aria-hidden="true" className="animate-spin motion-reduce:animate-none" /> : <Square size={10} fill="currentColor" aria-hidden="true" />}
-            </button>
-          )}
         </div>
       </header>
 

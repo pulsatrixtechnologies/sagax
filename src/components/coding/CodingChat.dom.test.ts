@@ -131,10 +131,10 @@ describe("CodingChatSheet", () => {
     expect([...band.querySelectorAll<HTMLElement>("[data-coding-changed-file]")].map((row) => row.dataset.codingChangedFile)).toEqual(["src/board/column.ts", "src/board/order.ts"]);
   });
 
-  it("shows Stop while live, in the header and the footer, and none once finished", () => {
+  it("shows Stop while live in the footer only (one place), and none once finished", () => {
     const props = mountSheet("running");
     const stop = column.querySelector<HTMLButtonElement>("[data-coding-stop]")!;
-    expect(column.querySelector("[data-coding-stop-header]")).not.toBeNull();
+    expect(column.querySelector("[data-coding-stop-header]")).toBeNull();
     flushSync(() => stop.click());
     expect(props.onStop).toHaveBeenCalledTimes(1);
     mountSheet("finished");

@@ -461,6 +461,9 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   // Stalled-turn e2e: the stall watchdog's window elapses on a marker file
   // instead of after 20 minutes of silence (stall-clock-hooks.mjs).
   if (parentEnv.SAGAX_TEST_STALL_CLOCK === "1") childEnv.SAGAX_TEST_STALL_CLOCK = "1";
+  // Per-step turn timing on stderr (server/turns/turn-trace.ts). Forwarded
+  // only when set: the fixture strips the parent env by default.
+  if (parentEnv.SAGAX_TURN_TRACE === "1") childEnv.SAGAX_TURN_TRACE = "1";
   // Desktop mode: the server runs as the desktop app runs it, and the owner
   // capability the app would hand it is this one (see desktop-parent.mjs).
   // A test that hands the server this computer's connection the way the

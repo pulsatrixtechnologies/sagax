@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { clearTurnCounters, noteFirstResponse, noteTurnQueued, setTurnTimingWriter, turnCounters, turnTrace } from "./turn-trace.ts";
+import { clearTurnCounters, noteFirstResponse, noteTurnQueued, setTurnTimingWriter, turnCounters, turnTrace, turnTracePayloadHash } from "./turn-trace.ts";
 
 describe("turn trace (SAGAX_TURN_TRACE)", () => {
   afterEach(() => {
@@ -101,6 +101,34 @@ describe("turn trace (SAGAX_TURN_TRACE)", () => {
   it("keeps first-token silent when the trace is off", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     noteFirstResponse("silent-thread-id");
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("prints a payload hash and never the words when the trace is on", () => {
+    process.env.SAGAX_TURN_TRACE = "1";
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    turnTracePayloadHash("0123456789abcdef", {
+      system: "secret system words",
+      systemStable: "stable",
+      systemVolatile: "volatile",
+      transcript: [{ role: "user", text: "hello there" }],
+      text: "turn text with secrets",
+      integrations: { agents: {}, browser: true },
+      model: "claude-sonnet",
+      effort: null,
+      resumeCursor: "cur-1",
+      sessionReset: false,
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+    const line = String(spy.mock.calls[0]![0]);
+    expect(line).toMatch(/^\[turn-trace\] 01234567 payload-hash [0-9a-f]{64}$/);
+    expect(line).not.toContain("secret");
+    expect(line).not.toContain("hello");
+  });
+
+  it("writes nothing for a payload hash unless switched on", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    turnTracePayloadHash("0123456789abcdef", { system: "x" });
     expect(spy).not.toHaveBeenCalled();
   });
 });

@@ -15,6 +15,7 @@ import { expect, it } from "vitest";
 import { launchVerificationServer, runControlOmb, verificationServerEnvironment, type VerificationServer } from "../scripts/control-omb.ts";
 import { request } from "../scripts/mcp-server.ts";
 import { waitForExit } from "./testing/cleanup.ts";
+import { waitForServerReady } from "./testing/server-ready.ts";
 import { readHandoffs } from "./testing/handoff-rows.ts";
 import { openSse } from "./testing/sse.ts";
 import { checkInvariants } from "./runtime/invariants.ts";
@@ -51,9 +52,7 @@ async function withFixture(test: (f: Fixture) => Promise<void>, options: { backu
       stdio: ["ignore", log, log],
     });
     closeSync(log);
-    await expect.poll(async () => {
-      try { return (await fetch(url + "/api/health", { signal: AbortSignal.timeout(1_000) })).ok; } catch { return false; }
-    }, { timeout: 30_000, interval: 200 }).toBe(true);
+    await waitForServerReady(server, url, () => readFileSync(logPath, "utf8"));
   };
   const stop = async () => { await waitForExit(server, { signal: "SIGTERM" }); server = undefined; };
   try {

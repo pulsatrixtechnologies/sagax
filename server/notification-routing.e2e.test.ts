@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { freePortBlock } from "./testing/ports.ts";
+import { waitForServerReady } from "./testing/server-ready.ts";
 import { openSse } from "./testing/sse.ts";
 import type { Assignment } from "./runtime/types.ts";
 
@@ -191,19 +192,9 @@ beforeAll(async () => {
   });
   child.stderr!.on("data", (chunk) => (stderr += chunk));
 
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    if (child.exitCode !== null) throw new Error(`server exited ${child.exitCode}: ${stderr}`);
-    try {
-      if ((await fetch(`${base}/api/health`)).status === 200) break;
-    } catch {
-      // still starting
-    }
-    if (Date.now() >= deadline) throw new Error(`server never became healthy: ${stderr}`);
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
+  await waitForServerReady(child, base, () => stderr);
 
-}, 45_000);
+}, 90_000);
 
 afterAll(async () => {
   if (child) await waitForExit(child, { signal: "SIGTERM" });

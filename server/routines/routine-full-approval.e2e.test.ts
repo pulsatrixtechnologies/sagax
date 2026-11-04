@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { launchVerificationServer, verificationServerEnvironment } from "../../scripts/control-omb.ts";
 import { waitForExit } from "../testing/cleanup.ts";
+import { waitForServerReady } from "../testing/server-ready.ts";
 import { harnessClientFromEnv } from "../drivers/agents-client.ts";
 
 it("runs owner-authorized email and webhook routines at the chosen level while their event data stays untrusted", async () => {
@@ -96,7 +97,7 @@ it("runs owner-authorized email and webhook routines at the chosen level while t
     const log = openSync(logPath, "a", 0o600);
     restarted = spawn(process.execPath, ["--experimental-strip-types", fileURLToPath(new URL("../index.ts", import.meta.url))], { cwd: fileURLToPath(new URL("../..", import.meta.url)), env, stdio: ["ignore", log, log] });
     closeSync(log);
-    await expect.poll(async () => { try { return (await fetch(`${url}/api/health`)).ok; } catch { return false; } }, { timeout: 20_000 }).toBe(true);
+    await waitForServerReady(restarted, url, () => readFileSync(logPath, "utf8"));
     const mailDump = await launchedFor(receipt.runId);
     expect(mailDump.argv[mailDump.argv.indexOf("--permission-mode") + 1]).toBe("bypassPermissions");
     expect((await runState(receipt.runId)).prompt).toContain("[UNTRUSTED BOTMAIL EVENT DATA ");

@@ -806,6 +806,9 @@ struct DesktopRoomBanners: View {
                 HStack(alignment: .top, spacing: 8) {
                     Text("Group conversations use more: every bot in the group reads the whole thread. For a simple question, chat with a single bot instead.")
                         .font(theme.font(13))
+                        // CSS's 1.5 line box (19.5 pt), not the face's own line
+                        .lineSpacing(max(0, 19.5 - theme.uiFont(13).lineHeight))
+                        .frame(minHeight: 19.5)
                         .foregroundStyle(theme.inkSecondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -870,7 +873,8 @@ struct DesktopRoomBanners: View {
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 8)
-                .frame(height: 30)
+                // `py-1.5` around a 12.5 pt line at 1.5 (18.75)
+                .frame(height: 30.75)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

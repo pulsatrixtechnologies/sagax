@@ -956,6 +956,8 @@ struct DesktopChatNotice: View {
             }
         }
         .font(theme.font(13))
+        // CSS's 1.5 line box (19.5 pt), not the face's own line
+        .frame(minHeight: 19.5)
         .foregroundStyle(theme.inkSecondary)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

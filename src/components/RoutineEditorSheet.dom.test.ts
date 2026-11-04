@@ -211,14 +211,11 @@ describe("Format with AI (2026-11-03)", () => {
     const { getDraft } = await import("@/lib/drafts");
     vi.stubGlobal("requestAnimationFrame", (callback: () => void) => { callback(); return 0; });
     const onClose = mount(routine({ type: "cron", expression: "0 9 * * *", timeZone: "UTC" }), vi.fn(), { presentation: "panel" });
-    for (const mode of ["view", "edit"] as const) {
-      if (mode === "edit") edit();
-      const button = host.querySelector<HTMLButtonElement>("[data-routine-editor-section=what] [data-routine-format-ai]");
-      expect(button, mode).not.toBeNull();
-      expect(button!.textContent).toBe("Format with AI");
-      expect(button!.querySelector("svg.lucide-sparkles")).not.toBeNull();
-    }
-    flushSync(() => host.querySelector<HTMLButtonElement>("[data-routine-format-ai]")!.click());
+    const button = host.querySelector<HTMLButtonElement>("[data-routine-editor-section=what] [data-routine-format-ai]");
+    expect(button).not.toBeNull();
+    expect(button!.textContent).toBe("Format with AI");
+    expect(button!.querySelector("svg.lucide-sparkles")).not.toBeNull();
+    flushSync(() => button!.click());
     const draft = getDraft(localStorage, "bot:runner:main");
     expect(draft).toContain("reformat the instruction of my routine “Weekly digest” (id r1)");
     expect(draft).toContain("Keep every rule, fact, date and decision exactly");
@@ -232,10 +229,20 @@ describe("Format with AI (2026-11-03)", () => {
     expect(host.querySelector("[data-routine-editor-presentation=panel]")).not.toBeNull();
   });
 
+  // 2026-11-03 (audit N-1): in edit mode the form keeps its copy of the
+  // instruction; a reformat approved meanwhile was overwritten by Save.
+  it("is offered in view mode only, never while the form holds its own copy of the instruction", () => {
+    mount(routine({ type: "cron", expression: "0 9 * * *", timeZone: "UTC" }), vi.fn(), { presentation: "panel" });
+    expect(host.querySelector("[data-routine-format-ai]")).not.toBeNull();
+    edit();
+    expect(host.querySelector("[data-routine-editor-section=what]")).not.toBeNull();
+    expect(host.querySelector("[data-routine-format-ai]")).toBeNull();
+  });
+
   it("shows the whole instruction in view mode, folding a long one behind Show more", () => {
     mount({ ...routine({ type: "cron", expression: "0 9 * * *", timeZone: "UTC" }), prompt: "Line.\n\n".repeat(200) });
     const text = host.querySelector<HTMLElement>("[data-routine-instruction-text]")!;
-    expect(text.className).toContain("max-h-[60vh]");
+    expect(text.className).toContain("max-h-[35vh]");
     expect(text.querySelector("textarea")).toBeNull();
   });
 });
@@ -357,9 +364,10 @@ describe("the routine panel, edit mode", () => {
     mount({
       ...routine({ type: "cron", expression: "30 8,12 * * 1-5", timeZone: "America/Toronto", timing: "flexible", windowEarlyMinutes: 10, windowLateMinutes: 5 } as Routine["schedule"]),
       timeoutMinutes: 45, overlap: "queue", autoPauseAfter: 3, continuity: true, onlyWhenPresent: true, postResults: false, mailAlias: "reports", attachments: [attachment],
+      requires: { skills: ["inbox-review"], mcpServers: ["outlook"], computer: true },
     } as Routine, onClose);
     const summary = host.querySelector("[data-routine-advanced-summary]")?.textContent ?? "";
-    for (const part of ["Attachments: 1", "Extra times: 1", "Flexible timing", "Stops if still running after 45 min", "Queue one run", "Remember the last run", "Only when I'm here", "Mail tag +reports"]) expect(summary).toContain(part);
+    for (const part of ["Attachments: 1", "Extra times: 1", "Flexible timing", "Stops if still running after 45 min", "Queue one run", "Remember the last run", "Only when I'm here", "Mail tag +reports", "Required skills", "Required MCP servers", "Computer required"]) expect(summary).toContain(part);
     edit();
     flushSync(() => button("Save")!.click());
     await vi.waitFor(() => expect(fixture.lastUpsert).not.toBeNull());
@@ -367,6 +375,7 @@ describe("the routine panel, edit mode", () => {
       name: "Weekly digest", prompt: "Summarise the week, see [the board](https://example.test/board)", botId: bot.id, runOn: "maus",
       schedule: { type: "cron", expression: "30 8,12 * * 1-5", timeZone: "America/Toronto", timing: "flexible", windowEarlyMinutes: 10, windowLateMinutes: 5 },
       timeoutMinutes: 45, overlap: "queue", autoPauseAfter: 3, continuity: true, onlyWhenPresent: true, postResults: false, mailAlias: "reports", attachments: [attachment],
+      requires: { skills: ["inbox-review"], mcpServers: ["outlook"], computer: true },
     });
     await vi.waitFor(() => expect(host.querySelector("[data-routine-editor-actions=view]")).not.toBeNull());
     expect(onClose).not.toHaveBeenCalled();

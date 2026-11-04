@@ -159,6 +159,14 @@ data class ToolActivity(
      * characters and already redacted. Older computers omit it.
      */
     val output: String? = null,
+    /** Short command or title the chat shows on the chip. Older computers omit it. */
+    val summary: String? = null,
+    /** Bounded, redacted arguments preview. Older computers omit it. */
+    val input: String? = null,
+    /** How long the call ran, in milliseconds. Older computers omit it. */
+    val durationMs: Double? = null,
+    /** Files the call wrote or touched. Older computers omit it. */
+    val files: List<String>? = null,
 )
 
 /**
@@ -445,6 +453,8 @@ data class Bot(
     val activeLeafId: String? = null,
     val hasMore: Boolean? = null,
     val projects: List<BotProject>? = null,
+    /** Organization server: whose bot this is. Absent on a solo server. */
+    val ownerUserId: String? = null,
 )
 
 /** Project only task-local controls; the original fleet record stays profile-global. */
@@ -486,7 +496,12 @@ object AvatarCropSerializer : KSerializer<AvatarCrop> {
 }
 
 @Serializable
-data class GroupResponder(val kind: String, val botId: String? = null)
+data class GroupResponder(
+    val kind: String,
+    val botId: String? = null,
+    /** An Auto room's fallback: the lead it had. */
+    val fallbackBotId: String? = null,
+)
 
 @Serializable
 data class Room(
@@ -511,6 +526,16 @@ data class Room(
     val tasks: List<BotTask>? = null,
     val messages: List<Message>? = null,
     val hasMore: Boolean? = null,
+    /** Organization server: who owns the room's settings. */
+    val ownerId: String? = null,
+    /** People in this room, beside the bots. Absent on a bot-to-bot room. */
+    val humanIds: List<String>? = null,
+    /** A room: @all notifies every person in it. */
+    val mentionAll: Boolean? = null,
+    /** Shared working folder for every member's shell and file tools. */
+    val cwd: String? = null,
+    /** Organization server: a direct conversation between two people. */
+    val peopleDm: Boolean? = null,
 )
 
 @Serializable(with = FleetSerializer::class)
@@ -1125,6 +1150,10 @@ data class Routine(
     val nextRunAt: Double? = null,
     val createdAt: Double,
     val updatedAt: Double,
+    /** Team goal: the room this routine belongs to. */
+    val groupId: String? = null,
+    /** Conversation where completed results are posted. */
+    val resultsThreadId: String? = null,
 ) {
     val runLocation: RoutineRunLocation
         get() = RoutineRunLocation.entries.firstOrNull { it.wireValue == runOn }
@@ -1178,6 +1207,8 @@ data class RoutineInput(
     val timeoutMinutes: Int? = null,
     /** Interpreted by CompanionClient as an explicit JSON null. */
     @kotlinx.serialization.Transient val clearTimeout: Boolean = false,
+    /** Team goal: the room this routine belongs to. */
+    val groupId: String? = null,
 )
 
 @Serializable

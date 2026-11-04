@@ -83,9 +83,6 @@ function Ready() {
               bots={[bot]}
               onClose={() => {}}
               onStop={live ? () => {} : undefined}
-              onRunAgain={live ? undefined : () => {}}
-              onLogs={() => {}}
-              onOpenConfiguration={() => {}}
             />
           )}
         </ExchangeColumnProvider>

@@ -10,6 +10,7 @@
 // - Updates: this app's version; the iPad updates through the App Store or
 //   TestFlight, not through the desktop's updater.
 import SwiftUI
+import AVFoundation
 import UIKit
 import CompanionCore
 
@@ -34,29 +35,62 @@ struct DesktopBotModelsPage: View {
     }
 }
 
-/// "Defaults for new bots" (BotDefaultsCard): what a new bot starts with;
-/// here its effort, the setting General held before 2026-10-28.
+/// "Defaults for new bots" (DefaultBotSettings, NewBotDialog.tsx): the
+/// row with its summary, "Share as preset…" and "Edit", which opens the
+/// New Bot editor in its defaults mode on the desktop; here Edit holds what
+/// the iPad can set for new bots, their effort.
 struct DesktopNewBotDefaults: View {
     @EnvironmentObject private var model: DesktopSettingsModel
+    @EnvironmentObject private var session: Session
+    @State private var editing = false
+    @State private var sharing = false
 
     var body: some View {
         let config = model.config
-        DesktopSettingsHeading(Text("Defaults for new bots"))
-        DesktopSettingsGroup {
-            DesktopSettingRow(
-                title: Text("Effort for new bots"),
-                subtitle: Text("How hard new bots think from their first message."),
-                help: Text("How hard every new bot thinks from its first message. A bot can change its own level; model providers without this level keep their default.")
-            ) {
-                DesktopSelect(
-                    options: [("", AppStrings.localized("Provider default"))] + DesktopEffort.levels.map { ($0, DesktopGeneralSettings.effortLabel($0)) },
-                    selection: config?.newBots?.effort ?? "",
-                    label: Text("Effort for new bots"),
-                    identifier: "desktop-settings.effort",
-                    disabled: !model.saving.isEmpty || config == nil
-                ) { value in
-                    setEffort(value)
+        if session.surfaceGate.viewer?.isOperator != false {
+            DesktopSettingsGroup(Text("Defaults for new bots"),
+                                 accessory: AnyView(DesktopHelpTip(help: Text("The model, effort and other starting choices every new bot of yours begins with."))),
+                                 identifier: "bot-models-defaults") {
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        DesktopText(Text("Defaults for new bots"))
+                        if let effort = config?.newBots?.effort, !effort.isEmpty {
+                            DesktopText(verbatim: DesktopGeneralSettings.effortLabel(effort), size: 12, line: 16, color: \.inkSecondary).lineLimit(1)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Button("Share as preset…") { sharing = true }
+                        .buttonStyle(DesktopButtonStyle(kind: .ghost))
+                        .popover(isPresented: $sharing) {
+                            DesktopText("Presets are shared from Sagax on your computer.", size: 12, line: 17, color: \.inkSecondary)
+                                .frame(width: 232, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(12)
+                                .desktopPopoverOnCompact()
+                        }
+                        .accessibilityIdentifier("desktop-settings.share-preset")
+                    Button("Edit") { editing = true }
+                        .buttonStyle(DesktopButtonStyle(kind: .control))
+                        .accessibilityIdentifier("desktop-settings.defaults-edit")
+                        .popover(isPresented: $editing) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                DesktopText(Text("Effort for new bots"), weight: .medium)
+                                DesktopText(Text("How hard new bots think from their first message."), size: 12, line: 16, color: \.inkSecondary)
+                                DesktopPillSelect(
+                                    options: [("", AppStrings.localized("Provider default"))] + DesktopEffort.levels.map { ($0, DesktopGeneralSettings.effortLabel($0)) },
+                                    selection: config?.newBots?.effort ?? "",
+                                    label: Text("Effort for new bots"),
+                                    identifier: "desktop-settings.effort",
+                                    disabled: !model.saving.isEmpty || config == nil
+                                ) { value in setEffort(value) }
+                            }
+                            .padding(14)
+                            .frame(width: 280, alignment: .leading)
+                            .desktopPopoverOnCompact()
+                        }
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
             }
         }
     }
@@ -69,31 +103,54 @@ extension DesktopNewBotDefaults {
     }
 }
 
-/// `BotModelsTable`: "Bot models", the column heads, then each team with
-/// its bots. Rows are 32 tall on the desktop; 44 here for a finger.
+/// `BotModelsSettings`: "Bot models" and its help, the column heads
+/// (Bot, Model, Effort, Account, Backup), then each section with its own
+/// checkbox and its bots: their checkbox, avatar, model menu (the provider's
+/// mark), effort menu, who pays and backup. The person's own bots only,
+/// Unassigned first, then the sections in the bots' order.
 struct DesktopBotModelsTable: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var session: Session
-    @ObservedObject private var prefs = SidebarPrefsModel.shared
     @State private var instances: [Instance] = []
     @State private var editing: Bot?
+    @State private var selected: Set<String> = []
+
+    private static let columns: [CGFloat] = [0.9, 1.8, 0.8, 0.9, 0.8]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            DesktopSettingsHeading(Text("Bot models"))
-            VStack(alignment: .leading, spacing: 0) {
-                header
-                ForEach(groups, id: \.name) { group in
-                    Rectangle().fill(theme.hairlineWeak).frame(height: 0.5)
-                    DesktopText(Text(verbatim: "\(group.name) (\(group.bots.count))"), size: 12.5, line: 18, color: \.inkSecondary)
-                        .padding(.horizontal, 14)
-                        .frame(height: 32, alignment: .leading)
-                    ForEach(group.bots) { bot in row(bot) }
+        DesktopSettingsGroup(Text("Bot models"),
+                             accessory: AnyView(DesktopHelpTip(help: Text("Your bots' engines and models in one place. Change them here without starting a turn, including when an engine is out of credit."))),
+                             identifier: "bot-models-table") {
+            if groups.isEmpty {
+                DesktopSettingsTextRow(Text("You have no bots yet."))
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    grid([
+                        AnyView(column(Text("Bot"))), AnyView(column(Text("Model")).padding(.leading, 8)),
+                        AnyView(column(Text("Effort")).padding(.leading, 8)), AnyView(column(Text("Account")).padding(.leading, 8)),
+                        AnyView(column(Text("Backup")).padding(.leading, 8)),
+                    ]) {
+                        Color.clear.frame(width: 20)
+                    }
+                    .padding(.top, 4).padding(.bottom, 8)
+                    .overlay(alignment: .bottom) { Rectangle().fill(theme.hairline.opacity(0.4)).frame(height: 1) }
+                    ForEach(groups, id: \.name) { group in
+                        let ids = group.bots.map(\.id)
+                        let allOn = !ids.isEmpty && ids.allSatisfy(selected.contains)
+                        HStack(spacing: 10) {
+                            DesktopCheckbox(checked: allOn, label: Text(verbatim: String(format: AppStrings.localized("Select every bot in %@"), group.name)),
+                                            identifier: "desktop-settings.bot-models.section-select") {
+                                if allOn { selected.subtract(ids) } else { selected.formUnion(ids) }
+                            }
+                            DesktopText(verbatim: "\(group.name) (\(group.bots.count))", color: \.inkSecondary).lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.top, 14).padding(.bottom, 6)
+                        ForEach(group.bots) { bot in row(bot) }
+                    }
                 }
             }
-            .padding(1)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .desktopHairlineBox()
         }
         .task { instances = await DesktopModelCatalog.shared.instances(session) }
         .popover(item: $editing) { bot in
@@ -104,65 +161,99 @@ struct DesktopBotModelsTable: View {
         .accessibilityIdentifier("desktop-settings.bot-models")
     }
 
-    private var header: some View {
-        HStack(spacing: 12) {
-            column(Text("Bot")).frame(width: 170, alignment: .leading)
-            column(Text("Model")).frame(maxWidth: .infinity, alignment: .leading)
-            column(Text("Effort")).frame(width: 96, alignment: .leading)
+    /// `ROW_GRID`: the checkbox column, then the five columns by their weights.
+    private func grid<Lead: View>(_ cells: [AnyView], @ViewBuilder lead: () -> Lead) -> some View {
+        HStack(spacing: 10) {
+            lead()
+            GeometryReader { geometry in
+                let total = Self.columns.reduce(0, +)
+                let width = geometry.size.width - CGFloat(Self.columns.count - 1) * 10
+                HStack(spacing: 10) {
+                    ForEach(cells.indices, id: \.self) { index in
+                        cells[index].frame(width: max(0, width * Self.columns[index] / total), alignment: .leading)
+                    }
+                }
+                .frame(maxHeight: .infinity)
+            }
         }
-        .padding(.horizontal, 14)
-        .frame(height: 32)
+        .frame(minHeight: 18)
+        .padding(.horizontal, 12)
     }
 
     private func column(_ title: Text) -> some View {
-        DesktopText(title, size: 12, weight: .medium, line: 16, color: \.inkSecondary)
+        DesktopText(title, size: 12, line: 16, color: \.inkSecondary).lineLimit(1)
     }
 
     private func row(_ bot: Bot) -> some View {
-        Button { editing = bot } label: {
-            HStack(spacing: 12) {
-                HStack(spacing: 8) {
-                    ChatAvatarView(chat: .bot(bot), size: 20, state: MausState.forChat(.bot(bot), in: session.state), background: theme.panel)
-                        .frame(width: 20, height: 20)
-                    DesktopText(Text(verbatim: bot.name), size: 13, weight: .medium, line: 18)
-                        .lineLimit(1)
+        let mayEdit = session.surfaceGate.ownsBot(bot)
+        let cells: [AnyView] = [
+            AnyView(HStack(spacing: 8) {
+                ChatAvatarView(chat: .bot(bot), size: 24, state: MausState.forChat(.bot(bot), in: session.state), background: theme.panel)
+                    .frame(width: 24, height: 24)
+                DesktopText(Text(verbatim: bot.name), weight: .medium).lineLimit(1)
+            }),
+            AnyView(Button { editing = bot } label: {
+                HStack(spacing: 6) {
+                    if bot.modelSelection.auto != true {
+                        ProviderMarkView(driverKind: instances.first { $0.instanceId == bot.modelSelection.instanceId }?.driverKind ?? "", size: 13)
+                            .frame(width: 14, height: 14)
+                    }
+                    DesktopText(Text(verbatim: modelLabel(bot))).lineLimit(1)
+                    Spacer(minLength: 0)
+                    DesktopSettingsIconView(icon: .chevronDown, size: 13).foregroundStyle(theme.inkSecondary)
                 }
-                .frame(width: 170, alignment: .leading)
-                HStack(spacing: 4) {
-                    DesktopText(Text(verbatim: modelLabel(bot)), size: 13, line: 18)
-                        .lineLimit(1)
-                    DesktopSettingsIconView(icon: .chevronDown, size: 12, strokeWidth: 2.5)
-                        .foregroundStyle(theme.inkSecondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                DesktopText(Text(effortLabel(bot)), size: 13, line: 18, color: \.inkSecondary)
-                    .frame(width: 96, alignment: .leading)
+                .padding(.horizontal, 8).frame(height: 32).contentShape(Rectangle())
             }
-            .padding(.horizontal, 14)
-            .frame(minHeight: 44)
-            .contentShape(Rectangle())
+            .buttonStyle(DesktopHoverFill(radius: 8))
+            .disabled(!mayEdit)
+            .accessibilityLabel(Text(verbatim: "\(bot.name), \(modelLabel(bot))"))
+            .accessibilityIdentifier("desktop-settings.bot-model.\(bot.id)")),
+            AnyView(DesktopPillSelect(
+                options: [("", AppStrings.localized("Default"))] + DesktopEffort.levels.map { ($0, DesktopGeneralSettings.effortLabel($0)) },
+                selection: bot.modelSelection.effort ?? "",
+                label: Text("Effort"), identifier: "desktop-settings.bot-effort.\(bot.id)",
+                disabled: !mayEdit || bot.busy == true, fill: true
+            ) { value in
+                var next = bot.modelSelection
+                next.effort = value.isEmpty ? nil : value
+                Task { _ = await session.updateModel(next, for: bot, updateBotDefault: true) }
+            }),
+            AnyView(DesktopText(verbatim: "—").padding(.horizontal, 8)),
+            AnyView(DesktopPillSelect(
+                options: [("", AppStrings.localized("None"))] + instances.filter { $0.instanceId != bot.modelSelection.instanceId }.map { ($0.instanceId, $0.displayName ?? $0.instanceId) },
+                selection: bot.fallback?.first?.instanceId ?? "",
+                shown: backupLabel(bot),
+                label: Text("Backup"), identifier: "desktop-settings.bot-backup.\(bot.id)",
+                disabled: !mayEdit || bot.busy == true, fill: true
+            ) { value in
+                let next: [ModelSelection] = instances.first { $0.instanceId == value }.map { [ModelSelection(instanceId: $0.instanceId, model: $0.models.default)] } ?? []
+                Task { _ = await session.updateFallback(next, for: bot) }
+            }),
+        ]
+        return grid(cells) {
+            DesktopCheckbox(checked: selected.contains(bot.id), label: Text(verbatim: String(format: AppStrings.localized("Select %@"), bot.name)),
+                            identifier: "desktop-settings.bot-models.select.\(bot.id)") {
+                if selected.contains(bot.id) { selected.remove(bot.id) } else { selected.insert(bot.id) }
+            }
         }
-        .buttonStyle(DesktopHoverFill(radius: 0))
-        .accessibilityLabel(Text("\(bot.name), \(modelLabel(bot))"))
-        .accessibilityIdentifier("desktop-settings.bot-model.\(bot.id)")
+        .frame(minHeight: 44)
+        .padding(.vertical, 2)
+        .overlay(alignment: .top) { Rectangle().fill(theme.hairline.opacity(0.3)).frame(height: 1) }
     }
 
-    /// The bots by team, in the sidebar's order (hidden bots left out).
+    /// `ownBotsForModelsPage` and `groupBotsBySidebarSection`: the person's
+    /// own visible bots, Unassigned first, then sections in first-seen order.
     private var groups: [(name: String, bots: [Bot])] {
-        let bots = session.state.bots.filter { $0.hidden != true }
+        let bots = session.state.bots.filter { $0.hidden != true && session.surfaceGate.ownsBot($0) }
         var order: [String] = []
-        var byTeam: [String: [Bot]] = [:]
+        var bySection: [String: [Bot]] = [:]
         for bot in bots {
-            let team = bot.section?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let name = team.isEmpty ? String(localized: "Unassigned") : team
-            if byTeam[name] == nil { order.append(name) }
-            byTeam[name, default: []].append(bot)
+            let section = bot.section?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if bySection[section] == nil { order.append(section) }
+            bySection[section, default: []].append(bot)
         }
-        // the sidebar's order: Unassigned first, then the teams as listed
-        let unassigned = String(localized: "Unassigned")
-        let listed = [unassigned] + prefs.layout(session).sectionNames
-        let ranked = order.sorted { (listed.firstIndex(of: $0) ?? Int.max) < (listed.firstIndex(of: $1) ?? Int.max) }
-        return ranked.map { ($0, byTeam[$0] ?? []) }
+        let ranked = order.filter(\.isEmpty) + order.filter { !$0.isEmpty }
+        return ranked.map { ($0.isEmpty ? AppStrings.localized("Unassigned") : $0, bySection[$0] ?? []) }
     }
 
     private func modelLabel(_ bot: Bot) -> String {
@@ -174,9 +265,9 @@ struct DesktopBotModelsTable: View {
         return label.isEmpty ? String(localized: "Default") : label
     }
 
-    private func effortLabel(_ bot: Bot) -> LocalizedStringKey {
-        guard let effort = bot.modelSelection.effort, !effort.isEmpty else { return "Default" }
-        return LocalizedStringKey(effort.prefix(1).uppercased() + effort.dropFirst())
+    private func backupLabel(_ bot: Bot) -> String {
+        let names = (bot.fallback ?? []).compactMap { entry in instances.first { $0.instanceId == entry.instanceId }.map { $0.displayName ?? $0.instanceId } }
+        return names.isEmpty ? AppStrings.localized("None") : names.joined(separator: ", ")
     }
 }
 
@@ -192,13 +283,18 @@ struct DesktopVoiceSettings: View {
     /// `VOICE_DASHES_PREFERENCE` (shared/voice-dashes.ts): "on", "off", or
     /// absent (on in French, off otherwise).
     @AppStorage("sagax.voiceDashes.v1") private var dashesRaw = ""
+    @State private var status: VoiceProvidersStatus?
+    @State private var statusFailed: String?
     @State private var voices: [VoiceModeVoice]?
+    @State private var testing = false
+    @State private var note: String?
+    @State private var player: AVAudioPlayer?
     @State private var serverURL = ""
     @State private var serverModel = ""
     @State private var serverError: String?
+    @State private var savingServer = false
 
     private var settings: VoiceModeSettings { VoiceModeSettings.decode(voiceRaw.isEmpty ? nil : voiceRaw) }
-    private var person: VoiceModeSettings { settings.forBot(nil) }
 
     private var noDashes: Bool {
         if dashesRaw == "on" { return true }
@@ -206,124 +302,224 @@ struct DesktopVoiceSettings: View {
         return Locale.current.language.languageCode?.identifier == "fr"
     }
 
+    private func label(_ provider: String) -> String {
+        VoiceProviderChoice.label(provider, system: AppStrings.localized("Built-in Mac voices"), chatterbox: AppStrings.localized("Chatterbox (local)"))
+    }
+
+    private func noKey(_ name: String) -> String { String(format: AppStrings.localized("%@ (no key)"), name) }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            DesktopSettingsHeading(Text("Who speaks and who listens"))
-            DesktopSettingsGroup {
-                DesktopSettingRow(title: Text("Bot's voice")) {
-                    DesktopSelect(options: [("", String(localized: "Auto")), ("xai", "xAI"), ("openai", "OpenAI"), ("elevenlabs", "ElevenLabs")],
-                                  selection: settings.ttsChoice(botId: nil) ?? "", label: Text("Bot's voice"),
-                                  identifier: "desktop-settings.voice.tts") { value in
-                        voiceRaw = settings.withTts(value.isEmpty ? nil : value).encoded
-                        voices = nil
-                        Task { await loadVoices() }
+        let tts = settings.personTts
+        let stt = settings.personStt
+        let speaking = VoiceProviderChoice.speaking(picked: tts, status: status)
+        DesktopSettingsGroup(Text("Who speaks and who listens"), identifier: "voiceProviders") {
+            if let statusFailed, status == nil {
+                DesktopDescribedRow(Text("Bot's voice"), description: Text(verbatim: statusFailed)) { EmptyView() }
+            } else if let status, status.offeredTts.isEmpty && status.offeredStt.isEmpty && tts == "auto" {
+                DesktopDescribedRow(Text("Bot's voice"), description: Text("Add a key in Providers, or use an installed voice, to choose who speaks and who listens.")) { EmptyView() }
+            } else {
+                DesktopDescribedRow(Text("Bot's voice"), help: Text("Only the providers you have a key for are offered. If one fails or reaches its limit, another one you have takes over by itself, and the conversation's Events tab says so."), identifier: "voiceProviders.tts") {
+                    DesktopPillSelect(
+                        options: VoiceProviderChoice.options(offered: status?.offeredTts ?? [], all: VoiceModeSettings.ttsProviders, picked: tts,
+                                                             auto: AppStrings.localized("Auto"), label: label, noKey: noKey),
+                        selection: tts, label: Text("Bot's voice"), identifier: "desktop-settings.voice.tts"
+                    ) { value in
+                        note = nil
+                        voiceRaw = settings.withTts(value == "auto" ? nil : value).encoded
+                        Task { await loadStatus() }
                     }
                 }
-                DesktopSettingRow(title: Text("Voice")) {
-                    DesktopSelect(options: [("", String(localized: "Not set"))] + (voices ?? []).map { ($0.id, PhoneBotCallVoiceCard.capitalizedLabel($0.label)) },
-                                  selection: person.voice,
-                                  shown: voices == nil ? String(localized: "Loading voices…") : nil,
-                                  label: Text("Voice"), identifier: "desktop-settings.voice.voice") { value in
+                DesktopCompactRow(Text("Voice"), identifier: "voiceProviders.voice") {
+                    let selected = speaking.map { settings.personVoice(of: $0) } ?? ""
+                    let base: [(String, String)] = [("", voices == nil && speaking != nil ? AppStrings.localized("Loading voices…") : AppStrings.localized("Provider's default voice"))]
+                    let kept: [(String, String)] = !selected.isEmpty && !(voices ?? []).contains { $0.id == selected } ? [(selected, selected)] : []
+                    DesktopPillSelect(
+                        options: base + kept + (voices ?? []).map { ($0.id, PhoneBotCallVoiceCard.capitalizedLabel($0.label)) },
+                        selection: selected,
+                        label: Text(verbatim: String(format: AppStrings.localized("%@ voice"), speaking.map(label) ?? "")),
+                        identifier: "desktop-settings.voice.voice", disabled: speaking == nil
+                    ) { value in
+                        note = nil
                         voiceRaw = settings.withPersonVoice(value).encoded
                     }
-                }
-                DesktopSettingRow(title: Text("Speed")) {
-                    DesktopSelect(options: VoiceModeSettings.speeds.map { ($0, VoiceModeSettings.speedLabel($0)) },
-                                  selection: settings.speed, label: Text("Speed"), identifier: "desktop-settings.voice.speed") { value in
-                        var next = settings
-                        next.speed = value
-                        voiceRaw = next.encoded
+                    Button { Task { await test() } } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "speaker.wave.2").font(.system(size: 12))
+                            Text("Test the voice")
+                        }
                     }
+                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .disabled(testing || speaking == nil || (status?.offeredTts.isEmpty ?? true))
+                    .accessibilityIdentifier("desktop-settings.voice.test")
                 }
-                DesktopSettingRow(title: Text("Speech to text")) {
-                    DesktopSelect(options: VoiceModeSettings.languages.map { ($0.code, $0.code == "auto" ? String(localized: "Auto") : $0.label) },
-                                  selection: settings.language, label: Text("Speech to text"), identifier: "desktop-settings.voice.language") { value in
-                        var next = settings
-                        next.language = value
-                        voiceRaw = next.encoded
+                DesktopDescribedRow(Text("Speech to text"), help: Text("Who turns what you say into text on a call and in dictation."), identifier: "voiceProviders.stt") {
+                    DesktopPillSelect(
+                        options: VoiceProviderChoice.options(offered: status?.offeredStt ?? [], all: VoiceModeSettings.sttProviders, picked: stt,
+                                                             auto: AppStrings.localized("Auto"), label: label, noKey: noKey),
+                        selection: stt, label: Text("Speech to text"), identifier: "desktop-settings.voice.stt"
+                    ) { value in
+                        voiceRaw = settings.withStt(value == "auto" ? nil : value).encoded
+                        Task { await loadStatus() }
                     }
                 }
             }
-            DesktopSettingsHeading(Text("Advanced"))
-                .padding(.top, 8)
-            DesktopSettingsGroup {
-                DesktopSettingRow(title: Text("Fish Audio model"),
-                                  help: Text("Pick the model your Fish Audio plan covers. It applies to every agent on this installation.")) {
-                    DesktopSelect(options: [("s2.1-pro", String(localized: "s2.1-pro (default)")), ("s2.1-pro-free", String(localized: "s2.1-pro-free (free for developers)"))],
-                                  selection: model.config?.tts?.fishModel ?? "s2.1-pro", label: Text("Fish Audio model"),
-                                  identifier: "desktop-settings.voice.fish", disabled: model.config == nil) { value in
+            if let note {
+                DesktopText(verbatim: note, size: 12, line: 16, color: \.danger)
+                    .padding(.horizontal, 14).padding(.bottom, 8)
+            }
+        }
+        // VoiceSettingsPage: `flex-col gap-6`
+        if model.config?.tts != nil {
+            AnyView(advanced).padding(.top, 12)
+        }
+        AnyView(audio).padding(.top, 12)
+        Color.clear.frame(height: 0)
+            .task(id: model.loaded) {
+                serverURL = model.config?.tts?.baseUrl ?? ""
+                serverModel = model.config?.tts?.model ?? ""
+                seedInstalledVoice()
+                await loadStatus()
+            }
+    }
+
+    private var advanced: some View {
+            DesktopSettingsGroup(Text("Advanced"), identifier: "voice-options") {
+                DesktopDescribedRow(Text("Fish Audio model"),
+                                    help: Text("Pick the model your Fish Audio plan covers. It applies to every agent on this installation."), identifier: "fishModel") {
+                    DesktopPillSelect(options: [("s2.1-pro", AppStrings.localized("s2.1-pro (default)")), ("s2.1-pro-free", AppStrings.localized("s2.1-pro-free (free for developers)"))],
+                                      selection: model.config?.tts?.fishModel ?? "s2.1-pro", label: Text("Fish Audio model"),
+                                      identifier: "desktop-settings.voice.fish", disabled: model.config == nil) { value in
                         Task { _ = await model.apply(.fishModel(value), key: "fishModel") }
                     }
                 }
-                VStack(alignment: .leading, spacing: 8) {
-                    DesktopText(Text("Chatterbox server"))
-                    HStack(spacing: 6) {
-                        Circle().fill(model.config?.tts?.baseUrl?.isEmpty == false ? theme.accent : theme.raisedHover).frame(width: 6, height: 6)
-                        DesktopText(model.config?.tts?.baseUrl?.isEmpty == false ? Text("Saved") : Text("Any OpenAI-compatible server running Chatterbox works. No key is needed."),
-                                    size: 12.5, line: 17, color: \.inkSecondary)
-                        Link(destination: URL(string: "https://github.com/resemble-ai/chatterbox")!) {
-                            DesktopText(Text("How to run one locally"), size: 12.5, weight: .medium, line: 17, color: \.accentText)
+                DesktopDescribedRow(Text("Chatterbox server"), identifier: "chatterbox") {
+                    EmptyView()
+                } below: {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 6) {
+                            Circle().fill(model.config?.tts?.baseUrl?.isEmpty == false ? theme.accent : theme.raisedHover).frame(width: 6, height: 6)
+                            DesktopText(model.config?.tts?.baseUrl?.isEmpty == false ? Text("Saved") : Text("Any OpenAI-compatible server running Chatterbox works. No key is needed."),
+                                        size: 12, line: 16, color: \.inkSecondary)
+                            Link(destination: URL(string: "https://github.com/resemble-ai/chatterbox")!) {
+                                DesktopText(Text("How to run one locally"), size: 12, weight: .medium, line: 16, color: \.accentText)
+                            }
                         }
+                        .padding(.top, -6)
+                        HStack(spacing: 8) {
+                            field(Text(verbatim: "http://127.0.0.1:4123"), text: $serverURL, url: true)
+                                .accessibilityIdentifier("desktop-settings.voice.chatterbox-url")
+                            Button { Task { await saveServer() } } label: {
+                                HStack(spacing: 4) {
+                                    DesktopSettingsIconView(icon: .check, size: 13)
+                                    Text("Save")
+                                }
+                            }
+                            .buttonStyle(DesktopButtonStyle(kind: .control))
+                            .disabled(savingServer)
+                        }
+                        field(Text("Model id, default chatterbox-turbo"), text: $serverModel, url: false)
+                        if let serverError { DesktopText(Text(verbatim: serverError), size: 12, line: 16, color: \.danger) }
                     }
-                    HStack(spacing: 8) {
-                        TextField("http://127.0.0.1:4123", text: $serverURL)
-                            .font(theme.font(13))
-                            .keyboardType(.URL)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .padding(.horizontal, 12).frame(minHeight: 36)
-                            .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .accessibilityIdentifier("desktop-settings.voice.chatterbox-url")
-                        Button("Save") { Task { await saveServer() } }
-                            .buttonStyle(DesktopButtonStyle(kind: .ghost, size: 12.5, weight: .medium, height: 36, horizontal: 12))
-                            .disabled(serverURL.trimmingCharacters(in: .whitespaces).isEmpty)
-                    }
-                    TextField(String(localized: "Model id, default chatterbox-turbo"), text: $serverModel)
-                        .font(theme.font(13))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .padding(.horizontal, 12).frame(minHeight: 36)
-                        .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    if let serverError { DesktopText(Text(verbatim: serverError), size: 12, line: 16, color: \.danger) }
+                    .padding(.top, 8)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                DesktopSettingRow(title: Text("No em or en dashes in replies"),
-                                  subtitle: Text("Replaces them in the final text of bot replies: a range word between times and numbers, a colon after a list label, a comma elsewhere. On by default in French.")) {
+                DesktopDescribedRow(Text("No em or en dashes in replies"),
+                                    description: Text("Replaces them in the final text of bot replies: a range word between times and numbers, a colon after a list label, a comma elsewhere. On by default in French."),
+                                    identifier: "voiceNoDashes") {
                     DesktopSwitch(isOn: noDashes, label: Text("No em or en dashes in replies"), identifier: "desktop-settings.voice.no-dashes") {
                         dashesRaw = noDashes ? "off" : "on"
                     }
                 }
             }
-            DesktopSettingsHeading(Text("Audio"))
-                .padding(.top, 8)
-            DesktopSettingsGroup {
-                DesktopSettingRow(title: Text("Microphone"), subtitle: Text("Used for dictation, voice notes and calls on this iPad.")) {
-                    DesktopText(Text("System default"), color: \.inkSecondary)
+    }
+
+    private var audio: some View {
+        DesktopSettingsGroup(Text("Audio"), identifier: "audio") {
+            HStack(spacing: 20) {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "mic").font(.system(size: 12)).foregroundStyle(theme.inkSecondary).padding(.top, 2)
+                    VStack(alignment: .leading, spacing: 2) {
+                        DesktopText(Text("Microphone"))
+                        DesktopText(Text("Used for dictation, voice notes and calls on this iPad."), size: 12, line: 16, color: \.inkSecondary)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                // iPadOS picks the input (the built-in microphone, a headset):
+                // the desktop's device list is the system default here
+                DesktopPillSelect(options: [("", AppStrings.localized("System default"))], selection: "",
+                                  label: Text("Microphone"), identifier: "desktop-settings.voice.microphone") { _ in }
             }
-        }
-        .task {
-            serverURL = model.config?.tts?.baseUrl ?? ""
-            serverModel = model.config?.tts?.model ?? ""
-            await loadVoices()
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
         }
     }
 
+    private func field(_ prompt: Text, text: Binding<String>, url: Bool) -> some View {
+        TextField(text: text, prompt: prompt.foregroundColor(theme.inkSecondary)) { prompt }
+            .font(theme.font(13))
+            .foregroundStyle(theme.ink)
+            .keyboardType(url ? .URL : .default)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .submitLabel(.done)
+            .onSubmit { Task { await saveServer() } }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
+    }
+
+    /// `migrateInstalledVoiceSettings`: on a solo installation, the first
+    /// time nothing is stored, the installation's voice becomes the person's.
+    private func seedInstalledVoice() {
+        guard voiceRaw.isEmpty, let config = model.config, config.personalSettings != true, let tts = config.tts else { return }
+        voiceRaw = VoiceModeSettings.installed(provider: tts.provider, voice: tts.voice).encoded
+    }
+
+    private func loadStatus() async {
+        guard let client = session.settingsClient else { return }
+        do {
+            status = try await client.voiceProvidersStatus(tts: settings.personTts, stt: settings.personStt)
+            statusFailed = nil
+        } catch {
+            statusFailed = error.localizedDescription
+        }
+        await loadVoices()
+    }
+
     private func loadVoices() async {
-        guard let client = session.callClient, let bot = session.state.bots.first(where: { $0.hidden != true }) else {
-            voices = []
+        guard let client = session.settingsClient,
+              let speaking = VoiceProviderChoice.speaking(picked: settings.personTts, status: status),
+              status?.offeredTts.contains(speaking) == true else {
+            voices = nil
             return
         }
-        voices = (try? await client.voiceModeVoices(botId: bot.id, provider: settings.ttsChoice(botId: nil))) ?? []
+        voices = nil
+        voices = (try? await client.providerVoices(speaking)) ?? []
+    }
+
+    private func test() async {
+        guard let client = session.settingsClient else { return }
+        testing = true
+        note = nil
+        defer { testing = false }
+        do {
+            let clip = try await client.testVoice(text: AppStrings.localized("Hello, this is how I sound on a call."), settings: settings)
+            try? AVAudioSession.sharedInstance().setCategory(.playback)
+            player = try AVAudioPlayer(data: clip)
+            player?.play()
+        } catch {
+            note = String(format: AppStrings.localized("The voice test did not play: %@"), error.localizedDescription)
+        }
     }
 
     private func saveServer() async {
         let url = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !url.isEmpty else { return }
         guard url.lowercased().hasPrefix("http://") || url.lowercased().hasPrefix("https://") else {
             serverError = String(localized: "The server address must start with http:// or https://")
             return
         }
+        savingServer = true
+        defer { savingServer = false }
         serverError = await model.apply(.ttsServer(baseUrl: url, model: serverModel), key: "ttsServer")
     }
 }

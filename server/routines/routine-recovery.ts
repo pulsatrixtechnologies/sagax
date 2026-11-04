@@ -12,7 +12,7 @@ import {
 } from "../engines/engine-reconnect-ahead.ts";
 import { classifyError, USAGE_LIMIT } from "../drivers/retry.ts";
 import { isEngineEmptyFailure } from "../peers/incidents.ts";
-import type { RoutineRun } from "./routines.ts";
+import type { RoutineRun } from "./routine-run-types.ts";
 import { hostTimeZone } from "../turns/turn-clock.ts";
 
 export type RoutineOwnerCause = "signed_out" | "credits" | "usage_limit" | "setup";
@@ -37,7 +37,7 @@ export type RoutineFailureClass =
 /** A failure notification's own words; null stays quiet because the owner was already told. */
 export interface RoutineAlert { detail: string }
 
-export interface RoutineOwnerNotice { botId: string; cause: RoutineOwnerCause; at: number }
+export interface RoutineOwnerNotice { botId: string; cause: RoutineOwnerCause | "skill_missing" | "flow_profile" | "mcp_missing" | "perspicax_profile" | "computer_offline" | "probe_error"; at: number }
 
 export type RoutineRecovery =
   | { queued: true; alert?: RoutineAlert }
@@ -55,13 +55,13 @@ const AFTER_RESET_MS = 60_000;
 const WEEK_MS = 7 * 24 * 60 * 60_000;
 /** startTurn's codes for a bot or thread that is busy for now. */
 const BUSY_CODES = new Set(["thread_busy", "thread_limit", "workspace_busy", "settling"]);
-const OWNER_CAUSES = new Set<RoutineOwnerCause>(["signed_out", "credits", "usage_limit", "setup"]);
+const OWNER_CAUSES = new Set<string>(["signed_out", "credits", "usage_limit", "setup", "skill_missing", "flow_profile", "mcp_missing", "perspicax_profile", "computer_offline", "probe_error"]);
 
 /** Codex's ChatGPT workspace routing lookup: passing, unlike its "unauthorized" variant (a sign-in problem). */
 const ROUTING_LOOKUP = /\bworkspace routing discovery (?:failed|timed out)\b/i;
 
 /** A provider refusing for want of credit or payment, in its own words. */
-const OUT_OF_CREDITS = /\bpayment required\b|\b(?:http|status) 402\b|\binsufficient (?:account )?(?:funds|balance|credits?)\b|\b(?:credit|account) balance is too low\b|\bout of credits?\b|\bno credits? (?:left|remaining)\b|\bused all (?:available |of (?:your|its) )?credits\b/i;
+const OUT_OF_CREDITS = /\bpayment required\b|\b(?:http|status) 402\b|\binsufficient (?:account )?(?:funds|balance|credits?)\b|\b(?:credit|account) balance is too low\b|\busage balance (?:is |has been )?(?:used up|exhausted)\b|\bout of credits?\b|\bno credits? (?:left|remaining)\b|\bused all (?:available |of (?:your|its) )?credits\b/i;
 
 const OWNER_ACTION: Record<Exclude<RoutineOwnerCause, "setup">, string> = {
   signed_out: "This bot's engine is signed out. Sign in again in Settings → Model providers.",
@@ -82,6 +82,8 @@ const FIRST_START: Record<RoutineRetryCause, string> = {
 export function classifyRoutineFailure(failure: string, facts: RoutineFailureFacts = {}): RoutineFailureClass {
   if (facts.cause === "busy") return { kind: "busy" };
   if (facts.cause === "stalled" || facts.stalled) return { kind: "retry", cause: "stalled" };
+  // The run's own step cap takes precedence over a generic provider quota token (#1946).
+  if (/^Stopped after \d+ (?:steps|tool calls) without a final answer\b/i.test(failure)) return { kind: "final" };
   // reasoning_only / empty model: one automatic retry of the same turn.
   if (facts.stopReason === "reasoning_only" || facts.stopReason === "empty_turn" || isEngineEmptyFailure(failure)) {
     return { kind: "retry", cause: "empty_response" };
@@ -96,7 +98,7 @@ export function classifyRoutineFailure(failure: string, facts: RoutineFailureFac
   if (facts.limitResetsAt || facts.stopReason === "quota" || USAGE_LIMIT.test(failure)) {
     return { kind: "owner", cause: "usage_limit", ...(facts.limitResetsAt ? { resetsAt: facts.limitResetsAt } : {}) };
   }
-  if (facts.stopReason === "auth_required" || reason === "auth") return { kind: "owner", cause: "signed_out" };
+  if (isEngineReconnectCondition(failure) || facts.stopReason === "auth_required" || reason === "auth") return { kind: "owner", cause: "signed_out" };
   if (reason === "quota") return { kind: "owner", cause: "credits" };
   if (facts.setup || facts.stopReason === "update_required" || facts.stopReason === "setup_required") return { kind: "owner", cause: "setup" };
   if (reason === "rate_limited") return { kind: "retry", cause: "rate_limited" };
@@ -143,7 +145,7 @@ export function retryNote(cause: RoutineRetryCause): string {
     "check what it did (files, messages sent, anything started) so nothing is done twice; then finish the routine.]";
 }
 
-function firstNotice(notices: RoutineOwnerNotice[], botId: string, cause: RoutineOwnerCause, at: number): boolean {
+export function firstOwnerNotice(notices: RoutineOwnerNotice[], botId: string, cause: RoutineOwnerNotice["cause"], at: number): boolean {
   if (notices.some((notice) => notice.botId === botId && notice.cause === cause)) return false;
   notices.push({ botId, cause, at });
   return true;
@@ -164,7 +166,7 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
   }
   if (verdict.kind === "retry") return requeueOnce(run, verdict.cause, failure, now) ? { queued: true } : { queued: false, error: again };
   if (verdict.kind === "final") return { queued: false, error: again };
-  const first = firstNotice(notices, run.botId, verdict.cause, now);
+  const first = firstOwnerNotice(notices, run.botId, verdict.cause, now);
   const reset = verdict.resetsAt;
   if (reset && reset > now && reset - now <= LIMIT_WAIT_MS && requeueOnce(run, "usage_limit", failure, now, reset + AFTER_RESET_MS)) {
     return { queued: true, ...(first ? { alert: { detail: `This bot's engine reached its usage limit. This run starts again at ${when(reset + AFTER_RESET_MS)}.` } } : {}) };
@@ -192,7 +194,7 @@ export { isEngineReconnectCondition, CLAUDE_SIGN_IN_EXPIRED };
 export function loadOwnerNotices(value: unknown): RoutineOwnerNotice[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((notice) => typeof notice?.botId === "string" && OWNER_CAUSES.has(notice.cause) && Number.isFinite(notice.at)
-    ? [{ botId: notice.botId, cause: notice.cause as RoutineOwnerCause, at: notice.at as number }] : []).slice(-500);
+    ? [{ botId: notice.botId, cause: notice.cause as RoutineOwnerNotice["cause"], at: notice.at as number }] : []).slice(-500);
 }
 
 export function weekRuns(runs: readonly RoutineRun[], routineId: string, now: number): { ok: number; total: number } | undefined {

@@ -2660,5 +2660,13 @@
   "routineEditor.formatAiHint": "打开 {bot} 的聊天并填入整理此指令的请求。按 Enter 前不会发送。",
   "routineEditor.formatAiPrompt": "请重新整理我的例程“{name}”（ID {id}）的指令，使其结构更清晰、更易读：使用标题、编号步骤和短句。完整保留每条规则、事实、日期和决定，不改变任何含义。然后用你的例程编辑工具（propose_routine_action，action update，changes.instructions）以结果更新例程“{name}”（ID {id}），并给我看修改前后的对比。",
   "routineEditor.copy": "创建副本",
-  "routineEditor.hint.duplicate": "使用这些设置的新例程。"
+  "routineEditor.hint.duplicate": "使用这些设置的新例程。",
+  "botPanel.library.kind.artifact": "工件",
+  "botPanel.library.pageTitle": "页面：{state}",
+  "botPanel.library.pageState.draft": "草稿",
+  "botPanel.library.pageState.private": "已发布给我",
+  "botPanel.library.pageState.org": "已发布给我的组织",
+  "botPanel.library.pageState.link": "已发布给任何有链接的人",
+  "botPanel.library.pageState.revoked": "已撤销",
+  "botPanel.library.pageState.expired": "已过期"
 }

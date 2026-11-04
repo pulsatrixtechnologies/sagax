@@ -32,11 +32,11 @@ function make(opts: {
   bots?: Record<string, { id: string; remoteHosts?: string[]; ownerPrincipalId?: string | null }>;
   ownerSub?: (principalId: string) => string | null;
 } = {}) {
-  const bots = { ...(opts.bots ?? { melonie: { id: "melonie", remoteHosts: [], ownerPrincipalId: ALICE } }) };
+  const bots = { ...(opts.bots ?? { wren: { id: "wren", remoteHosts: [], ownerPrincipalId: ALICE } }) };
   const save = vi.fn((botId: string, remoteHosts: string[]) => {
     bots[botId] = { ...bots[botId]!, remoteHosts };
   });
-  const open = vi.fn(async () => ({ ok: true as const, code: "K7QMNP", botId: "melonie", threadId: "t1" }));
+  const open = vi.fn(async () => ({ ok: true as const, code: "K7QMNP", botId: "wren", threadId: "t1" }));
   const service = createRemoteBotHosts({
     bot: (id) => bots[id] ?? null,
     canEdit: (principalId, botId) => bots[botId]?.ownerPrincipalId?.toLowerCase() === principalId.toLowerCase(),
@@ -63,11 +63,11 @@ function make(opts: {
 describe("remote bot hosts (endpoint-to-bot access)", () => {
   it("attaches a person's enrolled host to their bot by default", async () => {
     const { service, save, bots } = make();
-    const out = await service.attach(ALICE, "melonie", HOST);
+    const out = await service.attach(ALICE, "wren", HOST);
     expect(out).toEqual({ ok: true, remoteHosts: [HOST] });
-    expect(save).toHaveBeenCalledWith("melonie", [HOST]);
-    expect(bots.melonie?.remoteHosts).toEqual([HOST]);
-    const listed = await service.forBot(ALICE, "melonie");
+    expect(save).toHaveBeenCalledWith("wren", [HOST]);
+    expect(bots.wren?.remoteHosts).toEqual([HOST]);
+    const listed = await service.forBot(ALICE, "wren");
     expect(listed.attached).toEqual([HOST]);
     expect(listed.hosts.map((h) => h.hostname)).toEqual(["PC-A"]);
   });
@@ -77,11 +77,11 @@ describe("remote bot hosts (endpoint-to-bot access)", () => {
       aliceHosts: [enrolled()],
       bobHosts: [enrolled({ hostId: OTHER, hostname: "Bob-PC", installedBy: BOB_SUB })],
       bots: {
-        melonie: { id: "melonie", remoteHosts: [], ownerPrincipalId: ALICE },
+        wren: { id: "wren", remoteHosts: [], ownerPrincipalId: ALICE },
         bobBot: { id: "bobBot", remoteHosts: [], ownerPrincipalId: BOB },
       },
     });
-    expect(await service.attach(ALICE, "melonie", OTHER)).toMatchObject({ ok: false, error: "not_found" });
+    expect(await service.attach(ALICE, "wren", OTHER)).toMatchObject({ ok: false, error: "not_found" });
     expect(await service.attach(ALICE, "bobBot", HOST)).toMatchObject({ ok: false, error: "forbidden" });
     expect(save).not.toHaveBeenCalled();
   });
@@ -92,23 +92,23 @@ describe("remote bot hosts (endpoint-to-bot access)", () => {
         enrolled(),
         enrolled({ hostId: OTHER, hostname: "Bob-PC", installedBy: BOB_SUB }),
       ],
-      bots: { melonie: { id: "melonie", remoteHosts: [OTHER], ownerPrincipalId: ALICE } },
+      bots: { wren: { id: "wren", remoteHosts: [OTHER], ownerPrincipalId: ALICE } },
     });
-    expect(await service.attach(ALICE, "melonie", OTHER)).toMatchObject({ ok: false, error: "not_found" });
-    const catalog = await service.forBot(ALICE, "melonie");
+    expect(await service.attach(ALICE, "wren", OTHER)).toMatchObject({ ok: false, error: "not_found" });
+    const catalog = await service.forBot(ALICE, "wren");
     expect(catalog.catalog.map((h) => h.hostId)).toEqual([HOST]);
     expect(catalog.hosts).toEqual([]);
-    expect(await service.open(ALICE, "melonie", OTHER)).toMatchObject({ ok: false, error: "not_found" });
+    expect(await service.open(ALICE, "wren", OTHER)).toMatchObject({ ok: false, error: "not_found" });
     expect(open).not.toHaveBeenCalled();
   });
 
   it("detaches and refuses open until the host is attached", async () => {
     const { service, open } = make();
-    expect(await service.open(ALICE, "melonie", HOST)).toMatchObject({ ok: false, error: "not_found" });
+    expect(await service.open(ALICE, "wren", HOST)).toMatchObject({ ok: false, error: "not_found" });
     expect(open).not.toHaveBeenCalled();
-    await service.attach(ALICE, "melonie", HOST);
-    expect(await service.open(ALICE, "melonie", HOST)).toEqual({ ok: true, code: "K7QMNP", botId: "melonie", threadId: "t1" });
+    await service.attach(ALICE, "wren", HOST);
+    expect(await service.open(ALICE, "wren", HOST)).toEqual({ ok: true, code: "K7QMNP", botId: "wren", threadId: "t1" });
     expect(open).toHaveBeenCalledWith({ principalId: ALICE }, HOST, {});
-    expect(await service.detach(ALICE, "melonie", HOST)).toEqual({ ok: true, remoteHosts: [] });
+    expect(await service.detach(ALICE, "wren", HOST)).toEqual({ ok: true, remoteHosts: [] });
   });
 });

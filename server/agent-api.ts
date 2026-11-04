@@ -1,14 +1,16 @@
-// The agent-to-agent API: twelve tools that let one agent (a Sagax bot, or a
-// person's AI client attached to Perspicax) find, create, prompt and read
-// other Sagax bots, with the semantics, parameters and limits of the reference design's
-// own agent tools (docs/agent-api.md):
+// The agent-to-agent API: tools that let one agent (a Sagax bot, or a
+// person's AI client attached to Perspicax) find, create, prompt, read and
+// configure other Sagax bots, with the semantics, parameters and limits of the
+// reference design's own agent tools (docs/agent-api.md):
 //
 //   list_agents, find_agents, get_agent, create_agent, delete_agent,
 //   send_prompt, await_turn, read_transcript, read_transcript_page,
-//   read_latest_page, read_latest_page_with_threads, read_transcript_cold
+//   read_latest_page, read_latest_page_with_threads, read_transcript_cold,
+//   list_agent_models, update_agent_model, update_agent_settings, update_routine
 //
 // create_agent makes a temporary agent and delete_agent archives one
-// (server/temporary-agents.ts, Perspicax #321).
+// (server/temporary-agents.ts, Perspicax #321). Fleet writes (#1944) reuse the
+// same PATCH routes the Edit bot window and Automations editor call.
 //
 // This file is the core only: validation, the turn handle, waiting for a
 // turn, transcript paging, rate limits, scopes and the audit hook. It reads
@@ -30,6 +32,22 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { join } from "node:path";
 import { parseWakePriority, planPriorityWake, releasePriorityNow, wakeSenderId, type PriorityDelivery } from "./proactive/priority-wake.ts";
 import { TEMP_AGENT_IDLE_HOURS_MAX } from "./temporary-agents.ts";
+import { AGENT_SETTINGS_FIELDS } from "./fleet-agent-settings.ts";
+
+export {
+  AGENT_PRIMARY_FIELD,
+  AGENT_SETTINGS_FIELDS,
+  RUNTIME_SETTINGS_FIELDS,
+  formatEngineCandidates,
+  isAgentSettingsField,
+  isRuntimeSettingsField,
+  partitionAgentSettings,
+  plainFieldRefusalReason,
+  resolveEngineInstance,
+  type EngineCandidate,
+  type ResolveEngineResult,
+  type RuntimeSettingsField,
+} from "./fleet-agent-settings.ts";
 
 export const AGENT_TOOL_NAMES = [
   "list_agents",
@@ -44,6 +62,10 @@ export const AGENT_TOOL_NAMES = [
   "read_latest_page",
   "read_latest_page_with_threads",
   "read_transcript_cold",
+  "list_agent_models",
+  "update_agent_model",
+  "update_agent_settings",
+  "update_routine",
 ] as const;
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
 
@@ -86,6 +108,11 @@ export const AGENT_TOOL_POLICY: Record<AgentToolName, AgentToolPolicy> = {
   read_latest_page: { scope: "agents.read", access: "read", readOnly: true, rate: 240 },
   read_latest_page_with_threads: { scope: "agents.read", access: "read", readOnly: true, rate: 240 },
   read_transcript_cold: { scope: "agents.read", access: "read", readOnly: true, rate: 240 },
+  // Fleet (#1944): person AI clients configure bots they may already edit in the app.
+  list_agent_models: { scope: "agents.read", access: "read", readOnly: true, rate: 240 },
+  update_agent_model: { scope: "agents.send", access: "write", readOnly: false, rate: 30 },
+  update_agent_settings: { scope: "agents.send", access: "write", readOnly: false, rate: 30 },
+  update_routine: { scope: "agents.send", access: "write", readOnly: false, rate: 30 },
 };
 
 // Limits, the reference's where it names one.
@@ -187,6 +214,14 @@ export interface AgentCaller {
   speakerPrincipalId?: string;
 }
 
+/** The agent's default model as list_agents / get_agent show it (#1944). */
+export interface AgentModelSummary {
+  instance_id: string;
+  model: string;
+  effort?: string;
+  auto?: boolean;
+}
+
 export interface AgentSummary {
   id: string;
   name: string;
@@ -197,6 +232,8 @@ export interface AgentSummary {
   /** The person who owns this agent, as get_agent answers it. Null when none
    * is known to the caller. `principal_id` is the value to pass to sagax_nudge. */
   owner: { principal_id: string; name: string } | null;
+  /** Default engine/model when the transport knows it (#1944). */
+  model?: AgentModelSummary | null;
 }
 
 /** What get_agent answers beyond the summary (the dependencies fill it). */
@@ -222,6 +259,36 @@ export interface AgentProfile {
   } | null;
   /** The agent's sheet, when the server can name one. */
   profile_url: string | null;
+  /** Default model/engine (#1944); always when the agent is reachable. */
+  model?: AgentModelSummary | null;
+}
+
+/** One engine and its models for list_agent_models. */
+export interface AgentModelChoice {
+  instance_id: string;
+  label: string;
+  models: Array<{ id: string; label: string }>;
+  effort_levels?: string[];
+  /** True when Auto may be chosen on this engine. */
+  auto?: boolean;
+}
+
+/** Fields update_agent_settings may send: derived in fleet-agent-settings.ts
+ * from MEMBER_BOT_FIELDS + BOT_FIELD_PERMISSIONS + runtime-settings + primary.
+ * modelSelection stays on update_agent_model. */
+export type AgentSettingsField = string;
+
+export interface AgentSettingsResult {
+  changed: string[];
+  refused: Array<{ field: string; reason: string }>;
+  agent?: AgentSummary;
+}
+
+export interface AgentRoutinePatch {
+  enabled?: boolean;
+  name?: string;
+  instructions?: string;
+  schedule?: Record<string, unknown>;
 }
 
 export interface TranscriptThread {
@@ -303,6 +370,19 @@ export interface AgentApiDeps {
   profile(caller: AgentCaller, agentId: string): AgentProfile | Refusal | Promise<AgentProfile | Refusal>;
   /** Archive a temporary agent (its conversations are kept for a while). */
   deleteAgent(caller: AgentCaller, agentId: string): Promise<{ archived_at: number; purge_at: number } | Refusal>;
+  /** Engines and models the caller may pick for this agent (#1944). */
+  listModels?(caller: AgentCaller, agentId: string): Promise<{ models: AgentModelChoice[]; current: AgentModelSummary | null } | Refusal>;
+  /** Change the agent's default model/engine (same checks as PATCH /api/bots/:id). */
+  updateModel?(caller: AgentCaller, agentId: string, selection: {
+    instanceId?: string;
+    model?: string;
+    effort?: string;
+    auto?: boolean;
+  }): Promise<{ model: AgentModelSummary; agent: AgentSummary } | Refusal>;
+  /** Partial Edit-bot fields (same checks as PATCH /api/bots/:id). */
+  updateSettings?(caller: AgentCaller, agentId: string, fields: Record<string, unknown>): Promise<AgentSettingsResult | Refusal>;
+  /** Enable/disable or edit a routine the caller may edit (same as member PATCH routines/{id}). */
+  updateRoutine?(caller: AgentCaller, routineId: string, patch: AgentRoutinePatch): Promise<{ routine: Record<string, unknown> } | Refusal>;
   /** The conversations with this agent the caller may read. */
   threads(caller: AgentCaller, agentId: string): TranscriptThread[];
   /** A conversation's stored messages, oldest first. Never wakes anything. */
@@ -508,16 +588,25 @@ const BAD_HANDLE_MESSAGE: Record<BadHandleReason, string> = {
 /** The refusal of a handle. `threadId` is passed only when the handle was
  * authentic (its signature held) and names a conversation this caller may
  * read: the one-call recovery is then read_latest_page with it. */
-export function badHandleRefusal(reason: BadHandleReason, threadId?: string | null): Refusal {
+export function badHandleRefusal(reason: BadHandleReason, threadId?: string | null, agentId?: string | null): Refusal {
+  const named = { ...(threadId ? { thread_id: threadId } : {}), ...(threadId && agentId ? { agent_id: agentId } : {}) };
   return refuse(400, BAD_HANDLE_CODE[reason], BAD_HANDLE_MESSAGE[reason], {
-    details: { reason, family: "bad_handle", ...(threadId ? { thread_id: threadId } : {}) },
-    ...(threadId ? { thread_id: threadId } : {}),
+    details: { reason, family: "bad_handle", ...named },
+    ...named,
     hint: BAD_HANDLE_HINT,
   });
 }
 
 /** When a handle stops being valid (ms since the epoch). */
 export const handleExpiresAt = (issuedAt: number): number => issuedAt + HANDLE_TTL_MS;
+
+/** The lifetime fields every answer that carries a handle publishes (#1896):
+ * `expires_at` (unix ms, the contract since 0.8.24), the same instant as an
+ * ISO 8601 string, and the handle's whole lifetime in ms. */
+export function handleLifetime(issuedAt: number): { expires_at: number; expires_at_iso: string; ttl_ms: number } {
+  const expiresAt = handleExpiresAt(issuedAt);
+  return { expires_at: expiresAt, expires_at_iso: new Date(expiresAt).toISOString(), ttl_ms: HANDLE_TTL_MS };
+}
 
 export function verifyHandle(secret: Buffer, handle: string, now: number): VerifyHandleResult {
   if (typeof handle !== "string" || !handle.startsWith("turn_") || handle.length > 1_200) {
@@ -614,6 +703,7 @@ const wireSummary = (agent: AgentSummary) => ({
   status: agent.status,
   temporary: agent.temporary === true,
   owner: agent.owner ?? null,
+  ...(agent.model ? { model: agent.model } : {}),
 });
 
 const keyOf = (entry: TranscriptEntry): CursorKey => ({ at: entry.at, threadId: entry.thread_id, id: entry.id });
@@ -918,10 +1008,12 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       if (isRefusal(agent)) return agent;
       const profile = await deps.profile(caller, agentId);
       if (isRefusal(profile)) return profile;
+      const model = profile.model ?? agent.model ?? null;
       return ok({
-        agent: { ...wireSummary(agent), title: profile.title },
+        agent: { ...wireSummary(agent), title: profile.title, ...(model ? { model } : {}) },
         owner: profile.owner,
         profile: profile.profile,
+        model,
         temporary: profile.temporary,
         profile_url: profile.profile_url,
         ...(profile.profile ? {} : { note: "You may use this agent, but only its owner, a person who can edit it or an organization admin reads its instructions." }),
@@ -1105,7 +1197,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       const body: HandleBody = { a: agentId, t: threadId, m: posted.messageId, i: issuedAt, c: callerKey(caller) };
       const handle = signHandle(deps.secret, body);
       const accepted = {
-        handle, expires_at: handleExpiresAt(issuedAt), label: turnLabel(agent.name, prompt), agent_id: agentId, thread_id: threadId, mode, accepted: true, files: fileInputs.length,
+        handle, ...handleLifetime(issuedAt), label: turnLabel(agent.name, prompt), agent_id: agentId, thread_id: threadId, mode, accepted: true, files: fileInputs.length,
         ...(plan.reported ? { priority: plan.reported, ...(plan.downgraded ? { downgraded: true, priority_note: plan.note } : {}) } : {}),
       };
       if (mode === "fire_and_forget") return ok({ ...accepted, finished: false, status: "accepted" });
@@ -1145,9 +1237,20 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
         // Altered or not a handle: nothing in it is trusted, nothing is read.
         if (!verified.ok && verified.reason !== "age") return badHandleRefusal(verified.reason);
         const body = verified.body;
-        if (body.a !== agentId) return badHandleRefusal("other_agent");
+        if (body.a !== agentId) {
+          // Authentic, but for another agent (the caller mixed up agent_id).
+          // Name the handle's conversation and agent only when it is one of
+          // the caller's own with an agent it still reaches: the one-call
+          // recovery is then read_latest_page with both (#1896).
+          const own = deps.threads(caller, body.a).some((thread) => thread.threadId === body.t)
+            && !isRefusal(await reachable(caller, body.a));
+          return own ? badHandleRefusal("other_agent", body.t, body.a) : badHandleRefusal("other_agent");
+        }
         const reason: BadHandleReason | null = !verified.ok ? "age" : body.c !== callerKey(caller) ? "other_caller" : null;
-        if (!reason) return ok({ ...resultBody(await waitTurn(body, args.handle, timeoutMs!, signal, after)), expires_at: handleExpiresAt(body.i) });
+        if (!reason) return ok({ ...resultBody(await waitTurn(body, args.handle, timeoutMs!, signal, after)), ...handleLifetime(body.i) });
+        // The caller key is the person's principal id (or the bot id), never
+        // the MCP session or AI client: a person who reconnects after an idle
+        // gap (new session, same person) matches and lands above (#1896).
         // The handle is authentic (its signature held). A conversation of the
         // caller's own (deps.threads) is one it may read anyway with
         // read_latest_page: naming it, or answering from it, discloses nothing.
@@ -1174,9 +1277,9 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       const handle = signHandle(deps.secret, body);
       if (deps.turnState(agentId, threadId) === "idle") {
         const last = [...entries].reverse().find((entry) => entry.thread_id === threadId && entry.role === "agent" && entry.kind === "text");
-        return ok({ handle, expires_at: handleExpiresAt(body.i), agent_id: agentId, thread_id: threadId, finished: true, status: "idle", reply: last?.text ?? "" });
+        return ok({ handle, ...handleLifetime(body.i), agent_id: agentId, thread_id: threadId, finished: true, status: "idle", reply: last?.text ?? "" });
       }
-      return ok({ ...resultBody(await waitTurn(body, handle, timeoutMs!, signal, after)), expires_at: handleExpiresAt(body.i) });
+      return ok({ ...resultBody(await waitTurn(body, handle, timeoutMs!, signal, after)), ...handleLifetime(body.i) });
     },
 
     async read_transcript(caller, args) {
@@ -1239,6 +1342,134 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
       // of the agent is started (turnState is never called).
       const page = pageBefore(collectEntries(deps, deps.threads(caller, agentId)), cursor, COLD_PAGE_SIZE);
       return ok({ agent_id: agentId, entries: page.entries, next_cursor: page.next_cursor, cold: true });
+    },
+
+    async list_agent_models(caller, args) {
+      const bad = onlyKeys(args, ["agent_id"]);
+      if (bad) return bad;
+      const agentId = agentIdArg(args);
+      if (isRefusal(agentId)) return agentId;
+      const agent = await reachable(caller, agentId);
+      if (isRefusal(agent)) return agent;
+      if (!deps.listModels) {
+        return refuse(501, "not_supported", "This server does not list models for agents yet.");
+      }
+      const listed = await deps.listModels(caller, agentId);
+      if (isRefusal(listed)) return listed;
+      return ok({ agent_id: agentId, current: listed.current, models: listed.models });
+    },
+
+    async update_agent_model(caller, args) {
+      const bad = onlyKeys(args, ["agent_id", "instance_id", "instance", "engine", "model", "effort", "auto"]);
+      if (bad) return bad;
+      const agentId = agentIdArg(args);
+      if (isRefusal(agentId)) return agentId;
+      const agent = await reachable(caller, agentId);
+      if (isRefusal(agent)) return agent;
+      if (!deps.updateModel) {
+        return refuse(501, "not_supported", "This server does not change agent models yet.");
+      }
+      const auto = args.auto === true ? true : args.auto === false ? false : undefined;
+      if (args.auto !== undefined && args.auto !== null && auto === undefined) {
+        return refuse(400, "bad_request", "auto is true (pick Auto) or omit it.");
+      }
+      const instanceRaw = [args.instance_id, args.instance, args.engine].find((value) => typeof value === "string" && value.trim());
+      const instanceId = typeof instanceRaw === "string" ? instanceRaw.trim() : undefined;
+      const model = typeof args.model === "string" ? args.model.trim() : undefined;
+      const effort = typeof args.effort === "string" ? args.effort.trim() : undefined;
+      if (auto !== true && !instanceId && !model && !effort) {
+        return refuse(400, "bad_request", "Pass instance_id (or engine), model, effort, and/or auto true. Call list_agent_models for valid choices.");
+      }
+      if (effort !== undefined && !effort) return refuse(400, "bad_request", "effort is a non-empty effort level from list_agent_models.");
+      const updated = await deps.updateModel(caller, agentId, {
+        ...(instanceId ? { instanceId } : {}),
+        ...(model ? { model } : {}),
+        ...(effort ? { effort } : {}),
+        ...(auto === true ? { auto: true } : {}),
+      });
+      if (isRefusal(updated)) return updated;
+      return ok({
+        agent_id: agentId,
+        model: updated.model,
+        agent: wireSummary(updated.agent),
+        note: "The agent's default model is updated. Threads that follow the bot use it on their next turn.",
+      });
+    },
+
+    async update_agent_settings(caller, args) {
+      const bad = onlyKeys(args, ["agent_id", ...AGENT_SETTINGS_FIELDS]);
+      if (bad) {
+        // Name the refused key plainly when it is a model field (wrong tool).
+        const keys = args && typeof args === "object" && !Array.isArray(args) ? Object.keys(args as object) : [];
+        const unknown = keys.find((key) => key !== "agent_id" && !AGENT_SETTINGS_FIELDS.includes(key));
+        if (unknown === "modelSelection" || unknown === "model" || unknown === "instance_id" || unknown === "instance" || unknown === "engine" || unknown === "effort" || unknown === "auto") {
+          return refuse(400, "bad_request", "Model changes use update_agent_model, not update_agent_settings.");
+        }
+        return bad;
+      }
+      const agentId = agentIdArg(args);
+      if (isRefusal(agentId)) return agentId;
+      const agent = await reachable(caller, agentId);
+      if (isRefusal(agent)) return agent;
+      if (!deps.updateSettings) {
+        return refuse(501, "not_supported", "This server does not change agent settings yet.");
+      }
+      const fields: Record<string, unknown> = {};
+      for (const key of AGENT_SETTINGS_FIELDS) {
+        if (Object.hasOwn(args, key)) fields[key] = args[key];
+      }
+      if (!Object.keys(fields).length) {
+        return refuse(400, "bad_request", "Pass at least one Edit bot field (name, approval level, tools, computer, runtime, primary, …). Call get_agent first; the same checks as the Sagax Edit bot window apply.");
+      }
+      const updated = await deps.updateSettings(caller, agentId, fields);
+      if (isRefusal(updated)) return updated;
+      return ok({
+        agent_id: agentId,
+        changed: updated.changed,
+        refused: updated.refused,
+        ...(updated.agent ? { agent: wireSummary(updated.agent) } : {}),
+      });
+    },
+
+    async update_routine(caller, args) {
+      const bad = onlyKeys(args, ["routine_id", "enabled", "name", "instructions", "schedule"]);
+      if (bad) return bad;
+      const routineId = typeof args.routine_id === "string" ? args.routine_id.trim() : "";
+      if (!routineId || !ID.test(routineId)) {
+        return refuse(400, "bad_request", "routine_id is required: an id from sagax_routines or list_routines.");
+      }
+      if (!deps.updateRoutine) {
+        return refuse(501, "not_supported", "This server does not update routines through the agent API yet.");
+      }
+      const patch: AgentRoutinePatch = {};
+      if (Object.hasOwn(args, "enabled")) {
+        if (typeof args.enabled !== "boolean") return refuse(400, "bad_request", "enabled is true or false.");
+        patch.enabled = args.enabled;
+      }
+      if (Object.hasOwn(args, "name")) {
+        if (typeof args.name !== "string") return refuse(400, "bad_request", "name is a string.");
+        const name = args.name.trim();
+        if (!name || name.length > 120) return refuse(400, "bad_request", "name is 1 to 120 characters.");
+        patch.name = name;
+      }
+      if (Object.hasOwn(args, "instructions")) {
+        if (typeof args.instructions !== "string") return refuse(400, "bad_request", "instructions is a string.");
+        const instructions = args.instructions.trim();
+        if (!instructions || instructions.length > 32_000) return refuse(400, "bad_request", "instructions is 1 to 32000 characters.");
+        patch.instructions = instructions;
+      }
+      if (Object.hasOwn(args, "schedule")) {
+        if (!args.schedule || typeof args.schedule !== "object" || Array.isArray(args.schedule)) {
+          return refuse(400, "bad_request", "schedule is an object (cron, daily, interval, once, webhook or event).");
+        }
+        patch.schedule = args.schedule as Record<string, unknown>;
+      }
+      if (!Object.keys(patch).length) {
+        return refuse(400, "bad_request", "Pass at least one of enabled, name, instructions, schedule.");
+      }
+      const updated = await deps.updateRoutine(caller, routineId, patch);
+      if (isRefusal(updated)) return updated;
+      return ok({ routine_id: routineId, routine: updated.routine });
     },
   };
 

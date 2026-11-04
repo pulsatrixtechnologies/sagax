@@ -90,6 +90,12 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   page_comments: "conversation",
   // a phone call: a card in the member's own conversation, through their own Twilio profile
   place_phone_call: "conversation",
+  // Live controls and the compatibility alias use that same person's
+  // profile; call lookup also binds bot and thread (d352e1751).
+  place_call: "conversation",
+  send_dtmf: "conversation",
+  transfer: "conversation",
+  hang_up: "conversation",
   send_voice_note: "conversation",
   end_call: "conversation",
   request_credential: "conversation",
@@ -116,6 +122,9 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   propose_routine_action: "own-setup",
   propose_profile: "own-setup",
   propose_model: "own-setup",
+  // Personal review rules only; the route keeps person and org Ask/Deny
+  // checks (4ec8a5749, MCP own scope registered in b17ff95a5).
+  propose_rule: "own-setup",
   propose_team_memory: "own-setup",
   propose_team_setup: "own-setup",
   propose_bot_deletion: "own-setup",
@@ -157,6 +166,10 @@ export const MEMBER_OWN_SCOPE_AGENT_TOOLS: Readonly<Record<string, MemberToolFam
   // turn speaks for, through a route that checks it.
   // the bot's own task list (agents-call-tasks.ts)
   task_list: "own-work",
+  // The capability's bot and chat own these waits; the route rejects an
+  // attempt to cancel another chat's wait (4286c5568, b17ff95a5).
+  wait_until: "own-work",
+  cancel_wait: "own-work",
   // points at the engine's own video tools; runs nothing (agents-video.ts)
   make_video: "own-work",
   // a search with the person's own provider and key (server/web-search/)

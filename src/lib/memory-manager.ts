@@ -24,6 +24,8 @@ export interface MemoryManagerSource {
   botId?: string;
   section?: string;
   scope?: string;
+  /** Bot source: false when no current bot owns this memory (a temporary agent's). */
+  linked?: boolean;
 }
 
 export interface MemoryManagerSourcesResponse {
@@ -91,6 +93,8 @@ export interface MemoryBrowse {
   tiers?: MemoryTierRow[];
   /** Team memory: each note's whole text, by note id (the listing carries it). */
   bodies?: Record<string, string>;
+  /** A bot's MEMORY.md, in bytes (0: empty). */
+  indexBytes?: number;
 }
 
 export interface MemoryNoteDetail {
@@ -194,7 +198,7 @@ export async function browseBotSource(botId: string): Promise<MemoryBrowse> {
     { id: "topics", name: "Topics", count: overview.topics.length },
     { id: "logs", name: "Logs", count: overview.logs.length },
   ].filter((folder) => folder.count > 0);
-  return { folders, notes, mayWrite: true };
+  return { folders, notes, mayWrite: true, indexBytes: overview.index?.bytes ?? 0 };
 }
 
 export async function openBotNote(botId: string, path: string): Promise<MemoryNoteDetail> {
@@ -229,6 +233,24 @@ export async function deleteBotNotes(botId: string, paths: string[]) {
 
 export async function undoBotDeletes(botId: string, undoIds: string[]) {
   for (const id of undoIds) await revertMemoryChange(botId, id);
+}
+
+/** A whole bot memory folder emptied (a folder no bot is linked to): its
+ * topics and logs deleted and its MEMORY.md cleared (it cannot be deleted),
+ * each one a journal row the Trash and Undo put back. */
+export async function emptyBotFolder(botId: string, paths: string[], clearIndex: boolean) {
+  const { undoIds } = await deleteBotNotes(botId, paths);
+  if (clearIndex) {
+    await saveMemoryDoc(botId, MEMORY_INDEX, "", undefined);
+    const journal = await fetchMemoryJournal(botId, 10);
+    const cleared = journal.find((row) => row.path === MEMORY_INDEX && row.canRevert);
+    if (cleared) undoIds.push(cleared.id);
+  }
+  return { undoIds, count: paths.length + (clearIndex ? 1 : 0) };
+}
+
+export function restoreBotChange(botId: string, changeId: string) {
+  return revertMemoryChange(botId, changeId);
 }
 
 export interface TeamEntry {

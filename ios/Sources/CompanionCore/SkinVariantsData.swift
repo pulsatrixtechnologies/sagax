@@ -73,7 +73,7 @@ enum DesktopSkinVariantData {
 
     /// SKIN_FAMILIES (src/lib/skin-families.ts).
     static let families: [Family] = [
-        Family(id: "pulsatrix", name: "Pulsatrix", tagline: "Perspicax's own look: navy chrome, Geist and a soft glow from the top.", secret: false, variants: [
+        Family(id: "pulsatrix", name: "Pulsatrix", tagline: "Perspicax's own look: neutral dark chrome, Geist and Pulsatrix blue.", secret: false, variants: [
             Variant(id: "basic", light: "pulsatrix-light", dark: "pulsatrix", tint: nil, group: .color),
             Variant(id: "red", light: "pulsatrix-light", dark: "pulsatrix", tint: .red, group: .color),
             Variant(id: "pink", light: "pulsatrix-light", dark: "pulsatrix", tint: .pink, group: .color),

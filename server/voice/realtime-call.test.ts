@@ -28,7 +28,7 @@ function setup(overrides: Partial<RealtimeBridgeDeps> = {}) {
     closePage: () => {},
     work: async () => ({ kind: "answer", text: "The latest mail is from Mathieu, about the server windows." }),
     respond: async () => true,
-    bot: { name: "Melonie" },
+    bot: { name: "Wren" },
     history: [],
     log: () => {},
     now: () => clock,
@@ -45,7 +45,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("realtime call configuration", () => {
   it("configures one realtime session: server turn detection, PCM 24 kHz, the bot's work as functions", () => {
-    const update = realtimeSessionUpdate({ bot: { name: "Melonie" }, voice: "Ara", language: "fr" });
+    const update = realtimeSessionUpdate({ bot: { name: "Wren" }, voice: "Ara", language: "fr" });
     expect(update.type).toBe("session.update");
     expect(update.session.turn_detection).toMatchObject({ type: "server_vad", silence_duration_ms: 500 });
     expect(update.session.audio.input.format).toEqual({ type: "audio/pcm", rate: 24_000 });
@@ -55,7 +55,7 @@ describe("realtime call configuration", () => {
   });
 
   it("answers presence checks itself and never repeats a result", () => {
-    const text = realtimeInstructions({ name: "Melonie" });
+    const text = realtimeInstructions({ name: "Wren" });
     expect(text).toMatch(/are you there/);
     expect(text).toMatch(/never repeat a result/);
     expect(text).toMatch(/repeated word/);

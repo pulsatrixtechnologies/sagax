@@ -1,14 +1,17 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DatabaseSync } from "node:sqlite";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { freePortBlock } from "./testing/ports.ts";
 import { openSse } from "./testing/sse.ts";
+import type { Assignment } from "./runtime/types.ts";
 
 // Where a signal lands, end to end. Two bugs live here, and both are about a
 // notification pointing at a conversation that did not change:
@@ -70,6 +73,28 @@ const capability = async (
   return { authorization: `Bearer ${minted.body.token}` };
 };
 
+// 84841aeed: these standalone peer probes have no requester turn to resume.
+// Their real external-runtime capability runs consultations on a poll root.
+const runtimes: Record<string, { token: string; threadId: string }> = {};
+const peerCapability = (botId: string, threadId: string): Record<string, string> => {
+  const token = `notification-runtime-${randomUUID()}`;
+  runtimes[botId] = { token, threadId };
+  writeFileSync(join(home, ".sagax", "external-runtimes.json"), JSON.stringify(runtimes), { mode: 0o600 });
+  return { authorization: `Bearer ${token}` };
+};
+
+const peerWork = (fromBotId: string, toBotId: string): Assignment[] => {
+  const db = new DatabaseSync(join(home, ".sagax", "runtime.db"), { readOnly: true });
+  try {
+    const rows = (db.prepare("SELECT json FROM assignments").all() as Array<{ json: string }>).map(row => JSON.parse(row.json) as Assignment);
+    return rows.filter(row => row.parentId && row.assignee.botId === toBotId
+      && rows.find(parent => parent.id === row.parentId)?.assignee.botId === fromBotId);
+  } finally { db.close(); }
+};
+
+const threadMessages = async (threadId: string) =>
+  (await api("GET", `/api/threads/${threadId}/messages?limit=40`)).body.messages as any[];
+
 const state = async (messages = 40) => (await api("GET", `/api/bots?messages=${messages}`)).body;
 const botState = async (botId: string) =>
   (await state(40)).bots.find((candidate: { id: string }) => candidate.id === botId);
@@ -115,7 +140,7 @@ beforeAll(async () => {
       quick: {
         driver: "claudeAgent",
         displayName: "Quick fixture",
-        environment: { FAKE_CLAUDE_MODE: "happy", FAKE_CLAUDE_DUMP: dumpFile },
+        environment: { FAKE_CLAUDE_MODE: "happy", FAKE_CLAUDE_TOOL_CALLS: "[]", FAKE_CLAUDE_DUMP: dumpFile },
         config: { cli: FAKE_CLAUDE },
       },
       // never finishes: how a bot is held mid-room long enough to ask for
@@ -334,92 +359,101 @@ describe("bot-to-bot coordination is recorded, not announced", () => {
   it("runs an ask_bot round trip with no badge and no banner anywhere", async () => {
     const asker = await createBot("Pen", "quick");
     const peer = await createBot("Ink", "quick");
-    let channelId: string | undefined;
     const stream = await openSse(`${base}/api/events`);
     try {
-      // Ink already answered the person earlier and they have not looked yet.
-      // A hop runs on Ink's own 1:1 thread, so this badge is the one it could
-      // spend by mistake — seeded true, or the "no badge" checks below would
-      // pass for a hop that had just cleared it.
+      // The peer's existing badge belongs to an earlier human conversation.
       expect((await api("PATCH", `/api/bots/${peer.id}`, { unread: true })).status).toBe(200);
       expect((await botState(peer.id))?.unread).toBe(true);
       const asked = await api(
         "POST",
         "/api/internal/ask-bot",
         { fromBotId: asker.id, toBotId: peer.id, message: "Ink, can you take the deploy?" },
-        await capability(asker.id, asker.threadId),
+        peerCapability(asker.id, asker.threadId),
       );
       expect(asked.status).toBe(200);
       expect(asked.body.botName).toBe("Ink");
       expect(asked.body.text).toContain("hello from fake claude");
 
+      // 84841aeed replaces the mirrored DM with one runtime consultation,
+      // its private work transcript and clickable requester receipts.
+      const work = peerWork(asker.id, peer.id);
+      expect(work).toHaveLength(1);
+      expect(work[0]).toMatchObject({ mode: "consult", status: "completed", executions: 1 });
+      const workThreadId = work[0]!.assignee.destination.threadId!;
+      expect(workThreadId).not.toBe(peer.threadId);
+      const exchange = await threadMessages(workThreadId);
+      expect(exchange.filter(message => message.roomRequest?.phase === "request")).toEqual([
+        expect.objectContaining({ from: expect.objectContaining({ botId: asker.id, name: "Pen" }), text: expect.stringContaining("Ink, can you take the deploy?") }),
+      ]);
+      expect(exchange.some(message => message.role === "bot" && message.kind === "text" && message.text?.includes("hello from fake claude"))).toBe(true);
+      const source = await threadMessages(asker.threadId);
+      expect(source.find(message => message.tool?.name === "Sent to Ink")).toMatchObject({ threadRef: { botId: peer.id, threadId: workThreadId } });
+      const reports = source.filter(message => message.roomRequest?.id === work[0]!.id && message.roomRequest.phase === "result");
+      expect(reports).toHaveLength(1);
+      expect(reports[0]).toMatchObject({ from: { botId: peer.id, name: "Ink" }, tool: { ok: true, output: expect.stringContaining("hello from fake claude") }, threadRef: { botId: peer.id, threadId: workThreadId } });
+
       const current = await state(40);
-      const channel = current.groups.find(
-        (group: { dm?: boolean; memberIds: string[] }) =>
-          group.dm === true && group.memberIds.includes(asker.id) && group.memberIds.includes(peer.id),
-      );
-      channelId = channel?.id;
-      expect(channel).toBeTruthy();
-
-      // the record is whole: the channel holds both sides of the exchange...
-      expect(channel.messages.some((message: { text?: string }) => message.text === "Ink, can you take the deploy?")).toBe(true);
-      expect(channel.messages.some(
-        (message: { from?: { botId?: string }; text?: string }) =>
-          message.from?.botId === peer.id && (message.text ?? "").includes("hello from fake claude"),
-      )).toBe(true);
-      // ...and both 1:1 threads keep their clickable chip into it
-      const chip = (botId: string, name: string) =>
-        (current.bots.find((candidate: { id: string }) => candidate.id === botId)?.messages ?? []).some(
-          (message: { kind: string; tool?: { name?: string }; comm?: { groupId?: string } }) =>
-            message.kind === "activity" && message.tool?.name === name && message.comm?.groupId === channel.id,
-        );
-      expect(chip(asker.id, "Messaged @Ink")).toBe(true);
-      expect(chip(peer.id, "Message from @Pen")).toBe(true);
-
-      // nothing about it is worth interrupting anyone: no channel badge, and
-      // the asker — whose thread only carries a chip — gets no dot
-      expect(channel.unread).toBeFalsy();
+      expect(current.groups.some((group: { dm?: boolean; memberIds: string[] }) => group.dm === true && group.memberIds.includes(asker.id) && group.memberIds.includes(peer.id))).toBe(false);
       expect(current.bots.find((candidate: { id: string }) => candidate.id === asker.id)?.unread).toBeFalsy();
-      // ...while the badge Ink already earned is neither spent by the hop
-      // nor re-raised by it: still exactly the one signal the person had
       expect(current.bots.find((candidate: { id: string }) => candidate.id === peer.id)?.unread).toBe(true);
+      const workTask = current.bots.find((candidate: { id: string }) => candidate.id === peer.id)?.tasks.find((task: { threadId: string }) => task.threadId === workThreadId);
+      expect(workTask).toBeTruthy();
+      expect(workTask.unread).toBeFalsy();
 
-      // A unique bot patch is an SSE ordering barrier: by the time it is
-      // observed, every notification this exchange raised is already in
-      // `frames` — including one the fold should never have sent.
+      // This SSE barrier includes every notification raised by the exchange.
       expect((await api("PATCH", `/api/bots/${asker.id}`, { name: "Pen observed" })).status).toBe(200);
-      await stream.until(
-        (candidate) => candidate.kind === "bot" && candidate.bot?.id === asker.id && candidate.bot?.name === "Pen observed",
+      await stream.until(candidate => candidate.kind === "bot" && candidate.bot?.id === asker.id && candidate.bot?.name === "Pen observed");
+      expect(stream.frames.filter(candidate => candidate.kind === "notify")).toEqual([]);
+
+      // A quiet report must also preserve a badge the requester already had.
+      expect((await api("PATCH", `/api/bots/${asker.id}`, { unread: true })).status).toBe(200);
+      expect((await botState(asker.id))?.unread).toBe(true);
+      const askedAgain = await api(
+        "POST",
+        "/api/internal/ask-bot",
+        { fromBotId: asker.id, toBotId: peer.id, message: "Ink, is the deploy ready?" },
+        peerCapability(asker.id, asker.threadId),
       );
-      expect(stream.frames.filter((candidate) => candidate.kind === "notify")).toEqual([]);
+      expect(askedAgain.status).toBe(200);
+      expect(askedAgain.body.botName).toBe("Ink");
+      expect(askedAgain.body.text).toContain("hello from fake claude");
+      const bothWork = peerWork(asker.id, peer.id);
+      expect(bothWork).toHaveLength(2);
+      const secondWork = bothWork.find(assignment => assignment.id !== work[0]!.id)!;
+      expect(secondWork).toMatchObject({ mode: "consult", status: "completed", executions: 1, brief: "Ink, is the deploy ready?" });
+      const secondWorkThreadId = secondWork.assignee.destination.threadId!;
+      expect(secondWorkThreadId).not.toBe(peer.threadId);
+      const secondReports = (await threadMessages(asker.threadId))
+        .filter(message => message.roomRequest?.id === secondWork.id && message.roomRequest.phase === "result");
+      expect(secondReports).toHaveLength(1);
+      expect(secondReports[0]).toMatchObject({ from: { botId: peer.id, name: "Ink" }, tool: { ok: true, output: expect.stringContaining("hello from fake claude") }, threadRef: { botId: peer.id, threadId: secondWorkThreadId } });
+      const afterSecond = await state(40);
+      expect(afterSecond.bots.find((candidate: { id: string }) => candidate.id === asker.id)?.unread).toBe(true);
+      expect(afterSecond.bots.find((candidate: { id: string }) => candidate.id === peer.id)?.unread).toBe(true);
+      const secondWorkTask = afterSecond.bots.find((candidate: { id: string }) => candidate.id === peer.id)?.tasks.find((task: { threadId: string }) => task.threadId === secondWorkThreadId);
+      expect(secondWorkTask).toBeTruthy();
+      expect(secondWorkTask.unread).toBeFalsy();
+      expect((await api("PATCH", `/api/bots/${asker.id}`, { name: "Pen observed twice" })).status).toBe(200);
+      await stream.until(candidate => candidate.kind === "bot" && candidate.bot?.id === asker.id && candidate.bot?.name === "Pen observed twice");
+      expect(stream.frames.filter(candidate => candidate.kind === "notify")).toEqual([]);
     } finally {
       stream.close();
-      await cleanup([channelId], [asker.id, peer.id]);
+      await cleanup([], [asker.id, peer.id]);
     }
   }, 45_000);
 
-  // A hop runs on the PEER'S OWN 1:1 thread (askBotAndWait dispatches to
-  // target.threadId) — the very thread the person types into. So the
-  // classification must not outlive the turn that earned it: leak it once,
-  // in either of the two ways a hop can end, and that bot's DM is mute from
-  // then on, with nothing anywhere to say why.
-  const pairChannelId = async (a: string, b: string) =>
-    (await state(0)).groups.find(
-      (group: { dm?: boolean; memberIds: string[] }) =>
-        group.dm === true && group.memberIds.includes(a) && group.memberIds.includes(b),
-    )?.id;
-
+  // A peer now works in its own runtime work thread. The person's next
+  // ordinary message must still announce itself in their standing thread.
   it("still announces the person's own next message after a hop that finished", async () => {
     const asker = await createBot("Nib", "quick");
     const peer = await createBot("Vellum", "quick");
-    let channelId: string | undefined;
     const stream = await openSse(`${base}/api/events`);
     try {
       const asked = await api(
         "POST",
         "/api/internal/ask-bot",
         { fromBotId: asker.id, toBotId: peer.id, message: "Vellum, is the branch green?" },
-        await capability(asker.id, asker.threadId),
+        peerCapability(asker.id, asker.threadId),
       );
       expect(asked.status).toBe(200);
       expect((await botState(peer.id))?.unread).toBeFalsy();
@@ -435,17 +469,15 @@ describe("bot-to-bot coordination is recorded, not announced", () => {
       );
       expect(frame.notification.threadId).toBe(peer.threadId);
       await expect.poll(async () => (await botState(peer.id))?.unread, { timeout: 20_000 }).toBe(true);
-      channelId = await pairChannelId(asker.id, peer.id);
     } finally {
       stream.close();
-      await cleanup([channelId], [asker.id, peer.id]);
+      await cleanup([], [asker.id, peer.id]);
     }
   }, 45_000);
 
   it("still announces the person's own next message after a hop that never started", async () => {
     const asker = await createBot("Quire", "quick");
     const peer = await createBot("Folio", "quick");
-    let channelId: string | undefined;
     const stream = await openSse(`${base}/api/events`);
     try {
       // Park the peer on an engine that is not there. Since #819 a teammate
@@ -459,7 +491,7 @@ describe("bot-to-bot coordination is recorded, not announced", () => {
         "POST",
         "/api/internal/ask-bot",
         { fromBotId: asker.id, toBotId: peer.id, message: "Folio, still there?" },
-        await capability(asker.id, asker.threadId),
+        peerCapability(asker.id, asker.threadId),
       );
       expect(asked.status).toBe(409);
       expect(asked.body.error).toContain("Folio");
@@ -477,10 +509,9 @@ describe("bot-to-bot coordination is recorded, not announced", () => {
       );
       expect(frame.notification.threadId).toBe(peer.threadId);
       await expect.poll(async () => (await botState(peer.id))?.unread, { timeout: 20_000 }).toBe(true);
-      channelId = await pairChannelId(asker.id, peer.id);
     } finally {
       stream.close();
-      await cleanup([channelId], [asker.id, peer.id]);
+      await cleanup([], [asker.id, peer.id]);
     }
   }, 45_000);
 
@@ -495,7 +526,7 @@ describe("bot-to-bot coordination is recorded, not announced", () => {
       "POST",
       "/api/internal/ask-bot",
       { fromBotId: asker.id, toBotId: peer.id, message: "Dot, can you take the deploy?" },
-      await capability(asker.id, asker.threadId),
+      peerCapability(asker.id, asker.threadId),
     );
     try {
       const frame = await stream.until(
@@ -516,7 +547,12 @@ describe("bot-to-bot coordination is recorded, not announced", () => {
       expect(card?.card?.tool).toBe("ask_bot");
       const denied = await api("POST", `/api/bots/${asker.id}/respond`, { requestId: card.card.requestId, behavior: "deny" });
       expect(denied.status).toBe(200);
-      expect((await asking).body).toMatchObject({ error: "denied by user" });
+      const queued = await asking;
+      expect(queued.status).toBe(200);
+      expect(queued.body).toMatchObject({ busy: true, taskId: expect.any(String) });
+      await expect.poll(async () => (await api("GET", `/api/internal/delegations/${queued.body.taskId}`, undefined, { authorization: `Bearer ${runtimes[asker.id]!.token}` })).body,
+        { timeout: 20_000 }).toMatchObject({ status: "failed", toBotName: "Dot", result: "Denied by user; no work sent." });
+      expect(peerWork(asker.id, peer.id)).toEqual([expect.objectContaining({ status: "failed", executions: 0 })]);
     } finally {
       stream.close();
       await asking.catch(() => undefined);
@@ -527,46 +563,46 @@ describe("bot-to-bot coordination is recorded, not announced", () => {
   it("still buzzes when a peer's turn stops to ask the person a question", async () => {
     const asker = await createBot("Quill", "quick");
     const peer = await createBot("Sage", "curious", "fake-model");
-    let channelId: string | undefined;
+    let peerThreadId: string | undefined;
     const stream = await openSse(`${base}/api/events`);
     // the peer's turn parks on its card, so the ask cannot be awaited yet
     const asking = api(
       "POST",
       "/api/internal/ask-bot",
       { fromBotId: asker.id, toBotId: peer.id, message: "Sage, which colour?" },
-      await capability(asker.id, asker.threadId),
+      peerCapability(asker.id, asker.threadId),
     );
     try {
       const frame = await stream.until(
         (candidate) => candidate.kind === "notify" && candidate.notification?.botId === peer.id,
         20_000,
       );
+      const work = peerWork(asker.id, peer.id);
+      expect(work).toHaveLength(1);
+      expect(work[0]).toMatchObject({ mode: "consult", status: "running", executions: 1 });
+      peerThreadId = work[0]!.assignee.destination.threadId;
       // silencing the peer's completion must never silence the peer asking a
       // person for something only a person can give
       expect(frame.notification).toMatchObject({
         kind: "question",
         botId: peer.id,
-        threadId: peer.threadId,
+        threadId: peerThreadId,
         title: "Sage has a question",
       });
       // the card is really open in the peer's thread — the banner is not
       // announcing something the person cannot act on (a new bot's onboarding
       // card sits above it, so take the turn's own)
-      const card = (await botState(peer.id))?.messages.findLast(
+      expect(peerThreadId).not.toBe(peer.threadId);
+      const card = (await threadMessages(peerThreadId!)).findLast(
         (message: { kind: string; card?: { title?: string } }) => message.kind === "options" && Boolean(message.card),
       );
       expect(card?.card).toMatchObject({ title: "Your bot has a question", subtitle: "Which color?" });
 
-      const current = await state(0);
-      channelId = current.groups.find(
-        (group: { dm?: boolean; memberIds: string[] }) =>
-          group.dm === true && group.memberIds.includes(asker.id) && group.memberIds.includes(peer.id),
-      )?.id;
     } finally {
       stream.close();
-      await api("POST", `/api/bots/${peer.id}/interrupt`, {}).catch(() => undefined);
+      await api("POST", `/api/bots/${peer.id}/interrupt`, peerThreadId ? { threadId: peerThreadId } : {}).catch(() => undefined);
       await asking.catch(() => undefined);
-      await cleanup([channelId], [asker.id, peer.id]);
+      await cleanup([], [asker.id, peer.id]);
     }
   }, 45_000);
 });

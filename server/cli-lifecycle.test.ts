@@ -39,7 +39,7 @@ vi.mock("./tailscale.ts", () => ({
   tailscaleServeOff: mocks.tailscaleServeOff, explainTailscaleFailure: (failure: string) => failure,
 }));
 vi.mock("./tunnel.ts", () => ({ ...mocks, describeTunnelState: () => "Fixture tunnel" }));
-vi.mock("./browser-engine.ts", () => ({
+vi.mock("./browser/browser-engine.ts", () => ({
   browserEngineStatus: () => ({ kind: "ready" }), describeBrowserEngine: () => "Fixture browser ready",
 }));
 vi.mock("./cli/cli-setup.ts", () => ({

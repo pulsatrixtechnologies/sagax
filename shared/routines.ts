@@ -1,3 +1,4 @@
+import type { RoutineRequirements, RoutineReadinessCheck } from "./routine-readiness.ts";
 /** Routine wire shapes — the routine and run records as they ride the REST
  * snapshot and the `routine` / `routine.run` live frames. Moved verbatim
  * from the client's hand-maintained mirrors (src/lib/routines.ts) so the
@@ -133,6 +134,7 @@ export function routineRunMatchesStatus(run: { status: RoutineRunStatus; quiet?:
 }
 
 export interface Routine {
+  requires?: RoutineRequirements;
   id: string;
   name: string;
   prompt: string;
@@ -235,6 +237,8 @@ export interface RoutineRunHandoff {
 }
 
 export interface RoutineRun {
+  readiness?: RoutineReadinessCheck[];
+  requires?: RoutineRequirements;
   id: string;
   routineId: string;
   routineName: string;
@@ -303,6 +307,7 @@ export interface RoutineRun {
 }
 
 export interface RoutineInput {
+  requires?: RoutineRequirements | null;
   name: string;
   prompt: string;
   target?: RoutineTarget;

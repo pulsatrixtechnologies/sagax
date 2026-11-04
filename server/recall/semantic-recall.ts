@@ -8,8 +8,7 @@
 // FTS5 passages always come first; a vector passage only takes a free slot.
 
 import type { MemoryDestination } from "../memory/memory-audience.ts";
-import type { RecallPassage } from "./recall.ts";
-
+import type { RecallPassage } from "./recall-types.ts";
 
 export interface SemanticHit {
   source: "memory" | "conversation";

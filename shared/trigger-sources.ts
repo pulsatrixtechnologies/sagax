@@ -360,6 +360,10 @@ export interface NormalizedTriggerEvent {
   resource?: string;
   /** A comment posted by an app or bot account (GitHub `type: "Bot"`). */
   fromBot?: boolean;
+  /** Human label for who sent the event (Bot phone: person name or
+   * formatted number). Never a raw id. Filter key `fields.sender` stays
+   * the number or address. */
+  senderLabel?: string;
   /** Bot phone (Perspicax Voice): the line's directives as Perspicax sent
    * them (closed values, never the caller's words), handed to the run as
    * they are, outside the untrusted fence. */

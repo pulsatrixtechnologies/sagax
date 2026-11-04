@@ -1,3 +1,4 @@
+import { formatMemoryBytes as sharedFormatMemoryBytes } from "../../shared/format-bytes";
 // The memory panel's client side: the wire types the server's memory
 // routes answer with, the calls, and the pure wording helpers the panel
 // renders from, kept here so the sentences can be tested without React.
@@ -220,18 +221,14 @@ export function openMemoryLocation(botId: string, target: MemoryOpenTarget): Pro
 
 // ── wording ───────────────────────────────────────────────────────────
 
-/** "749 B", "23.4 KB" ("749 o", "23,4 Ko" in French). Not shared/format-bytes:
- * this stops at kilobytes and reads memoryText. */
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return t("memoryText.bytes", { count: bytes });
-  const kb = Math.round(bytes / 102.4) / 10;
-  let shown = String(kb);
-  try {
-    shown = new Intl.NumberFormat(activeLocale(), { maximumFractionDigits: 1 }).format(kb);
-  } catch {
-    /* an unknown locale keeps the plain number */
-  }
-  return t("memoryText.kilobytes", { count: shown });
+/** "749 B", "23.4 KB" ("749 o", "23,4 Ko" in French). Binds the shared
+ * memory formatter to memoryText words and the active locale. Distinct
+ * from shared/format-bytes formatBytes (the locale ladder). */
+export function formatMemoryBytes(bytes: number): string {
+  return sharedFormatMemoryBytes(bytes, activeLocale(), {
+    bytes: (count) => t("memoryText.bytes", { count }),
+    kilobytes: (count) => t("memoryText.kilobytes", { count }),
+  });
 }
 
 /** "just now", "3 min ago", "2 hr ago", "yesterday", "Sep 3": the
@@ -280,7 +277,7 @@ export function capacityStatus(index: MemoryCapacity): CapacityStatus {
     const missingLines = index.lines - index.loadedLines;
     warning = missingLines > 0
       ? t(missingLines === 1 ? "memoryText.capacity.missingOne" : "memoryText.capacity.missing", { count: missingLines })
-      : t("memoryText.capacity.missingBytes", { loaded: formatBytes(index.loadedBytes), bytes: formatBytes(index.bytes) });
+      : t("memoryText.capacity.missingBytes", { loaded: formatMemoryBytes(index.loadedBytes), bytes: formatMemoryBytes(index.bytes) });
   }
   return { level, lineShare, byteShare, sentence, warning };
 }

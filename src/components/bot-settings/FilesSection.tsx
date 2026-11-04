@@ -199,7 +199,7 @@ function meta(file: ThreadFile): string {
 
 /** The open conversation's files: the fetch, the live refresh and the jump
  * back into the chat. Shared by the Files section and the Library tab. */
-export function useThreadFiles(bot: Bot): {
+export function useThreadFiles(bot: Pick<Bot, "threadId" | "messages" | "hasMore">): {
   threadId: string;
   files: ThreadFile[] | null;
   error: boolean;

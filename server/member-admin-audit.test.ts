@@ -64,9 +64,21 @@ describe("member admin audit, section 1: bot tool calls", () => {
   it("the speaker's own places on a bot someone else owns: no card", () => {
     expect(choice("mcp__sagax-computer__computer_select", "ask", { places: "pr_speaker", persons: [OWNER, "pr_speaker"] })).toBe("none");
   });
-  it("the safety hold, the person's ask rule and their security key still come first", () => {
-    for (const extra of [{ safetyHold: true }, { customRule: { behavior: "ask" as const, id: "r" } }, { stepUpRequired: ["screen"] }]) {
-      expect(autoVerdict("full", "mcp__sagax-computer__computer_select", { ownComputerChoice: true, ...extra }).source).not.toBe("own-computer-choice");
+  it("Full skips the safety hold; Ask, Deny and the person's security key still come first", () => {
+    const tool = "mcp__sagax-computer__computer_select";
+    // 23498ec06 (#1905, #1910): the central Full decision precedes safety
+    // holds. Explicit person/org rules and a protected gate still stand.
+    for (const mode of MODES) {
+      expect(autoVerdict(mode, tool, { ownComputerChoice: true, safetyHold: true })).toMatchObject(mode === "full"
+        ? { approve: expect.any(String), source: "own-computer-choice" }
+        : { approve: null, source: "safety-hold" });
+      for (const behavior of ["ask", "deny"] as const) {
+        for (const id of ["person_rule", "orule_required"]) {
+          expect(autoVerdict(mode, tool, { ownComputerChoice: true, sagaxGate: true,
+            safetyHold: mode === "full", customRule: { behavior, id } })).toEqual({ approve: null, source: `custom-rule-${behavior}` });
+        }
+      }
+      expect(autoVerdict(mode, tool, { ownComputerChoice: true, sagaxGate: true, stepUpRequired: ["screen"] }).approve).toBeNull();
     }
   });
   it.each([

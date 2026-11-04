@@ -1,5 +1,6 @@
+import type { SidebarState } from "./types";
 import { Archive } from "lucide-react";
-import { visibleMessages, type AppState, type Bot, type Group } from "@/state/store";
+import { visibleMessages, type Bot, type Group } from "@/state/store";
 import { t } from "@/lib/i18n";
 import { isViewersPrimaryBot } from "@/lib/primary-bot";
 import { hiddenKeySet, type SidebarHiddenPrefs } from "@/lib/sidebar-hidden";
@@ -33,7 +34,7 @@ export function useSidebarRoster({
   remoteClient,
   onShowArchived,
 }: {
-  state: AppState;
+  state: SidebarState;
   layoutBots: Bot[];
   layoutGroups: Group[];
   layoutSections: string[];

@@ -5,11 +5,16 @@
  * map: the radial brain; columns: the column map;
  * map, tags, quality: those views; trash: the Perspicax trash;
  * scope-map, scope-tags, scope-quality: the bot Atlas picked in the rail, then that view.
+ * links: a folder no bot is linked to (perf-test-061, a temporary agent's), its
+ * "Not linked" hint; linked-menu / unlinked-menu: their ⋯ menus; delete: the
+ * confirmation of Delete folder…; import / import-bot: the import window with
+ * the preview of a vault (.zip), into My memory or into a bot's memory.
  */
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import { MemoryManagerPanel } from "../components/memory-manager/MemoryManagerPanel";
+import { ConfirmProvider } from "../components/ConfirmProvider";
 import { PanelSlotProvider } from "../components/panel-slot";
 import { loadLocale } from "../lib/i18n";
 import { applySkin, readSkin, SKIN_IDS, type SkinId } from "../lib/skins";
@@ -43,6 +48,10 @@ const BOT_FILES: Record<string, Record<string, { text: string; age: number }>> =
     "memory/contacts.md": { text: "{\n  \"front desk\": \"ext 100\",\n  \"lab\": \"ext 214\",\n  \"after hours\": \"ext 999\"\n}\n", age: 12 * D },
     "memory/logs/run-1.md": { text: "# Run 1\n\nTidied three topics.\n", age: 1 * D },
   },
+  // a temporary agent's memory (create_agent): no current bot is linked to it
+  perf: {
+    "memory/probe.md": { text: "# Probe\n\nLatency probe left by a test run.\n", age: 14 * D },
+  },
   nova: {
     "MEMORY.md": { text: "# MEMORY\n\nIndex for Nova: [[Release checklist]].\n", age: 3 * H },
     "memory/release-checklist.md": { text: "# Release checklist\n\n- [ ] Notes written\n- [x] Tests green\n\nLinked from the [[Weekly briefing]].\n", age: 20 * H },
@@ -56,7 +65,7 @@ function overview(botId: string) {
   return {
     botId,
     workspacePath: `/tmp/${botId}`,
-    index: { lines: 4, bytes: 80, maxLines: 200, maxBytes: 24000, loadedLines: 4, loadedBytes: 80, truncated: false, hash: "idx" },
+    index: { lines: 4, bytes: files["MEMORY.md"] ? 80 : 0, maxLines: 200, maxBytes: 24000, loadedLines: 4, loadedBytes: 80, truncated: false, hash: "idx" },
     topics: Object.keys(files).filter((path) => path.startsWith("memory/") && !path.includes("/logs/")).map(entry),
     logs: Object.keys(files).filter((path) => path.includes("/logs/")).map(entry),
   };
@@ -83,6 +92,9 @@ const PX = {
         { topic: "notes", count: 2, entries: [
           { id: "n1", title: "Weekly briefing", topic: "notes", tags: ["work", "area:planning"], updated: iso(4 * H), created: iso(60 * D), excerpt: "Keep every claim with its source.", author_name: "Dana Reyes", links: 2 },
           { id: "n2", title: "Reading list", topic: "notes", tags: ["reading"], updated: iso(3 * D), created: iso(30 * D), excerpt: "Three books on systems thinking.", author_name: "Dana Reyes", links: 0 },
+        ] },
+        { topic: "field-notes", count: 1, entries: [
+          { id: "f1", title: "Existing", topic: "field-notes", tags: [], updated: iso(8 * D), created: iso(8 * D), excerpt: "Written by hand last week.", author_name: "Dana Reyes" },
         ] },
         { topic: "templates", count: 1, entries: [
           { id: "t1", title: "Meeting notes", topic: "templates", tags: [], updated: iso(20 * D), created: iso(90 * D), excerpt: "Attendees, decisions, actions.", author_name: "Dana Reyes" },
@@ -132,6 +144,56 @@ function pxEntry(scope: string, id: string) {
   return { id, scope, topic: "notes", title: id, body: "", tags: [], may_edit: false };
 }
 
+/** A vault as a stored (uncompressed) .zip, the way the import window reads one. */
+function vaultZip(): File {
+  const text = new TextEncoder();
+  const key = `${"sk-"}ant-api03-${"a".repeat(28)}`;
+  const files: Array<[string, string]> = [
+    ["Field Notes/Welcome.md", "---\ntitle: Welcome\ntags: [inbox, start]\n---\n# Welcome\n\nStart at [[Alpha plan]] and meet [[Jane Doe|Jane]]. #getting-started\n"],
+    ["Field Notes/Projects/Alpha/Alpha plan.md", "---\ntags:\n  - project/alpha\nstatus: active\n---\nThe plan for Alpha. Owner: [[People/Jane Doe]].\n\n![[diagram.png]]\n\nSee [[Missing note]] later. #roadmap\n"],
+    ["Field Notes/Projects/Beta/Beta brief.md", "Beta follows [[Alpha plan]]. #project/beta\n"],
+    ["Field Notes/People/Jane Doe.md", "Jane leads [[Alpha plan#Owners]]. #person\n"],
+    ["Field Notes/People/Sam Lee.md", "Sam reviews the [[Beta brief]]. #person\n"],
+    ["Field Notes/Existing.md", "A note whose name is already in the destination.\n"],
+    ["Field Notes/Leaked key.md", `The deploy key is ${key}.\n`],
+    ["Field Notes/assets/diagram.png", "png"],
+    ["Field Notes/.obsidian/app.json", "{}"],
+    ["Field Notes/.obsidian/workspace.json", "{}"],
+    ["Field Notes/.trash/Old.md", "deleted note"],
+    ["Field Notes/.env", "API_TOKEN=x"],
+  ];
+  const parts: Uint8Array[] = [];
+  const central: Uint8Array[] = [];
+  let offset = 0;
+  const header = (size: number) => { const buf = new Uint8Array(size); return { buf, view: new DataView(buf.buffer) }; };
+  for (const [name, body] of files) {
+    const nameBytes = text.encode(name);
+    const data = text.encode(body);
+    const local = header(30);
+    local.view.setUint32(0, 0x04034b50, true);
+    local.view.setUint32(18, data.length, true);
+    local.view.setUint32(22, data.length, true);
+    local.view.setUint16(26, nameBytes.length, true);
+    parts.push(local.buf, nameBytes, data);
+    const dir = header(46);
+    dir.view.setUint32(0, 0x02014b50, true);
+    dir.view.setUint32(20, data.length, true);
+    dir.view.setUint32(24, data.length, true);
+    dir.view.setUint16(28, nameBytes.length, true);
+    dir.view.setUint32(42, offset, true);
+    central.push(dir.buf, nameBytes);
+    offset += 30 + nameBytes.length + data.length;
+  }
+  const dirSize = central.reduce((sum, part) => sum + part.length, 0);
+  const end = header(22);
+  end.view.setUint32(0, 0x06054b50, true);
+  end.view.setUint16(8, files.length, true);
+  end.view.setUint16(10, files.length, true);
+  end.view.setUint32(12, dirSize, true);
+  end.view.setUint32(16, offset, true);
+  return new File([...parts, ...central, end.buf] as BlobPart[], "Field Notes.zip", { type: "application/zip" });
+}
+
 const originalFetch = window.fetch.bind(window);
 window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
@@ -140,9 +202,12 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   if (url.includes("/api/memory-manager/sources")) {
     return json({
       sources: [
-        { id: "bot:atlas", kind: "bot", name: "Atlas", detail: "Bot memory", mayWrite: true, botId: "atlas" },
-        { id: "bot:nova", kind: "bot", name: "Nova", detail: "Bot memory", mayWrite: true, botId: "nova" },
+        { id: "bot:atlas", kind: "bot", name: "Atlas", detail: "Bot memory", mayWrite: true, botId: "atlas", linked: true },
+        { id: "bot:nova", kind: "bot", name: "Nova", detail: "Bot memory", mayWrite: true, botId: "nova", linked: true },
+        { id: "bot:perf", kind: "bot", name: "perf-test-061", detail: "Bot memory", mayWrite: true, botId: "perf", linked: false },
         { id: "team:general", kind: "team", name: "General", detail: "Team notes", mayWrite: true, section: "" },
+        // a sidebar section without team notes: no tier of its own
+        { id: "team:dr-eggbot", kind: "team", name: "dr eggbot", detail: "0 team notes", mayWrite: true, section: "dr-eggbot" },
         { id: "perspicax", kind: "perspicax", name: "Perspicax", detail: "Personal, team and organization notes", mayWrite: true, mayManage: true, scope: "me" },
       ],
       perspicax: { available: true },
@@ -155,6 +220,7 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     return json({ path, text: BOT_FILES[bot]?.[path]?.text ?? "", hash: `h-${path}`, exists: true });
   }
   if (bot) return json(overview(bot));
+  if (url.includes("/api/team-memory") && url.includes("section=dr-eggbot")) return json({ section: "dr-eggbot", label: "dr eggbot", entries: [] });
   if (url.includes("/api/team-memory")) {
     return json({
       section: "",
@@ -207,7 +273,12 @@ const store = {
       id: "atlas", threadId: "main", name: "Atlas", title: "Research", description: "",
       notifications: true, color: "blue", unread: false,
       modelSelection: { instanceId: "x", model: "x" }, messages: [], tasks: [],
+    }, {
+      id: "nova", threadId: "main-nova", name: "Nova", title: "Releases", description: "",
+      notifications: true, color: "purple", unread: false,
+      modelSelection: { instanceId: "x", model: "x" }, messages: [], tasks: [],
     }],
+    routines: [{ id: "r1", name: "Morning digest", botId: "atlas" }, { id: "r2", name: "Friday backup check", botId: "atlas" }],
   },
   dispatch: () => {},
 };
@@ -247,6 +318,40 @@ function Shell() {
       if (view === "tags") { segment(/Tags|Étiquettes/); await waitFor("[data-memory-tags-view]"); }
       if (view === "quality") { segment(/Quality|Qualité/); await waitFor("[data-memory-quality-view]"); }
       if (view === "trash") { click('[data-memory-nav="trash"]'); await waitFor("[data-memory-trash]"); }
+      // StrictMode runs this effect twice: only the live run drives the page (a second click would close a menu)
+      if (cancelled) return;
+      const folderRow = (selector: string) => document.querySelector(selector)?.closest("[data-memory-folder-link]");
+      if (view === "links") document.querySelector<HTMLElement>('[data-memory-source="bot:perf"]')?.focus();
+      if (view === "linked-menu" || view === "unlinked-menu" || view === "delete") {
+        const row = folderRow(view === "linked-menu" ? '[data-memory-source="bot:atlas"]' : '[data-memory-source="bot:perf"]');
+        row?.querySelector<HTMLElement>("button")?.focus();
+        row?.querySelector<HTMLElement>('[data-memory-row-action="menu"]')?.click();
+        await waitFor("[data-memory-folder-menu]");
+        if (view === "delete") {
+          row?.querySelector<HTMLElement>('[data-memory-folder-menu-item="delete"]')?.click();
+          await waitFor('[role="alertdialog"]');
+        }
+      }
+      if (view === "import" || view === "import-bot") {
+        click('[data-memory-nav="import"]');
+        await waitFor("[data-memory-import]");
+        const input = document.querySelector<HTMLInputElement>("[data-memory-import-zip]")!;
+        const transfer = new DataTransfer();
+        transfer.items.add(vaultZip());
+        input.files = transfer.files;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        await waitFor("[data-memory-import-preview]");
+        if (view === "import-bot") {
+          const select = document.querySelector<HTMLSelectElement>("[data-memory-import-destination]")!;
+          const option = [...select.options].find((entry) => entry.textContent?.includes("Atlas"));
+          if (option) {
+            const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!;
+            setter.call(select, option.value);
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        }
+        await new Promise((done) => setTimeout(done, 300));
+      }
       if (view === "folder") {
         click('[data-memory-folder="org/network"]');
         await new Promise((done) => setTimeout(done, 200));
@@ -270,12 +375,14 @@ function Shell() {
   return (
     <div className="flex h-full bg-app" data-gallery-ready={ready ? "1" : "0"} style={{ width, height }}>
       <BotEditorStore value={store as never}>
+        <ConfirmProvider>
         <PanelSlotProvider slot={null}>
           {/* the app's content frame, as automations-header.tsx draws it, so the card and its gutters match the app */}
           <div className="app-content-frame relative flex h-full min-w-0 flex-1 flex-col">
             <MemoryManagerPanel />
           </div>
         </PanelSlotProvider>
+        </ConfirmProvider>
       </BotEditorStore>
     </div>
   );

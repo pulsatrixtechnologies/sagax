@@ -131,6 +131,26 @@ describe("turn dispatch cancellation boundary", () => {
     expect(retired.has("turn-c")).toBe(true);
   });
 
+  it.each(["cancelled", "interrupted"])("quarantines a late %s completion without stopping the replacement", (stopReason) => {
+    const pending = new PendingTurnCancellations();
+    const retired = new RetiredTurnRegistry();
+    const completion = { threadId: "same-thread", type: "turn.completed", stopReason };
+    expect(isTurnEventQuarantined(pending, retired, { ...completion, turnId: "old-turn" }, "new-turn")).toBe(true);
+    expect(retired.has("old-turn")).toBe(true);
+    expect(retired.has("new-turn")).toBe(false);
+    expect(isTurnEventQuarantined(pending, retired, { ...completion, turnId: "new-turn" }, "new-turn")).toBe(false);
+    expect(isTurnEventQuarantined(pending, retired, { threadId: "same-thread", turnId: "old-turn", type: "item.completed" }, "new-turn")).toBe(true);
+  });
+
+  it("does not infer a stop from a provider error or a refused tool", () => {
+    const pending = new PendingTurnCancellations();
+    const retired = new RetiredTurnRegistry();
+    for (const stopReason of [null, "tool_error", "permission_denied", "rpc_error"]) {
+      expect(isTurnEventQuarantined(pending, retired, { threadId: "same-thread", turnId: "other-turn", type: "turn.completed", stopReason }, "new-turn")).toBe(false);
+    }
+    expect(retired.has("other-turn")).toBe(false);
+  });
+
   it("gates handshake events until every cancelled owner is retired", () => {
     const pending = new PendingTurnCancellations();
     pending.mark("thread-1", "room-a");

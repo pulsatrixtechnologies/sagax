@@ -13,7 +13,7 @@
 //   - a question about connectors or tools is answered with no call;
 //   - a known tool is called with use_tool directly, no search first.
 // Measured on the local bench (perf/instant-tool-turns): see the PR.
-import { GROK_CLOUD_CONNECTORS, grokGatewayServerConnector, grokGatewayToolConnector, isGrokGatewayServer } from "../../../shared/grok-cloud-connectors.ts";
+import { gatewayServerNames, GROK_CLOUD_CONNECTORS, grokGatewayServerConnector, grokGatewayToolConnector, isGrokGatewayServer } from "../../../shared/grok-cloud-connectors.ts";
 import { GROK_KNOWN_TOOLS_SECTION } from "./grok-tool-usage.ts";
 
 export interface GrokCatalogServer {
@@ -70,6 +70,11 @@ export function readGrokCatalog(result: unknown): GrokCatalogServer[] | undefine
 // after configureSession, same turn) can read it. Bounded.
 const CATALOGS_MAX = 256;
 const catalogs = new Map<string, GrokCatalogServer[]>();
+/** Sessions whose `_x.ai/mcp/list` already reported every MCP server settled.
+ * A later prompt on the same live session skips GROK_MCP_SETTLE_MS. Cleared
+ * when the session is forgotten (resetGrokCatalogs) or explicitly forgotten
+ * before session/new or session/load re-handshake the servers. */
+const settledSessions = new Set<string>();
 
 export function rememberGrokCatalog(sessionId: string, result: unknown): void {
   const servers = readGrokCatalog(result);
@@ -81,6 +86,23 @@ export function rememberGrokCatalog(sessionId: string, result: unknown): void {
 
 export function grokCatalogFor(sessionId: string | undefined): GrokCatalogServer[] | undefined {
   return sessionId ? catalogs.get(sessionId) : undefined;
+}
+
+/** Mark this live Grok session as having finished its MCP handshake. */
+export function rememberGrokMcpSettled(sessionId: string): void {
+  if (!sessionId) return;
+  settledSessions.add(sessionId);
+  while (settledSessions.size > CATALOGS_MAX) settledSessions.delete(settledSessions.keys().next().value!);
+}
+
+/** Whether configureSession already confirmed MCP settle for this session. */
+export function grokMcpAlreadySettled(sessionId: string | undefined): boolean {
+  return Boolean(sessionId && settledSessions.has(sessionId));
+}
+
+/** Drop settle state before session/new or session/load reconnects MCP. */
+export function forgetGrokMcpSettled(sessionId: string | undefined): void {
+  if (sessionId) settledSessions.delete(sessionId);
 }
 
 /** A server with more tools than this shows only the ones this bot uses
@@ -132,8 +154,10 @@ export function grokGatewayConnectors(catalog: readonly GrokCatalogServer[]): Gr
     if (!server.gateway || server.status !== "ready") continue;
     // a server of one connector (`managed_gateway:outlook`) names it itself
     const serverConnector = grokGatewayServerConnector(server.name, server.displayName);
+    // a member's server named with dashes reads whole (#1931)
+    const names = gatewayServerNames(server.tools);
     for (const tool of server.tools) {
-      const connector = grokGatewayToolConnector(tool) ?? serverConnector;
+      const connector = grokGatewayToolConnector(tool, names) ?? serverConnector;
       const known = connector?.id ? GROK_CLOUD_CONNECTORS.find((entry) => entry.id === connector.id) : undefined;
       const label = known?.name ?? connector?.name ?? server.displayName ?? server.name;
       const key = known?.id ?? label.toLowerCase();
@@ -293,5 +317,6 @@ function exampleTool(tools: readonly string[]): string {
 /** Test seam. */
 export function resetGrokCatalogs(): void {
   catalogs.clear();
+  settledSessions.clear();
   reachByHome.clear();
 }

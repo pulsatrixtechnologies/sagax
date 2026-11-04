@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { McpAuditRecord } from "../mcp/mcp-permissions.ts";
 import type { SubjectTokenOutcome } from "../auth/idp-session.ts";
 import type { ExchangeResult } from "./perspicax-link.ts";
-import { PERSPICAX_ACCESS_ENDED, PERSPICAX_ROUTINE_RETRY_MS, PERSPICAX_SESSION_RESET, PERSPICAX_UNAVAILABLE_WHY, PerspicaxMcp, parseMcpBody, perspicaxReplayable, reviewedReadsOf, perspicaxSessionLost, perspicaxUnavailableRow, perspicaxUnavailableWhy, type PerspicaxMcpLink, type PerspicaxMcpOptions } from "./perspicax-mcp.ts";
+import { PERSPICAX_ACCESS_ENDED, PERSPICAX_KEEPALIVE_PER_PERSON, PERSPICAX_ROUTINE_RETRY_MS, PERSPICAX_SESSION_RESET, PERSPICAX_UNAVAILABLE_WHY, PerspicaxMcp, parseMcpBody, perspicaxReadOnlyToolsOf, perspicaxReplayable, reviewedReadsOf, perspicaxSessionLost, perspicaxUnavailableRow, perspicaxUnavailableWhy, type PerspicaxMcpLink, type PerspicaxMcpOptions } from "./perspicax-mcp.ts";
 
 const ISS = "https://px.example.test";
 const ALICE = "pr_alice";
@@ -15,8 +15,20 @@ const CATALOG = [
   { id: "P2", slug: "billing", name: "Billing", description: "" },
 ];
 
-function harness(options: { held?: Record<string, string[]>; mcp?: (request: { headers: Record<string, string>; body: any; method: string }) => Response | Promise<Response>; onCall?: Set<string>; guard?: PerspicaxMcpOptions["permissionGuard"]; remoteSupport?: PerspicaxMcpOptions["onRemoteSupport"]; askGo?: PerspicaxMcpOptions["askGo"] } = {}) {
+function harness(options: {
+  held?: Record<string, string[]>;
+  mcp?: (request: { headers: Record<string, string>; body: any; method: string }) => Response | Promise<Response>;
+  onCall?: Set<string>;
+  engineWarm?: Set<string>;
+  keepaliveMs?: number;
+  keepaliveJitterMs?: number;
+  maxPingedPerPerson?: number;
+  guard?: PerspicaxMcpOptions["permissionGuard"];
+  remoteSupport?: PerspicaxMcpOptions["onRemoteSupport"];
+  askGo?: PerspicaxMcpOptions["askGo"];
+} = {}) {
   let clock = 1_000_000;
+  const timers: Array<{ at: number; fn: () => void | Promise<void>; cancelled: boolean }> = [];
   const held = options.held ?? { A: ["P1", "P2"], B: ["P1"], C: [] };
   const subjects: Record<string, { iss: string; sub: string; disabled: boolean }> = {
     [ALICE]: { iss: ISS, sub: "A", disabled: false },
@@ -88,6 +100,15 @@ function harness(options: { held?: Record<string, string[]>; mcp?: (request: { h
     delegationRefused: (principalId) => refusedDelegations.push(principalId),
     botProfiles: (id) => botProfiles[id],
     ...(options.onCall ? { keepWarm: (threadId: string) => options.onCall!.has(threadId) } : {}),
+    ...(options.engineWarm ? { engineWarm: (threadId: string) => options.engineWarm!.has(threadId) } : {}),
+    ...(options.keepaliveMs !== undefined ? { keepaliveMs: options.keepaliveMs } : {}),
+    ...(options.keepaliveJitterMs !== undefined ? { keepaliveJitterMs: options.keepaliveJitterMs } : { keepaliveJitterMs: 0 }),
+    ...(options.maxPingedPerPerson !== undefined ? { maxPingedPerPerson: options.maxPingedPerPerson } : {}),
+    after: (ms, fn) => {
+      const timer = { at: clock + ms, fn, cancelled: false };
+      timers.push(timer);
+      return { cancel: () => { timer.cancelled = true; } };
+    },
     version: "0.1.89",
     ...(options.guard ? { permissionGuard: options.guard } : {}),
     ...(options.remoteSupport ? { onRemoteSupport: options.remoteSupport } : {}),
@@ -101,6 +122,15 @@ function harness(options: { held?: Record<string, string[]>; mcp?: (request: { h
   return {
     mcp, subjects, sleeps, botProfiles, exchanges, revoked, logs, mcpCalls, subjectCalls, delegations, delegationCalls, refusedDelegations,
     advance: (ms: number) => { clock += ms; },
+    /** Fire keep-alive timers that are due at the current clock. */
+    runDue: async () => {
+      const due = timers.filter((timer) => !timer.cancelled && timer.at <= clock).sort((a, b) => a.at - b.at);
+      for (const timer of due) {
+        if (timer.cancelled) continue;
+        timer.cancelled = true;
+        await timer.fn();
+      }
+    },
     failSignIn: (outcome: SubjectTokenOutcome | null) => { signInFails = outcome; },
     failExchange: (outcome: ExchangeResult | null) => { exchangeFails = outcome; },
     failExchangeOnce: (outcome: ExchangeResult) => { exchangeFailsOnce = outcome; },
@@ -238,13 +268,36 @@ describe("PerspicaxMcp", () => {
       mounted: [], unavailable: [{ profileId: "P1", name: "Dispatch", reason: "no_delegation" }],
     });
     expect(h.subjectCalls).toEqual([]);
+    // #1941: empty speaker with no owner fallback still refuses; with owner
+    // fallback mounts as the owner. A named unknown principal never widens.
     expect(await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: "", speakerOrigin: "person" })).toMatchObject({ mounted: [], unavailable: [{ reason: "unknown_speaker" }] });
-    expect(await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: "pr_nobody", speakerOrigin: "peer" })).toMatchObject({ mounted: [], unavailable: [{ reason: "unknown_speaker" }] });
+    expect(await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: "", speakerOrigin: "person", ownerPrincipalId: BOB })).toEqual({
+      mounted: [{ profileId: "P1", slug: "dispatch", name: "Dispatch" }], unavailable: [],
+    });
+    // Peer hop / a2a wake with no source principal: owner fallback (never another person).
+    expect(await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: "", speakerOrigin: "peer", ownerPrincipalId: BOB })).toEqual({
+      mounted: [{ profileId: "P1", slug: "dispatch", name: "Dispatch" }], unavailable: [],
+    });
+    expect(await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: "pr_nobody", speakerOrigin: "peer", ownerPrincipalId: BOB })).toMatchObject({ mounted: [], unavailable: [{ reason: "unknown_speaker" }] });
     expect(await h.mcp.prepareTurn({ ...turn, bot: { id: "x", perspicax: { profiles: ["GONE"] } }, speakerPrincipalId: BOB, speakerOrigin: "person" })).toMatchObject({ mounted: [], unavailable: [{ profileId: "GONE", name: "GONE", reason: "unknown_profile" }] });
     expect(await h.mcp.prepareTurn({ ...turn, bot: { id: "x" }, speakerPrincipalId: BOB, speakerOrigin: "person" })).toEqual({ mounted: [], unavailable: [] });
-    expect(h.exchanges).toEqual([]);
     const solo = new PerspicaxMcp({ issuer: ISS, link: () => null, subjectOf: () => null, subjectToken: async () => ({ ok: false, error: "no_session" }), botProfiles: () => ["P1"], version: "1" });
     expect(await solo.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" })).toEqual({ mounted: [], unavailable: [] });
+  });
+
+  it("#1941 owner-routine with empty speaker mounts via the bot owner (delegation)", async () => {
+    const h = harness();
+    h.delegations.add(BOB);
+    expect(await h.mcp.prepareTurn({
+      ...turn, bot, speakerPrincipalId: "", speakerOrigin: "owner-routine", routine: true, ownerPrincipalId: BOB,
+    })).toEqual({
+      mounted: [{ profileId: "P1", slug: "dispatch", name: "Dispatch" }], unavailable: [],
+    });
+    expect(h.delegationCalls).toEqual([BOB]);
+    // Empty without owner still refuses; never widens to another person.
+    expect(await h.mcp.prepareTurn({
+      ...turn, bot, speakerPrincipalId: "", speakerOrigin: "owner-routine", routine: true,
+    })).toMatchObject({ mounted: [], unavailable: [{ reason: "unknown_speaker" }] });
   });
 
   it("a turn in a routine's lineage never uses a sign-in, even for a peer hop that names a live person", async () => {
@@ -568,7 +621,7 @@ describe("perspicaxUnavailableRow", () => {
 
 /** Perspicax as rmcp serves it in legacy session mode: initialize opens a
  * session; a call naming an unknown session is 404, a call naming none is 422. */
-function sessionServer() {
+function sessionServer(tools?: unknown[]) {
   const live = new Set<string>();
   let opened = 0;
   const ran: string[] = [];
@@ -586,6 +639,10 @@ function sessionServer() {
     if (!live.has(session)) return new Response("Not Found: Session not found", { status: 404 });
     if (body.id === undefined) return new Response(null, { status: 202 });
     if (body.method === "tools/call") ran.push(body.params.name);
+    if (body.method === "tools/list" && tools) {
+      ran.push("tools/list");
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { tools } }), { status: 200, headers: { "content-type": "application/json" } });
+    }
     return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { ok: true, session } }), { status: 200, headers: { "content-type": "application/json" } });
   };
   return { mcp, live, ran, opened: () => opened, forget: () => live.clear() };
@@ -595,8 +652,8 @@ describe("PerspicaxMcp: a session Perspicax dropped", () => {
   const call = (name: string, id: number) => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: {} } });
   const init = { jsonrpc: "2.0", id: 0, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "grok", version: "1" } } };
 
-  async function started() {
-    const server = sessionServer();
+  async function started(tools?: unknown[]) {
+    const server = sessionServer(tools);
     const h = harness({ mcp: server.mcp });
     await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
     await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: init });
@@ -613,9 +670,71 @@ describe("PerspicaxMcp: a session Perspicax dropped", () => {
     expect(perspicaxReplayable(call("memory_search", 1))).toBe(true);
     expect(perspicaxReplayable(call("memory_find", 1))).toBe(true);
     expect(perspicaxReplayable({ jsonrpc: "2.0", id: 1, method: "tools/list" })).toBe(true);
-    for (const name of ["cw_psa_write", "cw_psa_action", "memory_write", "memory_save", "memory_remove", "memory_suggestions", "sagax_send", "flow_action", "unknown"]) {
+    for (const name of ["cw_psa_write", "cw_psa_action", "memory_write", "memory_save", "memory_remove", "memory_suggestions", "sagax_send", "unknown"]) {
       expect(perspicaxReplayable(call(name, 1)), name).toBe(false);
     }
+    // a Flow action writes only on a confirmed call: without confirm it reads
+    expect(perspicaxReplayable(call("flow_action", 1))).toBe(true);
+    expect(perspicaxReplayable({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "flow_action", arguments: { name: "free-slot-find", params: { member: "osprey", minutes: 60 } } } })).toBe(true);
+    expect(perspicaxReplayable({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "flow_action", arguments: { name: "schedule-slot-create", params: {}, confirm: true } } })).toBe(false);
+    // what Perspicax lists as read-only
+    const readOnly = new Set(["cw_psa_find_schedule_entries"]);
+    expect(perspicaxReplayable(call("cw_psa_find_schedule_entries", 1))).toBe(false);
+    expect(perspicaxReplayable(call("cw_psa_find_schedule_entries", 1), readOnly)).toBe(true);
+    expect(perspicaxReplayable(call("cw_psa_update_ticket", 1), readOnly)).toBe(false);
+  });
+
+  const LISTED = [
+    { name: "cw_psa_find_schedule_entries", annotations: { readOnlyHint: true, destructiveHint: false } },
+    { name: "cw_psa_get_ticket", annotations: { readOnlyHint: true, destructiveHint: false } },
+    { name: "cw_psa_update_ticket", annotations: { readOnlyHint: false, destructiveHint: true } },
+    { name: "odd_tool", annotations: { readOnlyHint: true, destructiveHint: true } },
+    { name: "bare_tool" },
+  ];
+
+  it("reads which tools only read from tools/list annotations, never a destructive or unannotated one", () => {
+    expect(perspicaxReadOnlyToolsOf({ jsonrpc: "2.0", id: 1, result: { tools: LISTED } })).toEqual(["cw_psa_find_schedule_entries", "cw_psa_get_ticket"]);
+    expect(perspicaxReadOnlyToolsOf({ result: {} })).toEqual([]);
+    expect(perspicaxReadOnlyToolsOf(null)).toEqual([]);
+  });
+
+  // 2026-11-03 (production): find_schedule_entries, get_ticket and flow_action
+  // free-slot-find were all refused "can change data" after a dropped session
+  it("404 on a read Perspicax listed as read-only: sends it again on the new session", async () => {
+    const { server, h, relay } = await started(LISTED);
+    await relay({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+    server.forget();
+    const answer = await relay({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "cw_psa_find_schedule_entries", arguments: { member: "Osprey", period: "this_week", limit: 100 } } });
+    expect(answer).toMatchObject({ status: 200, body: { id: 5, result: { ok: true, session: "s-2" } } });
+    expect(server.ran).toEqual(["tools/list", "cw_psa_find_schedule_entries"]);
+    expect(h.logs.join("\n")).toContain("read sent again");
+  });
+
+  it("404 on a read before this entry saw tools/list: lists on the new session, then sends the read again", async () => {
+    const { server, relay } = await started(LISTED);
+    server.forget();
+    const answer = await relay(call("cw_psa_get_ticket", 6));
+    expect(answer).toMatchObject({ status: 200, body: { id: 6, result: { ok: true } } });
+    expect(server.ran).toEqual(["tools/list", "cw_psa_get_ticket"]);
+  });
+
+  it("404 on a write listed by Perspicax: still never replayed", async () => {
+    const { server, relay } = await started(LISTED);
+    server.forget();
+    const answer = await relay(call("cw_psa_update_ticket", 7));
+    expect(answer).toEqual({ status: 200, body: { jsonrpc: "2.0", id: 7, error: { code: -32000, message: PERSPICAX_SESSION_RESET } } });
+    expect(server.ran).toEqual(["tools/list"]);
+  });
+
+  it("404 on a Flow action without confirm is sent again; a confirmed one is not", async () => {
+    const { server, relay } = await started();
+    server.forget();
+    const read = await relay({ jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "flow_action", arguments: { name: "free-slot-find", params: { member: "osprey", minutes: 60, days: 4, limit: 3 } } } });
+    expect(read).toMatchObject({ status: 200, body: { id: 8, result: { ok: true } } });
+    server.forget();
+    const write = await relay({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "flow_action", arguments: { name: "schedule-slot-create", params: {}, confirm: true } } });
+    expect(write).toEqual({ status: 200, body: { jsonrpc: "2.0", id: 9, error: { code: -32000, message: PERSPICAX_SESSION_RESET } } });
+    expect(server.ran).toEqual(["flow_action"]);
   });
 
   it("404 on a read: opens a new session once and sends the read again, transparently", async () => {
@@ -827,6 +946,140 @@ describe("PerspicaxMcp remote support answers", () => {
       args: { code: "BQDHS7" },
       result: { content: [{ type: "text", text: JSON.stringify({ state: "connected", fetch_ip_count: 1 }) }] },
     }]);
+  });
+});
+
+describe("PerspicaxMcp keep-alive (#1955)", () => {
+  const warm = new Set(["t1"]);
+
+  it("sends a ping on the schedule while the engine is warm, and re-arms after it", async () => {
+    const h = harness({ engineWarm: warm, keepaliveMs: 90_000, keepaliveJitterMs: 0 });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    const before = h.mcpCalls.filter((c) => c.body?.method === "ping").length;
+    h.advance(90_000);
+    await h.runDue();
+    expect(h.mcpCalls.filter((c) => c.body?.method === "ping").length).toBe(before + 1);
+    h.advance(90_000);
+    await h.runDue();
+    expect(h.mcpCalls.filter((c) => c.body?.method === "ping").length).toBe(before + 2);
+  });
+
+  it("never pings a cold thread", async () => {
+    const h = harness({ keepaliveMs: 1_000, keepaliveJitterMs: 0 });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    h.advance(5_000);
+    await h.runDue();
+    expect(h.mcpCalls.some((c) => c.body?.method === "ping")).toBe(false);
+  });
+
+  it("stops on noteEngineCold (engine idle close)", async () => {
+    const h = harness({ engineWarm: warm, keepaliveMs: 90_000, keepaliveJitterMs: 0 });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    h.mcp.noteEngineCold("t1");
+    h.advance(90_000);
+    await h.runDue();
+    expect(h.mcpCalls.some((c) => c.body?.method === "ping")).toBe(false);
+  });
+
+  it("stops on endGeneration retire when the engine is cold", async () => {
+    const h = harness({ engineWarm: new Set(), keepaliveMs: 90_000, keepaliveJitterMs: 0 });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    await h.mcp.endGeneration("t1", "g1");
+    h.advance(90_000);
+    await h.runDue();
+    expect(h.mcpCalls.some((c) => c.body?.method === "ping")).toBe(false);
+  });
+
+  it("stops on endAll (process shutdown)", async () => {
+    const h = harness({ engineWarm: warm, keepaliveMs: 90_000, keepaliveJitterMs: 0 });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    await h.mcp.endAll();
+    h.advance(90_000);
+    await h.runDue();
+    expect(h.mcpCalls.some((c) => c.body?.method === "ping")).toBe(false);
+  });
+
+  it("does not re-arm when the token is near expiry", async () => {
+    const h = harness({ engineWarm: warm, keepaliveMs: 90_000, keepaliveJitterMs: 0 });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    h.mcp.noteEngineCold("t1");
+    // Exchange minted expiresAt = now + 900_000; leave under PERSPICAX_TOKEN_MIN_LIFE_MS (60 s).
+    h.advance(850_000);
+    h.mcp.noteEngineWarm("t1");
+    h.advance(90_000);
+    await h.runDue();
+    expect(h.mcpCalls.some((c) => c.body?.method === "ping")).toBe(false);
+  });
+
+  it("a failed ping ends the entry; the next turn reopens", async () => {
+    let failPing = false;
+    const engineWarm = new Set(["t1"]);
+    const h = harness({
+      engineWarm,
+      keepaliveMs: 90_000,
+      keepaliveJitterMs: 0,
+      mcp: ({ body, method }) => {
+        if (method === "DELETE") return new Response(null, { status: 204 });
+        if (body?.method === "ping" && failPing) return new Response("gone", { status: 404 });
+        if (body?.id === undefined) return new Response(null, { status: 202 });
+        return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: body.method === "tools/list" ? { tools: [] } : {} }), {
+          status: 200,
+          headers: { "content-type": "application/json", "mcp-session-id": "sess-1" },
+        });
+      },
+    });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    failPing = true;
+    h.advance(90_000);
+    await h.runDue();
+    expect(h.mcpCalls.some((c) => c.body?.method === "ping")).toBe(true);
+    // Entry ended: next turn with a cold-then-warm engine pays a fresh exchange
+    engineWarm.delete("t1");
+    await h.mcp.endGeneration("t1", "g1");
+    const exchangesBefore = h.exchanges.length;
+    engineWarm.add("t1");
+    await h.mcp.prepareTurn({ threadId: "t1", generation: "g2", bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    expect(h.exchanges.length).toBeGreaterThan(exchangesBefore);
+  });
+
+  it("keeps at most maxPingedPerPerson entries pinged (newest)", async () => {
+    const engineWarm = new Set<string>();
+    for (let i = 0; i < 10; i += 1) engineWarm.add(`t${i}`);
+    const h = harness({
+      engineWarm,
+      keepaliveMs: 90_000,
+      keepaliveJitterMs: 0,
+      maxPingedPerPerson: 8,
+      held: { B: ["P1"] },
+    });
+    h.botProfiles.x = ["P1"];
+    for (let i = 0; i < 10; i += 1) {
+      await h.mcp.prepareTurn({ threadId: `t${i}`, generation: "g", bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+      await h.mcp.relay({ threadId: `t${i}`, generation: "g", botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    }
+    h.advance(90_000);
+    await h.runDue();
+    const pings = h.mcpCalls.filter((c) => c.body?.method === "ping");
+    expect(pings.length).toBe(PERSPICAX_KEEPALIVE_PER_PERSON);
+    expect(pings.length).toBe(8);
+  });
+
+  it("keeps the MCP session across turns when the engine stays warm", async () => {
+    const h = harness({ engineWarm: warm, keepaliveMs: 90_000, keepaliveJitterMs: 0 });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    const exchangesAfterFirst = h.exchanges.length;
+    await h.mcp.endGeneration("t1", "g1");
+    await h.mcp.prepareTurn({ threadId: "t1", generation: "g2", bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    expect(h.exchanges.length).toBe(exchangesAfterFirst);
+    expect(h.logs.some((line) => /warm engine/.test(line))).toBe(true);
   });
 });
 

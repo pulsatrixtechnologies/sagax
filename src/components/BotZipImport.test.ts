@@ -12,7 +12,7 @@ vi.mock("@/state/store", async (importOriginal) => {
   return { ...store, api: fixture.api, useStore: () => ({ state: { ...store.initialState, ...fixture.state }, dispatch: fixture.dispatch }) };
 });
 vi.mock("@/lib/perspicax-org", () => ({ useOrgPeople: () => new Map() }));
-vi.mock("../BotProfileAvatarCard", () => ({ BotProfileAvatarCard: () => null }));
+vi.mock("./BotProfileAvatarCard", () => ({ BotProfileAvatarCard: () => null }));
 
 import { BotZipImportPanel } from "./BotZipImport";
 import { BotActionsMenu } from "./bot-settings/BotActionsMenu";

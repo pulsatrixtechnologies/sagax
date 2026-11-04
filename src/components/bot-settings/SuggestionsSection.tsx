@@ -42,9 +42,20 @@ export function SuggestionsSection({ bot, routineCount }: { bot: Bot; routineCou
   };
 
   return (
-    <section data-bot-settings-section="suggestions" aria-labelledby={`bot-suggestions-${bot.id}`} className="flex flex-col gap-2">
+    <SuggestionsCard
+      headingId={`bot-suggestions-${bot.id}`}
+      rows={items.map((item) => ({ id: item.id, title: t(item.titleKey, item.vars), subtitle: t(item.subtitleKey, item.vars), onRun: () => run(item) }))}
+    />
+  );
+}
+
+/** The Suggestions card itself: its title with Hide, then one grouped card
+ * of rows. Shared by the bot panel and the group panel (GroupDetailsTab). */
+export function SuggestionsCard({ headingId, rows }: { headingId: string; rows: ReadonlyArray<{ id: string; title: string; subtitle: string; onRun: () => void }> }) {
+  return (
+    <section data-bot-settings-section="suggestions" aria-labelledby={headingId} className="flex flex-col gap-2">
       <div className="flex items-center justify-between px-0.5">
-        <h3 id={`bot-suggestions-${bot.id}`} className="text-[12px] leading-[17px] text-ink-tertiary">{t("botPanel.suggestions.title")}</h3>
+        <h3 id={headingId} className="text-[12px] leading-[17px] text-ink-tertiary">{t("botPanel.suggestions.title")}</h3>
         <button
           type="button"
           data-suggestions-hide
@@ -55,26 +66,22 @@ export function SuggestionsSection({ bot, routineCount }: { bot: Bot; routineCou
         </button>
       </div>
       <ul className={GROUPED_CARD}>
-        {items.map((item) => {
-          const title = t(item.titleKey, item.vars);
-          const subtitle = t(item.subtitleKey, item.vars);
-          return (
-            <li key={item.id} className={GROUPED_ROW}>
-              <button
-                type="button"
-                data-suggestion={item.id}
-                onClick={() => run(item)}
-                className="flex w-full min-w-0 items-start gap-2.5 text-left hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60"
-              >
-                <Sparkles size={15} aria-hidden="true" className="mt-0.5 shrink-0 text-ink-secondary" />
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate text-[13px] font-semibold leading-5 text-ink" title={title}>{title}</span>
-                  <span className="line-clamp-2 text-[12px] leading-4 text-ink-secondary">{subtitle}</span>
-                </span>
-              </button>
-            </li>
-          );
-        })}
+        {rows.map((row) => (
+          <li key={row.id} className={GROUPED_ROW}>
+            <button
+              type="button"
+              data-suggestion={row.id}
+              onClick={row.onRun}
+              className="flex w-full min-w-0 items-start gap-2.5 text-left hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60"
+            >
+              <Sparkles size={15} aria-hidden="true" className="mt-0.5 shrink-0 text-ink-secondary" />
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate text-[13px] font-semibold leading-5 text-ink" title={row.title}>{row.title}</span>
+                <span className="line-clamp-2 text-[12px] leading-4 text-ink-secondary">{row.subtitle}</span>
+              </span>
+            </button>
+          </li>
+        ))}
       </ul>
     </section>
   );

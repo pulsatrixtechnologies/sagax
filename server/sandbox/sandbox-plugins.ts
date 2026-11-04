@@ -14,8 +14,12 @@
 //     servers) and no symlink (workspaceManifest refuses them).
 //   - The folder is replaced whole, a digest marker says what is there, and
 //     an unchanged plugin costs one read of the marker.
+//   - Copies may run at once into one environment (2026-11-04, an organization server: every
+//     bot of a person resynced a refreshed Flow on its next turn): each copy
+//     stages and unpacks under its own name, and the swap that loses a race
+//     to an identical copy counts as copied.
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 import type { SandboxExecInput } from "./sandboxd-core.ts";
 import { workspaceManifest } from "./sandbox-workspace-copy.ts";
@@ -70,7 +74,9 @@ export async function syncPluginsToSandbox(
       continue;
     }
     if (archive.length > MAX_PLUGIN_ARCHIVE_BYTES) { out.skipped.push({ name: plugin.name, reason: "too large" }); continue; }
-    const staged = `${root}/.incoming-${plugin.name}.tgz`;
+    // per copy: two copies at once never write or unpack each other's files
+    const nonce = randomBytes(6).toString("hex");
+    const staged = `${root}/.incoming-${plugin.name}-${nonce}.tgz`;
     // Linux keeps one environment string under 128 KiB: 48 KiB pieces, 8 a call.
     const pieces: Buffer[] = [];
     for (let offset = 0; offset < archive.length; offset += CHUNK) pieces.push(archive.subarray(offset, offset + CHUNK));
@@ -88,24 +94,42 @@ export async function syncPluginsToSandbox(
       });
       if (result.exitCode !== 0) { ok = false; break; }
     }
-    if (!ok) { out.skipped.push({ name: plugin.name, reason: "copy failed" }); continue; }
+    if (!ok) {
+      await target.exec({ argv: ["sh", "-c", 'rm -f -- "$SAGAX_PATH"'], env: { SAGAX_PATH: staged }, timeoutSec: 30, maxOutputBytes: 256 }).catch(() => undefined);
+      out.skipped.push({ name: plugin.name, reason: "copy failed" });
+      continue;
+    }
     const installed = await target.exec({
       argv: ["sh", "-c", [
         "set -eu",
-        'tmp="$SAGAX_DEST.incoming"',
-        'rm -rf -- "$tmp"',
+        'tmp="$SAGAX_ROOT/.unpack-$SAGAX_NONCE"',
+        'trap \'rm -rf -- "$tmp" "$SAGAX_PATH"\' EXIT',
         'mkdir -p -- "$tmp"',
         // the archive holds regular files and folders only (no link, no device)
-        'if tar -tvzf "$SAGAX_PATH" | grep -qv "^[d-]"; then rm -f -- "$SAGAX_PATH"; exit 3; fi',
+        'list=$(tar -tvzf "$SAGAX_PATH")',
+        'if printf "%s\\n" "$list" | grep -qv "^[d-]"; then echo "the archive holds a link or a device" >&2; exit 3; fi',
         'tar -xzf "$SAGAX_PATH" -C "$tmp" --no-same-owner --no-same-permissions',
-        'rm -f -- "$SAGAX_PATH"',
         'printf %s "$SAGAX_DIGEST" > "$tmp/.sagax-digest"',
-        'rm -rf -- "$SAGAX_DEST"',
-        'mv -- "$tmp" "$SAGAX_DEST"',
+        // the swap holds a lock (mkdir is atomic); a lock left by a copy
+        // that died is older than two minutes and is taken over
+        'lock="$SAGAX_DEST.lock"',
+        'tries=0',
+        'until mkdir -- "$lock" 2>/dev/null; do',
+        '  if [ -n "$(find "$lock" -maxdepth 0 -mmin +2 2>/dev/null)" ]; then rm -rf -- "$lock"; continue; fi',
+        '  tries=$((tries + 1)); [ "$tries" -le 300 ] || { echo "another copy holds the folder" >&2; exit 4; }',
+        '  sleep 0.2',
+        'done',
+        'trap \'rm -rf -- "$tmp" "$SAGAX_PATH" "$lock"\' EXIT',
+        // an identical copy that landed while this one unpacked is kept
+        'if [ "$(cat -- "$SAGAX_DEST/.sagax-digest" 2>/dev/null)" != "$SAGAX_DIGEST" ]; then rm -rf -- "$SAGAX_DEST"; mv -- "$tmp" "$SAGAX_DEST"; fi',
       ].join("\n")],
-      env: { SAGAX_DEST: dest, SAGAX_PATH: staged, SAGAX_DIGEST: digest }, timeoutSec: 120,
+      env: { SAGAX_DEST: dest, SAGAX_PATH: staged, SAGAX_ROOT: root, SAGAX_NONCE: nonce, SAGAX_DIGEST: digest }, timeoutSec: 120,
     });
-    if (installed.exitCode !== 0) { out.skipped.push({ name: plugin.name, reason: "unpack failed" }); continue; }
+    if (installed.exitCode !== 0) {
+      const why = installed.stderr.trim().split("\n").filter(Boolean).slice(-1)[0]?.slice(0, 200);
+      out.skipped.push({ name: plugin.name, reason: why ? `unpack failed: ${why}` : "unpack failed" });
+      continue;
+    }
     out.copied.push(plugin.name);
   }
   return out;

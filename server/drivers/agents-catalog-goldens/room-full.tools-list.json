@@ -1911,7 +1911,7 @@
     },
     {
       "name": "run_routine",
-      "description": "Run one of this bot's own routines now, once. Get the routine id from list_routines. The schedule and the Active switch stay as they are; a paused routine runs and stays paused. It waits while busy, then starts; a run already in progress is returned, never doubled.",
+      "description": "Check one of this bot's routines with action check (readiness only, no run or model turn), or run it now, once. Get the routine id from list_routines. The schedule and the Active switch stay as they are; a paused routine runs and stays paused. It waits while busy, then starts; a run already in progress is returned, never doubled.",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -1920,6 +1920,14 @@
             "type": "string",
             "minLength": 1,
             "description": "Routine id from list_routines."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "run",
+              "check"
+            ],
+            "description": "check reads readiness without creating a run. Omit to run."
           }
         },
         "required": [

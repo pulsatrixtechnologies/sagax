@@ -17,6 +17,7 @@ import {
   MISUSE_REFUSAL_LOCKED,
   misuseGateBlockText,
   misuseRefusalText,
+  sandboxAbsolutePath,
   sandboxPathBlocked,
   type MisuseAction,
   type MisuseCategory,
@@ -252,6 +253,32 @@ describe("red team: server-environment paths", () => {
     expect(classifySandboxPath("/workspace/bots.json", true)).toMatchObject({ action: "block", category: "platform_exfiltration" });
     expect(classifySandboxPath("../etc/passwd")).toMatchObject({ action: "block", category: "platform_exfiltration" });
     expect(classifySandboxPath("/opt/sagax/server/index.ts")).toMatchObject({ action: "block", category: "platform_exfiltration" });
+  });
+
+  // 2026-11-03 (production): a bot in its folder asked for a relative path
+  // that climbs out of the folder but stays in the person's /workspace
+  it("resolves a relative path against the bot's folder and allows it inside /workspace", () => {
+    const own = { cwd: "/workspace/bots/osprey" };
+    expect(sandboxAbsolutePath("../../team-notes/email-template/README.md", own.cwd)).toBe("/workspace/team-notes/email-template/README.md");
+    expect(sandboxAbsolutePath("active/x.md", own.cwd)).toBe("/workspace/bots/osprey/active/x.md");
+    expect(sandboxAbsolutePath("../x.md")).toBe("/x.md");
+    expect(sandboxPathBlocked("../../team-notes/email-template/README.md", own)).toBe(false);
+    expect(classifySandboxPath("../../team-notes/email-template/README.md", false, "own_environment", own).action).toBe("allow");
+    expect(sandboxPathBlocked("../wren/active/notes.md", own)).toBe(false);
+    expect(sandboxPathBlocked("../../shared/plan.md", own)).toBe(false);
+  });
+
+  it("still refuses a relative path that climbs to the server or a platform file", () => {
+    const own = { cwd: "/workspace/bots/osprey" };
+    expect(classifySandboxPath("../../../etc/shadow", false, "own_environment", own)).toMatchObject({ action: "block", category: "platform_exfiltration" });
+    expect(classifySandboxPath("../../../data/.openmausbot/bots.json", false, "own_environment", own)).toMatchObject({ action: "block" });
+    expect(classifySandboxPath("../../../proc/1/environ", false, "own_environment", own)).toMatchObject({ action: "block", category: "sandbox_escape" });
+    expect(classifySandboxPath("../../../opt/sagax/server/index.ts", false, "own_environment", own)).toMatchObject({ action: "block" });
+    expect(classifySandboxPath("../../bots.json", false, "own_environment", own)).toMatchObject({ action: "block" });
+    expect(sandboxPathBlocked("../../../../../../root/.ssh/id_rsa", own)).toBe(true);
+    // a cwd that is not absolute falls back to /workspace, never to /
+    expect(sandboxAbsolutePath("../etc/passwd", "bots/osprey")).toBe("/etc/passwd");
+    expect(sandboxPathBlocked("../etc/passwd", { cwd: "bots/osprey" })).toBe(true);
   });
 });
 

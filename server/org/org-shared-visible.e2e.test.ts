@@ -24,7 +24,7 @@ import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
 
-const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
+const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const posixOnly = describe.skipIf(process.platform === "win32");
 const ORG_KEY = "sk-ant-test-org-key";
@@ -154,7 +154,7 @@ posixOnly("Perspicax organization: a bot and a group shared with someone who own
       version: 1, issuer: idp.issuer, client_id: "pulsa-bot", server_id: idp.serverId, origin: BASE, link_token: idp.linkToken,
     }), { mode: 0o640 });
     writeFileSync(join(data, "config.json"), JSON.stringify({
-      instances: { claude: { driver: "claudeAgent", config: { cli: FAKE_CLAUDE, fullAuto: true } } },
+      instances: { claude: { driver: "claudeAgent", access: "api", config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } } },
     }));
     await start();
     alice = await signIn(ALICE);

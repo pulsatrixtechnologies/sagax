@@ -22,7 +22,7 @@ dropdown.
 - [after-waking.png](after-waking.png): same muted bot glyph (soft pulse),
   "Waking up…", no z.
 - [after-running-open.png](after-running-open.png): live frame edge to edge,
-  centered "Open" pill, "Melonie's screen" caption, no badge overlay.
+  centered "Open" pill, "Wren's screen" caption, no badge overlay.
 - [after-place-rename.png](after-place-rename.png): inline rename in the place
   dropdown ("MacBook de JC"; technical name as placeholder / tooltip).
 

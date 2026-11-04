@@ -1875,5 +1875,13 @@
   "routines.group.running": "{count} चल रहे हैं",
   "routines.group.failing": "{count} विफल हो रहे हैं",
   "routines.group.botMenu": "{name} के लिए और",
-  "routines.group.newFor": "{name} के लिए नया रूटीन"
+  "routines.group.newFor": "{name} के लिए नया रूटीन",
+  "botPanel.library.kind.artifact": "आर्टिफ़ैक्ट",
+  "botPanel.library.pageTitle": "पेज: {state}",
+  "botPanel.library.pageState.draft": "ड्राफ़्ट",
+  "botPanel.library.pageState.private": "मेरे लिए प्रकाशित",
+  "botPanel.library.pageState.org": "मेरे संगठन के लिए प्रकाशित",
+  "botPanel.library.pageState.link": "लिंक वाले किसी के भी लिए प्रकाशित",
+  "botPanel.library.pageState.revoked": "रद्द",
+  "botPanel.library.pageState.expired": "समाप्त"
 }

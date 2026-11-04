@@ -1,6 +1,7 @@
 // Agents tool family: Agent-to-agent API and run_with_engine.
 // Never import server/index.ts.
 import { agentToolAnnotations } from "../../tools/agent-tool-policy.ts";
+import { AGENT_SETTINGS_FIELDS } from "../../fleet-agent-settings.ts";
 import type { ToolCallContext, ToolCallResult } from "../agents-call-types.ts";
 import type { Json } from "../agents-client.ts";
 
@@ -9,10 +10,15 @@ import type { Json } from "../agents-client.ts";
  * lands in that agent's single chat with its person (#1170), the sender named. */
 const AGENT_ID = { type: "string", description: "The agent's id, exactly as list_agents or find_agents returned it." } as const;
 const AGENT_CURSOR = { type: "string", description: "next_cursor of the previous page: entries before it." } as const;
+
+/** Loose property for every Edit-bot / runtime / primary field the agent API accepts. */
+const AGENT_SETTINGS_PROPERTIES: Record<string, Record<string, unknown>> = Object.fromEntries(
+  AGENT_SETTINGS_FIELDS.map((field) => [field, { description: `Edit bot field "${field}" (same value as PATCH /api/bots/:id or runtime-settings / primary).` }]),
+);
 export const AGENT_API_TOOLS = [
   {
     name: "list_agents",
-    description: "List the Sagax agents (bots) you may reach: id, name, description, status (running or idle), temporary, and owner ({principal_id, name} or null). Its ids are the only valid agent_id values. Pass owner.principal_id to sagax_nudge to reach that agent's owner.",
+    description: "List the Sagax agents (bots) you may reach: id, name, description, status (running or idle), temporary, owner ({principal_id, name} or null), and model (instance_id, model, effort, auto) when known. Its ids are the only valid agent_id values. Pass owner.principal_id to sagax_nudge to reach that agent's owner.",
     inputSchema: { type: "object", additionalProperties: false, properties: {} },
   },
   {
@@ -26,7 +32,7 @@ export const AGENT_API_TOOLS = [
   },
   {
     name: "get_agent",
-    description: "Read one agent's full profile for an audit: title, owner, instructions with their persona, rules, voice and anti-jobs sections, voice settings, whether it is temporary and when it expires, and a link to its sheet.",
+    description: "Read one agent's full profile for an audit: title, owner, model (instance_id, model, effort, auto), instructions with their persona, rules, voice and anti-jobs sections, voice settings, whether it is temporary and when it expires, and a link to its sheet.",
     inputSchema: { type: "object", additionalProperties: false, properties: { agent_id: AGENT_ID }, required: ["agent_id"] },
   },
   {
@@ -46,7 +52,7 @@ export const AGENT_API_TOOLS = [
   },
   {
     name: "send_prompt",
-    description: "Send a prompt to an agent: it lands in the agent's one chat with its person, your name on it, and runs at the agent's own approval level. mode fire_and_forget (default) and async return a handle once accepted (async also tells you when the turn ends); blocking waits up to timeout_ms but returns still_working under the ~55 s ceiling with the handle so you resume via await_turn. The answer carries thread_id and expires_at (ms; a handle lasts 7 days): keep thread_id, it outlives the handle. After a timeout, resume with await_turn and the handle: never re-send. An empty reply with finished=true means the agent said nothing. on_busy: queue (default) waits its turn, reject refuses with retryable busy (turn_state and options in details), supersede stops the running turn you started (and any approval it waits on), never someone else's. Refusals use the unified envelope with retryable true|false. Optional priority now wakes an idle agent at once or moves the prompt to the front of its queue, and never interrupts a running turn; past 10 now sends an hour it is delivered as normal.",
+    description: "Send a prompt to an agent: it lands in the agent's one chat with its person, your name on it, and runs at the agent's own approval level. mode fire_and_forget (default) and async return a handle once accepted (async also tells you when the turn ends); blocking waits up to timeout_ms but returns still_working under the ~55 s ceiling with the handle so you resume via await_turn. The answer carries thread_id and the handle's lifetime: a handle lasts 7 days, given as ttl_ms, expires_at (unix ms) and expires_at_iso. Keep thread_id: it outlives the handle. After a timeout, resume with await_turn and the handle: never re-send. An empty reply with finished=true means the agent said nothing. on_busy: queue (default) waits its turn, reject refuses with retryable busy (turn_state and options in details), supersede stops the running turn you started (and any approval it waits on), never someone else's. Refusals use the unified envelope with retryable true|false. Optional priority now wakes an idle agent at once or moves the prompt to the front of its queue, and never interrupts a running turn; past 10 now sends an hour it is delivered as normal.",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       agent_id: AGENT_ID,
       prompt: { type: "string", minLength: 1, maxLength: 32000 },
@@ -60,7 +66,7 @@ export const AGENT_API_TOOLS = [
   },
   {
     name: "await_turn",
-    description: "Wait for an agent's turn under a caller-chosen timeout_ms (0 to 55000, default 15000): with the handle send_prompt or send_to_bot gave (copy it exactly), that turn; without one, the in-flight turn of your conversation, else its last message. When the wait ends and the turn is not done, the answer is still_working (not an error): thread_id, progress.summary, progress.steps, wait_cursor, recommended_wait_ms. Pass wait_cursor as cursor on the next call so steps are not repeated. Prefer short polls with cursor resume, or async send_prompt plus the completion notification, over a long held call. An expired handle (or one from another of your sessions) on a conversation you can read answers that turn anyway (handle null, recovered_from). Refusals: handle_expired, handle_session_mismatch, handle_agent_mismatch, bad_handle (altered); then read_latest_page with agent_id and the thread_id send_prompt returned, which needs no handle. Never re-send the prompt.",
+    description: "Wait for an agent's turn under a caller-chosen timeout_ms (0 to 55000, default 15000): with the handle send_prompt or send_to_bot gave (copy it exactly), that turn; without one, the in-flight turn of your conversation, else its last message. When the wait ends and the turn is not done, the answer is still_working (not an error): thread_id, progress.summary, progress.steps, wait_cursor, recommended_wait_ms. Pass wait_cursor as cursor on the next call so steps are not repeated. Prefer short polls with cursor resume, or async send_prompt plus the completion notification, over a long held call. An expired handle (or one from another of your sessions) on a conversation you can read answers that turn anyway (handle null, recovered_from). A handle is bound to you (the person or the bot), not to your MCP session: reconnecting after an idle gap keeps it valid. Refusals: handle_expired, handle_session_mismatch, handle_agent_mismatch, bad_handle (altered), with thread_id when it is one of your conversations. Fallbacks that need no handle: read_latest_page with agent_id and the thread_id send_prompt returned, or sagax_thread with that thread_id from a Perspicax client. Never re-send the prompt.",
     inputSchema: { type: "object", additionalProperties: false, properties: {
       agent_id: AGENT_ID,
       handle: { type: "string", description: "Copy the handle send_prompt returned, exactly." },
@@ -103,6 +109,58 @@ export const AGENT_API_TOOLS = [
     name: "read_transcript_cold",
     description: "Read the stored transcript, 50 entries per page from the newest, without touching the agent's live state.",
     inputSchema: { type: "object", additionalProperties: false, properties: { agent_id: AGENT_ID, cursor: AGENT_CURSOR }, required: ["agent_id"] },
+  },
+  {
+    name: "list_agent_models",
+    description: "List the engines and models you may pick as this agent's default (and its current model). Call before update_agent_model. Valid instance_id and model values come from this list only.",
+    inputSchema: { type: "object", additionalProperties: false, properties: { agent_id: AGENT_ID }, required: ["agent_id"] },
+  },
+  {
+    name: "update_agent_model",
+    description: "Change a reachable agent's default engine/model/effort, or turn Auto on (auto true). Same rights as Edit bot in Sagax: the owner, a person granted edit, or an admin. Pass instance_id (or engine), model, optional effort; or auto true (keeps the current engine/model as Auto's base when omitted). An invalid model is refused with the valid choices. Threads that follow the bot move on their next turn. Call list_agent_models first.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        agent_id: AGENT_ID,
+        instance_id: { type: "string", minLength: 1, maxLength: 120, description: "Engine instance id from list_agent_models." },
+        instance: { type: "string", minLength: 1, maxLength: 120, description: "Alias of instance_id." },
+        engine: { type: "string", minLength: 1, maxLength: 120, description: "Alias of instance_id (engine id or family name the server resolves)." },
+        model: { type: "string", minLength: 1, maxLength: 200, description: "Model id on that engine, from list_agent_models." },
+        effort: { type: "string", minLength: 1, maxLength: 40, description: "Optional effort level the model accepts." },
+        auto: { type: "boolean", description: "true turns Auto on for this agent (uses list_agent_models / auto-model)." },
+      },
+      required: ["agent_id"],
+    },
+  },
+  {
+    name: "update_agent_settings",
+    description: "Partial patch of an agent's Edit bot fields: identity and look, permission-gated settings (approval level, tools, computer, workspace, visibility, section, cwd, voice notes, …), runtime settings (maxConcurrentThreads and the rest), and primary (true/false for the Primary Bot switch). Same rights as the Sagax Edit bot window: the server checks each field. Returns changed and refused (each with a plain reason). Model changes use update_agent_model.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        agent_id: AGENT_ID,
+        ...AGENT_SETTINGS_PROPERTIES,
+      },
+      required: ["agent_id"],
+    },
+  },
+  {
+    name: "update_routine",
+    description: "Enable, disable or edit a routine you may change (name, instructions, schedule). Same as the Automations editor / member PATCH: your own routines, without a proposal card. Pass routine_id from sagax_routines or list_routines.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        routine_id: { type: "string", minLength: 1, description: "Routine id from sagax_routines or list_routines." },
+        enabled: { type: "boolean", description: "true resumes it; false pauses it." },
+        name: { type: "string", minLength: 1, maxLength: 120 },
+        instructions: { type: "string", minLength: 1, maxLength: 32000 },
+        schedule: { type: "object", description: "cron, daily, interval, once, webhook or event schedule object." },
+      },
+      required: ["routine_id"],
+    },
   },
 ].map((tool) => {
   const annotations = agentToolAnnotations(tool.name);

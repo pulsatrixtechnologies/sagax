@@ -24,6 +24,7 @@ const DIALOG_FRAME_ALLOW = new Set([
   "components/BulkEditBotsDialog.tsx", // bulk Edit bots window (restored)
   "components/TeamBotFromThreadDialog.tsx", // team bot from thread window (restored)
   "components/OrgImportDialog.tsx", // org import window (restored)
+  "components/memory-manager/MemoryImportDialog.tsx", // Memory > Import window (3733220d4, 2026-11-03)
 ]);
 
 /** Production files that may call useModalDialog. */

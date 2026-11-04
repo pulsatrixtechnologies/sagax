@@ -10,7 +10,7 @@
 // sure, and any failure at all, falls back to the room's lead (or its first
 // member), which is exactly what a lead-mode room does today. Nothing here
 // throws.
-import type { Decider } from "./index.ts";
+import type { Decider } from "./decider-contract.ts";
 import type { DeciderFailure } from "./types.ts";
 
 /** Turn starts take seconds anyway, and people far from the US West Coast

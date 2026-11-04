@@ -12,9 +12,13 @@ async function withFixture(mode: "happy" | "hang", run: (helpers: {
   control(args: string[]): Promise<any>;
   url: string;
   dataDir: string;
-  dump(): Promise<any>;
+  dump(expectedPrompt?: string): Promise<any>;
 }) => Promise<void>) {
-  const fixture = await launchVerificationServer({ ...process.env, FAKE_CLAUDE_MODE: mode });
+  const fixture = await launchVerificationServer({ ...process.env, FAKE_CLAUDE_MODE: mode,
+    // 95e8f39e4 continues tool-only endings. A completed fixture reply must
+    // not leave a second direct-turn dump for the next room assertion.
+    ...(mode === "happy" ? { FAKE_CLAUDE_TOOL_CALLS: "[]" } : {}),
+  });
   try {
     await run({
       url: fixture.info.url, dataDir: fixture.info.dataDir,
@@ -23,9 +27,13 @@ async function withFixture(mode: "happy" | "hang", run: (helpers: {
         return { status: response.status, body: await response.json() };
       },
       control: (args) => runControlOmb([...args, "--url", fixture.info.url]),
-      dump: async () => {
-        await expect.poll(() => existsSync(fixture.fixtureDumpPath), { timeout: 15_000 }).toBe(true);
-        const value = JSON.parse(readFileSync(fixture.fixtureDumpPath, "utf8"));
+      dump: async (expectedPrompt) => {
+        let value: any;
+        await expect.poll(() => {
+          if (!existsSync(fixture.fixtureDumpPath)) return false;
+          value = JSON.parse(readFileSync(fixture.fixtureDumpPath, "utf8"));
+          return expectedPrompt === undefined || JSON.stringify(value.prompt ?? "").includes(expectedPrompt);
+        }, { timeout: 15_000 }).toBe(true);
         rmSync(fixture.fixtureDumpPath, { force: true });
         return value;
       },
@@ -175,14 +183,14 @@ it("carries the latest original tool selection into fresh direct and room MCP co
     const direct = { allow: ["native:*", "mcp:notes:read_notes"] };
     expect((await api("PATCH", `/api/bots/${bot.id}`, { toolScope: direct })).status).toBe(200);
     await control(["send", "--bot", bot.id, "--text", "Reply once."]);
-    const first = await dump();
+    const first = await dump("Reply once.");
     expect(JSON.parse(first.mcpConfig.mcpServers.notes.env.SAGAX_GATE_TOOL_SCOPE)).toEqual(direct);
     await control(["wait", "--bot", bot.id, "--timeout", "30"]);
     const roomScope = { deny: ["mcp:notes:write_notes"] };
     expect((await api("PATCH", `/api/bots/${bot.id}`, { toolScope: roomScope })).status).toBe(200);
     const { channel } = await control(["new-channel", "--name", "Scope dispatch room", "--members", bot.id]);
     await control(["send-channel", "--channel", channel.id, "--text", "Reply once in this room."]);
-    const second = await dump();
+    const second = await dump("Reply once in this room.");
     expect(second.pid).not.toBe(first.pid);
     expect(JSON.parse(second.mcpConfig.mcpServers.notes.env.SAGAX_GATE_TOOL_SCOPE)).toEqual(roomScope);
     await control(["wait", "--channel", channel.id, "--timeout", "30"]);

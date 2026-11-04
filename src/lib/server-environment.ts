@@ -2,9 +2,9 @@
 // own isolated Linux environment on the server, shared by all their bots
 // (server/sandbox/user-sandbox-routes.ts).
 import { api, ApiError } from "@/state/store";
-import { formatPanelBytes as formatBytes } from "../../shared/format-bytes";
+import { formatPanelBytes } from "../../shared/format-bytes";
 
-export { formatBytes };
+export { formatPanelBytes };
 
 export interface ServerEnvironmentStatus {
   configured: boolean;

@@ -9,7 +9,7 @@ final class BotConversationPreviewProtocol: URLProtocol {
 
     override func startLoading() {
         guard request.httpMethod == "GET",
-              request.url?.path == "/api/threads/melonie-ask/messages",
+              request.url?.path == "/api/threads/wren-ask/messages",
               let url = Bundle.main.url(forResource: "BotConversationThread", withExtension: "json"),
               let data = try? Data(contentsOf: url) else {
             client?.urlProtocol(self, didFailWithError: URLError(.resourceUnavailable))

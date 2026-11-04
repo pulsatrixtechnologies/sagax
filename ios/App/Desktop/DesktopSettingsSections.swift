@@ -7,6 +7,7 @@
 // Diagnostics export, Defaults for new bots, which opens the full New Bot
 // editor) are not on the iPad.
 import SwiftUI
+import UniformTypeIdentifiers
 import UIKit
 import CompanionCore
 
@@ -36,9 +37,8 @@ struct DesktopSettingsHeading: View {
     init(_ title: Text) { self.title = title }
 
     var body: some View {
-        DesktopText(title, size: 13, weight: .medium, line: 18, color: \.inkSecondary)
-            .padding(.leading, 2)
-            .padding(.top, 4)
+        DesktopText(title, size: 13, line: 18, color: \.inkSecondary)
+            .padding(.leading, 4)
             .accessibilityAddTraits(.isHeader)
     }
 }
@@ -80,35 +80,27 @@ struct DesktopSubPageRow: View {
 private struct DesktopGeneralMainSettings: View {
     @EnvironmentObject private var model: DesktopSettingsModel
     @AppStorage(PrefKey.language) private var language = AppLanguage.system.rawValue
+    @ObservedObject private var mode = DesktopInterfaceMode.shared
     @State private var editingAboutMe = false
     let openAdvanced: () -> Void
 
     var body: some View {
         let config = model.config
         // Settings > Account (2026-10-28): Account (who is signed in, About
-        // me), Appearance (Language), System (Advanced), under the desktop's
-        // grey headings. The effort for new bots is Models > Defaults for
-        // new bots now.
-        DesktopSettingsHeading(Text("Account"))
-        AnyView(DesktopProfileCard())
-        Button { editingAboutMe = true } label: {
-            DesktopCollapsedRow(title: Text("About me"), summary: aboutMeSummary)
+        // me), Appearance (Language, time zone), System (Guided tours,
+        // Advanced), under the desktop's grey headings.
+        DesktopSettingsGroup(Text("Account"), identifier: "account") {
+            AnyView(DesktopProfileCard())
+            DesktopSubPageRowBare(title: Text("About me"), summary: aboutMeSummary, action: Text("Edit"),
+                                  identifier: "desktop-settings.about-me") { editingAboutMe = true }
         }
-        .buttonStyle(DesktopHoverFill(radius: 14))
-        .desktopHairlineBox()
-        .accessibilityIdentifier("desktop-settings.about-me")
         .sheet(isPresented: $editingAboutMe) {
             DesktopAboutMeEditor(initial: config?.profile?.aboutMe ?? "")
                 .environmentObject(model)
         }
-        DesktopSettingsHeading(Text("Appearance"))
-        DesktopSettingsGroup {
-            DesktopSettingRow(
-                title: Text("Language"),
-                subtitle: Text("Follows your system language unless you pick one."),
-                help: Text("The app follows your system language unless you pick one here. Buttons drawn by iPadOS itself follow the iPad's language.")
-            ) {
-                DesktopSelect(
+        DesktopSettingsGroup(Text("Appearance"), identifier: "appearance") {
+            DesktopCompactRow(Text("Language"), identifier: "language") {
+                DesktopPillSelect(
                     options: AppLanguage.allCases.map { ($0.rawValue, $0.optionLabel) },
                     selection: language,
                     shown: AppLanguage(rawValue: language).map(\.inEffect)?.optionLabel,
@@ -119,13 +111,18 @@ private struct DesktopGeneralMainSettings: View {
             }
             DesktopTimeZoneRows()
         }
-        DesktopSettingsHeading(Text("System"))
-        DesktopSubPageRow(
-            title: Text("Advanced"),
-            summary: Text("Parallel threads, recovery, cleanup, group turns, routines"),
-            identifier: "desktop-settings.advanced",
-            open: openAdvanced
-        )
+        DesktopSettingsGroup(Text("System"), identifier: "system") {
+            // the desktop's guided tours (GuidedToursRow) play in its window;
+            // on the iPad the row says so behind its help
+            DesktopCompactRow(Text("Guided tours"), identifier: "tours") {
+                DesktopTourButton(title: Text("App tour"), identifier: "desktop-settings.app-tour")
+                DesktopTourButton(title: Text("Welcome tour"), identifier: "desktop-settings.welcome-tour")
+            }
+            if mode.advanced {
+                DesktopSubPageRowBare(title: Text("Advanced"), summary: Text("People's tool access, conversation cleanup, diagnostics"),
+                                      action: Text("Open"), identifier: "desktop-settings.advanced", open: openAdvanced)
+            }
+        }
     }
 
     private var aboutMeSummary: Text {
@@ -133,6 +130,58 @@ private struct DesktopGeneralMainSettings: View {
             .split(whereSeparator: \.isNewline).first.map(String.init)?
             .trimmingCharacters(in: .whitespaces) ?? ""
         return first.isEmpty ? Text("Not set") : Text(verbatim: first)
+    }
+}
+
+/// A guided tour's button (GuidedToursRow): the tours play in the desktop's
+/// window, so on the iPad the button says where to find them.
+struct DesktopTourButton: View {
+    let title: Text
+    let identifier: String
+    @State private var showing = false
+
+    var body: some View {
+        Button { showing = true } label: { title }
+            .buttonStyle(DesktopButtonStyle(kind: .control))
+            .accessibilityIdentifier(identifier)
+            .popover(isPresented: $showing) {
+                DesktopText("The app tour and the welcome tour play in Sagax on your computer.", size: 12, line: 17, color: \.inkSecondary)
+                    .frame(width: 232, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(12)
+                    .desktopPopoverOnCompact()
+            }
+    }
+}
+
+/// `SettingsSubPageRow bare`: a row of a group's card that opens a
+/// sub-page: title, summary, the accent action word and a chevron.
+struct DesktopSubPageRowBare: View {
+    @Environment(\.desktopTheme) private var theme
+    let title: Text
+    let summary: Text
+    let action: Text
+    let identifier: String
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    DesktopText(title)
+                    DesktopText(summary, size: 12.5, line: 18, color: \.inkSecondary).lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                DesktopText(action, size: 12.5, weight: .medium, color: \.accent)
+                DesktopSettingsIconView(icon: .chevronRight, size: 14)
+                    .foregroundStyle(theme.inkSecondary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(DesktopHoverFill(radius: 0))
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -299,48 +348,125 @@ struct DesktopCollapsedRow: View {
     }
 }
 
-/// Profile: the initial, the name and the address, edited in place.
+/// The account row (AccountCard.tsx, OperatorIdentity): the initial, the
+/// name and the address edited in place, the person's own label under the
+/// name (MyLabelField) and the copy-email button.
 struct DesktopProfileCard: View {
     @Environment(\.desktopTheme) private var theme
     @EnvironmentObject private var model: DesktopSettingsModel
+    @EnvironmentObject private var session: Session
+    @ObservedObject private var people = PeopleDirectory.shared
     @State private var name = ""
     @State private var email = ""
     @State private var seeded = false
+    @State private var label = ""
+    @State private var editingLabel = false
+    @State private var labelError: String?
+    @State private var copied = false
+    @FocusState private var labelFocused: Bool
+
+    private var principal: String? {
+        let id = session.account?.principalId?.trimmingCharacters(in: .whitespaces) ?? session.roomViewer.actorId
+        return id.isEmpty ? nil : id
+    }
 
     var body: some View {
         let profile = model.config?.profile
-        DesktopSettingsCard(Text("Profile"), summary: Text(verbatim: profile?.name ?? ""), identifier: "general.profile") {
-            HStack(spacing: 12) {
-                Text(verbatim: String((name.isEmpty ? (profile?.email ?? "?") : name).prefix(1)).uppercased())
-                    .font(theme.font(13, .semibold))
+        HStack(spacing: 12) {
+            Text(verbatim: String((name.isEmpty ? (email.isEmpty ? "?" : email) : name).prefix(1)).uppercased())
+                .font(theme.font(13, .semibold))
+                .foregroundStyle(theme.ink)
+                .frame(width: 36, height: 36)
+                .background(theme.raised, in: Circle())
+            VStack(alignment: .leading, spacing: 4) {
+                TextField(text: $name, prompt: Text("Your name").foregroundColor(theme.inkSecondary)) { Text("Your name") }
+                    .font(theme.font(13, .medium))
                     .foregroundStyle(theme.ink)
-                    .frame(width: 36, height: 36)
-                    .background(theme.raised, in: Circle())
-                VStack(alignment: .leading, spacing: 4) {
-                    TextField(text: $name, prompt: Text("Your name").foregroundColor(theme.inkSecondary)) { Text("Your name") }
-                        .font(theme.font(14, .semibold))
-                        .foregroundStyle(theme.ink)
-                        .frame(height: 21)
-                        .submitLabel(.done)
-                        .onSubmit { save(.profileName(name), was: profile?.name) }
-                        .accessibilityIdentifier("desktop-settings.profile-name")
-                    TextField(text: $email, prompt: Text("Email").foregroundColor(theme.inkSecondary)) { Text("Email") }
+                    .frame(height: 18)
+                    .submitLabel(.done)
+                    .onSubmit { save(.profileName(name), was: profile?.name) }
+                    .accessibilityIdentifier("desktop-settings.profile-name")
+                if let principal { labelLine(principal) }
+                HStack(spacing: 4) {
+                    TextField(text: $email, prompt: Text(verbatim: "you@example.com").foregroundColor(theme.inkSecondary)) { Text("Email") }
                         .font(theme.font(13))
                         .foregroundStyle(theme.inkSecondary)
-                        .frame(height: 19.5)
+                        .frame(height: 18)
+                        .fixedSize()
                         .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .submitLabel(.done)
                         .onSubmit { save(.profileEmail(email), was: profile?.email) }
                         .accessibilityIdentifier("desktop-settings.profile-email")
+                    if !email.trimmingCharacters(in: .whitespaces).isEmpty {
+                        Button {
+                            UIPasteboard.general.string = email.trimmingCharacters(in: .whitespaces)
+                            copied = true
+                            Task { try? await Task.sleep(nanoseconds: 1_500_000_000); copied = false }
+                        } label: {
+                            DesktopSettingsIconView(icon: copied ? .check : .copy, size: 13)
+                                .foregroundStyle(copied ? theme.success : theme.inkSecondary)
+                                .frame(width: 24, height: 24)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(DesktopHoverFill(radius: 6))
+                        .accessibilityLabel(copied ? Text("Email copied") : Text("Copy email"))
+                        .accessibilityIdentifier("desktop-settings.copy-email")
+                    }
+                    Spacer(minLength: 0)
+                }
+                if let labelError {
+                    DesktopText(verbatim: labelError, size: 12, line: 16, color: \.danger)
                 }
             }
-            .padding(.top, 1)
-            .padding(.bottom, 3)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("settings-card.general.account")
         .onAppear(perform: seed)
         .onValueChange(of: model.config?.profile) { _ in seed() }
+    }
+
+    /// The person's own label (`InlineEditableText`, muted 12/16): the
+    /// placeholder reads as editable; a tap edits it in place.
+    @ViewBuilder
+    private func labelLine(_ principal: String) -> some View {
+        let saved = people.label(principal) ?? ""
+        if editingLabel {
+            TextField(text: $label, prompt: Text("Add a label").foregroundColor(theme.inkSecondary)) { Text("Edit label") }
+                .font(theme.font(12))
+                .foregroundStyle(theme.inkSecondary)
+                .frame(height: 16)
+                .focused($labelFocused)
+                .submitLabel(.done)
+                .onSubmit { commitLabel(principal, was: saved) }
+                .onChange(of: labelFocused) { focused in if !focused { commitLabel(principal, was: saved) } }
+                .accessibilityIdentifier("desktop-settings.my-label-field")
+        } else {
+            Button {
+                label = saved
+                editingLabel = true
+                labelFocused = true
+            } label: {
+                DesktopText(verbatim: saved.isEmpty ? AppStrings.localized("Add a label") : saved, size: 12, line: 16, color: \.inkSecondary)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Edit label"))
+            .accessibilityValue(Text(verbatim: saved))
+            .accessibilityIdentifier("desktop-settings.my-label")
+        }
+    }
+
+    private func commitLabel(_ principal: String, was: String) {
+        guard editingLabel else { return }
+        editingLabel = false
+        let next = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard next != was else { return }
+        Task { labelError = await people.saveLabel(principal, next, session: session) }
     }
 
     private func seed() {
@@ -454,76 +580,60 @@ struct DesktopExperimentalSettings: View {
 
     var body: some View {
         let config = model.config
-        let saving = !model.saving.isEmpty || config == nil
-        DesktopSettingsCard(
+        let features = config?.features
+        let busy = !model.saving.isEmpty || config == nil
+        let skills = features?.skillAuthoring != false
+        let browser = features?.browser == true
+        let engine = config?.browserEngine
+        let browserReady = engine?.kind != "unavailable"
+        let browserInstallable = engine?.installable == true
+        let decision = features?.decisionModel == true
+        let dataWindow = features?.dataWindow == true
+        let notetaker = features?.meetingNotetaker == true
+        let titles = features?.llmThreadTitles == true
+        let on = [skills, browser, decision, dataWindow, notetaker, devPods, titles].filter { $0 }.count
+        DesktopSettingsGroup(
             Text("Experimental features"),
-            subtitle: Text("Early features may change while we test them. Each one says whether it starts on or off."),
-            identifier: "experimental.features"
+            accessory: AnyView(DesktopText(verbatim: "· " + String(format: AppStrings.localized("%@ of %@ on"), "\(on)", "7"), color: \.inkSecondary).lineLimit(1)),
+            identifier: "experimental"
         ) {
-            let skills = config?.features?.skillAuthoring ?? true
-            DesktopFeatureRow(
-                title: Text("Bots may draft skills for your review"),
-                detail: Text("On by default. Save a bot's verification run as a skill from the Verify card, or ask a supported bot to run /create-verification-skill. Every change waits for your review."),
-                isOn: skills, label: Text("Allow bots to draft skills"), identifier: "desktop-settings.skill-authoring",
-                disabled: saving
-            ) { Task { _ = await model.apply(.feature("skillAuthoring", !skills), key: "skills") } }
-            let browser = config?.features?.browser == true
-            let engine = config?.browserEngine
-            DesktopFeatureRow(
-                title: Text("Built-in browser"),
-                detail: engine?.kind == "unavailable"
-                    ? Text(verbatim: AppStrings.localized("The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Experimental and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server."))
-                    : (browser
-                        ? Text("Enabled for this installation. Each bot also has its own browser switch.")
-                        : Text("Off by default. Enable it to let supported bots use a browser tab you can watch and take over.")),
-                isOn: browser, label: Text("Enable the built-in browser"), identifier: "desktop-settings.browser",
-                disabled: saving || (!browser && engine?.kind == "unavailable" && engine?.installable != true),
-                divided: true
-            ) { Task { _ = await model.apply(.feature("browser", !browser), key: "browser") } }
-            let browseBots = config?.features?.templates == true
-            DesktopFeatureRow(
-                title: Text("Browse Bots"),
-                detail: Text("Off by default. Shows Browse Bots in the sidebar menu, to find and add ready-made bots and teams."),
-                isOn: browseBots, label: Text("Show Browse Bots in the sidebar"), identifier: "desktop-settings.browse-bots",
-                disabled: saving, divided: true
-            ) { Task { _ = await model.apply(.feature("templates", !browseBots), key: "templates") } }
-            DesktopFeatureRow(
-                title: Text(verbatim: DevPodsStrings.settingTitle),
-                detail: Text(verbatim: DevPodsStrings.settingDetail),
-                isOn: devPods, label: Text(verbatim: DevPodsStrings.settingTitle), identifier: "desktop-settings.dev-pods",
-                divided: true
-            ) { devPods.toggle() }
+            row("skillAuthoring", Text("Bots may write their own skills"), aria: Text("Allow bots to draft skills"), on: skills, busy: busy, identifier: "desktop-settings.skill-authoring")
+            row("browser", Text("Built-in browser"), aria: Text("Enable the built-in browser"), on: browser, busy: busy,
+                unavailable: !browserReady && !browserInstallable,
+                reason: Text(verbatim: AppStrings.localized("The browser engine is not installed on this server yet. Enable the browser switches in App Settings → Experimental and the bot's Access settings, then open Bot's computer → Browser to install it. Or run `sagax browser install` on the server.")),
+                note: !browserReady && browserInstallable ? Text("Then install the engine from a bot's Computer > Browser.") : nil,
+                identifier: "desktop-settings.browser")
+            row("decisionModel", Text("Decision model"), aria: Text("Decision model"), on: decision, busy: busy, identifier: "desktop-settings.decision-model")
+            row("dataWindow", Text("Data window"), aria: Text("Turn on the Data window"), on: dataWindow, busy: busy,
+                unavailable: features?.dataWindow == nil,
+                reason: Text("This server does not offer the Data window yet. It comes with Sagax 0.5.3 on the server."),
+                identifier: "desktop-settings.data-window")
+            row("meetingNotetaker", Text("Meeting notetaker (Google Meet)"), aria: Text("Meeting notetaker (Google Meet)"), on: notetaker, busy: busy,
+                unavailable: features?.meetingNotetaker == nil,
+                reason: Text("This server does not offer the meeting notetaker yet."),
+                note: Text("Bots can ask to join a Google Meet and take notes, after your approval on each meeting. Not yet tested on real meetings."),
+                identifier: "desktop-settings.meeting-notetaker")
+            row("llmThreadTitles", Text("Generated conversation titles"), aria: Text("Turn on generated conversation titles"), on: titles, busy: busy,
+                unavailable: features?.llmThreadTitles == nil,
+                reason: Text("This server does not offer this feature yet. Update Sagax on the server."),
+                identifier: "desktop-settings.thread-titles")
+            DesktopDescribedRow(Text("Context pods for development"), identifier: "devPods") {
+                DesktopSwitch(isOn: devPods, label: Text("Turn on context pods for development"), identifier: "desktop-settings.dev-pods") { devPods.toggle() }
+            }
         }
     }
-}
 
-/// One switch of Experimental features (`text-[14px] font-medium`, detail
-/// 12 pt relaxed; a hairline above the second and later).
-struct DesktopFeatureRow: View {
-    @Environment(\.desktopTheme) private var theme
-    let title: Text
-    let detail: Text
-    let isOn: Bool
-    let label: Text
-    var identifier: String
-    var disabled = false
-    var divided = false
-    let toggle: () -> Void
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 2) {
-                DesktopText(title, size: 14, weight: .medium, line: 21)
-                DesktopText(detail, size: 12, line: 19.5, color: \.inkSecondary)
+    /// `FeatureRow`: a feature the server cannot run keeps its row, greyed,
+    /// with "Not available on this server" and the reason behind the help.
+    private func row(_ feature: String, _ label: Text, aria: Text, on: Bool, busy: Bool, unavailable: Bool = false,
+                     reason: Text? = nil, note: Text? = nil, identifier: String) -> some View {
+        DesktopDescribedRow(label, description: unavailable ? Text("Not available on this server") : note, identifier: feature) {
+            if unavailable, let reason { DesktopHelpTip(help: reason) }
+            DesktopSwitch(isOn: on, label: aria, identifier: identifier, disabled: busy || (unavailable && !on)) {
+                Task { _ = await model.apply(.feature(feature, !on), key: feature) }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            DesktopSwitch(isOn: isOn, label: label, identifier: identifier, disabled: disabled, action: toggle)
         }
-        .padding(.top, divided ? 16 : 0)
-        .overlay(alignment: .top) {
-            if divided { Rectangle().fill(theme.hairline.opacity(0.3)).frame(height: 1) }
-        }
-        .padding(.top, divided ? 16 : 0)
+        .opacity(unavailable ? 0.75 : 1)
     }
 }
 
@@ -706,11 +816,14 @@ struct DesktopUsageSettings: View {
     @StateObject private var personal = PersonalUsageModel()
 
     var body: some View {
-        DesktopSettingsCard(Text("Cost"), identifier: "usage.cost") {
-            AnyView(cost)
+        DesktopSettingsGroup(Text("Cost"), identifier: "cost") {
+            AnyView(cost).padding(.horizontal, 14).padding(.vertical, 10)
         }
         .task(id: session.connection?.id) { await personal.load(session.settingsClient) }
-        AnyView(DesktopPlanUsageCard())
+        // UsageLayout: `flex-col gap-6` between Cost, the limit, Plan and the traces
+        if personal.usage != nil { AnyView(DesktopSpendCapGroup()).padding(.top, 12) }
+        AnyView(DesktopPlanUsageCard()).padding(.top, 12)
+        AnyView(DesktopUsageTraces()).padding(.top, 12)
         if let usage = personal.usage, !usage.isEmpty {
             DesktopSettingsCard(Text("By bot and by model"), summary: Text("This month"), open: false, identifier: "usage.breakdown") {
                 VStack(alignment: .leading, spacing: 16) {
@@ -750,6 +863,162 @@ struct DesktopUsageSettings: View {
         } else {
             ProgressView().controlSize(.small)
         }
+    }
+}
+
+/// Spending limit (SpendCapCard): the person's own monthly limit; a reached
+/// limit stops new turns until it is raised. Hidden where the server does
+/// not know the route.
+struct DesktopSpendCapGroup: View {
+    @Environment(\.desktopTheme) private var theme
+    @EnvironmentObject private var session: Session
+    @State private var data: PersonalSpendCap?
+    @State private var text = ""
+    @State private var busy = false
+    @State private var failed: String?
+    @State private var confirmRemove = false
+
+    var body: some View {
+        Group {
+            if let data, data.supported {
+                let parsed = PersonalSpendCap.parse(text, minUsd: data.minUsd)
+                DesktopSettingsGroup(Text("Spending limit"), identifier: "spendCap") {
+                    DesktopDescribedRow(Text("Monthly limit (USD)"), description: description(data), identifier: "cap-state") {
+                        if data.cap != nil {
+                            Button(confirmRemove ? "Confirm removal" : "Remove limit") {
+                                if confirmRemove { Task { await save(nil) } } else { confirmRemove = true }
+                            }
+                            .buttonStyle(DesktopButtonStyle(kind: .control))
+                            .disabled(busy)
+                        }
+                    }
+                    HStack(spacing: 8) {
+                        TextField(text: $text, prompt: Text(data.cap == nil ? "e.g. 50" : "New limit").foregroundColor(theme.inkSecondary)) { Text("Monthly limit (USD)") }
+                            .font(theme.font(13))
+                            .keyboardType(.decimalPad)
+                            .padding(.horizontal, 10)
+                            .frame(width: 160, height: 32)
+                            .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+                            .accessibilityIdentifier("desktop-settings.spend-cap")
+                        Button(data.cap == nil ? "Set limit" : "Change limit") { if let parsed { Task { await save(parsed) } } }
+                            .buttonStyle(DesktopButtonStyle(kind: .accent))
+                            .disabled(busy || parsed == nil)
+                            .accessibilityIdentifier("desktop-settings.spend-cap-save")
+                    }
+                    .padding(.horizontal, 14).padding(.bottom, 10)
+                    if !text.isEmpty && parsed == nil {
+                        DesktopText(verbatim: String(format: AppStrings.localized("Enter an amount of %@ or more, like 25 or 25.50."), PersonalUsageModel.cost(data.minUsd)), size: 12, line: 16, color: \.danger)
+                            .padding(.horizontal, 14).padding(.bottom, 10)
+                    }
+                    if let failed {
+                        DesktopText(verbatim: failed, size: 12, line: 16, color: \.danger).padding(.horizontal, 14).padding(.bottom, 10)
+                    }
+                    DesktopText(Text("Counts every bot turn and voice request on this computer this month (voice is estimated). The limit stops the next turn; a turn already running can finish and go past it. You are notified at 80% and at the limit."),
+                                size: 12, line: 16, color: \.inkSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 14).padding(.bottom, 10)
+                }
+            }
+        }
+        Color.clear.frame(height: 0)
+            .task { data = try? await session.settingsClient?.spendCap() }
+    }
+
+    private func description(_ data: PersonalSpendCap) -> Text {
+        guard let cap = data.cap else { return Text("No limit is set. Your bots spend freely.") }
+        let line = DesktopSettingsSummary.spend(cap.spentUsd, of: cap.monthlyUsd)
+        let state = cap.exceeded ? AppStrings.localized("Limit reached: the next turns are refused until you raise it.")
+            : cap.warn ? AppStrings.localized("Nearing the limit") : AppStrings.localized("Within the limit")
+        return Text(verbatim: line + "\n" + state)
+    }
+
+    private func save(_ value: Double?) async {
+        guard let client = session.settingsClient else { return }
+        busy = true
+        failed = nil
+        confirmRemove = false
+        defer { busy = false }
+        do {
+            data = try await client.setSpendCap(value)
+            text = ""
+        } catch { failed = error.localizedDescription }
+    }
+}
+
+/// Usage traces (UsageTraces.tsx): where each of the person's own jobs spent
+/// its time and money this month, ten a page, newest first.
+struct DesktopUsageTraces: View {
+    @Environment(\.desktopTheme) private var theme
+    @EnvironmentObject private var session: Session
+    @State private var list: UsageTraceList?
+    @State private var failed = false
+    @State private var offset = 0
+    private let pageSize = 10
+
+    var body: some View {
+        DesktopSettingsGroup(Text("Usage traces"), plain: true, identifier: "usage-traces") {
+            DesktopText(Text("Where each of your jobs spent its time and its money, from the usage ledger. Counters, time and cost only; no message content."),
+                        size: 12, line: 17, color: \.inkSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 4)
+            VStack(alignment: .leading, spacing: 0) {
+                if failed {
+                    DesktopText(Text("Couldn't load the usage traces."), size: 12, color: \.inkSecondary).padding(12)
+                } else if let list {
+                    if list.jobs.isEmpty && (list.total?.jobs ?? 0) == 0 {
+                        DesktopText(Text("No job recorded for this period yet."), size: 12, color: \.inkSecondary).padding(12)
+                    } else {
+                        if let total = list.total {
+                            HStack {
+                                DesktopText(Text("Period total"), size: 12, color: \.inkSecondary)
+                                Spacer(minLength: 0)
+                                DesktopText(verbatim: [total.costUsd.map(PersonalUsageModel.cost), String(format: AppStrings.localized("%@ jobs"), "\(total.jobs)")].compactMap { $0 }.joined(separator: " · "), size: 12, color: \.inkSecondary)
+                            }
+                            .padding(12)
+                        }
+                        ForEach(list.jobs) { job in
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    DesktopText(verbatim: job.botName, weight: .medium).lineLimit(1)
+                                    DesktopText(verbatim: job.triggerLabel + " · " + String(format: AppStrings.localized("%@ turns"), "\(job.turns)"), size: 12, line: 16, color: \.inkSecondary).lineLimit(1)
+                                }
+                                Spacer(minLength: 0)
+                                DesktopText(verbatim: (job.costUsd ?? job.estimatedUsd).map(PersonalUsageModel.cost) ?? "—", size: 12).monospacedDigit()
+                            }
+                            .padding(.horizontal, 12).padding(.vertical, 8)
+                            .overlay(alignment: .top) { Rectangle().fill(theme.border).frame(height: 0.5) }
+                        }
+                        let total = list.total?.jobs ?? list.jobs.count
+                        if total > pageSize {
+                            HStack(spacing: 8) {
+                                Spacer(minLength: 0)
+                                DesktopText(verbatim: "\(offset + 1)–\(min(offset + pageSize, total)) / \(total)", size: 12, color: \.inkSecondary)
+                                Button { offset = max(0, offset - pageSize) } label: { DesktopSettingsIconView(icon: .chevronDown, size: 13).rotationEffect(.degrees(90)) }
+                                    .buttonStyle(DesktopButtonStyle(kind: .ghost)).disabled(offset == 0)
+                                Button { offset += pageSize } label: { DesktopSettingsIconView(icon: .chevronRight, size: 13) }
+                                    .buttonStyle(DesktopButtonStyle(kind: .ghost)).disabled(offset + pageSize >= total)
+                            }
+                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .overlay(alignment: .top) { Rectangle().fill(theme.border).frame(height: 0.5) }
+                        }
+                    }
+                } else {
+                    DesktopText(Text("Loading usage traces…"), size: 12, color: \.inkSecondary).padding(12)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(theme.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .desktopHairlineBox(radius: 12)
+        }
+        .task(id: offset) { await load() }
+    }
+
+    private func load() async {
+        guard let client = session.settingsClient else { return }
+        let month = PersonalUsagePeriods().month
+        do { list = try await client.myUsageTraces(from: month.from, to: month.to, limit: pageSize, offset: offset); failed = false }
+        catch { failed = true }
     }
 }
 
@@ -834,47 +1103,158 @@ struct DesktopBackupsSettings: View {
     @State private var error: String?
     @State private var shared: DesktopSharedFile?
 
-    @State private var includedOpen = false
+    @State private var open: String?
+    @State private var choosing = false
+    @State private var file: URL?
+    @State private var importPassword = ""
+    @State private var preview: WorkspaceBackupPreview?
+    @State private var typed = ""
+    @State private var restoring = false
+    @State private var restored = false
 
-    /// Backups in one card (#518, `WorkspaceBackupSettings`): what a backup
-    /// is, what it includes, the export, and where a restore happens.
+    /// Full backup (WorkspaceBackupSettings.tsx): its help, then the two
+    /// rows, Export a backup and Restore a backup, each opening its form.
     var body: some View {
-        DesktopSettingsCard(
-            Text("Full backup"),
-            subtitle: Text("An encrypted copy of your bots, conversations and files, to restore here or on another computer."),
-            identifier: "backups.full"
-        ) {
-            VStack(alignment: .leading, spacing: 12) {
-                DesktopDisclosure(title: Text("What is included"), open: $includedOpen) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        DesktopText("A password-protected backup of this installation: bots, conversations, instructions, local files, and non-secret settings.", color: \.inkSecondary)
-                        DesktopText("Saved account credentials and connections are not included. Reconnect your accounts on a new machine; existing credentials on the destination stay unchanged. External CLI sign-ins and remote VM disks are not included.", color: \.inkSecondary)
-                        DesktopText("Chats, drafts, and user files are not automatically redacted and may contain pasted secrets. Keep this backup private and save its password safely; it cannot be recovered.", color: \.warning)
-                    }
-                }
-                DesktopText("Use a password of at least 12 characters. You will need it to import this backup.", size: 12.5, line: 17, color: \.inkSecondary)
-                passwordField(Text("Backup password"), text: $password, identifier: "desktop-settings.backup-password")
-                passwordField(Text("Confirm backup password"), text: $confirm, identifier: "desktop-settings.backup-confirm")
-                let ready = password.count >= 12 && password == confirm && !exporting
-                Button(action: export) {
-                    HStack(spacing: 8) {
-                        if exporting { ProgressView().controlSize(.small) } else { DesktopSettingsIconView(icon: .download, size: 15) }
-                        Text(exporting ? "Creating encrypted backup…" : "Export full backup")
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(DesktopBackupButtonStyle(ready: ready))
-                .disabled(!ready)
-                .accessibilityIdentifier("desktop-settings.backup-export")
-                if let error {
-                    DesktopText(verbatim: error, size: 12, line: 17, color: \.danger)
-                }
-                DesktopText("Restoring replaces this installation and restarts it. Restore from Sagax on the computer, where the backup file is.",
-                            size: 12, line: 17, color: \.inkSecondary)
+        DesktopSettingsGroup(Text("Full backup"), accessory: AnyView(DesktopHelpTip(help: Text(verbatim: [
+            AppStrings.localized("A password-protected backup of this installation: bots, conversations, instructions, local files, and non-secret settings. Drafts and preferences from this browser are included."),
+            AppStrings.localized("Saved account credentials and connections are not included. Reconnect your accounts on a new machine; existing credentials on the destination stay unchanged. External CLI sign-ins and remote VM disks are not included."),
+            AppStrings.localized("Chats, drafts, and user files are not automatically redacted and may contain pasted secrets. Keep this backup private and save its password safely; it cannot be recovered."),
+        ].joined(separator: "\n\n")))), identifier: "backups") {
+            DesktopDescribedRow(Text("Export a backup"), description: Text("An encrypted copy of your bots, conversations and files, to restore here or on another computer."), identifier: "backupExport") {
+                Button("Export") { open = open == "export" ? nil : "export" }
+                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .accessibilityIdentifier("desktop-settings.backup-export-open")
+            } below: {
+                if open == "export" { exportForm.padding(.top, 8) }
+            }
+            DesktopDescribedRow(Text("Restore a backup"), description: Text("Replaces everything here, once the file is checked."), identifier: "backupRestore") {
+                Button("Restore") { open = open == "import" ? nil : "import" }
+                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .accessibilityIdentifier("desktop-settings.backup-restore-open")
+            } below: {
+                if open == "import" { restoreForm.padding(.top, 8) }
             }
         }
         .sheet(item: $shared) { file in
             DesktopShareSheet(url: file.url)
+        }
+        .fileImporter(isPresented: $choosing, allowedContentTypes: [.data]) { result in
+            if case let .success(url) = result { file = url; preview = nil }
+        }
+    }
+
+    private var exportForm: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            passwordField(Text("Backup password"), text: $password, identifier: "desktop-settings.backup-password")
+            passwordField(Text("Confirm backup password"), text: $confirm, identifier: "desktop-settings.backup-confirm")
+            DesktopText("Use a password of at least 12 characters. You will need it to import this backup.", size: 12, line: 16, color: \.inkSecondary)
+            DesktopText("Chats, drafts, and user files are not automatically redacted and may contain pasted secrets. Keep this backup private and save its password safely; it cannot be recovered.", size: 12, line: 16, color: \.warning)
+                .fixedSize(horizontal: false, vertical: true)
+            let ready = password.count >= 12 && password == confirm && !exporting
+            HStack {
+                Spacer(minLength: 0)
+                Button(action: export) {
+                    HStack(spacing: 6) {
+                        if exporting { ProgressView().controlSize(.mini) } else { DesktopSettingsIconView(icon: .download, size: 13) }
+                        Text(exporting ? "Creating encrypted backup…" : "Export full backup")
+                    }
+                }
+                .buttonStyle(DesktopButtonStyle(kind: .accent))
+                .disabled(!ready)
+                .accessibilityIdentifier("desktop-settings.backup-export")
+            }
+            if let error { DesktopText(verbatim: error, size: 12, line: 16, color: \.danger) }
+        }
+    }
+
+    private var restoreForm: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                DesktopText(Text("Backup file"), size: 12, color: \.inkSecondary)
+                Button(file?.lastPathComponent ?? AppStrings.localized("Choose a file")) { choosing = true }
+                    .buttonStyle(DesktopButtonStyle(kind: .control))
+                    .accessibilityIdentifier("desktop-settings.backup-file")
+            }
+            if let preview {
+                VStack(alignment: .leading, spacing: 4) {
+                    DesktopText(Text("Validated backup"), size: 14, weight: .medium)
+                    DesktopText(verbatim: [
+                        preview.summary.appVersion.map { AppStrings.localized("App version") + " " + $0 },
+                        "\(AppStrings.localized("Bots")): \(preview.summary.bots)",
+                        "\(AppStrings.localized("Groups")): \(preview.summary.groups)",
+                        "\(AppStrings.localized("Threads")): \(preview.summary.threads)",
+                        "\(AppStrings.localized("Messages")): \(preview.summary.messages)",
+                        "\(AppStrings.localized("Files")): \(preview.summary.files)",
+                    ].compactMap { $0 }.joined(separator: " · "), size: 12, line: 16, color: \.inkSecondary)
+                }
+                DesktopText("This replaces everything in this installation; it does not merge. A recoverable safety backup of the current installation is kept before replacement. Restart is required.", size: 12, line: 16, color: \.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+                DesktopText("Only restore backups you trust: instructions, skills, and bot permissions are restored too. Reconnect accounts as needed. Routines, webhooks, and calendar calls arrive paused; pending work is not resumed.", size: 12, line: 16, color: \.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 4) {
+                    DesktopText(Text("Type REPLACE to confirm"), size: 12, color: \.inkSecondary)
+                    TextField("", text: $typed)
+                        .font(theme.font(13))
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                        .padding(.horizontal, 10).frame(height: 32)
+                        .background(theme.inset, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.border, lineWidth: 1))
+                        .accessibilityIdentifier("desktop-settings.backup-replace-confirm")
+                }
+                HStack {
+                    Spacer(minLength: 0)
+                    Button { Task { await restore() } } label: {
+                        Text(restoring ? "Preparing replacement…" : "Replace installation").foregroundStyle(Color.white)
+                    }
+                    .buttonStyle(DesktopDangerButtonStyle())
+                    .disabled(restoring || !WorkspaceRestore.ready(typed))
+                    .accessibilityIdentifier("desktop-settings.backup-replace")
+                }
+            } else {
+                passwordField(Text("Password for this backup"), text: $importPassword, identifier: "desktop-settings.backup-import-password")
+                HStack {
+                    Spacer(minLength: 0)
+                    Button("Validate backup") { Task { await check() } }
+                        .buttonStyle(DesktopButtonStyle(kind: .accent))
+                        .disabled(restoring || file == nil || importPassword.isEmpty)
+                        .accessibilityIdentifier("desktop-settings.backup-check")
+                }
+            }
+            if let error { DesktopText(verbatim: error, size: 12, line: 16, color: \.danger) }
+        }
+    }
+
+    private func check() async {
+        guard let client = model.client, let file else { return }
+        restoring = true
+        error = nil
+        defer { restoring = false }
+        do {
+            let scoped = file.startAccessingSecurityScopedResource()
+            defer { if scoped { file.stopAccessingSecurityScopedResource() } }
+            let data = try Data(contentsOf: file)
+            let id = try await client.uploadWorkspaceBackup(data)
+            preview = try await client.previewWorkspaceBackup(id: id, password: importPassword)
+            importPassword = ""
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func restore() async {
+        guard let client = model.client, let preview, WorkspaceRestore.ready(typed) else { return }
+        restoring = true
+        error = nil
+        defer { restoring = false }
+        do {
+            try await client.restoreWorkspaceBackup(id: preview.id)
+            restored = true
+            self.preview = nil
+            typed = ""
+            file = nil
+        } catch {
+            self.error = error.localizedDescription
         }
     }
 

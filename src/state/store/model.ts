@@ -566,6 +566,7 @@ export interface TaskUsage {
 }
 
 export interface Bot {
+  perspicaxActAs?: { slug: string; name: string };
   /** A bot the viewer knows only from a room it is in (groupMemberBots):
    * its name and look, nothing else; it cannot be opened. */
   publicProfile?: true;
@@ -1329,8 +1330,12 @@ export interface AppState {
    * line in the conversation was clicked); RoutinesSection opens it once. */
   routineFocus: { botId: string; routineId: string } | null;
   /** 2026-11-01: a routine run open as an exchange sheet over the chat
-   * column (same place as Melonie <-> Katarina). ChatView renders it. */
+   * column (same place as Wren <-> Osprey). ChatView renders it. */
   routineRunSheet: { runId: string; routineId?: string } | null;
+  /** 2026-11-03: a coding task of the bot panel's Coding list open as a chat
+   * over the chat column (src/components/coding/CodingChat.tsx), where a
+   * routine run opens. ChatView renders it. */
+  codingChat: import("../../lib/coding-chat").CodingChatTarget | null;
   /** a link that opens Connect apps on one tab: Pages (the published
    * pages), Providers (once My accounts: the old name "accounts" still
    * leads there, see the togglePlugins action), Sources or Bots (Browse
@@ -1784,6 +1789,8 @@ export type Action =
   | { type: "routineFocused" }
   | { type: "openRoutineRunSheet"; runId: string; routineId?: string; botId?: string }
   | { type: "closeRoutineRunSheet" }
+  | { type: "openCodingChat"; target: import("../../lib/coding-chat").CodingChatTarget }
+  | { type: "closeCodingChat" }
   | { type: "openPersonPanel"; personId: string | null }
   /** Open a bot's panel on Details with one Coding activity item shown
    * (`run:<routineRunId>` or `thread:<threadId>`), e.g. from the owner's
@@ -2484,6 +2491,7 @@ export const initialState: AppState = {
   pluginsFocusApps: null,
   routineFocus: null,
   routineRunSheet: null,
+  codingChat: null,
   pluginsPage: null,
   triggersOpen: false,
   memoryManagerOpen: false,

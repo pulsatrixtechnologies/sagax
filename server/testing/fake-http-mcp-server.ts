@@ -135,6 +135,12 @@ export interface FakeHttpMcp {
   setCallDelayMs(ms: number | undefined): void;
   /** replace the catalog later tools/list requests answer with */
   setTools(tools: FakeHttpMcpTool[]): void;
+  /** Forget every live MCP session (Perspicax KEEP_ALIVE idle close). The
+   * next non-initialize call with a session id answers 404; initialize
+   * mints a new session id. Lets benches simulate a 130 s pause without sleeping. */
+  forgetSessions(): void;
+  /** how many distinct session ids have been minted */
+  readonly sessionsMinted: number;
   /** the client's replies to requests this server sent it */
   replies: unknown[];
   /** the params of every initialize the server received, refused or not */
@@ -162,7 +168,15 @@ export async function startFakeHttpMcp(options: FakeHttpMcpOptions = {}): Promis
   let callDelayMs = options.callDelayMs;
   const replies: unknown[] = [];
   const initializes: unknown[] = [];
+  const liveSessions = new Set<string>();
+  let sessionsMinted = 0;
   let replied: (() => void) | undefined;
+  const mintSession = () => {
+    sessionsMinted += 1;
+    const id = `fake-session-${sessionsMinted}`;
+    liveSessions.add(id);
+    return id;
+  };
   const ask = () => {
     const waiting = new Promise<void>((resolve) => { replied = resolve; });
     return { waiting, frame: `event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: "server-ask-1", method: options.askOnCall, params: {} })}\n\n` };
@@ -221,11 +235,17 @@ export async function startFakeHttpMcp(options: FakeHttpMcpOptions = {}): Promis
         return;
       }
       const frame = JSON.parse((await readBody(req)) || "{}") as { id?: unknown; method?: unknown; params?: unknown };
+      const inboundSession = typeof req.headers["mcp-session-id"] === "string" ? req.headers["mcp-session-id"] : undefined;
       // the client answering a request this server sent it
       if (frame.method === undefined && frame.id !== undefined) {
         replies.push(frame);
         replied?.();
         res.writeHead(202).end();
+        return;
+      }
+      // Perspicax KEEP_ALIVE: a forgotten session answers 404 until initialize.
+      if (frame.method !== "initialize" && inboundSession && !liveSessions.has(inboundSession)) {
+        res.writeHead(404, { "content-type": "application/json" }).end(JSON.stringify({ error: "Session not found" }));
         return;
       }
       if (frame.method === "initialize") {
@@ -285,7 +305,10 @@ export async function startFakeHttpMcp(options: FakeHttpMcpOptions = {}): Promis
         for (const stream of streams) stream.write(`event: message\ndata: ${JSON.stringify(answer)}\n\n`);
         return;
       }
-      const session = { "mcp-session-id": "fake-session" };
+      const sessionId = frame.method === "initialize"
+        ? mintSession()
+        : (inboundSession && liveSessions.has(inboundSession) ? inboundSession : mintSession());
+      const session = { "mcp-session-id": sessionId };
       if (options.askOnCall && frame.method === "tools/call") {
         const { waiting, frame: request } = ask();
         res.writeHead(200, { ...session, "content-type": "text/event-stream" });
@@ -319,11 +342,13 @@ export async function startFakeHttpMcp(options: FakeHttpMcpOptions = {}): Promis
     get delayedToolsLists() { return delayedToolsLists; },
     get toolsLists() { return toolsLists; },
     get openSseStreams() { return streams.size; },
+    get sessionsMinted() { return sessionsMinted; },
     dropSseStreams: () => {
       for (const stream of streams) stream.end();
       streams.clear();
     },
     setCallDelayMs: (ms) => { callDelayMs = ms; },
+    forgetSessions: () => { liveSessions.clear(); },
     replies,
     initializes,
     setTools: (next) => { tools = next; },

@@ -503,6 +503,13 @@ async function callSandboxComputerTool(name: string, args: Record<string, unknow
   return text("done");
 }
 
+/** 2026-11-03: a relative path that was not found says where it landed,
+ * so the bot corrects it from its own folder instead of guessing again. */
+function relativeHint(path: string, real: string, folder?: string | null): string {
+  if (path.trim().startsWith("/")) return "";
+  return ` (the relative path ${path} resolved to ${real}; relative paths start at ${folder || "/workspace"})`;
+}
+
 /** The tool list with the bot's own folder in the descriptions
  * (server/sandbox/sandbox-bot-folder.ts): relative paths start there. */
 export function userSandboxToolsFor(folder?: string | null): typeof USER_SANDBOX_TOOLS {
@@ -540,7 +547,7 @@ export async function callUserSandboxTool(name: string, args: Record<string, unk
       const where = await resolveInSandbox(path, exec);
       if ("refused" in where) return text(where.refused, true);
       const result = await exec.exec({ ...guarded(path, where.resolved, READ_SCRIPT, String(max)), timeoutSec: 30, maxOutputBytes: max + 1024 });
-      if (result.exitCode !== 0) return text(result.stderr.trim() || `could not read ${path}`, true);
+      if (result.exitCode !== 0) return text(`${result.stderr.trim() || `could not read ${path}`}${relativeHint(path, where.resolved.real, folder)}`, true);
       return text(wrapUntrusted("file", result.stdout));
     }
     if (name === "write_file") {

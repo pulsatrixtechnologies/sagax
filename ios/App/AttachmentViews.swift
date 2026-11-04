@@ -357,11 +357,9 @@ struct TranscriptAttachmentView: View {
     /// opens the same preview as the phone's card.
     private var desktopFileChip: some View {
         Button(action: openPreview) {
-            if attachment.name.lowercased().hasSuffix(".pdf") {
-                DesktopPdfCard(name: attachment.name, loading: previewLoading)
-            } else {
-                DesktopFileChip(name: attachment.name, loading: previewLoading)
-            }
+            // a PDF under a reply is a compact pill like any other file
+            // (AttachmentGallery.tsx `beneath`), its preview button the page
+            DesktopFileChip(name: attachment.name, loading: previewLoading)
         }
         .buttonStyle(.plain)
         .hoverEffect(.highlight)

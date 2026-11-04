@@ -571,6 +571,27 @@ public extension CompanionClient {
         _ = try await perform(makeRequest("PATCH", "/api/skills-library/\(name)", body: ["enabled": enabled]))
     }
 
+    /// `isSkillName` (shared/skill-md.ts): lowercase letters, digits and
+    /// single hyphens, 1 to 64 characters.
+    static func isSkillName(_ name: String) -> Bool {
+        (1...64).contains(name.count) && name.range(of: #"^[a-z0-9]+(?:-[a-z0-9]+)*$"#, options: .regularExpression) != nil
+    }
+
+    /// `composeSkillMd(null, …)`: the front matter, a blank line, the body.
+    static func skillMarkdown(name: String, description: String, instructions: String) -> String {
+        let summary = description.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+        let body = instructions.replacingOccurrences(of: "\r\n", with: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        return ["---", "name: \(name.trimmingCharacters(in: .whitespaces))", "description: \(summary)", "---", "", body, ""].joined(separator: "\n")
+    }
+
+    /// Installed's New skill: `POST /api/me/skills-library { text }`, the
+    /// person's own library (SkillPage.tsx creating, the Me scope).
+    func createPersonalSkill(name: String, description: String, instructions: String) async throws {
+        _ = try await perform(makeRequest("POST", "/api/me/skills-library", body: [
+            "text": Self.skillMarkdown(name: name, description: description, instructions: instructions),
+        ]))
+    }
+
     /// `PUT /api/skills-library/:name`: Save (owner or admin).
     func saveLibrarySkill(name: String, newName: String, description: String, instructions: String) async throws {
         _ = try await perform(makeRequest("PUT", "/api/skills-library/\(name)", body: [
@@ -589,6 +610,18 @@ public extension CompanionClient {
             return (try await send(makeRequest("GET", "/api/marketplaces"), as: MarketplaceList.self).marketplaces ?? []).compactMap(\.value)
         } catch let APIError.status(code, _) where code == 404 || code == 403 {
             return []
+        }
+    }
+
+    /// Whether `GET /api/marketplaces` answers this person (Capabilities'
+    /// Organization scope, PluginsPanel.tsx `workspaceMarkets`): only an
+    /// admin or the computer's owner manages the workspace's marketplaces.
+    func marketplacesReadable() async -> Bool {
+        do {
+            _ = try await send(makeRequest("GET", "/api/marketplaces"), as: MarketplaceList.self)
+            return true
+        } catch {
+            return false
         }
     }
 

@@ -3,7 +3,8 @@
 // so the wrapper carries data-mid and its last child — the bubble/chip,
 // after any day separator — is what gets scrolled and highlighted.
 import { useEffect } from "react";
-import { api, openBot, openBotThread, useStore, type Action, type AppState } from "@/state/store";
+import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
+import { api, openBot, openBotThread, type Action, type AppState } from "@/state/store";
 import { isEarlierSegment } from "@/lib/single-stream";
 import type { SearchHit } from "@/lib/search-hit";
 import { scrollMotion } from "@/lib/motion";
@@ -89,8 +90,8 @@ function matchRange(root: HTMLElement, text: string): Range | null {
 }
 
 export function useFocusMessage(threadId: string, ready: boolean) {
-  const { state, dispatch } = useStore();
-  const focus = state.focusMessage;
+  const dispatch = useStoreDispatch();
+  const focus = useStoreSelector((current) => current.focusMessage?.threadId === threadId ? current.focusMessage : null);
   useEffect(() => {
     // a segment focus scrolls to a topic's start (StreamEarlierTopics)
     if (!focus || focus.consumed || focus.segment || focus.threadId !== threadId || !ready) return;

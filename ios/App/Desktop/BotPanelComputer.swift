@@ -28,7 +28,10 @@ struct BotPanelComputer: View {
     @State private var picked: String?
     @State private var config: ConfigStatus?
     @State private var controlOpen = false
-    @State private var fullView = false
+    /// The bot's computer opens in its own window (a scene on iPadOS, the
+    /// shell's panel where there is none): the desktop's `SandboxDesktopModal`.
+    @Environment(\.openWindow) private var openWindow
+    @EnvironmentObject private var shell: DesktopShellModel
 
     init(bot: Bot) {
         self.bot = bot
@@ -210,10 +213,6 @@ struct BotPanelComputer: View {
             session.stopWatchingScreen(of: bot.id)
         }
         .onValueChange(of: streamFrame) { controller.streamFrame($0?.data) }
-        .sheet(isPresented: $fullView) {
-            NavigationStack { ComputerView(bot: bot) }
-                .environmentObject(session)
-        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("desktop-panel-computer")
     }
@@ -237,7 +236,8 @@ struct BotPanelComputer: View {
                         Text(offline ? "This computer is offline" : "Starting your bot's computer…")
                     case .off, .picture:
                         Image(systemName: "power").font(.system(size: 19, weight: .regular))
-                        Text("This bot's computer is off")
+                        // place.view.off.line
+                        Text("\(bot.name) has no screen. It can still chat and do anything that doesn't need one.")
                     }
                 }
                 .font(theme.font(12))
@@ -250,7 +250,11 @@ struct BotPanelComputer: View {
         .frame(maxWidth: .infinity)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .contentShape(Rectangle())
-        .onTapGesture { if controller.image != nil { fullView = true } }
+        .onTapGesture { if controller.image != nil { openComputerWindow() } }
+    }
+
+    private func openComputerWindow() {
+        DesktopComputerWindow.open(botId: bot.id, openWindow: openWindow, model: shell)
     }
 
     private var controlSection: some View {
@@ -293,10 +297,10 @@ struct BotPanelComputer: View {
                         } else {
                             PanelButton(title: "Take control", systemImage: "cursorarrow.rays", prominent: true,
                                         disabled: controller.noComputer || offline || controller.phase == .taking) {
-                                Task { await controller.takeControl() }
+                                openComputerWindow()
                             }
                         }
-                        PanelButton(title: "Open full view", systemImage: "arrow.up.left.and.arrow.down.right") { fullView = true }
+                        PanelButton(title: "Open in a window", systemImage: "arrow.up.left.and.arrow.down.right") { openComputerWindow() }
                     }
                 }
                 .padding(.horizontal, 16)

@@ -3,7 +3,10 @@
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState, PrepareResult } from "./start-turn-state.ts";
 
-export function createPrepareValidateStartTurn(host: StartTurnHost) {
+export function createPrepareValidateStartTurn(
+  host: StartTurnHost,
+  admit: (state: TurnState) => Promise<PrepareResult>,
+) {
   const {
     BOTMAIL_ENGINE_REFUSAL,
     DATA_DIR,
@@ -389,6 +392,6 @@ export function createPrepareValidateStartTurn(host: StartTurnHost) {
     if (mailConfined && !cloudGuestDriven(state.threadId)) throw Object.assign(new Error(BOTMAIL_ENGINE_REFUSAL), { status: 409, code: "botmail_engine" });
     throw Object.assign(new Error(guestEngineRefusal(state.threadId)), { status: 409, code: "guest_engine" });
   }
-  return { kind: "continue" };
+  return admit(state);
   };
 }

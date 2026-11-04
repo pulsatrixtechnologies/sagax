@@ -63,6 +63,8 @@ struct MarkdownText: View {
     @State private var openFootnote: MarkdownFootnote?
     /// iPad desktop shell: 13/20 text, 8 pt paragraphs, 4 pt list items.
     @Environment(\.desktopChatText) private var desktop
+    /// Find in conversation: the landed hit's words in this message.
+    @Environment(\.desktopFindHighlight) private var findHighlight
 
     private var bodyFont: Font { desktop?.font(DesktopChatMetrics.textSize) ?? Theme.Font.body }
     private var bodyLineSpacing: CGFloat { desktop.map(DesktopChatMetrics.lineSpacing) ?? Theme.bodyLineSpacing }
@@ -417,6 +419,12 @@ struct MarkdownText: View {
     /// parse it. A settled block is parsed once and kept (`MarkdownParseCache`)
     /// keyed by its text and everything its style depends on; the block the
     /// live reply is still writing (`cacheable` false) is parsed fresh.
+    /// `[`code`](address-with-a-backtick)` -> `` `code` ``.
+    static func droppingBacktickLinks(_ text: String) -> String {
+        guard text.contains("`](") else { return text }
+        return text.replacingOccurrences(of: #"\[(`[^`\]]+`)\]\(([^)\s]*`[^)\s]*)\)"#, with: "$1", options: .regularExpression)
+    }
+
     private func styledInline(_ text: String, cacheable: Bool) -> AttributedString? {
         // The iPad desktop styles from its theme value; only the phone's
         // styling is fully described by the key.
@@ -424,7 +432,11 @@ struct MarkdownText: View {
             ? MarkdownParseCache.styleKey(text, mentions: mentions, everyone: mentionEveryone, revealed: revealed)
             : nil
         if let key, let hit = MarkdownParseCache.styled(key) { return hit.value }
-        let parsed = cacheable ? MarkdownParseCache.inline(text) : MarkdownParseCache.parseInline(text)
+        // the desktop drops a link whose address holds a raw backtick (not a
+        // URL its sanitizer keeps) and draws its text as written: a code
+        // span stays a code span (`[`x`](x`)`), never a blue link
+        let inlineSource = desktop == nil ? text : Self.droppingBacktickLinks(text)
+        let parsed = cacheable ? MarkdownParseCache.inline(inlineSource) : MarkdownParseCache.parseInline(inlineSource)
         let styled = parsed.map { parsed -> AttributedString in
             var attributed = parsed
             if let desktop {
@@ -436,7 +448,14 @@ struct MarkdownText: View {
                     let bold = intent.contains(.stronglyEmphasized), italic = intent.contains(.emphasized)
                     guard bold || italic else { continue }
                     var font = desktop.font(DesktopChatMetrics.textSize, bold ? .bold : .regular)
-                    if italic { font = font.italic() }
+                    if italic {
+                        // Geist has no italic face and `.italic()` does not
+                        // slant a custom font: skew it, as the browser's
+                        // synthesized oblique does
+                        let upright = desktop.uiFont(DesktopChatMetrics.textSize, bold ? .bold : .regular)
+                        let slanted = upright.fontDescriptor.withMatrix(CGAffineTransform(a: 1, b: 0, c: 0.2, d: 1, tx: 0, ty: 0))
+                        font = Font(UIFont(descriptor: slanted, size: upright.pointSize) as CTFont)
+                    }
                     attributed[run.range].font = font
                 }
             }
@@ -483,6 +502,9 @@ struct MarkdownText: View {
                 }
             }
             MentionTint.apply(to: &attributed, peers: mentions, everyone: mentionEveryone)
+            if let desktop, let findHighlight, DesktopFindHighlight.holdsFirst(block: text, of: findHighlight, in: source) {
+                DesktopFindHighlight.apply(to: &attributed, needle: findHighlight, theme: desktop)
+            }
             styleFootnotes(&attributed)
             styleSpoilers(&attributed)
             return attributed

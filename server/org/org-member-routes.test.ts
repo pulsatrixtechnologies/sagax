@@ -628,6 +628,11 @@ describe("the AI-client approval loop (2026-10-17)", () => {
       { question: "Which branch?", options: [{ id: "1", label: "main" }, { id: "2", label: "dev" }] },
     ] });
     expect(routine).toMatchObject({ kind: "request", answerWith: "decision", choices: [{ id: "1", label: "Save" }, { id: "2", label: "Not now" }] });
+    // #1940: when the card has no expiresAt, fill from createdAt + policy days.
+    const withPolicy = readThreadPage("t1", { messages: [
+      { id: "c1", role: "bot", kind: "options", at: 1_000, card: bashCard() },
+    ] }, null, 7);
+    expect(withPolicy.approvals[0]?.expiresAt).toBe(1_000 + 7 * 86_400_000);
   });
 
   it("a bare allow on a three-option question is 409 option_required with the options; nothing is answered", async () => {

@@ -8,7 +8,17 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { deliverSseFrame, openSseHeartbeat, SSE_MAX_BUFFERED_BYTES, type SseFanoutClient } from "./sse-fanout.ts";
+import {
+  deliverSseFrame,
+  encodeSseDataFrame,
+  mergeRuntimeDeltaEvents,
+  openSseHeartbeat,
+  runtimeDeltaStreamKey,
+  sseKindSkipsMembershipRecheck,
+  SseRuntimeDeltaCoalescer,
+  SSE_MAX_BUFFERED_BYTES,
+  type SseFanoutClient,
+} from "./sse-fanout.ts";
 
 /** A fake client plus a handle on the drain listeners it queued. */
 type TestClient = SseFanoutClient & { drains: (() => void)[]; closes: number };
@@ -29,6 +39,82 @@ function fakeClient(resOverrides: Partial<SseFanoutClient["res"]> = {}): TestCli
   };
   return client;
 }
+
+describe("encodeSseDataFrame and runtime delta coalesce", () => {
+  it("builds one SSE frame string", () => {
+    expect(encodeSseDataFrame("s", 3, { kind: "runtime", seq: 3 })).toBe(
+      `id: s:3\ndata: ${JSON.stringify({ kind: "runtime", seq: 3 })}\n\n`,
+    );
+  });
+
+  it("skips membership recheck only for runtime and screen", () => {
+    expect(sseKindSkipsMembershipRecheck("runtime")).toBe(true);
+    expect(sseKindSkipsMembershipRecheck("screen")).toBe(true);
+    expect(sseKindSkipsMembershipRecheck("message")).toBe(false);
+    expect(sseKindSkipsMembershipRecheck("bot")).toBe(false);
+  });
+
+  it("merges consecutive content.delta payloads on the same stream", () => {
+    const first = {
+      kind: "runtime",
+      event: {
+        type: "content.delta",
+        threadId: "t1",
+        turnId: "turn",
+        itemId: "item",
+        streamKind: "assistant_text",
+        delta: "Hel",
+        eventId: "a",
+        provider: "claude",
+        providerInstanceId: "p",
+      },
+    };
+    const second = {
+      kind: "runtime",
+      event: { ...first.event, eventId: "b", delta: "lo" },
+    };
+    expect(runtimeDeltaStreamKey(first.event)).toBe(runtimeDeltaStreamKey(second.event));
+    expect(mergeRuntimeDeltaEvents(first, second)).toEqual({
+      kind: "runtime",
+      event: { ...first.event, delta: "Hello" },
+    });
+    expect(mergeRuntimeDeltaEvents(first, { ...second, event: { ...second.event, threadId: "other" } })).toBeNull();
+  });
+
+  it("coalesces a burst into one flush and keeps order against a later non-delta", async () => {
+    vi.useFakeTimers();
+    const flushed: Array<Record<string, unknown>> = [];
+    const coalescer = new SseRuntimeDeltaCoalescer((payload) => flushed.push(payload), 16);
+    const delta = (text: string, eventId: string) => ({
+      kind: "runtime",
+      event: {
+        type: "content.delta",
+        threadId: "t1",
+        turnId: "turn",
+        itemId: "item",
+        streamKind: "assistant_text",
+        delta: text,
+        eventId,
+        provider: "claude",
+        providerInstanceId: "p",
+      },
+    });
+    // the stream's first text is flushed at once (#1952); the rest coalesces
+    expect(coalescer.offer(delta("Hel", "a"))).toBe(true);
+    expect(flushed).toHaveLength(1);
+    expect((flushed[0]!.event as { delta: string }).delta).toBe("Hel");
+    expect(coalescer.offer(delta("lo", "b"))).toBe(true);
+    expect(coalescer.offer(delta(" world", "c"))).toBe(true);
+    expect(flushed).toHaveLength(1);
+    expect(coalescer.offer({ kind: "runtime", event: { type: "turn.completed", threadId: "t1", ok: true } })).toBe(false);
+    expect(flushed).toHaveLength(2);
+    expect((flushed[1]!.event as { delta: string }).delta).toBe("lo world");
+    // after a non-delta frame the next text is a first text again
+    expect(coalescer.offer(delta("Next", "d"))).toBe(true);
+    expect(flushed).toHaveLength(3);
+    vi.useRealTimers();
+  });
+});
 
 describe("deliverSseFrame", () => {
   it("sends normally while write() returns true", () => {

@@ -2,7 +2,7 @@
 // route (server/routes/artifacts.ts), which checks and stores. They live
 // here rather than in agents-call.ts, which is at its size ratchet; callTool
 // hands these names over and returns the answer as it stands.
-import type { ToolCallContext, ToolCallResult } from "./agents-call.ts";
+import type { ToolCallContext, ToolCallResult } from "./agents-call-types.ts";
 import type { Json } from "./agents-client.ts";
 
 export { ARTIFACT_TOOL_NAMES } from "./agents-artifact-tools.ts";

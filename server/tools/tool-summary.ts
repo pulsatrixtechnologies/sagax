@@ -3,12 +3,24 @@
 // pasted, and a key sliced in half would slip past the shapes redaction knows.
 import { MAX_QUESTION_TEXT } from "../../shared/ask-question.ts";
 import { cwResultText, isCwTool } from "../../shared/cw-widgets/tool-call.ts";
+import { toolFailureText } from "../../shared/tool-failure-text.ts";
 import { HELD_SECRET_MASK, redactSecrets, redactSecretsInText } from "../redact.ts";
 
 /** Display-only excerpt, never the raw protocol payload. Bound traversal and
  * omit binary bodies before redacting; truncate only AFTER redaction so a
  * credential cannot be cut in half and escape detection. */
-export function toolDetailPreview(value: unknown): string | undefined {
+/** A file edit's arguments keep more of their text (2026-11-03): the coding
+ * chat draws them as a diff (src/lib/coding-chat.ts), and 6,000 characters
+ * cut a modest edit in half. Still redacted first, still bounded. */
+export const EDIT_PREVIEW_MAX = 24_000;
+const EDIT_TOOL = /^(?:Edit|MultiEdit|Write|NotebookEdit|edit|edit_file|write_file|create_file|str_replace|str_replace_editor|str_replace_based_edit_tool|apply_patch|fileChange|file_change)$/;
+
+/** The bound of a call's arguments preview, by its tool's name. */
+export function inputPreviewMax(toolName: string | undefined): number | undefined {
+  return toolName && EDIT_TOOL.test(toolName.replace(/^mcp__.+?__/, "")) ? EDIT_PREVIEW_MAX : undefined;
+}
+
+export function toolDetailPreview(value: unknown, max = 6_000): string | undefined {
   if (value === undefined) return undefined;
   let budget = 200;
   let textBudget = 256_000;
@@ -44,7 +56,16 @@ export function toolDetailPreview(value: unknown): string | undefined {
   const safe = redactSecrets(bounded(value));
   const text = typeof safe === "string" ? safe : JSON.stringify(safe, null, 2);
   if (!text?.trim() || text === "{}" || text === "[]") return undefined;
-  return text.length > 6_000 ? `${text.slice(0, 6_000)}\n[… preview shortened]` : text;
+  return text.length > max ? `${text.slice(0, max)}\n[… preview shortened]` : text;
+}
+
+/** A failed call's result for its step: the error's own words
+ * (shared/tool-failure-text.ts), redacted and cut like any preview, else the
+ * preview of whatever it returned. Every driver ends a failed call with it,
+ * so a card never says "no error message" when the engine gave one. */
+export function toolFailurePreview(value: unknown): string | undefined {
+  const words = toolFailureText(value);
+  return (words ? toolDetailPreview(words) : undefined) ?? toolDetailPreview(value);
 }
 
 /** The whole result of a ConnectWise call, for its in-chat widget (the

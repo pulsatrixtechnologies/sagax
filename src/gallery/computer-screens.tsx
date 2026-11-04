@@ -86,7 +86,7 @@ function Gallery() {
         </Section>
         <Section title="Environnement serveur en marche">
           {/* Pause / Stop given on purpose: a bot's computer never draws them. */}
-          <ComputerScreen source="server" state="running" caption={t("computer.screenOf", { name: "Melonie" })} onOpen={() => {}} openAlwaysShown
+          <ComputerScreen source="server" state="running" caption={t("computer.screenOf", { name: "Wren" })} onOpen={() => {}} openAlwaysShown
             live={<img alt="" className="h-full w-full object-cover" src={`data:image/png;base64,${fakeDesktop()}`} />}
             controls={{ pause: () => {}, stop: () => {} }} />
         </Section>

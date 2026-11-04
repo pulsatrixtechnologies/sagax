@@ -40,6 +40,12 @@ vi.mock("@/lib/live-call-media", async (original) => {
   const actual = await original<typeof import("@/lib/live-call-media")>();
   return { ...actual, useLiveMedia: actual.liveMedia };
 });
+// This harness invokes the owner's hooks without React's dispatcher.
+vi.mock("@/state/store-selector", async (original) => ({
+  ...await original<typeof import("@/state/store-selector")>(),
+  useStoreSelector: (select: (state: import("@/state/store").AppState) => unknown) => select(fixture.state as unknown as import("@/state/store").AppState),
+  useStoreDispatch: () => vi.fn(),
+}));
 import { BotListItem } from "./Sidebar";
 
 const bot: Bot = {

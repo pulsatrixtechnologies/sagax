@@ -10,7 +10,8 @@ function clockLocale(): string {
 }
 
 export function limitFailoverLineText(line: LimitFailoverLine, now = Date.now()): string {
-  const time = "resetsAt" in line ? resetClockText(line.resetsAt, clockLocale(), undefined, now) : "";
+  const resetsAt = "resetsAt" in line && typeof line.resetsAt === "number" ? line.resetsAt : undefined;
+  const time = resetsAt !== undefined ? resetClockText(resetsAt, clockLocale(), undefined, now) : "";
   switch (line.kind) {
     case "switched":
       if (line.reason === "model") {
@@ -25,5 +26,14 @@ export function limitFailoverLineText(line: LimitFailoverLine, now = Date.now())
       return t(line.owner ? "limitFailover.ownerWaiting" : "limitFailover.waiting", { from: line.from, time });
     case "waitingRoutine":
       return t("limitFailover.waitingRoutine", { from: line.from, time });
+    case "exhausted": {
+      const tried = line.tried.filter(Boolean).join(", ") || "the engines tried";
+      if (line.resetsAt !== undefined) {
+        return t(line.owner ? "limitFailover.ownerExhausted" : "limitFailover.exhausted", {
+          tried, time: resetClockText(line.resetsAt, clockLocale(), undefined, now),
+        });
+      }
+      return t(line.owner ? "limitFailover.ownerExhaustedNoTime" : "limitFailover.exhaustedNoTime", { tried });
+    }
   }
 }

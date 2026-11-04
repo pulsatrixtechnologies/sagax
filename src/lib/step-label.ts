@@ -16,6 +16,7 @@ import { parseArgs, parseToolId } from "@/lib/approval-describe";
 import { isOpaqueId, isOpaqueValue } from "../../shared/human-id";
 import { readMcpGatewayCall, readUseToolCall, type McpGatewayCall } from "../../shared/mcp-gateway-call";
 import { humanPath } from "@/lib/short-path";
+import { gatewayToolId, toolDisplayName } from "../../shared/tool-display-name";
 
 export type StepPhase = "running" | "done" | "failed";
 
@@ -411,6 +412,10 @@ function isSentence(name: string): boolean {
 
 /** The words for one step. `nameOf` turns a teammate id into its name. */
 export function readStep(tool: StepTool, nameOf?: StepNameOf): StepReading {
+  // a gateway title without its gateway part (`user-Outlook-get_5fmail_5fmessage___12`)
+  // reads as the connector it is, never "Get 5fmail 5fmessage" (2026-11-03)
+  const gatewayId = gatewayToolId(tool.name);
+  if (gatewayId && gatewayId !== tool.name.trim()) tool = { ...tool, name: gatewayId };
   const phase = stepPhase(tool);
   const name = tool.name.trim();
   const meta = grokMetaTool(tool, phase);
@@ -464,11 +469,10 @@ export function stepToolName(tool: Pick<StepTool, "name" | "product">): string {
   const kind = kindOf(name);
   const key = kind ? TOOL_NAME[kind] : undefined;
   if (key) return t(key);
-  // the tool's own part of an MCP id, in words: no server, no underscores;
-  // with the product the server declared for it, when it declared one
-  const own = capitalize((name.split("__").filter(Boolean).pop() ?? name).replace(/[_.]+/g, " ").trim() || name);
-  const product = tool.product?.trim();
-  return product ? `${own} · ${product}` : own;
+  // the tool's own part of an MCP id, in words: no server, no underscores,
+  // no gateway escape or number (2026-11-03: "12"); with the product the
+  // server declared for it, when it declared one (shared/tool-display-name.ts)
+  return toolDisplayName(name, tool.product);
 }
 
 /** The label alone, for callers that only need the sentence. */

@@ -9,8 +9,8 @@ afterEach(() => fixture.api.mockReset());
 
 describe("computer working bots lib", () => {
   it("reads the list from the working-bots endpoint", async () => {
-    fixture.api.mockResolvedValue({ bots: [{ id: "b1", name: "Katarina", threadId: "t1" }] });
-    expect(await loadWorkingBots()).toEqual([{ id: "b1", name: "Katarina", threadId: "t1" }]);
+    fixture.api.mockResolvedValue({ bots: [{ id: "b1", name: "Osprey", threadId: "t1" }] });
+    expect(await loadWorkingBots()).toEqual([{ id: "b1", name: "Osprey", threadId: "t1" }]);
     expect(fixture.api).toHaveBeenCalledWith("/api/computer/working-bots", {});
   });
 

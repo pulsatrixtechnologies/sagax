@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterNetworkRows, formatBytes, formatMs, matchesStatus, networkTypes, type NetworkRow } from "./NetworkDebuggerDialog";
+import { filterNetworkRows, formatDebuggerBytes, formatMs, matchesStatus, networkTypes, type NetworkRow } from "./NetworkDebuggerDialog";
 
 const row = (id: number, patch: Partial<NetworkRow>): NetworkRow => ({
   id, method: "GET", url: "https://example.test/", status: 200, statusText: "", resourceType: "Document", mimeType: "text/html",
@@ -27,9 +27,9 @@ describe("network debugger view helpers", () => {
   });
 
   it("formats sizes and times", () => {
-    expect(formatBytes(null)).toBe("");
-    expect(formatBytes(512)).toBe("512 B");
-    expect(formatBytes(2048)).toBe("2.0 kB");
+    expect(formatDebuggerBytes(null)).toBe("");
+    expect(formatDebuggerBytes(512)).toBe("512 B");
+    expect(formatDebuggerBytes(2048)).toBe("2.0 kB");
     expect(formatMs(25.4)).toBe("25 ms");
     expect(formatMs(1500)).toBe("1.50 s");
   });

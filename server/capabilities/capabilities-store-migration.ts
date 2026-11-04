@@ -6,7 +6,7 @@
 // of person and installation secrets is preserved. Person isolation
 // is preserved (each principal stays under principals/<pid>/).
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { writeFileAtomic } from "../atomic.ts";
@@ -468,16 +468,31 @@ function verifiedLibraryEntry(dataDir: string, name: string, entry: unknown): bo
   }
 }
 
+/** 2026-11-03 (audit S-4): a library index entry a restore adopts: a valid
+ * entry whose skill folder holds a SKILL.md. Its sha256 may differ: a skill
+ * "changed after review" keeps the reviewed sha in its entry (the editor
+ * shows the review against it), and rejecting it made the skill answer 404
+ * after the restore although its files were there. Only the stranded-entry
+ * recovery, which has no other proof, requires the sha. */
+function restorableLibraryEntry(dataDir: string, name: string, entry: unknown): boolean {
+  if (!SKILL_NAME.test(name) || !isSkillLibraryEntry(entry) || entry.name !== name) return false;
+  try {
+    return statSync(join(dataDir, "skills-library", "skills", name, "SKILL.md")).isFile();
+  } catch {
+    return false;
+  }
+}
+
 /**
  * A workspace restore brings the organization library's skill files in
  * data/ and their index as its own archive part (the sealed installation
  * store, where the index lives, stays the destination's). The restore leaves
  * that part at SKILLS_LIBRARY_RESTORE_IMPORT; here, once the store can be
- * read, it is adopted under the recovery's rules: each entry valid, its
- * SKILL.md sha256 matching. In mode "replace" (a workspace restore, which
+ * read, it is adopted: each entry valid, its SKILL.md present (its sha256
+ * may differ: a skill changed after review, restorableLibraryEntry). In mode "replace" (a workspace restore, which
  * replaces the whole library folder) an adopted entry replaces the sealed
  * one of its name, and a sealed entry whose skill file the restore removed
- * is dropped; a sealed entry whose file still matches stays. In any other
+ * is dropped; a sealed entry whose file is still there stays. In any other
  * mode an existing name is never replaced. The file is removed once
  * adopted; a file that is not a supported index is set aside as
  * `.rejected`; a failed write leaves it for the next boot.
@@ -500,12 +515,12 @@ function importRestoredLibraryIndex(
   const adopted: Record<string, unknown> = {};
   for (const [name, entry] of Object.entries(raw.entries as Record<string, unknown>)) {
     if (!replace && Object.hasOwn(verified.skillsLibrary, name)) continue;
-    if (verifiedLibraryEntry(dataDir, name, entry)) adopted[name] = entry;
+    if (restorableLibraryEntry(dataDir, name, entry)) adopted[name] = entry;
   }
   const kept: Record<string, unknown> = {};
   for (const [name, entry] of Object.entries(verified.skillsLibrary)) {
     if (Object.hasOwn(adopted, name)) continue;
-    if (!replace || verifiedLibraryEntry(dataDir, name, entry)) kept[name] = entry;
+    if (!replace || restorableLibraryEntry(dataDir, name, entry)) kept[name] = entry;
   }
   try {
     installation.write({ ...verified, skillsLibrary: { ...kept, ...adopted } });

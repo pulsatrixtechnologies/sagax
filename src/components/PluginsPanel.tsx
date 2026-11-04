@@ -94,7 +94,7 @@ import { useServerMode } from "./ServerModeSettings";
 import { ConnectAppsView, connectAppsTabLabel, connectedCounts, isProvidersLink, normalizeConnectAppsTab, type ConnectAppsTab } from "./plugins/ConnectAppsView";
 import type { Crumb } from "./Breadcrumb";
 import { CATEGORY_MODAL, cardActionClass } from "./category-modal";
-import { BotCatalogPane } from "./lazy-screens";
+import { BotCatalogPane } from "./lazy-bot-catalog";
 import { useBotCatalogSources } from "./bot-catalog/use-bot-catalog-sources";
 import { catalogSections, type CatalogItem } from "@/lib/bot-catalog";
 import { searchConnectApps, visibleResults, type SearchGroupId, type SearchPage, type SearchResult, type SearchSource } from "@/lib/connect-apps-search";

@@ -104,11 +104,19 @@ final class DesktopSettingsUITests: XCTestCase {
         XCTAssertTrue(app.buttons["desktop-settings.nav.providers"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["desktop-settings.nav.backups"].exists)
         XCTAssertFalse(app.buttons["desktop-settings.nav.companion"].exists, "Pair devices left the app")
-        // the search opens the API keys card
+        // Providers > Add a provider > Paste a key opens the keys (the
+        // desktop's one flow, 2026-10-30)
+        app.buttons["desktop-settings.nav.providers"].tap()
+        let add = app.buttons["desktop-settings.providers.add"]
+        XCTAssertTrue(add.waitForExistence(timeout: 10), "Add a provider")
+        add.tap()
+        let paste = app.buttons["desktop-settings.providers.add.key"]
+        XCTAssertTrue(paste.waitForExistence(timeout: 5))
+        paste.tap()
         let key = app.secureTextFields["settings-key.openrouter"]
         _ = key.waitForExistence(timeout: 5)
         for _ in 0..<8 where !(key.exists && key.isHittable) { app.swipeUp() }
-        XCTAssertTrue(key.waitForExistence(timeout: 5), "API keys opens")
+        XCTAssertTrue(key.waitForExistence(timeout: 5), "the keys open")
 
         settings.tap()
         XCTAssertFalse(settings.waitForExistence(timeout: 2))

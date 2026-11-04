@@ -31,6 +31,7 @@ import type { SubjectTokenOutcome } from "../auth/idp-session.ts";
 import type { DirectoryProfile, ExchangeResult } from "./perspicax-link.ts";
 import { PERSPICAX_READ_ONLY_TOOLS } from "../drivers/acp/grok-read-only-tools.ts";
 import { executionKey, WriteOnce } from "../write-once.ts";
+import { PerspicaxIdentity, identityLapsed, identityProfiles, identityValue, identityWarning, type IdentityFailure, type IdentityInventory } from "./perspicax-identity.ts";
 
 export type PerspicaxUnavailableReason = "not_held" | "no_session" | "unreachable" | "rate_limited" | "no_delegation" | "unknown_speaker" | "unknown_profile";
 
@@ -104,10 +105,26 @@ export interface PerspicaxMcpOptions {
   delegationRefused?(principalId: string): void;
   /** The bot's current profile ids (undefined: the bot is gone). */
   botProfiles(botId: string): readonly string[] | undefined;
+  botActAs?(botId: string): { slug: string; name: string } | undefined;
+  heldProfiles?(principalId: string): readonly string[];
+  onIdentityWarning?(input: { threadId: string; botId: string; principalId: string; reason: IdentityFailure }): void;
   /** The thread is on a live voice call: a turn's tokens are kept for its
    * next turn instead of revoked, so the call's tools stay mounted from turn
    * to turn without a new exchange (server/voice/voice-call-session.ts). */
   keepWarm?(threadId: string): boolean;
+  /** The thread's engine session is still warm (idle pool, running turn, or
+   * a pooled ACP/Claude process): Perspicax MCP entries stay and are pinged
+   * so Perspicax's 120 s idle close does not fire (#1955). */
+  engineWarm?(threadId: string): boolean;
+  /** One-shot timer for keep-alive (tests inject a fake clock). Default:
+   * setTimeout, unref'd. `fn` may return a Promise; tests await it. */
+  after?(ms: number, fn: () => void | Promise<void>): { cancel: () => void };
+  /** Keep-alive base delay (default PERSPICAX_KEEPALIVE_MS). */
+  keepaliveMs?: number;
+  /** Keep-alive jitter (default PERSPICAX_KEEPALIVE_JITTER_MS). */
+  keepaliveJitterMs?: number;
+  /** Per-person pinged-entry cap (default PERSPICAX_KEEPALIVE_PER_PERSON). */
+  maxPingedPerPerson?: number;
   /** Pulsa Bot's version, sent in `clientInfo`. */
   version: string;
   /** Permission check for tools/call frames (server/mcp/mcp-permissions.ts). Null
@@ -182,6 +199,12 @@ export const VOICE_CALL_UNAVAILABLE = "Refused by Sagax: a call goes through pla
 export const PERSPICAX_TOKEN_MIN_LIFE_MS = 60_000;
 export const PERSPICAX_RELAY_TIMEOUT_MS = 10 * 60_000;
 export const PERSPICAX_RELAY_MAX_BYTES = 20 * 1024 * 1024;
+/** Idle keep-alive ping cadence: under Perspicax KEEP_ALIVE (120 s). */
+export const PERSPICAX_KEEPALIVE_MS = 90_000;
+/** Jitter added on top of PERSPICAX_KEEPALIVE_MS so many entries do not fire together. */
+export const PERSPICAX_KEEPALIVE_JITTER_MS = 15_000;
+/** At most this many entries of one person are pinged (newest kept). */
+export const PERSPICAX_KEEPALIVE_PER_PERSON = 8;
 export const PERSPICAX_ACCESS_ENDED = "Perspicax access for this turn ended";
 /** A call Sagax did not replay after Perspicax dropped the MCP session: it can
  * change data, so the bot decides (the call never reached Perspicax's tool). */
@@ -212,16 +235,39 @@ export function perspicaxWriteOnceTool(name: string): boolean {
 const READ_ONLY_METHODS = new Set(["tools/list", "resources/list", "resources/templates/list", "resources/read", "prompts/list", "prompts/get", "ping", "completion/complete"]);
 
 /** Whether a frame may be sent again after a new session: a read-only method,
- * or tools/call of a Perspicax tool reviewed as read-only (grok-read-only-tools.ts).
- * Writes, actions, sends and unknown tools are never replayed. */
-export function perspicaxReplayable(frame: Record<string, unknown>): boolean {
+ * tools/call of a Perspicax tool reviewed as read-only (grok-read-only-tools.ts)
+ * or one Perspicax itself lists as read-only (`readOnly`: its tools/list
+ * `readOnlyHint`, not destructive), or a Pulsatrix Flow action call that
+ * cannot write (no `confirm: true`: Perspicax sends an action's writes only
+ * on a confirmed call holding its batch key, so a call without it answers
+ * reads, a dry run, a choice or needs_confirmation).
+ * 2026-11-03 (production): a session dropped during a long turn, and
+ * cw_psa_find_schedule_entries, cw_psa_get_ticket and flow_action
+ * free-slot-find, all reads, came back "did not replay this call because it
+ * can change data". Writes, sends and unknown tools are still never replayed. */
+export function perspicaxReplayable(frame: Record<string, unknown>, readOnly?: ReadonlySet<string>): boolean {
   const method = frame.method;
   if (typeof method !== "string") return false;
   if (READ_ONLY_METHODS.has(method)) return true;
   if (method !== "tools/call") return false;
   const params = frame.params;
-  const name = params && typeof params === "object" && !Array.isArray(params) ? (params as Record<string, unknown>).name : undefined;
-  return typeof name === "string" && PERSPICAX_READ_ONLY_TOOLS.has(name);
+  const record = params && typeof params === "object" && !Array.isArray(params) ? params as Record<string, unknown> : {};
+  const name = record.name;
+  if (typeof name !== "string") return false;
+  if (PERSPICAX_READ_ONLY_TOOLS.has(name) || readOnly?.has(name) === true) return true;
+  const args = record.arguments && typeof record.arguments === "object" && !Array.isArray(record.arguments) ? record.arguments as Record<string, unknown> : {};
+  return name === "flow_action" && args.confirm !== true;
+}
+
+/** The tools a tools/list answer marks read-only (`readOnlyHint` true and
+ * not `destructiveHint`): Perspicax derives them from the vendor method. */
+export function perspicaxReadOnlyToolsOf(body: unknown): string[] {
+  const result = isObject(body) && isObject(body.result) ? body.result : null;
+  const tools = result && Array.isArray(result.tools) ? result.tools : [];
+  return tools
+    .filter((tool): tool is Json => isObject(tool) && typeof tool.name === "string" && isObject(tool.annotations)
+      && tool.annotations.readOnlyHint === true && tool.annotations.destructiveHint !== true)
+    .map((tool) => String(tool.name));
 }
 
 /** Perspicax (rmcp streamable HTTP, legacy session mode) answers 404
@@ -245,6 +291,19 @@ interface Entry {
   token: string;
   expiresAt: number;
   mcpSessionId?: string;
+  initialized?: boolean;
+  identity?: PerspicaxIdentity;
+  implicitIdentity?: string;
+  servedTools?: Set<string>;
+  /** The served tools Perspicax lists as read-only (perspicaxReadOnlyToolsOf). */
+  readOnlyTools?: Set<string>;
+  twilioTools?: Set<string>;
+  /** Full JSON-RPC tools/list body for this MCP session and identity.
+   * Serves a later tools/list on the same session (engine after Sagax's
+   * identity list) without a second round trip. Cleared on reopen, identity
+   * invalidate/clear, list_changed, and retire. Never shared across profiles
+   * or persons: it lives on this Entry only. */
+  toolsListBody?: unknown;
   /** #1935: the MCP server name the engine sees this profile under. */
   mount?: string;
   /** One re-initialize at a time (relay, a session Perspicax dropped). */
@@ -252,6 +311,12 @@ interface Entry {
   /** The person is out, or the access could not be renewed: every call ends. */
   ended?: boolean;
   renewing?: Promise<boolean>;
+  /** Idle keep-alive timer (#1955): one per entry, unref'd. */
+  keepAlive?: { cancel: () => void } | null;
+  /** When this entry's keep-alive was last armed (per-person newest cap). */
+  keepAliveArmedAt?: number;
+  /** True while a keep-alive ping is in flight (do not re-arm over it). */
+  keepAlivePing?: boolean;
 }
 
 export interface PerspicaxRelayAnswer {
@@ -398,14 +463,21 @@ export function isGoForm(schema: unknown): boolean {
 
 /** The body of an answer, bounded. On an SSE stream, each request the server
  * sends (`method` and `id`) is handed to `onRequest` as it arrives, so a
- * call that waits on the client's answer can go on. */
-async function readBounded(response: Response, max: number, onRequest?: (request: Json) => Promise<void>): Promise<string> {
+ * call that waits on the client's answer can go on. Notifications (no id)
+ * such as tools/list_changed go to `onNotification`. */
+async function readBounded(
+  response: Response,
+  max: number,
+  onRequest?: (request: Json) => Promise<void>,
+  onNotification?: (frame: Json) => void,
+): Promise<string> {
   const declared = Number(response.headers.get("content-length") ?? "0");
   if (declared > max) throw new Error("the Perspicax answer is too large");
   if (!response.body) return "";
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  const stream = onRequest !== undefined && (response.headers.get("content-type") ?? "").includes("text/event-stream");
+  const stream = (onRequest !== undefined || onNotification !== undefined)
+    && (response.headers.get("content-type") ?? "").includes("text/event-stream");
   let size = 0;
   let text = "";
   let scanned = 0;
@@ -427,14 +499,23 @@ async function readBounded(response: Response, max: number, onRequest?: (request
       if (!line.startsWith("data:")) continue;
       let frame: unknown;
       try { frame = JSON.parse(line.slice(5).trim()); } catch { continue; }
-      if (isObject(frame) && typeof frame.method === "string" && (typeof frame.id === "string" || typeof frame.id === "number")) {
-        pending.push(onRequest(frame).catch(() => {}));
+      if (!isObject(frame) || typeof frame.method !== "string") continue;
+      if (typeof frame.id === "string" || typeof frame.id === "number") {
+        if (onRequest) pending.push(onRequest(frame).catch(() => {}));
+      } else if (onNotification) {
+        onNotification(frame);
       }
     }
     scanned = end + 1;
   }
   await Promise.all(pending);
   return text + decoder.decode();
+}
+
+/** Rebind a cached tools/list JSON-RPC result to the caller's request id. */
+function rewriteToolsListId(body: unknown, id: unknown): unknown {
+  if (!isObject(body)) return body;
+  return { ...body, id };
 }
 
 function rpcError(id: unknown, code: number, message: string): Json {
@@ -460,13 +541,13 @@ export class PerspicaxMcp {
    * and the connectors whose reads it marks as reviewed. */
   private readonly apiNames = new Map<string, { at: number; names: Map<string, string>; reviewed: Set<string> }>();
   private readonly apiNamesPending = new Set<string>();
-  /** Per profile: tools whose tools/list entry names Twilio (telephony guard). */
-  private readonly twilioTools = new Map<string, Set<string>>();
-  /** Per profile, the tool names its tools/list served (bounded): a native
-   * call (callTool) uses the spelling the server serves. */
-  private readonly servedTools = new Map<string, Set<string>>();
   /** "At the same time": a 5 minute window, then a write is sent again. */
   private readonly writes = new WriteOnce<PerspicaxRelayAnswer>({ ttlMs: 5 * 60_000 });
+
+  private readonly keepaliveMs: number;
+  private readonly keepaliveJitterMs: number;
+  private readonly maxPingedPerPerson: number;
+  private disposed = false;
 
   constructor(options: PerspicaxMcpOptions) {
     this.options = options;
@@ -475,6 +556,230 @@ export class PerspicaxMcp {
     this.log = options.log ?? ((line) => console.log(line));
     this.routineRetryMs = options.routineRetryMs ?? PERSPICAX_ROUTINE_RETRY_MS;
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.keepaliveMs = options.keepaliveMs ?? PERSPICAX_KEEPALIVE_MS;
+    this.keepaliveJitterMs = options.keepaliveJitterMs ?? PERSPICAX_KEEPALIVE_JITTER_MS;
+    this.maxPingedPerPerson = Math.max(1, options.maxPingedPerPerson ?? PERSPICAX_KEEPALIVE_PER_PERSON);
+  }
+
+  /** Voice call or a still-warm engine session: entries stay across turns. */
+  private sessionShouldStay(threadId: string): boolean {
+    return this.options.keepWarm?.(threadId) === true || this.options.engineWarm?.(threadId) === true;
+  }
+
+  private scheduleAfter(ms: number, fn: () => void | Promise<void>): { cancel: () => void } {
+    if (this.options.after) return this.options.after(ms, fn);
+    const timer = setTimeout(() => { void fn(); }, ms);
+    timer.unref?.();
+    return { cancel: () => clearTimeout(timer) };
+  }
+
+  private disarmKeepAlive(entry: Entry): void {
+    entry.keepAlive?.cancel();
+    entry.keepAlive = null;
+    entry.keepAliveArmedAt = undefined;
+  }
+
+  /** Arm (or re-arm) a keep-alive ping when the engine session is warm.
+   * Never for a cold thread; at most maxPingedPerPerson per person (newest). */
+  private touchKeepAlive(entry: Entry): void {
+    this.disarmKeepAlive(entry);
+    if (this.disposed || entry.ended || entry.keepAlivePing) return;
+    if (!entry.mcpSessionId || !this.sessionShouldStay(entry.threadId)) return;
+    if (entry.expiresAt - this.now() < PERSPICAX_TOKEN_MIN_LIFE_MS) return;
+    entry.keepAliveArmedAt = this.now();
+    this.enforcePingCap(entry);
+    if (!entry.keepAliveArmedAt) return; // dropped by the per-person cap
+    const delay = this.keepaliveMs + (this.keepaliveJitterMs > 0 ? Math.floor(Math.random() * this.keepaliveJitterMs) : 0);
+    entry.keepAlive = this.scheduleAfter(delay, () => this.pingKeepAlive(entry));
+  }
+
+  /** Drop the oldest pinged entries of this person until the cap holds. */
+  private enforcePingCap(newest: Entry): void {
+    const pinged = [...this.entries.values(), ...this.warm.values()]
+      .filter((entry) => entry.principalId === newest.principalId && entry.keepAliveArmedAt !== undefined && !entry.ended);
+    if (pinged.length <= this.maxPingedPerPerson) return;
+    pinged.sort((a, b) => (a.keepAliveArmedAt ?? 0) - (b.keepAliveArmedAt ?? 0));
+    const drop = pinged.length - this.maxPingedPerPerson;
+    for (let i = 0; i < drop; i += 1) {
+      const old = pinged[i]!;
+      this.disarmKeepAlive(old);
+    }
+  }
+
+  private async pingKeepAlive(entry: Entry): Promise<void> {
+    entry.keepAlive = null;
+    if (this.disposed || entry.ended || entry.keepAlivePing) return;
+    if (!this.sessionShouldStay(entry.threadId) || !entry.mcpSessionId) {
+      this.disarmKeepAlive(entry);
+      return;
+    }
+    if (entry.expiresAt - this.now() < PERSPICAX_TOKEN_MIN_LIFE_MS) {
+      if (!(await this.renew(entry))) {
+        this.disarmKeepAlive(entry);
+        return;
+      }
+    }
+    const link = this.options.link();
+    if (!link) {
+      this.disarmKeepAlive(entry);
+      return;
+    }
+    entry.keepAlivePing = true;
+    try {
+      const id = `sagax-keepalive-${++this.nativeCalls}`;
+      const sent = await this.send(link, entry, { jsonrpc: "2.0", id, method: "ping", params: {} }, undefined, true);
+      if (typeof sent === "string" || !sent.response.ok) {
+        this.disarmKeepAlive(entry);
+        this.end(entry);
+        return;
+      }
+      // A lost session answered as 404/422: treat as a failed ping.
+      if (perspicaxSessionLost(sent.response.status, sent.text)) {
+        this.disarmKeepAlive(entry);
+        this.end(entry);
+        return;
+      }
+    } catch {
+      this.disarmKeepAlive(entry);
+      this.end(entry);
+      return;
+    } finally {
+      entry.keepAlivePing = false;
+    }
+    if (!entry.ended) this.touchKeepAlive(entry);
+  }
+
+  /** Engine session went cold: stop pings and drop kept tokens for this thread. */
+  noteEngineCold(threadId: string): void {
+    for (const entry of [...this.entries.values(), ...this.warm.values()]) {
+      if (entry.threadId === threadId) this.disarmKeepAlive(entry);
+    }
+    if (this.options.keepWarm?.(threadId) === true) return;
+    void this.endWarm(threadId);
+  }
+
+  /** Engine session is warm again (idle pool): re-arm pings on kept entries. */
+  noteEngineWarm(threadId: string): void {
+    for (const entry of [...this.entries.values(), ...this.warm.values()]) {
+      if (entry.threadId === threadId && entry.mcpSessionId && !entry.ended) this.touchKeepAlive(entry);
+    }
+  }
+
+  /** Open (or verify) the MCP session and identity lease for every mounted
+   * profile of this turn, so the handshake can run beside setup (#1955). */
+  async ensureTurnSessions(threadId: string, generation: string): Promise<void> {
+    const prefix = `${threadId}\u0000${generation}\u0000`;
+    const work: Promise<void>[] = [];
+    for (const [at, entry] of this.entries) {
+      if (!at.startsWith(prefix) || entry.ended) continue;
+      work.push((async () => {
+        const link = this.options.link();
+        if (!link || entry.ended) return;
+        if (!entry.initialized && !entry.mcpSessionId) await this.reopen(link, entry);
+        if (entry.identity) await entry.identity.ensure();
+        else if (!entry.toolsListBody && entry.mcpSessionId) {
+          await this.identityRpc(entry, "tools/list").catch(() => undefined);
+        }
+        if (entry.mcpSessionId && !entry.ended) this.touchKeepAlive(entry);
+      })());
+    }
+    await Promise.all(work);
+  }
+
+  private setIdentity(entry: Entry, slug: string | undefined): void {
+    if (!slug) return;
+    entry.identity = new PerspicaxIdentity({
+      slug,
+      now: this.now,
+      rpc: (method, params) => this.identityRpc(entry, method, params),
+      warn: (reason) => this.options.onIdentityWarning?.({ threadId: entry.threadId, botId: entry.botId, principalId: entry.principalId, reason }),
+    });
+  }
+
+  /** Internal identity traffic uses the very same token and session as the
+   * engine's calls. It never enters the identity gate recursively. */
+  private async identityRpc(entry: Entry, method: string, params?: Json): Promise<unknown> {
+    const link = this.options.link();
+    if (!link || entry.ended) throw new Error("Perspicax unavailable");
+    const speaker = this.options.subjectOf(entry.principalId);
+    if (!speaker || speaker.disabled) { this.end(entry); throw new Error("Perspicax access ended"); }
+    if (entry.expiresAt - this.now() < PERSPICAX_TOKEN_MIN_LIFE_MS && !await this.renew(entry)) throw new Error("Perspicax access ended");
+    if (!entry.initialized && !entry.mcpSessionId && !await this.reopen(link, entry)) throw new Error("Perspicax unavailable");
+    const id = `sagax-identity-${++this.nativeCalls}`;
+    const sent = await this.send(link, entry, { jsonrpc: "2.0", id, method, ...(params ? { params } : {}) }, undefined, true);
+    if (typeof sent === "string" || !sent.response.ok) throw new Error("Perspicax unavailable");
+    const body = parseMcpBody(sent.text, id);
+    if (method === "tools/list" && isObject(body) && isObject(body.result) && Array.isArray(body.result.tools)) {
+      entry.servedTools = new Set(body.result.tools.filter(isObject).map((tool) => String(tool.name)).slice(0, 2000));
+      entry.readOnlyTools = new Set(perspicaxReadOnlyToolsOf(body).slice(0, 2000));
+      entry.twilioTools = new Set(twilioToolsOf(body).slice(0, 500));
+      entry.toolsListBody = body;
+    }
+    return body;
+  }
+
+  /** Settings discovery has its own short-lived connection in the signed-in
+   * person's name. It only lists identities, never chooses one. */
+  async listIdentities(principalId: string, profileId: string): Promise<IdentityInventory> {
+    const link = this.options.link();
+    const subject = this.options.subjectOf(principalId);
+    if (!link || !subject || subject.disabled || subject.iss !== this.options.issuer) throw new Error("Perspicax sign-in required");
+    const signIn = await this.options.subjectToken(subject);
+    if (!signIn.ok) throw new Error("Perspicax sign-in required");
+    const exchanged = await link.exchangeToken(signIn.token, profileId);
+    if (!exchanged.ok) throw new Error("Perspicax unavailable");
+    const entry: Entry = { threadId: "identity-settings", generation: "listing", botId: "", profileId, principalId, subject, source: "session", token: exchanged.token, expiresAt: Math.min(exchanged.expiresAt, signIn.expiresAt) };
+    try {
+      const tools = await this.identityRpc(entry, "tools/list");
+      if (!isObject(tools) || !isObject(tools.result) || !Array.isArray(tools.result.tools)) throw new Error("Perspicax unavailable");
+      if (!tools.result.tools.some((tool) => isObject(tool) && tool.name === "identity_switch")) return { supported: false, profiles: [] };
+      const body = await this.identityRpc(entry, "tools/call", { name: "identity_switch", arguments: {} });
+      if (!isObject(body) || !isObject(body.result) || body.result.isError) throw new Error("Perspicax unavailable");
+      return { supported: true, profiles: identityProfiles(body) };
+    } finally { await this.close(entry); }
+  }
+
+  /** Cheap read on a separate, short-lived routine connection. No turn or identity switch. */
+  async probeReadiness(principalId: string, profiles: readonly string[], signal: AbortSignal): Promise<{ refused?: boolean; profile?: string; detail?: string } | undefined> {
+    const link = this.options.link();
+    if (!link || !profiles.length) return undefined;
+    const subject = this.options.subjectOf(principalId);
+    if (!subject || subject.disabled) return undefined;
+    for (const profileId of profiles) {
+      if (signal.aborted) return { detail: "Perspicax readiness timed out; admission will retry reachability." };
+      const profile = link.profileCatalog().find(profile => profile.id === profileId);
+      let token: string | undefined;
+      let session: string | null = null;
+      try {
+        const source = await this.subjectFor("delegation", principalId, subject);
+        if (!source.ok) return { detail: "Perspicax routine access is not available yet; admission will retry." };
+        const exchanged = await link.exchangeToken(source.token, profileId);
+        if (!exchanged.ok) return { refused: exchanged.error === "subject" || exchanged.error === "not_held", profile: profile?.slug ?? profileId, detail: exchanged.error };
+        token = exchanged.token;
+        const post = async (frame: Json) => {
+          const response = await this.fetcher(link.mcpEndpoint(), { method: "POST", redirect: "error", signal,
+            headers: { "content-type": "application/json", accept: "application/json, text/event-stream", authorization: `Bearer ${token}`, ...(session ? { "mcp-session-id": session } : {}) }, body: JSON.stringify(frame) });
+          session = response.headers.get("mcp-session-id") ?? session;
+          const text = await response.text();
+          return { response, text };
+        };
+        const init = await post({ jsonrpc: "2.0", id: "readiness-init", method: "initialize", params: { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: "Sagax routine check", version: this.options.version } } });
+        if (init.response.status === 401 || init.response.status === 403) return { refused: true, profile: profile?.slug ?? profileId, detail: `${init.response.status} invalid_token` };
+        if (!init.response.ok) return { detail: `Perspicax readiness HTTP ${init.response.status}; admission will retry reachability.` };
+        await post({ jsonrpc: "2.0", method: "notifications/initialized" });
+        const listed = await post({ jsonrpc: "2.0", id: "readiness-list", method: "tools/list" });
+        if (listed.response.status === 401 || listed.response.status === 403) return { refused: true, profile: profile?.slug ?? profileId, detail: `${listed.response.status} invalid_token` };
+        if (!listed.response.ok) return { detail: `Perspicax readiness HTTP ${listed.response.status}; admission will retry reachability.` };
+      } catch {
+        return { detail: "Perspicax readiness is unreachable; admission will retry reachability." };
+      } finally {
+        if (token) {
+          if (session) await this.fetcher(link.mcpEndpoint(), { method: "DELETE", redirect: "error", signal: AbortSignal.timeout(200), headers: { authorization: `Bearer ${token}`, "mcp-session-id": session } }).then(response => response.body?.cancel()).catch(() => {});
+          void link.revokeExchanged(token).catch(() => {});
+        }
+      }
+    }
+    return {};
   }
 
   /** Exchange the speaker's access for each profile of the bot, before the
@@ -482,16 +787,34 @@ export class PerspicaxMcp {
   async prepareTurn(input: {
     threadId: string;
     generation: string;
-    bot: { id: string; perspicax?: { profiles: readonly string[] } };
+    bot: { id: string; perspicax?: { profiles: readonly string[] }; perspicaxActAs?: { slug: string; name: string } };
     speakerPrincipalId: string;
     speakerOrigin: "person" | "operator" | "owner-routine" | "peer";
     /** The turn descends from a routine or other automation (a hop it
      * asked, a thread it opened, a room goal it runs). */
     routine?: boolean;
+    /** #1941: when the speaker id is empty, mount as this bot's owner
+     * (conversation uses the speaker; routine uses the owner; unresolved
+     * falls back to the owner only, never another person). A named unknown
+     * principal still refuses as unknown_speaker. */
+    ownerPrincipalId?: string;
   }): Promise<PerspicaxTurnPlan> {
     const plan: PerspicaxTurnPlan = { mounted: [], unavailable: [] };
     const link = this.options.link();
+    const selected = input.bot.perspicaxActAs;
     const profiles = [...new Set(input.bot.perspicax?.profiles ?? [])];
+    // #1941: empty speaker → bot owner; a named unknown principal stays refused.
+    const speakerTrimmed = input.speakerPrincipalId.trim();
+    const ownerTrimmed = input.ownerPrincipalId?.trim() ?? "";
+    const resolvedPrincipalId = speakerTrimmed || ownerTrimmed;
+    if (!profiles.length && selected && link) {
+      // The base connection needs a held profile even when the chosen identity
+      // has since been removed. That lets identity_switch report the refusal
+      // and keep the person's read plane available.
+      const held = this.options.heldProfiles?.(resolvedPrincipalId);
+      const profileId = held ? held[0] : link.profileCatalog().find((profile) => profile.slug === selected.slug)?.id;
+      if (profileId) profiles.push(profileId);
+    }
     if (!link || !profiles.length) return plan;
     const catalog = new Map(link.profileCatalog().map((profile) => [profile.id, profile] as const));
     const nameOf = (id: string) => catalog.get(id)?.name || catalog.get(id)?.slug || id;
@@ -502,7 +825,7 @@ export class PerspicaxMcp {
     refuse(profiles.filter((id) => !catalog.has(id)), "unknown_profile");
     if (!known.length) return plan;
     const source: Entry["source"] = input.speakerOrigin === "owner-routine" || input.routine === true ? "delegation" : "session";
-    const principalId = input.speakerPrincipalId.trim();
+    const principalId = resolvedPrincipalId;
     const subject = principalId ? this.options.subjectOf(principalId) : null;
     if (!subject || subject.iss !== this.options.issuer) {
       refuse(known, "unknown_speaker");
@@ -518,10 +841,10 @@ export class PerspicaxMcp {
     // quick turns hit Perspicax's rate limit, and a refused exchange left
     // the profile out of that turn: tools gone, then back).
     let need = known;
-    const keepWarm = this.options.keepWarm?.(input.threadId) === true;
-    // the call ended (or expired) without saying so: its kept tokens go
-    if (!keepWarm) void this.endWarm(input.threadId);
-    if (keepWarm) {
+    const stay = this.sessionShouldStay(input.threadId);
+    // the call or warm engine ended without saying so: its kept tokens go
+    if (!stay) void this.endWarm(input.threadId);
+    if (stay) {
       need = [];
       for (const profileId of known) {
         const at = warmKey(input.threadId, profileId, principalId, source);
@@ -529,12 +852,19 @@ export class PerspicaxMcp {
         if (kept && !kept.ended && kept.botId === input.bot.id && kept.expiresAt - this.now() >= PERSPICAX_TOKEN_MIN_LIFE_MS) {
           this.warm.delete(at);
           kept.generation = input.generation;
+          const wanted = input.bot.perspicaxActAs?.slug;
+          // Voice keep clears the identity lease each turn; an engine-warm
+          // keep leaves the lease and tools/list cache so the next turn
+          // skips the re-handshake (#1955).
+          if (!kept.identity || (wanted && kept.identity.profile() !== wanted) || (!wanted && kept.identity.profile())) {
+            this.setIdentity(kept, wanted);
+          }
           const previous = this.entries.get(key(input.threadId, input.generation, profileId));
-          if (previous && previous !== kept) void this.revoke(previous.token);
+          if (previous && previous !== kept) void this.close(previous);
           this.entries.set(key(input.threadId, input.generation, profileId), kept);
           const profile = catalog.get(profileId)!;
           plan.mounted.push({ profileId, slug: profile.slug, name: profile.name || profile.slug || profileId });
-          this.log(`perspicax mcp: profile ${profileId} kept for the call's next turn`);
+          this.log(`perspicax mcp: profile ${profileId} kept for the ${this.options.keepWarm?.(input.threadId) ? "call" : "warm engine"}'s next turn`);
         } else need.push(profileId);
       }
       if (!need.length) return plan;
@@ -591,8 +921,8 @@ export class PerspicaxMcp {
       }
       const at = key(input.threadId, input.generation, profileId);
       const previous = this.entries.get(at);
-      if (previous) void this.revoke(previous.token);
-      this.entries.set(at, {
+      if (previous) void this.close(previous);
+      const entry: Entry = {
         threadId: input.threadId,
         generation: input.generation,
         botId: input.bot.id,
@@ -600,9 +930,12 @@ export class PerspicaxMcp {
         principalId,
         subject: who,
         source,
+        ...(!input.bot.perspicax?.profiles.length && selected ? { implicitIdentity: selected.slug } : {}),
         token: result.token,
         expiresAt: Math.min(result.expiresAt, signIn.expiresAt),
-      });
+      };
+      this.setIdentity(entry, input.bot.perspicaxActAs?.slug);
+      this.entries.set(at, entry);
       const profile = catalog.get(profileId)!;
       plan.mounted.push({ profileId, slug: profile.slug, name: profile.name || profile.slug || profileId });
     }
@@ -659,7 +992,7 @@ export class PerspicaxMcp {
     if (!entry || entry.botId !== input.botId) return null;
     const scope = this.options.writeOnceScope({ threadId: input.threadId, botId: input.botId, principalId: entry.principalId });
     if (!scope) return null;
-    return executionKey([scope, entry.principalId, input.profileId, name, params.arguments ?? {}]);
+    return executionKey([scope, entry.principalId, input.profileId, entry.identity?.profile() ?? "default", name, params.arguments ?? {}]);
   }
 
   private async relayFrame(input: { threadId: string; generation: string; botId: string; profileId: string; frame: unknown; judged?: boolean }): Promise<PerspicaxRelayAnswer> {
@@ -670,7 +1003,7 @@ export class PerspicaxMcp {
     const id = frame.id;
     const notification = id === undefined;
     const ended = (): PerspicaxRelayAnswer => (notification ? { status: 202 } : { status: 200, body: rpcError(id, -32001, PERSPICAX_ACCESS_ENDED) });
-    if (!(this.options.botProfiles(input.botId) ?? []).includes(input.profileId)) {
+    if (!this.entryMounted(entry)) {
       return { status: 403, body: { error: "this bot no longer lists that Perspicax profile", code: "profile_not_mounted" } };
     }
     // a tools/call is always a request: one without an id would run with no
@@ -711,7 +1044,7 @@ export class PerspicaxMcp {
         };
       }
     }
-    const blocked = input.judged ? null : telephonyBlock(frame, this.twilioTools.get(input.profileId)) ?? await this.permissionBlock(entry, frame);
+    const blocked = input.judged ? null : telephonyBlock(frame, entry.twilioTools) ?? await this.permissionBlock(entry, frame);
     if (blocked) return { status: 200, body: { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: blocked }], isError: true } } };
     const speaker = this.options.subjectOf(entry.principalId);
     if (!speaker || speaker.disabled) this.end(entry);
@@ -729,8 +1062,22 @@ export class PerspicaxMcp {
     // A turn's entry starts without a session while the engine may keep the
     // bridge it initialized on an earlier turn: open one first, or Perspicax
     // answers 422 "expect initialize request".
-    if (frame.method !== "initialize" && !notification && !entry.mcpSessionId && this.initParams.has(initKey(entry.threadId, entry.profileId))) {
+    if (frame.method !== "initialize" && !notification && !entry.initialized && !entry.mcpSessionId && (entry.identity || this.initParams.has(initKey(entry.threadId, entry.profileId)))) {
       await this.reopen(link, entry);
+    }
+    if (!notification && frame.method !== "initialize") {
+      await entry.identity?.ensure();
+      const params = isObject(frame.params) ? frame.params : {};
+      if (frame.method === "tools/call" && entry.identity && !entry.identity.allows(String(params.name ?? ""))) {
+        return { status: 200, body: this.identityRefusal(frame) };
+      }
+      // Same MCP session and identity already listed tools (Sagax identity
+      // lease or an earlier engine list): serve that body. Invalidation is
+      // reopen, identity clear/invalidate, list_changed, retire.
+      if (frame.method === "tools/list" && entry.toolsListBody !== undefined && entry.mcpSessionId) {
+        const body = entry.identity?.catalog(entry.toolsListBody) ?? entry.toolsListBody;
+        return { status: 200, body: rewriteToolsListId(body, id) };
+      }
     }
     const usedSession = entry.mcpSessionId;
     const sent = entry.source === "delegation" && !notification
@@ -744,17 +1091,28 @@ export class PerspicaxMcp {
       // initialize again, once; send a read again, never a write.
       // a concurrent call may have opened the new session already
       const reopened = entry.mcpSessionId !== undefined && entry.mcpSessionId !== usedSession ? true : await this.reopen(link, entry);
-      const replay = reopened && !notification && perspicaxReplayable(frame);
+      // an entry that never saw a tools/list (the engine listed on an earlier
+      // turn) reads it on the new session to know which tools only read
+      if (reopened && !notification && frame.method === "tools/call" && !entry.readOnlyTools && !perspicaxReplayable(frame)) {
+        await this.identityRpc(entry, "tools/list").catch(() => undefined);
+      }
+      const replay = reopened && !notification && perspicaxReplayable(frame, entry.readOnlyTools);
       this.log(`perspicax mcp: profile ${entry.profileId} session lost (HTTP ${response.status}); ${reopened ? "a new one is open" : "a new one could not be opened"}; ${replay ? "read sent again" : notification ? "notification dropped" : "call not replayed"}`);
       if (notification) return { status: 202 };
       if (!reopened) return { status: 200, body: rpcError(id, -32000, `Perspicax answered HTTP ${response.status}`) };
       if (!replay) return { status: 200, body: rpcError(id, -32000, PERSPICAX_SESSION_RESET) };
+      await entry.identity?.ensure(true);
       const again = await this.send(link, entry, frame);
       if (again === "ended") return ended();
       if (again === "unreachable") return { status: 200, body: rpcError(id, -32000, "Perspicax is unavailable") };
       ({ response, text } = again);
     }
-    if (notification) return { status: 202 };
+    // Client→server list_changed is unusual; clear before the 202 return so
+    // a later tools/list cannot serve a stale body. Server→client clears in send().
+    if (notification) {
+      if (frame.method === "notifications/tools/list_changed") entry.toolsListBody = undefined;
+      return { status: 202 };
+    }
     if (!response.ok) {
       let body: unknown = null;
       try {
@@ -766,13 +1124,36 @@ export class PerspicaxMcp {
       return { status: 200, body: rpcError(id, -32000, `Perspicax answered HTTP ${response.status}`) };
     }
     try {
-      const body = parseMcpBody(text, id);
+      let body = parseMcpBody(text, id);
+      if (entry.identity && identityLapsed(body)) {
+        entry.identity.invalidate();
+        entry.toolsListBody = undefined;
+        await entry.identity.ensure(true);
+        const params = isObject(frame.params) ? frame.params : {};
+        if (frame.method !== "tools/call" || entry.identity.allows(String(params.name ?? ""))) {
+          // act_as_expired explicitly says the operation was refused. One retry,
+          // including a write, is safe; never recurse if it lapses again.
+          const retry = await this.send(link, entry, frame);
+          if (typeof retry !== "string") body = parseMcpBody(retry.text, id);
+        }
+      }
+      if (frame.method === "initialize" && isObject(body) && isObject(body.result)) entry.initialized = true;
+      if (frame.method === "tools/call" && isObject(frame.params) && frame.params.name === "identity_switch") {
+        const value = identityValue(body);
+        if (!entry.identity && isObject(value.acting_as) && typeof value.acting_as.slug === "string") this.setIdentity(entry, value.acting_as.slug);
+        const args = isObject(frame.params.arguments) ? frame.params.arguments : {};
+        if (!entry.identity && typeof args.profile === "string" && (entry.servedTools?.has("identity_switch") || /switch_not_consented|params_invalid/.test(JSON.stringify(body)))) this.setIdentity(entry, args.profile);
+        await entry.identity?.observe(body);
+      }
       if (frame.method === "tools/list" && body !== null) {
+        body = entry.identity?.catalog(body) ?? body;
         const served = isObject(body) && isObject(body.result) && Array.isArray(body.result.tools)
           ? body.result.tools.filter((tool): tool is Json => isObject(tool) && typeof tool.name === "string").map((tool) => String(tool.name)) : [];
-        if (served.length) this.servedTools.set(input.profileId, new Set([...(this.servedTools.get(input.profileId) ?? []), ...served].slice(-2000)));
+        entry.servedTools = new Set(served.slice(0, 2000));
+        entry.readOnlyTools = new Set(perspicaxReadOnlyToolsOf(body).slice(0, 2000));
         const named = twilioToolsOf(body);
-        if (named.length) this.twilioTools.set(input.profileId, new Set([...(this.twilioTools.get(input.profileId) ?? []), ...named].slice(-500)));
+        entry.twilioTools = new Set(named.slice(0, 500));
+        entry.toolsListBody = body;
       }
       return body === null ? { status: 200, body: rpcError(id, -32000, "Perspicax sent no answer") } : { status: 200, body };
     } catch {
@@ -796,11 +1177,22 @@ export class PerspicaxMcp {
    * profile its bot still lists. */
   private turnEntry(threadId: string, generation: string, botId: string): Entry | undefined {
     const prefix = `${threadId}\u0000${generation}\u0000`;
-    const listed = this.options.botProfiles(botId) ?? [];
     for (const [at, entry] of this.entries) {
-      if (at.startsWith(prefix) && entry.botId === botId && !entry.ended && listed.includes(entry.profileId)) return entry;
+      if (at.startsWith(prefix) && entry.botId === botId && !entry.ended && this.entryMounted(entry)) return entry;
     }
     return undefined;
+  }
+
+  private entryMounted(entry: Entry): boolean {
+    const profiles = this.options.botProfiles(entry.botId);
+    if (!profiles) return false;
+    if (profiles.includes(entry.profileId)) return true;
+    const identity = this.options.botActAs?.(entry.botId);
+    return profiles.length === 0 && !!identity && entry.implicitIdentity === identity.slug;
+  }
+
+  private identityRefusal(frame: Json): Json {
+    return { jsonrpc: "2.0", id: frame.id, result: { isError: true, content: [{ type: "text", text: identityWarning("unavailable", "en") }] } };
   }
 
   /** #1935: the MCP server name this turn gives a mounted profile, so a
@@ -816,11 +1208,9 @@ export class PerspicaxMcp {
   toolHome(threadId: string, generation: string, botId: string, name?: string): { server: string; served: boolean } | undefined {
     const prefix = `${threadId}\u0000${generation}\u0000`;
     if (name) {
-      const listed = this.options.botProfiles(botId) ?? [];
       for (const [at, entry] of this.entries) {
-        if (!at.startsWith(prefix) || entry.botId !== botId || entry.ended || !entry.mount || !listed.includes(entry.profileId)) continue;
-        const served = this.servedTools.get(entry.profileId);
-        if (served?.has(servedSpelling(name, served))) return { server: entry.mount, served: true };
+        if (!at.startsWith(prefix) || entry.botId !== botId || entry.ended || !entry.mount || !entry.servedTools || !this.entryMounted(entry)) continue;
+        if (entry.servedTools.has(servedSpelling(name, entry.servedTools))) return { server: entry.mount, served: true };
       }
     }
     const first = this.turnEntry(threadId, generation, botId);
@@ -898,13 +1288,14 @@ export class PerspicaxMcp {
     if (!entry) return { ok: false, code: "profile_not_mounted", error: "no Perspicax profile is mounted in this turn" };
     const link = this.options.link();
     if (!link) return { ok: false, code: "access_ended", error: PERSPICAX_ACCESS_ENDED };
-    if (!entry.mcpSessionId && !(await this.reopen(link, entry))) {
+    if (!entry.initialized && !entry.mcpSessionId && !(await this.reopen(link, entry))) {
       return entry.ended
         ? { ok: false, code: "access_ended", error: PERSPICAX_ACCESS_ENDED }
         : { ok: false, code: "unreachable", error: "Perspicax is unavailable" };
     }
     const id = `sagax-native-${++this.nativeCalls}`;
-    const name = servedSpelling(requested, this.servedTools.get(entry.profileId));
+    await entry.identity?.ensure();
+    const name = servedSpelling(requested, entry.servedTools);
     const answer = await this.relay({
       threadId: input.threadId,
       generation: input.generation,
@@ -942,7 +1333,7 @@ export class PerspicaxMcp {
    * run: never sent, or answered 503 (unavailable, not processed); a 502 or
    * a cut answer may have run it, so the bot gets the failure instead. */
   private async sendForRoutine(link: PerspicaxMcpLink, entry: Entry, frame: Json): Promise<{ response: Response; text: string } | "ended" | "unreachable"> {
-    const replayable = perspicaxReplayable(frame) || frame.method === "initialize";
+    const replayable = perspicaxReplayable(frame, entry.readOnlyTools) || frame.method === "initialize";
     for (let attempt = 0; ; attempt += 1) {
       const note: { unsent?: boolean } = {};
       const sent = await this.send(link, entry, frame, note);
@@ -961,13 +1352,17 @@ export class PerspicaxMcp {
 
   /** POST one frame with the entry's token and session; a 401 renews the
    * token once. The answer is read whole (bounded); the session it names is kept. */
-  private async send(link: PerspicaxMcpLink, entry: Entry, frame: Json, note?: { unsent?: boolean }): Promise<{ response: Response; text: string } | "ended" | "unreachable"> {
+  private async send(link: PerspicaxMcpLink, entry: Entry, frame: Json, note?: { unsent?: boolean }, identityInternal = false): Promise<{ response: Response; text: string } | "ended" | "unreachable"> {
     let response: Response;
     try {
       response = await this.post(link.mcpEndpoint(), entry, frame);
       if (response.status === 401) {
         void response.body?.cancel().catch(() => {});
         if (!(await this.renew(entry))) return "ended";
+        if (!identityInternal && frame.id !== undefined && frame.method !== "initialize") await entry.identity?.ensure(true);
+        if (!identityInternal && frame.method === "tools/call" && isObject(frame.params) && entry.identity && !entry.identity.allows(String(frame.params.name))) {
+          return { response: new Response(null, { status: 200 }), text: JSON.stringify(this.identityRefusal(frame)) };
+        }
         response = await this.post(link.mcpEndpoint(), entry, frame);
         if (response.status === 401) {
           void response.body?.cancel().catch(() => {});
@@ -981,10 +1376,23 @@ export class PerspicaxMcp {
       return "unreachable";
     }
     const session = response.headers.get("mcp-session-id");
-    if (session && session.length <= 256) entry.mcpSessionId = session;
+    if (session && session.length <= 256) {
+      if (session !== entry.mcpSessionId) {
+        entry.identity?.invalidate();
+        entry.toolsListBody = undefined;
+      }
+      entry.mcpSessionId = session;
+    }
     try {
       const onRequest = this.options.askGo ? (request: Json) => this.answerServerRequest(link, entry, request) : undefined;
-      return { response, text: await readBounded(response, PERSPICAX_RELAY_MAX_BYTES, onRequest) };
+      const onNotification = (note: Json) => {
+        if (note.method === "notifications/tools/list_changed") entry.toolsListBody = undefined;
+      };
+      const text = await readBounded(response, PERSPICAX_RELAY_MAX_BYTES, onRequest, onNotification);
+      // A real exchange (and a successful keep-alive ping) refreshes the idle
+      // timer so Perspicax's 120 s close does not fire while the engine is warm.
+      if (!entry.keepAlivePing && response.ok) this.touchKeepAlive(entry);
+      return { response, text };
     } catch {
       return "unreachable";
     }
@@ -1043,15 +1451,22 @@ export class PerspicaxMcp {
   private async reopenOnce(link: PerspicaxMcpLink, entry: Entry): Promise<boolean> {
     if (entry.ended) return false;
     entry.mcpSessionId = undefined;
+    entry.initialized = false;
+    entry.toolsListBody = undefined;
+    entry.identity?.invalidate();
     const params = this.initParams.get(initKey(entry.threadId, entry.profileId)) ?? {
       protocolVersion: PERSPICAX_PROTOCOL_VERSION,
       capabilities: this.options.askGo ? withElicitation({}) : {},
       clientInfo: { name: `Pulsa Bot (${entry.botId})`, version: this.options.version },
     };
-    const opened = await this.send(link, entry, { jsonrpc: "2.0", id: `sagax-reopen-${++this.reopens}`, method: "initialize", params });
-    if (typeof opened === "string" || !opened.response.ok || !entry.mcpSessionId) return false;
+    const id = `sagax-reopen-${++this.reopens}`;
+    const opened = await this.send(link, entry, { jsonrpc: "2.0", id, method: "initialize", params });
+    if (typeof opened === "string" || !opened.response.ok) return false;
+    const body = parseMcpBody(opened.text, id);
+    if (!isObject(body) || !isObject(body.result)) return false;
+    entry.initialized = true;
     const done = await this.send(link, entry, { jsonrpc: "2.0", method: "notifications/initialized" });
-    return typeof done !== "string" && Boolean(entry.mcpSessionId);
+    return typeof done !== "string";
   }
 
   /** The engine's own initialize, kept so a new session looks like its first. */
@@ -1081,25 +1496,40 @@ export class PerspicaxMcp {
   }
 
   /** Every generation of a thread (stop, delete, the backstop before a new
-   * turn). On a live call its tokens are kept for the call's next turn. */
+   * turn). On a live call or warm engine its tokens are kept for the next turn. */
   async endThread(threadId: string): Promise<void> {
-    const keep = this.options.keepWarm?.(threadId) === true;
+    const keep = this.sessionShouldStay(threadId);
     await Promise.all([this.retire(`${threadId}\u0000`, threadId), ...(keep ? [] : [this.endWarm(threadId)])]);
   }
 
-  /** End the entries under `prefix`: kept for a live call's next turn
-   * (prepareTurn takes them over), revoked otherwise. */
+  /** End the entries under `prefix`: kept for a live call or warm engine's
+   * next turn (prepareTurn takes them over), revoked otherwise. */
   private async retire(prefix: string, threadId: string): Promise<void> {
     const done: Promise<unknown>[] = [];
-    const keep = this.options.keepWarm?.(threadId) === true;
+    const voiceKeep = this.options.keepWarm?.(threadId) === true;
+    const engineKeep = this.options.engineWarm?.(threadId) === true;
+    const keep = voiceKeep || engineKeep;
     for (const [at, entry] of this.entries) {
       if (!at.startsWith(prefix)) continue;
       this.entries.delete(at);
+      // Voice turns clear the identity lease each time (AGENTS.md). An
+      // engine-warm keep leaves the lease and tools/list cache so the next
+      // turn skips the re-handshake; keep-alive pings continue.
+      if (voiceKeep || !engineKeep) {
+        this.disarmKeepAlive(entry);
+        await entry.identity?.clear();
+        entry.identity = undefined;
+        entry.servedTools = undefined;
+        entry.readOnlyTools = undefined;
+        entry.twilioTools = undefined;
+        entry.toolsListBody = undefined;
+      }
       if (keep && !entry.ended && entry.expiresAt - this.now() >= PERSPICAX_TOKEN_MIN_LIFE_MS) {
         const warm = warmKey(entry.threadId, entry.profileId, entry.principalId, entry.source);
         const previous = this.warm.get(warm);
         if (previous && previous !== entry) done.push(this.close(previous));
         this.warm.set(warm, entry);
+        if (engineKeep && entry.mcpSessionId) this.touchKeepAlive(entry);
         continue;
       }
       done.push(this.close(entry));
@@ -1109,9 +1539,11 @@ export class PerspicaxMcp {
 
   /** Shutdown: revoke everything. */
   async endAll(): Promise<void> {
+    this.disposed = true;
     const all = [...this.entries.values(), ...this.warm.values()];
     this.entries.clear();
     this.warm.clear();
+    for (const entry of all) this.disarmKeepAlive(entry);
     await Promise.all(all.map((entry) => this.close(entry)));
   }
 
@@ -1188,6 +1620,8 @@ export class PerspicaxMcp {
     const old = entry.token;
     entry.token = result.token;
     entry.expiresAt = Math.min(result.expiresAt, signIn.expiresAt);
+    entry.identity?.invalidate();
+    entry.toolsListBody = undefined;
     void this.revoke(old);
     return true;
   }
@@ -1195,12 +1629,16 @@ export class PerspicaxMcp {
   private end(entry: Entry): void {
     if (entry.ended) return;
     entry.ended = true;
+    this.disarmKeepAlive(entry);
+    void entry.identity?.clear();
     void this.revoke(entry.token);
   }
 
   private async close(entry: Entry): Promise<void> {
     const link = this.options.link();
     if (entry.ended) return;
+    this.disarmKeepAlive(entry);
+    await entry.identity?.clear();
     entry.ended = true;
     // The session goes first, while its token still opens it; then the token.
     if (link && entry.mcpSessionId) {

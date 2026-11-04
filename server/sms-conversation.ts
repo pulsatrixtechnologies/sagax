@@ -86,8 +86,9 @@ export function smsLateBody(botName: string, language: "fr" | "en"): string {
 export type SmsTurnState = "running" | "queued" | "waiting" | "idle";
 
 export interface SmsConversationDeps {
-  /** Send the words as the person into their conversation with the bot. */
-  send(input: { person: string; sub: string; botId: string; text: string }): Promise<{ ok: true; threadId: string; messageId: string } | { ok: false; error: string }>;
+  /** Send the words as the person into their conversation with the bot.
+   * `label` is the human caller label stamped on the message (never a raw id). */
+  send(input: { person: string; sub: string; botId: string; text: string; label: string }): Promise<{ ok: true; threadId: string; messageId: string } | { ok: false; error: string }>;
   state(botId: string, threadId: string): SmsTurnState;
   /** The bot's words after `messageId` (text replies), or "" when none. */
   replyAfter(threadId: string, messageId: string): string;
@@ -106,6 +107,8 @@ export interface OwnTextEvent {
   botId: string;
   from: string;
   text: string;
+  /** Human label for who texted (person name or formatted number). */
+  label: string;
 }
 
 const mask = (number: string) => {
@@ -130,7 +133,7 @@ export class SmsConversation {
   /** The text becomes a turn; the answer goes back on its own. False when
    * the turn could not start (the caller then keeps its usual way). */
   async start(event: OwnTextEvent): Promise<boolean> {
-    const sent = await this.deps.send({ person: event.person, sub: event.sub, botId: event.botId, text: event.text });
+    const sent = await this.deps.send({ person: event.person, sub: event.sub, botId: event.botId, text: event.text, label: event.label });
     if (!sent.ok) {
       this.log(`sms-conversation: ${event.botId} could not start (${sent.error.slice(0, 120)})`);
       return false;

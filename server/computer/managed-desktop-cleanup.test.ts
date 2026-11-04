@@ -3,6 +3,7 @@ import vm from "node:vm";
 import { transpileTs } from "../testing/transpile.ts";
 import { expect, it } from "vitest";
 import { changedInstanceIds, engineLaunches } from "../config.ts";
+import { interruptKeepsTeammates } from "../team/teammate-replies.ts";
 
 // Execute the actual cleanup functions without importing index.ts, which would
 // start a server. State and adapters are synthetic; this is an ownership-race
@@ -96,6 +97,7 @@ function fixture(kind: "direct" | "group", threadIds = ["first"]) {
     autoVmClaims,
     turnResources: { release() {} }, settlingResourceOwners: new Map(), turnComputerResources: new Map(), teamComputerTurns: new Map(),
     coordinator: { stopAwaitingDirect: () => [] },
+    interruptKeepsTeammates,
     noteTeammatesLeftRunning() {},
     cancelDirectTurnDispatch: (_botId: string, threadId: string) => cancelled.push(threadId),
     cancelGroupTurnOperations: (_groupId: string, threadId: string, outcome?: { status: string; detail: string; byHarness?: boolean }) => {

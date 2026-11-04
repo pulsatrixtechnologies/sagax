@@ -1,3 +1,4 @@
+import type { RoutineReadinessCheck } from "./routine-readiness.ts";
 /** Durable, non-actionable projection of one background routine run.
  *
  * The provider still runs in its isolated execution task. This small card is
@@ -6,6 +7,7 @@
  * through the routines calendar.
  */
 export interface RoutineRunCardData {
+  readiness?: RoutineReadinessCheck[];
   runId: string;
   routineId: string;
   routineName: string;

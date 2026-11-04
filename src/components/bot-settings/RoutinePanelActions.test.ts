@@ -39,8 +39,8 @@ describe("a routine's action bar", () => {
     const markup = panel(false);
     const all = buttons(markup);
     // 2026-11-03 (JC): exactly [Run now] [Edit] [Disable or Enable] [Delete].
-    expect(all).toHaveLength(4);
-    expect(all.map((button) => /aria-label="([^"]+)"/.exec(button)?.[1])).toEqual(["Run now", "Edit", "Enable", "Delete"]);
+    expect(all).toHaveLength(5);
+    expect(all.map((button) => /aria-label="([^"]+)"/.exec(button)?.[1])).toEqual(["Run now", "Check routine", "Edit", "Enable", "Delete"]);
     for (const button of all) {
       const label = /aria-label="([^"]+)"/.exec(button)?.[1];
       expect(label).toBeTruthy();
@@ -62,7 +62,7 @@ describe("a routine's action bar", () => {
     }
     const paused = buttons(panel(false));
     expect(paused[0]).toContain('fill="currentColor"');
-    expect(iconOf(paused[2]!)).toMatch(/circle-play|play-circle/);
+    expect(iconOf(paused[3]!)).toMatch(/circle-play|play-circle/);
   });
 
   it("the routine's page and the run's detail give each action its own icon and a tooltip", () => {

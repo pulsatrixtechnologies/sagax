@@ -127,10 +127,35 @@ public enum DesktopComposeTo {
         }
     }
 
-    public static func rows(mode: Mode, bots: [Bot], canCreateBots: Bool, people: [OrgDirectoryPerson] = []) -> [Row] {
-        let botRows = bots.map { Row.bot($0.id) }
-        if mode == .group { return [.createGroup] + botRows }
-        return (canCreateBots ? [.createBot, .createBotWizard] : []) + [.createGroup] + botRows + people.map { Row.person($0.principalId) }
+    /// `COMPOSE_RESULT_LIMIT`: at most six results (bots and people
+    /// together) under the create rows.
+    public static let resultLimit = 6
+
+    /// `composeRows`: the create rows first, then at most `resultLimit`
+    /// results, the bots then the people (browse mode only). With a query
+    /// the matches are ranked best first (`matchRank`), ties keeping that
+    /// order; the shortcuts follow the visible rows.
+    public static func rows(mode: Mode, bots: [Bot], canCreateBots: Bool, people: [OrgDirectoryPerson] = [], query: String = "") -> [Row] {
+        var results: [(row: Row, name: String)] = bots.map { (Row.bot($0.id), $0.name) }
+        if mode == .browse { results += people.map { (Row.person($0.principalId), $0.name.isEmpty ? $0.login : $0.name) } }
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !q.isEmpty {
+            results = results.enumerated()
+                .map { (index: $0.offset, rank: matchRank($0.element.name, q), item: $0.element) }
+                .sorted { $0.rank != $1.rank ? $0.rank < $1.rank : $0.index < $1.index }
+                .map(\.item)
+        }
+        let shown = results.prefix(resultLimit).map(\.row)
+        if mode == .group { return [.createGroup] + shown }
+        return (canCreateBots ? [.createBot, .createBotWizard] : []) + [.createGroup] + shown
+    }
+
+    /// 0 the name starts with the query, 1 a word of it does, 2 it matches elsewhere.
+    static func matchRank(_ name: String, _ query: String) -> Int {
+        let text = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if text.hasPrefix(query) { return 0 }
+        let words = text.split(whereSeparator: { " \t._@-".contains($0) })
+        return words.contains { $0.hasPrefix(query) } ? 1 : 2
     }
 
     /// Arrow keys wrap around the rows.

@@ -693,7 +693,7 @@ droite ; c'est une page comme Automations et la carte d'équipe).
 
 ### 2.22 Messages d'un autre bot (boîte d'entrée du bot)
 
-Ajouté le 2026-11-02 (JC : « tu as reçu plein de messages de Katarina, pourquoi tu ne
+Ajouté le 2026-11-02 (JC : « tu as reçu plein de messages de Osprey, pourquoi tu ne
 t'en occupes pas ? », et c'est pareil pour tous les bots). Comme Grok Bot : un bot traite
 les messages de ses coéquipiers à leur arrivée et ne montre à la personne que ce qui a
 besoin d'elle.
@@ -716,6 +716,55 @@ besoin d'elle.
 - Code : `server/proactive/proactive-wake.ts` (`peerNoticeEvent`, `PeerNoticeHops`,
   `PEER_WAKE_RULES`), `server/index.ts` (`offerPeerNotice`, rapport d'un avis à sens unique,
   `postInputRequest`).
+
+---
+
+### 2.23 Identité Perspicax du bot
+
+Ajouté le 2026-11-03, décision produit de JC. Dans les profils Perspicax du
+bot, un select natif « Agit comme (profil Perspicax) » montre les noms humains
+des profils détenus, avec « Identité par défaut » choisi au départ. Un profil
+explicite ou avec attribution au bot ne se choisit jamais automatiquement.
+Le choix partage le bouton Enregistrer de la section. L'en-tête du chat porte
+une petite puce « comme {nom} » dans le bouton du bot. Un ancien Perspicax
+sans cette fonction ne montre pas le select. Une lecture échouée offre de
+réessayer; un refus de switch paraît en mots dans l'activité du tour.
+
+Surface web et desktop; le réglage et la puce iOS restent à porter.
+Code : `PerspicaxSection.tsx`, `BotHeaderPill.tsx`. Tests DOM avec données
+synthétiques, aucun compte réel.
+
+### 2.24 Chat de code (une tâche de code ouverte)
+
+Décision de JC (2026-11-03) : une tâche de la section Code du panneau du bot ne
+s'ouvre plus dans le panneau. Elle s'ouvre comme un chat, là où est le chat,
+de la même famille que l'exécution de routine (feuille sur la colonne du chat,
+pilule du bot en haut, rangée d'actions en bas avec Fermer le chat en dernier),
+mais pensée pour le développement, comme la vue d'agent d'un éditeur de code.
+
+- En-tête : pilule du bot, titre de la tâche (2 lignes au plus), puis une ligne
+  grise : nom du dossier (jamais le chemin), branche, état avec le temps écoulé,
+  et un carré rouge Arrêter tant qu'elle roule.
+- Fil : les mots en bulles comme le chat ; une commande est un bloc terminal
+  (`$ commande`, compte des tests, durée, coche ou code de sortie en rouge ;
+  la sortie se replie, ouverte pendant la course ou après un échec) ; une
+  modification est un diff unifié par fichier, coloré comme les blocs de code,
+  repliable, longues zones inchangées pliées ; les lectures d'affilée font une
+  ligne de puces de fichiers ; le reste garde la puce d'outil du chat.
+- Bande Changements au-dessus des actions : « N fichiers modifiés +A -R »
+  (déplie la liste ; un clic saute au diff du fichier), le dernier compte de
+  tests, la branche, le commit et la PR (ouvre le navigateur).
+- Actions : Continuer (ouvre un compositeur en ligne ; le suivi va dans le fil
+  de la tâche, rejoint le tour s'il roule), Arrêter tant qu'elle roule,
+  Fermer le chat. Échap ferme (ou replie le compositeur).
+- Chemins et identifiants : relatifs au dossier de la tâche, sinon les deux
+  derniers segments ; aucun UUID.
+
+Code : `src/components/coding/CodingChat.tsx`, `CodingDiff.tsx`,
+`CodingTerminal.tsx`, lecture pure dans `src/lib/coding-chat.ts`. Captures :
+`node scripts/capture/coding-chat.mjs` (galerie `src/gallery/coding-chat.html`).
+iOS et Android : la section Code liste les tâches en cours seulement ; le chat
+de code y reste à porter.
 
 ---
 

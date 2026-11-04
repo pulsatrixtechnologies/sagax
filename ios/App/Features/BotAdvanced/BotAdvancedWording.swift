@@ -95,7 +95,7 @@ enum BotAdvancedWording {
     }
 
     /// The history row's line a person reads (lot 8): no UUID, no byte
-    /// sizes. Pass the bot's name so a bot actor shows as "Katarina".
+    /// sizes. Pass the bot's name so a bot actor shows as "Osprey".
     static func historyLine(_ row: BotHistoryRow, botName: String = "") -> String {
         DisplayHygiene.historyPhrase(row, botName: botName)
     }

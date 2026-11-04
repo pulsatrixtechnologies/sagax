@@ -15,7 +15,7 @@ import type { SandboxdClient, SandboxdInfo } from "./user-sandbox-client.ts";
 import { SandboxdRequestError, validSandboxdUrl } from "./user-sandbox-client.ts";
 import { sandboxKeyForPrincipal } from "./user-sandbox-spec.ts";
 import { UserSandboxUnavailable } from "./user-sandbox-errors.ts";
-import { provisionerNotReached, provisionerUnreachable, sandboxStarting, SANDBOX_STARTING_RETRY_DELAY_MS, SANDBOX_STARTING_RETRY_MS, sandboxWakeSettingsFromEnv, type SandboxClusterWaker, type SandboxWakeSettings, type WakeMode } from "./sandbox-k8s-wake.ts";
+import { provisionerNotReached, provisionerUnreachable, SANDBOX_CUT_WHILE_STARTING_MESSAGE, SANDBOX_STARTING_CODE, SANDBOX_STILL_STARTING_MESSAGE, sandboxStarting, SANDBOX_STARTING_RETRY_DELAY_MS, SANDBOX_STARTING_RETRY_MS, sandboxWakeSettingsFromEnv, type SandboxClusterWaker, type SandboxWakeSettings, type WakeMode } from "./sandbox-k8s-wake.ts";
 
 export const DEFAULT_DELETE_GRACE_MS = 72 * 3600_000;
 
@@ -124,14 +124,6 @@ export class UserSandboxManager {
     const notify = (phase: ClusterWaitEvent["phase"]) => {
       try { this.options.onClusterWait?.({ ...who, phase }); } catch { /* a notice never fails the call */ }
     };
-    const ready = async () => {
-      try {
-        await waker.ready(mode, () => notify("waiting"));
-      } catch (error) {
-        if ((error as { code?: unknown }).code === "cluster_start_timeout") notify("timeout");
-        throw error;
-      }
-    };
     // 2026-10-19 (production): right after a cold start the provisioner answered,
     // then the first exec waited for a pod on a node pool scaling 0 -> 1, was
     // cut at 90 s and taken for a provisioner gone: the routine gave up.
@@ -141,7 +133,21 @@ export class UserSandboxManager {
     // reach the provisioner.
     const run = async <T>(call: () => Promise<T>, idempotent = false): Promise<T> => {
       const calledAt = this.now();
-      await ready();
+      // 2026-11-03 (production): a run_command sent while the notice "The
+      // server environment is starting" was shown came back as "the
+      // connection was interrupted", with nothing saying why. A call that
+      // waited on a wake, or ran inside a wake window, now ends with a
+      // plain "still starting" error when the environment did not take it.
+      let waited = false;
+      const readyNow = async () => {
+        try {
+          await waker.ready(mode, () => { waited = true; notify("waiting"); });
+        } catch (error) {
+          if ((error as { code?: unknown }).code === "cluster_start_timeout") notify("timeout");
+          throw error;
+        }
+      };
+      await readyNow();
       if (mode === "wake") this.recentUse.set(useKey(who.principalId, who.botId), this.now());
       const startedAt = this.now();
       let resent = false;
@@ -153,15 +159,24 @@ export class UserSandboxManager {
           // included) stays under the engine's 10 minute cut of a tool call.
           if (mode === "wake" && sandboxStarting(error) && this.now() - startedAt < SANDBOX_STARTING_RETRY_MS
             && this.now() - calledAt < SANDBOX_CALL_BUDGET_MS) {
+            waited = true;
             notify("waiting");
             await this.sleep(SANDBOX_STARTING_RETRY_DELAY_MS);
             continue;
           }
+          // past its bound: nothing ran, said plainly
+          if (mode === "wake" && sandboxStarting(error)) throw new UserSandboxUnavailable(SANDBOX_STILL_STARTING_MESSAGE, SANDBOX_STARTING_CODE);
           if (!provisionerUnreachable(error)) throw error;
           waker.markUnreachable();
-          if (mode !== "wake" || resent || !(idempotent || provisionerNotReached(error))) throw error;
-          resent = true;
-          await ready();
+          if (mode === "wake" && !resent && (idempotent || provisionerNotReached(error))) {
+            resent = true;
+            await readyNow();
+            continue;
+          }
+          if (mode === "wake" && (waited || waker.wakeState() !== null)) {
+            throw new UserSandboxUnavailable(idempotent || provisionerNotReached(error) ? SANDBOX_STILL_STARTING_MESSAGE : SANDBOX_CUT_WHILE_STARTING_MESSAGE, "sandbox_starting_cut");
+          }
+          throw error;
         }
       }
     };

@@ -11,6 +11,7 @@
 // src/locales/en.json exactly; a test holds them together.
 
 import { connectorWriteKind, type ConnectorWriteKind } from "./engine-connectors.ts";
+import { GROK_CLOUD_CONNECTORS, grokGatewayToolConnector, parseGrokGatewayToolId } from "./grok-cloud-connectors.ts";
 
 export type ApprovalTranslate = (key: string, vars?: Record<string, string | number>) => string;
 export interface ApprovalWords {
@@ -161,6 +162,9 @@ export interface ApprovalDescription {
   summary?: string;
   risk?: ApprovalRisk;
   server?: string;
+  /** the tool's own name on that server, for the details row: never an
+   * ACP kind ("other") nor a gateway's escaped id */
+  tool?: string;
   /** the arguments as pretty JSON, when they are JSON */
   argsJson?: string;
   /** `action` is only the tool's own words (no known verb): "Allow X to
@@ -178,6 +182,21 @@ export function parseToolId(tool: string): ParsedToolId {
   const match = /^(?:mcp__)?([A-Za-z0-9][A-Za-z0-9_.-]*?)__([A-Za-z0-9][A-Za-z0-9_.-]*)$/.exec(tool);
   if (!match) return { name: tool };
   return { server: match[1], name: match[2]! };
+}
+
+/** Grok's managed gateway names a connector's tool
+ * `cursor__user-<server>-<tool>___<n>` (shared/grok-cloud-connectors.ts):
+ * split at the first `__` that reads server `cursor` and a tool `…___23`.
+ * The reading is the connector and its tool, decoded (#1931), and the
+ * product is the connector as the person named it, or grok.com's name for
+ * a known one. Null for any other id. */
+export function readGatewayToolId(tool: string): { parsed: ParsedToolId; product: string } | null {
+  const gateway = parseGrokGatewayToolId(tool);
+  if (!gateway) return null;
+  const known = grokGatewayToolConnector(tool)?.id;
+  const name = known ? GROK_CLOUD_CONNECTORS.find((entry) => entry.id === known)?.name : undefined;
+  const product = name ?? (/[A-Z]/.test(gateway.server) ? gateway.server.replace(/[_-]+/g, " ").trim() : titleCase(gateway.server));
+  return { parsed: { server: gateway.server, name: gateway.tool }, product };
 }
 
 /** Servers that are the app itself: they name no product. */
@@ -536,11 +555,13 @@ export function describeApproval(
   const argsJson = prettyJson(args, input);
   if (!tool) return { argsJson };
   const builtin = BUILTIN_RISK[tool];
-  const parsed = parseToolId(tool);
+  const gateway = readGatewayToolId(tool);
+  const parsed = gateway?.parsed ?? parseToolId(tool);
   if (!parsed.server) {
     return { risk: riskFor(undefined, hints, builtin), argsJson };
   }
-  const { product, prefixTokens } = productFor(parsed, hints);
+  const { product, prefixTokens } = productFor(parsed, gateway && !hints?.product?.trim() ? { ...hints, product: gateway.product } : hints);
+  const toolName = parsed.name;
   // acme_desk__query_schedule → [acme, desk, query, schedule]; the product
   // prefix goes, the verb is the last word (or the first: list_sites).
   let tokens = parsed.name.split(/_+/).filter(Boolean).slice(prefixTokens);
@@ -580,11 +601,11 @@ export function describeApproval(
     // Teams): "write to SharePoint", not "write to SharePoint in Sharepoint"
     const last = product?.split(/\s+/).pop()?.toLowerCase();
     const named = Boolean(last && action.toLowerCase().includes(last));
-    return { action, ...(product && !named ? { product } : {}), summary: joined, risk, server: parsed.server, argsJson };
+    return { action, ...(product && !named ? { product } : {}), summary: joined, risk, server: parsed.server, tool: toolName, argsJson };
   }
   if (!op) {
     // a tool named for itself (flow, memory): "use flow"
-    return { action: tokens.join(" ") || parsed.name, verbless: true, product, summary, risk, server: parsed.server, argsJson };
+    return { action: tokens.join(" ") || parsed.name, verbless: true, product, summary, risk, server: parsed.server, tool: toolName, argsJson };
   }
   // an action's name is not a record: "run the isolate action"
   const resource = op === "run"
@@ -598,7 +619,7 @@ export function describeApproval(
     : resource
     ? words.t(`approval.verb.${op}`, { resource })
     : words.t(`approval.verb.${op}.bare`);
-  return { action, product, summary, risk, server: parsed.server, argsJson };
+  return { action, product, summary, risk, server: parsed.server, tool: toolName, argsJson };
 }
 
 export const RISK_LABEL: Record<ApprovalRisk, string> = {

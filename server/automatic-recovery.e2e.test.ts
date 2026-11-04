@@ -7,6 +7,7 @@ import { launchVerificationServer, runControlOmb, verificationServerEnvironment 
 import { waitForExit } from "./testing/cleanup.ts";
 import { readHandoffs } from "./testing/handoff-rows.ts";
 import { hostTimeout } from "./testing/host-timeout.ts";
+import { CLAUDE_SIGN_IN_EXPIRED } from "./drivers/claude-errors.ts";
 
 const primary = { instanceId: "opencodeGo", model: "fixture/recovery" };
 const backup = { instanceId: "claude", model: "claude-sonnet-5" };
@@ -69,7 +70,7 @@ async function withRecoveryFixture(
     const cli = fileURLToPath(new URL("./testing/fake-acp-cli.ts", import.meta.url));
     config.instances.history = {
       driver: "opencodeGo", displayName: "History fixture", config: { cli },
-      environment: { FAKE_ACP_MODELS: primary.model },
+      environment: { FAKE_ACP_MODELS: primary.model, FAKE_ACP_TEXT_REPLY: "hello from fake acp" },
     };
     config.instances.opencodeGo = {
       driver: "opencodeGo", displayName: "Primary fixture", config: { cli },
@@ -344,7 +345,8 @@ it("stops after one failed backup instead of looping between engines", async () 
     // the backup's sign-in failure is the one failed-turn row every client
     // reads (shared/failed-turn.ts): whole, with the flag its sign-in needs
     expect(messages.map((message: any) => message.tool).filter((tool: any) => tool?.ok === false))
-      .toEqual([{ name: "error: Not logged in · Please run /login", ok: false, setup: true }]);
+      // 84841aeed gives an expired sign-in its Reconnect guidance and keeps the provider's words.
+      .toEqual([{ name: `error: ${CLAUDE_SIGN_IN_EXPIRED} Claude said: Not logged in · Please run /login`, ok: false, setup: true }]);
   });
 }, 90_000);
 
@@ -396,7 +398,7 @@ it("preserves the sign-in error when automatic recovery is disabled", async () =
     const { messages } = await control("messages", "--bot", bot.id, "--limit", "30");
     expect(messages.filter((message: any) => message.tool?.name?.startsWith("recovery:"))).toHaveLength(0);
     expect(messages.map((message: any) => message.tool).filter((tool: any) => tool?.ok === false))
-      .toEqual([{ name: "error: Not logged in · Please run /login", ok: false, setup: true }]);
+      .toEqual([{ name: `error: ${CLAUDE_SIGN_IN_EXPIRED} Claude said: Not logged in · Please run /login`, ok: false, setup: true }]);
   });
 }, 90_000);
 

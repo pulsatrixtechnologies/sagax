@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { canonicalJson, parsePackageDocument } from "../../shared/package-format.ts";
 
-const FIXTURES = join(import.meta.dirname, "..", "shared", "package-fixtures");
+const FIXTURES = join(import.meta.dirname, "..", "..", "shared", "package-fixtures");
 const fixture = (name: string): any => JSON.parse(readFileSync(join(FIXTURES, name), "utf8"));
 const sha = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 const hex = /^[a-f0-9]{64}$/;

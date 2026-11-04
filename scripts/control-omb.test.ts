@@ -16,6 +16,14 @@ describe("a fixture driven from a real browser", () => {
   });
 });
 
+describe("turn-trace forwarding", () => {
+  it("forwards SAGAX_TURN_TRACE=1 only when set", () => {
+    expect(childEnv({})).not.toHaveProperty("SAGAX_TURN_TRACE");
+    expect(childEnv({ SAGAX_TURN_TRACE: "0" })).not.toHaveProperty("SAGAX_TURN_TRACE");
+    expect(childEnv({ SAGAX_TURN_TRACE: "1" }).SAGAX_TURN_TRACE).toBe("1");
+  });
+});
+
 describe("the fixture's Live call environment", () => {
   it("passes a loopback fake GPT-Live and its key through", () => {
     expect(childEnv({ SAGAX_OPENAI_LIVE_URL: " http://127.0.0.1:4100 ", SAGAX_OPENAI_API_KEY: "sk-fake" }))

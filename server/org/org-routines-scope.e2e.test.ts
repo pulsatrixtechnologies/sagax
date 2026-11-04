@@ -23,7 +23,7 @@ import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
 
-const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
+const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const posixOnly = describe.skipIf(process.platform === "win32");
 const TEAM_T = "01J9SCOPETEAMT000000000000";
 const TEAM_U = "01J9SCOPETEAMU000000000000";

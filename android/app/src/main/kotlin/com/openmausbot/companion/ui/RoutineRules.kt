@@ -333,6 +333,7 @@ object RoutineRules {
         schedule: RoutineSchedule,
         durationMinutes: Int,
         timeoutMinutes: Int? = null,
+        groupId: String? = null,
     ): RoutineInput {
         require(validTimeout(timeoutMinutes)) {
             "Timeout must be empty or a whole number from 5 to 240"
@@ -347,6 +348,7 @@ object RoutineRules {
             durationMinutes = durationMinutes,
             timeoutMinutes = timeoutMinutes,
             clearTimeout = timeoutMinutes == null,
+            groupId = groupId?.takeIf { it.isNotBlank() },
         )
     }
 }

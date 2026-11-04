@@ -207,7 +207,7 @@ describe("Library tab: a mini preview on every row (2026-10-28)", () => {
     expect(rowOf(html, ID(2))).toContain('data-library-glyph="image"');
   });
 
-  it("each type has its own mark: page, document, archive, PDF, code, other", () => {
+  it("each type has its own mark: code (HTML too), document, archive, PDF, code, other", () => {
     const html = render([
       picture(1, "dashboard.html", "text/html"),
       picture(2, "plan.md", "text/markdown"),
@@ -218,17 +218,73 @@ describe("Library tab: a mini preview on every row (2026-10-28)", () => {
       picture(7, "blob.bin", "application/octet-stream"),
     ], list([]));
     const kind = (n: number) => /data-library-glyph="([a-z]+)"/.exec(rowOf(html, ID(n)))?.[1];
-    expect([1, 2, 3, 4, 5, 6, 7].map(kind)).toEqual(["page", "document", "document", "archive", "pdf", "code", "other"]);
+    expect([1, 2, 3, 4, 5, 6, 7].map(kind)).toEqual(["code", "document", "document", "archive", "pdf", "code", "other"]);
     expect(rowOf(html, ID(5))).toContain("data-glyph-pdf");
-    expect(rowOf(html, ID(1))).toContain("data-page-glyph");
+    // an .html file is a file, not a Page (#1922)
+    expect(rowOf(html, ID(1))).not.toContain("data-page-glyph");
+  });
+});
+
+describe("Library tab: an artifact and a Page never look alike (#1922)", () => {
+  const page = (id: string, status: string, access: string, expired = false) => ({
+    id, title: id, status, access, expiresAt: null, currentVersion: status === "published" ? 1 : null, botId: "bot1", threadId: "t1",
+    createdAt: now, updatedAt: now - 1000, expired, versions: [], pinned: false,
+  });
+  const rowAt = (html: string, attr: string) => {
+    const at = html.indexOf(attr);
+    expect(at).toBeGreaterThan(-1);
+    return html.slice(at, html.indexOf("</li>", at));
+  };
+  const glyphOf = (row: string) => /data-library-glyph="([a-z]+)"/.exec(row)?.[1];
+  const svgOf = (row: string) => /<svg[^>]*class="([^"]*lucide[^"]*)"/.exec(row)?.[1];
+
+  it("an artifact wears an app window titled Artifact, a Page a globe titled Page, pinned or not", () => {
+    const html = render([], list([artifact("art_0000001", "Queue overview", false), artifact("art_0000002", "Pinned board", true)]), {
+      pages: [page("pageAAAA1111", "published", "org"), { ...page("pageBBBB2222", "draft", "private"), pinned: true }],
+    });
+    for (const id of ["art_0000001", "art_0000002"]) {
+      const row = rowAt(html, `data-artifact-row="${id}"`);
+      expect(glyphOf(row)).toBe("artifact");
+      expect(row).toContain('title="Artifact"');
+      expect(svgOf(row)).toContain("lucide-app-window");
+      expect(row).not.toContain("data-page-glyph");
+    }
+    for (const id of ["pageAAAA1111", "pageBBBB2222"]) {
+      const row = rowAt(html, `data-library-page="${id}"`);
+      expect(glyphOf(row)).toBe("page");
+      expect(row).toMatch(/title="Page: [^"]+"/);
+      expect(svgOf(row)).toContain("lucide-globe");
+    }
   });
 
-  it("an artifact and a published page wear the colored page mark", () => {
-    const html = render([], list([artifact("art_0000001", "Queue overview", false)]), {
-      pages: [{ id: "pageAAAA1111", title: "Quarterly", status: "draft", access: "private", expiresAt: null, currentVersion: null, botId: "bot1", threadId: "t1", createdAt: now, updatedAt: now - 1000, expired: false, versions: [], pinned: false }],
+  it("a draft Page and a published one differ, and each published audience has its own badge", () => {
+    const html = render([], list([]), {
+      pages: [
+        page("pageDRAFT001", "draft", "link"),
+        page("pageMINE0001", "published", "private"),
+        page("pageORG00001", "published", "org"),
+        page("pageLINK0001", "published", "link"),
+        page("pageGONE0001", "revoked", "link"),
+        page("pageOLD00001", "published", "link", true),
+      ],
     });
-    expect(html.match(/data-library-glyph="page"/g)).toHaveLength(2);
-    expect(html.match(/data-page-glyph/g)).toHaveLength(2);
+    const state = (id: string) => /data-page-state="([a-z]+)"/.exec(rowAt(html, `data-library-page="${id}"`))?.[1];
+    expect(["pageDRAFT001", "pageMINE0001", "pageORG00001", "pageLINK0001", "pageGONE0001", "pageOLD00001"].map(state))
+      .toEqual(["draft", "private", "org", "link", "revoked", "expired"]);
+    const draft = rowAt(html, 'data-library-page="pageDRAFT001"');
+    const live = rowAt(html, 'data-library-page="pageLINK0001"');
+    expect(draft).toContain('title="Page: draft"');
+    expect(live).toContain('title="Page: published for anyone with the link"');
+    expect(draft).toContain("opacity-60");
+    expect(live).not.toContain("opacity-60");
+    expect(draft).toContain("lucide-pencil-line");
+    expect(live).toContain("lucide-link");
+    expect(rowAt(html, 'data-library-page="pageORG00001"')).toContain("lucide-building-2");
+  });
+
+  it("the marks use theme tokens only, never a fixed colour", () => {
+    const html = render([], list([artifact("art_0000001", "Queue overview", false)]), { pages: [page("pageAAAA1111", "published", "link")] });
+    expect(html).not.toMatch(/from-sky-|to-indigo-|text-white/);
   });
 
   it("groups: Pinned, Today, This week, then Older showing five with Show more", () => {

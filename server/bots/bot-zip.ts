@@ -72,7 +72,7 @@ import { autoOnlyDestination } from "../surface.ts";
 import { memberImportReset } from "../routes/bot-catalog.ts";
 import type { Routine, RoutineManager } from "../routines/routines.ts";
 import { restoreSkillManifest, setSkillEnabled, skillManifestForExport } from "../skills/skills.ts";
-import { cleanBotGrants, cleanBotPerspicax, type BotRecord, type Message, type Store, type TaskRecord } from "../store.ts";
+import { cleanBotGrants, cleanBotPerspicax, perspicaxActAsSchema, type BotRecord, type Message, type Store, type TaskRecord } from "../store.ts";
 import type { WebhookTrigger } from "../triggers/webhooks.ts";
 import { TRIGGER_SOURCES, type TriggerSourceConfig } from "../../shared/trigger-sources.ts";
 import { storedTeamMemorySharing } from "../../shared/team-memory-sharing.ts";
@@ -157,6 +157,7 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   outbound: "settings",
   assignedSkills: "settings",
   perspicax: "settings",
+  perspicaxActAs: "settings",
   temporary: { drop: "an imported bot is never temporary (Perspicax #321)" },
   createdByBot: { drop: "a person imports the bot: it starts as a person's bot (server/bots/bot-creation.ts)" },
   section: "settings",
@@ -1005,6 +1006,8 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
     store.patchTask(id, bot.threadId, { approvalMode: patch.approvalMode, autoApprove: patch.autoApprove === true });
     const profiles = cleanBotPerspicax(document.settings.perspicax);
     if (profiles && host.organization) store.setBotPerspicax(id, profiles.profiles);
+    const perspicaxIdentity = perspicaxActAsSchema.safeParse(document.settings.perspicaxActAs);
+    if (perspicaxIdentity.success && host.organization) store.setBotPerspicaxActAs(id, perspicaxIdentity.data);
 
     // the bot folder and the desk
     for (const entry of reader.under("bot-folder/")) {

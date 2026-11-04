@@ -178,11 +178,11 @@ describe("RoutineRunCard", () => {
     expect(plain).not.toContain("data-routine-resume");
     expect(renderToStaticMarkup(createElement(RoutineRunCard, { message: message("failed", { autoPausedAfter: 1 }) }))).toContain("Paused after a failure");
   });
-  it("says a run completed with problems, with the problems under the report (2026-11-01)", () => {
+  it("says a run completed with problems, the details only in the run detail (2026-11-03)", () => {
     const html = renderToStaticMarkup(createElement(RoutineRunCard, { message: message("completed", { summary: "Checked 10 invoices.", problems: "crm_login failed 2 times" }) }));
     expect(html).toContain("Checked 10 invoices.");
-    expect(html).toContain("data-routine-problems");
-    expect(html).toContain("crm_login failed 2 times");
+    expect(html).not.toContain("data-routine-problems");
+    expect(html).not.toContain("crm_login failed");
     expect(html).toContain("Completed with problems");
   });
 

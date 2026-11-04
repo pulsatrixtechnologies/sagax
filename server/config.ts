@@ -517,6 +517,9 @@ const appConfigSchema = z.object({
      * working folders, keyed by principal id or `*` for every member
      * (server/people/member-folders.ts). */
     memberFolders: z.record(z.string().max(200), z.array(z.string().max(1024)).max(50)).optional(),
+    /** #1940: days before a pending approval leaves the inbox (0 = never).
+     * Absent follows SAGAX_PENDING_APPROVAL_EXPIRE_DAYS, then 7. */
+    pendingApprovalExpireDays: z.number().int().min(0).max(365).optional(),
   }).optional(),
   /** When stored person references became principal ids (server/people/identity-migration.ts). */
   identityMigratedAt: z.number().optional(),
@@ -805,6 +808,10 @@ export interface AppConfig {
     /** #1098: folders of the server's disk an admin opened to members as
      * working folders, by principal id or `*` (server/people/member-folders.ts). */
     memberFolders?: Record<string, string[]>;
+    /** #1940: days before a pending approval leaves the inbox (0 = never).
+     * Absent follows SAGAX_PENDING_APPROVAL_EXPIRE_DAYS, then 7. A person
+     * may override in their own settings. */
+    pendingApprovalExpireDays?: number;
   };
   /** When stored person references became principal ids (server/people/identity-migration.ts). */
   identityMigratedAt?: number;

@@ -10,7 +10,8 @@
 // really has no room left for it.
 import { useEffect, useState } from "react";
 import { t } from "@/lib/i18n";
-import { api, useStore } from "@/state/store";
+import { api } from "@/state/store";
+import { useStoreSelector } from "@/state/store-selector";
 import { connectedAppItems, type AccountConnector } from "@/lib/connected-apps";
 import type { PluginItem } from "@/lib/plugins-model";
 import { SidebarProfileMenu, SidebarRoutinesBadge } from "./SidebarProfileMenu";
@@ -23,9 +24,9 @@ import { SidebarUpdatePill } from "./SidebarUpdatePill";
  * (what was just connected shows). The account's connectors can take a while
  * (the engine is asked): the servers show first, the connectors join them. */
 export function useConnectedApps(): PluginItem[] {
-  const { state } = useStore();
+
   const [apps, setApps] = useState<PluginItem[]>([]);
-  const panelOpen = state.pluginsOpen;
+  const panelOpen = useStoreSelector((current) => current.pluginsOpen);
   useEffect(() => {
     if (panelOpen) return;
     let cancelled = false;

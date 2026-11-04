@@ -66,12 +66,13 @@ enum DesktopMenuStyle {
         switch self {
         case .standard: 228
         case .section: 220
-        case .profile: 259
+        case .profile: 228 // min-w-[228px] (SidebarProfileMenu.tsx), measured on 11
         case .new: 240
         }
     }
 
-    var rowHeight: CGFloat { self == .profile ? 32 : 30 }
+    // the account menu: 32 pt a row with the 2 pt gap, as measured on 11
+    var rowHeight: CGFloat { 30 }
     var iconSize: CGFloat {
         switch self {
         case .profile: 18
@@ -322,19 +323,29 @@ struct DesktopSidebarMenus {
         var out: [DesktopMenuEntry] = []
         // New thread and New folder left the bot row (#182): they live in
         // the thread list, the chat header's or the sidebar tree's.
-        // "Put on the desktop" floats a bot in its own window: none on iPad.
+        // "Put on the desktop" floats the bot in its own window
+        // (DesktopFloatingBots: an iPadOS scene Stage Manager floats).
         let copyId = DesktopMenuEntry(id: "copy-id", title: String(localized: "Copy conversation ID"), icon: .clipboardCopy, kind: .action {
             model.threadActions.copyConversationId(bot)
         })
         // BotContextMenu.tsx (2026-11-03 reference): New topic (threads
-        // off), Pin, Move to ›, then Rename the bot, Edit bot, Share, Make
+        // off), Pin, Move to ›, Select, then Rename the bot, Edit bot, Share, Make
         // primary bot, then Hide from sidebar, Archive, Delete.
-        if !DesktopSidebarState.threadsOn(model: model, prefs: prefs) {
+        // New thread (threads on) or New topic comes first, then a line
+        // (`divider("d-new")`)
+        if DesktopSidebarState.threadsOn(model: model, prefs: prefs) {
+            out.append(DesktopMenuEntry(id: "new-thread", title: String(localized: "New thread"), icon: .plus, kind: .action {
+                Task {
+                    if let created = await session.createRosterThread(for: bot) { model.open(.bot(created)) }
+                }
+            }))
+        } else {
             out.append(DesktopMenuEntry(id: "new-topic", title: String(localized: "New topic"), icon: .plus, kind: .action {
                 model.open(session.returning(to: .bot(bot)))
                 session.startNewTopic(bot)
             }))
         }
+        if gate.scope != .sidecar { out.append(.divider("d-new")) }
         out.append(pinBot(bot))
         if gate.scope == .sidecar {
             // Sidecar keeps Pin (the reference design). Electron remoteClient omits it.
@@ -347,6 +358,10 @@ struct DesktopSidebarMenus {
             return out
         }
         if let move = moveBot(bot) { out.append(move) }
+        // sidebar.select.start: the multi-select starts with this bot
+        out.append(DesktopMenuEntry(id: "select", title: String(localized: "Select"), icon: .listChecks, kind: .action {
+            model.selection.start(with: bot.id)
+        }))
         out.append(.divider("d1"))
         out.append(DesktopMenuEntry(id: "rename", title: String(localized: "Rename the bot"), icon: .pencil, kind: .action {
             model.renameDraft = bot.name
@@ -362,6 +377,13 @@ struct DesktopSidebarMenus {
             model.sharingBotLink = URL(string: "sagax://bot/\(bot.id)")
         }))
         out += primaryEntries(bot)
+        let floating = DesktopFloatingBots.shared.isFloating(bot.id)
+        out.append(DesktopMenuEntry(
+            id: floating ? "remove-from-desktop" : "put-on-desktop",
+            title: floating ? String(localized: "Remove from the desktop") : String(localized: "Put on the desktop"),
+            icon: .pictureInPicture,
+            kind: .action { DesktopFloatingBots.shared.toggle(bot.id, model: model, session: session) }
+        ))
         out.append(.divider("d2"))
         out.append(DesktopMenuEntry(id: "hide", title: String(localized: "Hide from sidebar"), icon: .eyeOff, kind: .action {
             prefs.hide(session, .bot, bot.id)

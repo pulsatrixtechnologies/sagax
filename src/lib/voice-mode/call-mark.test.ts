@@ -1,8 +1,9 @@
-// Every call view marks its turns as call turns the same way (call-mark.ts):
-// the live call and the older macOS dictation call.
+// Call attribution survives the realtime migration: work carries the call
+// on the server, and the remaining legacy hook keeps its ownership guards.
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
+import { spokenAnswer } from "./answer-budget";
 import { markVoiceCall, type VoiceCallMarkDeps } from "./call-mark";
 
 function fakeDeps(language?: string) {
@@ -52,14 +53,46 @@ describe("markVoiceCall", () => {
 describe("the call views", () => {
   const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
-  it("the older macOS call marks its turns like the live call: same hook, voiceCall on each send", () => {
+  it("marks realtime work on its authenticated bot and thread and never restores the dictation call", () => {
+    // 4cf8c3eb6: the macOS dictation/TTS call was removed on purpose.
     const view = read("../../components/CallView.tsx");
-    const older = view.slice(view.indexOf("function Call({ bot }"));
-    expect(older).toContain("useVoiceCallMark(bot.id, bot.threadId)");
-    expect(older).toMatch(/dispatch\(\{ type: "send", botId: bot\.id, text: said, threadId: bot\.threadId, voiceCall: \{ callId \} \}\)/);
-    // the bot's end_call hangs it up, and a written follow-up is never said
-    expect(older).toContain("VOICE_CALL_ENDED_EVENT");
-    expect(older).toContain("spokenReply(reply.text");
-    expect(read("../../components/voice-mode/LiveCall.tsx")).toContain("useVoiceCallMark(bot.id, bot.threadId)");
+    const host = view.slice(view.indexOf("export function CallEngineHost()"), view.indexOf("export function CallOverlay"));
+    expect(host).toContain("if (!realtimeCallReady(voiceMode)) return null;");
+    expect(host).toContain("return <RealtimeCallEngine key={bot.id} bot={bot} />;");
+    expect(host).not.toMatch(/\bLiveCallEngine\b|\bnew VoiceCall\b/);
+    const overlay = view.slice(view.indexOf("export function CallOverlay"), view.indexOf("const CALL_DOCK_EXIT_MS"));
+    expect(overlay).toContain("return null;");
+    expect(overlay).not.toMatch(/speechStart\(|spokenReply\(|\bnew VoiceCall\b/);
+
+    const engine = read("../../components/voice-mode/RealtimeCall.tsx");
+    expect(engine).toContain("voiceModeRealtimeUrl(bot.id, readVoiceModeSettings(), bot.threadId)");
+    expect(engine).toContain('engine.on("ended", () => endCall(bot.id))');
+    expect(engine).toContain("engine.hangUp();");
+    const route = read("../../../server/voice/voice-mode.ts");
+    expect(route).toContain("const link = deps.realtime.session(target, auth, callId);");
+    expect(route).toMatch(/new RealtimeCallBridge\(\{\s*callId,/);
+    const server = read("../../../server/index.ts");
+    const start = server.indexOf("  realtime: {");
+    const end = server.indexOf("  callSession: {", start);
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    const session = server.slice(start, end);
+    expect(session).toContain("acceptDirectSend({");
+    expect(session).toContain("botId: target.botId, threadId, text,");
+    expect(session).toContain("sender: messageSender(auth)");
+    expect(session).toContain("speaker: speakerFor(auth)");
+    expect(session).toMatch(/via: "call",\s*callId,\s*personPresent: true/);
+    expect(session).toContain("respondToCard({ auth, threadId, requestId, behavior, callId })");
+
+    // The remaining pipeline keeps the shared mark, bot hang-up and the
+    // spoken-prefix filter: a written follow-up is never read as speech.
+    const legacy = read("../../components/voice-mode/LiveCall.tsx");
+    expect(legacy).toContain("useVoiceCallMark(bot.id, bot.threadId)");
+    expect(legacy).toContain("VOICE_CALL_ENDED_EVENT");
+    expect(legacy).toContain('item.kind === "done" ? live.replyDone(item.text)');
+    const pipeline = read("./call.ts");
+    const replyDone = pipeline.slice(pipeline.indexOf("  replyDone(text: string)"), pipeline.indexOf("  replyDone(text: string)") + 600);
+    expect(replyDone).toContain("const kept = spokenAnswer(text).text;");
+    expect(spokenAnswer("The change is saved.\n---\nWritten follow-up only.").text).toBe("The change is saved.\n");
   });
 });

@@ -24,6 +24,8 @@ struct RichTableView: View {
     let plain: (String) -> String
 
     @State private var sort: RichSort?
+    /// The toolbar's fullscreen button (`TableDialog`).
+    @State private var fullscreen = false
     @State private var query = ""
     @State private var filtering = false
     @State private var draftQuery = ""
@@ -70,53 +72,79 @@ struct RichTableView: View {
         }
     }
 
-    /// The desktop table: hairline ring at 40 %, radius 8; a toolbar strip
-    /// (raised at 25 %, 33 tall) with "N rows" and CSV / Markdown; the grid
-    /// filling the width, 12.5 pt cells 10 x 6 in, a 50 % rule under the
-    /// header and 20 % between rows. A header tap sorts.
+    /// RichTable.tsx: a box (panel, hairline ring at 50 %, radius 8); a
+    /// toolbar strip (inset, `px-2.5 py-1.5`, 11 pt, a 40 % rule under it)
+    /// with Table2, "N rows", then Copy CSV, Copy Markdown and the
+    /// fullscreen button (lucide Copy and Maximize2, 11 pt); the grid with a
+    /// raised header row on a full hairline, 12.5 pt cells `px-2.5 py-2`
+    /// (37 pt rows) on 30 % rules. A header tap sorts.
     private func desktopBody(_ theme: DesktopTheme) -> some View {
         let order = self.order
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                Image(systemName: "tablecells")
-                    .font(.system(size: 11))
+                DesktopLucideGlyph(paths: DesktopLucide.table2, size: 12)
                     .foregroundStyle(theme.inkSecondary)
-                    .frame(width: 14, height: 14)
                 Text(query.isEmpty ? "\(table.rows.count) rows" : "\(order.count) of \(table.rows.count) rows")
                     .font(theme.font(11).monospacedDigit())
-                    .foregroundStyle(theme.inkSecondary)
+                    .foregroundStyle(theme.ink)
                 Spacer(minLength: 6)
-                DesktopBlockTool(icon: "doc.on.doc", title: "CSV") {
+                DesktopBlockTool(icon: "doc.on.doc", title: "CSV", lucide: DesktopLucide.copy) {
                     feedback.copy("csv", RichBlocks.tableToCSV(header: headerTexts, rows: order.map { texts[$0] }))
                 }
                 .accessibilityLabel(Text("Copy as CSV"))
-                DesktopBlockTool(icon: "doc.on.doc", title: "Markdown") {
+                DesktopBlockTool(icon: "doc.on.doc", title: "Markdown", lucide: DesktopLucide.copy) {
                     feedback.copy("md", RichBlocks.tableToMarkdown(header: headerTexts, rows: order.map { texts[$0] }, align: exportAlign))
                 }
                 .accessibilityLabel(Text("Copy as Markdown"))
+                DesktopBlockTool(icon: "arrow.up.left.and.arrow.down.right", title: nil, lucide: DesktopLucide.maximize2) {
+                    fullscreen = true
+                }
+                .accessibilityLabel(Text("Open the table in full screen"))
+                .accessibilityIdentifier("rich-table-fullscreen")
             }
-            .padding(.horizontal, 8)
-            .frame(height: 33)
-            .background(theme.raised.opacity(0.25))
-            .overlay(alignment: .bottom) { Rectangle().fill(theme.hairline.opacity(0.3)).frame(height: 1) }
-            DesktopTableGrid(
-                headers: table.headers.map { render($0, tail: false) },
-                rows: order.map { table.rows[$0].map { render($0, tail: false) } },
-                weights: desktopWeights(theme),
-                alignments: table.headers.indices.map(alignment),
-                sort: sort,
-                theme: theme
-            ) { column in sort = RichBlocks.nextSort(sort, column: column) }
+            .padding(.horizontal, 10)
+            .frame(height: 32.5)
+            .background(theme.inset)
+            .overlay(alignment: .bottom) { Rectangle().fill(theme.hairline.opacity(0.4)).frame(height: 1) }
+            desktopGrid(theme, order: order)
         }
         // inside the 1 pt border, as the desktop's box
         .padding(1)
-        .background(theme.card)
+        .background(theme.panel)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.4), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
         .contentShape(.contextMenuPreview, Rectangle())
         .contextMenu { menu(order) }
         .accessibilityElement(children: .contain)
         .modifier(RichIdentifier(identifier: identifier))
+        // `TableDialog`: the same table, large, over the app
+        .sheet(isPresented: $fullscreen) {
+            NavigationStack {
+                ScrollView([.vertical, .horizontal]) {
+                    desktopGrid(theme, order: order)
+                        .frame(minWidth: 640)
+                        .padding(20)
+                }
+                .background(theme.panel)
+                .navigationTitle(Text("Table"))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) { Button("Close table") { fullscreen = false } }
+                }
+            }
+            .environment(\.desktopTheme, theme)
+        }
+    }
+
+    private func desktopGrid(_ theme: DesktopTheme, order: [Int]) -> some View {
+        DesktopTableGrid(
+            headers: table.headers.map { render($0, tail: false) },
+            rows: order.map { table.rows[$0].map { render($0, tail: false) } },
+            weights: desktopWeights(theme),
+            alignments: table.headers.indices.map(alignment),
+            sort: sort,
+            theme: theme
+        ) { column in sort = RichBlocks.nextSort(sort, column: column) }
     }
 
     /// HTML's automatic table layout: each column's share of the width
@@ -383,12 +411,14 @@ struct DesktopTableGrid: View {
                             }
                             .foregroundStyle(theme.ink)
                             .padding(.horizontal, 10)
-                            .frame(width: widths[index], height: 32.5, alignment: Self.align(alignments, index))
+                            .frame(width: widths[index], height: Self.rowHeight, alignment: Self.align(alignments, index))
                         }
                         .buttonStyle(.plain)
                     }
                 }
-                .overlay(alignment: .bottom) { Rectangle().fill(theme.hairline.opacity(0.5)).frame(height: 1) }
+                // `bg-raised` and `border-b border-hairline` on the th
+                .background(theme.raised)
+                .overlay(alignment: .bottom) { Rectangle().fill(theme.hairline).frame(height: 1) }
                 ForEach(Array(rows.enumerated()), id: \.offset) { position, row in
                     HStack(spacing: 0) {
                         ForEach(Array(row.enumerated()), id: \.offset) { index, cell in
@@ -396,18 +426,21 @@ struct DesktopTableGrid: View {
                                 .foregroundStyle(theme.ink)
                                 .lineLimit(1)
                                 .padding(.horizontal, 10)
-                                .frame(width: index < widths.count ? widths[index] : 0, height: position == rows.count - 1 ? 32.5 : 33,
+                                .frame(width: index < widths.count ? widths[index] : 0, height: Self.rowHeight,
                                        alignment: Self.align(alignments, index))
                         }
                     }
                     .overlay(alignment: .bottom) {
-                        if position < rows.count - 1 { Rectangle().fill(theme.hairline.opacity(0.2)).frame(height: 1) }
+                        if position < rows.count - 1 { Rectangle().fill(theme.hairline.opacity(0.3)).frame(height: 1) }
                     }
                 }
             }
         }
-        .frame(height: 32.5 + CGFloat(rows.count) * 33 - (rows.isEmpty ? 0 : 0.5))
+        .frame(height: Self.rowHeight * CGFloat(rows.count + 1))
     }
+
+    /// `py-2` around a 20 pt line, and its 1 pt rule.
+    static let rowHeight: CGFloat = 37
 
     static func align(_ alignments: [MarkdownTableAlignment], _ index: Int) -> Alignment {
         switch index < alignments.count ? alignments[index] : .leading {

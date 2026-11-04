@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { routineRunCard } from "./routine-run-card.ts";
+import { routineRunCard, routineRunFallbackText } from "./routine-run-card.ts";
 import type { RoutineRun } from "./routines.ts";
 
 const REPORT = "Le suivi de 14 h 50 n'a rien écrit dans ConnectWise. J'ai libéré le verrou dispatch.";
@@ -56,4 +56,38 @@ describe("routineRunCard", () => {
     expect(routineRunCard(run({ status: "failed", error: "down", autoPaused: { failures: 5 } }), "main").autoPausedAfter).toBe(5);
     expect(routineRunCard(run({ status: "failed", error: "down" }), "main")).not.toHaveProperty("autoPausedAfter");
   });
+});
+
+// 2026-11-03 (the maintainer): the problem lines belong in the run detail (View run)
+// only, never in the conversation, the message's text included.
+describe("routineRunFallbackText", () => {
+  const problems = "Get message failed 2 times and never succeeded after: Microsoft Graph API error: 404 Not Found";
+
+  it("says a run completed with problems without their lines", () => {
+    const card = routineRunCard(run({ problems }), "main");
+    expect(card.problems).toBe(problems);
+    const text = routineRunFallbackText(card);
+    expect(text).toContain(REPORT);
+    expect(text).toContain("Completed with problems.");
+    expect(text).not.toContain("Graph API");
+    expect(text).not.toContain("failed 2 times");
+  });
+
+  it("says so for a run with no report too", () => {
+    const text = routineRunFallbackText(routineRunCard(run({ problems, output: undefined }), "main"));
+    expect(text).toBe("Routine “[Dispatch] New tickets” completed with problems");
+  });
+
+  it("keeps a failure's reason, which is not a problem line", () => {
+    expect(routineRunFallbackText(routineRunCard(run({ status: "failed", output: undefined, error: "The engine stopped" }), "main")))
+      .toBe("Routine “[Dispatch] New tickets” failed\n\nThe engine stopped");
+  });
+});
+
+// The card keeps readiness codes so the client translates the blocked reason.
+it("carries independent readiness checks for a blocked run", () => {
+  const readiness = [{ kind: "skills", ok: false, code: "skill_missing", params: { skill: "inbox-review" }, line: "Missing skill. Assign it." }] as const;
+  const card = routineRunCard({ id: "run-check", routineId: "r1", routineName: "Inbox", botId: "osprey", target: "bot", runOn: "maus", status: "blocked", scheduledFor: 1, createdAt: 1, manual: true, readiness: [...readiness] });
+  expect(card.readiness).toEqual(readiness);
+  expect(card.readiness).not.toBe(readiness);
 });

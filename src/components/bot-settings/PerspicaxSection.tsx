@@ -24,6 +24,9 @@ export interface PerspicaxAnswer {
   selected: Array<PerspicaxProfile & { heldByMe: boolean }>;
   available: PerspicaxProfile[];
   canEdit: boolean;
+  identities?: { supported: boolean; profiles: Array<{ slug: string; name: string; explicit_only: boolean }> };
+  actsAs?: { slug: string; name: string } | null;
+  identityUnavailable?: boolean;
 }
 
 export interface PerspicaxRow {
@@ -52,6 +55,8 @@ const ERROR_KEYS: Record<string, LocaleKey> = {
   profile_not_held: "botSettings.perspicax.error.profile_not_held",
   needs_edit: "botSettings.perspicax.error.needs_edit",
   unknown_profile: "botSettings.perspicax.error.unknown_profile",
+  params_invalid: "perspicax.identity.params_invalid",
+  identity_unavailable: "perspicax.identity.unavailable",
 };
 
 /** A disabled row is a profile this person cannot toggle. The name stays;
@@ -126,6 +131,7 @@ export function PerspicaxSection({ bot }: { bot: Pick<Bot, "id"> }) {
   const [answer, setAnswer] = useState<PerspicaxAnswer | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [draft, setDraft] = useState<string[]>([]);
+  const [actsAs, setActsAs] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<LocaleKey | null>(null);
   const [saved, setSaved] = useState(false);
@@ -139,6 +145,7 @@ export function PerspicaxSection({ bot }: { bot: Pick<Bot, "id"> }) {
         if (!alive) return;
         setAnswer(body);
         setDraft(body.selected.map((profile) => profile.id));
+        setActsAs(body.actsAs?.slug ?? "");
       })
       .catch(() => { if (alive) setLoadFailed(true); });
     return () => { alive = false; };
@@ -156,7 +163,7 @@ export function PerspicaxSection({ bot }: { bot: Pick<Bot, "id"> }) {
 
   const rows = perspicaxRows(answer, draft);
   const current = answer.selected.map((profile) => profile.id);
-  const changed = draft.length !== current.length || draft.some((id, index) => id !== current[index]);
+  const changed = draft.length !== current.length || draft.some((id, index) => id !== current[index]) || actsAs !== (answer.actsAs?.slug ?? "");
   const toggle = (id: string, on: boolean) => {
     setSaved(false);
     setError(null);
@@ -167,9 +174,10 @@ export function PerspicaxSection({ bot }: { bot: Pick<Bot, "id"> }) {
     setError(null);
     setSaved(false);
     try {
-      const body = await api<PerspicaxAnswer>(`/api/bots/${bot.id}/perspicax`, { method: "PUT", body: JSON.stringify({ profiles: draft }) });
+      const body = await api<PerspicaxAnswer>(`/api/bots/${bot.id}/perspicax`, { method: "PUT", body: JSON.stringify({ profiles: draft, ...(actsAs !== (answer.actsAs?.slug ?? "") ? { actsAs: actsAs || null } : {}) }) });
       setAnswer(body);
       setDraft(body.selected.map((profile) => profile.id));
+      setActsAs(body.actsAs?.slug ?? "");
       setSaved(true);
     } catch (failure) {
       setError(perspicaxErrorKey(failure instanceof ApiError ? failure.body?.code : undefined));
@@ -180,6 +188,21 @@ export function PerspicaxSection({ bot }: { bot: Pick<Bot, "id"> }) {
 
   return (
     <div className="flex flex-col gap-3" data-bot-perspicax>
+      {(answer.identities?.supported || answer.actsAs) && <label className="flex flex-col gap-2 text-[13px] text-ink">
+        <span>{t("perspicax.identity.label")}</span>
+        <select
+          className="rounded-lg border border-hairline bg-inset px-3 py-2 text-[13px] text-ink"
+          value={actsAs}
+          disabled={!answer.canEdit || saving}
+          onChange={(event) => { setActsAs(event.target.value); setSaved(false); setError(null); }}
+        >
+          <option value="">{t("perspicax.identity.default")}</option>
+          {answer.actsAs && !answer.identities?.profiles.some((profile) => profile.slug === answer.actsAs?.slug) && <option value={answer.actsAs.slug}>{answer.actsAs.name}</option>}
+          {answer.identities?.profiles.map((profile) => <option key={profile.slug} value={profile.slug}>{profile.name}</option>)}
+        </select>
+        <span className="text-[12px] text-ink-secondary">{t("perspicax.identity.help")}</span>
+      </label>}
+      {answer.identityUnavailable && <p role="status" className="text-[12px] text-ink-secondary">{t("perspicax.identity.unavailable")}</p>}
       <div className="flex items-center gap-1.5 text-[12.5px] text-ink-secondary">
         <span>{t("botSettings.perspicax.short")}</span>
         <HelpTip label={t("settings.moreAbout", { title: t("botSettings.perspicax.title") })}>

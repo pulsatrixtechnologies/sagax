@@ -229,6 +229,18 @@ public struct RoomInfoAccess: Hashable, Sendable {
     }
 }
 
+// MARK: - A room's call (GroupCallButton, src/components/GroupCallView.tsx)
+
+public enum RoomCallReadiness {
+    /// `CallTargetButton` with `requireExplicitVoices`: a room call speaks
+    /// with text to speech, so it waits until speech is set up and every
+    /// member has its own voice; until then the button wears the warning
+    /// dot and explains instead of calling.
+    public static func ready(speechConfigured: Bool, memberVoices: [String?]) -> Bool {
+        speechConfigured && !memberVoices.isEmpty && memberVoices.allSatisfy { ($0 ?? "").isEmpty == false }
+    }
+}
+
 // MARK: - Who answers (DefaultResponderSelect, src/lib/group-routing.ts)
 
 public enum RoomResponder {

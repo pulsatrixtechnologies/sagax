@@ -143,7 +143,7 @@ async function call(transcripts: string[]) {
     closePage: () => {},
     work: bot.work,
     respond: async () => true,
-    bot: { name: "Melonie" },
+    bot: { name: "Wren" },
     history: [{ role: "user", text: "Hi" }],
     log: () => {},
   });

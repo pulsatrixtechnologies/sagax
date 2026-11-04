@@ -40,7 +40,7 @@ const DECIDED_IN: Record<FullAccessSurface, string | null> = {
   "peer-contact": "server/index.ts",
   "proposal": "server/index.ts",
   "send": "server/index.ts",
-  "chat-engine": "server/drivers/openai-chat.ts",
+  "chat-engine": "server/drivers/openai-chat-turn.ts",
   "engine-bridge": null,
   "isolation": null,
   "exempt": null,
@@ -90,7 +90,7 @@ describe("every approval or choice card reads the Full access decision", () => {
     expect(hits.length).toBeGreaterThan(20);
     expect(hits.some((hit) => hit.file === "server/index.ts" && hit.emitter === "options card")).toBe(true);
     expect(hits.some((hit) => hit.file === "server/widgets/chat-widgets.ts")).toBe(true);
-    expect(hits.some((hit) => hit.file === "server/drivers/openai-chat.ts" && hit.emitter === "permission request")).toBe(true);
+    expect(hits.some((hit) => hit.file === "server/drivers/openai-chat-turn.ts" && hit.emitter === "permission request")).toBe(true);
   });
 
   it("carries a marker naming a registered surface on each emitter", () => {
@@ -174,7 +174,7 @@ describe("every approval or choice card reads the Full access decision", () => {
   });
 
   it("the chat-completions engines answer their own gate through the decision, not a bare level compare", () => {
-    const chat = readFileSync(join(SERVER, "drivers", "openai-chat.ts"), "utf8");
+    const chat = readFileSync(join(SERVER, "drivers", "openai-chat-turn.ts"), "utf8");
     expect(chat).toMatch(/fullAccessActs\(turn\.approvalMode\)/);
     expect(chat).not.toMatch(/turn\.approvalMode === "full" \|\| !shown\.ask/);
   });

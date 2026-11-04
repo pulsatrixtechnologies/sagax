@@ -34,7 +34,7 @@ import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from 
 import { freePortBlock } from "../testing/ports.ts";
 import { CLAUDE_HOST_TOOLS } from "../drivers/host-tools.ts";
 
-const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
+const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const posixOnly = describe.skipIf(process.platform === "win32");
 const ALICE: FakeOidcUser = { sub: "01J9FAALICE00000000000000A", email: "alice@example.test", name: "Alice", preferred_username: "alice", role: "admin" };
@@ -117,9 +117,10 @@ posixOnly("organization Full access", () => {
     dump = join(home, "claude-dump.json");
     writeFileSync(join(data, "config.json"), JSON.stringify({
       instances: {
-        claude: { driver: "claudeAgent", environment: { FAKE_CLAUDE_DUMP: dump }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        // fcce56775 (#1812): these fixtures use the organization API key.
+        claude: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP: dump }, config: { cli: FAKE_CLAUDE, requireApiKey: true, fullAuto: true } },
         // a turn that stays open, for the Primary Bot's tool calls (FA-4)
-        waiting: { driver: "claudeAgent", environment: { FAKE_CLAUDE_DUMP: dump, FAKE_CLAUDE_MODE: "hang" }, config: { cli: FAKE_CLAUDE, fullAuto: true } },
+        waiting: { driver: "claudeAgent", access: "api", environment: { FAKE_CLAUDE_DUMP: dump, FAKE_CLAUDE_MODE: "hang" }, config: { cli: FAKE_CLAUDE, requireApiKey: true, fullAuto: true } },
       },
     }));
     child = spawn(process.execPath, [join(SERVER_DIR, "index.ts")], {
@@ -310,7 +311,7 @@ posixOnly("organization Full access", () => {
   it("FA-6: the packaged desktop app on a remote organization server turns Full on, for the conversation and the bot (#1674)", async () => {
     // the app's own saves (src/state/store.tsx, loaded at run time: the
     // server's typecheck does not compile the app)
-    const appStore: string = "../src/state/store.tsx";
+    const appStore: string = "../../src/state/store.tsx";
     type Save = (...args: unknown[]) => Promise<{ id: string; approvalMode?: string }>;
     const { persistBotUpdate, persistTaskApproval } = await import(appStore) as { persistBotUpdate: Save; persistTaskApproval: Save };
     // the app's own transport on a remote page: the session cookie, no private channel

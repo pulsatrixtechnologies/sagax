@@ -1,5 +1,39 @@
 # Sagax agent notes
 
+## Desktop store subscriptions
+
+Shell selects routing and chrome; BotSurface and GroupSurface subscribe to
+conversation records at the leaves. ChatView, its viewport, focus and unread
+hooks use useStoreSelector scoped by thread or bot. Event handlers use
+useStoreGetter, not a captured workspace. Peer lists use view-slices.ts and
+never subscribe to other conversations' transcripts; ownership, grants,
+hiding and task navigation still invalidate them.
+TransientNotice groups fresh routine failures in one dismissible banner, with
+each run still available in its details. It remembers the whole burst and
+does not extend the first notice's timer as failures arrive. Access cards
+keep their separate settlement behavior. Regression: TransientNotice.dom.test.ts.
+StoreCommandsContext carries flush/refresh services independently of state,
+including inside BotEditorStore. Use useStoreCommands for them. Sidebar
+layout helpers take SidebarState; rows memoize record fields and every
+callback, and row selectors scope queues, motion and deletion to their bot.
+The profile foot selects counts, not whole run or bot lists.
+Render regression: src/components/StoreSubscriptions.renders.dom.test.ts
+(real desktop, scoped store, neutral fixture, no network or visible window).
+
+## Perspicax identities (2026-11-03)
+
+`perspicaxActAs` is an explicit per-bot profile choice (slug and human name),
+absent by default. Settings lists the person's held profiles through a
+short-lived `identity_switch {}` connection. `server/perspicax/perspicax-identity.ts`
+holds the turn's identity lease on the existing Perspicax MCP connection:
+switch before tools, re-list, renew before expiry, re-switch after a parent
+token refresh or `act_as_expired` and retry the refused call once, clear on
+turn end (including warm calls). A switch failure reports plain words and
+serves only reads for that turn. An older server without the tool stays
+unchanged. Never automatically choose an explicit-only/redacted profile.
+Tool and Twilio catalogues belong to an entry, never a global profile cache.
+Tests: `server/perspicax/perspicax-identity.test.ts` (fake MCP, no network).
+
 Before every merge (and before every push, through the pre-push hook), run
 `pnpm verify:merge`: the local gate (lint, typecheck, locale catalogs, source
 terms, contrast, unused files via `pnpm check:unused`, the guard tests that
@@ -180,6 +214,26 @@ ledger and aside queue are gone. Still off the runtime: `run_with_engine`
 `server/runtime-delivery-convergence.e2e.test.ts` (checks invariants over
 the server's `runtime.db`), `server/runtime/runtime.test.ts`. Evidence and
 route table: `docs/plans/grok-convergence-runtime-evidence.md`.
+
+## Peer receipts never name a teammate made private (2026-11-02)
+
+Isolation between people. A bot record is patched in place, so a teammate
+read before an approval card or a wait already carries its new name after
+it. Every receipt, `toBotName`, message, chip and report written after a
+wait reads the name at that moment, and only while the sender can still
+reach the teammate: `receiptName` (`server/peers/peer-delivery.ts`, canReachPeer)
+for ask_bot, delegate_bot and coordinate_bots; `teammateNameFor`
+(`server/index.ts`, the route check that withholds a result) for the
+report chip, the "Resumed with" chip and notification, and the resume's
+report names. A receipt then keeps only the `botId` the caller sent (no
+`botName`; the renderer falls back to the id); a person-facing chip says
+"Teammate". After an approval, `delegateOnRuntime` and coordinate_bots check
+the route again before any thread or work touches the teammate (ask_bot did
+until lot 3 moved it onto the runtime, 0.8.24). Never name a peer from a
+record read before an await. Tests: `server/routes/internal-bot-chat.test.ts`,
+`server/peers/peer-delivery.test.ts`, `server/peers/peer-approval.e2e.test.ts`,
+`server/direct-coordination.e2e.test.ts` (withheld report) and
+`server/org/org-sharing.e2e.test.ts` S3-13 (two people).
 
 ## Peer completion: done_when and no ack-as-done (2026-10-30, #1818)
 
@@ -7575,6 +7629,33 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
   Screenshots: `node scripts/capture/bot-panel-coding.mjs` (headless, the
   gallery `src/gallery/bot-panel-coding.html`).
 
+## Coding chat: a coding task opens where the chat is (2026-11-03)
+
+Decision (JC): a row of Details > Coding no longer opens the task sheet in the
+side panel. It opens as a chat over the chat column (`AppState.codingChat`,
+actions `openCodingChat` / `closeCodingChat`, drawn by ChatView like
+`routineRunSheet`; a routine run, another bot or a closing panel closes it),
+the same family as the routine run sheet, drawn for development
+(`src/components/coding/CodingChat.tsx`, pure reading in
+`src/lib/coding-chat.ts`, UX in `docs/design/ux-reference-grokbot-cursor.md`
+2.24). Source: the task's own thread (`useSideTranscript`: the messages'
+`tool.input` / `tool.output` previews) and its activity entry (polled every
+3 s while it runs, and 30 s after a follow-up; a reload keeps the screen).
+A task without a readable thread (a cloud agent, a private run) shows the
+entry's steps. Commands are terminal blocks with test counts (vitest, jest,
+pytest, cargo, go, node:test, mocha); Edit / MultiEdit / Write, apply_patch
+and Codex file changes are diffs per file (`git diff` output too); reads are
+file chips. A file edit's arguments keep up to `EDIT_PREVIEW_MAX` (24,000)
+characters (`inputPreviewMax`, server/tools/tool-summary.ts) so a modest
+edit is not cut in half. Paths read relative to the task's folder, else as
+their last two segments; UUIDs are masked. Continue posts to
+`/api/bots/:id/messages` with the task's `threadId` (`busyMode: "steer"`
+while it runs). Launched coding agents and the history deep link open it
+too; routine runs and sub-agents keep their own sheets. Tests:
+`src/lib/coding-chat.test.ts`, `src/components/coding/CodingChat.dom.test.ts`,
+`ActivitySection.coding.dom.test.ts`. Captures: `node
+scripts/capture/coding-chat.mjs` (gallery `src/gallery/coding-chat.html`).
+
 ## Parallel tasks (sending while the bot works, 2026-10-02)
 
 A message sent to a busy 1:1 conversation carries `busyMode`
@@ -8862,7 +8943,10 @@ apps, so those paths stay ours on every later merge. To repeat:
   brought back, which settles their modify/delete conflicts; `--check` only
   lists them. To restore one of those files on purpose, remove its line
   first (`scripts/upstream-drop.test.mjs` fails while a listed path is
-  tracked).
+  tracked). A line `old -> new` is a file Sagax moved (server/ by domain):
+  its old path coming back carries an upstream change git did not follow
+  through the rename, so the script never removes it and lists where to
+  port it (exit 1); port the change, then `git rm` the old path.
 - On conflict our behavior wins and upstream improvements are layered in.
   Merge `src/locales/*.json` and `source-hashes.json` as a union of keys and
   run `pnpm i18n:check`.
@@ -10151,3 +10235,32 @@ a message's content on the car's screen. Tests:
 The main app's localized `ios/App/{Base,en,fr,pt-BR}.lproj/AppIntentVocabulary.plist`
 files supply example phrases for both supported Siri intents. Keep each
 locale aligned with `App/Localizable.xcstrings`; Base is the English fallback.
+
+## Routine readiness and interruption recovery (2026-11-04)
+
+Every defined routine checks its engine/account, scoped skills, MCP mounts,
+Perspicax profile and required computer before creating an execution task.
+`server/routines/routine-readiness.ts` probes beside the scheduler pass, with
+independent timeouts below five seconds and a 60-second bot/account cache.
+Reservations and engine prewarm use the same checks before creating a task.
+Unknown facts pass; explicit refusals block. `requires` names bounded explicit
+skills, MCP servers and a computer requirement. Run snapshots retain checks
+and stable codes for EN/FR rendering.
+Probe errors pass for a run and remain not ready in an on-demand check. On an
+organization server with a Flow declaration, a Flow routine reads its product
+skills through its bot's Perspicax profile even when the local install is held
+back; no local skill copy is required. A missing profile is explained directly.
+Readiness timestamp params carry ISO UTC; the viewer formats the local time
+and includes the date outside today. Blocked owner notices quote the reason
+and name the routine, once per bot and cause. Engine refusals, including the
+first refusal, never count toward the automatic pause (issues #1945 to #1948).
+`POST /api/routines/:id/check`,
+`run_routine` with `action: "check"`, and the internal routine bridge share
+Run now authorization and create no run. The run HTTP endpoint also accepts
+`action: "check"` for clients forwarding routine tools.
+
+`engine-refusals.ts` remembers account refusals in this process only: credits
+for 30 minutes, usage limits until their reset (30 minutes when unknown),
+sign-out until a verified sign-in. A newer completed turn clears that account.
+Admission skips are blocked, and interrupted runs marked `ROUTINE_RESTARTED`
+never count in failure streaks. Reconnect waits survive restarts.

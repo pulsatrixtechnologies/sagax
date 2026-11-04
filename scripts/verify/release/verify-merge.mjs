@@ -80,6 +80,8 @@ const GUARD_TESTS = [
   "server/drivers/tool-scope-coverage.test.ts",
   // #1905: every approval or choice card reads the one Full access decision
   "server/approvals/full-access-gate.guard.test.ts",
+  // #1386: docs/ media must be cited; no large GIF; PR proofs on pr-assets
+  "scripts/testing/docs-media.guard.test.ts",
 ];
 
 const LIGHT_CHECKS = [

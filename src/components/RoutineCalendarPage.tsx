@@ -201,6 +201,8 @@ type EventSeed = {
   mode?: "view" | "edit";
   /** A routine not on the server yet (a new bot's draft): edit only, no Pause, no trash. */
   unmanaged?: boolean;
+  /** 2026-11-03: a new routine made from a group's panel is that group's team goal. */
+  groupId?: string;
 };
 
 function activeRoomMembers(group: Group | undefined, bots: Bot[]): Bot[] {
@@ -412,7 +414,7 @@ function InstructionText({ text }: { text: string }) {
   }, [text]);
   if (!text.trim()) return <p data-routine-instruction-text className="text-[13.5px] text-ink-tertiary">{t("routineEditor.none")}</p>;
   return <div className="min-w-0">
-    <div ref={body} data-routine-instruction-text data-folded={!open && long ? "" : undefined} className={cn("relative min-w-0 break-words text-[13.5px] leading-relaxed text-ink [&_a]:no-underline", !open && "max-h-[60vh] overflow-hidden")}>
+    <div ref={body} data-routine-instruction-text data-folded={!open && long ? "" : undefined} className={cn("relative min-w-0 break-words text-[13.5px] leading-relaxed text-ink [&_a]:no-underline", !open && "max-h-[35vh] overflow-hidden")}>
       <ChatMarkdown text={text} />
       {!open && long && <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-panel to-transparent" />}
     </div>
@@ -556,6 +558,9 @@ function EventEditorBody({
   const [intervalTimeoutDefaultApplied, setIntervalTimeoutDefaultApplied] = useState(Boolean(template));
   const [overlap, setOverlap] = useState<"skip" | "queue">(template?.overlap ?? "skip");
   // 2026-10-26: failed runs in a row that pause this routine (0 never).
+  const [requiredSkills, setRequiredSkills] = useState(template?.requires?.skills?.join(", ") ?? "");
+  const [requiredMcp, setRequiredMcp] = useState(template?.requires?.mcpServers?.join(", ") ?? "");
+  const [requiresComputer, setRequiresComputer] = useState(template?.requires?.computer ?? false);
   const [autoPauseAfter, setAutoPauseAfter] = useState(() => template ? routineAutoPauseAfter(template) : ROUTINE_AUTO_PAUSE_DEFAULT);
   const [continuity, setContinuity] = useState(Boolean(template?.continuity));
   // Only when I'm here (server/routines/routine-away.ts): off unless chosen.
@@ -601,8 +606,8 @@ function EventEditorBody({
     : toLocalDateInput(addDays(startOfDay(Math.max(Date.now(), initialAt)), 7)));
   const [botIds, setBotIds] = useState(lockedBotId ? [lockedBotId] : template ? [template.botId] : existingCall?.botIds ?? seed.botIds);
   const selectBots = (ids: string[]) => setBotIds(ids);
-  const [routineTarget, setRoutineTarget] = useState<RoutineTarget>(template?.target ?? "bot");
-  const [groupId, setGroupId] = useState(template?.groupId ?? "");
+  const [routineTarget, setRoutineTarget] = useState<RoutineTarget>(template?.target ?? (seed.groupId ? "room-goal" : "bot"));
+  const [groupId, setGroupId] = useState(template?.groupId ?? seed.groupId ?? "");
   const [runOn, setRunOn] = useState<RoutineRunOn>(template?.runOn ?? defaultRunOn ?? "maus");
   const [attachments, setAttachments] = useState<Array<RoutineContextAttachment | CalendarCallAttachment>>(
     template?.target === "room-goal" ? [] : template?.attachments ?? existingCall?.attachments ?? [],
@@ -804,6 +809,11 @@ function EventEditorBody({
           timeoutMinutes,
           overlap,
           autoPauseAfter,
+          requires: requiredSkills.trim() || requiredMcp.trim() || requiresComputer ? {
+            skills: requiredSkills.split(",").map(name => name.trim()).filter(Boolean),
+            mcpServers: requiredMcp.split(",").map(name => name.trim()).filter(Boolean),
+            computer: requiresComputer,
+          } : null,
           // Room goals can't carry a report yet, and a one-time run has no next run.
           continuity: routineTarget === "bot" && repeatsOnClock && continuity,
           onlyWhenPresent,
@@ -921,6 +931,9 @@ function EventEditorBody({
     recurrence === "interval" && intervalWindow === "custom" ? t("routineEditor.summary.intervalHours") : null,
     recurrence === "interval" && intervalEnd === "on-date" ? t("routineEditor.summary.intervalEnds", { date: intervalEndDate }) : null,
     watchAllowed && watchDraft.on ? t("routineWatch.title") : null,
+    requiredSkills.trim() ? t("routineReadiness.requiresSkills") : null,
+    requiredMcp.trim() ? t("routineReadiness.requiresMcp") : null,
+    requiresComputer ? t("routineReadiness.requiresComputer") : null,
     timeoutMinutes != null ? t("routineCalendar.stopsAfter", { duration: durationLabel(timeoutMinutes) }) : null,
     repeatsOnClock && overlap === "queue" ? t("routines.overlapQueue") : null,
     repeatsOnClock && autoPauseAfter !== ROUTINE_AUTO_PAUSE_DEFAULT ? routineAutoPauseOption(autoPauseAfter) : null,
@@ -935,7 +948,7 @@ function EventEditorBody({
     setMoreOpen(open);
     rememberRoutineEditorMoreOpen(open);
   };
-  const editorSnapshot = JSON.stringify([kind, name, description, recurrence, limitReset, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
+  const editorSnapshot = JSON.stringify([requiredSkills, requiredMcp, requiresComputer, kind, name, description, recurrence, limitReset, scheduleDraft, date, startTime, weekdays, durationMinutes, timeoutMinutes, overlap, autoPauseAfter, continuity, onlyWhenPresent, deleteWhenFinished, watchDraft, postResults, mailAlias, timingMode, earlyMinutes, lateMinutes, intervalMinutes, intervalDays, intervalWeekdays, intervalWindow, intervalWindowStart, intervalWindowEnd, intervalEnd, intervalEndDate, botIds, routineTarget, groupId, runOn, attachments.map((attachment) => attachment.id), runAs]);
   const openedSnapshot = useRef(editorSnapshot);
   const dirty = editorSnapshot !== openedSnapshot.current;
   const requestClose = async () => {
@@ -1076,11 +1089,14 @@ function EventEditorBody({
             <section data-routine-editor-section="what" className="min-w-0 space-y-1">
               <div className="flex min-w-0 items-center justify-between gap-2">
                 <h3 className={PANEL_LABEL}>{t("routineEditor.instruction")}</h3>
-                {existingRoutine && !readOnly && formatBot && <FormatWithAiButton bot={formatBot} routine={existingRoutine} />}
+                {/* 2026-11-03 (audit N-1): view mode only. In edit mode the form
+                    keeps its own copy of the instruction, so Save would put the
+                    old text back over the bot's reformatted one. */}
+                {viewing && existingRoutine && !readOnly && formatBot && <FormatWithAiButton bot={formatBot} routine={existingRoutine} />}
               </div>
               {viewing
                 ? <InstructionText text={description} />
-                : <MarkdownEditor compact expandable toolbarOnFocus value={description} onChange={setDescription} minHeight={panel ? 120 : 160} maxHeight={panel ? "calc(100vh - 220px)" : "70vh"} dataField="routine-instructions" className="-mx-3 min-w-0" ariaLabel={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} placeholder={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} />}
+                : <MarkdownEditor compact expandable toolbarOnFocus value={description} onChange={setDescription} minHeight={panel ? 120 : 160} maxHeight={panel ? "40vh" : "70vh"} dataField="routine-instructions" className="-mx-3 min-w-0" ariaLabel={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} placeholder={isRoomGoal ? t("routineCalendar.teamAccomplish") : t("routineCalendar.botInstructions")} />}
             </section>
 
             <section data-routine-editor-section="when" className="min-w-0 space-y-1">
@@ -1312,6 +1328,13 @@ function EventEditorBody({
                 options={[{ value: "", label: t("settings.card.noLimit") }, ...EVENT_DURATION_OPTIONS.map((minutes) => ({ value: String(minutes), label: durationLabel(minutes) })), ...(timeoutMinutes != null && !EVENT_DURATION_OPTIONS.includes(timeoutMinutes) ? [{ value: String(timeoutMinutes), label: durationLabel(timeoutMinutes) }] : [])]} />
               {repeatsOnClock && <PanelSelect<"skip" | "queue"> data-routine-overlap="" label={t("routines.overlapLabel")} hint={t("routineEditor.hint.overlap")} help={t(overlap === "queue" ? "routines.overlapQueueHelp" : "routines.overlapSkipHelp")} viewing={viewing} value={overlap} onChange={setOverlap}
                 options={[{ value: "skip", label: t("routines.overlapSkip") }, { value: "queue", label: t("routines.overlapQueue") }]} />}
+              <PanelRow label={t("routineReadiness.requiresSkills")} help={t("routineReadiness.requiresHelp")}>
+                {viewing ? <PanelValue>{requiredSkills || t("routineEditor.none")}</PanelValue> : <input aria-label={t("routineReadiness.requiresSkills")} className={cn(PANEL_INPUT, "w-full")} value={requiredSkills} onChange={event => setRequiredSkills(event.target.value)} />}
+              </PanelRow>
+              <PanelRow label={t("routineReadiness.requiresMcp")} help={t("routineReadiness.requiresHelp")}>
+                {viewing ? <PanelValue>{requiredMcp || t("routineEditor.none")}</PanelValue> : <input aria-label={t("routineReadiness.requiresMcp")} className={cn(PANEL_INPUT, "w-full")} value={requiredMcp} onChange={event => setRequiredMcp(event.target.value)} />}
+              </PanelRow>
+              <PanelToggle label={t("routineReadiness.requiresComputer")} viewing={viewing} checked={requiresComputer} onChange={setRequiresComputer} />
               {repeatsOnClock && <PanelSelect data-routine-auto-pause="" label={t("routines.autoPause.label")} hint={t("routineEditor.hint.autoPause")} help={t("routines.autoPause.help")} viewing={viewing} value={String(autoPauseAfter)} onChange={(value) => setAutoPauseAfter(Number(value))}
                 options={routineAutoPauseChoices(autoPauseAfter).map((count) => ({ value: String(count), label: routineAutoPauseOption(count) }))} />}
               {!isRoomGoal && repeatsOnClock && <PanelToggle data-routine-continuity="" label={t("routines.continuityLabel")} hint={t("routineEditor.hint.continuity")} help={t("routines.continuityHelp")} viewing={viewing} checked={continuity} onChange={setContinuity} />}
@@ -2421,11 +2444,6 @@ export function EventDetails({
     onClose();
   };
   const toggleRoutine = () => { if (routine) void invoke(`/api/routines/${routine.id}`, "PATCH", { enabled: !routine.enabled }); };
-  const openLogs = () => {
-    const routineId = routine?.id ?? run?.routineId;
-    dispatch({ type: "showRoutines", section: "logs", ...(routineId ? { routineId } : {}), botId: routine?.botId ?? run?.botId });
-    onClose();
-  };
 
   // 2026-11-01 (no modals): a routine, its run and a calendar call all open
   // in the right detail panel (DetailPanel.tsx), the calendar usable beside it.
@@ -2438,13 +2456,10 @@ export function EventDetails({
         working={working || starting}
         onClose={canGoBack ? goBack : onClose}
         onStop={() => void invoke(`/api/routine-runs/${run.id}/cancel`)}
-        onRunAgain={runRoutineNow}
-        onLogs={openLogs}
-        onOpenConfiguration={() => onEdit("view")}
         onOpenRoom={onOpenRoom}
       />
     );
-    // Chat column host present: portal into it like Melonie <-> Katarina.
+    // Chat column host present: portal into it like Wren <-> Osprey.
     // Automations alone: the detail panel holds it.
     if (getExchangeColumnHost()) return exchange;
     return <DetailPanel bare label={t("routineCalendar.eventDetails")} onClose={onClose} data-event-details="run">{exchange}</DetailPanel>;
@@ -2591,6 +2606,7 @@ export function RoutineEditor({
   onDismiss,
   onDeleted,
   onDuplicate,
+  group,
 }: {
   routine?: Routine;
   /** 2026-10-29: a new routine prefilled from this one (Duplicate). */
@@ -2613,10 +2629,12 @@ export function RoutineEditor({
   onDeleted?: () => void;
   /** Advanced's Duplicate. */
   onDuplicate?: (routine: Routine) => void;
+  /** A new routine from a group's panel: that group's team goal, led by `lead`. */
+  group?: { id: string; leadBotId?: string };
 }) {
   const source = routine ?? copyOf;
   const at = routineEditorAt(source);
-  return <EventEditor seed={{ kind: "routine", at, durationMinutes: source?.durationMinutes ?? 30, botIds: lockedBotId ? [lockedBotId] : source ? [source.botId] : [], routine, ...(copyOf && !routine ? { copyOf } : {}), ...(folder && !routine ? { folder } : {}), ...(mode ? { mode } : {}), ...(!manage ? { unmanaged: true } : {}) }} bots={bots} lockedBotId={lockedBotId} defaultRunOn={defaultRunOn} presentation={presentation} onClose={onClose} onDismiss={onDismiss} onDeleted={onDeleted} onDuplicate={onDuplicate} onSavedCall={() => {}} />;
+  return <EventEditor seed={{ kind: "routine", at, durationMinutes: source?.durationMinutes ?? 30, botIds: lockedBotId ? [lockedBotId] : source ? [source.botId] : group?.leadBotId ? [group.leadBotId] : [], routine, ...(copyOf && !routine ? { copyOf } : {}), ...(group && !source ? { groupId: group.id } : {}), ...(folder && !routine ? { folder } : {}), ...(mode ? { mode } : {}), ...(!manage ? { unmanaged: true } : {}) }} bots={bots} lockedBotId={lockedBotId} defaultRunOn={defaultRunOn} presentation={presentation} onClose={onClose} onDismiss={onDismiss} onDeleted={onDeleted} onDuplicate={onDuplicate} onSavedCall={() => {}} />;
 }
 
 /** The slices of the store the Automations page reads (2026-11-02): it
@@ -3143,7 +3161,7 @@ export const RoutinesPage = memo(function RoutinesPage({ onBack: _onBack, onOpen
           {groupBy === "none" ? <RoutineList routines={filteredRoutines} viewerPrincipalId={state.config?.viewer?.principalId ?? null} runs={scopedRuns} bots={state.bots} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpen={openRoutine} onLogs={openLogs}
             onRowMenu={(routine, at, trigger) => setRowMenu({ routine, x: at.x, y: at.y, trigger })}
             renamingId={renamingId} onRenameStart={(routine) => setRenamingId(routine.id)} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)} />
-            : <RoutineGroupedList key={groupBy} groupBy={groupBy} routines={filteredRoutines} viewerPrincipalId={viewerId} runs={scopedRuns} bots={state.bots} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpen={openRoutine}
+            : <RoutineGroupedList key={groupBy} groupBy={groupBy} routines={filteredRoutines} allRoutines={scopedRoutines} viewerPrincipalId={viewerId} runs={scopedRuns} bots={state.bots} loading={(scoped.live ? state.routinesLoadState === "loading" : scoped.loading) && filteredRoutines.length === 0} error={scoped.live ? state.routinesLoadState === "error" : scoped.error} onOpen={openRoutine}
               onCreate={createInGroup} onDuplicate={duplicateRoutine}
               onRowMenu={(routine, at, trigger) => setRowMenu({ routine, x: at.x, y: at.y, trigger })}
               renamingId={renamingId} onRenameStart={(routine) => setRenamingId(routine.id)} onRenameSave={renameRoutine} onRenameCancel={() => setRenamingId(null)} />}

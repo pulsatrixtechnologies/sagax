@@ -11,31 +11,31 @@ const VOICE_WEBHOOK = "9fe3376c-7c0c-4a19-9a8d-5475c52ebf8f";
 const VOICE_ROUTINE = "voice-routine-id";
 const INCOMING = "20c7ee6e-effe-48e8-9576-8c0ff3ced59c";
 
-const melonie = "bot-melonie";
+const wren = "bot-wren";
 const sibling = "bot-ember";
 
 const routines = [
-  { id: INCOMING, botId: melonie, name: "Incoming texts", enabled: false, schedule: { type: "webhook" as const } },
-  { id: VOICE_ROUTINE, botId: melonie, name: "Voice line requests from JC", enabled: false, schedule: { type: "webhook" as const } },
-  { id: "nightly", botId: melonie, name: "Nightly", enabled: true, schedule: { type: "cron" as const } },
+  { id: INCOMING, botId: wren, name: "Incoming texts", enabled: false, schedule: { type: "webhook" as const } },
+  { id: VOICE_ROUTINE, botId: wren, name: "Voice line requests from JC", enabled: false, schedule: { type: "webhook" as const } },
+  { id: "nightly", botId: wren, name: "Nightly", enabled: true, schedule: { type: "cron" as const } },
   { id: "on-ember", botId: sibling, name: "Tunnel watch", enabled: true, schedule: { type: "interval" as const } },
 ];
 
 const webhooks = [
-  { id: "hook-incoming", botId: melonie, routineId: INCOMING, name: "Incoming texts", enabled: false },
-  { id: VOICE_WEBHOOK, botId: melonie, routineId: VOICE_ROUTINE, name: "Voice line requests from JC", enabled: false },
-  { id: "standalone-phone", botId: melonie, name: "Bot phone", enabled: true, source: { type: "telephony" } },
+  { id: "hook-incoming", botId: wren, routineId: INCOMING, name: "Incoming texts", enabled: false },
+  { id: VOICE_WEBHOOK, botId: wren, routineId: VOICE_ROUTINE, name: "Voice line requests from JC", enabled: false },
+  { id: "standalone-phone", botId: wren, name: "Bot phone", enabled: true, source: { type: "telephony" } },
 ];
 
 describe("resolveRoutineById (#1891 list_routines routine_id)", () => {
   it("loads a webhook routine by its routine id (Incoming texts)", () => {
-    const found = resolveRoutineById({ routineId: INCOMING, botId: melonie, routines, webhooks });
+    const found = resolveRoutineById({ routineId: INCOMING, botId: wren, routines, webhooks });
     expect(found).toEqual({ kind: "found", routine: routines[0], via: "routine" });
   });
 
   it("loads the same routine when the list page id is the owned webhook id (Voice line)", () => {
     // Failing path before the fix: own.find(r => r.id === VOICE_WEBHOOK) missed.
-    const found = resolveRoutineById({ routineId: VOICE_WEBHOOK, botId: melonie, routines, webhooks });
+    const found = resolveRoutineById({ routineId: VOICE_WEBHOOK, botId: wren, routines, webhooks });
     expect(found).toMatchObject({
       kind: "found",
       via: "webhook",
@@ -47,7 +47,7 @@ describe("resolveRoutineById (#1891 list_routines routine_id)", () => {
   it("loads a sibling bot's routine when that bot is reachable (Automations Mine id)", () => {
     const found = resolveRoutineById({
       routineId: "on-ember",
-      botId: melonie,
+      botId: wren,
       routines,
       webhooks,
       reachableBotIds: [sibling],
@@ -58,17 +58,17 @@ describe("resolveRoutineById (#1891 list_routines routine_id)", () => {
   it("refuses another person's bot even when its id is known", () => {
     const found = resolveRoutineById({
       routineId: "on-ember",
-      botId: melonie,
+      botId: wren,
       routines,
       webhooks,
-      // reachableBotIds omitted: only Melonie's own bot
+      // reachableBotIds omitted: only Wren's own bot
     });
     expect(found).toEqual({ kind: "missing" });
   });
 
   it("trims the id and ignores an empty one", () => {
-    expect(resolveRoutineById({ routineId: `  ${INCOMING}  `, botId: melonie, routines, webhooks }).kind).toBe("found");
-    expect(resolveRoutineById({ routineId: "   ", botId: melonie, routines, webhooks })).toEqual({ kind: "missing" });
+    expect(resolveRoutineById({ routineId: `  ${INCOMING}  `, botId: wren, routines, webhooks }).kind).toBe("found");
+    expect(resolveRoutineById({ routineId: "   ", botId: wren, routines, webhooks })).toEqual({ kind: "missing" });
   });
 
   it("does not treat a standalone telephony webhook without a routine as a routine", () => {
@@ -76,7 +76,7 @@ describe("resolveRoutineById (#1891 list_routines routine_id)", () => {
     // list_routines still names routines. The caller gets missing, not a false hit.
     expect(resolveRoutineById({
       routineId: "standalone-phone",
-      botId: melonie,
+      botId: wren,
       routines,
       webhooks,
     })).toEqual({ kind: "missing" });

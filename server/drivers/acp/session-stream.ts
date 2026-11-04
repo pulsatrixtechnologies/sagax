@@ -141,6 +141,11 @@ export function createStreamHandlers(deps: StreamHandlerDeps) {
             }
             case "tool_call_update": {
               trackRunningTool(current, u);
+              // grok 1.0.62 sends use_tool's arguments on a later update: keep
+              // them for the permission ask that may follow (#1931)
+              if (!finished && support.onToolCompleted && typeof u.toolCallId === "string" && u.rawInput !== undefined) {
+                (current.toolInputs ??= new Map()).set(u.toolCallId, u.rawInput);
+              }
               if (finished) toolEnded((typeof u.toolCallId === "string" && u.toolCallId) ? u.toolCallId : current.unkeyedToolIds.shift());
               break;
             }

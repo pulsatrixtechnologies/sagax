@@ -1,7 +1,7 @@
 // open_connector_setup (shared/connector-setup.ts): the person asks to
 // connect a connector, the bot makes one call, the chat shows a card whose
 // button opens the engine's sign-in page in the person's browser.
-import type { ToolCallContext, ToolCallResult } from "./agents-call.ts";
+import type { ToolCallContext, ToolCallResult } from "./agents-call-types.ts";
 import type { Json } from "./agents-client.ts";
 
 export const CONNECTOR_SETUP_TOOL_NAME = "open_connector_setup";

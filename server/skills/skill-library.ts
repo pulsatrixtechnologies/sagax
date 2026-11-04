@@ -13,7 +13,7 @@ import { writeFileAtomic } from "../atomic.ts";
 import { DATA_DIR } from "../config.ts";
 import { installationCapabilityBridge, type InstallationCapabilityBridge } from "../capabilities/installation-capability-bridge.ts";
 import { isSkillName, parseSkillMd, SKILL_FILE_MAX_BYTES } from "../../shared/skill-md.ts";
-import type { SkillPackageStamp } from "./skills.ts";
+import type { SkillPackageStamp } from "./skill-package-stamp.ts";
 
 export interface SkillManifest {
   id: string;

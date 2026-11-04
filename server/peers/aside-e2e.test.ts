@@ -2,17 +2,20 @@
 // mid-turn on a seam-capable engine folds into the RUNNING turn. The
 // envelope physically enters the live session through Adapter.steer, the
 // transcript records it as peer context (never steering, never a
-// delegation), the asker gets an honest receipt, and the turn settles with
+// delegation), the external asker gets an honest receipt, and the turn settles with
 // the aside folded into its reply — once, not replayed at the settle
-// boundary. The no-seam degradation (busy ACP peer → delegation queue)
-// stays pinned by the ask_bot busy-fallback e2e in comms.test.ts.
+// boundary. The no-seam degradation (busy peer to runtime consultation)
+// stays pinned by the busy-peer e2e in comms.test.ts.
 //
 // POSIX-gated like the other CLI e2es (the fakes are shebang scripts).
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { once } from "node:events";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createInterface } from "node:readline";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
@@ -52,27 +55,31 @@ posixOnly("peer aside lane e2e", () => {
       await new Promise((r) => setTimeout(r, 250));
     }
   };
-  // Enter through a routine the way the legacy comms e2es do: the asker's
-  // turn reaches the peer through the injected agents proxy (list_bots →
-  // ask_bot), which is the chain the packaged app uses.
-  const startRoutine = async (botId: string, text: string) => {
-    const created = await api("POST", "/api/routines", {
-      name: "Aside lane fixture",
-      prompt: text,
-      botId,
-      enabled: false,
-      schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 3_600_000 },
+  // 84841aeed: routine asks are runtime consultations. The aside lane is
+  // an external caller's real agents MCP call into a turn already running.
+  const externalBridge = (botId: string, threadId: string) => {
+    const token = `aside-runtime-${randomUUID()}`;
+    writeFileSync(join(home, ".sagax", "external-runtimes.json"), JSON.stringify({ [botId]: { token, threadId } }), { mode: 0o600 });
+    const proxy = spawn(process.execPath, [join(SERVER_DIR, "..", "drivers", "agents-proxy.ts")], {
+      env: { ...(process.env.PATH ? { PATH: process.env.PATH } : {}), HOME: home, USERPROFILE: home,
+        SAGAX_HARNESS_URL: BASE, SAGAX_BOT_ID: botId, SAGAX_THREAD_ID: threadId,
+        SAGAX_COMMS_TOKEN: token, SAGAX_EXTERNAL_RUNTIME: "1" },
+      stdio: ["pipe", "pipe", "pipe"],
     });
-    expect(created.status, JSON.stringify(created.body)).toBe(201);
-    const started = await api("POST", `/api/routines/${created.body.routine.id}/run`);
-    expect(started.status, JSON.stringify(started.body)).toBe(201);
-    let run: any;
-    await waitUntil(async () => {
-      run = (await api("GET", "/api/routines")).body.runs.find((candidate: any) => candidate.id === started.body.run.id);
-      return Boolean(run?.threadId);
-    }, 15_000, "routine execution thread was not created");
-    expect((await api("POST", `/api/bots/${botId}/tasks/${run.threadId}`)).status).toBe(200);
-    return started;
+    proxy.stderr.resume();
+    const lines = createInterface({ input: proxy.stdout });
+    let id = 0;
+    return {
+      async rpc(method: string, params: unknown = {}) {
+        const reply = once(lines, "line", { signal: AbortSignal.timeout(20_000) });
+        proxy.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: ++id, method, params })}\n`);
+        const value = JSON.parse(String((await reply)[0]));
+        expect(value.id).toBe(id);
+        expect(value.error).toBeUndefined();
+        return value.result;
+      },
+      async close() { await waitForExit(proxy, { signal: "SIGTERM" }); lines.close(); },
+    };
   };
 
   beforeAll(async () => {
@@ -153,52 +160,59 @@ posixOnly("peer aside lane e2e", () => {
         "helper tool chip never landed",
       );
 
-      // Asker asks while Helper is mid-turn
-      expect((await startRoutine(asker.id, "hey @Helper ping")).status).toBe(201);
-      let askerBot: any;
-      await waitUntil(async () => {
-        askerBot = await getBot(asker.id);
-        const reply = askerBot.messages.findLast((m: any) => m.kind === "text" && m.role === "bot");
-        return Boolean(reply?.text?.includes("peer says:") && !askerBot.busy);
-      }, 25_000, "asker never got its reply");
+      const helperThreads = (await getBot(helper.id)).tasks.map((task: { threadId: string }) => task.threadId);
+      const bridge = externalBridge(asker.id, asker.threadId);
+      try {
+        await bridge.rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "aside-fixture", version: "0" } });
+        const catalog = await bridge.rpc("tools/list");
+        expect(catalog.tools.map((tool: { name: string }) => tool.name)).toContain("ask_bot");
+        const asked = await bridge.rpc("tools/call", { name: "ask_bot", arguments: { bot_id: helper.id, message: ASIDE_TEXT } });
+        expect(asked.isError).not.toBe(true);
+        const receipt = asked.content.map((part: { text?: string }) => part.text ?? "").join("\n");
+        // The receipt is immediate aside delivery, never a queued consultation.
+        expect(receipt).toContain("Helper is mid-turn");
+        expect(receipt).toContain("aside");
+        expect(receipt).not.toContain("Task id:");
+        expect(receipt).not.toContain("queued as a delegation");
+        const askerBot = await getBot(asker.id);
+        expect(
+          askerBot.messages.some(
+            (m: any) => m.kind === "activity" && m.tool?.name === "Delegated to @Helper: asked while busy",
+          ),
+        ).toBe(false);
 
-      // the receipt says ASIDE, and it is not the delegation fallback
-      const askerReply = askerBot.messages.findLast((m: any) => m.kind === "text" && m.role === "bot");
-      expect(askerReply.text).toContain("peer says: Helper is mid-turn");
-      expect(askerReply.text).toContain("aside");
-      expect(askerReply.text).not.toContain("Task id:");
-      expect(askerReply.text).not.toContain("queued as a delegation");
-      expect(
-        askerBot.messages.some(
-          (m: any) => m.kind === "activity" && m.tool?.name === "Delegated to @Helper: asked while busy",
-        ),
-      ).toBe(false);
+        // Helper's transcript already shows the folded context: user-role,
+        // enveloped, marked aside (never steered), attributed to the peer
+        const midTurn = await getBot(helper.id);
+        expect(midTurn.busy).toBe(true); // an aside is not an interruption
+        const asideLine = midTurn.messages.find((m: any) => m.aside === true);
+        expect(asideLine).toBeTruthy();
+        expect(asideLine.role).toBe("user");
+        expect(asideLine.kind).toBe("text");
+        expect(asideLine.text).toBe(`${ENVELOPE_OPEN}\n${ASIDE_TEXT}\n[end aside]`);
+        // The old durable aside queue is gone; an injected row has no queue id.
+        expect(asideLine.queueId).toBeUndefined();
+        expect(asideLine.peerAsk).toEqual({ botId: asker.id, name: "Asker" });
+        expect(asideLine.steered).toBeUndefined();
+        expect(midTurn.tasks.map((task: { threadId: string }) => task.threadId)).toEqual(helperThreads);
+        expect(askerBot.tasks.map((task: { threadId: string }) => task.threadId)).toEqual([asker.threadId]);
 
-      // Helper's transcript already shows the folded context: user-role,
-      // enveloped, marked aside (never steered), attributed to the peer
-      const midTurn = await getBot(helper.id);
-      expect(midTurn.busy).toBe(true); // an aside is not an interruption
-      const asideLine = midTurn.messages.find((m: any) => m.aside === true);
-      expect(asideLine).toBeTruthy();
-      expect(asideLine.role).toBe("user");
-      expect(asideLine.kind).toBe("text");
-      expect(asideLine.text).toBe(`${ENVELOPE_OPEN}\n${ASIDE_TEXT}\n[end aside]`);
-      expect(asideLine.queueId).toBeTruthy();
-      expect(asideLine.peerAsk).toEqual({ botId: asker.id, name: "Asker" });
-      expect(asideLine.steered).toBeUndefined();
-
-      // release the turn: its reply physically carries the envelope, which
-      // is the proof the words entered the live session
-      writeFileSync(finishGate, "finish");
-      await waitUntil(async () => (await getBot(helper.id))?.busy === false, 20_000, "helper turn never settled");
-      const settled = await getBot(helper.id);
-      const finalReply = settled.messages.findLast((m: any) => m.kind === "text" && m.role === "bot");
-      expect(withoutTurnClock(finalReply.text)).toContain(`reply to: first + steered: ${ENVELOPE_OPEN}`);
-      expect(finalReply.text).toContain(ASIDE_TEXT);
-      // one injection, no replay: the settle boundary retired the row, it
-      // did not fold the same words a second time
-      expect(settled.messages.filter((m: any) => m.aside === true)).toHaveLength(1);
-      expect(settled.messages.filter((m: any) => m.role === "bot" && m.kind === "text" && m.text?.startsWith("reply to:"))).toHaveLength(1);
+        // release the turn: its reply physically carries the envelope, which
+        // is the proof the words entered the live session
+        writeFileSync(finishGate, "finish");
+        await waitUntil(async () => (await getBot(helper.id))?.busy === false, 20_000, "helper turn never settled");
+        const settled = await getBot(helper.id);
+        const finalReply = settled.messages.findLast((m: any) => m.kind === "text" && m.role === "bot");
+        expect(withoutTurnClock(finalReply.text)).toContain(`reply to: first + steered: ${ENVELOPE_OPEN}`);
+        expect(finalReply.text).toContain(ASIDE_TEXT);
+        // one injection, no replay: the settle boundary retired the row, it
+        // did not fold the same words a second time
+        expect(settled.messages.filter((m: any) => m.aside === true)).toHaveLength(1);
+        expect(settled.messages.filter((m: any) => m.role === "bot" && m.kind === "text" && m.text?.startsWith("reply to:"))).toHaveLength(1);
+      } finally {
+        writeFileSync(finishGate, "finish");
+        await bridge.close();
+      }
     },
     60_000,
   );

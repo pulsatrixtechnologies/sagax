@@ -33,7 +33,7 @@ import {
   type ProactiveWakeBatch,
 } from "./proactive-wake.ts";
 
-function harness(modes: Record<string, ProactiveMode | undefined | string>, opts: { gatherMs?: number; engineExpired?: (botId: string) => boolean } = {}) {
+function harness(modes: Record<string, ProactiveMode | undefined | string>, opts: { gatherMs?: number; engineExpired?: (botId: string) => boolean; owner?: (botId: string) => string | undefined } = {}) {
   let now = 1_000_000;
   const timers: Array<{ at: number; fn: () => void; live: boolean }> = [];
   const woken: ProactiveWakeBatch[] = [];
@@ -47,6 +47,7 @@ function harness(modes: Record<string, ProactiveMode | undefined | string>, opts
     dropped: (botId, events) => dropped.push({ botId, events }),
     pendingChanged: (botId, events) => changes.push({ botId, keys: events.map((event) => event.key) }),
     ...(opts.engineExpired ? { engineExpired: opts.engineExpired } : {}),
+    ...(opts.owner ? { owner: opts.owner } : {}),
     now: () => now,
     setTimer: (fn, ms) => {
       const timer = { at: now + ms, fn, live: true };
@@ -197,6 +198,45 @@ describe("batching", () => {
     expect(h.woken[1]!.events.map((event) => event.key)).toEqual(["mail-2", "mail-3"]);
   });
 
+  // 2026-11-03 (audit S-2): a shared org bot's events of two people in one
+  // window used to make one wake under the first runAs found, so person A's
+  // turn read person B's (and the owner's) content.
+  it("two people's events in one window make one wake each, never mixed, each under its own person", () => {
+    const h = harness({ nova: "proactive" }, { owner: () => "owner-o" });
+    const failed = (n: number, runAs: string): ProactiveEvent => ({
+      botId: "nova", source: "run", key: `run-${n}`, failed: true, runAs,
+      label: "Routine failed: Daily report", detail: `Run ${n} failed for ${runAs}`,
+    });
+    h.waker.offer(failed(1, "person-a"));
+    h.advance(1_000);
+    h.waker.offer(failed(2, "person-b"));
+    h.advance(1_000);
+    h.waker.offer(mail("nova", 3));
+    h.advance(1_000);
+    h.waker.offer(failed(4, "person-a"));
+    expect(h.waker.pendingFor("nova")).toBe(4);
+    // the disk copy of the bot still lists every gathered event
+    expect(h.changes.at(-1)!.keys).toEqual(["run-1", "run-4", "run-2", "mail-3"]);
+    h.advance(30_000);
+    expect(h.modelCalls()).toBe(3);
+    const byPerson = Object.fromEntries(h.woken.map((batch) => [batch.runAs, batch.events.map((event) => event.key)]));
+    expect(byPerson).toEqual({ "person-a": ["run-1", "run-4"], "person-b": ["run-2"], "owner-o": ["mail-3"] });
+    for (const batch of h.woken) {
+      expect(new Set(batch.events.map((event) => event.runAs ?? "owner-o"))).toEqual(new Set([batch.runAs]));
+    }
+    expect(h.waker.pendingFor("nova")).toBe(0);
+    expect(h.changes.at(-1)!.keys).toEqual([]);
+  });
+
+  it("an event with the owner's own runAs joins the owner's events", () => {
+    const h = harness({ nova: "proactive" }, { owner: () => "owner-o" });
+    h.waker.offer(mail("nova", 1));
+    h.waker.offer({ botId: "nova", source: "run", key: "run-2", failed: true, runAs: "owner-o", label: "Routine failed: X", detail: "failed" });
+    h.advance(30_000);
+    expect(h.modelCalls()).toBe(1);
+    expect(h.woken[0]!.runAs).toBe("owner-o");
+  });
+
   it("past the hour's wakes, events are skipped with a line", () => {
     const h = harness({ nova: "proactive" });
     for (let n = 1; n <= 13; n += 1) {
@@ -337,7 +377,7 @@ describe("teammates' messages (peer inbox, 2026-11-02)", () => {
   const notice = (receiverId: string, n: number, extra: Partial<Parameters<typeof peerNoticeEvent>[0]> = {}) => peerNoticeEvent({
     receiverId, noticeId: `node-${n}`, threadId: `th-${n}`, title: `Northwind write ${n}`, status: "completed",
     text: `Dry run done for write ${n}; GO needed.`, result: `Checked write ${n}; it needs JC's GO.`,
-    senderId: "katarina", senderName: "Katarina", ...extra,
+    senderId: "osprey", senderName: "Osprey", ...extra,
   });
 
   it("a teammate's notice always concerns its receiver: it wakes it, whatever kind of bot it is", () => {
@@ -367,7 +407,7 @@ describe("teammates' messages (peer inbox, 2026-11-02)", () => {
     // one card for all of them, and no acknowledgement ping-pong
     expect(prompt).toContain(PEER_WAKE_RULES);
     expect(prompt).toContain("ONE card for all of these messages");
-    expect(wakeLine(h.woken[0]!)).toContain("Message from Katarina (x3)");
+    expect(wakeLine(h.woken[0]!)).toContain("Message from Osprey (x3)");
     expect(wakeLine(h.woken[0]!)).not.toContain("Northwind");
   });
 
@@ -386,17 +426,17 @@ describe("teammates' messages (peer inbox, 2026-11-02)", () => {
 
   it("replies between two bots count against the hop limit: no ping-pong", () => {
     const hops = new PeerNoticeHops();
-    const h = harness({ melonie: "proactive", katarina: "proactive" });
-    // a person's turn of Katarina sends a notice to Melonie: hop 1
+    const h = harness({ wren: "proactive", osprey: "proactive" });
+    // a person's turn of Osprey sends a notice to Wren: hop 1
     const first = hops.note("mel-th-1", 0);
-    expect(h.waker.offer(notice("melonie", 1, { threadId: "mel-th-1", hops: first }))).toBe("gathered");
-    // Melonie's wake (hop 1) replies to Katarina: hop 2, still woken
+    expect(h.waker.offer(notice("wren", 1, { threadId: "mel-th-1", hops: first }))).toBe("gathered");
+    // Wren's wake (hop 1) replies to Osprey: hop 2, still woken
     const second = hops.note("kat-th-1", 1 + 1);
-    expect(h.waker.offer(notice("katarina", 2, { threadId: "kat-th-1", hops: second, senderId: "melonie", senderName: "Melonie" }))).toBe("gathered");
-    // Katarina's wake (hop 2) answers again: hop 3, the chain stops
+    expect(h.waker.offer(notice("osprey", 2, { threadId: "kat-th-1", hops: second, senderId: "wren", senderName: "Wren" }))).toBe("gathered");
+    // Osprey's wake (hop 2) answers again: hop 3, the chain stops
     const third = hops.note("mel-th-2", second + 1);
     expect(third).toBe(PROACTIVE_MAX_HOPS);
-    expect(h.waker.offer(notice("melonie", 3, { threadId: "mel-th-2", hops: third }))).toBe("hops");
+    expect(h.waker.offer(notice("wren", 3, { threadId: "mel-th-2", hops: third }))).toBe("hops");
     // a notice turn (not a wake) that writes on carries the chain too
     expect(hops.get("mel-th-2")).toBe(3);
   });
@@ -419,12 +459,12 @@ describe("teammates' messages (peer inbox, 2026-11-02)", () => {
 describe("teammates' messages, second pass (production, 2026-11-02)", () => {
   const notice = (receiverId: string, n: number, extra: Partial<Parameters<typeof peerNoticeEvent>[0]> = {}) => peerNoticeEvent({
     receiverId, noticeId: `node-${n}`, threadId: `th-${n}`, title: `Urgent Northwind ${n}`, status: "completed",
-    text: `Sam answered on ${n}.`, senderId: "katarina", senderName: "Katarina", ...extra,
+    text: `Sam answered on ${n}.`, senderId: "osprey", senderName: "Osprey", ...extra,
   });
 
   it("the wake is told the person never sees the notice threads and never ends quiet on them", () => {
-    const h = harness({ melonie: "proactive" });
-    h.waker.offer(notice("melonie", 1));
+    const h = harness({ wren: "proactive" });
+    h.waker.offer(notice("wren", 1));
     h.advance(30_000);
     const prompt = proactiveWakePrompt(h.woken[0]!);
     expect(prompt).toContain("The person never sees those threads");
@@ -433,7 +473,7 @@ describe("teammates' messages, second pass (production, 2026-11-02)", () => {
 
   it("the digest names who wrote and about what, with a status other than done", () => {
     const digest = peerWakeDigest([notice("m", 1), notice("m", 2, { status: "expired" }), { botId: "m", source: "mail", key: "x", label: "Email", detail: "d" }], 2);
-    expect(digest).toBe("Messages from teammates:\n- Katarina: Urgent Northwind 1\n- Katarina: Urgent Northwind 2 (expired)\n- and 2 more");
+    expect(digest).toBe("Messages from teammates:\n- Osprey: Urgent Northwind 1\n- Osprey: Urgent Northwind 2 (expired)\n- and 2 more");
     expect(peerWakeDigest([{ botId: "m", source: "mail", key: "x", label: "Email", detail: "d" }])).toBeUndefined();
   });
 
@@ -441,48 +481,48 @@ describe("teammates' messages, second pass (production, 2026-11-02)", () => {
     for (const verdict of ["off", "hops", "auth", "gone", "own", "irrelevant"] as const) expect(peerNoticeDropped(verdict)).toBe(true);
     expect(peerNoticeDropped("gathered")).toBe(false);
     expect(peerNoticeDropped("duplicate")).toBe(false);
-    const h = harness({ melonie: "proactive" });
-    expect(peerNoticeDropped(h.waker.offer(notice("melonie", 1, { hops: PROACTIVE_MAX_HOPS })))).toBe(true);
+    const h = harness({ wren: "proactive" });
+    expect(peerNoticeDropped(h.waker.offer(notice("wren", 1, { hops: PROACTIVE_MAX_HOPS })))).toBe(true);
   });
 
   it("notices gathered and then skipped (the hour's limit of wakes, or turned off meanwhile) are handed back to be shown", () => {
-    const h = harness({ melonie: "proactive" });
+    const h = harness({ wren: "proactive" });
     for (let n = 1; n <= 12; n += 1) {
-      h.waker.offer(notice("melonie", n));
+      h.waker.offer(notice("wren", n));
       h.advance(2 * 60_000);
     }
     expect(h.woken).toHaveLength(12);
-    h.waker.offer(notice("melonie", 13));
+    h.waker.offer(notice("wren", 13));
     h.advance(2 * 60_000);
     expect(h.woken).toHaveLength(12);
     expect(h.dropped.map((row) => row.events.map((event) => event.peer?.threadId))).toEqual([["th-13"]]);
     h.advance(60 * 60_000);
-    h.waker.offer(notice("melonie", 14));
-    h.setMode("melonie", "off");
+    h.waker.offer(notice("wren", 14));
+    h.setMode("wren", "off");
     h.advance(60_000);
-    expect(h.dropped.at(-1)!.events.map((event) => event.peer)).toEqual([{ threadId: "th-14", title: "Urgent Northwind 14", status: "completed", senderId: "katarina", senderName: "Katarina" }]);
+    expect(h.dropped.at(-1)!.events.map((event) => event.peer)).toEqual([{ threadId: "th-14", title: "Urgent Northwind 14", status: "completed", senderId: "osprey", senderName: "Osprey" }]);
   });
 });
 
 describe("pending wakes survive a restart; a two-bot DM post always reports (2026-11-02)", () => {
   const notice = (receiverId: string, n: number) => peerNoticeEvent({
     receiverId, noticeId: `node-${n}`, threadId: `th-${n}`, title: `Urgent Northwind ${n}`, status: "completed",
-    text: `SECRET_WORDS ${n}`, result: `SECRET_RESULT ${n}`, senderId: "katarina", senderName: "Katarina",
+    text: `SECRET_WORDS ${n}`, result: `SECRET_RESULT ${n}`, senderId: "osprey", senderName: "Osprey",
   });
   const dmPost = (botId: string, extra: Partial<ProactiveEvent> = {}): ProactiveEvent => ({
-    botId, source: "bot", key: "room-post:m1", fromBotId: "katarina", hops: 1, mentionsBot: true, dm: true,
-    label: "Post by Katarina in Katarina and Melonie", detail: "Room: K and M\nFrom: Katarina\n\nSECRET_POST",
-    replay: { kind: "room", groupId: "g1", threadId: "gt1", messageId: "m1", posterId: "katarina", hops: 1 }, ...extra,
+    botId, source: "bot", key: "room-post:m1", fromBotId: "osprey", hops: 1, mentionsBot: true, dm: true,
+    label: "Post by Osprey in Osprey and Wren", detail: "Room: K and M\nFrom: Osprey\n\nSECRET_POST",
+    replay: { kind: "room", groupId: "g1", threadId: "gt1", messageId: "m1", posterId: "osprey", hops: 1 }, ...extra,
   });
 
   it("the waker reports what each bot has gathered, and clears it when the wake starts", () => {
-    const h = harness({ melonie: "proactive" });
-    h.waker.offer(notice("melonie", 1));
-    h.waker.offer(notice("melonie", 2));
-    expect(h.changes).toEqual([{ botId: "melonie", keys: ["peer-notice:node-1"] }, { botId: "melonie", keys: ["peer-notice:node-1", "peer-notice:node-2"] }]);
+    const h = harness({ wren: "proactive" });
+    h.waker.offer(notice("wren", 1));
+    h.waker.offer(notice("wren", 2));
+    expect(h.changes).toEqual([{ botId: "wren", keys: ["peer-notice:node-1"] }, { botId: "wren", keys: ["peer-notice:node-1", "peer-notice:node-2"] }]);
     h.advance(30_000);
     expect(h.woken).toHaveLength(1);
-    expect(h.changes.at(-1)).toEqual({ botId: "melonie", keys: [] });
+    expect(h.changes.at(-1)).toEqual({ botId: "wren", keys: [] });
   });
 
   it("the file keeps ids only (never the words), mode 0600, and hands them back once", () => {
@@ -490,15 +530,15 @@ describe("pending wakes survive a restart; a two-bot DM post always reports (202
     try {
       const file = join(dir, "proactive-pending.json");
       const first = new ProactivePendingFile(file);
-      first.set("melonie", [notice("melonie", 1), dmPost("melonie"), { botId: "melonie", source: "mail", key: "mail-1", label: "Email", detail: "SECRET_MAIL" }]);
+      first.set("wren", [notice("wren", 1), dmPost("wren"), { botId: "wren", source: "mail", key: "mail-1", label: "Email", detail: "SECRET_MAIL" }]);
       const raw = readFileSync(file, "utf8");
       for (const word of ["SECRET_WORDS", "SECRET_RESULT", "SECRET_POST", "SECRET_MAIL", "Northwind"]) expect(raw).not.toContain(word);
       expect(statSync(file).mode & 0o777).toBe(0o600);
       // a restart: a fresh instance reads what was kept
       const second = new ProactivePendingFile(file);
       expect(second.take()).toEqual([
-        { botId: "melonie", key: "peer-notice:node-1", ref: { kind: "peer", noticeId: "node-1" } },
-        { botId: "melonie", key: "room-post:m1", ref: { kind: "room", groupId: "g1", threadId: "gt1", messageId: "m1", posterId: "katarina", hops: 1 } },
+        { botId: "wren", key: "peer-notice:node-1", ref: { kind: "peer", noticeId: "node-1" } },
+        { botId: "wren", key: "room-post:m1", ref: { kind: "room", groupId: "g1", threadId: "gt1", messageId: "m1", posterId: "osprey", hops: 1 } },
       ]);
       expect(new ProactivePendingFile(file).take()).toEqual([]);
       // a garbled row is left out, the others kept
@@ -523,13 +563,13 @@ describe("pending wakes survive a restart; a two-bot DM post always reports (202
     expect(wakeAlwaysReports([dmPost("m")])).toBe(true);
     expect(wakeAlwaysReports([dmPost("m", { dm: undefined })])).toBe(false);
     expect(wakeAlwaysReports([{ botId: "m", source: "mail", key: "k", label: "Email", detail: "d" }])).toBe(false);
-    const h = harness({ melonie: "proactive" });
-    h.waker.offer(dmPost("melonie"));
+    const h = harness({ wren: "proactive" });
+    h.waker.offer(dmPost("wren"));
     h.advance(30_000);
     const prompt = proactiveWakePrompt(h.woken[0]!);
     expect(prompt).toContain(DM_WAKE_RULES);
     expect(prompt).toContain("never ends with NOTHING_TO_REPORT");
-    expect(peerWakeDigest([dmPost("m")])).toBe("Messages from teammates:\n- Post by Katarina in Katarina and Melonie");
+    expect(peerWakeDigest([dmPost("m")])).toBe("Messages from teammates:\n- Post by Osprey in Osprey and Wren");
     expect(proactiveWakePrompt({ mode: "proactive", events: [dmPost("m", { dm: undefined })], more: 0 })).not.toContain(DM_WAKE_RULES);
   });
 });

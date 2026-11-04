@@ -1903,5 +1903,13 @@
   "routines.group.running": "{count} laufen",
   "routines.group.failing": "{count} fehlerhaft",
   "routines.group.botMenu": "Mehr für {name}",
-  "routines.group.newFor": "Neue Routine für {name}"
+  "routines.group.newFor": "Neue Routine für {name}",
+  "botPanel.library.kind.artifact": "Artefakt",
+  "botPanel.library.pageTitle": "Seite: {state}",
+  "botPanel.library.pageState.draft": "Entwurf",
+  "botPanel.library.pageState.private": "für mich veröffentlicht",
+  "botPanel.library.pageState.org": "für meine Organisation veröffentlicht",
+  "botPanel.library.pageState.link": "für alle mit dem Link veröffentlicht",
+  "botPanel.library.pageState.revoked": "widerrufen",
+  "botPanel.library.pageState.expired": "abgelaufen"
 }

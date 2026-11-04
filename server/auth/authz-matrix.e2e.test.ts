@@ -408,7 +408,7 @@ posixOnly("authorization matrix: person and person, member and admin (2026-10-27
       version: 1, issuer: idp.issuer, client_id: "pulsa-bot", server_id: idp.serverId, origin: BASE, link_token: idp.linkToken,
     }), { mode: 0o640 });
     writeFileSync(join(data, "config.json"), JSON.stringify({
-      instances: { claude: { driver: "claudeAgent", config: { cli: FAKE_CLAUDE, fullAuto: true } } },
+      instances: { claude: { driver: "claudeAgent", access: "api", config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } } },
     }));
     await start();
     admin = await signIn(ADMIN);

@@ -42,7 +42,7 @@ import { SPARE_TICK_MS, SpareScaler, spareConfigFromEnv } from "./sandboxd-k8s-s
 import { DENY_HOSTS_TICK_MS, denyHostsFromEnv, resolveDenyHosts } from "./sandboxd-k8s-deny-hosts.ts";
 import { runsConfigFromEnv } from "../sandbox/sandboxd-runs-spec.ts";
 import type { ContainerStats, ContainerSummary, DockerApi, ExecRequest, ExecResult, TtyExec, TtySize } from "../sandbox/sandboxd-docker.ts";
-import { createSandboxdHandler, createSandboxdUpgradeHandler } from "../sandboxd.ts";
+import { createSandboxdHandler, createSandboxdUpgradeHandler } from "../sandbox/sandboxd-http.ts";
 import {
   SANDBOX_INSTANCE_LABEL,
   SANDBOX_KEY_RE,

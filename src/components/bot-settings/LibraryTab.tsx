@@ -6,21 +6,22 @@
 // both follow the person to iOS. Skills live on the Personas page and the
 // bot's Claude Code plugins in Connect apps, in that bot's scope.
 // (docs/superpowers/specs/2026-10-16-artifacts-design.md)
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppWindow, Copy, Download, FolderOpen, LoaderCircle, MessageSquare, MoreHorizontal, Pin, PinOff, RefreshCw, RotateCcw, Share, Trash2, X } from "lucide-react";
 
-import { api, useStore, type Bot } from "@/state/store";
+import { api, useStore, type Bot, type Group } from "@/state/store";
+import { groupThreadIds } from "@/lib/group-panel";
 import { cn } from "@/lib/cn";
 import { copyText } from "@/lib/copy-text";
 import { t } from "@/lib/i18n";
 import { useAdvancedMode } from "@/lib/interface-mode";
-import { useBotArtifacts, type ArtifactList } from "@/lib/artifacts";
+import { useAllArtifacts, useBotArtifacts, type ArtifactList } from "@/lib/artifacts";
 import { classifyFile, threadFileUrl, type ThreadFile } from "@/lib/chat-files";
 import { groupLibraryItems, libraryItems, OLDER_PREVIEW, type LibraryItem } from "@/lib/library-items";
 import { AttachmentPreviewDialog, canonicalDownloadFilename } from "../AttachmentPreview";
 import type { ArtifactSummary } from "../../../shared/artifacts";
 import { ConfirmDialog } from "../ConfirmDialog";
-import { FileGlyph, PageRowGlyph } from "./LibraryGlyph";
+import { ArtifactRowGlyph, FileGlyph, PageRowGlyph } from "./LibraryGlyph";
 import { PageSharePopover } from "../PageShare";
 import { usePagesPolicy } from "../page-controls";
 import { openPage } from "@/lib/open-page";
@@ -38,16 +39,24 @@ export function openBotPlugins(dispatch: ReturnType<typeof useStore>["dispatch"]
 /** The pages this bot made for this person (GET /api/pages: the person's
  * own pages only), kept current while the tab is open. */
 export function useBotPages(botId: string): { pages: PublishedPageSummary[] | null; patch(page: PublishedPageSummary): void; drop(id: string): void } {
+  return usePagesWhere(botId, (page) => page.botId === botId);
+}
+
+/** The person's pages that `keep` keeps, read again while the tab is open;
+ * `key` changes when `keep` does. */
+function usePagesWhere(key: string, keep: (page: PublishedPageSummary) => boolean): { pages: PublishedPageSummary[] | null; patch(page: PublishedPageSummary): void; drop(id: string): void } {
   const [pages, setPages] = useState<PublishedPageSummary[] | null>(null);
+  const keepRef = useRef(keep);
+  keepRef.current = keep;
   useEffect(() => {
     let live = true;
     const load = () => api<{ pages: PublishedPageSummary[] }>("/api/pages")
-      .then((answer) => { if (live) setPages(answer.pages.filter((page) => page.botId === botId)); })
+      .then((answer) => { if (live) setPages(answer.pages.filter((page) => keepRef.current(page))); })
       .catch(() => { if (live) setPages((current) => current ?? []); });
     void load();
     const timer = setInterval(() => { if (document.visibilityState !== "hidden") void load(); }, 15_000);
     return () => { live = false; clearInterval(timer); };
-  }, [botId]);
+  }, [key]);
   return {
     pages,
     patch: (page) => setPages((current) => (current ?? []).map((entry) => (entry.id === page.id ? page : entry))),
@@ -59,6 +68,26 @@ export function LibraryTab({ bot }: { bot: Bot }) {
   const list = useBotArtifacts(bot.id);
   const pages = useBotPages(bot.id);
   const files = useThreadFiles(bot);
+  return <LibraryTabView list={list} pages={pages} files={files} />;
+}
+
+/** A group's Library (2026-11-03): the files of the group's open
+ * conversation, and the artifacts and pages its bots made in any of the
+ * group's conversations. */
+export function GroupLibraryTab({ group }: { group: Group }) {
+  const threads = groupThreadIds(group);
+  const threadKey = [...threads].sort().join(",");
+  const all = useAllArtifacts();
+  const list = useMemo<ArtifactList>(() => {
+    const keep = new Set(threadKey.split(","));
+    return { ...all, artifacts: all.artifacts ? all.artifacts.filter((artifact) => artifact.threadId !== undefined && keep.has(artifact.threadId)) : null };
+  }, [all, threadKey]);
+  const pages = usePagesWhere(`group:${group.id}:${threadKey}`, (page) => threads.has(page.threadId));
+  const files = useThreadFiles(group);
+  return <LibraryTabView list={list} pages={pages} files={files} />;
+}
+
+function LibraryTabView({ list, pages, files }: { list: ArtifactList; pages: ReturnType<typeof useBotPages>; files: ReturnType<typeof useThreadFiles> }) {
   const advanced = useAdvancedMode();
   const [status, setStatus] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const setPinned = (file: ThreadFile, pinned: boolean) => {
@@ -344,7 +373,7 @@ function ArtifactLibraryRow({ artifact, actions, now, openMenus }: { artifact: A
   return (
     <LibraryRow
       attr={{ "data-artifact-row": artifact.id }}
-      icon={<PageRowGlyph />}
+      icon={<ArtifactRowGlyph />}
       name={artifact.title}
       trail={status.tone === "muted" ? null : (
         <span data-artifact-status={artifact.refresh.state} title={status.detail ? `${status.text} ${status.detail}` : status.text} className={cn("size-1.5 shrink-0 rounded-full", status.tone === "danger" ? "bg-danger" : "bg-warning")} />
@@ -397,7 +426,7 @@ function PageLibraryRow({ page, linkOff, openMenus, onChange, onPin, onDelete }:
   return (
     <LibraryRow
       attr={{ "data-library-page": page.id }}
-      icon={<PageRowGlyph />}
+      icon={<PageRowGlyph page={page} />}
       name={page.title || t("pages.untitled")}
       trail={sharing ? (
         <span className="relative">

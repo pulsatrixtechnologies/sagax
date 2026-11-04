@@ -663,7 +663,7 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   { methods: ["GET", "PUT"], path: /^\/api\/bots\/[\w-]+\/memory$/ },
   { methods: ["GET", "PUT", "DELETE"], path: /^\/api\/bots\/[\w-]+\/memory\/file$/ },
   { methods: ["GET"], path: /^\/api\/bots\/[\w-]+\/memory\/(?:journal|upkeep|semantic)$/ },
-  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/memory\/(?:journal\/[\w-]+\/revert|tidy|rename)$/ },
+  { methods: ["POST"], path: /^\/api\/bots\/[\w-]+\/memory\/(?:journal\/[\w-]+\/revert|tidy|rename|import)$/ },
   // 2026-10-26: the bot's change history, its SOUL.md undo and a
   // version restore: the owner (or an edit grant) or an admin, checked in
   // the handlers.
@@ -805,8 +805,8 @@ export const CLIENT_ALLOW: ReadonlyArray<{ methods: readonly string[]; path: Reg
   // the routine modal's "Runs as" choices (server/routines/routine-run-as.ts)
   { methods: ["GET"], path: /^\/api\/routines\/run-as-options$/ },
   { methods: ["POST"], path: /^\/api\/routines$/ },
-  { methods: ["PATCH", "DELETE"], path: /^\/api\/routines\/[\w-]+$/ },
-  { methods: ["POST"], path: /^\/api\/routines\/[\w-]+\/run$/ },
+  { methods: ["GET", "PATCH", "DELETE"], path: /^\/api\/routines\/[\w-]+$/ },
+  { methods: ["POST"], path: /^\/api\/routines\/[\w-]+\/(?:run|check)$/ },
   // "Check now" of "Only when something changes" (#1202): one reading, no
   // model, nothing kept; the handler applies the same rights as saving a
   // routine of that bot, so a member checks their own watch without an admin

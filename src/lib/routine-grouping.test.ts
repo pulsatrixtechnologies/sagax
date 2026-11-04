@@ -66,3 +66,23 @@ describe("routine grouping", () => {
     expect(collapsedRoutineGroups("you").size).toBe(0);
   });
 });
+
+// 2026-11-03 (audit N-6): the group health walked every run once per routine
+// and per render; one pass over the runs gives the same counts.
+describe("routineGroupHealth over many runs", () => {
+  it("counts running and failing routines from one pass over the runs", () => {
+    const routines = Array.from({ length: 300 }, (_, n) => ({ id: `r${n}`, enabled: n % 7 !== 0, failureStreak: n % 5 === 0 ? 2 : 0, autoPaused: n % 7 === 0 ? true : undefined }));
+    const runs = Array.from({ length: 6_000 }, (_, n) => ({ routineId: `r${n % 400}`, status: n % 3 === 0 ? "running" : "completed" }));
+    const slow = (() => {
+      let running = 0;
+      let failing = 0;
+      for (const routine of routines) {
+        if (runs.some((run) => run.routineId === routine.id && run.status === "running")) running += 1;
+        else if ((routine.failureStreak ?? 0) > 0 || (!routine.enabled && routine.autoPaused)) failing += 1;
+      }
+      return { running, failing };
+    })();
+    expect(routineGroupHealth(routines, runs)).toEqual(slow);
+    expect(routineGroupHealth([], runs)).toEqual({ running: 0, failing: 0 });
+  });
+});

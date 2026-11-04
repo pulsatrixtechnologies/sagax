@@ -211,13 +211,13 @@ describe("never the bot's", () => {
   it("is not reachable through the engine MCP launch, the internal routes or the harness proxy", () => {
     const engine = readFileSync(join(import.meta.dirname, "browser-engine.ts"), "utf8");
     expect(engine).toContain('args: ["mcp", "--tools", "core", "--no-webmcp"]');
-    const proxy = readFileSync(join(import.meta.dirname, "harness-mcp-proxy.ts"), "utf8");
+    const proxy = readFileSync(join(import.meta.dirname, "..", "harness-mcp-proxy.ts"), "utf8");
     expect(proxy).not.toMatch(/network-debug|browser\/network|BrowserNetworkDebug/);
-    const index = readFileSync(join(import.meta.dirname, "index.ts"), "utf8");
+    const index = readFileSync(join(import.meta.dirname, "..", "index.ts"), "utf8");
     expect(index).not.toMatch(/\/api\/internal\/[^"'`]*network/);
     expect(index).toContain("ROUTES.push(createBrowserNetworkRoutes(");
     // the route lives in its module and is POST only
-    const route = readFileSync(join(import.meta.dirname, "routes", "browser-network.ts"), "utf8");
+    const route = readFileSync(join(import.meta.dirname, "..", "routes", "browser-network.ts"), "utf8");
     expect(route).toContain("/^\\/api\\/bots\\/([\\w-]+)\\/browser\\/network$/");
     expect(route).toContain('if (method !== "POST") return json(res, 405');
   });

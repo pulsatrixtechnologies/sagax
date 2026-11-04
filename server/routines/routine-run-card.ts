@@ -36,9 +36,57 @@ export function routineRunCard(run: RoutineRun, cardThreadId?: string, fullRepor
   if (run.threadId) card.executionThreadId = run.threadId;
   if (summary) card.summary = summary;
   if (error) card.error = error;
+  if (run.readiness) card.readiness = structuredClone(run.readiness);
   if (run.autoPaused) card.autoPausedAfter = run.autoPaused.failures;
   if (run.status === "completed" && run.problems) card.problems = readableRoutineProblems(redactSecretsInText(run.problems)).slice(0, 1_000);
   if (run.status === "queued" && run.attention) card.attention = redactSecretsInText(run.attention).slice(0, 500);
   if (run.handedTo?.length) card.handedTo = run.handedTo.map((entry) => ({ botId: entry.botId, threadId: entry.threadId, status: entry.status, ...(entry.name ? { name: redactSecretsInText(entry.name) } : {}) }));
   return card;
+}
+
+/** The text of a run's message: what a client without the card draws, and
+ * what the notification, the search and the thread preview read. */
+export function routineRunFallbackText(card: RoutineRunCardData): string {
+  const goalState = card.goalStatus === "needs-input"
+    ? "needs your input"
+    : card.goalStatus === "blocked"
+      ? "was blocked"
+      : card.goalStatus === "limit-reached"
+        ? "reached its limit"
+        : card.goalStatus === "stopped"
+          ? "was stopped"
+          : card.goalStatus === "failed"
+            ? "failed"
+            : undefined;
+  const state = goalState ?? (
+    card.status === "waiting"
+      ? "needs your attention"
+      : card.status === "completed"
+        ? "completed"
+        : card.status === "failed"
+          ? "failed"
+          : card.status === "cancelled"
+            ? "was cancelled"
+            : card.status === "missed"
+              ? "was missed"
+              : card.status === "nothing_to_report"
+                ? "had nothing to report"
+              : card.status === "queued" && card.deferredAt != null
+                ? "deferred: target busy"
+              : card.status
+  );
+  // Clients without the card (older phones) draw only this line, so it
+  // carries what the run said, not just that it finished.
+  const detail = card.summary ?? card.error;
+  // A report reads as the bot's own message, the routine named under it.
+  // 2026-11-01: a run that completed with problems says so, under its report.
+  // 2026-11-03 (the maintainer): the problem lines themselves stay in the run detail
+  // (View run), never in the conversation, this text included (an older
+  // client, the notification, the search and the thread preview read it).
+  const problems = card.status === "completed" && card.problems ? "\n\nCompleted with problems." : "";
+  if (card.status === "completed" && (!card.goalStatus || card.goalStatus === "completed") && card.summary) return `${card.summary}${problems}\n\nRoutine “${card.routineName}”`;
+  if (problems) return `Routine “${card.routineName}” completed with problems`;
+  // 2026-10-26: older clients without the notice still read the pause.
+  const paused = card.autoPausedAfter ? ` and was paused after ${card.autoPausedAfter} failures in a row` : "";
+  return `Routine “${card.routineName}” ${state}${paused}${detail ? `\n\n${detail}` : ""}`;
 }

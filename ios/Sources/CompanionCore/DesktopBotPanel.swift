@@ -774,9 +774,12 @@ public struct BotActionsMenuPlan: Hashable, Sendable {
     ///   - inspector: the Inspector is offered where the pairing shows it.
     ///   - activeBotCount: bots not archived, for Archive's "keep one".
     ///   - wizard: "Redo the wizard" (2026-10-26), for whoever may change the bot.
+    ///   - editBot: the desktop's first entry, Edit bot (`BotActionsMenu.tsx`
+    ///     "edit-bot"), where the bot editor is the desktop's window (the
+    ///     iPad desktop shell, 2026-11-03); the phone keeps its Edit button.
     public init(gate: SurfaceGate, bot: Bot, viewerId: String?, editable: Bool, zipExport: Bool,
-                inspector: Bool = false, activeBotCount: Int, wizard: Bool = false) {
-        var first: [BotActionsMenuItem] = []
+                inspector: Bool = false, activeBotCount: Int, wizard: Bool = false, editBot: Bool = false) {
+        var first: [BotActionsMenuItem] = editBot ? [.editBot] : []
         // Lot 6: Make / Replace primary first, then Redo the wizard, then
         // Share with people. Edit bot and Rename are gone (duplicates).
         if let viewerId, gate.allows(.primaryBot) {

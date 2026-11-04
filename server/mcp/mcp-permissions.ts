@@ -212,6 +212,10 @@ export const MCP_PERMISSIONS: readonly McpPermission[] = [
   // 2026-11-01 (#1891): person AI client updates own routines via member PATCH
   // (Perspicax sagax_routine_update). Bots keep propose_routine_action (Ask/Auto).
   p("routines:update", "own", "update_routine", "sagax", ["sagax_routine_update"]),
+  // Fleet (#1944): person AI client changes a bot's default model/settings
+  // through the agent API (same PATCH rights as the Edit bot window).
+  p("agents:model", "own", "update_agent_model", "sagax", ["list_agent_models"]),
+  p("agents:settings", "own", "update_agent_settings", "sagax"),
   p("people:nudge", "dispatch", "nudge_person", "sagax", ["sagax_nudge"]),
   // Perspicax meta-tools (connector mcp/meta_tools.rs CORE_META_NAMES).
   p("api:list", "read", "api_list", "perspicax"),

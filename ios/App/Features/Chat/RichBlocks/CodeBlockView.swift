@@ -9,6 +9,9 @@ import UIKit
 import CompanionCore
 
 struct CodeBlockView: View {
+    /// The UIKit face of `Theme.mono(12)`, for its line box.
+    static var codeFace: UIFont { UIFont(name: "GeistMono-Regular", size: 12) ?? .monospacedSystemFont(ofSize: 12, weight: .regular) }
+
     @Environment(\.themePalette) var themePalette
     let language: String?
     let code: String
@@ -79,9 +82,11 @@ struct CodeBlockView: View {
                 let text = (body + caret)
                     .font(Theme.mono(12))
                     .tracking(DesktopChatMetrics.monoTracking(12))
-                    .lineSpacing(18 - UIFont.monospacedSystemFont(ofSize: 12, weight: .regular).lineHeight)
+                    // `leading-[18px]` measured on the face drawn (Geist Mono,
+                    // whose natural line is not SF Mono's)
+                    .lineSpacing(max(0, 18 - Self.codeFace.lineHeight))
                     // the 18 pt line box's half-leading above and below
-                    .padding(.vertical, ((18 - UIFont.monospacedSystemFont(ofSize: 12, weight: .regular).lineHeight) * 2).rounded(.down) / 4)
+                    .padding(.vertical, (max(0, 18 - Self.codeFace.lineHeight) * 2).rounded(.down) / 4)
                     .foregroundStyle(theme.ink)
                     .textSelection(.enabled)
                 if wrap {

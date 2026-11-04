@@ -319,7 +319,7 @@ describe("bounded scheduled overlap and run health", () => {
     expect(alerts).toEqual([undefined, null, undefined, undefined]);
   });
 
-  it("counts restart recovery only once and sanitizes obsolete or invalid health metadata", async () => {
+  it("excludes restart recovery and sanitizes obsolete or invalid health metadata", async () => {
     const h = harness(start);
     const routine = h.manager.create({ ...input(), enabled: false });
     h.manager.runNow(routine.id); await h.manager.tick();
@@ -331,7 +331,7 @@ describe("bounded scheduled overlap and run health", () => {
     expect(resumed.takeRestartResumes()).toEqual([expect.objectContaining({ status: "running", restartResumes: 1 })]);
     for (let i = 0; i < 2; i++) {
       const saved = new RoutineManager(h.options).listRoutines()[0];
-      expect(saved.failureStreak).toBe(1);
+      expect(saved.failureStreak).toBeUndefined();
       expect(saved.skippedRuns).toBeUndefined(); expect(saved.lastSkippedAt).toBeUndefined(); expect(saved.overlap).toBeUndefined();
     }
     expect(() => h.manager.update(routine.id, { overlap: "invalid" as "queue" })).toThrow("skip or queue");
@@ -3152,7 +3152,7 @@ describe("RoutineManager", () => {
     if (error) h.manager.handleRuntimeEvent({ ...base, eventId: "runtime-error", type: "runtime.error", message: error });
     h.manager.handleRuntimeEvent({ ...base, eventId: "turn-completed", type: "turn.completed", ok: false, stopReason });
 
-    expect(h.manager.listRuns()[0]).toMatchObject({ status: "failed", error: expected });
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: error?.includes("out of credits") ? "blocked" : "failed", error: expected });
     expect(h.failed).toMatchObject([{ error: expected }]);
   });
 
@@ -3900,7 +3900,7 @@ describe("slice 6: routines in their person's name", () => {
     const routine = h.manager.create(input, undefined, { actorPrincipalId: "pr_alice" });
     h.setNow(routine.nextRunAt!);
     await h.manager.tick();
-    expect(h.manager.listRuns()[0]).toMatchObject({ status: "failed", error: "Perspicax is unreachable; this run is skipped" });
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "blocked", error: "Perspicax is unreachable; this run is skipped" });
     expect(h.manager.listRoutines()[0].suspended).toBeUndefined();
     answer = { ok: true };
     h.setNow(routine.nextRunAt! + 60_000);
@@ -3929,7 +3929,7 @@ describe("slice 6: routines in their person's name", () => {
     h.setNow(due + 420_000);
     await h.manager.tick();
     expect(h.admitted).toHaveLength(4);
-    expect(h.manager.listRuns()[0]).toMatchObject({ status: "failed", error: "Perspicax is rate limiting this server; this run is skipped" });
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "blocked", error: "Perspicax is rate limiting this server; this run is skipped" });
     expect(h.suspended).toEqual([]);
     expect(h.manager.listRoutines()[0].suspended).toBeUndefined();
     // the fields survive a reload
@@ -3963,7 +3963,7 @@ describe("slice 6: routines in their person's name", () => {
       h.setNow(at);
       await h.manager.tick();
     }
-    expect(h.manager.listRuns()[0]).toMatchObject({ status: "failed", error: ROUTINE_UNREACHABLE_SKIPPED });
+    expect(h.manager.listRuns()[0]).toMatchObject({ status: "blocked", error: ROUTINE_UNREACHABLE_SKIPPED });
     expect(h.manager.listRoutines()[0].suspended).toBeUndefined();
   });
 
@@ -4665,7 +4665,7 @@ describe("auto-pause after failures in a row (2026-10-26)", () => {
     expect(h.manager.getRoutine(routine.id)!.enabled).toBe(false);
   });
 
-  it("counts a failure at restart toward the pause", async () => {
+  it("excludes a failure at restart from the pause", async () => {
     const h = harness(start);
     const routine = h.manager.create({ ...input(), autoPauseAfter: 2 });
     await fail(h, routine.id);
@@ -4673,8 +4673,10 @@ describe("auto-pause after failures in a row (2026-10-26)", () => {
     // first restart resumes the cut run in place, the second cut fails it
     new RoutineManager(h.options);
     const after = new RoutineManager(h.options);
-    expect(after.getRoutine(routine.id)).toMatchObject({ enabled: false, autoPaused: { failures: 2 } });
-    expect(after.listRuns().at(-1)).toMatchObject({ status: "failed", autoPaused: { failures: 2 } });
+    expect(after.listRoutines()[0]).toMatchObject({ enabled: true, failureStreak: 1 });
+    expect(after.getRoutine(routine.id)?.autoPaused).toBeUndefined();
+    expect(after.listRuns().at(-1)).toMatchObject({ status: "failed", error: "Sagax restarted while this routine was running" });
+    expect(after.listRuns().at(-1)?.autoPaused).toBeUndefined();
   });
 
   it("never auto-pauses a webhook or email trigger (#1891 phone webhooks stay on)", async () => {
@@ -4828,8 +4830,26 @@ describe("truthful run endings and stranded waits (2026-11-01)", () => {
     tool(h, "thread-1", "a", "mcp__perspicax_profile__cw_psa__query", false, "Tool not found: perspicax_profile__cw_psa__query");
     tool(h, "thread-1", "b", "perspicax_profile__cw_psa_query", false, "upstream_error: 400");
     done(h, "thread-1");
-    expect(runOf(h).problems).toContain("mcp__perspicax_profile__cw_psa__query failed 2 times");
+    // 2026-11-03: the tool in words, as its card names it; no `__` id
+    expect(runOf(h).problems).toContain("Query failed 2 times");
+    expect(runOf(h).problems).not.toContain("__");
     expect(runOf(h).problems).toContain("upstream_error: 400");
+  });
+
+  it("a problem line names a connector tool in words and keeps its error (2026-11-03)", async () => {
+    const h = harness(start);
+    const routine = h.manager.create(input());
+    h.manager.runNow(routine.id); await h.manager.tick();
+    const graph = "Managed MCP gateway tool call failed: Microsoft Graph API error: 404 Not Found";
+    tool(h, "thread-1", "a", "mcp__outlook__get_message", false, graph);
+    tool(h, "thread-1", "b", "mcp__outlook__get_message", false, graph);
+    tool(h, "thread-1", "c", "user-Outlook-get_5fmail_5fmessage___12", false, graph);
+    tool(h, "thread-1", "d", "user-Outlook-get_5fmail_5fmessage___12", false, graph);
+    done(h, "thread-1");
+    const problems = runOf(h).problems ?? "";
+    expect(problems).toContain(`Get message failed 2 times and never succeeded after: ${graph}`);
+    expect(problems).toMatch(/Get mail message · Outlook[^\n]* failed 2 times/);
+    expect(problems).not.toMatch(/__|5f/);
   });
 
   it("one failed call the bot moved past (a search with no match, say) is not a problem: only a tool that kept failing is", async () => {

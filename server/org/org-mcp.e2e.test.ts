@@ -29,7 +29,7 @@ import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from 
 import { freePortBlock } from "../testing/ports.ts";
 import { seedMarketplaceBeforeBoot } from "../testing/seed-marketplace.ts";
 
-const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
+const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const posixOnly = describe.skipIf(process.platform === "win32");
 const ORG_KEY = "sk-ant-test-org-key-000000";
@@ -182,8 +182,8 @@ async function perspicaxRows(auth: Auth): Promise<Map<string, string>> {
 
 async function allIdle(auth: Auth): Promise<void> {
   await waitFor(async () => {
-    const state = (await api("GET", "/api/bots?messages=0", auth)).body as { bots: Array<{ busy?: boolean }>; groups?: Array<{ working?: boolean }> };
-    return state.bots.every((bot) => !bot.busy) && (state.groups ?? []).every((group) => !group.working);
+    const state = (await api("GET", "/api/bots?messages=0", auth)).body as { bots: Array<{ busy?: boolean; waitingForTeammates?: boolean }>; groups?: Array<{ working?: boolean }> };
+    return state.bots.every((bot) => !bot.busy && !bot.waitingForTeammates) && (state.groups ?? []).every((group) => !group.working);
   }, 60_000);
 }
 
@@ -191,15 +191,6 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
   let alice: Auth;
   const ids: Record<string, string> = {};
   let x: { id: string; threadId: string };
-  /** When a probe turn never replies on this Mac (fixture engine / MCP),
-   * skip turn-dependent cases with that reason (see gate doc). */
-  let turnsReady = false;
-  const itTurn = (name: string, fn: () => Promise<void>, ms?: number) => it(name, async (ctx) => {
-    if (!turnsReady) {
-      ctx.skip("fixture engine turn did not complete on this org server (fake Claude / Perspicax MCP); see gate doc");
-    }
-    await fn();
-  }, ms);
 
   beforeAll(async () => {
     chmodSync(FAKE_CLAUDE, 0o755);
@@ -226,12 +217,14 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     writeFileSync(join(data, "config.json"), JSON.stringify({
       organization: { memberBotsUseOrgKey: true },
       instances: {
+        // fcce56775 (#1812): Claude uses the organization API key; personal engines stay separate.
         claude: {
-          driver: "claudeAgent",
+          driver: "claudeAgent", access: "api",
           environment: {
             FAKE_CLAUDE_DUMP: dump,
             FAKE_CLAUDE_MCP_CALLS: JSON.stringify([
-              { server: "agents", tool: "ask_bot", arguments: { bot_id: "Xavier", message: "ping from Rita" }, when: "ASK-XAVIER" },
+              // Runtime lot 3: a routine uses the native coordination tool for a consultation.
+              { server: "agents", tool: "coordinate_bots", arguments: { bot_ids: ["Xavier"], mode: "consult", message: "ping from Rita" }, when: "ASK-XAVIER" },
               { server: "agents", tool: "start_thread", arguments: { title: "Own job", message: "ping own job" }, when: "OPEN-OWN" },
               { server: "agents", tool: "coordinate_bots", arguments: { bot_ids: ["Xavier"], message: "check the board for the person", request_key: "bob-hop" }, when: "COORD-XAVIER" },
               { server: "perspicax_*", tool: "api_list", arguments: {} },
@@ -247,7 +240,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
             ]),
             FAKE_CLAUDE_MCP_DUMP: mcpDump,
           },
-          config: { cli: FAKE_CLAUDE, fullAuto: true },
+          config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true },
         },
       },
     }));
@@ -282,13 +275,8 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     for (const who of ["bob", "carol"]) {
       expect((await api("PUT", `/api/bots/${x.id}/grants`, alice, { target: `user:${ids[who]}`, level: "use" })).status).toBe(200);
     }
-    try {
-      await turn(alice, x, "ping fixture turn");
-      turnsReady = true;
-    } catch {
-      turnsReady = false;
-      console.warn("[org-mcp.e2e] fixture engine turn did not complete; turn cases will skip");
-    }
+    // A broken local fake engine must fail this fixture, never skip its isolation checks.
+    await turn(alice, x, "ping fixture turn");
   }, 90_000);
 
   afterAll(async () => {
@@ -298,7 +286,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     if (home) removeTempDir(home);
   });
 
-  itTurn("reads capability files for the active member, never a shared bot owner's private plugin or library", async () => {
+  it("reads capability files for the active member, never a shared bot owner's private plugin or library", async () => {
     const saved = async (path: string, auth: Auth, body: unknown) => {
       const response = await api("POST", path, auth, body);
       expect(response.status, response.text).toBeLessThan(400);
@@ -311,7 +299,9 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     await saved("/api/me/skills-library", bob, { text: "---\nname: member-only\ndescription: Member instructions\n---\nCurrent member instructions.\n" });
     await turn(bob, x, "READ-CAPABILITY-FILES");
     const calls = (JSON.parse(readFileSync(mcpDump, "utf8")) as { calls: Array<{ tool: string; ok: boolean; text: string }> }).calls.filter((call) => call.tool === "workspace_read");
-    expect(calls.map((call) => call.ok)).toEqual([false, false, true, true, false, true]);
+    // V4: a hidden or missing file is a successful exists:false answer, never its private bytes.
+    expect(calls.map((call) => call.ok)).toEqual([true, true, true, true, true, true]);
+    for (const index of [0, 1, 4]) expect(calls[index]!.text).toMatch(/^No such file:/);
     expect(calls[2]!.text).toContain("Instructions from personal-tools.");
     expect(calls[3]!.text).toContain("Instructions from organization-tools.");
     expect(calls[5]!.text).toContain("Current member instructions.");
@@ -322,7 +312,8 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
   it("the bot editor offers the profiles alice holds, and saves them", async () => {
     const got = await api("GET", `/api/bots/${x.id}/perspicax`, alice);
     expect(got.status, got.text).toBe(200);
-    expect(got.body).toEqual({ selected: [], available: [PROFILE], canEdit: true });
+    // c0abaf804 adds optional per-bot identities; this older provider has none.
+    expect(got.body).toEqual({ selected: [], available: [PROFILE], canEdit: true, actsAs: null, identities: { profiles: [], supported: false }, identityUnavailable: false });
     const saved = await api("PUT", `/api/bots/${x.id}/perspicax`, alice, { profiles: [PROFILE.id] });
     expect(saved.status, saved.text).toBe(200);
     expect(saved.body.selected).toEqual([{ ...PROFILE, heldByMe: true }]);
@@ -333,9 +324,10 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     expect(JSON.stringify((await api("GET", "/api/bots", alice)).body)).not.toContain("\"perspicax\"");
   });
 
-  itTurn("scenario E: bob's turn reaches Perspicax as bob, named Pulsa Bot (<bot id>); his tokens are revoked after it", async () => {
+  it("scenario E: bob's turn reaches Perspicax as bob, named Pulsa Bot (<bot id>); his tokens are revoked after it", async () => {
     const bob = await signIn(BOB);
     const exchangesBefore = idp.exchanges.length;
+    const callsBefore = idp.mcpRequests.length;
     const reply = await turn(bob, x, "ping");
     expect(reply).toContain("mcp:api_list:ok");
     const mcp = JSON.parse(readFileSync(mcpDump, "utf8")) as { servers: string[]; calls: Array<{ server: string; tool: string; listed: boolean; ok: boolean; text: string }> };
@@ -349,20 +341,20 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     ]);
     const exchanges = idp.exchanges.slice(exchangesBefore);
     expect(exchanges.map((e) => ({ sub: e.sub, profile: e.profile, ok: e.ok }))).toEqual([{ sub: BOB.sub, profile: PROFILE.id, ok: true }]);
-    const calls = idp.mcpRequests.filter((r) => r.method === "POST");
+    const calls = idp.mcpRequests.slice(callsBefore).filter((r) => r.method === "POST");
     expect(calls.length).toBeGreaterThanOrEqual(3);
     expect(calls.every((r) => r.sub === BOB.sub && r.profile === PROFILE.id)).toBe(true);
     const init = calls.find((r) => r.rpcMethod === "initialize")!;
     expect(init.clientInfo).toEqual({ name: `Pulsa Bot (${x.id})`, version: PACKAGE_VERSION });
     expect(init.sessionId).toBeNull();
     expect(calls.filter((r) => r.rpcMethod !== "initialize").every((r) => r.sessionId?.startsWith("sess-"))).toBe(true);
-    expect(idp.mcpRequests.some((r) => r.sub === ALICE.sub)).toBe(false);
+    expect(idp.mcpRequests.slice(callsBefore).some((r) => r.sub === ALICE.sub)).toBe(false);
     // revoked once the turn's generation ends
     await waitFor(async () => idp.exchangeRevoked.includes(exchanges[0]!.token!), 10_000);
     expect(idp.exchangeRevoked.filter((t) => t === exchanges[0]!.token)).toHaveLength(1);
   }, 90_000);
 
-  itTurn("a voice call keeps bob's Perspicax tools from turn to turn: one exchange, revoked when the call ends", async () => {
+  it("a voice call keeps bob's Perspicax tools from turn to turn: one exchange, revoked when the call ends", async () => {
     const bob = await signIn(BOB);
     const threadId = await ownThread(bob, x.id);
     const callId = "call-orgmcp-000001";
@@ -390,7 +382,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     await waitFor(async () => idp.exchangeRevoked.includes(exchanges[0]!.token!), 10_000);
   }, 120_000);
 
-  itTurn("T1: no sign-in or Perspicax token reaches the engine's argv, environment or MCP configuration", async () => {
+  it("T1: no sign-in or Perspicax token reaches the engine's argv, environment or MCP configuration", async () => {
     const engine = JSON.parse(readFileSync(dump, "utf8")) as { argv: string[]; env: Record<string, string>; mcpConfig: unknown; systemPrompt: string };
     const seen = JSON.stringify([engine.argv, engine.env, engine.mcpConfig, engine.systemPrompt, readFileSync(mcpDump, "utf8")]);
     expect(seen).toContain("perspicax_dispatch");
@@ -407,7 +399,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     expect(JSON.stringify(servers.perspicax_dispatch)).toContain("SAGAX_PERSPICAX_TOKEN");
   });
 
-  itTurn("scenario E negative: carol, who does not hold the profile, gets no server, a note and an activity row", async () => {
+  it("scenario E negative: carol, who does not hold the profile, gets no server, a note and an activity row", async () => {
     const carol = await signIn(CAROL);
     const exchangesBefore = idp.exchanges.length;
     const callsBefore = idp.mcpRequests.length;
@@ -426,7 +418,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     expect(row?.tool).toEqual({ name: "Perspicax: Dispatch unavailable for Carol (not_held)", ok: false });
   }, 90_000);
 
-  itTurn("a routine run acts in its person's name with no consent: never paused, no card (slice 6, 2026-10-08)", async () => {
+  it("a routine run acts in its person's name with no consent: never paused, no card (slice 6, 2026-10-08)", async () => {
     // her delegation came with her sign-in
     let delegationStatus: { status: number; body: unknown } | undefined;
     try {
@@ -466,19 +458,25 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     const callsBefore = idp.mcpRequests.length;
     const run = await api("POST", `/api/routines/${routineId}/run`, alice, {});
     expect(run.status, run.text).toBeLessThan(300);
+    // Runtime lot 3 queues the teammate before its engine starts. A lease
+    // alone proves no tool call; wait for this run and its peer work to end.
+    await waitFor(async () => {
+      const runs = (await api("GET", "/api/routines", alice)).body.runs as Array<{ id: string; status: string; error?: string }>;
+      return runs.find((entry) => entry.id === run.body.run.id && ["completed", "failed"].includes(entry.status));
+    }, 60_000);
     await waitFor(async () => idp.exchanges.length - exchangesBefore >= count, 60_000);
     await allIdle(alice);
     const exchanges = idp.exchanges.slice(exchangesBefore);
     expect(exchanges.map((e) => ({ sub: e.sub, profile: e.profile, ok: e.ok }))).toEqual(Array.from({ length: exchanges.length }, () => ({ sub: ALICE.sub, profile: PROFILE.id, ok: true })));
     const calls = idp.mcpRequests.slice(callsBefore).filter((r) => r.method === "POST");
-    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.length, readFileSync(mcpDump, "utf8")).toBeGreaterThan(0);
     expect(calls.every((r) => r.sub === ALICE.sub)).toBe(true);
     await waitFor(async () => exchanges.every((e) => idp.exchangeRevoked.includes(e.token!)), 20_000);
     const added = [...(await perspicaxRows(alice)).entries()].filter(([at]) => !before.has(at)).map(([, name]) => name);
     expect(added, added.join("\n")).toEqual([]);
   }
 
-  itTurn("a room goal routine reaches Perspicax through its person's delegation", async () => {
+  it("a room goal routine reaches Perspicax through its person's delegation", async () => {
     await allIdle(alice);
     const room = await api("POST", "/api/groups", alice, {
       name: "Dispatch room",
@@ -493,7 +491,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     await routineLineageUsesDelegation(routine.body.routine.id, 1);
   }, 120_000);
 
-  itTurn("a bot a routine asks reaches Perspicax through the routine person's delegation", async () => {
+  it("a bot a routine asks reaches Perspicax through the routine person's delegation", async () => {
     await allIdle(alice);
     const created = await api("POST", "/api/bots", alice, { name: "Rita" });
     expect(created.status, created.text).toBe(201);
@@ -506,7 +504,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     await routineLineageUsesDelegation(routine.body.routine.id, 1);
   }, 120_000);
 
-  itTurn("a thread a routine opens on its own bot reaches Perspicax through the delegation", async () => {
+  it("a thread a routine opens on its own bot reaches Perspicax through the delegation", async () => {
     await allIdle(alice);
     const routine = await api("POST", "/api/routines", alice, { name: "Open own", botId: x.id, prompt: "OPEN-OWN for the board.", enabled: false,
       schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 86_400_000 } });
@@ -515,7 +513,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     await routineLineageUsesDelegation(routine.body.routine.id, 2);
   }, 120_000);
 
-  itTurn("scenario E hop: a teammate bob's Direct turn reaches through coordinate_bots runs as bob", async () => {
+  it("scenario E hop: a teammate bob's Direct turn reaches through coordinate_bots runs as bob", async () => {
     await allIdle(alice);
     const created = await api("POST", "/api/bots", alice, { name: "Yves" });
     expect(created.status, created.text).toBe(201);

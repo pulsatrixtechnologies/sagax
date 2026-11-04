@@ -19,7 +19,7 @@ import { stepUpApprovals } from "@/lib/step-up-client";
 import { createBotPatchQueue } from "./bot-patch-queue";
 import { useChatErrorClear } from "./chat-error";
 import { migrateInstalledVoiceSettings } from "@/lib/voice-mode/settings";
-import { StoreSourceContext, usePublishedStoreSource } from "./store-source";
+import { StoreCommandsContext, StoreSourceContext, usePublishedStoreSource } from "./store-source";
 import { ThreadPrefetchContext } from "./thread-prefetch";
 import { createThreadPrefetcher, ThreadPageCache } from "@/lib/thread-page-cache";
 import { PERSON_THREADS_HEADER, currentTaskBot, visibleMessages, configStatusFromFrame, pinBotThreadAction, openRoutineRun, continueRoutineRunInConversation, routineRunOfThread, visibleNotificationThread, openNotificationTarget, opensBesideStream, sendsToFreshTopic, freshTopicCovers, botOpensTo, awayFromMainThread, openBot, landOnBot, startNewTopic, openBotThread, openThread, threadsReadOnScreen, folderOwnerPath, personThreadKept, peopleDmReadTarget, panelFollowsSelection, openBotCatalog, closeBotCatalog, dataTablesFromResponse, dataSheetFromResponse, initialState, liveCallFromFrame, nextLiveCallLookup, ApiError, taskPatchFields, type OptionCardData, type SecretRequestCardData, type Message, type GroupDefaultResponder, type Group, type GroupTask, type ModelSelection, type Task, type ThreadOpener, type ThreadCloser, type TaskUsage, type Bot, type BotProject, type ProjectUpdatePatch, type FolderOwnerKind, type GroupTaskUpdatePatch, type TaskUpdatePatch, type ConfigStatus, type ConfigViewer, type ManagedPolicySummary, type BrowserEngineSummary, type BrowserProfile, type ConfigStatusFrame, type EngineInstall, type InstanceInfo, type AchievementsCategory, type ModelVariantSession, type AppState, type BotAnnouncement, type Action, type ThreadTarget, type BotCatalogTarget, type PanelOwner } from "./store/model";
@@ -135,6 +135,15 @@ const StreamContext = createContext<StreamState>(EMPTY_STREAM);
 
 type PendingDelta = { text: string; reasoning: string };
 
+/** Stream APIs the SSE fold calls. Owned by StreamRoot so a delta's setState
+ * re-renders only StreamContext consumers, not StoreProvider's tree. */
+type StreamApi = {
+  clearStream: (threadId: string) => void;
+  flushDeltas: () => void;
+  resetStreams: () => void;
+  deltaBuffer: ReturnType<typeof createStreamDeltaBuffer>;
+};
+
 /** Paint once per frame, but keep draining when a hidden tab pauses rAF.
  * Flush pending chunks at 64 Ki UTF-16 characters or a 100ms fallback timer.
  * Accumulated output remains intact and unbounded; this is not a memory cap. */
@@ -240,44 +249,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const showThreads = useShowThreads();
   const showThreadsRef = useRef(showThreads);
   showThreadsRef.current = showThreads;
-  // per-frame stream-delta batching (see the "runtime" SSE case); stream
-  // state is intentionally OUTSIDE the reducer so token frames re-render
-  // only StreamContext consumers
-  const [stream, setStream] = useState<StreamState>(EMPTY_STREAM);
-  const deltaBuffer = useMemo(() => createStreamDeltaBuffer((entries) => {
-    setStream((prev) => {
-      const streaming = { ...prev.streaming };
-      const reasoning = { ...prev.reasoning };
-      for (const [threadId, d] of entries) {
-        if (d.text) streaming[threadId] = (streaming[threadId] ?? "") + d.text;
-        if (d.reasoning) reasoning[threadId] = (reasoning[threadId] ?? "") + d.reasoning;
-      }
-      return { streaming, reasoning };
-    });
+  // Stream state lives in StreamRoot (below): a delta's setState must not
+  // re-render StoreProvider, or ChatView / the sidebar / the composer run
+  // again on every token even though they do not read the stream.
+  const streamApiRef = useRef<StreamApi | null>(null);
+  const clearStream = useCallback((threadId: string) => {
+    streamApiRef.current?.clearStream(threadId);
+  }, []);
+  const flushDeltas = useCallback(() => {
+    streamApiRef.current?.flushDeltas();
+  }, []);
+  const resetStreams = useCallback(() => {
+    streamApiRef.current?.resetStreams();
+  }, []);
+  const deltaBuffer = useMemo(() => ({
+    push: (threadId: string, kind: string, delta: string) => {
+      streamApiRef.current?.deltaBuffer.push(threadId, kind, delta);
+    },
+    dispose: () => {
+      streamApiRef.current?.deltaBuffer.dispose();
+    },
   }), []);
-  const flushDeltas = deltaBuffer.flush;
-  const clearStream = (threadId: string) => {
-    // Drop the thread's un-flushed deltas too: the settled message that
-    // triggered this clear already contains them. Without this, the pending
-    // rAF re-creates a "ghost" stream holding the tail fragment, and the
-    // next block's deltas append onto the duplicated tail instead of
-    // starting fresh.
-    deltaBuffer.clear(threadId);
-    setStream((prev) => {
-      if (!(threadId in prev.streaming) && !(threadId in prev.reasoning)) return prev;
-      const { [threadId]: _s, ...streaming } = prev.streaming;
-      const { [threadId]: _r, ...reasoning } = prev.reasoning;
-      return { streaming, reasoning };
-    });
-  };
-  // A non-resumable hello hydrates from REST and never replays the missed
-  // turn.completed / final message frames, so any half-written live text must
-  // go: otherwise LiveReply keeps the truncated bubble under the settled
-  // transcript and the next turn's deltas prepend onto it (#1749).
-  const resetStreams = () => {
-    deltaBuffer.reset();
-    setStream(EMPTY_STREAM);
-  };
   const clearChatError = useCallback(() => {
     rawDispatch({ type: "error", message: null });
   }, []);
@@ -572,15 +564,70 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Selector reads (store-selector.ts): the same state, for components that
   // render only when the slice they read changes.
   const source = usePublishedStoreSource(state, dispatch);
+  const commands = useMemo(() => ({ flushBotPatches, refreshInstances, refreshModels }), [flushBotPatches, refreshInstances, refreshModels]);
   return (
     <StoreSourceContext.Provider value={source}>
-      <StoreContext.Provider value={value}>
-        <ThreadPrefetchContext.Provider value={threadPrefetch}>
-          <StreamContext.Provider value={stream}>{children}</StreamContext.Provider>
-        </ThreadPrefetchContext.Provider>
-      </StoreContext.Provider>
+      <StoreCommandsContext.Provider value={commands}>
+        <StoreContext.Provider value={value}>
+          <ThreadPrefetchContext.Provider value={threadPrefetch}>
+            <StreamRoot apiRef={streamApiRef}>{children}</StreamRoot>
+          </ThreadPrefetchContext.Provider>
+        </StoreContext.Provider>
+      </StoreCommandsContext.Provider>
     </StoreSourceContext.Provider>
   );
+}
+
+/** Owns the in-flight stream map and the per-frame delta buffer. Keeping
+ * setState here (not in StoreProvider) means a content.delta only re-renders
+ * useStreaming consumers — LiveReply, TurnPresence, a floating bot — while
+ * ChatView and the rest of the tree keep their last commit. children is the
+ * element App passed in; when only this root updates, React reuses that
+ * element and skips the non-consumers. */
+function StreamRoot({
+  apiRef,
+  children,
+}: {
+  apiRef: { current: StreamApi | null };
+  children: ReactNode;
+}) {
+  const [stream, setStream] = useState<StreamState>(EMPTY_STREAM);
+  const deltaBuffer = useMemo(() => createStreamDeltaBuffer((entries) => {
+    setStream((prev) => {
+      const streaming = { ...prev.streaming };
+      const reasoning = { ...prev.reasoning };
+      for (const [threadId, d] of entries) {
+        if (d.text) streaming[threadId] = (streaming[threadId] ?? "") + d.text;
+        if (d.reasoning) reasoning[threadId] = (reasoning[threadId] ?? "") + d.reasoning;
+      }
+      return { streaming, reasoning };
+    });
+  }), []);
+  const flushDeltas = deltaBuffer.flush;
+  const clearStream = (threadId: string) => {
+    // Drop the thread's un-flushed deltas too: the settled message that
+    // triggered this clear already contains them. Without this, the pending
+    // rAF re-creates a "ghost" stream holding the tail fragment, and the
+    // next block's deltas append onto the duplicated tail instead of
+    // starting fresh.
+    deltaBuffer.clear(threadId);
+    setStream((prev) => {
+      if (!(threadId in prev.streaming) && !(threadId in prev.reasoning)) return prev;
+      const { [threadId]: _s, ...streaming } = prev.streaming;
+      const { [threadId]: _r, ...reasoning } = prev.reasoning;
+      return { streaming, reasoning };
+    });
+  };
+  // A non-resumable hello hydrates from REST and never replays the missed
+  // turn.completed / final message frames, so any half-written live text must
+  // go: otherwise LiveReply keeps the truncated bubble under the settled
+  // transcript and the next turn's deltas prepend onto it (#1749).
+  const resetStreams = () => {
+    deltaBuffer.reset();
+    setStream(EMPTY_STREAM);
+  };
+  apiRef.current = { clearStream, flushDeltas, resetStreams, deltaBuffer };
+  return <StreamContext.Provider value={stream}>{children}</StreamContext.Provider>;
 }
 
 /** The store when there is one; null outside a provider (static renders, tests). */
@@ -598,9 +645,13 @@ export function useStore() {
 export function BotEditorStore({ value, children }: { value: ReturnType<typeof useStore>; children: ReactNode }) {
   // Selector reads inside the editor see its scoped state, not the workspace's.
   const source = usePublishedStoreSource(value.state, value.dispatch);
+  const { flushBotPatches, refreshInstances, refreshModels } = value;
+  const commands = useMemo(() => ({ flushBotPatches, refreshInstances, refreshModels }), [flushBotPatches, refreshInstances, refreshModels]);
   return (
     <StoreSourceContext.Provider value={source}>
-      <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
+      <StoreCommandsContext.Provider value={commands}>
+        <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
+      </StoreCommandsContext.Provider>
     </StoreSourceContext.Provider>
   );
 }

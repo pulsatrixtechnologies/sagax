@@ -86,11 +86,11 @@ posixOnly("organization: a bot-to-bot conversation in both chats", () => {
       version: 1, issuer: idp.issuer, client_id: "pulsa-bot", server_id: idp.serverId, origin: BASE, link_token: idp.linkToken,
     }), { mode: 0o640 });
     writeFileSync(join(data, "config.json"), JSON.stringify({
-      instances: { claude: { driver: "claudeAgent", environment: {
+      instances: { claude: { driver: "claudeAgent", access: "api", environment: {
         FAKE_CLAUDE_MCP_DUMP: join(home, "mcp-dump.json"), FAKE_CLAUDE_MCP_CALLS: JSON.stringify([
           { server: "agents", tool: "coordinate_bots", arguments: { bot_ids: ["Bravo"], message: "PEER-HELLO from Alpha", request_key: "bc-1" }, when: "ASK-BRAVO" },
         ]),
-      }, config: { cli: FAKE_CLAUDE, fullAuto: true } } },
+      }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } } },
     }));
     child = spawn(process.execPath, ["--experimental-strip-types", join(SERVER_DIR, "..", "index.ts")], {
       cwd: join(SERVER_DIR, "..", ".."),

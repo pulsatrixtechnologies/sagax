@@ -347,6 +347,33 @@ describe("migrateCapabilitiesStores", () => {
       expect(migrate(dir, bots, installation).imported.filter((row) => row.startsWith("installation:skills-library-restore:"))).toEqual([]);
     });
 
+    // 2026-11-03 (audit S-4): a skill "changed after review" keeps its
+    // reviewed sha in the index while its SKILL.md differs; the restore
+    // dropped both the imported and the sealed entry, and it answered 404.
+    it("keeps a skill changed after review, restored or sealed, whose files are there", () => {
+      const { dir, bots, installation } = setUp("replace");
+      const reviewed = "---\nname: edited-later\ndescription: Reviewed\n---\nREVIEWED\n";
+      mkdirSync(join(dir, "skills-library", "skills", "edited-later"), { recursive: true });
+      writeFileSync(join(dir, "skills-library", "skills", "edited-later", "SKILL.md"), "---\nname: edited-later\ndescription: Edited\n---\nEDITED AFTER REVIEW\n");
+      mkdirSync(join(dir, "skills-library", "skills", "sealed-edited"), { recursive: true });
+      writeFileSync(join(dir, "skills-library", "skills", "sealed-edited", "SKILL.md"), "---\nname: sealed-edited\ndescription: Edited\n---\nEDITED\n");
+      const importFile = join(dir, "skills-library", "restore-import.json");
+      const raw = JSON.parse(readFileSync(importFile, "utf8"));
+      raw.entries["edited-later"] = entry("edited-later", reviewed);
+      writeFileSync(importFile, JSON.stringify(raw));
+      const document = installation.read();
+      document.skillsLibrary = { ...document.skillsLibrary, "sealed-edited": entry("sealed-edited", "the reviewed bytes") };
+      installation.write(document);
+      migrate(dir, bots, installation);
+      installation.clearCache();
+      const library = installation.read().skillsLibrary as Record<string, { sha256: string }>;
+      expect(library["edited-later"]?.sha256).toBe(sha(reviewed));
+      expect(library["sealed-edited"]?.sha256).toBe(sha("the reviewed bytes"));
+      // an entry whose folder the archive does not hold is still refused
+      expect(library).not.toHaveProperty("drifted");
+      expect(library).not.toHaveProperty("gone");
+    });
+
     it("never replaces an existing name in any other mode", () => {
       const { dir, bots, installation } = setUp("merge");
       migrate(dir, bots, installation);

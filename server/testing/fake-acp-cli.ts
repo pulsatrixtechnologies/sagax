@@ -40,7 +40,9 @@
 //                     FAKE_ACP_GATE_FILE is set hold the turn open until that
 //                     file exists — a deterministic busy window for the
 //                     steer-queue e2e, with the echo pinning exactly what a
-//                     drained turn was sent)
+//                     drained turn was sent. FAKE_ACP_ECHO_REPLY_FILE, when
+//                     present on disk, supplies a finite report instead of
+//                     echoing instructions; the prompt dump stays real)
 //                   | safe-agent-reads (simulate a native Auto reviewer around
 //                     the real injected agents MCP; not a real classifier test)
 //                   | stall-after-text (stream one message chunk, then go
@@ -1573,7 +1575,9 @@ function handle(msg: any) {
         // both what a drained turn was sent and what it was NOT sent (e.g.
         // the webhook untrusted-data paragraph a steered turn must not get)
         const finish = () => {
-          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text: `echo: ${promptText}` } } } });
+          const replyFile = process.env.FAKE_ACP_ECHO_REPLY_FILE;
+          const text = replyFile && existsSync(replyFile) ? readFileSync(replyFile, "utf8") : `echo: ${promptText}`;
+          out({ jsonrpc: "2.0", method: "session/update", params: { update: { sessionUpdate: "agent_message_chunk", content: { text } } } });
           complete();
         };
         const gate = process.env.FAKE_ACP_GATE_FILE;

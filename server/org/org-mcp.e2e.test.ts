@@ -27,6 +27,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
+import { waitForServerReady } from "../testing/server-ready.ts";
 import { seedMarketplaceBeforeBoot } from "../testing/seed-marketplace.ts";
 
 const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -103,6 +104,11 @@ async function start() {
       SAGAX_PERSPICAX_DIRECTORY_SECONDS: "5",
       SAGAX_ANTHROPIC_API_KEY: ORG_KEY,
       SAGAX_ORG_NAME: "Acme",
+      // e3f51c658 keeps profile leases while the engine is warm. Exercise the
+      // real idle close on a bounded fixture window, then assert revocation.
+      SAGAX_CLAUDE_SESSION_IDLE_MS: "10000",
+      // The pool reaps on MemoryWatch ticks, not the driver's idle timer.
+      SAGAX_MEMORY_WATCH_MS: "100",
       // Its temp HOME once left an `openmausbot-computer` bound to a deleted
       // folder on a developer's Mac: any Local VM this server makes carries
       // the run's namespace instead (server/testing/local-vm-namespace.ts).
@@ -112,16 +118,7 @@ async function start() {
   });
   child.stdout!.on("data", (c) => (log += c));
   child.stderr!.on("data", (c) => (log += c));
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    try {
-      if ((await fetch(`${BASE}/api/health`)).ok) return;
-    } catch {
-      /* not up yet */
-    }
-    if (Date.now() > deadline) throw new Error(`server never came up:\n${log}`);
-    await sleep(150);
-  }
+  await waitForServerReady(child, BASE, () => log);
 }
 
 /** The speaker's own thread on a bot. Private threads (#13,
@@ -222,6 +219,9 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
           driver: "claudeAgent", access: "api",
           environment: {
             FAKE_CLAUDE_DUMP: dump,
+            // The MCP calls are real; finish with words after them. The fake's
+            // default Bash-after-text is deliberately an unfinished turn.
+            FAKE_CLAUDE_TOOL_CALLS: "[]",
             FAKE_CLAUDE_MCP_CALLS: JSON.stringify([
               // Runtime lot 3: a routine uses the native coordination tool for a consultation.
               { server: "agents", tool: "coordinate_bots", arguments: { bot_ids: ["Xavier"], mode: "consult", message: "ping from Rita" }, when: "ASK-XAVIER" },
@@ -300,7 +300,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     await turn(bob, x, "READ-CAPABILITY-FILES");
     const calls = (JSON.parse(readFileSync(mcpDump, "utf8")) as { calls: Array<{ tool: string; ok: boolean; text: string }> }).calls.filter((call) => call.tool === "workspace_read");
     // V4: a hidden or missing file is a successful exists:false answer, never its private bytes.
-    expect(calls.map((call) => call.ok)).toEqual([true, true, true, true, true, true]);
+    expect(calls.map((call) => call.ok), readFileSync(mcpDump, "utf8")).toEqual([true, true, true, true, true, true]);
     for (const index of [0, 1, 4]) expect(calls[index]!.text).toMatch(/^No such file:/);
     expect(calls[2]!.text).toContain("Instructions from personal-tools.");
     expect(calls[3]!.text).toContain("Instructions from organization-tools.");
@@ -349,8 +349,8 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     expect(init.sessionId).toBeNull();
     expect(calls.filter((r) => r.rpcMethod !== "initialize").every((r) => r.sessionId?.startsWith("sess-"))).toBe(true);
     expect(idp.mcpRequests.slice(callsBefore).some((r) => r.sub === ALICE.sub)).toBe(false);
-    // revoked once the turn's generation ends
-    await waitFor(async () => idp.exchangeRevoked.includes(exchanges[0]!.token!), 10_000);
+    // Revoked once the warm engine goes idle (e3f51c658), never per sentence.
+    await waitFor(async () => idp.exchangeRevoked.includes(exchanges[0]!.token!), 20_000);
     expect(idp.exchangeRevoked.filter((t) => t === exchanges[0]!.token)).toHaveLength(1);
   }, 90_000);
 
@@ -379,7 +379,7 @@ posixOnly("Perspicax organization, slice 5: MCP for the person who speaks", () =
     expect(users.map((m: any) => m.voiceCall?.callId)).toEqual([callId, callId, callId]);
     const ended = await api("POST", `/api/bots/${x.id}/voice/call`, bob, { threadId, callId, state: "end" });
     expect(ended.status, ended.text).toBe(200);
-    await waitFor(async () => idp.exchangeRevoked.includes(exchanges[0]!.token!), 10_000);
+    await waitFor(async () => idp.exchangeRevoked.includes(exchanges[0]!.token!), 20_000);
   }, 120_000);
 
   it("T1: no sign-in or Perspicax token reaches the engine's argv, environment or MCP configuration", async () => {

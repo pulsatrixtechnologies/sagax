@@ -54,6 +54,21 @@ Tests: `capabilities.test.ts`, `PluginsPanel.modal.dom.test.ts`.
 Headless journey: `scripts/capture/flow-superseded.mjs`; recipe and limits:
 `docs/verification/flow-superseded.md`.
 
+## Routine regression fixtures (#1995, 2026-11-04)
+
+Routine readiness accepts a computer that can start or be provisioned,
+keeps its specific refusal and refreshes provider state after configuration
+writes. A provider-blocked run stays on the routine failover path. A blocked
+payer still gets the actionable access card through the existing audience
+checks, without allocating an execution thread or exposing another person's
+transcript. Warm engine expiry releases its dependent leases even without
+cgroups, honors the actual driver's idle policy and exempts live calls.
+Isolated cold boots use `server/testing/server-ready.ts` (bounded probes,
+child exit and pid checks). Fixture launches and restarts retain the run's
+Local VM namespace; gateway-only fixtures explicitly turn computers off.
+MCP fixtures finish with words after their calls and require lease revocation
+after the configured engine idle close, including after warm voice sessions.
+
 ## Routine readiness and failover (#1986, 2026-11-04)
 
 Routine pre-flight uses `limitFailover.backupFor` to check the same backup

@@ -124,9 +124,14 @@ describe("bot activity API", () => {
     expect((await get(base, "/api/bots/pepper/activity/item?runId=run-1", "bob")).status).toBe(404);
   });
 
-  it("gives a failed run's access card to its audience only, with or without the thread", async () => {
+  it.each([
+    { status: "failed", threadId: "t-bob" },
+    { status: "failed", threadId: undefined },
+    { status: "blocked", threadId: "t-bob" },
+    { status: "blocked", threadId: undefined },
+  ] as const)("gives a $status run's access card only to its audience (thread: $threadId)", async ({ status, threadId }) => {
     const failed = [
-      { id: "run-2", routineId: "r2", routineName: "Bob's check", botId: "pepper", status: "failed", target: "bot", runOn: "auto", scheduledFor: NOW - 4_000, startedAt: NOW - 4_000, finishedAt: NOW - 3_000, manual: true, createdAt: NOW - 4_000, threadId: "t-bob", error: "no credentials" },
+      { id: "run-2", routineId: "r2", routineName: "Bob's check", botId: "pepper", status, target: "bot", runOn: "auto", scheduledFor: NOW - 4_000, startedAt: NOW - 4_000, finishedAt: NOW - 3_000, manual: true, createdAt: NOW - 4_000, ...(threadId ? { threadId } : {}), error: "no credentials" },
     ] as unknown as RoutineRun[];
     const card = { reason: "no_access", engine: "Claude", botId: "pepper", ownerPrincipalId: "alice", payer: "owner", payerPrincipalId: "alice", routine: true, cause: "no_credentials" } as const;
     const asked: Array<string | undefined> = [];
@@ -144,7 +149,8 @@ describe("bot activity API", () => {
     expect(JSON.stringify(owner.body)).not.toContain("secret plan");
     // bob reads his own thread there, without her card
     const runAs = await get(base, "/api/bots/pepper/activity/item?runId=run-2", "bob");
-    expect(runAs.body.item).toMatchObject({ threadId: "t-bob" });
+    if (threadId) expect(runAs.body.item).toMatchObject({ threadId });
+    else expect(runAs.body.item).not.toHaveProperty("threadId");
     expect(runAs.body.item).not.toHaveProperty("access");
     expect(asked).toEqual(["alice", "bob"]);
     // a completed run never asks for a card

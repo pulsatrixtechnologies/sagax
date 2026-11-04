@@ -111,15 +111,46 @@ describe("IdleEnginePool", () => {
     expect(closed).toEqual(["a", "b"]);
   });
 
-  it("forgets entries the driver already closed on its own idle timer", () => {
+  it("releases expired entries and their dependent resources exactly once", () => {
     let clock = 0;
     const closed: string[] = [];
     const pool = new IdleEnginePool({ maxIdle: 1, ttlMs: 1_000, now: () => clock });
     pool.noteIdle("a", () => closed.push("a"));
     clock = 5_000;
     pool.noteIdle("b", () => closed.push("b"));
-    expect(closed).toEqual([]);
+    expect(closed).toEqual(["a"]);
     expect(pool.stats().idle).toBe(1);
+    pool.expire();
+    expect(closed).toEqual(["a"]);
+  });
+
+  it("honors each engine's idle override instead of applying the default TTL", () => {
+    let clock = 0;
+    const closed: string[] = [];
+    const pool = new IdleEnginePool({ maxIdle: 3, ttlMs: 1_000, now: () => clock });
+    pool.noteIdle("default", () => closed.push("default"));
+    pool.noteIdle("longer", () => closed.push("longer"), 10_000);
+    clock = 2_000;
+    expect(pool.expire()).toEqual(["default"]);
+    expect(pool.has("longer")).toBe(true);
+    clock = 10_000;
+    expect(pool.expire()).toEqual(["longer"]);
+    expect(closed).toEqual(["default", "longer"]);
+  });
+
+  it("keeps a live call through TTL expiry, then releases it when no longer exempt", () => {
+    let clock = 0;
+    let onCall = true;
+    const release = vi.fn();
+    const pool = new IdleEnginePool({ maxIdle: 1, ttlMs: 1_000, now: () => clock, exempt: () => onCall });
+    pool.noteIdle("call", release);
+    clock = 5_000;
+    expect(pool.expire()).toEqual([]);
+    expect(pool.has("call")).toBe(true);
+    expect(release).not.toHaveBeenCalled();
+    onCall = false;
+    expect(pool.expire()).toEqual(["call"]);
+    expect(release).toHaveBeenCalledTimes(1);
   });
 
   it("maxIdle 0 closes each session as its turn ends; a throwing release is contained", () => {
@@ -158,6 +189,26 @@ describe("OOM priority", () => {
 });
 
 describe("MemoryWatch", () => {
+  it("expires warm leases on ticks even without cgroups or OOM scoring", async () => {
+    vi.useFakeTimers();
+    const release = vi.fn();
+    const pool = new IdleEnginePool({ maxIdle: 2, ttlMs: 1_000 });
+    const watcher = new MemoryWatch({ pool, intervalMs: 100, highRatio: 0.75, criticalRatio: 0.88,
+      childOomScoreAdj: 0, read: () => null });
+    try {
+      watcher.start();
+      pool.noteIdle("warm-profile", release);
+      await vi.advanceTimersByTimeAsync(1_100);
+      expect(release).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1_100);
+      expect(release).toHaveBeenCalledTimes(1);
+      expect(pool.stats().idle).toBe(0);
+    } finally {
+      watcher.stop();
+      vi.useRealTimers();
+    }
+  });
+
   function watch(reading: { current: number }, extra: { oomKills?: number; now?: () => number } = {}) {
     const pool = new IdleEnginePool({ maxIdle: 10, ttlMs: 600_000 });
     const log = vi.fn();

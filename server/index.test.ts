@@ -23,7 +23,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
-import { hostTimeout } from "./testing/host-timeout.ts";
+import { waitForServerReady } from "./testing/server-ready.ts";
 import { startFakeHttpMcp } from "./testing/fake-http-mcp-server.ts";
 import { startFakeOAuthMcp } from "./testing/fake-oauth-mcp-server.ts";
 import { freePortBlock } from "./testing/ports.ts";
@@ -226,34 +226,8 @@ const waitForIsolatedServer = async (
   port: number,
   capturedStderr: () => string,
 ): Promise<void> => {
-  // a cold start on a loaded Windows runner (an isolated server loads and
-  // strips every server module) has taken past 20 s; hostTimeout doubles it there
-  const deadline = Date.now() + hostTimeout(20_000);
-  let lastObservedHealth = "none";
-  for (;;) {
-    if (serverChild.exitCode !== null || serverChild.signalCode !== null) {
-      throw new Error(
-        `isolated server exited before becoming healthy `
-        + `(code=${String(serverChild.exitCode)}, signal=${String(serverChild.signalCode)}).\n${capturedStderr()}`,
-      );
-    }
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/health`);
-      if (response.status === 200) {
-        const health = await response.json() as { app?: unknown; pid?: unknown; static?: unknown };
-        lastObservedHealth = JSON.stringify(health);
-        if (health.app === "openmausbot" && health.pid === serverChild.pid && health.static === true) return;
-      }
-    } catch {
-      /* still starting */
-    }
-    if (Date.now() >= deadline) {
-      throw new Error(
-        `isolated server never became healthy (last health: ${lastObservedHealth}).\n${capturedStderr()}`,
-      );
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
+  await waitForServerReady(serverChild, `http://127.0.0.1:${port}`, capturedStderr,
+    health => health.app === "openmausbot" && health.pid === serverChild.pid && health.static === true);
 };
 
 const api = async (method: string, path: string, body?: unknown): Promise<{ status: number; body: any }> => {

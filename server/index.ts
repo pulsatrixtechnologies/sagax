@@ -17366,7 +17366,7 @@ bus.subscribe((event: RuntimeEvent) => {
         try { engine.adapter.releaseWarmSession?.(threadId); } catch { /* already closed */ }
         // engine idle timer (or pool eviction): stop Perspicax keep-alive (#1955)
         perspicaxMcp?.noteEngineCold(threadId);
-      }));
+      }), idleEngineTtl(engine.driverKind));
       perspicaxMcp?.noteEngineWarm(threadId);
     } else {
       idleEngines.forget(event.threadId);
@@ -18565,6 +18565,9 @@ const runningTurnEngines = new Map<string, NonNullable<ReturnType<typeof registr
  * instead of the server. */
 const memoryGuard = memoryGuardSettings();
 const ROUTINE_MEMORY_WAIT_MS = 10 * 60_000;
+function idleEngineTtl(driverKind: string | undefined): number {
+  return sessionIdlePolicy(driverKind === "claudeAgent" ? "CLAUDE" : driverKind === "codex" ? "CODEX" : "ACP").idleMs;
+}
 const idleEngines = new IdleEnginePool({
   maxIdle: memoryGuard.maxIdle,
   ttlMs: sessionIdlePolicy("CLAUDE").idleMs,
@@ -20519,9 +20522,11 @@ bus.subscribe((event: RuntimeEvent) => {
       const failureCause = turnFailureCause(event);
       const usageLimitShaped = Boolean(limitKindOf(failureCause, event.stopReason));
       const routineForFailover = (() => {
-        if (!usageLimitShaped) return routineRun?.status === "failed" ? routineRun : null;
+        // A provider refusal now settles as blocked (routine reliability).
+        // Keep it on the routine rerun path, never as a direct resend.
+        if (!usageLimitShaped) return routineRun && ["failed", "blocked"].includes(routineRun.status) ? routineRun : null;
         const candidate = routineRun ?? routines?.runForThread(event.threadId);
-        return candidate && ["failed", "waiting", "queued"].includes(candidate.status) ? candidate : null;
+        return candidate && ["failed", "blocked", "waiting", "queued"].includes(candidate.status) ? candidate : null;
       })();
       const limitTaken = !event.ok && !stopped && !lazyClaimAlreadyReported && !computerParked && Boolean(bot) &&
         limitFailover.turnFailed({ threadId: event.threadId, turnId: completedTurnId, cause: failureCause, stopReason: event.stopReason,
@@ -21955,7 +21960,7 @@ function prewarmThread(botId: string, threadId: string, person: string, opts: Pr
       ...(opts.commsDepth ? { commsDepth: opts.commsDepth } : {}),
       ...(opts.cardContinuation ? { cardContinuation: true } : {}),
       ...(opts.warmCoordination ? { warmCoordination: true } : {}),
-      onWarmSettled: (ok) => {
+      onWarmSettled: (ok, driverKind) => {
         // counted with the finished sessions, so the idle cap (#804) holds
         if (ok && !signal.aborted && !runningTurnEngines.has(threadId)) idleEngines.noteIdle(threadId, () => {
           threadPrewarm.cancel(threadId);
@@ -21963,7 +21968,7 @@ function prewarmThread(botId: string, threadId: string, person: string, opts: Pr
             releaseWarmEngine(threadId);
             perspicaxMcp?.noteEngineCold(threadId);
           });
-        });
+        }, idleEngineTtl(driverKind));
         resolve();
       }
     }).catch((error) => {
@@ -24029,7 +24034,7 @@ async function startTurn(
     warmSignal?: AbortSignal;
     /** Fired once the warm has released its claim, whether or not the
      * process is up. The call's first turn waits on this. */
-    onWarmSettled?: (ok: boolean) => void;
+    onWarmSettled?: (ok: boolean, driverKind?: string) => void;
   },
 ) {
   return (startTurnRunner as typeof startTurnRunner)(botId, text, opts);
@@ -24684,13 +24689,22 @@ function routineReadinessProfiles(bot: BotRecord, principal: string): readonly s
   const held = subject ? perspicaxDirectory?.profilesOf(subject.sub) : undefined;
   return held?.[0] ? [held[0]] : [];
 }
+let routineReadinessConfigRevision = 0;
+onConfigSaved(() => { routineReadinessConfigRevision += 1; });
 const routineReadinessDeps: RoutineReadinessDeps = {
   cacheKey: (routine, run) => {
     const bot = store.bot(run.botId);
     const engine = routineReadinessEngine(routine, run);
-    return JSON.stringify([engine, bot?.modelSelection, bot?.mcpServers, bot?.toolScope, bot?.assignedSkills, bot?.perspicax, bot?.perspicaxActAs, bot?.computer, bot?.remoteHosts]);
+    return JSON.stringify([routineReadinessConfigRevision, engine, bot?.modelSelection, bot?.mcpServers, bot?.toolScope, bot?.assignedSkills, bot?.perspicax, bot?.perspicaxActAs, bot?.computer, bot?.remoteHosts]);
   },
-  engine: (routine, run) => routineReadinessEngine(routine, run),
+  engine: async (routine, run) => {
+    const engine = routineReadinessEngine(routine, run);
+    if (!engine || IDENTITY.kind === "perspicax") return engine;
+    // A settings write can replace a provider key or compatible endpoint
+    // before the installation probe cache refreshes. Probe the current instance.
+    const snapshot = await registry.get(engine.engine)?.snapshot();
+    return snapshot ? { ...engine, signedIn: snapshot.state === "available" && snapshot.authenticated !== false, signedInAt: Date.now() } : engine;
+  },
   backup: async (routine, run, primary) => {
     const speaker = routineRunSpeaker({ botId: run.botId, runAs: run.runAs ?? routine.runAs });
     const backup = await limitFailover.backupFor(run.botId, run.threadId ?? "", speaker, primary.engine);
@@ -24765,7 +24779,9 @@ const routineReadinessDeps: RoutineReadinessDeps = {
         rows.push({ name: "Cloud computer", online: status.state === "running" });
       } else {
         const option = (await selectableComputers(bot)).find(option => option.surface === surface);
-        if (option) rows.push({ name: option.label, online: option.ready });
+        // A managed computer that can wake or be provisioned is available to
+        // dispatch. The pre-flight must not require an already warm desktop.
+        if (option) rows.push({ name: option.label, online: option.available, ...(option.reason ? { detail: option.reason } : {}) });
       }
       return rows.map(row => ({ ...row, needed: required && (row.name === "Cloud computer" || row.name === surfaceLabel(surface)) }));
     }
@@ -25111,7 +25127,25 @@ routines = new RoutineManager({
     }
     const bot = store.bot(run.botId);
     // null: the owner was already told about this cause for this bot.
-    if (!bot || alert === null) return;
+    if (!bot) return;
+    // Pre-flight can refuse before an execution thread exists. Keep the
+    // payer's actionable card and its audience on the existing results thread.
+    if (IDENTITY.kind === "perspicax" && run.status === "blocked" && run.readiness?.some(check => check.code === "engine_signed_out")) {
+      const routine = routines?.getRoutine(run.routineId);
+      const planned = routine ? routineReadinessBot(routine, run) ?? bot : bot;
+      const instance = registry.get(planned.modelSelection.instanceId);
+      const refusal = instance && orgEngineRefusal(planned, instance, routineRunSpeaker(run), planned.modelSelection.model);
+      const threadId = run.threadId ?? run.resultsThreadId ?? run.sourceThreadId;
+      if (instance && refusal && threadId) {
+        const engine = engineDisplayName(instance);
+        const access = accessCardFor(planned, refusal, engine);
+        store.appendMessage(threadId, { role: "bot", kind: "access", access });
+        if (alert !== null) notifyAccess(deliverableNotification("turn-failed", bot, threadId, engineAccessNotice(refusal.reason, engine, refusal), { avatarUrl: bot.avatarUrl }), access, run.id);
+        console.error(`[routine] bot=${bot.id} refused: ${refusal.reason}${refusal.cause ? `/${refusal.cause}` : ""} (${instance.instanceId})`);
+        return;
+      }
+    }
+    if (alert === null) return;
     const said = alert?.detail ?? run.error;
     const detail = run.status === "blocked" && alert ? alert.detail : said ? `${run.routineName}: ${said}` : run.routineName;
     const notificationBot = routineSourceOwner(run)?.bot ?? bot;
@@ -34278,7 +34312,7 @@ ROUTES.push(createDevPullRoutes({
  * threads leaves (the bot's owner reads the card of a run that ran as
  * another person, never that person's thread). */
 function routineRunAccessCard(run: RoutineRun, viewerId: string | undefined): WireAccessCard | undefined {
-  if (run.status !== "failed") return undefined;
+  if (run.status !== "failed" && run.status !== "blocked") return undefined;
   const from = run.createdAt;
   const until = (run.finishedAt ?? Date.now()) + 5_000;
   const threads = [...new Set([run.threadId, run.resultsThreadId, run.sourceThreadId].filter((id): id is string => Boolean(id)))];

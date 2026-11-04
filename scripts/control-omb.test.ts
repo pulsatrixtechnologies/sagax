@@ -16,6 +16,14 @@ describe("a fixture driven from a real browser", () => {
   });
 });
 
+describe("Local VM test isolation", () => {
+  it("keeps the run namespace through fixture launch and restart environments", () => {
+    const namespace = "tfixture-osprey";
+    expect(childEnv({ SAGAX_LOCAL_VM_TEST_NAMESPACE: namespace }).SAGAX_LOCAL_VM_TEST_NAMESPACE).toBe(namespace);
+    expect(childEnv({})).not.toHaveProperty("SAGAX_LOCAL_VM_TEST_NAMESPACE");
+  });
+});
+
 describe("turn-trace forwarding", () => {
   it("forwards SAGAX_TURN_TRACE=1 only when set", () => {
     expect(childEnv({})).not.toHaveProperty("SAGAX_TURN_TRACE");

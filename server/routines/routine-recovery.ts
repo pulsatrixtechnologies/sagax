@@ -281,7 +281,8 @@ export function recoverRun(run: RoutineRun, failure: string, facts: RoutineFailu
   }
   // The engine the host saw refuse, by its name: a quick model Sagax picked is skipped for quick turns (no advice to
   // change the bot's engine), a backup standing in for the bot's own engine names when that one comes back.
-  if (verdict.cause === "credits" && limit) {
+  // The bot's own engine out of credit keeps the engine's own words (the provider's detail and what to add, #1995).
+  if (verdict.cause === "credits" && limit && (limit.detour || limit.home)) {
     const text = routineLimitCreditsText(limit, said);
     return { queued: false, error: text, alert: first ? { detail: text } : null };
   }

@@ -300,7 +300,7 @@ if (state.warmOnly) {
           console.error(`[voice-call] warm skipped: ${error instanceof Error ? error.name : "error"}`);
           state.warmOk = false;
         }
-        state.opts?.onWarmSettled?.(state.warmOk);
+        state.opts?.onWarmSettled?.(state.warmOk, state.instance?.driverKind);
         drainQueuedSends();
       }
 

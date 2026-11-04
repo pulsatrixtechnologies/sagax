@@ -39,6 +39,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { removeTempDir, waitForExit } from "../testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "../testing/fake-oidc-provider.ts";
 import { freePortBlock } from "../testing/ports.ts";
+import { waitForServerReady } from "../testing/server-ready.ts";
 
 const SERVER_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
@@ -114,7 +115,7 @@ async function runNow(auth: Auth, routineId: string): Promise<Run> {
   const started = await api("POST", `/api/routines/${routineId}/run`, auth, {});
   expect(started.status, started.text).toBe(201);
   const id = started.body.run.id as string;
-  return waitFor(async () => (await runsOf(auth, routineId)).find((r) => r.id === id && ["completed", "failed", "cancelled"].includes(r.status)), 60_000);
+  return waitFor(async () => (await runsOf(auth, routineId)).find((r) => r.id === id && ["completed", "failed", "blocked", "cancelled"].includes(r.status)), 60_000);
 }
 /** An open /api/events stream: everything it received so far. */
 async function openStream(auth: Auth): Promise<{ text: () => string; close: () => void }> {
@@ -193,6 +194,11 @@ async function start() {
       SAGAX_PERSPICAX_DIRECTORY_SECONDS: "5",
       SAGAX_ROUTINE_RENEW_SECONDS: String(RENEW_SECONDS),
       SAGAX_ORG_NAME: "Acme",
+      // e3f51c658 keeps profile leases while the engine is warm. Exercise the
+      // real idle close on a bounded fixture window, then assert revocation.
+      SAGAX_CLAUDE_SESSION_IDLE_MS: "10000",
+      // The pool reaps on MemoryWatch ticks, not the driver's idle timer.
+      SAGAX_MEMORY_WATCH_MS: "100",
       // its checks read the message database raw (docs/content-encryption.md)
       SAGAX_CONTENT_ENCRYPTION: "off",
     },
@@ -200,16 +206,7 @@ async function start() {
   });
   child.stdout!.on("data", (c) => (log += c));
   child.stderr!.on("data", (c) => (log += c));
-  const deadline = Date.now() + 20_000;
-  for (;;) {
-    try {
-      if ((await fetch(`${BASE}/api/health`)).ok) return;
-    } catch {
-      /* not up yet */
-    }
-    if (Date.now() > deadline) throw new Error(`server never came up:\n${log}`);
-    await sleep(150);
-  }
+  await waitForServerReady(child, BASE, () => log);
 }
 
 posixOnly("Perspicax organization, slice 6: routines in their person's name", () => {
@@ -245,7 +242,7 @@ posixOnly("Perspicax organization, slice 6: routines in their person's name", ()
           driver: "claudeAgent",
           environment: {
             FAKE_CLAUDE_DUMP: dump,
-            FAKE_CLAUDE_MCP_CALLS: JSON.stringify([{ server: "perspicax_*", tool: "api_list", arguments: {} }]),
+            FAKE_CLAUDE_TOOL_CALLS: "[]", FAKE_CLAUDE_MCP_CALLS: JSON.stringify([{ server: "perspicax_*", tool: "api_list", arguments: {} }]),
             FAKE_CLAUDE_MCP_DUMP: join(home, "mcp-dump.json"),
           },
           config: { cli: FAKE_CLAUDE, fullAuto: true },
@@ -463,18 +460,19 @@ posixOnly("Perspicax organization, slice 6: routines in their person's name", ()
     const aliceStream = await openStream(alice);
     const bobStream = await openStream(bob);
     const refused = await runNow(bob, r2);
-    expect(refused.status).toBe("failed");
+    // 63eff44d1c: missing payer credentials block the run; they never use Bob's.
+    expect(refused.status).toBe("blocked");
     expect(existsSync(dump)).toBe(false);
-    // the run's thread is bob's (its runAs, private threads). 2026-10-01: the
-    // card is the owner's alone (her credentials are missing), so bob, who
-    // started the run, sees none; alice is notified
+    // b0cec80619 blocks before allocating an execution thread. The existing
+    // results thread stores the owner's card without exposing it to Bob.
+    expect(onDisk().runs.find(run => run.id === refused.id)?.threadId).toBeUndefined();
     const thread = runThread(refused.id);
     await waitFor(async () => log.includes(`refused: no_access/no_credentials`));
     const stored = storedAccessCards(thread).findLast((access) => access.reason === "no_access");
     expect(stored).toMatchObject({ payer: "owner", payerPrincipalId: ids.alice, routine: true, cause: "no_credentials" });
     const bobView = ((await api("GET", `/api/threads/${thread}/messages`, bob)).body.messages ?? []) as Message[];
     expect(bobView.some((m) => m.kind === "access" && m.access?.reason === "no_access")).toBe(false);
-    // alice still cannot read bob's private thread
+    // The results transcript is not a way around the card's audience.
     const aliceThread = await api("GET", `/api/threads/${thread}/messages`, alice);
     expect(((aliceThread.body.messages ?? []) as Message[]).some((m) => m.kind === "access")).toBe(false);
     // her notification names no thread, only the run: it opens the bot's
@@ -492,10 +490,10 @@ posixOnly("Perspicax organization, slice 6: routines in their person's name", ()
     expect(ownerView.item).toMatchObject({ id: `run:${refused.id}`, kind: "routine", status: "failed", steps: [] });
     expect(ownerView.item!.threadId).toBeUndefined();
     expect(ownerView.item!.access).toMatchObject({ reason: "no_access", payer: "owner", payerPrincipalId: ids.alice, routine: true, cause: "no_credentials", subscriptionSignIn: true, keysUrl: expect.any(String) });
-    // bob reads his run (and his thread) without her card
+    // Bob reads the blocked run without an execution thread or her card.
     const runAsView = await runActivity(bob, x.id, refused.id);
     expect(runAsView.status).toBe(200);
-    expect(runAsView.item!.threadId).toBe(thread);
+    expect(runAsView.item!.threadId).toBeUndefined();
     expect(runAsView.item!.access).toBeUndefined();
     // carol, who neither owns the bot nor runs the routine, does not see the run
     const carol = await signIn(CAROL);
@@ -573,7 +571,8 @@ posixOnly("Perspicax organization, slice 6: routines in their person's name", ()
       expect(created.status, created.text).toBe(201);
       const r3 = created.body.routine.id as string;
       const skipped = await runNow(carol, r3);
-      expect(skipped).toMatchObject({ status: "failed", error: "Perspicax did not issue Carol's routine access yet; this run is skipped and the next one tries again" });
+      // b0cec80619: a skipped admission is terminal and blocked, never a live wait.
+      expect(skipped).toMatchObject({ status: "blocked", error: "Perspicax did not issue Carol's routine access yet; this run is skipped and the next one tries again" });
       expect(idp.delegationIssues.filter((issue) => issue.sub === CAROL.sub).at(-1)).toEqual({ sub: CAROL.sub, ok: false, error: "invalid_request" });
       expect((await routineOf(carol, r3))?.suspended).toBeUndefined();
       expect(onDisk().routines.find((r) => r.id === r3)?.suspended).toBeUndefined();
@@ -599,7 +598,8 @@ posixOnly("Perspicax organization, slice 6: routines in their person's name", ()
     expect(r2).toBeTruthy();
     if (existsSync(dump)) rmSync(dump);
     const refused = await runNow(bob, r2!);
-    expect(refused.status).toBe("failed");
+    // 63eff44d1c: an unavailable payer is a blocked run.
+    expect(refused.status).toBe("blocked");
     expect(existsSync(dump)).toBe(false);
     const thread = runThread(refused.id);
     const stored = await waitFor(async () => storedAccessCards(thread).findLast((access) => access.cause === "payer_disabled") ?? null);

@@ -8,6 +8,10 @@ hooks use useStoreSelector scoped by thread or bot. Event handlers use
 useStoreGetter, not a captured workspace. Peer lists use view-slices.ts and
 never subscribe to other conversations' transcripts; ownership, grants,
 hiding and task navigation still invalidate them.
+TransientNotice groups fresh routine failures in one dismissible banner, with
+each run still available in its details. It remembers the whole burst and
+does not extend the first notice's timer as failures arrive. Access cards
+keep their separate settlement behavior. Regression: TransientNotice.dom.test.ts.
 Render regression: src/components/StoreSubscriptions.renders.dom.test.ts
 (real desktop, scoped store, neutral fixture, no network or visible window).
 

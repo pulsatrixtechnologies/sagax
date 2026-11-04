@@ -180,4 +180,42 @@ final class DesktopChatSweepUITests: XCTestCase {
         let id = try XCTUnwrap(routineId, "the loop's routine")
         _ = try? api("DELETE", "/api/routines/\(id)")
     }
+
+    /// The model menu (ModelPicker windowOnly): search, the models, Providers.
+    @MainActor
+    func testModelMenuIsThePopover() throws {
+        let app = launch("chat-model-picker")
+        XCTAssertTrue(element(app, "desktop-model-menu").waitForExistence(timeout: 20), "the model menu")
+        XCTAssertTrue(element(app, "desktop-model-search").exists, "its search field")
+        XCTAssertTrue(element(app, "model-menu-providers").exists, "Providers at its foot")
+    }
+
+    /// The guided first run opens on its first step with the terms over it.
+    @MainActor
+    func testFirstRunWithTheTerms() throws {
+        let app = launch("onboarding-welcome")
+        XCTAssertTrue(element(app, "desktop-first-run").waitForExistence(timeout: 20), "the guided first run")
+        XCTAssertEqual(element(app, "first-run-progress").label, "Step 1 of 3")
+        XCTAssertTrue(element(app, "first-run-skip").exists, "Skip tour")
+        XCTAssertTrue(element(app, "first-run-continue").exists, "Continue")
+        XCTAssertTrue(element(app, "terms-sheet").exists, "the terms of use")
+        XCTAssertTrue(element(app, "terms-accept").exists, "I agree")
+        XCTAssertTrue(element(app, "terms-read").exists, "Read the terms")
+    }
+
+    /// The tour starts on the composer, Next moves on, Skip closes it.
+    @MainActor
+    func testTourStepsAndSkips() throws {
+        let app = launch("onboarding-tour")
+        XCTAssertTrue(element(app, "desktop-tour").waitForExistence(timeout: 20), "the tour")
+        XCTAssertEqual(element(app, "tour-progress").label, "Step 1 of 9")
+        element(app, "tour-next").tap()
+        let second = NSPredicate(format: "label == %@", "Step 2 of 9")
+        expectation(for: second, evaluatedWith: element(app, "tour-progress"))
+        waitForExpectations(timeout: 10)
+        element(app, "tour-skip").tap()
+        let gone = NSPredicate(format: "exists == false")
+        expectation(for: gone, evaluatedWith: element(app, "desktop-tour"))
+        waitForExpectations(timeout: 10)
+    }
 }

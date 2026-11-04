@@ -1,5 +1,17 @@
 # Sagax agent notes
 
+## Local act and Perspicax assertions (#1993, 2026-11-04)
+
+`act` delegates an opaque Sagax session, never a Perspicax console JWS.
+`botActConsoleRouteError` (`shared/bot-act.ts`) explains `/api/org/admin`
+and `/api/org/member` before scope checks or approval; `performBotActRoute`
+also checks before delegating a session for a planned replay. Console calls
+go through the person's Perspicax profile; local bots and routines use
+`/api/bots`, `/api/routines` and `/api/routines/runs` with the existing
+person checks. Never accept a Sagax bearer at the assertion gate.
+Regression: `server/member-own-act.e2e.test.ts` (isolated organization,
+admin and member replays) and `shared/bot-act.test.ts`.
+
 ## Routine readiness and failover (#1986, 2026-11-04)
 
 Routine pre-flight uses `limitFailover.backupFor` to check the same backup

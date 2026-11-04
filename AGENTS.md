@@ -7609,6 +7609,33 @@ Rules, none optional (`server/routes/bot-code-branches.ts`, git in
   Screenshots: `node scripts/capture/bot-panel-coding.mjs` (headless, the
   gallery `src/gallery/bot-panel-coding.html`).
 
+## Coding chat: a coding task opens where the chat is (2026-11-03)
+
+Decision (JC): a row of Details > Coding no longer opens the task sheet in the
+side panel. It opens as a chat over the chat column (`AppState.codingChat`,
+actions `openCodingChat` / `closeCodingChat`, drawn by ChatView like
+`routineRunSheet`; a routine run, another bot or a closing panel closes it),
+the same family as the routine run sheet, drawn for development
+(`src/components/coding/CodingChat.tsx`, pure reading in
+`src/lib/coding-chat.ts`, UX in `docs/design/ux-reference-grokbot-cursor.md`
+2.24). Source: the task's own thread (`useSideTranscript`: the messages'
+`tool.input` / `tool.output` previews) and its activity entry (polled every
+3 s while it runs, and 30 s after a follow-up; a reload keeps the screen).
+A task without a readable thread (a cloud agent, a private run) shows the
+entry's steps. Commands are terminal blocks with test counts (vitest, jest,
+pytest, cargo, go, node:test, mocha); Edit / MultiEdit / Write, apply_patch
+and Codex file changes are diffs per file (`git diff` output too); reads are
+file chips. A file edit's arguments keep up to `EDIT_PREVIEW_MAX` (24,000)
+characters (`inputPreviewMax`, server/tools/tool-summary.ts) so a modest
+edit is not cut in half. Paths read relative to the task's folder, else as
+their last two segments; UUIDs are masked. Continue posts to
+`/api/bots/:id/messages` with the task's `threadId` (`busyMode: "steer"`
+while it runs). Launched coding agents and the history deep link open it
+too; routine runs and sub-agents keep their own sheets. Tests:
+`src/lib/coding-chat.test.ts`, `src/components/coding/CodingChat.dom.test.ts`,
+`ActivitySection.coding.dom.test.ts`. Captures: `node
+scripts/capture/coding-chat.mjs` (gallery `src/gallery/coding-chat.html`).
+
 ## Parallel tasks (sending while the bot works, 2026-10-02)
 
 A message sent to a busy 1:1 conversation carries `busyMode`

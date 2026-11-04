@@ -252,6 +252,32 @@ async function highlightFence(code: string, lang: string): Promise<string> {
     defaultColor: "light-dark()",
   });
 }
+/** One coloured run of a line (the coding chat's diffs): its text and the
+ * two themes' colour (`light-dark()`), never HTML. */
+export interface CodeToken {
+  content: string;
+  style?: Record<string, string>;
+}
+
+/** The same grammars and themes as a code fence, as tokens per line, for a
+ * renderer that draws its own rows. Null for a language outside the curated
+ * set or a text past HIGHLIGHT_MAX_CHARS: the rows stay plain. */
+export async function highlightCodeLines(code: string, lang: string): Promise<CodeToken[][] | null> {
+  if (code.length > HIGHLIGHT_MAX_CHARS) return null;
+  const file = grammarFile(lang.trim().toLowerCase());
+  if (!file) return null;
+  const highlighter = await getHighlighter();
+  await loadGrammar(highlighter, file);
+  const result = highlighter.codeToTokens(code, {
+    lang: file,
+    themes: { light: LIGHT_THEME, dark: DARK_THEME },
+    defaultColor: "light-dark()",
+  });
+  return result.tokens.map((line) => line.map((token) => ({
+    content: token.content,
+    ...(token.htmlStyle ? { style: token.htmlStyle as Record<string, string> } : token.color ? { style: { color: token.color } } : {}),
+  })));
+}
 const highlightKey = (lang: string, code: string) => `${lang}:${hash(code)}`;
 // Past this size a block stays plain text. Shiki tokenizes on the renderer's
 // main thread: 100 KB of TypeScript took 1.1 s, 200 KB 2.3 s and 1 MB 12 s,

@@ -8,7 +8,7 @@ import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../../shared
 import { searchedToolCall } from "../../../shared/searched-tool-call.ts";
 import { pushRenewalStep } from "../../context/context-renewal.ts";
 import { filesField, writtenFilesFromToolInput } from "../../threads/thread-files.ts";
-import { commandSummary, cwToolResult, toolDetailPreview, toolFailurePreview } from "../../tools/tool-summary.ts";
+import { commandSummary, cwToolResult, inputPreviewMax, toolDetailPreview, toolFailurePreview } from "../../tools/tool-summary.ts";
 import { withAbsolutePaths } from "../permission-command.ts";
 import { claudeAuthFailure } from "../claude-auth-recovery.ts";
 import { claudeSignInExpired as claudeSignInExpiredImport } from "../claude-errors.ts";
@@ -194,7 +194,7 @@ case "assistant": {
         itemId: b.id,
         title: runs.name,
         summary: commandSummary(runs.input),
-        input: toolDetailPreview(runs.input),
+        input: toolDetailPreview(runs.input, inputPreviewMax(typeof runs.name === "string" ? runs.name : undefined)),
         ...filesField(writtenFilesFromToolInput(runs.name, withAbsolutePaths(runs.name, runs.input, cwd))),
         // a sub-agent's call: nested under the Agent call that started it
         ...(typeof o.parent_tool_use_id === "string" && o.parent_tool_use_id ? { parentItemId: o.parent_tool_use_id } : {}),

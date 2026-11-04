@@ -16,6 +16,7 @@ export const closedRightPanels = {
   activityOpen: false,
   appSettingsOpen: false,
   routineRunSheet: null,
+  codingChat: null,
 } satisfies Partial<AppState>;
 
 export function reduceViews(state: AppState, action: Action, _reduce: ReduceFn): AppState | undefined {

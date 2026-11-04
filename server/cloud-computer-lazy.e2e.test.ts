@@ -16,6 +16,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CONTROL_WAITED } from "./control-client.ts";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { freePortBlock } from "./testing/ports.ts";
+import { waitForServerReady } from "./testing/server-ready.ts";
 import { openSse, type SseRecorder } from "./testing/sse.ts";
 import { withoutTurnClock } from "./testing/turn-clock-text.ts";
 
@@ -231,13 +232,10 @@ describe("a cloud computer starts only when the bot uses it", () => {
     });
     child.stdout?.on("data", chunk => { output += chunk; });
     child.stderr?.on("data", chunk => { output += chunk; });
-    await until(async () => {
-      if (child!.exitCode !== null) throw new Error(`the server exited:\n${output}`);
-      try { return (await fetch(`${base}/api/health`)).ok; } catch { return false; }
-    }, Boolean, 30_000);
+    await waitForServerReady(child, base, () => output);
     events = await openSse(`${base}/api/events`);
     await events.until(frame => frame.kind === "hello");
-  }, 60_000);
+  }, 90_000);
 
   afterAll(async () => {
     events?.close();

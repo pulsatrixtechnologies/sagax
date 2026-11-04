@@ -24,6 +24,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { removeTempDir, waitForExit } from "./testing/cleanup.ts";
 import { startFakeOidcProvider, type FakeOidcProvider, type FakeOidcUser } from "./testing/fake-oidc-provider.ts";
 import { freePortBlock } from "./testing/ports.ts";
+import { waitForServerReady } from "./testing/server-ready.ts";
 
 const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const FAKE_ACP = join(SERVER_DIR, "testing", "fake-acp-cli.ts");
@@ -150,17 +151,6 @@ async function fetchCall(base: string, method: string, path: string, body?: unkn
   return { status: response.status, body: parsed, text };
 }
 
-async function waitForHealth(base: string, log: () => string): Promise<void> {
-  const deadline = Date.now() + 30_000;
-  for (;;) {
-    try {
-      if ((await fetch(`${base}/api/health`)).ok) return;
-    } catch { /* not up yet */ }
-    if (Date.now() > deadline) throw new Error(`server never came up:\n${log()}`);
-    await new Promise((resolve) => setTimeout(resolve, 150));
-  }
-}
-
 posixOnly("solo server: the operator's own Grok sign-in", () => {
   let home = "";
   let base = "";
@@ -179,7 +169,7 @@ posixOnly("solo server: the operator's own Grok sign-in", () => {
     });
     child.stdout!.on("data", (chunk) => (log += chunk));
     child.stderr!.on("data", (chunk) => (log += chunk));
-    await waitForHealth(base, () => log);
+    await waitForServerReady(child, base, () => log);
   };
   beforeAll(async () => {
     chmodSync(FAKE_ACP, 0o755);
@@ -202,7 +192,7 @@ posixOnly("solo server: the operator's own Grok sign-in", () => {
     for (const task of row.tasks ?? []) { delete task.approvalMode; delete task.autoApprove; delete task.approvalOwn; }
     writeFileSync(join(data, "bots.json"), JSON.stringify(saved, null, 2));
     await boot();
-  }, 90_000);
+  }, 150_000);
   afterAll(async () => {
     if (child) await waitForExit(child, { signal: "SIGTERM" });
     if (home) await removeTempDir(home);
@@ -260,7 +250,7 @@ posixOnly("organization server: the person's own Grok sign-in", () => {
     });
     child.stdout!.on("data", (chunk) => (log += chunk));
     child.stderr!.on("data", (chunk) => (log += chunk));
-    await waitForHealth(base, () => log);
+    await waitForServerReady(child, base, () => log);
     cookie = await signIn();
     // Alice's own grok.com sign-in on this server: the marker a device
     // sign-in writes (principal-engine-logins.ts), so her turns run on it

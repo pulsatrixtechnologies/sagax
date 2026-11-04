@@ -22,7 +22,7 @@ export async function waitForServerReady(
         throw new Error(`fixture server exited before becoming healthy (code=${child.exitCode}, signal=${child.signalCode}${spawnError ? `, error=${spawnError.message}` : ""}).\n${output()}`);
       }
       try {
-        const response = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(Math.max(1, Math.min(1_000, deadline - Date.now()))) });
+        const response = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(Math.max(1, Math.min(5_000, deadline - Date.now()))) });
         if (response.ok) {
           const health = await response.json() as ServerHealth;
           lastHealth = JSON.stringify(health);

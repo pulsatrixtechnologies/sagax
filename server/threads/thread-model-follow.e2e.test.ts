@@ -46,8 +46,10 @@ async function withEngines(check: (fixture: Fixture) => Promise<void>) {
     const configPath = join(dataDir, "config.json");
     const config = JSON.parse(readFileSync(configPath, "utf8"));
     const signedOut = { FAKE_CLAUDE_AUTH: "out", FAKE_CLAUDE_MODE: "not-logged-in" };
+    // 95e8f39e4 continues tool-only endings. Finish these fake replies in
+    // text so each recorded prompt measures the engine fallback itself.
     config.instances.claude = { ...config.instances.claude, environment: {
-      FAKE_CLAUDE_PROMPTS: promptFile("claude"), ...(engines.claude === "signed-out" ? signedOut : {}),
+      FAKE_CLAUDE_PROMPTS: promptFile("claude"), FAKE_CLAUDE_TOOL_CALLS: "[]", ...(engines.claude === "signed-out" ? signedOut : {}),
     } };
     delete config.instances[SPARE];
     if (engines.spare !== "missing") {
@@ -56,7 +58,7 @@ async function withEngines(check: (fixture: Fixture) => Promise<void>) {
       config.instances[SPARE] = {
         driver: "claudeAgent", displayName: "Spare Claude", config: { cli: FAKE_CLI, configDir },
         ...(engines.spare === "disabled" ? { enabled: false } : {}),
-        environment: { FAKE_CLAUDE_PROMPTS: promptFile(SPARE), ...(engines.spare === "signed-out" ? signedOut : {}) },
+        environment: { FAKE_CLAUDE_PROMPTS: promptFile(SPARE), FAKE_CLAUDE_TOOL_CALLS: "[]", ...(engines.spare === "signed-out" ? signedOut : {}) },
       };
     }
     writeFileSync(configPath, JSON.stringify(config));

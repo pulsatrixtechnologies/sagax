@@ -10215,3 +10215,23 @@ a message's content on the car's screen. Tests:
 The main app's localized `ios/App/{Base,en,fr,pt-BR}.lproj/AppIntentVocabulary.plist`
 files supply example phrases for both supported Siri intents. Keep each
 locale aligned with `App/Localizable.xcstrings`; Base is the English fallback.
+
+## Routine readiness and interruption recovery (2026-11-04)
+
+Every defined routine checks its engine/account, scoped skills, MCP mounts,
+Perspicax profile and required computer before creating an execution task.
+`server/routines/routine-readiness.ts` probes beside the scheduler pass, with
+independent timeouts below five seconds and a 60-second bot/account cache.
+Reservations and engine prewarm use the same checks before creating a task.
+Unknown facts pass; explicit refusals block. `requires` names bounded explicit
+skills, MCP servers and a computer requirement. Run snapshots retain checks
+and stable codes for EN/FR rendering. `POST /api/routines/:id/check`,
+`run_routine` with `action: "check"`, and the internal routine bridge share
+Run now authorization and create no run. The run HTTP endpoint also accepts
+`action: "check"` for clients forwarding routine tools.
+
+`engine-refusals.ts` remembers account refusals in this process only: credits
+for 30 minutes, usage limits until their reset (30 minutes when unknown),
+sign-out until a verified sign-in. A newer completed turn clears that account.
+Admission skips are blocked, and interrupted runs marked `ROUTINE_RESTARTED`
+never count in failure streaks. Reconnect waits survive restarts.

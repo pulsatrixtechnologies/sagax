@@ -63,6 +63,8 @@ function open(): DatabaseSync {
     -- walk these rows in time order on messages_thread. Created on every
     -- open, including a database that already has messages.
     CREATE INDEX IF NOT EXISTS messages_thread_at ON messages(thread_id, at);
+    -- kind-filtered scans: working goal runs and similar.
+    CREATE INDEX IF NOT EXISTS messages_kind ON messages(kind);
     CREATE TABLE IF NOT EXISTS thread_state (
       thread_id TEXT PRIMARY KEY,
       active_leaf_id TEXT
@@ -84,6 +86,8 @@ function open(): DatabaseSync {
       payload TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS chat_followups_receipt ON chat_followups(kind, owner_id, thread_id, send_id);
+    -- deleteThread / rebind followups by thread alone (receipt index is kind-led).
+    CREATE INDEX IF NOT EXISTS chat_followups_thread ON chat_followups(thread_id);
     CREATE TABLE IF NOT EXISTS command_receipts (
       kind TEXT NOT NULL,
       key TEXT NOT NULL,
@@ -120,6 +124,16 @@ function ensureSealedSchema(db: DatabaseSync): void {
       thread_id TEXT PRIMARY KEY,
       key_id TEXT NOT NULL
     );
+    CREATE INDEX IF NOT EXISTS thread_keys_key_id ON thread_keys(key_id);
+    -- After key_id exists: erase-by-owner and migration scans.
+    CREATE INDEX IF NOT EXISTS messages_key_id ON messages(key_id) WHERE key_id IS NOT NULL;
+    -- Open permission cards at restart: json projection is cleartext even when sealed.
+    CREATE INDEX IF NOT EXISTS messages_open_permission_cards ON messages(thread_id)
+      WHERE json_extract(json, '$.card.requestType') = 'permission'
+        AND json_extract(json, '$.card.requestId') IS NOT NULL
+        AND json_extract(json, '$.card.answered') IS NULL
+        AND COALESCE(json_extract(json, '$.card.dismissed'), 0) = 0
+        AND COALESCE(json_extract(json, '$.card.expired'), 0) = 0;
     CREATE VIRTUAL TABLE IF NOT EXISTS messages_sealed_fts USING fts5(
       words, prefixes, content='', contentless_delete=1, detail=column
     );
@@ -180,6 +194,7 @@ function ensureMemoryIndex(db: DatabaseSync): void {
   if (!columns.has("sealed")) db.exec("ALTER TABLE memory_files ADD COLUMN sealed BLOB");
   if (!columns.has("key_id")) db.exec("ALTER TABLE memory_files ADD COLUMN key_id TEXT");
   db.exec(`
+    CREATE INDEX IF NOT EXISTS memory_files_key_id ON memory_files(key_id) WHERE key_id IS NOT NULL;
     CREATE VIRTUAL TABLE IF NOT EXISTS memory_sealed_fts USING fts5(
       words, prefixes, content='', contentless_delete=1, detail=column
     );

@@ -9,7 +9,7 @@
 // Advanced.
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/interface-mode", () => ({ useAdvancedMode: () => true, setAdvancedMode: () => {} }));
 import { setLocale } from "@/lib/i18n";
@@ -48,6 +48,12 @@ function part(html: string, from: string, to?: string): string {
   const end = to ? html.indexOf(to, start) : -1;
   return html.slice(start, end > start ? end : undefined);
 }
+
+beforeAll(async () => {
+  // b8333c52c: these pages load on demand; static rendering runs no effects.
+  const sections = await import("./lazy-settings-sections");
+  await Promise.all([sections.EnginesSettings.preload(), sections.ProvidersSettings.preload(), sections.VoiceSettingsPage.preload()]);
+}, 60_000);
 
 beforeEach(async () => {
   // 2026-10-30: the Engines and Keys groups below are Models' former view

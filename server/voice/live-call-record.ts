@@ -13,13 +13,15 @@ import { liveCallRowText } from "../../shared/live-call.ts";
 import type { LiveCallRecord } from "../../shared/wire.ts";
 import type { Message } from "../store.ts";
 
-/** The Live-call fields a user line is stored with: `via: "call"` when it
- * was spoken on a call, and that call's id only alongside it. A typed, API
- * or relayed line never carries a call id, even one handed in by mistake. */
+/** Channel fields a user line is stored with: `via: "call"` when spoken on
+ * a Live call (with that call's id only alongside it), or `via: "sms"` when
+ * the person texted their bot from their own verified number. A typed or
+ * API line never carries a call id, even one handed in by mistake. */
 export function spokenLineFields(
-  via: "api" | "call" | undefined,
+  via: "api" | "call" | "sms" | undefined,
   callId: string | undefined,
-): { via?: "call"; callId?: string } {
+): { via?: "call" | "sms"; callId?: string } {
+  if (via === "sms") return { via };
   if (via !== "call") return {};
   return callId ? { via, callId } : { via };
 }

@@ -1097,8 +1097,9 @@ export interface FollowupPayload {
   peerAsk?: Message["peerAsk"];
   mode?: "chat" | "goal";
   /** "api": a room line sent through the local API with no session behind
-   * it. "call": a person's words relayed from a Live call. */
-  via?: "api" | "call";
+   * it. "call": a person's words relayed from a Live call. "sms": a text
+   * the person sent their bot from their own verified number. */
+  via?: "api" | "call" | "sms";
   /** Words said on a voice call (Message.voiceCall). */
   voiceCall?: Message["voiceCall"];
   /** The Live call a "call" line was spoken on (Message.callId). Only with

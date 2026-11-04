@@ -31800,18 +31800,28 @@ function smsReplyAfter(threadId: string, messageId: string): string {
     .join("\n\n");
 }
 const smsConversation = new SmsConversation({
-  send: async ({ person, sub, botId, text }) => {
+  send: async ({ person, sub, botId, text, label }) => {
     const bot = store.bot(botId);
     if (!bot) return { ok: false, error: "no such bot" };
-    const member: MemberPerson = { principalId: person, sub, name: personDisplayName(principals.byId(person)) || "", admin: false, actor: "perspicax-voice" };
+    const directoryName = personDisplayName(principals.byId(person)) || "";
+    // Prefer the telephony human label so the message never falls through to
+    // "AI client (Perspicax)" when the directory name is empty.
+    const member: MemberPerson = { principalId: person, sub, name: label.trim() || directoryName, admin: false, actor: "perspicax-voice" };
     // the bot's one conversation with the person (#1586), started when they have none
     const threadId = conversationOrStart(bot, person);
     if (!threadId) return { ok: false, error: "no conversation" };
     if (store.isConfidentialThread(threadId)) return { ok: false, error: "confidential conversation" };
     const sent = await performAsMember(member, { method: "POST", path: `/api/bots/${encodeURIComponent(botId)}/messages`, body: { text, threadId } });
     if (sent.status >= 300) return { ok: false, error: String((sent.body as { error?: unknown })?.error ?? `refused (${sent.status})`) };
-    const messageId = (sent.body as { message?: { id?: unknown } })?.message?.id;
-    if (typeof messageId === "string") store.patchMessage(threadId, messageId, { via: "sms" });
+    const message = (sent.body as { message?: { id?: unknown; sender?: { id?: unknown; name?: unknown } } })?.message;
+    const messageId = message?.id;
+    if (typeof messageId === "string") {
+      const existingId = typeof message?.sender?.id === "string" ? message.sender.id : person;
+      store.patchMessage(threadId, messageId, {
+        via: "sms",
+        sender: { name: label.trim() || directoryName || "via text message", id: existingId },
+      });
+    }
     return { ok: true, threadId, messageId: typeof messageId === "string" ? messageId : "" };
   },
   state: (botId, threadId) => agentTurnState(botId, threadId),
@@ -31849,7 +31859,14 @@ const inboundTelephony = createBotInboundTelephonyRoute({
     events: input.progress.events,
   }),
   // 2026-10-29: the person texting their own bot (server/sms-conversation.ts)
-  ownText: (input) => smsConversation.start({ person: input.ownerPrincipalId.trim().toLowerCase(), sub: input.sub, botId: input.botId, from: input.from, text: input.text }),
+  ownText: (input) => smsConversation.start({
+    person: input.ownerPrincipalId.trim().toLowerCase(),
+    sub: input.sub,
+    botId: input.botId,
+    from: input.from,
+    text: input.text,
+    label: input.label,
+  }),
   record: (row) => appendAdminAction(DATA_DIR, {
     category: "webhook",
     action: row.notice ? "bot-phone.notice" : "bot-phone.delivered",
@@ -41484,10 +41501,13 @@ bus.subscribe((event: RuntimeEvent) => {
 async function performAsMember(person: MemberPerson, request: MemberRequest): Promise<{ status: number; body: unknown }> {
   const principal = principals.byId(person.principalId);
   const scopes: Scope[] = person.admin && principal?.orgRole === "admin" ? ["admin", "client"] : ["client"];
+  // A non-empty person.name (Bot phone stamps the human caller label) becomes
+  // the session label so messageSender never falls through to the generic
+  // "AI client (Perspicax)" string when the directory has no display name.
   const opened = sessions.actAs({
     principalId: person.principalId,
     scopes,
-    label: "AI client (Perspicax)",
+    label: person.name.trim().slice(0, 80) || "AI client (Perspicax)",
     ...(IDENTITY.kind === "perspicax" ? { idp: { iss: IDENTITY.issuer, sub: person.sub, role: person.admin ? "admin" : "employee" } } : {})
   });
   if (!opened) return { status: 403, body: { error: "This person cannot act on this server." } };

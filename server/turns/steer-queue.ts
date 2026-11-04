@@ -73,10 +73,10 @@ interface QueueEntry {
     /** When the words were queued (epoch ms): drain-time coalescing splits
      * one sender's items when the gap between them outgrows the window. */
     queuedAt: number;
-    /** The words were spoken in a Live call, not typed: the drained line
-     * says so, like an immediate send would. */
-    via?: "call";
-    /** The Live call they were spoken on (Message.callId); only with via. */
+    /** The words were spoken in a Live call ("call") or texted from the
+     * person's own verified number ("sms"): the drained line says so. */
+    via?: "call" | "sms";
+    /** The Live call they were spoken on (Message.callId); only with via "call". */
     callId?: string;
     /** The words are already a row of the thread (a message steered into the
      * running turn that the bot set aside for after it, route_message
@@ -159,7 +159,7 @@ export function queueSteeredMessage(
   botId: string,
   threadId: string,
   text: string,
-  options: { prompt?: string; replyToId?: string; sendId?: string; dataContext?: Message["dataContext"]; reason?: SteerQueueReason; unattended?: boolean; peerAsk?: Message["peerAsk"]; origin?: WorkOrigin; sender?: ResolvedSender; trigger?: UsageTrigger; speaker?: TurnSpeaker; voiceCall?: Message["voiceCall"]; callId?: string; via?: "call"; existingMessageId?: string; front?: boolean } = {},
+  options: { prompt?: string; replyToId?: string; sendId?: string; dataContext?: Message["dataContext"]; reason?: SteerQueueReason; unattended?: boolean; peerAsk?: Message["peerAsk"]; origin?: WorkOrigin; sender?: ResolvedSender; trigger?: UsageTrigger; speaker?: TurnSpeaker; voiceCall?: Message["voiceCall"]; callId?: string; via?: "call" | "sms"; existingMessageId?: string; front?: boolean } = {},
 ): QueuedSteer {
   const id = newId();
   const entry = queues.get(threadId) ?? { botId, items: [] };

@@ -48,6 +48,17 @@ and skill probes (`server/routines/routine-readiness-target.ts`). Previews
 and receipts remain reads. Regressions: `turn-skill-links.test.ts` and
 `start-turn-computer-workspace.test.ts` (temporary files and fake dispatch).
 
+## Native Claude artifact tools (#1990, 2026-11-04)
+
+Organization Claude turns keep `Artifact`, `ArtifactData` and `ArtifactComments`
+in `CLAUDE_ORG_TOOLS`, with no host deny on their parent. The driver opts print
+sessions into `CLAUDE_CODE_ARTIFACT` and `CLAUDE_CODE_ARTIFACT_TOOLSET` by default.
+Native ToolSearch remains available on compact turns; their Sagax MCP directory
+stays compact. Explicit engine settings and Claude account eligibility still
+apply. Routine readiness uses the resolved driver and payer access to explain
+artifact dependencies on API accounts or another engine before creating a task.
+Evidence and configuration matrix: `docs/verification/claude-artifacts.md`.
+
 ## Codex retains one app-server per conversation (#1969, 2026-11-04)
 
 `server/drivers/codex/sessions.ts` owns the per-instance, per-thread process

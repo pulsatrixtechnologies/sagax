@@ -8,7 +8,7 @@ import { CLAUDE_NEEDS_RECONNECTING, CLAUDE_SIGN_IN_EXPIRED, claudeSignInExpired 
 import { CODEX_SIGN_IN_EXPIRED, codexSignInExpired } from "../drivers/codex-errors.ts";
 import { engineNeedsReconnecting, engineReconnectAheadDetail } from "../engines/engine-reconnect-ahead.ts";
 import {
-  classifyRoutineFailure, dispatchRefusal, retryNote, ROUTINE_BUSY_RECHECK_MS, ROUTINE_BUSY_WAIT_MS, weekRuns, type RoutineAlert,
+  classifyRoutineFailure, dispatchRefusal, firstOwnerNotice, loadOwnerNotices, retryNote, ROUTINE_BUSY_RECHECK_MS, ROUTINE_BUSY_WAIT_MS, weekRuns, type RoutineAlert,
 } from "./routine-recovery.ts";
 import { RoutineManager, type RoutineManagerOptions, type RoutineRun } from "./routines.ts";
 
@@ -18,6 +18,13 @@ afterEach(() => {
 });
 
 const START = new Date(2026, 7, 17, 8, 0, 0).getTime();
+it("retains the artifact readiness notice across restart and reports it once (#1990)", () => {
+  const saved = [{ botId: "fixture-bot", cause: "engine_artifacts", at: START }];
+  const loaded = loadOwnerNotices(saved);
+  expect(loaded).toEqual(saved);
+  expect(firstOwnerNotice(loaded, "fixture-bot", "engine_artifacts", START + 1_000)).toBe(false);
+  expect(firstOwnerNotice(loaded, "another-bot", "engine_artifacts", START + 1_000)).toBe(true);
+});
 const SECOND = 1_000;
 const MINUTE = 60_000;
 const ROUTING = "stream error: workspace routing discovery failed: error sending request";

@@ -260,13 +260,16 @@ it("keeps the bot's own engine on the cloud computer, and a failed place never b
       prompt: "Inspect the cloud desktop.", runOn: "cloud", enabled: false,
       schedule: { type: "interval", everyMinutes: 60, anchorAt: Date.now() + 3_600_000 } });
     const { run } = await apiOk("POST", `/api/routines/${routine.id}/run`, {});
-    let routineThread = "";
+    // b0cec80619: a known blocker is recorded before allocating a work thread.
+    let blocked: any;
     await expect.poll(async () => {
-      routineThread = (await apiOk("GET", "/api/routines")).runs.find((entry: any) => entry.id === run.id)?.threadId ?? "";
-      return routineThread;
-    }, { timeout: 15_000 }).not.toBe("");
-    expect((await control(["wait", "--bot", plain.id, "--task", routineThread, "--timeout", "30"])).status).toBe("failed");
-    expect((await lastRows(routineThread)).at(-1)).toBe("error: tools-off-model can't use a computer. Choose a model that can, such as Claude or ChatGPT. Choose another model in Tools-off fixture's settings.");
+      blocked = (await apiOk("GET", "/api/routines")).runs.find((entry: any) => entry.id === run.id);
+      return blocked?.status;
+    }, { timeout: 15_000 }).toBe("blocked");
+    const refusal = "tools-off-model can't use a computer. Choose a model that can, such as Claude or ChatGPT. Choose another model in Tools-off fixture's settings.";
+    expect(blocked.error).toBe(refusal);
+    expect(blocked.threadId).toBeUndefined();
+    expect(blocked.readiness).toContainEqual(expect.objectContaining({ kind: "computer", ok: false, code: "computer_offline", line: refusal }));
     expect(boxesCreated).toBe(2);
     await apiOk("PATCH", `/api/bots/${plain.id}`, { computer: null });
     await control(["send", "--bot", plain.id, "--task", plain.activeTaskId, "--text", "hello again"]);

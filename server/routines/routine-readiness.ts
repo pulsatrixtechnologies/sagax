@@ -18,7 +18,7 @@ export function routineEngineRefusal(engine: ReadinessEngine, now: number): Engi
     : activeEngineRefusal(engine.engine, engine.account, now);
 }
 export interface ReadinessMcp { known: string[]; enabled: string[]; profileServer?: string; toolPrefixes?: Record<string, string> }
-export interface ReadinessComputer { name: string; online?: boolean; needed?: boolean }
+export interface ReadinessComputer { name: string; online?: boolean; needed?: boolean; detail?: string }
 interface ReadinessFlowSkills { hasProfile: boolean; installation: string }
 /** A held local install does not disable the pack's remote product documents (#1945). */
 export function routineFlowSkills(organization: boolean, declaration: FlowPluginsDeclaration | undefined, profiles: readonly string[], status: OrgFlowPluginsStatus): ReadinessFlowSkills | undefined {
@@ -164,7 +164,7 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
         const anyOnline = computers?.some(computer => computer.online === true);
         const explicitlySelected = computers?.some(computer => computer.needed);
         for (const computer of computers ?? []) if (computer.online === false && (computer.needed || prompt.includes(computer.name.toLowerCase()) || (routine.requires?.computer && !anyOnline && !explicitlySelected))) {
-          checks.push({ kind, ok: false, code: "computer_offline", params: { computer: computer.name }, line: `This bot's computer \`${computer.name}\` is offline. Turn it on, or let the routine run without it.` });
+          checks.push({ kind, ok: false, code: "computer_offline", params: { computer: computer.name }, line: computer.detail ? clean(computer.detail) : `This bot's computer \`${computer.name}\` is offline. Turn it on, or let the routine run without it.` });
         }
       }
       if (checks.length === start) checks.push(ready(kind));

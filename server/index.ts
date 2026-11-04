@@ -24632,13 +24632,22 @@ function routineReadinessProfiles(bot: BotRecord, principal: string): readonly s
   const held = subject ? perspicaxDirectory?.profilesOf(subject.sub) : undefined;
   return held?.[0] ? [held[0]] : [];
 }
+let routineReadinessConfigRevision = 0;
+onConfigSaved(() => { routineReadinessConfigRevision += 1; });
 const routineReadinessDeps: RoutineReadinessDeps = {
   cacheKey: (routine, run) => {
     const bot = store.bot(run.botId);
     const engine = routineReadinessEngine(routine, run);
-    return JSON.stringify([engine, bot?.modelSelection, bot?.mcpServers, bot?.toolScope, bot?.assignedSkills, bot?.perspicax, bot?.computer, bot?.remoteHosts]);
+    return JSON.stringify([routineReadinessConfigRevision, engine, bot?.modelSelection, bot?.mcpServers, bot?.toolScope, bot?.assignedSkills, bot?.perspicax, bot?.computer, bot?.remoteHosts]);
   },
-  engine: (routine, run) => routineReadinessEngine(routine, run),
+  engine: async (routine, run) => {
+    const engine = routineReadinessEngine(routine, run);
+    if (!engine || IDENTITY.kind === "perspicax") return engine;
+    // A settings write can replace a provider key or compatible endpoint
+    // before the installation probe cache refreshes. Probe the current instance.
+    const snapshot = await registry.get(engine.engine)?.snapshot();
+    return snapshot ? { ...engine, signedIn: snapshot.state === "available" && snapshot.authenticated !== false, signedInAt: Date.now() } : engine;
+  },
   backup: async (routine, run, primary) => {
     const speaker = routineRunSpeaker({ botId: run.botId, runAs: run.runAs ?? routine.runAs });
     const backup = await limitFailover.backupFor(run.botId, run.threadId ?? "", speaker, primary.engine);
@@ -24706,7 +24715,9 @@ const routineReadinessDeps: RoutineReadinessDeps = {
         rows.push({ name: "Cloud computer", online: status.state === "running" });
       } else {
         const option = (await selectableComputers(bot)).find(option => option.surface === surface);
-        if (option) rows.push({ name: option.label, online: option.ready });
+        // A managed computer that can wake or be provisioned is available to
+        // dispatch. The pre-flight must not require an already warm desktop.
+        if (option) rows.push({ name: option.label, online: option.available, ...(option.reason ? { detail: option.reason } : {}) });
       }
       return rows.map(row => ({ ...row, needed: required && (row.name === "Cloud computer" || row.name === surfaceLabel(surface)) }));
     }

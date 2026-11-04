@@ -1097,3 +1097,133 @@ describe("interruptTurn duplex cap", () => {
     await instance.dispose();
   }, 15_000);
 });
+
+describe("HTTP MCP prewarm on warmOnly (#1975)", () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+    vi.unstubAllGlobals();
+  });
+
+  const agentsServer = (launches: string) => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-http-prewarm-"));
+    dirs.push(dir);
+    const script = join(dir, "agents.mjs");
+    writeFileSync(script, `#!/usr/bin/env node
+      import { appendFileSync } from "node:fs";
+      appendFileSync(${JSON.stringify(launches)}, "spawn\\n");
+      const send = (m) => process.stdout.write(JSON.stringify(m) + "\\n");
+      let buffer = "";
+      process.stdin.setEncoding("utf8");
+      process.stdin.on("data", (chunk) => {
+        buffer += chunk;
+        let nl;
+        while ((nl = buffer.indexOf("\\n")) !== -1) {
+          const line = buffer.slice(0, nl); buffer = buffer.slice(nl + 1);
+          const m = JSON.parse(line);
+          if (m.method === "initialize") send({jsonrpc:"2.0",id:m.id,result:{protocolVersion:"2024-11-05",capabilities:{tools:{}}}});
+          else if (m.method === "tools/list") send({jsonrpc:"2.0",id:m.id,result:{tools:[{name:"ping",description:"ping",inputSchema:{type:"object",properties:{}}}]}});
+          else if (m.method === "tools/call") send({jsonrpc:"2.0",id:m.id,result:{content:[{type:"text",text:"pong"}]}});
+        }
+      });
+    `);
+    chmodSync(script, 0o755);
+    return {
+      command: script,
+      args: [] as string[],
+      env: { SAGAX_COMMS_TOKEN: "prewarm-tok", SAGAX_TURN_DEPTH: "0", SAGAX_BOT_ID: "bot-prewarm" },
+    };
+  };
+
+  it("warmOnly mounts once; the first real turn reuses that mount", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-http-prewarm-count-"));
+    dirs.push(dir);
+    const launches = join(dir, "launches.txt");
+    writeFileSync(launches, "");
+    const agents = agentsServer(launches);
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      if (String(url).endsWith("/models")) return new Response(JSON.stringify({ data: [{ id: "fixture" }] }), { status: 200 });
+      return sse(`data: ${JSON.stringify({ choices: [{ delta: { content: "ok" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`);
+    }));
+    const instance = await OpenAICompatDriver.create({
+      instanceId: "openaiCompat",
+      displayName: "Other",
+      enabled: true,
+      config: OpenAICompatDriver.decodeConfig({ url: "https://api.example.test/v1", apiKeyEnv: "K", model: "fixture" }),
+      environment: { K: "secret" },
+    });
+    expect(instance.adapter.capabilities.warmSession).toBe(true);
+    const events: RuntimeEvent[] = [];
+    instance.adapter.onEvent((event) => events.push(event));
+    const controller = new AbortController();
+    const integrations = { agents };
+    try {
+      await instance.adapter.sendTurn({
+        threadId: "prewarm-thread",
+        botId: "bot-prewarm",
+        text: "",
+        warmOnly: true,
+        warmSignal: controller.signal,
+        integrations,
+      });
+      await vi.waitFor(() => expect(readFileSync(launches, "utf8").trim().split("\n").filter(Boolean).length).toBe(1), { timeout: 10_000 });
+      await instance.adapter.sendTurn({
+        threadId: "prewarm-thread",
+        botId: "bot-prewarm",
+        text: "hello",
+        integrations,
+      });
+      await vi.waitFor(() => expect(events.some((event) => event.type === "turn.completed")).toBe(true), { timeout: 15_000 });
+      // Still one spawn: the real turn reused the prewarmed mount.
+      expect(readFileSync(launches, "utf8").trim().split("\n").filter(Boolean)).toEqual(["spawn"]);
+    } finally {
+      controller.abort();
+      await instance.dispose();
+    }
+  }, 30_000);
+
+  it("idle abort drops the unused prewarmed mount", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sagax-http-prewarm-idle-"));
+    dirs.push(dir);
+    const launches = join(dir, "launches.txt");
+    writeFileSync(launches, "");
+    const agents = agentsServer(launches);
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      if (String(url).endsWith("/models")) return new Response(JSON.stringify({ data: [{ id: "fixture" }] }), { status: 200 });
+      return sse(`data: ${JSON.stringify({ choices: [{ delta: { content: "ok" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`);
+    }));
+    const instance = await OpenAICompatDriver.create({
+      instanceId: "openaiCompat",
+      displayName: "Other",
+      enabled: true,
+      config: OpenAICompatDriver.decodeConfig({ url: "https://api.example.test/v1", apiKeyEnv: "K", model: "fixture" }),
+      environment: { K: "secret" },
+    });
+    const controller = new AbortController();
+    try {
+      await instance.adapter.sendTurn({
+        threadId: "idle-prewarm",
+        botId: "bot-prewarm",
+        text: "",
+        warmOnly: true,
+        warmSignal: controller.signal,
+        integrations: { agents },
+      });
+      await vi.waitFor(() => expect(readFileSync(launches, "utf8").includes("spawn")).toBe(true), { timeout: 10_000 });
+      controller.abort();
+      // After idle drop, the next turn must mount again (second spawn).
+      const events: RuntimeEvent[] = [];
+      instance.adapter.onEvent((event) => events.push(event));
+      await instance.adapter.sendTurn({
+        threadId: "idle-prewarm",
+        botId: "bot-prewarm",
+        text: "hello",
+        integrations: { agents },
+      });
+      await vi.waitFor(() => expect(events.some((event) => event.type === "turn.completed")).toBe(true), { timeout: 15_000 });
+      expect(readFileSync(launches, "utf8").trim().split("\n").filter(Boolean)).toEqual(["spawn", "spawn"]);
+    } finally {
+      await instance.dispose();
+    }
+  }, 30_000);
+});

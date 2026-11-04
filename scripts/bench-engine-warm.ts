@@ -433,11 +433,14 @@ async function benchCodex(): Promise<EngineReport> {
   const log = () => fixtureLog(fixture.info.logPath);
   let events: SseTap | null = null;
   try {
-    const bots = await (await fetch(`${url}/api/bots`, { headers: { origin: url } })).json() as { bots: Array<{ id: string; activeTaskId: string }> };
-    const botId = bots.bots[0]?.id;
-    if (!botId) throw new Error("no bot");
+    const bots = await (await fetch(`${url}/api/bots`, { headers: { origin: url } })).json() as {
+      bots: Array<{ id: string; threadId?: string; activeTaskId?: string; mainThreadId?: string }>;
+    };
+    const bot = bots.bots[0];
+    const botId = bot?.id;
+    const threadId = bot?.threadId ?? bot?.activeTaskId ?? bot?.mainThreadId;
+    if (!botId || !threadId) throw new Error(`no bot/thread: ${JSON.stringify(bot ?? null)}`);
     await runControlOmb(["set-model", "--bot", botId, "--instance", "codex", "--model", "gpt-fake-default"], { env });
-    const threadId = bots.bots[0]!.activeTaskId;
     events = await openEvents(url);
     const warm: TurnSample[] = [];
     for (let i = 0; i < WARM; i++) {
@@ -449,11 +452,15 @@ async function benchCodex(): Promise<EngineReport> {
     }
     const cold: TurnSample[] = [];
     for (let i = 0; i < COLD; i++) {
-      const created = await runControlOmb(["new-bot", "--name", `ColdCodex${i}`], { env }) as { bot: { id: string; activeTaskId: string } };
+      const created = await runControlOmb(["new-bot", "--name", `ColdCodex${i}`], { env }) as {
+        bot: { id: string; threadId?: string; activeTaskId?: string };
+      };
+      const coldThread = created.bot.threadId ?? created.bot.activeTaskId;
+      if (!coldThread) throw new Error(`cold bot has no thread: ${JSON.stringify(created.bot)}`);
       await runControlOmb(["set-model", "--bot", created.bot.id, "--instance", "codex", "--model", "gpt-fake-default"], { env });
       const before = countLaunches(startupLog);
       cold.push(await sendAndMeasure({
-        url, botId: created.bot.id, threadId: created.bot.activeTaskId, text: `cold turn ${i + 1}`, events, log,
+        url, botId: created.bot.id, threadId: coldThread, text: `cold turn ${i + 1}`, events, log,
         launchesBefore: before, launchesAfter: () => countLaunches(startupLog), kind: "cold",
       }));
     }

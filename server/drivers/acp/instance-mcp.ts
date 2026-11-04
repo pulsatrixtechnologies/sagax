@@ -214,7 +214,7 @@ export function createAcpMcp(deps: AcpMcpDeps) {
         }, turn.botId) ?? [],
       });
       // Sagax's own servers (agents, browser, computer) name their
-      // tools admissibly; connectors (Perspicax profiles, URL and stdio
+      // tools admissibly; connectors (the Perspicax account, URL and stdio
       // servers) can name them anything, so those ride the gate.
       const toolNames = support.mcpToolNames;
       const renames = (server: AcpMcpServer) => Boolean(toolNames) && custom.has(server.name);

@@ -31,7 +31,6 @@ const HIDDEN_SETTINGS: ReadonlySet<AppSettingsSection> = new Set([
 const HIDDEN_BOT: ReadonlySet<BotSettingsSection> = new Set([
   "access",
   "worksOn",
-  "perspicax",
   "usage",
   "history",
   "skills",

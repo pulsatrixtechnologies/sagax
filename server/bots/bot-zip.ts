@@ -72,7 +72,7 @@ import { autoOnlyDestination } from "../surface.ts";
 import { memberImportReset } from "../routes/bot-catalog.ts";
 import type { Routine, RoutineManager } from "../routines/routines.ts";
 import { restoreSkillManifest, setSkillEnabled, skillManifestForExport } from "../skills/skills.ts";
-import { cleanBotGrants, cleanBotPerspicax, perspicaxActAsSchema, type BotRecord, type Message, type Store, type TaskRecord } from "../store.ts";
+import { cleanBotGrants, type BotRecord, type Message, type Store, type TaskRecord } from "../store.ts";
 import type { WebhookTrigger } from "../triggers/webhooks.ts";
 import { TRIGGER_SOURCES, type TriggerSourceConfig } from "../../shared/trigger-sources.ts";
 import { storedTeamMemorySharing } from "../../shared/team-memory-sharing.ts";
@@ -156,8 +156,8 @@ export const BOT_FIELD_POLICY: { readonly [K in keyof BotRecord]-?: FieldPolicy 
   peers: "settings",
   outbound: "settings",
   assignedSkills: "settings",
-  perspicax: "settings",
-  perspicaxActAs: "settings",
+  perspicax: { drop: "Perspicax roles belong to the account and never travel with a bot" },
+  perspicaxActAs: { drop: "a routine chooses a held role at run time with identity_switch" },
   temporary: { drop: "an imported bot is never temporary (Perspicax #321)" },
   createdByBot: { drop: "a person imports the bot: it starts as a person's bot (server/bots/bot-creation.ts)" },
   section: "settings",
@@ -467,7 +467,6 @@ export function planBotZip(host: BotZipHost, botId: string, options: BotZipExpor
   // MCP servers, by name
   const mcpServers = (bot.mcpServers ?? []).map((name) => ({ name, ...(host.mcpServer(name) ?? { valueNames: [] }) }));
   includes.mcpServers = mcpServers.length;
-  includes.perspicaxProfiles = bot.perspicax?.profiles.length ?? 0;
 
   // routines and webhooks owned by the bot
   const routines = (host.routines()?.listRoutines() ?? []).filter((routine) => routine.botId === bot.id && routine.target !== "room-goal").map((routine) => ({
@@ -740,11 +739,6 @@ export async function previewBotZip(host: BotZipHost, inspected: InspectedBotZip
       if (!host.mcpServer(server.name)) needsAction.push(line("mcp", `MCP server ${server.name} is not installed here${server.url ? ` (${server.url})` : ""}: add it in Capabilities.`, "mcpMissing", { name: server.name }));
     }
   }
-  const profiles = (settings.perspicax as { profiles?: string[] } | undefined)?.profiles ?? [];
-  if (profiles.length) {
-    if (host.organization) created.push(line("perspicax", `${profiles.length} Perspicax profile(s)`, "perspicax", { count: profiles.length }));
-    else skipped.push(line("perspicax", "Perspicax profiles: an organization server only.", "perspicaxSkipped"));
-  }
   if (includes.routines) created.push(line("routines", `${includes.routines} routine(s), off until you turn them on`, "routines", { count: includes.routines }));
   if (includes.webhooks) created.push(line("webhooks", `${includes.webhooks} webhook(s), off, each with a new token`, "webhooks", { count: includes.webhooks }));
   if (includes.conversations) created.push(line("conversations", `${includes.conversations} thread(s), ${includes.messages ?? 0} message(s), ${includes.attachments ?? 0} attachment(s), if you include them`, "conversations", { count: includes.conversations, messages: includes.messages ?? 0, attachments: includes.attachments ?? 0 }));
@@ -1004,11 +998,6 @@ export async function importBotZip(host: BotZipHost, inspected: InspectedBotZip,
     if (!options.asMember && hostSettings.browserProfile && !(host.browserProfileExists?.(hostSettings.browserProfile) ?? true)) warnings.push("The browser profile is not on this server: the bot uses its own browser session.");
     store.patchBot(id, patch);
     store.patchTask(id, bot.threadId, { approvalMode: patch.approvalMode, autoApprove: patch.autoApprove === true });
-    const profiles = cleanBotPerspicax(document.settings.perspicax);
-    if (profiles && host.organization) store.setBotPerspicax(id, profiles.profiles);
-    const perspicaxIdentity = perspicaxActAsSchema.safeParse(document.settings.perspicaxActAs);
-    if (perspicaxIdentity.success && host.organization) store.setBotPerspicaxActAs(id, perspicaxIdentity.data);
-
     // the bot folder and the desk
     for (const entry of reader.under("bot-folder/")) {
       const rel = entry.slice("bot-folder/".length);

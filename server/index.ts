@@ -1768,7 +1768,6 @@ import {
   sectionShareGrants
 } from "./rooms/section-channels.ts";
 import { createBotGrantRoutes, visibleGrants, wireGrants } from "./bots/bot-grants.ts";
-import { createBotPerspicaxRoutes } from "./bots/bot-perspicax.ts";
 import { identityWarning } from "./perspicax/perspicax-identity.ts";
 import { OrgFlowPlugins, flowSkillsNote, guarded as orgFlowGuarded } from "./org/org-flow-plugins.ts";
 import { applyIdentityMigration, principalIdFor, rewritePeopleForAttach } from "./people/identity-migration.ts";
@@ -2061,7 +2060,6 @@ import { pluginTurnInventory } from "./turns/plugin-turn.ts";
 import { orderedSkillDiscovery, skillDiscoveryAvailable, type DiscoveredSkill } from "./skills/skill-discovery.ts";
 import {
   engineServerMcp,
-  perspicaxServerName,
   personalMcpPrecheck,
   serverMcpAsPerson
 } from "./turns/turn-mounts.ts";
@@ -2622,7 +2620,7 @@ import { attachedFilesInText, attachmentChunks, attachmentIsTheirs, stageTurnAtt
 import { OFFICE_IMAGE_MAX_COUNT, OFFICE_IMAGES_MAX_TOTAL_BYTES, officeKind, officeMediaFolder, officeNote, readOfficeMedia } from "./media/office-media.ts";
 import { archiveInlineTexts, archiveNote, extractedFolderName, localExtractedPath, recoverArchiveUpload, sandboxArchiveArgv, storedArchiveManifest } from "./attachments/attachment-archives.ts";
 import { BOT_WORKPLACE_PREFERENCE, DESKTOP_BRIDGE_MCP_NAME, parseBotWorkplace, type BotWorkplace } from "../shared/bot-workplace.ts";
-import { accessCardAudience, accessCardForViewer, engineNameForViewer, keyEngineProvider, orgKeyEngineName, signInExpiredCard, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, engineAccountConnectorCall, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberOwnedBot, resolveTurnSpeaker, routineAccessNotifications, routineLineage, speakerPrincipal, type EngineAccessRefusal, type MemberHostToolPlace, type TurnSpeaker } from "./engines/engine-access.ts";
+import { accessCardAudience, accessCardForViewer, engineNameForViewer, keyEngineProvider, orgKeyEngineName, signInExpiredCard, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, engineAccountConnectorCall, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberOwnedBot, perspicaxOwnerScopedServer, resolveTurnSpeaker, routineAccessNotifications, routineLineage, speakerPrincipal, type EngineAccessRefusal, type MemberHostToolPlace, type TurnSpeaker } from "./engines/engine-access.ts";
 import {
   assignBotHost,
   channelTurnGate,
@@ -5092,8 +5090,6 @@ type InternalCapability = {
   generation: string;
   depth: number;
   kind: "agents" | "connectors" | "computer" | "browser" | "hooks" | "phone" | "messages" | "perspicax" | "sandbox" | "desktop" | "workplace" | "personal-mcp" | "data";
-  /** Slice 5: the one Perspicax profile a "perspicax" capability relays for. */
-  perspicaxProfile?: string;
   /** A "sandbox" capability: whose server environment it runs in. */
   sandboxPrincipalId?: string;
   /** A "personal-mcp" capability: which of that person's own MCP servers
@@ -5595,7 +5591,7 @@ function agentsIntegration(
       ...mcpIdentityEnv(mcpIdentityOf(botId, threadId)),
       ...mcpPolicyEnv(process.env),
       // The claim tools (server/perspicax/perspicax-claims.ts) while this turn has a
-      // Perspicax profile mounted for the person speaking; the route re-checks.
+      // Perspicax account connection mounted for the person speaking; the route re-checks.
       SAGAX_CLAIMS: perspicaxMcp?.hasMounted(threadId, generation, botId) ? "1" : "0",
       // sagax_web_search: an engine without a web search of its own, for a
       // person who saved a search provider (a local file read, no network).
@@ -7305,7 +7301,6 @@ function messagesIntegration(botId: string, threadId: string, generation: string
 const imessageSender = createOsascriptSender();
 
 // ── Perspicax MCP for the person who speaks (slice 5) ─────────────────
-// perspicaxServerName: server/turns/turn-mounts.ts (shared with the capabilities resolver)
 /** The Perspicax user id of a principal of this organization, or null (the
  * operator, an interim or local principal, another issuer). */
 function perspicaxSubOf(principalId: string): string | null {
@@ -7345,11 +7340,10 @@ async function routineMemoryHint(run: RoutineRun, prompt: string): Promise<{ hin
   return hint ? { hint, note: duplicateNote(hint) } : null;
 }
 /** The engine servers, the system note and the activity rows of a turn's
- * Perspicax profiles, for whoever speaks (never the owner for someone
- * else). Nothing in solo mode, without a link, or for a bot without
- * profiles. The bridge holds only a turn capability; the tokens stay in
- * perspicaxMcp. */
-/** Token exchange, session open/verify, identity switch and tools/list:
+ * main Perspicax connection, for whoever speaks (never the owner for someone
+ * else). Nothing in solo mode or without a link. The bridge holds only a turn
+ * capability; the token stays in perspicaxMcp. */
+/** Token exchange, session open/verify and tools/list:
  * nothing here needs the custom MCP mount names, so setupStartTurn can start
  * it beside compaction and prompt build (#1955). */
 async function perspicaxTurnPrepare(input: {
@@ -7362,29 +7356,27 @@ async function perspicaxTurnPrepare(input: {
   live: BotRecord;
   speakerPrincipalId: string;
   routine: boolean;
-  plan: { mounted: Array<{ profileId: string; slug: string; name: string }>; unavailable: Array<{ profileId: string; name: string; reason: PerspicaxUnavailableReason; detail?: string }> };
+  plan: { mounted: Array<{ name: "Perspicax" }>; unavailable: Array<{ name: string; reason: PerspicaxUnavailableReason; detail?: string }> };
 } | null> {
   if (IDENTITY.kind !== "perspicax" || !perspicaxMcp) return null;
   const live = store.bot(input.bot.id) ?? input.bot;
-  if (!live.perspicax?.profiles.length && !live.perspicaxActAs) return null;
   const routine = routineLineage(input.speaker);
-  // #1941: conversation uses the speaker; routine uses the owner/run-as;
-  // if still unresolved, fall back to this bot's owner only (never another
-  // person). A peer hop without a principal used to force "" and lose the
-  // mount (unknown_speaker); owner fallback restores the owner's profiles.
+  // The origin decides whose account connection this is. `operator` and an
+  // owner routine already resolve to the owner; an unknown person or peer
+  // stays unknown and must never borrow the owner's connection.
   const ownerPrincipalId = effectiveBotOwner(live) ?? "";
-  const speakerPrincipalId = orgSpeakerPrincipal(live, input.speaker).trim() || ownerPrincipalId;
+  const speakerPrincipalId = orgSpeakerPrincipal(live, input.speaker).trim();
   const plan = await perspicaxMcp.prepareTurn({
     threadId: input.threadId,
     generation: input.generation,
-    bot: { id: live.id, perspicax: live.perspicax, perspicaxActAs: live.perspicaxActAs },
+    bot: { id: live.id },
     speakerPrincipalId,
     speakerOrigin: input.speaker.origin,
     ownerPrincipalId,
     ...(routine ? { routine: true } : {})
   });
-  // Handshake beside setup: open/verify the MCP session and identity lease
-  // now, so the engine's later tools/list hits the same-session cache.
+  // Handshake beside setup: open/verify the MCP session now, so the engine's
+  // later tools/list hits the same-session cache. Roles are never auto-picked.
   if (plan.mounted.length) await perspicaxMcp.ensureTurnSessions(input.threadId, input.generation);
   if (plan.mounted.length) void perspicaxMcp?.refreshApiNames({ threadId: input.threadId, generation: input.generation, botId: live.id });
   return { live, speakerPrincipalId, routine, plan };
@@ -7408,12 +7400,9 @@ async function perspicaxTurnIntegration(input: {
   const { live, speakerPrincipalId, routine, plan } = early;
   // The organization's work row is written where it always was: once the
   // turn's setup reached the mounts, never for a turn cancelled before that.
-  if (plan.mounted.length && !input.quiet) recordPerspicaxWork(live, input.threadId, input.speaker, speakerPrincipalId, plan.mounted.map((profile) => profile.name));
-  // Mount naming needs `taken` (custom MCP names already attached): sequential
-  // after attachCustomMcp, never in parallel with it.
+  if (plan.mounted.length && !input.quiet) recordPerspicaxWork(live, input.threadId, input.speaker, speakerPrincipalId, ["Perspicax"]);
   const custom: Record<string, McpServerSpec> = {};
-  const taken = new Set(input.taken);
-  for (const profile of plan.mounted) {
+  if (plan.mounted.length) {
     let token: string;
     try {
       token = mintInternalCapability({
@@ -7422,7 +7411,6 @@ async function perspicaxTurnIntegration(input: {
         generation: input.generation,
         depth: 0,
         kind: "perspicax",
-        perspicaxProfile: profile.profileId,
         skillAuthoring: false,
         createdBots: 0,
         openedThreads: 0
@@ -7430,31 +7418,30 @@ async function perspicaxTurnIntegration(input: {
     } catch {
       // The turn ended while the exchange ran: its generation revoke drops
       // the tokens.
-      continue;
+      token = "";
     }
-    const name = perspicaxServerName(profile.slug || profile.profileId, taken);
-    taken.add(name);
-    // #1935: a gateway answer (api_search) names the server that runs its tools
-    perspicaxMcp.setMount(input.threadId, input.generation, profile.profileId, name);
-    custom[name] = {
-      command: process.execPath,
-      args: [perspicaxBridgePath],
-      env: {
-        ...AGENTS_NODE_FLAG,
-        SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}`,
-        SAGAX_PERSPICAX_TOKEN: token,
-        SAGAX_PERSPICAX_PROFILE: profile.profileId,
-        SAGAX_BOT_ID: live.id,
-        SAGAX_THREAD_ID: input.threadId
-      }
-    };
+    if (token) {
+      const name = "perspicax";
+      perspicaxMcp.setMount(input.threadId, input.generation, name);
+      custom[name] = {
+        command: process.execPath,
+        args: [perspicaxBridgePath],
+        env: {
+          ...AGENTS_NODE_FLAG,
+          SAGAX_HARNESS_URL: `http://127.0.0.1:${PORT}`,
+          SAGAX_PERSPICAX_TOKEN: token,
+          SAGAX_BOT_ID: live.id,
+          SAGAX_THREAD_ID: input.threadId
+        }
+      };
+    }
   }
   // The calling conventions ride with the tools they are about (#1209).
   const conventions = Object.keys(custom).length > 0 ? PERSPICAX_CONVENTIONS_PROMPT : "";
   if (!plan.unavailable.length) return { custom, prompt: conventions };
   const lines = plan.unavailable.map((entry) => entry.reason === "no_delegation"
-    ? `Perspicax tools of profile "${entry.name}" are not available in this routine run: ${PERSPICAX_UNAVAILABLE_WHY.no_delegation}.`
-    : `Perspicax tools of profile "${entry.name}" are not available in this turn: ${perspicaxUnavailableWhy(entry.reason, entry.detail)}. Tell them so if they ask for these tools.`);
+    ? `Perspicax tools are not available in this routine run: ${PERSPICAX_UNAVAILABLE_WHY.no_delegation}.`
+    : `Perspicax tools are not available in this turn: ${perspicaxUnavailableWhy(entry.reason, entry.detail)}. Tell them so if they ask for these tools.`);
   const personName = (speakerPrincipalId && principals.byId(speakerPrincipalId)?.name) || "";
   const speakerName = routine
     ? (personName ? `a routine of ${personName}` : "a routine")
@@ -10268,7 +10255,6 @@ function scopedSkillsPrompt(bot: BotRecord, instance: { driverKind: string } | n
   const flowNote = IDENTITY.kind === "perspicax" ? flowSkillsNote({
     declaration: perspicaxDirectory?.flowPlugins(),
     loadedDirs: orgFlowPlugins.dirsFor(person, []),
-    perspicaxBot: (bot.perspicax?.profiles?.length ?? 0) > 0,
     member: Boolean(person) && orgMemberActive(person),
   }) : "";
   if (!instance || !(options.managedTools || !engineWorksInFiles(kind) || options.fileAccess)) {
@@ -10380,7 +10366,7 @@ function botCapabilitiesAs(
   const prompt = scopedSkillsPrompt(bot, instance, principal, { managedTools: skillDiscoveryAvailable(instance.adapter.capabilities.agentsMcp === true, bot.toolScope), fileAccess: supportsWorkspaceFiles(kind) });
   const inputs: CapabilityInputs = {
     organization,
-    bot: { id: bot.id, name: bot.name, ...(bot.mcpServers ? { mcpServers: bot.mcpServers } : {}), perspicaxProfiles: [...(bot.perspicax?.profiles ?? [])], ...(bot.assignedSkills ? { assignedSkills: bot.assignedSkills } : {}) },
+    bot: { id: bot.id, name: bot.name, ...(bot.mcpServers ? { mcpServers: bot.mcpServers } : {}), ...(bot.assignedSkills ? { assignedSkills: bot.assignedSkills } : {}) },
     engine: { instanceId: instance.instanceId, kind, label: instance.displayName ?? kind, customMcp: instance.adapter.capabilities.customMcp === true, agentsMcp: skillDiscoveryAvailable(instance.adapter.capabilities.agentsMcp === true, bot.toolScope) },
     botPlugins: botPlugins.listPlugins(bot.id).map((plugin) => {
       const folder = botPlugins.installedFolder(bot.id, plugin);
@@ -10712,7 +10698,7 @@ function shownBotActivity(bot: BotRecord, include: (task: TaskRecord) => boolean
 }
 
 const wireBot = (bot: BotRecord): WireBot => {
-  const { resumeCursors: _resumeCursors, tasks: allTasks, approvalGrant, lastProfileRequestId: _lastProfileRequestId, lastTeamSetupReceipt: _lastTeamSetupReceipt, packageBase: _packageBase, perspicax: _perspicax, assignedSkills: _assignedSkills, temporary: _temporary, createdByBot: _createdByBot, ...rest } = bot;
+  const { resumeCursors: _resumeCursors, tasks: allTasks, approvalGrant, lastProfileRequestId: _lastProfileRequestId, lastTeamSetupReceipt: _lastTeamSetupReceipt, packageBase: _packageBase, perspicax: _perspicax, perspicaxActAs: _perspicaxActAs, assignedSkills: _assignedSkills, temporary: _temporary, createdByBot: _createdByBot, ...rest } = bot;
   const tasks = allTasks ? listedTasks(bot.threadId, allTasks) : undefined;
   // The aggregate only: a record projected onto one thread already carries
   // that thread's own activity.
@@ -14190,12 +14176,12 @@ const remoteSessions = createRemoteSessionService({
   closeRemote: async ({ principalId, botId, code }) => {
     const mcp = perspicaxMcp;
     const live = store.bot(botId);
-    if (!mcp || !live?.perspicax?.profiles.length) return;
+    if (!mcp || !live) return;
     const threadId = `remote-close-${randomUUID()}`;
     const generation = randomUUID();
     try {
       const plan = await mcp.prepareTurn({
-        threadId, generation, bot: { id: live.id, perspicax: live.perspicax },
+        threadId, generation, bot: { id: live.id },
         speakerPrincipalId: principalId, speakerOrigin: "person",
         ownerPrincipalId: effectiveBotOwner(live),
       });
@@ -14245,27 +14231,27 @@ const remoteSessionsAdmin = createRemoteSessionsAdmin({
 // of sagax-remote-access): listed, opened and revoked by any person who
 // reaches this server (no admin approval, decision 2026-10-26; always on,
 // 2026-11-01). Calls go in the person's name through the Perspicax link of
-// their Primary Bot (else another bot of theirs with a Perspicax profile),
+// their Primary Bot (else another bot of theirs),
 // on that bot's conversation, so the session card and panel row come from
 // the usual remote_support_* registrar.
 const unattendedHosts = createUnattendedHosts({
   seat: async (principalId) => {
     const mcp = perspicaxMcp;
     if (!mcp) return { error: "This server is not linked to Perspicax." };
-    const mine = store.bots.filter((bot) => !bot.temporary && bot.perspicax?.profiles.length && effectiveBotOwner(bot).trim().toLowerCase() === principalId);
+    const mine = store.bots.filter((bot) => !bot.temporary && effectiveBotOwner(bot).trim().toLowerCase() === principalId);
     const bot = mine.find((candidate) => candidate.chiefOfStaff) ?? mine[0];
-    if (!bot?.perspicax) return { error: "None of your bots is linked to Perspicax, so Sagax cannot reach it for you." };
+    if (!bot) return { error: "None of your bots can host this Perspicax connection." };
     const threadId = bot.threadId;
     const generation = randomUUID();
     const plan = await mcp.prepareTurn({
-      threadId, generation, bot: { id: bot.id, perspicax: bot.perspicax },
+      threadId, generation, bot: { id: bot.id },
       speakerPrincipalId: principalId, speakerOrigin: "person",
       ownerPrincipalId: effectiveBotOwner(bot),
     });
     if (!plan.mounted.length) {
       await mcp.endGeneration(threadId, generation).catch(() => {});
       const first = plan.unavailable[0];
-      return { error: first ? `Perspicax: ${perspicaxUnavailableWhy(first.reason, first.detail)}` : "No Perspicax profile could be used." };
+      return { error: first ? `Perspicax: ${perspicaxUnavailableWhy(first.reason, first.detail)}` : "The Perspicax connection could not be used." };
     }
     const owner = { principalId, botId: bot.id };
     return {
@@ -14389,12 +14375,12 @@ const remoteSupportSeats = new Map<string, { generation: string; ready: Promise<
 async function remoteSupportSeat(target: SupportWatchTarget): Promise<string | null> {
   const mcp = perspicaxMcp;
   const bot = store.bot(target.botId);
-  if (!mcp || !bot?.perspicax?.profiles.length) return null;
+  if (!mcp || !bot) return null;
   let seat = remoteSupportSeats.get(target.code);
   if (!seat) {
     const generation = randomUUID();
     const ready = mcp.prepareTurn({
-      threadId: target.threadId, generation, bot: { id: bot.id, perspicax: bot.perspicax },
+      threadId: target.threadId, generation, bot: { id: bot.id },
       speakerPrincipalId: target.principalId, speakerOrigin: "person",
       ownerPrincipalId: effectiveBotOwner(bot),
     })
@@ -21840,12 +21826,12 @@ function prewarmRefusal(botId: string, threadId: string): string | null {
   // warming it would load the old session only to throw it away.
   const warmTask = store.taskByThread(botId, threadId);
   if (warmTask && staleEngineSession(threadId, warmTask, engine, store.activePath(threadId), new Set())) return "stale session";
-  // Perspicax profile servers: for Claude their turn capability rides a file
+  // Perspicax: for Claude its turn capability rides a file
   // the bridge reads on every frame (spawn-contract.ts warmPerspicaxEnv), so
   // the next turn reuses the warm process; the Perspicax tokens stay in
   // perspicaxMcp. Other engines still carry it in their launch, where a warm
   // would only be relaunched.
-  if (IDENTITY.kind === "perspicax" && perspicaxMcp && (store.bot(botId)?.perspicax?.profiles.length ?? 0) > 0
+  if (IDENTITY.kind === "perspicax" && perspicaxMcp
     && registry.get(bot.modelSelection.instanceId)?.driverKind !== "claudeAgent") return "perspicax";
   return null;
 }
@@ -24509,7 +24495,7 @@ async function routineWatchCallTool(routine: WatchRoutine, tool: string, args: R
       }
     }
   }
-  if (IDENTITY.kind === "perspicax" && bot.perspicax?.profiles.length) {
+  if (IDENTITY.kind === "perspicax") {
     const principal = effectiveRunAs({ botId: routine.botId, ...(routine.runAs ? { runAs: routine.runAs } : {}) }) || effectiveBotOwner(bot);
     return perspicaxReadAlone({ botId: bot.id, principalId: principal, threadId: `routine-watch-${routine.id}`, tool: tool.replace(/^mcp__[A-Za-z0-9_.-]+?__(?=[A-Za-z0-9])/, ""), args, clientName: "Sagax routine watch" });
   }
@@ -24599,18 +24585,11 @@ function routineReadinessEngine(routine: ReadinessRoutine, run: ReadinessRun) {
 function refusalAccount(via: string, principal?: string, slot = "primary"): string {
   return JSON.stringify([via === "owner-key" || via === "speaker-key" ? "key" : via, principal ?? "organization", slot]);
 }
-function routineReadinessProfiles(bot: BotRecord, principal: string): readonly string[] {
-  if (bot.perspicax?.profiles.length) return bot.perspicax.profiles;
-  if (!bot.perspicaxActAs) return [];
-  const subject = principals.byId(principal)?.subject;
-  const held = subject ? perspicaxDirectory?.profilesOf(subject.sub) : undefined;
-  return held?.[0] ? [held[0]] : [];
-}
 const routineReadinessDeps: RoutineReadinessDeps = {
   cacheKey: (routine, run) => {
     const bot = store.bot(run.botId);
     const engine = routineReadinessEngine(routine, run);
-    return JSON.stringify([engine, bot?.modelSelection, bot?.mcpServers, bot?.toolScope, bot?.assignedSkills, bot?.perspicax, bot?.computer, bot?.remoteHosts]);
+    return JSON.stringify([engine, bot?.modelSelection, bot?.mcpServers, bot?.toolScope, bot?.assignedSkills, bot?.computer, bot?.remoteHosts]);
   },
   engine: (routine, run) => routineReadinessEngine(routine, run),
   skills: (_routine, run) => {
@@ -24623,8 +24602,7 @@ const routineReadinessDeps: RoutineReadinessDeps = {
   flowSkills: (_routine, run) => {
     const bot = store.bot(run.botId);
     if (!bot) return undefined;
-    return routineFlowSkills(IDENTITY.kind === "perspicax", perspicaxDirectory?.flowPlugins(),
-      routineReadinessProfiles(bot, effectiveRunAs(run) ?? localPrincipalId()), orgFlowPlugins.status());
+    return routineFlowSkills(IDENTITY.kind === "perspicax", perspicaxDirectory?.flowPlugins(), orgFlowPlugins.status());
   },
   mcp: (_routine, run) => {
     const bot = store.bot(run.botId);
@@ -24632,23 +24610,17 @@ const routineReadinessDeps: RoutineReadinessDeps = {
     const principal = effectiveRunAs(run) ?? localPrincipalId();
     const plugins = scopedPluginMcp(bot, principal);
     const personal = IDENTITY.kind === "perspicax" && principal ? personConnections.servers(principal) : {};
-    const catalog = perspicaxDirectory?.profileCatalog() ?? [];
-    const profileNames = catalog.map(profile => ({ id: profile.id, name: perspicaxServerName(profile.slug || profile.id, new Set<string>()) }));
-    const held = principals.byId(principal)?.subject;
-    const profiles = routineReadinessProfiles(bot, principal);
-    const defaultProfile = profileNames.find(profile => profiles.includes(profile.id)) ?? profileNames.find(profile => held && perspicaxDirectory?.profilesOf(held.sub).includes(profile.id));
-    const known = [...Object.keys(cfg.mcpServers ?? {}), ...plugins.map(server => server.name), ...Object.keys(personal), ...profileNames.map(profile => profile.name)];
+    const known = [...Object.keys(cfg.mcpServers ?? {}), ...plugins.map(server => server.name), ...Object.keys(personal), ...(IDENTITY.kind === "perspicax" ? ["perspicax"] : [])];
     const enabled = [...Object.keys(engineMcpServers(bot)), ...plugins.map(server => server.name),
       ...Object.entries(personal).filter(([, server]) => server.enabled).map(([name]) => name),
-      ...profileNames.filter(profile => profiles.includes(profile.id)).map(profile => profile.name)].filter(name => canUseMcpServer(bot.toolScope, name));
-    return { known, enabled, ...(IDENTITY.kind === "perspicax" ? { profileServer: defaultProfile?.name ?? "perspicax", toolPrefixes: { cw_psa: defaultProfile?.name ?? "perspicax" } } : {}) };
+      ...(IDENTITY.kind === "perspicax" ? ["perspicax"] : [])].filter(name => name === "perspicax" || canUseMcpServer(bot.toolScope, name));
+    return { known, enabled, ...(IDENTITY.kind === "perspicax" ? { toolPrefixes: { cw_psa: "perspicax" } } : {}) };
   },
   perspicax: async (_routine, run, signal) => {
     if (IDENTITY.kind !== "perspicax" || !perspicaxMcp) return undefined;
-    const bot = store.bot(run.botId);
     const principal = effectiveRunAs(run);
-    if (!bot || !principal) return undefined;
-    return perspicaxMcp.probeReadiness(principal, routineReadinessProfiles(bot, principal), signal);
+    if (!store.bot(run.botId) || !principal) return undefined;
+    return perspicaxMcp.probeReadiness(principal, signal);
   },
   computers: async (routine, run, signal) => {
     const bot = store.bot(run.botId);
@@ -31051,21 +31023,20 @@ ROUTES.push(createMeetingRoutes({
 async function perspicaxReadAlone(input: { botId: string; principalId: string; threadId: string; tool: string; args: Record<string, unknown>; clientName: string }): Promise<ToolAnswer | { error: string }> {
   const mcp = perspicaxMcp;
   const live = store.bot(input.botId);
-  if (!mcp || !live?.perspicax?.profiles.length) return { error: "Perspicax is not available to this bot." };
+  if (!mcp || !live) return { error: "Perspicax is not available to this bot." };
   const { threadId, tool, args } = input;
   const generation = randomUUID();
   try {
     const plan = await mcp.prepareTurn({
-      threadId, generation, bot: { id: live.id, perspicax: live.perspicax },
+      threadId, generation, bot: { id: live.id },
       speakerPrincipalId: input.principalId, speakerOrigin: "owner-routine",
       ownerPrincipalId: effectiveBotOwner(live),
     });
-    const profile = plan.mounted.find((candidate) => candidate.slug && tool.startsWith(`${candidate.slug}__`)) ?? plan.mounted[0];
-    if (!profile) {
+    if (!plan.mounted.length) {
       const first = plan.unavailable[0];
-      return { error: first ? `Perspicax: ${perspicaxUnavailableWhy(first.reason, first.detail)}` : "No Perspicax profile could be used." };
+      return { error: first ? `Perspicax: ${perspicaxUnavailableWhy(first.reason, first.detail)}` : "The Perspicax connection could not be used." };
     }
-    const relay = (frame: Record<string, unknown>) => mcp.relay({ threadId, generation, botId: live.id, profileId: profile.profileId, frame });
+    const relay = (frame: Record<string, unknown>) => mcp.relay({ threadId, generation, botId: live.id, frame });
     await relay({ jsonrpc: "2.0", id: "artifact-init", method: "initialize", params: { protocolVersion: PERSPICAX_PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: input.clientName, version: serverVersion() } } });
     await relay({ jsonrpc: "2.0", method: "notifications/initialized" });
     const answer = await relay({ jsonrpc: "2.0", id: "artifact-call", method: "tools/call", params: { name: tool, arguments: args } });
@@ -31087,7 +31058,7 @@ const artifactRefresher = createArtifactRefresher({
     bot: (botId) => {
       const bot = store.bot(botId);
       const owner = bot ? effectiveBotOwner(bot).trim().toLowerCase() : "";
-      return bot ? { id: bot.id, computer: bot.computer, ...(owner ? { ownerPrincipalId: owner } : {}), ...(bot.perspicax?.profiles.length ? { perspicaxProfiles: bot.perspicax.profiles } : {}) } : null;
+      return bot ? { id: bot.id, computer: bot.computer, ...(owner ? { ownerPrincipalId: owner } : {}) } : null;
     },
     // 2026-10-26: Approve for me refreshes the owner's own command
     // source on the bot's own Local VM (artifact-sources.ts commandMayRun)
@@ -31985,7 +31956,7 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     misuseActor,
     safetyReviewer,
     safetyToolHold,
-    perspicaxMounted: (capability, profileId) => Boolean(perspicaxMcp && profileId && capability.perspicaxProfile === profileId),
+    perspicaxMounted: (capability) => Boolean(perspicaxMcp?.hasMounted(capability.threadId, capability.generation, capability.botId)),
     perspicaxRelay: (input) => perspicaxMcp!.relay(input)
   }),
 ];
@@ -36279,15 +36250,15 @@ function orgFullAccessPolicy(): boolean {
 }
 /** 2026-10-14 (bot owner permissions): an MCP server whose tools act
  * through a person's identity elsewhere for this bot's turn: Sagax's own
- * Perspicax mounts (`perspicax_*`, the person's tokens; Perspicax applies
- * DAP and profile holds), a
+ * Perspicax account mount (`perspicax`; legacy `perspicax_*` turns remain
+ * recognized, and Perspicax applies its live vendor permissions), a
  * remote server mounted for the bot, or a personal connection of the owner
  * or of the person the turn speaks for (it runs in their own environment).
  * A host-level built-in is never one (engine-access.ts). */
 function ownerScopedMcpServerFor(bot: BotRecord, threadId: string): (server: string) => boolean {
   return (server) => {
     const name = server.toLowerCase();
-    if (name.startsWith("perspicax_")) return true;
+    if (perspicaxOwnerScopedServer(name)) return true;
     if (claudeAiOwnerScopedServer(server, turnAccessByThread.get(threadId)?.via)) return true;
     const has = (names: Iterable<string>) => [...names].some((candidate) => candidate.toLowerCase() === name);
     try {
@@ -38024,40 +37995,6 @@ if (IDENTITY.kind === "perspicax") {
       actor: orgAuditActor(auth)
     })
   }));
-  // Slice 5: the Perspicax MCP profiles a bot mounts (server/bots/bot-perspicax.ts);
-  // only once the server is linked to Perspicax.
-  ROUTES.push(createBotPerspicaxRoutes({
-    linked: () => perspicaxDirectory !== null,
-    profilesOf: (id) => {
-      const bot = store.bot(id);
-      return bot ? [...(bot.perspicax?.profiles ?? [])] : undefined;
-    },
-    facts: (id) => botFacts(store.bot(id)!),
-    viewer: authzViewerFor,
-    heldBy: (auth) => {
-      const person = principals.byId(actorPrincipalId(auth));
-      return person?.subject?.iss === IDENTITY.issuer && person.disabledAt === undefined ? perspicaxDirectory?.profilesOf(person.subject.sub) ?? [] : [];
-    },
-    catalog: () => perspicaxDirectory?.profileCatalog() ?? [],
-    identities: async (auth) => {
-      const person = principals.byId(actorPrincipalId(auth));
-      const profileId = person?.subject && person.subject.iss === IDENTITY.issuer && person.disabledAt === undefined
-        ? perspicaxDirectory?.profilesOf(person.subject.sub)[0] : undefined;
-      if (!profileId || !person || !perspicaxMcp) return { supported: false, profiles: [] };
-      return perspicaxMcp.listIdentities(person.id, profileId);
-    },
-    actsAsOf: (id) => store.bot(id)?.perspicaxActAs,
-    setActsAs: (id, identity) => { store.setBotPerspicaxActAs(id, identity); },
-    setProfiles: (id, profiles) => { store.setBotPerspicax(id, profiles); },
-    onChanged: (id) => {
-      const bot = store.bot(id);
-      if (bot) broadcast({ kind: "bot", bot: wireBot(bot) });
-      // An idle engine must discover the next turn's identity surface anew.
-      for (const task of bot?.tasks ?? []) if (!threadBusy(id, task.threadId)) releaseWarmEngine(task.threadId);
-      // a profile added is also a trigger of the organization's Flow plugins
-      void orgFlowPlugins.sync("profile").catch(() => undefined);
-    }
-  }));
   // D14: the bots whose sharing the caller administers, with their grants,
   // never their messages. Admin: every bot; a team manager: bots shared with
   // one of their teams or members; anyone else: bots they own or manage.
@@ -38775,29 +38712,27 @@ async function reachMeRespond(person: string, card: ReachCard, body: ReachRespon
   return { status: answer.status, body: answer.status >= 400 ? { error: String(parsed.error ?? "The answer was refused.") } : parsed };
 }
 /** One Perspicax Voice tool for the person, outside any turn: their own
- * access (routine delegation), one profile of their bot at a time. */
+ * main connection through the routine delegation. */
 async function reachMeVoice(person: string, botId: string, tool: "voice_line" | "voice_sms", args: Record<string, unknown>): Promise<{ ok: true; value: unknown } | { ok: false; error: string }> {
   if (IDENTITY.kind !== "perspicax" || !perspicaxMcp) return { ok: false, error: "Perspicax is not linked on this server" };
   const candidates = [store.bot(botId), ...store.bots.filter((bot) => bot.chiefOfStaff && effectiveBotOwner(bot) === person)]
-    .filter((bot): bot is BotRecord => Boolean(bot?.perspicax?.profiles.length) && effectiveBotOwner(bot!) === person);
-  let last = "no bot of the person has a Perspicax profile";
+    .filter((bot): bot is BotRecord => Boolean(bot) && effectiveBotOwner(bot!) === person);
+  let last = "no bot belongs to this person";
   for (const bot of candidates.slice(0, 3)) {
-    for (const profileId of bot.perspicax!.profiles.slice(0, 6)) {
-      const threadId = `reach-me-${randomBytes(6).toString("hex")}`;
-      const generation = "1";
-      try {
-        const plan = await perspicaxMcp.prepareTurn({
-          threadId, generation, bot: { id: bot.id, perspicax: { profiles: [profileId] }, perspicaxActAs: bot.perspicaxActAs },
-          speakerPrincipalId: person, speakerOrigin: "owner-routine", routine: true,
-          ownerPrincipalId: effectiveBotOwner(bot),
-        });
-        if (!plan.mounted.length) { last = plan.unavailable[0]?.reason ?? "not mounted"; continue; }
-        const answer = await perspicaxMcp.callTool({ threadId, generation, botId: bot.id, name: tool, args });
-        if (answer.ok && !answer.isError) return { ok: true, value: answer.value };
-        last = answer.ok ? (typeof answer.value === "string" ? answer.value : "refused") : answer.error;
-      } finally {
-        await perspicaxMcp.endGeneration(threadId, generation).catch(() => {});
-      }
+    const threadId = `reach-me-${randomBytes(6).toString("hex")}`;
+    const generation = "1";
+    try {
+      const plan = await perspicaxMcp.prepareTurn({
+        threadId, generation, bot: { id: bot.id },
+        speakerPrincipalId: person, speakerOrigin: "owner-routine", routine: true,
+        ownerPrincipalId: effectiveBotOwner(bot),
+      });
+      if (!plan.mounted.length) { last = plan.unavailable[0]?.reason ?? "not mounted"; continue; }
+      const answer = await perspicaxMcp.callTool({ threadId, generation, botId: bot.id, name: tool, args });
+      if (answer.ok && !answer.isError) return { ok: true, value: answer.value };
+      last = answer.ok ? (typeof answer.value === "string" ? answer.value : "refused") : answer.error;
+    } finally {
+      await perspicaxMcp.endGeneration(threadId, generation).catch(() => {});
     }
   }
   return { ok: false, error: last.slice(0, 200) };
@@ -40295,9 +40230,7 @@ if (IDENTITY.kind === "perspicax" && oidcRp && idpSessions && process.env.SAGAX_
     // Slice 6: routine lineage speaks through the runAs's delegation.
     routineSubjectToken: (principalId) => routineConsents ? routineConsents.subjectToken(principalId) : Promise.resolve({ ok: false as const, error: "no_session" as const }),
     delegationRefused: (principalId) => routineConsents?.dropCache(principalId),
-    botProfiles: (id) => { const bot = store.bot(id); return bot ? bot.perspicax?.profiles ?? [] : undefined; },
-    botActAs: (id) => store.bot(id)?.perspicaxActAs,
-    heldProfiles: (id) => { const subject = principals.byId(id)?.subject; return subject?.iss === issuer ? directory.profilesOf(subject.sub) : []; },
+    botExists: (id) => Boolean(store.bot(id)),
     permissionGuard: ({ botId, principalId }) => {
       const person = isPrincipalId(principalId) ? principals.byId(principalId) : null;
       const env = mcpIdentityEnv({ botId, principalId, perspicaxRole: person?.perspicaxRole, teamIds: (person?.teams ?? []).map((team) => team.id), ...personOwnScope(principalId) });
@@ -40376,7 +40309,6 @@ const oidcLogin = IDENTITY.kind === "perspicax" && oidcRp && idpSessions
 /** Slice 7: the bots as the console's Bots page reads them, with what a
  * manager's reach is checked against. Metadata only. */
 function orgAdminBots(): Array<{ bot: AdminBot; reach: AdminBotReach }> {
-  const profileNames = new Map((perspicaxDirectory?.profileCatalog() ?? []).map((profile) => [profile.id, profile.name] as const));
   const routineCounts = new Map<string, number>();
   for (const routine of routines?.listRoutines() ?? []) routineCounts.set(routine.botId, (routineCounts.get(routine.botId) ?? 0) + 1);
   return store.bots.map((bot) => {
@@ -40404,7 +40336,9 @@ function orgAdminBots(): Array<{ bot: AdminBot; reach: AdminBotReach }> {
         engine: { instanceId: engine.instanceId, driverKind: engine.driver, installed: engineInstalled(engine.instanceId) },
         model: bot.modelSelection?.model || null,
         access,
-        mcpProfiles: (bot.perspicax?.profiles ?? []).map((id) => ({ id, name: profileNames.get(id) ?? id })),
+        // Kept empty for the older console wire shape. Roles belong to the
+        // account now, never to a bot.
+        mcpProfiles: [],
         grants: wireGrants(facts.grants, describeGrantTarget).map((grant) => ({
           target: grant.target, kind: grant.kind, label: grant.label, level: grant.level, ...(grant.disabled ? { disabled: true as const } : {})
         })),
@@ -40925,11 +40859,10 @@ ROUTES.push(createBotCatalogRoutes({
   clone: async (botId, input) => {
     const id = await orgBotsDeps.clone(botId, { ownerPrincipalId: input.ownerPrincipalId, ...(input.name ? { name: input.name } : {}) });
     const source = store.bot(botId);
-    // The Perspicax profile list travels with the copy; a member's copy
-    // also goes back to a member's defaults for where it runs and what it
-    // reaches on the host (an admin's keeps the source's settings).
+    // Account roles never travel with a bot. A member's copy goes back to
+    // member defaults for where it runs and what it reaches on the host (an
+    // admin's keeps the source's settings).
     store.patchBot(id, {
-      ...(source?.perspicax ? { perspicax: structuredClone(source.perspicax) } : {}),
       // 2026-10-26: a copy of the person's own bot keeps its remote
       // MCP servers; a stdio one runs on the organization's server
       ...(input.asMember ? memberImportReset(input.ownSource ? {

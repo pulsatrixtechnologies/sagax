@@ -1,6 +1,5 @@
 // One identity lease per MCP connection. The parent access token stays private
 // in PerspicaxMcp; this only retains the profile and its expiry, never the token.
-import { PERSPICAX_READ_ONLY_TOOLS } from "../drivers/acp/grok-read-only-tools.ts";
 import en from "../../src/locales/en.json" with { type: "json" };
 import fr from "../../src/locales/fr.json" with { type: "json" };
 
@@ -39,7 +38,7 @@ export function identityProfiles(body: unknown): PerspicaxIdentityProfile[] {
     .map((p) => ({ slug: String(p.slug), name: String(p.name), explicit_only: p.explicit_only === true })) : [];
 }
 
-function failureReason(body: unknown): IdentityFailure {
+export function identityFailureReason(body: unknown): IdentityFailure {
   const encoded = JSON.stringify(body);
   return encoded.includes("switch_not_consented") ? "switch_not_consented" : encoded.includes("params_invalid") ? "params_invalid" : "unavailable";
 }
@@ -68,6 +67,10 @@ export class PerspicaxIdentity {
 
   invalidate(): void { this.expiresAt = 0; this.cancelTimer(); }
   profile(): string { return this.wanted; }
+  active(): boolean {
+    return !this.stopped && !this.failed && this.supported !== false
+      && this.wanted.length > 0 && this.expiresAt > this.now();
+  }
 
   async ensure(force = false): Promise<void> {
     if (this.stopped || !this.wanted || this.supported === false) return;
@@ -87,7 +90,7 @@ export class PerspicaxIdentity {
         const catalog = await this.rpc("tools/list");
         if (object(catalog) && object(catalog.result) && Array.isArray(catalog.result.tools)) this.tools = catalog.result.tools.filter(object);
       } catch { /* the last reviewed reads remain available */ }
-      this.failure(failureReason(body));
+      this.failure(identityFailureReason(body));
       return;
     }
     if (value.lapsed) { this.invalidate(); return; }
@@ -130,7 +133,7 @@ export class PerspicaxIdentity {
       const expiry = typeof token.expires_at === "string" ? Date.parse(token.expires_at) : NaN;
       if (acting.slug !== this.wanted || !Number.isFinite(expiry) || expiry <= this.now()) {
         // Perspicax's ToolError envelope uses error.detail.reason for consent.
-        this.failure(failureReason(answer));
+        this.failure(identityFailureReason(answer));
         return;
       }
       this.failed = false;
@@ -159,22 +162,19 @@ export class PerspicaxIdentity {
     }
   }
 
-  allows(name: string): boolean {
-    if (name === "identity_switch") return true;
-    if (!this.failed) return true;
-    return PERSPICAX_READ_ONLY_TOOLS.has(name) || this.tools.some((tool) => tool.name === name && object(tool.annotations) && tool.annotations.readOnlyHint === true);
-  }
-
-  catalog(body: unknown): unknown {
-    if (!this.failed || !object(body) || !object(body.result) || !Array.isArray(body.result.tools)) return body;
-    return { ...body, result: { ...body.result, tools: body.result.tools.filter((tool) => object(tool) && this.allows(String(tool.name))) } };
-  }
-
   private cancelTimer(): void { if (this.timer) clearTimeout(this.timer); this.timer = undefined; }
 
   clear(): Promise<void> {
     this.closing ??= this.clearOnce();
     return this.closing;
+  }
+
+  /** Stop renewing this local lease without sending a remote clear. Used
+   * after `profile_use` has already replaced the act-as identity remotely. */
+  async detach(): Promise<void> {
+    this.stopped = true;
+    this.cancelTimer();
+    await this.pending;
   }
 
   private async clearOnce(): Promise<void> {

@@ -208,6 +208,9 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
         const cached = mountIntegrations ? warmToolSessions.get(turn.threadId, toolsFp) : undefined;
         if (cached) {
           tools = cached;
+          // A new generation starts with no selected account role, even
+          // when the bridge process and parent account token stay warm.
+          await tools.refresh?.(abort.signal);
           toolsReused = true;
           turnTrace(turn.threadId, "tools-reused");
         } else {

@@ -1124,7 +1124,7 @@ dropped and counted, never given access.
 
 What never travels: API keys and provider keys, files and pictures, custom
 avatars, model settings (the bots use the server's default model), connector
-and MCP grants, Perspicax profiles, computer and browser access. Copied bots
+and MCP grants, Perspicax account roles, computer and browser access. Copied bots
 start private, ask before acting, with the computer and the browser off.
 
 The organization server answers `POST /api/org/import` only to a person
@@ -1446,22 +1446,21 @@ their versions. Nothing comes from GitHub.
   them with `--plugin-dir`; the same selected copies are available to the
   person's sandbox and the capability file reader.
 - Guard: the copy has no hooks, so the Flow guard runs in Perspicax (its
-  server guard runs the pack's own PreToolUse hook on every call of a
-  Flow-linked profile: dry run, the person's GO, read back). Perspicax
-  declares `guard: "enforce"` only while that guard enforces and every
-  profile that can write is linked to Flow. Without it (an older Perspicax,
+  server guard runs the active pack's own PreToolUse hook on every Flow
+  call: dry run, the person's GO, read back). Perspicax declares
+  `guard: "enforce"` only while that guard enforces. Without it (an older Perspicax,
   the guard off or in shadow, or `enabled: false` with a `reason` such as
   `flow_guard_uncovered`) the server installs nothing, takes its copy out,
   and no turn loads it.
 - Triggers: a directory that changed, a person's sign-in,
-  a Perspicax profile added to a bot, the start of the server and a check
+  an active pack change, the start of the server and a check
   every 30 minutes. Each is idempotent and silent when the copy matches.
 - Off: the Perspicax admin sets `flow_plugins_default` to `off` (its Flow
   page); the next directory takes the copy out. A plugin someone installed
   on a bot by hand stays.
 - Status: `GET /api/org` (`settings.flowPlugins`), never a token.
 - Other engines: Codex, Grok and the rest have no Claude Code plugin system;
-  they reach Flow through the Perspicax profiles of the turn (`flow` and
+  they reach Flow through the same Perspicax account connection (`flow` and
   `flow_action`), under the same server guard.
 
 An allow rule never overrides a denial. Rules only go into

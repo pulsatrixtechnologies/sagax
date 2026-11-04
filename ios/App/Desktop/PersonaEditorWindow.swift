@@ -27,7 +27,7 @@ enum DesktopPersonaPage: String, CaseIterable, Hashable {
     case overview, appearance, sharing, visibility, summary
     case soul, rules, skills, files
     case model, worksOn, access, slack, voice
-    case permissions, perspicax
+    case permissions
     case usage, history
 
     /// The page that shows a panel section (`personaCategoryForSection`):
@@ -54,7 +54,6 @@ enum DesktopPersonaPage: String, CaseIterable, Hashable {
         case .slack: .slack
         case .voice: .voice
         case .permissions: .permissions
-        case .perspicax: .perspicax
         case .usage: .usage
         case .history: .history
         case .overview, .appearance, .rules, .files: nil
@@ -79,7 +78,6 @@ enum DesktopPersonaPage: String, CaseIterable, Hashable {
         case .slack: "Slack"
         case .voice: AppStrings.localized("Voice")
         case .permissions: AppStrings.localized("Permissions")
-        case .perspicax: AppStrings.localized("Perspicax Profiles")
         case .usage: AppStrings.localized("Usage")
         case .history: AppStrings.localized("Changes")
         }
@@ -114,7 +112,6 @@ enum DesktopPersonaPage: String, CaseIterable, Hashable {
         case .slack: .hash
         case .voice: .mic
         case .permissions: .shieldCheck
-        case .perspicax: .plug
         case .usage: .coins
         case .history: .history
         }
@@ -136,7 +133,7 @@ enum DesktopPersonaGroup: String, CaseIterable {
         case .profile: [.overview, .appearance, .sharing, .visibility, .summary]
         case .instructions: [.soul, .rules, .skills, .files]
         case .modelTools: [.model, .worksOn, .access, .slack, .voice]
-        case .security: [.permissions, .perspicax]
+        case .security: [.permissions]
         case .activity: [.usage, .history]
         }
     }
@@ -428,9 +425,7 @@ struct PersonaEditorWindow: View {
 
     @ViewBuilder
     private func pageBody(_ page: DesktopPersonaPage) -> some View {
-        if page == .perspicax, !reachable(.perspicax) {
-            note(AppStrings.localized("Perspicax profiles are offered on a server signed in with Perspicax."), lock: false)
-        } else if locked(page) {
+        if locked(page) {
             note(AppStrings.localized("Read only"), lock: true)
         } else {
             switch page {

@@ -32,7 +32,6 @@ export interface ArtifactSourceBot {
   /** The person who owns the bot. At Auto a command runs only for an
    * artifact of that person (unknown: blocked). */
   ownerPrincipalId?: string;
-  perspicaxProfiles?: readonly string[];
 }
 
 export interface ArtifactSourceDeps {
@@ -173,7 +172,7 @@ export function createArtifactSourceRunner(deps: ArtifactSourceDeps): (artifact:
     }
 
     const perspicaxTool = perspicaxReadTool(source.tool);
-    if (perspicaxTool && deps.perspicax && bot.perspicaxProfiles?.length) {
+    if (perspicaxTool && deps.perspicax) {
       const result = await deps.perspicax.call({ artifact, bot, tool: perspicaxTool, args: source.args, signal });
       return "error" in result ? { ok: false, error: result.error } : answer(result);
     }

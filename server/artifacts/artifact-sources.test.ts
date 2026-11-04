@@ -11,7 +11,7 @@ const artifact = (source: ArtifactSource): Artifact => ({
 function deps(over: Partial<ArtifactSourceDeps> = {}) {
   const calls: string[] = [];
   const base: ArtifactSourceDeps = {
-    bot: () => ({ id: "bot-a", computer: "vm", perspicaxProfiles: ["p1"] }),
+    bot: () => ({ id: "bot-a", computer: "vm" }),
     threadFor: (a) => a.threadId ?? "main",
     fullAccess: () => false,
     alwaysAllowed: () => false,

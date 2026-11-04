@@ -172,11 +172,6 @@ export function installationServerName(item: Pick<Capability, "key" | "form" | "
   return item.form === "mcp" && item.scope === "installation" && item.key.startsWith("mcp:installation:") ? item.key.slice("mcp:installation:".length) : null;
 }
 
-/** The profile id of a Role row (`role:bot:<id>`): sent back to the route, never shown. */
-export function roleProfileId(item: Pick<Capability, "key" | "form">): string | null {
-  return item.form === "role" && item.key.startsWith("role:bot:") ? item.key.slice("role:bot:".length) : null;
-}
-
 /** The skill name of a skill row (`skill:<scope>:<name>`). */
 export function skillName(item: Pick<Capability, "key" | "form">): string | null {
   if (item.form !== "skill") return null;

@@ -80,6 +80,5 @@ export type BotSettingsSection =
   | "voice"
   | "visibility"
   | "sharing"
-  | "perspicax"
   | "history"
   | "usage";

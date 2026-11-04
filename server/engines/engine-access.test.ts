@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { driverKeyBacked, type AppConfig } from "../config.ts";
-import { accessCardAudience, accessCardForViewer, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, engineAccountConnectorCall, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberOwnedBot, memberOwnHostToolCall, resolveTurnSpeaker, sensitiveHiddenSegment, routineAccessNotifications, routineLineage, serverCommandApproval, speakerPrincipal, type MemberHostToolPlace, signInExpiredCard, subscriptionSignInRefused, engineNameForViewer, keyEngineProvider, orgKeyEngineName } from "./engine-access.ts";
+import { accessCardAudience, accessCardForViewer, accessCardVisibleTo, adminApprovalDecision, claudeAiOwnerScopedServer, engineAccessNotice, engineAccountConnectorCall, fileViewToolPaths, keyRefusedCard, memberBotAdminApproval, memberOwnedBot, memberOwnHostToolCall, perspicaxOwnerScopedServer, resolveTurnSpeaker, sensitiveHiddenSegment, routineAccessNotifications, routineLineage, serverCommandApproval, speakerPrincipal, type MemberHostToolPlace, signInExpiredCard, subscriptionSignInRefused, engineNameForViewer, keyEngineProvider, orgKeyEngineName } from "./engine-access.ts";
 import { CODEX_SIGN_IN_EXPIRED, codexNotSignedIn, codexSignInExpired } from "../drivers/codex-errors.ts";
 
 const ALICE = "pr_aaaaaaaa-0000-4000-8000-000000000001";
@@ -229,9 +229,13 @@ describe("the admin gate on a member's bot", () => {
   // their own rights; the admin only what goes beyond them.
   const ownerGate = (tool: string, command?: unknown) => memberBotAdminApproval({
     tool, command, workspaceRoot: root,
-    ownerScopedMcpServer: (server) => server === "perspicax_quasar" || server === "my_remote",
+    ownerScopedMcpServer: (server) => perspicaxOwnerScopedServer(server) || server === "my_remote",
   });
   it("lets the owner answer a tool of a remote or personal MCP server and a web search", () => {
+    expect(perspicaxOwnerScopedServer("perspicax")).toBe(true);
+    expect(perspicaxOwnerScopedServer("perspicax_quasar")).toBe(true);
+    expect(perspicaxOwnerScopedServer("perspicaxish")).toBe(false);
+    expect(ownerGate("mcp__perspicax__cw_psa_query")).toBe(false);
     expect(ownerGate("mcp__perspicax_quasar__cw_psa_query")).toBe(false);
     expect(ownerGate("perspicax_quasar__cw_psa_write")).toBe(false);
     expect(ownerGate("mcp__my_remote__create_issue")).toBe(false);

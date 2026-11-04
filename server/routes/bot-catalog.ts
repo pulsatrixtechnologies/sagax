@@ -120,7 +120,8 @@ function entryOf(bot: CatalogBot, source: BotCatalogSource, ownerName: string, o
  * browser and the Always allow list stay. MCP servers stay only when the
  * copy is of the person's own bot (`keep`) and only the remote (url) ones:
  * a stdio server runs on the organization's server. Engine, model, soul,
- * skills and the Perspicax profile list stay too. */
+ * skills stay too. Perspicax roles belong to the account and never travel
+ * with a bot copy. */
 export function memberImportReset(keep?: { mcpServers?: readonly string[]; remote: (name: string) => boolean }): {
   browserProfile: undefined;
   cwd: undefined;

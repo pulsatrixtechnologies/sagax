@@ -1995,21 +1995,21 @@ describe("ClaudeDriver turns (fake CLI)", () => {
     expect(seen.mcpConfig.mcpServers.agents.env.SAGAX_MERGED_TOOLS).toBeUndefined();
   });
 
-  it("#1935: on a compact prompt a Perspicax profile bridge lists its core tools whole", async () => {
+  it("#1935: on a compact prompt the Perspicax account bridge lists its core tools whole", async () => {
     await create(undefined, { FAKE_CLAUDE_VERSION: "2.1.284" });
     const dump = join(scratch, "compact-px-dump.json");
     process.env.FAKE_CLAUDE_DUMP = dump;
     await instance.adapter.sendTurn({
       threadId: "t-compact-px", text: "hi",
-      compactPrompt: { agents: { core: "default", pinned: [] }, pinned: { perspicax_read_only_dispatch_view: ["cw_psa_find_tickets"] } },
+      compactPrompt: { agents: { core: "default", pinned: [] }, pinned: { perspicax: ["cw_psa_find_tickets"] } },
       integrations: { custom: {
-        perspicax_read_only_dispatch_view: { command: process.execPath, args: [SPAWNED_PROXIES.perspicax], env: { SAGAX_PERSPICAX_PROFILE: "P1" } },
+        perspicax: { command: process.execPath, args: [SPAWNED_PROXIES.perspicax], env: { SAGAX_PERSPICAX_TOKEN: "synthetic-account-token", SAGAX_PERSPICAX_TOKEN_FILE: "/fake/px-main-token" } },
         ops: { command: process.execPath, args: ["/fake/ops.js"], env: {} },
       } },
     } as Parameters<typeof instance.adapter.sendTurn>[0]);
     await recorder.until((e) => e.type === "turn.completed");
     const seen = JSON.parse(readFileSync(dump, "utf8"));
-    const bridge = JSON.parse(seen.mcpConfig.mcpServers.perspicax_read_only_dispatch_view.env.SAGAX_GATE_SEARCH);
+    const bridge = JSON.parse(seen.mcpConfig.mcpServers.perspicax.env.SAGAX_GATE_SEARCH);
     expect(bridge.pinned).toEqual(["api_describe", "api_result_query", "api_search", "cw_psa_find_tickets"]);
     expect(bridge.pinnedSuffixes).toEqual(["_action", "_query", "_write"]);
     // another server the bot owns keeps only its own most used tools

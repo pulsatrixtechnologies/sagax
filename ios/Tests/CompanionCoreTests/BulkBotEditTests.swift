@@ -164,24 +164,20 @@ final class BulkBotEditTests: XCTestCase {
         XCTAssertEqual(result.undo.first?.patch, ["voice": .string("")])
     }
 
-    func testGrantsAndProfilesThenUndo() async {
+    func testGrantsThenUndo() async {
         let api = FakeBulkAPI()
         api.grants["b1"] = [BotGrantRecord(target: "user:a", level: .use)]
-        api.profiles["b1"] = ["p1"]
         let plan = BulkBotEditPlan(
-            grants: BulkGrantEdit(mode: .replace, items: [BotGrantRecord(target: "user:b", level: .run)]),
-            profiles: BulkListEdit(mode: .add, items: ["p2"])
+            grants: BulkGrantEdit(mode: .replace, items: [BotGrantRecord(target: "user:b", level: .run)])
         )
         let atlas = Bot.bulkFixture(id: "b1", name: "Atlas")
         let result = await BulkBotEditRunner.apply(plan, bots: [atlas], enabledServers: [], api: api, reason: Self.reason)
         XCTAssertEqual(result.outcomes.first?.ok, true)
         XCTAssertEqual(api.grants["b1"], [BotGrantRecord(target: "user:b", level: .run)])
-        XCTAssertEqual(api.profiles["b1"], ["p1", "p2"])
 
         let undone = await BulkBotEditRunner.undo(result.undo, api: api, reason: Self.reason)
         XCTAssertEqual(undone.outcomes.first?.ok, true)
         XCTAssertEqual(api.grants["b1"], [BotGrantRecord(target: "user:a", level: .use)])
-        XCTAssertEqual(api.profiles["b1"], ["p1"])
     }
 
     func testUndoOfFullAccessSendsItsConfirmation() async {
@@ -220,7 +216,6 @@ final class BulkBotEditTests: XCTestCase {
 private final class FakeBulkAPI: BulkBotEditAPI, @unchecked Sendable {
     var refusePatch: [String: String] = [:]
     var grants: [String: [BotGrantRecord]] = [:]
-    var profiles: [String: [String]] = [:]
     private(set) var calls: [String] = []
 
     func patchBotFields(botId: String, patch: BulkPatch) async throws -> Bot {
@@ -248,15 +243,6 @@ private final class FakeBulkAPI: BulkBotEditAPI, @unchecked Sendable {
         return try answer(botId)
     }
 
-    func botPerspicax(botId: String) async throws -> PerspicaxAnswer {
-        let selected = (profiles[botId] ?? []).map { PerspicaxSelected(profile: PerspicaxProfile(id: $0, name: $0), heldByMe: true) }
-        return PerspicaxAnswer(selected: selected, available: [], canEdit: true)
-    }
-
-    func setBotPerspicax(botId: String, profiles next: [String]) async throws -> PerspicaxAnswer {
-        profiles[botId] = next
-        return try await botPerspicax(botId: botId)
-    }
 }
 
 private extension Bot {

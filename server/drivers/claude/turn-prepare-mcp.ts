@@ -157,7 +157,7 @@ if (turn.integrations?.dweb) {
 const botOwned = new Set<string>();
 for (const [name, server] of Object.entries(turn.integrations?.custom ?? {})) {
   if (Object.hasOwn(mcpServers, name)) continue;
-  // A Perspicax profile bridge: its turn capability rides a file (like
+  // The Perspicax account bridge: its turn capability rides a file (like
   // the agents comms token above), so a pre-warmed process is kept.
   // Never rewritten under a turn still running on this thread's process.
   const serverEnv = (server as { env?: Record<string, string> }).env;
@@ -207,7 +207,7 @@ for (const name of turn.toolScope === undefined ? botOwned : Object.keys(mcpServ
   if (!canUseMcpServer(turn.toolScope, name)) { delete mcpServers[name]; continue; }
   // a server may be named like an Object property ("constructor"): own keys only
   const used = turn.compactPrompt && Object.hasOwn(turn.compactPrompt.pinned, name) ? turn.compactPrompt.pinned[name]! : [];
-  // #1935: a Perspicax profile lists its own query, write and action tools
+  // #1935: the Perspicax account connection lists its query, write and action tools
   // whole from the first turn; a bot that saw only search_tools there took
   // api_search's tool names to the agents server.
   const profile = Object.hasOwn(turn.integrations?.custom ?? {}, name) && isPerspicaxBridge(turn.integrations!.custom![name]);

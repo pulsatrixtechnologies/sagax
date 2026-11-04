@@ -5,9 +5,9 @@
 //
 // - every field is "do not change" until it is touched; only touched fields
 //   are sent, bot by bot, through the same routes as the bot's own editor
-//   (PATCH /api/bots/:id, the grants and Perspicax routes), so each change is
+//   (PATCH /api/bots/:id and the grants routes), so each change is
 //   journaled as an individual edit and refused for the reasons it would be;
-// - a list (Shared with, the MCP servers of Access, Perspicax Profiles) is
+// - a list (Shared with, the MCP servers of Access) is
 //   changed by Add, Remove or Replace with;
 // - a value the bots share is shown as it is; when they differ the field
 //   reads "Mixed values" with each bot's value in the tooltip;

@@ -31,7 +31,6 @@ vi.mock("./computer/WorksOnSetting", () => ({ WorksOnSetting: () => null }));
 vi.mock("./bot-settings/ModelSection", () => ({ ModelSection: () => null }));
 vi.mock("./bot-settings/PermissionsSection", () => ({ PermissionsSection: () => null }));
 vi.mock("./bot-settings/VoiceSection", () => ({ VoiceSection: () => null }));
-vi.mock("./bot-settings/PerspicaxSection", () => ({ PerspicaxSection: () => null, PerspicaxProfileControl: () => null, perspicaxRows: () => [] }));
 vi.mock("./bot-settings/SharingSection", () => ({ SharingSection: () => null }));
 vi.mock("./bot-settings/VisibilitySection", () => ({ VisibilitySection: () => null }));
 vi.mock("./bot-settings/HistorySection", () => ({ HistorySection: () => null }));

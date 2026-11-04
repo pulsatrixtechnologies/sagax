@@ -4,7 +4,7 @@ import { basename } from "node:path";
 import type { McpServerSpec } from "../contracts.ts";
 import type { PersonalMcpServer } from "../people/person-connections.ts";
 import { listedMounts, resolveBotCapabilities, type CapabilityInputs } from "./capabilities.ts";
-import { engineServerMcp, perspicaxServerName, personalMcpPrecheck, serverMcpAsPerson, turnPluginPromptDirs } from "../turns/turn-mounts.ts";
+import { engineServerMcp, personalMcpPrecheck, serverMcpAsPerson, turnPluginPromptDirs } from "../turns/turn-mounts.ts";
 import { selectPluginScopes } from "./capability-plugin-mounts.ts";
 import { servedCapabilities } from "../../shared/capabilities.ts";
 import { PERSPICAX_MCP_PREFIX, reservedMcpName } from "../../shared/mcp-reserved-names.ts";
@@ -38,7 +38,7 @@ function inputs(engine: Engine): CapabilityInputs {
   return {
     organization: true,
     organizationName: "Example Org",
-    bot: { id: "bot1", name: "Scout", perspicaxProfiles: ["r2", "r1"], assignedSkills: ["lib-skill"] },
+    bot: { id: "bot1", name: "Scout", assignedSkills: ["lib-skill"] },
     engine,
     botPlugins: [
       { key: "alpha@market", name: "alpha", marketplace: "market", enabled: true, declaredMcpServers: ["alpha-server"], dir: "/plugins/alpha", present: true, contents: { skills: ["a1"], commands: ["c1"], agents: ["g1"] } },
@@ -94,17 +94,13 @@ function inputs(engine: Engine): CapabilityInputs {
 }
 
 /** What a turn of this bot mounts, in the order server/index.ts builds it,
- * with the same functions: this installation's servers (customMcp only),
- * the Roles the speaker holds, then the speaker's own servers. */
+ * with the same functions: this installation's servers, the account's one
+ * Perspicax connection, then the speaker's own servers. */
 function turnMcp(input: CapabilityInputs): string[] {
   if (!input.engine.customMcp) return [];
   const servers = serverMcpAsPerson(engineServerMcp({ configured: input.configured, organization: input.organization, filterPolicy: input.filterPolicy }), { organization: input.organization, githubToken: input.githubToken }).servers;
   const custom = new Set(Object.keys(servers));
-  const catalog = new Map(input.roles.catalog.map((role) => [role.id, role] as const));
-  for (const id of [...new Set(input.bot.perspicaxProfiles)].sort()) {
-    const role = catalog.get(id);
-    if (role && input.roles.held?.includes(id)) custom.add(perspicaxServerName(role.slug || role.id, custom));
-  }
+  if (input.organization) custom.add("perspicax");
   const person = input.personal!;
   for (const [name, server] of Object.entries(person.servers)) {
     const check = personalMcpPrecheck(name, server, { taken: (other) => custom.has(other), hasEnvironment: person.hasEnvironment, github: person.github });
@@ -257,7 +253,7 @@ describe("resolveBotCapabilities", () => {
     const list = claude();
     expect(list.engine).toEqual({ kind: "claudeAgent", label: "Claude" });
     expect(new Set(list.items.map((item) => item.key)).size).toBe(list.items.length);
-    expect(byKey(list, "role:bot:r1")?.name).toBe("Dispatch");
+    expect(byKey(list, "role:account:r1")?.name).toBe("Dispatch");
     expect(list.items.every((item) => !/\br[12]\b/.test(item.name))).toBe(true);
   });
 
@@ -417,8 +413,9 @@ describe("resolveBotCapabilities", () => {
 
   it("Roles: held is on, not held says so (C-5)", () => {
     const list = claude();
-    expect(byKey(list, "role:bot:r1")).toMatchObject({ state: "on", mounts: ["perspicax_dispatch"] });
-    expect(byKey(list, "role:bot:r2")).toMatchObject({ state: "not_held" });
+    expect(byKey(list, "mcp:account:perspicax")).toMatchObject({ state: "on", mounts: ["perspicax"], canToggle: false });
+    expect(byKey(list, "role:account:r1")).toMatchObject({ state: "on", mounts: ["perspicax"], canToggle: false });
+    expect(byKey(list, "role:account:r2")).toMatchObject({ state: "not_held", canToggle: false });
   });
 
   it("skills: the bot's own, and a library assignment while the library is off", () => {

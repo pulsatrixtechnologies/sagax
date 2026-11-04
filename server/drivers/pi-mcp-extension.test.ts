@@ -279,6 +279,74 @@ describe("Pi MCP startup budgets", () => {
 });
 
 describe("Pi MCP extension registration", () => {
+  it("refreshes a switched role before the next call and resets warm declarations on the next turn", async () => {
+    const dir = tempDir();
+    const rolePath = join(dir, "role");
+    writeFileSync(rolePath, "default");
+    const script = fakeMcpScript(`
+      import { readFileSync, writeFileSync } from "node:fs";
+      import { createInterface } from "node:readline";
+      const send = (value) => process.stdout.write(JSON.stringify(value) + "\\n");
+      let failNextList = false;
+      createInterface({ input: process.stdin }).on("line", (line) => {
+        const msg = JSON.parse(line);
+        if (msg.method === "initialize") send({ jsonrpc: "2.0", id: msg.id, result: { capabilities: { tools: { listChanged: true } } } });
+        else if (msg.method === "tools/list" && failNextList) {
+          failNextList = false;
+          send({ jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: "Discovery unavailable" } });
+        } else if (msg.method === "tools/list") send({ jsonrpc: "2.0", id: msg.id, result: { tools: [
+          { name: "identity_switch", inputSchema: { type: "object", properties: { profile: { type: "string" } } } },
+          { name: readFileSync(process.env.ROLE_PATH, "utf8") === "billing" ? "write_bill" : "read_ticket", inputSchema: { type: "object", properties: {} } },
+        ] } });
+        else if (msg.method === "tools/call") {
+          if (msg.params.name === "identity_switch") {
+            writeFileSync(process.env.ROLE_PATH, msg.params.arguments.profile);
+            send({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
+          }
+          if (msg.params.name === "write_bill") {
+            failNextList = true;
+            send({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
+          }
+          send({ jsonrpc: "2.0", id: msg.id, result: { content: [{ type: "text", text: msg.params.name }] } });
+        }
+      });
+    `);
+    process.env.SAGAX_MCP_CONFIG = join(dir, "mcp.json");
+    writeFileSync(process.env.SAGAX_MCP_CONFIG, JSON.stringify({ mcpServers: {
+      perspicax: { command: process.execPath, args: [script], env: { ROLE_PATH: rolePath }, scope: "custom" },
+    } }));
+    const tools = new Map<string, RegisteredTool>();
+    const registrations = new Map<string, number>();
+    const handlers = new Map<string, ShutdownHandler>();
+    let active = ["native_read"];
+    await extension({
+      registerTool(tool) {
+        tools.set(tool.name, tool);
+        registrations.set(tool.name, (registrations.get(tool.name) ?? 0) + 1);
+        active = [...new Set([...active, tool.name])];
+      },
+      on(event, handler) { handlers.set(event, handler); },
+      getActiveTools: () => active,
+      setActiveTools: (names) => { active = names; },
+    });
+    const confirm = vi.fn(async () => true);
+    const run = (name: string, args = {}) => tools.get(name)!.execute("call", args, undefined, undefined, { ui: { confirm } });
+    try {
+      expect(active).toEqual(["native_read", "perspicax_identity_switch", "perspicax_read_ticket"]);
+      await expect(run("perspicax_identity_switch", { profile: "billing" })).resolves.toMatchObject({ content: [{ text: "identity_switch" }] });
+      expect(active).toEqual(["native_read", "perspicax_identity_switch", "perspicax_write_bill"]);
+      await expect(run("perspicax_write_bill")).resolves.toMatchObject({ content: [{ text: "write_bill" }, { text: expect.stringContaining("Its result still applies") }] });
+      expect(confirm).toHaveBeenCalledTimes(2);
+      expect(confirm).toHaveBeenLastCalledWith("Allow perspicax:write_bill?", "Run perspicax:write_bill");
+      // Sagax ends the role at the generation boundary while Pi stays warm.
+      writeFileSync(rolePath, "default");
+      await handlers.get("before_agent_start")?.({});
+      expect(active).toEqual(["native_read", "perspicax_identity_switch", "perspicax_read_ticket"]);
+      expect([...tools.keys()]).toEqual(["perspicax_identity_switch", "perspicax_read_ticket", "perspicax_write_bill"]);
+      expect([...registrations.values()]).toEqual([1, 1, 1]);
+    } finally { await handlers.get("session_shutdown")?.(); }
+  });
+
   const scopedApi = (initial: string[]) => {
     let active = initial;
     const tools: RegisteredTool[] = [];

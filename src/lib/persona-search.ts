@@ -26,7 +26,6 @@ export const PERSONA_SEARCH_WORDS: Record<PersonaCategory, readonly string[]> = 
   access: ["accès", "acces", "access", "mcp", "outils", "tools", "webhooks", "crochets", "autoriser", "toujours autoriser", "allow", "exclure", "exclude", "navigateur", "browser", "dossier de travail", "horaire", "planifié", "schedule"],
   slack: ["slack", "messages directs", "direct messages", "mentions", "canal", "channel"],
   permissions: ["permissions", "approbation", "approbations", "approuver", "approval", "approve", "mode auto", "auto mode", "révision", "revision", "review", "pairs", "peers", "contacter", "contact", "coordination", "demander d'abord", "refuser", "ask first", "deny", "horaire", "routines", "schedule"],
-  perspicax: ["perspicax", "mcp", "profil", "profils", "profile", "profiles", "outils", "tools", "connectwise"],
   voice: ["voix", "voice", "parler", "speak", "alertes", "alerts", "notifications", "son", "sound", "horaire", "heures calmes", "ne pas déranger", "quiet hours", "do not disturb", "schedule"],
   usage: ["utilisation", "usage", "jetons", "tokens", "coût", "cout", "cost", "facturation", "billing"],
   history: ["changements", "changes", "historique", "history", "annuler", "undo", "restaurer", "rollback", "journal", "log"],

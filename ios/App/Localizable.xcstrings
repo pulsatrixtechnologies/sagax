@@ -15724,28 +15724,6 @@
         }
       }
     },
-    "Changing these profiles needs edit access to this bot.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Changing these profiles needs edit access to this bot."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pour changer ces profils, il faut le droit de modifier ce bot."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mudar estes perfis exige acesso de edição a este bot."
-          }
-        }
-      }
-    },
     "Channel name (optional)": {
       "localizations": {
         "fr": {
@@ -26822,28 +26800,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chaque personne paie ses propres messages. Quand le moteur de ce robot ne lui est pas offert, il répond avec son modèle par défaut (son premier modèle étoilé)."
-          }
-        }
-      }
-    },
-    "Each person who talks to this bot uses their own Perspicax access. Someone who does not hold a profile does not get its tools.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Each person who talks to this bot uses their own Perspicax access. Someone who does not hold a profile does not get its tools."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chaque personne qui parle à ce bot utilise son propre accès Perspicax. Une personne qui ne détient pas un profil n'obtient pas ses outils."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cada pessoa que fala com este bot usa seu próprio acesso Perspicax. Quem não tem um perfil não recebe as ferramentas dele."
           }
         }
       }
@@ -40460,28 +40416,6 @@
         }
       }
     },
-    "Loading the Perspicax profiles": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Loading the Perspicax profiles"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chargement des profils Perspicax"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Carregando os perfis Perspicax"
-          }
-        }
-      }
-    },
     "Loading the group memory…": {
       "localizations": {
         "en": {
@@ -49244,28 +49178,6 @@
         }
       }
     },
-    "Not held by you": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Not held by you"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vous ne détenez pas ce profil"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Você não tem este perfil"
-          }
-        }
-      }
-    },
     "Not installed": {
       "localizations": {
         "en": {
@@ -56732,28 +56644,6 @@
         }
       }
     },
-    "Perspicax Profiles": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Perspicax Profiles"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Profils Perspicax"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Perfis Perspicax"
-          }
-        }
-      }
-    },
     "Perspicax could not be reached to read your xAI key. Try again in a moment.": {
       "localizations": {
         "fr": {
@@ -56840,66 +56730,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Perspicax ne liste plus ce Rôle"
-          }
-        }
-      }
-    },
-    "Perspicax no longer lists this profile.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Perspicax no longer lists this profile."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Perspicax ne liste plus ce profil."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O Perspicax não lista mais este perfil."
-          }
-        }
-      }
-    },
-    "Perspicax profiles are not available on this server right now.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Perspicax profiles are not available on this server right now."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Les profils Perspicax ne sont pas disponibles sur ce serveur pour le moment."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Os perfis Perspicax não estão disponíveis neste servidor agora."
-          }
-        }
-      }
-    },
-    "Perspicax profiles are offered on a server signed in with Perspicax.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Les profils Perspicax sont offerts sur un serveur connecté à Perspicax."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Os perfis Perspicax estão disponíveis em um servidor conectado ao Perspicax."
           }
         }
       }
@@ -64948,28 +64778,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Les routines démarrent en pause dans l'organisation."
-          }
-        }
-      }
-    },
-    "Routines use the tools of the person they run as. That person needs a recent sign-in to Sagax; a run while they have none goes without these tools until they sign in again.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Routines use the tools of the person they run as. That person needs a recent sign-in to Sagax; a run while they have none goes without these tools until they sign in again."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Les routines utilisent les outils de la personne au nom de qui elles s'exécutent. Cette personne doit s'être connectée récemment à Sagax ; sinon, l'exécution se fait sans ces outils jusqu'à sa prochaine connexion."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "As rotinas usam as ferramentas da pessoa em nome de quem rodam. Essa pessoa precisa ter entrado no Sagax recentemente; sem isso, a execução segue sem essas ferramentas até ela entrar de novo."
           }
         }
       }
@@ -91514,28 +91322,6 @@
         }
       }
     },
-    "You can only add a profile you hold in Perspicax.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "You can only add a profile you hold in Perspicax."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vous pouvez seulement ajouter un profil que vous détenez dans Perspicax."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Você só pode adicionar um perfil que tem no Perspicax."
-          }
-        }
-      }
-    },
     "You can only write in conversations you started on this Cloud.": {
       "localizations": {
         "en": {
@@ -91580,28 +91366,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Você ainda pode escrever para %@ na demonstração."
-          }
-        }
-      }
-    },
-    "You can use this bot, not change its profiles.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "You can use this bot, not change its profiles."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vous pouvez utiliser ce bot, mais pas changer ses profils."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Você pode usar este bot, mas não mudar seus perfis."
           }
         }
       }
@@ -91806,28 +91570,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Você tem alterações não salvas."
-          }
-        }
-      }
-    },
-    "You hold no Perspicax profile.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "You hold no Perspicax profile."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vous ne détenez aucun profil Perspicax."
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Você não tem nenhum perfil Perspicax."
           }
         }
       }

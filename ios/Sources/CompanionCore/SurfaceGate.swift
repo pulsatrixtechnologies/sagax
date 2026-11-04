@@ -135,10 +135,9 @@ public enum SurfaceFeature: String, CaseIterable, Hashable, Sendable {
     /// on a served workspace that is not an organization server (the
     /// grants replace it there).
     case botVisibility
-    /// Shared with (BA15) and Perspicax profiles (BA16): organization
+    /// Shared with (BA15): organization
     /// servers only; the server decides who may change them.
     case botSharing
-    case botPerspicax
     /// The bot's Slack app in the organisation's Admin (BA17): a server
     /// answers the link; the sidecar has no route.
     case botSlack
@@ -444,7 +443,7 @@ public struct SurfaceGate: Hashable, Sendable {
             return scope == .serverAdmin || (scope == .serverClient && can("host.shell"))
         case .botVisibility:
             return scope == .serverAdmin && !organization
-        case .botSharing, .botPerspicax:
+        case .botSharing:
             return organization
         case .botPlugins:
             return scope == .serverAdmin || (scope == .serverClient && organization)

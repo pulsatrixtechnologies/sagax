@@ -22,12 +22,11 @@ export function botPillActions(panelOpen: boolean): Action[] {
  * it opens something. A native button, so Enter and Space toggle it and
  * focus stays on it; aria-expanded follows the panel.
  */
-export function BotHeaderPill({ name, panelOpen, onToggle, avatar, actsAs }: {
+export function BotHeaderPill({ name, panelOpen, onToggle, avatar }: {
   name: string;
   panelOpen: boolean;
   onToggle: () => void;
   avatar: ReactNode;
-  actsAs?: string;
 }) {
   return (
     <button
@@ -38,11 +37,9 @@ export function BotHeaderPill({ name, panelOpen, onToggle, avatar, actsAs }: {
       title={panelOpen ? t("chat.closePanel") : t("chat.openPanel")}
       aria-label={panelOpen ? t("chat.closePanelAria", { name }) : t("chat.openPanelAria", { name })}
       aria-expanded={panelOpen}
-      aria-description={actsAs ? t("perspicax.identity.chip", { name: actsAs }) : undefined}
     >
       {avatar}
       <span className="truncate text-[14px] font-medium leading-5 text-ink">{name}</span>
-      {actsAs && <span data-perspicax-identity className="max-w-40 truncate rounded-full bg-inset px-2 py-1 text-[11px] text-ink-secondary">{t("perspicax.identity.chip", { name: actsAs })}</span>}
       <ChevronRight
         data-bot-header-chevron=""
         size={14}

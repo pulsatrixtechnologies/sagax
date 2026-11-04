@@ -276,29 +276,10 @@ final class BotAdvancedTests: XCTestCase {
         XCTAssertEqual(try bot(#","turnPayerDefault":"owner","turnPayer":"speaker""#).effectiveTurnPayer, "speaker")
     }
 
-    func testPerspicaxRowsAndRefusals() async throws {
-        let answer = PerspicaxAnswer(
-            selected: [.init(profile: .init(id: "p1", name: "One"), heldByMe: true), .init(profile: .init(id: "p9", name: "Theirs"), heldByMe: false)],
-            available: [.init(id: "p1", name: "One"), .init(id: "p2", name: "Two")],
-            canEdit: true
-        )
-        let rows = PerspicaxRules.rows(answer, draft: answer.selectedIds)
-        XCTAssertEqual(rows.map(\.id), ["p1", "p2", "p9"])
-        XCTAssertEqual(rows.map(\.checked), [true, false, true])
-        XCTAssertEqual(rows.last?.notHeld, true)
-        XCTAssertEqual(rows.last?.disabled, true)
-        let draft = PerspicaxRules.toggled(answer.selectedIds, id: "p2", on: true)
-        XCTAssertEqual(draft, ["p1", "p9", "p2"])
-        XCTAssertTrue(PerspicaxRules.changed(draft, from: answer))
-
-        AdvancedRequestStub.responses["PUT /api/bots/b1/perspicax"] = (403, #"{"error":"x","code":"profile_not_held"}"#)
-        do {
-            _ = try await client.setBotPerspicax(botId: "b1", profiles: ["p2"])
-            XCTFail("refused")
-        } catch let error as PerspicaxRefusalError {
-            XCTAssertEqual(error.refusal, .profileNotHeld)
-        }
-        XCTAssertEqual(PerspicaxRules.refusal(code: "nope"), .failed)
+    func testLegacyPerspicaxAnswerStillDecodes() throws {
+        let raw = #"{"selected":[{"id":"p1","name":"One","heldByMe":true}],"available":[],"canEdit":true}"#
+        let answer = try JSONDecoder().decode(PerspicaxAnswer.self, from: Data(raw.utf8))
+        XCTAssertEqual(answer.selectedIds, ["p1"])
     }
 
     // MARK: Visibility, Slack, duplicate, variants, access, allowlist

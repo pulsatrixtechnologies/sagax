@@ -191,6 +191,13 @@ export function claudeAiOwnerScopedServer(server: string, via: string | undefine
   return via === "subscription" && /^claude_ai_[A-Za-z0-9]/i.test(server);
 }
 
+/** The account runtime's fixed Perspicax mount belongs to the speaking
+ * person. Keep the old prefix during migration for already-open turns. */
+export function perspicaxOwnerScopedServer(server: string): boolean {
+  const name = server.toLowerCase();
+  return name === "perspicax" || name.startsWith("perspicax_");
+}
+
 /** #1930: a Grok call to the person's own grok.com connector (the
  * driver's use_tool target, listed by this session's own catalog on a
  * managed gateway server: session-permission.ts `accountConnector`). The

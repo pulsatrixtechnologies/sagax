@@ -43,7 +43,6 @@ vi.mock("../computer/WorksOnSetting", () => ({ WorksOnSetting: page("worksOn", "
 vi.mock("../bot-settings/ModelSection", () => ({ ModelSection: page("model", "Effort", "Provider") }));
 vi.mock("../bot-settings/PermissionsSection", () => ({ PermissionsSection: page("permissions", "Auto approve", "Peers") }));
 vi.mock("../bot-settings/VoiceSection", () => ({ VoiceSection: page("voice", "Speak replies", "Alerts") }));
-vi.mock("../bot-settings/PerspicaxSection", () => ({ PerspicaxSection: page("perspicax", "Profiles", "MCP tools") }));
 vi.mock("../bot-settings/SharingSection", () => ({ SharingSection: page("sharing", "Teams", "Level") }));
 vi.mock("../bot-settings/VisibilitySection", () => ({ VisibilitySection: page("visibility", "Admins only", "People") }));
 vi.mock("../bot-settings/HistorySection", () => ({ HistorySection: page("history", "Undo", "Log") }));
@@ -139,7 +138,7 @@ describe("Edit bot search", () => {
     type("approbation");
     expect(currentPage()).toBe("permissions");
     type("MCP");
-    expect(pagesInRail()).toEqual(expect.arrayContaining(["access", "perspicax"]));
+    expect(pagesInRail()).toEqual(["access"]);
     type("voix");
     expect(currentPage()).toBe("voice");
     type("horaire");
@@ -187,7 +186,7 @@ describe("Edit bot search", () => {
   });
 
   it("chooses a result with the arrows and scrolls to the match with Enter", () => {
-    type("mcp");
+    type("horaire");
     const results = pagesInRail();
     expect(results.length).toBeGreaterThan(1);
     const start = currentPage();
@@ -195,8 +194,8 @@ describe("Edit bot search", () => {
     expect(currentPage()).toBe(results[(results.indexOf(start) + 1) % results.length]);
     key(input(), "ArrowUp");
     expect(currentPage()).toBe(start);
-    // Profiles holds a row with "MCP"; Enter scrolls to it.
-    while (currentPage() !== "perspicax") key(input(), "ArrowDown");
+    // An exact row match scrolls into view with Enter.
+    type("effort");
     (Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mockClear();
     key(input(), "Enter");
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();

@@ -7,7 +7,7 @@
 // tells it, with the link token:
 //
 //   - POST /api/v1/memory/work: one row when a bot turn on an organization
-//     server starts with Perspicax profiles mounted (a vendor-touching task).
+//     server starts with the Perspicax account connection mounted (a vendor-touching task).
 //     Rows are batched (at most WORK_BATCH_MAX = 50, Perspicax's cap, and
 //     one person per batch) and sent a moment later, one batch in flight at
 //     a time.

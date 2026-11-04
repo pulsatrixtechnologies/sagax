@@ -566,7 +566,6 @@ export interface TaskUsage {
 }
 
 export interface Bot {
-  perspicaxActAs?: { slug: string; name: string };
   /** A bot the viewer knows only from a room it is in (groupMemberBots):
    * its name and look, nothing else; it cannot be opened. */
   publicProfile?: true;

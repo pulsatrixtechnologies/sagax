@@ -14,7 +14,7 @@ import { basename } from "node:path";
 import type { McpServerSpec } from "../contracts.ts";
 import type { GithubConnection, PersonalMcpServer } from "../people/person-connections.ts";
 import type { PluginContents } from "../bots/bot-plugins.ts";
-import { engineServerMcp, perspicaxServerName, withoutHostCommands, personalMcpPrecheck, serverMcpAsPerson, turnPluginPromptDirs } from "../turns/turn-mounts.ts";
+import { engineServerMcp, withoutHostCommands, personalMcpPrecheck, serverMcpAsPerson, turnPluginPromptDirs } from "../turns/turn-mounts.ts";
 import { pluginMcpPrecheck, selectPluginScopes } from "./capability-plugin-mounts.ts";
 import {
   engineReceipt,
@@ -125,7 +125,7 @@ export interface CapabilityInputs<S extends Record<string, McpServerSpec> = Reco
   organization: boolean;
   /** readable name of the organization (Perspicax), for "From <org>" */
   organizationName?: string;
-  bot: { id: string; name: string; mcpServers?: string[]; perspicaxProfiles: string[]; assignedSkills?: string[] };
+  bot: { id: string; name: string; mcpServers?: string[]; assignedSkills?: string[] };
   engine: { instanceId: string; kind: string; label: string; customMcp: boolean; agentsMcp?: boolean };
 
   // plugins
@@ -408,33 +408,39 @@ export function resolveBotCapabilities(inputs: CapabilityInputs, viewer: Capabil
     });
   }
 
-  // ── Perspicax Roles of the bot (as the person looking) ────────────────
+  // ── The account's main Perspicax connection and held Roles ────────────
   const taken = new Set(mounted);
   if (inputs.organization) {
-    const catalog = new Map(inputs.roles.catalog.map((role) => [role.id, role] as const));
     const held = new Set(inputs.roles.held ?? []);
-    for (const id of [...new Set(inputs.bot.perspicaxProfiles)].sort()) {
-      const role = catalog.get(id);
-      let state: CapabilityState = "on";
-      let reason: CapabilityReason | undefined;
-      if (!role) { state = "off"; reason = "unknown_profile"; }
-      else if (!held.has(id)) state = "not_held";
-      const mount = role && state === "on" && engine.customMcp ? perspicaxServerName(role.slug || role.id, taken) : undefined;
-      if (mount) taken.add(mount);
+    const mount = engine.customMcp ? "perspicax" : undefined;
+    if (mount) taken.add(mount);
+    push({
+      key: "mcp:account:perspicax",
+      form: "mcp",
+      name: "Perspicax",
+      description: "Your account connection. Use identity_switch when a routine needs one of your held roles.",
+      source: { kind: "perspicax", label: inputs.organizationName ?? "Perspicax" },
+      scope: "account",
+      state: engine.customMcp ? "on" : "not_served",
+      enabled: true,
+      canToggle: false,
+      engine: receipt("mcp", { mcp: true }),
+      ...(mount ? { mounts: [mount] } : {}),
+    });
+    for (const role of [...inputs.roles.catalog].sort((a, b) => a.id.localeCompare(b.id))) {
+      const state: CapabilityState = held.has(role.id) ? "on" : "not_held";
       push({
-        key: `role:bot:${id}`,
+        key: `role:account:${role.id}`,
         form: "role",
-        // never the id: an unknown Role is named as such by the screens
-        name: role ? role.name || readableName(role.slug) : "",
-        ...(role?.description ? { description: role.description } : {}),
+        name: role.name || readableName(role.slug),
+        ...(role.description ? { description: role.description } : {}),
         source: { kind: "perspicax", label: inputs.organizationName ?? "Perspicax" },
-        scope: "bot",
+        scope: "account",
         state,
         enabled: true,
-        canToggle: viewer.mayChange,
-        engine: receipt("role", { mcp: true }),
-        ...(reason ? { reason } : {}),
-        ...(mount ? { mounts: [mount] } : {}),
+        canToggle: false,
+        engine: receipt("role", { mcp: held.has(role.id) }),
+        ...(mount && held.has(role.id) ? { mounts: [mount] } : {}),
       });
     }
   }

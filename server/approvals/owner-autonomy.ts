@@ -157,11 +157,10 @@ function reviewedConnectorRead(tool: string, reviewedReads: (api: string) => boo
 /** Coordination leases: they keep two runs off one record. */
 const PERSPICAX_LEASES: ReadonlySet<string> = new Set(["claim", "claim_renew", "claim_release"]);
 
-/** The Perspicax tool a provider's name designates on Sagax's own mount, or
- * null: `mcp__perspicax_<slug>__<tool>` (Claude) or `perspicax_<slug>__<tool>`. */
+/** The Perspicax tool a provider's name designates on Sagax's fixed account
+ * mount, or a legacy profile mount from an already-open turn. */
 function perspicaxTool(name: string | undefined): string | null {
-  // the slug never holds `__`, so the tool is everything after the first `__`
-  const match = /^(?:mcp__)?(perspicax_[a-z0-9-]+(?:_[a-z0-9-]+)*)__([a-z0-9][a-z0-9_]{0,127})$/i.exec(name?.trim() ?? "");
+  const match = /^(?:mcp__)?(perspicax(?:_[a-z0-9-]+)*)__([a-z0-9][a-z0-9_]{0,127})$/i.exec(name?.trim() ?? "");
   return match ? match[2]!.toLowerCase() : null;
 }
 

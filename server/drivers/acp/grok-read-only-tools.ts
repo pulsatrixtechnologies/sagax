@@ -78,7 +78,7 @@ export function isPerspicaxBridge(server: McpServerSpec | undefined, bridgePath:
   if (!server || "url" in server) return false;
   const spec = server as { command?: unknown; args?: unknown; env?: Record<string, unknown> };
   return Array.isArray(spec.args) && spec.args[0] === bridgePath
-    && typeof spec.env?.SAGAX_PERSPICAX_PROFILE === "string" && spec.env.SAGAX_PERSPICAX_PROFILE !== "";
+    && typeof spec.env?.SAGAX_PERSPICAX_TOKEN === "string" && spec.env.SAGAX_PERSPICAX_TOKEN !== "";
 }
 
 /** The `--allow` rules for this turn's read-only tools, sorted and unique. */

@@ -21,11 +21,10 @@ const bot = (id: string, extra: Partial<Bot> = {}): Bot => ({
   modelSelection: { instanceId: "claude", model: "m" }, messages: [], ...extra,
 } as Bot);
 
-/** A made-up server: per-bot grants and Perspicax profiles; Lina refuses a
+/** A made-up server: per-bot grants; Lina refuses a
  * change of where it works. */
 function server() {
   const grants: Record<string, Array<{ target: string; level: string }>> = { atlas: [{ target: "user:ada", level: "use" }], iris: [], lina: [] };
-  const profiles: Record<string, string[]> = { atlas: ["cw"], iris: [], lina: ["cw", "s1"] };
   const calls: string[] = [];
   const request = vi.fn(async (path: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
@@ -37,10 +36,6 @@ function server() {
       if (method === "DELETE") grants[id!] = grants[id!]!.filter((grant) => grant.target !== decodeURIComponent(target!));
       return { grants: grants[id!] };
     }
-    if (kind === "perspicax") {
-      if (method === "PUT") profiles[id!] = body.profiles;
-      return { selected: profiles[id!]!.map((profile) => ({ id: profile })) };
-    }
     throw new Error(`unexpected ${path}`);
   });
   const saved: Array<{ id: string; patch: Record<string, unknown> }> = [];
@@ -49,7 +44,7 @@ function server() {
     saved.push({ id: target.id, patch });
     return target;
   });
-  return { request, saveBot, saved, grants, profiles, calls };
+  return { request, saveBot, saved, grants, calls };
 }
 
 describe("runBulkEdit", () => {
@@ -80,19 +75,16 @@ describe("runBulkEdit", () => {
     const bots = [bot("atlas", { computer: "local" }), bot("iris", { computer: "cloud" }), bot("lina")];
     const run = await runBulkEdit(bots, {
       worksOn: { patch: { computer: "cloud" } },
-      perspicax: { patch: {}, perspicax: { mode: "add", items: ["s1"] } },
     }, { request: fake.request as never, saveBot: fake.saveBot });
     expect(run.outcomes).toEqual([
       { botId: "atlas", ok: true },
-      { botId: "iris", ok: true },
+      { botId: "iris", ok: true, skipped: true },
       { botId: "lina", ok: false, reasons: ["Engine not available for this bot"] },
     ]);
-    // Iris already worked in the cloud: only its profiles changed
+    // Iris already worked in the cloud, so it needs no write.
     expect(fake.saved).toEqual([{ id: "atlas", patch: { computer: "cloud" } }]);
-    expect(fake.profiles).toEqual({ atlas: ["cw", "s1"], iris: ["s1"], lina: ["cw", "s1"] });
     expect(run.before).toEqual([
-      { botId: "atlas", patch: { computer: "local" }, perspicax: ["cw"] },
-      { botId: "iris", perspicax: [] },
+      { botId: "atlas", patch: { computer: "local" } },
     ]);
   });
 
@@ -122,17 +114,14 @@ describe("runBulkEdit", () => {
     expect(fake.grants.iris).toEqual([{ target: "user:bob", level: "edit" }]);
   });
 
-  it("undoes the fields and the profiles", async () => {
+  it("undoes the fields", async () => {
     const fake = server();
     const bots = [bot("atlas", { computer: "local" })];
     const run = await runBulkEdit(bots, {
       worksOn: { patch: { computer: "off" } },
-      perspicax: { patch: {}, perspicax: { mode: "replace", items: [] } },
     }, { request: fake.request as never, saveBot: fake.saveBot });
-    expect(fake.profiles.atlas).toEqual([]);
     await undoBulkEdit(bots, run.before, { request: fake.request as never, saveBot: fake.saveBot });
     expect(fake.saved.at(-1)).toEqual({ id: "atlas", patch: { computer: "local" } });
-    expect(fake.profiles.atlas).toEqual(["cw"]);
   });
 
   it("skips a section the bot editor locks for that bot, with the reason", async () => {

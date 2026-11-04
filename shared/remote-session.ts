@@ -106,7 +106,7 @@ export function isTailcatAddress(value: unknown): value is string {
 
 /** A session's end: at most 15 minutes past and 26 hours ahead (Perspicax caps
  * an open at 24 hours). The same bound for publish_remote_session and for an
- * open the bot made through a Perspicax profile. Null when outside it. */
+ * open the bot made through its Perspicax account connection. Null when outside it. */
 export function parseRemoteSessionEnd(value: unknown, now: number): number | null {
   if (typeof value !== "string") return null;
   const end = Date.parse(value);

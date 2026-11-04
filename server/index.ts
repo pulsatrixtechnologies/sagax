@@ -11643,7 +11643,7 @@ type GroupTurnOperation = {
 /** Goal-orchestrator worker turns driven by enqueueGoalAssignment: system
  * instructions (not a visible room request), and host.run must not chain
  * on groupQueues behind the orchestrator that is polling it. */
-const goalWorkerTurns = new Map<string, { systemInstructions: string }>();
+const goalWorkerTurns = new Map<string, { systemInstructions: string; onClaimed: () => void; failureMessageId?: string }>();
 
 // busyBotId names only the speaker that currently owns the provider process.
 // A room turn is wider: it also includes async setup and every responder still
@@ -12701,6 +12701,18 @@ const coordinator: Coordinator = createCoordinator({
       const bot = store.bot(child.botId);
       if (store.messagesFor(parent.threadId).some(m => m.roomRequest?.id === child.id && m.roomRequest.phase === "result")) return;
       const problem = roomHandoffProblem(child, parent);
+      // A goal worker's setup refusal already appears in this same room.
+      // Match the message this execution recorded; a missing, changed or
+      // withheld result still gets its own report below.
+      const failureMessageId = goalWorkerTurns.get(child.id)?.failureMessageId;
+      if (!problem && child.status !== "completed" && failureMessageId &&
+          child.threadId === parent.threadId && child.groupId === parent.groupId &&
+          store.messagesFor(parent.threadId).some(message => message.id === failureMessageId &&
+            message.role === "bot" && message.kind === "activity" && message.from?.botId === child.botId &&
+            message.tool?.ok === false && message.tool.name === failedTurnTool(child.result).name)) {
+        if (group) store.patchGroup(group.id, { unread: true });
+        return;
+      }
       // A withheld result travels with its reason only: the teammate the
       // route no longer admits (hidden, unshared, renamed, out of reach) is
       // not named here, nor its thread's title (isolation between people).
@@ -12789,6 +12801,7 @@ const coordinator: Coordinator = createCoordinator({
       // the orchestrator, no visible @-request line (speakers stay lead/worker
       // replies only, matching the sequential harness).
       const goalWorker = goalWorkerTurns.get(node.id);
+      if (goalWorker) goalWorker.failureMessageId = undefined;
       const systemInstructions = goalWorker?.systemInstructions
         ?? (node.parentId ? coordinationSystemInstructions() : "");
       const request = coordinator.sharedRequest(node);
@@ -12903,7 +12916,9 @@ const coordinator: Coordinator = createCoordinator({
       // Ordinary room handoffs keep the queue (they start once the room is
       // free, see host.busy / groupIsWorking).
       const orchestration = goalWorker
-        ? { roomHandoffId: node.id, resumed, systemInstructions, followMentions: false as const, result }
+        ? { roomHandoffId: node.id, resumed, systemInstructions, followMentions: false as const, result,
+          onClaimed: goalWorker.onClaimed,
+          onFailureRecorded: (messageId: string) => { goalWorker.failureMessageId = messageId; } }
         : { roomHandoffId: node.id, resumed, systemInstructions, turnInstructions: brief, turnNote: composed.note, turnRestartNote: composed.restartNote, liveRoster, followMentions: false as const, result };
       const runRoomTurn = async () => {
         if (operation.cancelled) return;
@@ -26346,6 +26361,8 @@ type GroupTurnOrchestration = {
   followMentions: boolean;
   result: { replyText?: string; outcome?: GroupMemberTurnOutcome; stopReason?: string | null };
   onClaimed?: () => void;
+  /** A refusal already written in this conversation, for its runtime report. */
+  onFailureRecorded?: (messageId: string) => void;
   onTurnStarted?: (turnId: string) => void;
 };
 
@@ -26572,10 +26589,19 @@ async function runGoalWorkerOnRuntime(args: {
       };
     }
 
-    run.turnCount += 1;
-    operation.botIds.add(worker.id);
-    updateGroupGoalRunProgress(operation, `${worker.name} is working on team turn ${run.turnCount} of ${run.maxTurns}.`);
-    goalWorkerTurns.set(node.id, { systemInstructions: args.instructions });
+    let claimed = false;
+    goalWorkerTurns.set(node.id, {
+      systemInstructions: args.instructions,
+      // 84841aeed moved workers onto the runtime. Count the same actual
+      // admission as runGroupGoalStep, after the spend cap has passed.
+      onClaimed: () => {
+        if (claimed) return;
+        claimed = true;
+        run.turnCount += 1;
+        operation.botIds.add(worker.id);
+        updateGroupGoalRunProgress(operation, `${worker.name} is working on team turn ${run.turnCount} of ${run.maxTurns}.`);
+      },
+    });
     operation.awaitingRuntimeWorker = true;
     try {
       coordinator.tick();

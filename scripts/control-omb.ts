@@ -587,7 +587,9 @@ export async function launchVerificationServer(
   });
   closeSync(log);
 
-  const deadline = Date.now() + 20_000;
+  // Strip-types boot of server/index.ts can exceed 20s when the Mac is under
+  // several concurrent verification servers; 60s keeps the harness usable.
+  const deadline = Date.now() + 60_000;
   try {
     for (;;) {
       if (signal?.aborted) throw new ControlOmbError("verification launch cancelled");

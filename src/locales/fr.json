@@ -13090,5 +13090,8 @@
   "limitFailover.exhausted": "Limites atteintes sur {tried} : aucun autre moteur n'a pu répondre. Choisissez un autre modèle, ajoutez du crédit, ou réessayez à la réinitialisation (vers {time}).",
   "limitFailover.ownerExhausted": "Le propriétaire de ce bot a atteint ses limites sur {tried} : aucun autre moteur n'a pu répondre. Choisissez un autre modèle, ajoutez du crédit, ou réessayez à la réinitialisation (vers {time}).",
   "limitFailover.exhaustedNoTime": "Limites atteintes sur {tried} : aucun autre moteur n'a pu répondre. Choisissez un autre modèle, ajoutez du crédit, ou réessayez plus tard.",
-  "limitFailover.ownerExhaustedNoTime": "Le propriétaire de ce bot a atteint ses limites sur {tried} : aucun autre moteur n'a pu répondre. Choisissez un autre modèle, ajoutez du crédit, ou réessayez plus tard."
+  "limitFailover.ownerExhaustedNoTime": "Le propriétaire de ce bot a atteint ses limites sur {tried} : aucun autre moteur n'a pu répondre. Choisissez un autre modèle, ajoutez du crédit, ou réessayez plus tard.",
+  "routineReadiness.flow_plan": "La vérification Flow en shadow a échoué à {step} : {error}",
+  "routineReadiness.ready.flow": "Le plan Flow en shadow n’a aucun blocage connu. Lance la routine quand tu es prêt.",
+  "routineReadiness.flow_live": "Un run Flow est actif, le plan n’a pas été vérifié."
 }

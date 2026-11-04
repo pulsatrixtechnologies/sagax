@@ -58,8 +58,8 @@ export interface ClaimRouteAnswer {
 /** The harness side of a native claim tool: forward it to Perspicax in the
  * speaker's name. 200 `{ result, isError }` with Perspicax's answer (a
  * refused claim is a result with `ok: false`, not an error); 400 for an
- * unknown tool; 409 when no Perspicax profile is mounted in this turn; 502
- * when Perspicax could not answer. */
+ * unknown tool; 409 when the Perspicax account connection is not mounted in
+ * this turn; 502 when Perspicax could not answer. */
 export async function runClaimTool(
   mcp: { callTool(input: { threadId: string; generation: string; botId: string; name: string; args: Record<string, unknown> }): Promise<PerspicaxToolAnswer> } | null,
   input: { threadId: string; generation: string; botId: string; tool: unknown; args: unknown },
@@ -80,16 +80,16 @@ export async function runClaimTool(
   });
   if (!answer.ok) {
     if (answer.code === "profile_not_mounted") {
-      return { status: 409, body: { error: "Claims need a Perspicax profile mounted in this turn; this bot has none for the person speaking.", code: answer.code } };
+      return { status: 409, body: { error: "Claims need the Perspicax account connection mounted in this turn for the person speaking.", code: answer.code } };
     }
     return { status: 502, body: { error: answer.error, code: answer.code } };
   }
   return { status: 200, body: { result: answer.value, isError: answer.isError } };
 }
 
-/** The agents integration with its claim-tools flag set from whether a
- * Perspicax profile is mounted now. A path that builds the agents tools before
- * it mounts the profile calls this once the mount is done. */
+/** The agents integration with its claim-tools flag set from whether the
+ * Perspicax account connection is mounted now. A path that builds the agents
+ * tools before that mount calls this once the mount is done. */
 export function withClaimsFlag<T extends { env: Record<string, string> }>(agents: T, mounted: boolean): T {
   return { ...agents, env: { ...agents.env, SAGAX_CLAIMS: mounted ? "1" : "0" } };
 }

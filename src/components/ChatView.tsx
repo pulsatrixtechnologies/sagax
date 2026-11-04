@@ -2404,7 +2404,6 @@ export function ChatView({ bot: stored, side }: { bot: Bot; side?: SideChat }) {
   const botPill = (
     <BotHeaderPill
       name={bot.name}
-      actsAs={bot.perspicaxActAs?.name}
       panelOpen={side ? side.panel?.open === true : pillPanelOpen}
       onToggle={side?.panel ? side.panel.onToggle : () => {
         if (state.panelOwner) dispatch({ type: "toggleSettings", open: true, owner: null });

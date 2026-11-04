@@ -5,8 +5,6 @@
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, readFileSync, mkdirSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { z } from "zod";
-
 import { writeFileAtomic, writeFileAtomicIfChanged } from "./atomic.ts";
 import { PROACTIVE_MODE_DEFAULT, normalizeProactiveMode } from "../shared/proactive-mode.ts";
 import { commitBotChange, keptRevocation, saveBotsFor } from "./bots/bots-save.ts";
@@ -488,12 +486,9 @@ export interface BotRecord extends Omit<WireBot, "avatarUrl" | "tasks"> {
   /** Skills library (features.skillsLibrary): names of library skills
    * assigned to this bot. Server-private until the Skills UI ships. */
   assignedSkills?: string[];
-  /** Slice 5 (organization server): the Perspicax MCP profiles this bot
-   * mounts, by profile id. Each person who speaks uses their own access;
-   * changed only through /api/bots/:id/perspicax, never PATCH, never in a
-   * package or an export. */
-  perspicax?: BotPerspicax;
-  /** Explicit identity for this bot's Perspicax work. Absent means default. */
+  /** Legacy fields read only so old bot files can be migrated. Account roles
+   * are never configured on a bot and these are deleted on load. */
+  perspicax?: { profiles: string[] };
   perspicaxActAs?: { slug: string; name: string };
   /** Perspicax #321: made by create_agent (server/temporary-agents.ts).
    * Never on the wire: the Sagax app does not list such a bot. */
@@ -503,27 +498,12 @@ export interface BotRecord extends Omit<WireBot, "avatarUrl" | "tasks"> {
   createdByBot?: BotCreatedBy;
 }
 
-/** Slice 5: at most 8 profile ids per bot. */
-export const MAX_BOT_PERSPICAX_PROFILES = 8;
-const PERSPICAX_PROFILE_ID = /^[0-9A-Za-z_.:-]{1,64}$/;
-export const perspicaxActAsSchema = z.object({ slug: z.string().trim().min(1).max(128), name: z.string().trim().min(1).max(200) });
-export const botPerspicaxSchema = z.object({
-  profiles: z.array(z.string().regex(PERSPICAX_PROFILE_ID)).max(MAX_BOT_PERSPICAX_PROFILES).transform((ids) => [...new Set(ids)]),
-});
-export type BotPerspicax = z.infer<typeof botPerspicaxSchema>;
-
-/** A stored `perspicax` value as a valid one, or undefined (dropped). */
-export function cleanBotPerspicax(value: unknown): BotPerspicax | undefined {
-  const parsed = botPerspicaxSchema.safeParse(value);
-  return parsed.success && parsed.data.profiles.length ? parsed.data : undefined;
-}
-
 /** BotRecord fields no client may see, plus the two the projection
  * re-derives rather than passes through (tasks are re-projected as
  * WireTask[], avatarUrl is coerced to always-present). The exactness
  * assertion fails to compile when either side drifts, so a new server
  * field forces a decision — wire-visible or private here. */
-export type BotWirePrivateKeys = "resumeCursors" | "tasks" | "avatarUrl" | "approvalGrant" | "lastProfileRequestId" | "lastTeamSetupReceipt" | "packageBase" | "perspicax" | "assignedSkills" | "temporary" | "createdByBot";
+export type BotWirePrivateKeys = "resumeCursors" | "tasks" | "avatarUrl" | "approvalGrant" | "lastProfileRequestId" | "lastTeamSetupReceipt" | "packageBase" | "perspicax" | "perspicaxActAs" | "assignedSkills" | "temporary" | "createdByBot";
 export type BotWireProjection = Pick<BotRecord, Exclude<keyof BotRecord, BotWirePrivateKeys>>;
 export type BotWireProjectionIsExact = AssertExact<Omit<WireBot, "avatarUrl" | "tasks">, BotWireProjection> & AssertSameKeys<Omit<WireBot, "avatarUrl" | "tasks">, BotWireProjection>;
 export const botWireProjectionIsExact: BotWireProjectionIsExact = true;
@@ -1173,20 +1153,14 @@ export class Store {
         }
       }
     }
-    // Slice 5: a malformed Perspicax profile list is dropped.
+    // Account runtime migration: Perspicax roles and acting identity no
+    // longer belong to a bot. Drop both old settings instead of letting an
+    // invisible legacy choice affect a later turn.
     for (const b of this.bots) {
-      if (b.perspicaxActAs !== undefined) {
-        const identity = perspicaxActAsSchema.safeParse(b.perspicaxActAs);
-        if (identity.success) b.perspicaxActAs = identity.data;
-        else { delete b.perspicaxActAs; botsMigrated = true; }
-      }
-      if (b.perspicax === undefined) continue;
-      const clean = cleanBotPerspicax(b.perspicax);
-      if (JSON.stringify(clean) !== JSON.stringify(b.perspicax)) {
-        if (clean) b.perspicax = clean;
-        else delete b.perspicax;
-        botsMigrated = true;
-      }
+      if (b.perspicax === undefined && b.perspicaxActAs === undefined) continue;
+      delete b.perspicax;
+      delete b.perspicaxActAs;
+      botsMigrated = true;
     }
     // Perspicax #321: a malformed temporary mark is dropped.
     for (const b of this.bots) {
@@ -2502,32 +2476,6 @@ export class Store {
     this.saveBots();
     this.emit({ type: "bot", botId: id });
     return bot;
-  }
-
-  /** Slice 5: replace a bot's Perspicax profiles ([] removes the field). */
-  setBotPerspicax(id: string, profiles: readonly string[]): BotRecord | null {
-    const bot = this.bot(id);
-    if (!bot) return null;
-    const clean = cleanBotPerspicax({ profiles: [...profiles] });
-    if (clean) bot.perspicax = clean;
-    else delete bot.perspicax;
-    this.saveBots();
-    this.emit({ type: "bot", botId: id });
-    return bot;
-  }
-
-  setBotPerspicaxActAs(id: string, identity: { slug: string; name: string } | null): void {
-    const bot = this.bot(id);
-    if (!bot) return;
-    const previous = bot.perspicaxActAs;
-    if (identity) bot.perspicaxActAs = perspicaxActAsSchema.parse(identity);
-    else delete bot.perspicaxActAs;
-    try { this.saveBots(); } catch (error) {
-      if (previous) bot.perspicaxActAs = previous;
-      else delete bot.perspicaxActAs;
-      throw error;
-    }
-    this.emit({ type: "bot", botId: id });
   }
 
   /** `actorPrincipalId`: the person changing the bot. A level another

@@ -284,25 +284,6 @@ public extension CompanionClient {
         try await send(makeRequest("GET", "/api/org/directory"), as: OrgShareDirectory.self)
     }
 
-    /// `GET /api/bots/:id/perspicax`.
-    func botPerspicax(botId: String) async throws -> PerspicaxAnswer {
-        try await send(botRequest("GET", botId, "/perspicax"), as: PerspicaxAnswer.self)
-    }
-
-    /// `PUT /api/bots/:id/perspicax {profiles}`. A refusal throws
-    /// `PerspicaxRefusalError` with the server's code.
-    func setBotPerspicax(botId: String, profiles: [String]) async throws -> PerspicaxAnswer {
-        guard Self.validRouteID(botId) else { throw APIError.badURL }
-        let (data, response) = try await perform(
-            makeRequest("PUT", "/api/bots/\(botId)/perspicax", encodedBody: PerspicaxPutBody(profiles: profiles))
-        )
-        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-            let code = (try? JSONDecoder().decode(APIErrorCodeBody.self, from: data))?.code
-            throw PerspicaxRefusalError(refusal: PerspicaxRules.refusal(code: code))
-        }
-        return try JSONDecoder().decode(PerspicaxAnswer.self, from: data)
-    }
-
     /// `GET /api/bots/:id/slack-management`: the Admin link, or nil when
     /// none is offered (or the read fails: there is nothing to offer then).
     func slackManagementURL(botId: String) async -> URL? {
@@ -367,9 +348,4 @@ public extension CompanionClient {
         guard Self.validRouteID(botId) else { throw APIError.badURL }
         return try makeRequest(method, "/api/bots/\(botId)\(suffix)")
     }
-}
-
-/// A refused Perspicax save, with the server's reason.
-public struct PerspicaxRefusalError: Error, Sendable {
-    public var refusal: PerspicaxRules.Refusal
 }

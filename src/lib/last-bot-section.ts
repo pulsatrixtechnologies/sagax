@@ -25,7 +25,6 @@ export const BOT_SETTINGS_SECTION_IDS: readonly BotSettingsSection[] = [
   "voice",
   "visibility",
   "sharing",
-  "perspicax",
   "history",
   "usage",
 ];

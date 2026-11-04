@@ -18,7 +18,7 @@ goes in, what comes out), `server/routes/bot-zip.ts` (HTTP),
 | Path | What |
 |---|---|
 | `manifest.json` | `format: "sagax.bot"`, `version: 1`, `appVersion`, `exportedAt`, the bot's id and name, `includes` (counts per part), `redacted` (secrets replaced on the way out), marketplaces with `needsToken`, MCP servers by name, what is never included |
-| `bot.json` | the bot record's portable fields: `identity` (name, label, description, colour, mascot, character and skins, picture crop and focus, notifications), `settings` (model and effort, fallbacks, approval level, tool scope, voice and alerts, memory switches, peers, outbound policy, library skills, Perspicax profiles, team, projects, playbooks, pin), `host` (computer, cloud computer, working folder, browser and its profile, MCP servers, always allowed tools) |
+| `bot.json` | the bot record's portable fields: `identity` (name, label, description, colour, mascot, character and skins, picture crop and focus, notifications), `settings` (model and effort, fallbacks, approval level, tool scope, voice and alerts, memory switches, peers, outbound policy, library skills, team, projects, playbooks, pin), `host` (computer, cloud computer, working folder, browser and its profile, MCP servers, always allowed tools). Perspicax roles belong to the account, not the bot. |
 | `SOUL.md` | the standing instructions |
 | `avatar/<file>` | an uploaded or generated picture |
 | `bot-folder/**` | the rest of the bot's own folder (`RULES.md` and the like) |

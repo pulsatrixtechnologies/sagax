@@ -49,9 +49,8 @@ of the host's own key, never a hostname or a serial: E3).
   `remote_support_open` with `host_id` and the public nodekey, follows
   `remote_support_status` until the host picks the session at its beat, and
   the usual registrar posts the card and the panel row (`client = "app"`) in
-  the conversation of the person's Primary Bot (else another bot of theirs
-  with a Perspicax profile). The page then opens the live control overlay by
-  itself.
+  the conversation of the person's Primary Bot (else another bot of theirs).
+  The page then opens the live control overlay by itself.
 - "Revoke" (`POST /api/admin/remote-sessions/hosts/<host_id>/revoke`, optional
   body `{ reason }`) shows on every host not yet revoked, flag OFF included
   (M2), with a confirm and an optional reason. Who may: the person who

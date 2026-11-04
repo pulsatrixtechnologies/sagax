@@ -219,8 +219,8 @@ end-to-end encryption, and it does not hide the thread from:
   encrypted by Sagax.
 - **The model provider.** Every turn is sent to the engine the bot runs on,
   as any turn is.
-- **Perspicax.** A call the person allows (a card) or a read through a
-  Perspicax profile is seen by Perspicax and the outside system behind it,
+- **Perspicax.** A call the person allows (a card) or a read through the
+  Perspicax account connection is seen by Perspicax and the outside system behind it,
   and Perspicax keeps its own audit and journal of those calls.
 - **Engines with host access.** On a solo server, a bot whose engine has
   a shell on the host can call this server's own loopback API directly,

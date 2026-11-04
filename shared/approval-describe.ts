@@ -192,7 +192,7 @@ export function parseToolId(tool: string): ParsedToolId {
  * a known one. Null for any other id. */
 export function readGatewayToolId(tool: string): { parsed: ParsedToolId; product: string } | null {
   const gateway = parseGrokGatewayToolId(tool);
-  if (!gateway) return null;
+  if (!gateway || !gateway.server || !gateway.tool) return null;
   const known = grokGatewayToolConnector(tool)?.id;
   const name = known ? GROK_CLOUD_CONNECTORS.find((entry) => entry.id === known)?.name : undefined;
   const product = name ?? (/[A-Z]/.test(gateway.server) ? gateway.server.replace(/[_-]+/g, " ").trim() : titleCase(gateway.server));

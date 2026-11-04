@@ -12,8 +12,7 @@ import Foundation
 // does not decode is dropped). `key` and `botId` are never shown.
 // The switches call the routes the app already uses: a plugin of the bot
 // (`PATCH /api/bots/:id/plugins/:key`), a server of this installation (the
-// bot's own list, `PATCH /api/bots/:id {mcpServers}`), a Perspicax Role
-// (`PUT /api/bots/:id/perspicax`), a skill (`PATCH /api/bots/:id/skills/:name`,
+// bot's own list, `PATCH /api/bots/:id {mcpServers}`), a skill (`PATCH /api/bots/:id/skills/:name`,
 // `PATCH /api/skills-library/:name`, `PUT /api/bots/:id/skills-library`).
 
 public struct BotCapabilityList: Decodable, Hashable, Sendable {
@@ -197,7 +196,6 @@ public struct BotCapability: Decodable, Hashable, Identifiable, Sendable {
         case ("plugin", "bot"): return BotPluginRules.validKey(parts[2]) ? .plugin(key: parts[2]) : nil
         // a server the installation turned off: the bot's list cannot bring it back
         case ("mcp", "installation"): return reason == "disabled" ? nil : .installationServer(name: parts[2])
-        case ("role", "bot"): return .role(id: parts[2])
         case ("skill", "bot"), ("skill", "organization"): return SkillRules.validName(parts[2]) ? .skill(name: parts[2]) : nil
         // a library skill assigned while the library is off: the library
         // routes answer 404 until it is on again, so there is no switch
@@ -210,7 +208,6 @@ public struct BotCapability: Decodable, Hashable, Identifiable, Sendable {
 public enum BotCapabilityToggle: Hashable, Sendable {
     case plugin(key: String)
     case installationServer(name: String)
-    case role(id: String)
     case skill(name: String)
     case librarySkill(name: String)
 
@@ -280,16 +277,6 @@ public enum BotCapabilityRules {
         var seen = Set<String>()
         return names.filter { seen.insert($0).inserted }
     }
-
-    /// The bot's Perspicax Roles after switching one off (a Role on the bot
-    /// is on; its switch takes it off the bot).
-    public static func rolesAfter(_ list: BotCapabilityList, removing id: String) -> [String] {
-        list.items.compactMap { item -> String? in
-            guard item.form == .role, item.key.hasPrefix("role:bot:") else { return nil }
-            let role = String(item.key.dropFirst("role:bot:".count))
-            return role == id ? nil : role
-        }
-    }
 }
 
 private struct AssignedSkillsBody: Decodable { var assignedSkills: [String]? }
@@ -345,10 +332,6 @@ public extension CompanionClient {
         case let .installationServer(name):
             let next = BotCapabilityRules.mcpServersAfter(mcpServers, list: list, name: name, on: on)
             return try await patchBotFields(botId: botId, patch: ["mcpServers": .strings(next)])
-        case let .role(id):
-            // a Role on the bot is on: its switch only takes it off
-            guard !on else { return nil }
-            _ = try await setBotPerspicax(botId: botId, profiles: BotCapabilityRules.rolesAfter(list, removing: id))
         case let .skill(name):
             try await setSkillEnabled(botId: botId, name: name, enabled: on)
         case let .librarySkill(name):

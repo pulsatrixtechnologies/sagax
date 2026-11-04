@@ -37,7 +37,7 @@ describe("Persona editor state", () => {
     expect(open("worksOn" as never).personaEditor?.section).toBe("worksOn");
     expect(open("sharing" as never).personaEditor?.section).toBe("sharing");
     expect(open("appearance" as never).personaEditor?.section).toBe("appearance");
-    expect(open("perspicax" as never).personaEditor?.section).toBe("perspicax");
+    expect(open("perspicax" as never).personaEditor?.section).toBe("overview");
     expect(open("access" as never).settingsOpen).toBe(true);
   });
 

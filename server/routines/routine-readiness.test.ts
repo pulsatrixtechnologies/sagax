@@ -98,16 +98,16 @@ describe("routine readiness", () => {
   });
   it("blocks missing enabled skills and MCP servers using known tool prefixes", async () => {
     const answer = await checkRoutineReadiness({ ...routine, prompt: "Use Pulsatrix Flow and outlook_read and cw_psa_ticket.", requires: { skills: ["explicit"], mcpServers: ["calendar"] } }, run,
-      deps({ skills: () => ["explicit"], mcp: () => ({ known: ["outlook", "calendar", "perspicax_dispatch"], enabled: ["calendar"], profileServer: "perspicax_dispatch", toolPrefixes: { cw_psa: "perspicax_dispatch" } }) }));
+      deps({ skills: () => ["explicit"], mcp: () => ({ known: ["outlook", "calendar", "perspicax"], enabled: ["calendar"], toolPrefixes: { cw_psa: "perspicax" } }) }));
     expect(answer.ok).toBe(false);
     expect(answer.checks.filter(check => !check.ok).map(check => check.params)).toEqual([
-      { skill: "using-px-flow" }, { skill: "running-px-flow" }, { server: "outlook" }, { server: "perspicax_dispatch" },
+      { skill: "using-px-flow" }, { skill: "running-px-flow" }, { server: "outlook" }, { server: "perspicax" },
     ]);
   });
   it.each(["off/flow_guard_uncovered", "off/flow_guard_not_enforced", "on/installed"])("reads Flow product skills through the pack with organization install %s (#1945)", async (installation) => {
     const flow = { ...routine, prompt: "Use Pulsatrix Flow and skill `testing-px-flow-skills`.", requires: { skills: ["remote-pack-review"] } };
     const check = deps({ skills: () => [], flowSkills: () => routineFlowSkills(true,
-      installation === "on/installed" ? { ...declaration, enabled: true, guard: "enforce" } : declaration, ["osprey"],
+      installation === "on/installed" ? { ...declaration, enabled: true, guard: "enforce" } : declaration,
       installation === "on/installed" ? { mode: "on", plugins: [{ id: "flow@pack", tenant: false, state: "installed" }] }
         : { mode: "off", plugins: [], reason: installation.split("/")[1] }) });
     for (const mode of ["run", "check"] as const) {
@@ -118,14 +118,14 @@ describe("routine readiness", () => {
     }
     expect((await checkRoutineReadiness({ ...routine, requires: { skills: ["inbox-review"] } }, run, check)).ok).toBe(false);
   });
-  it("explains the missing profile for Flow, without claiming a missing local skill (#1945)", async () => {
+  it("serves Flow from the active pack without any bot profile eligibility (#1945)", async () => {
     const answer = await checkRoutineReadiness({ ...routine, prompt: "Use flow_run." }, run,
-      deps({ skills: () => [], flowSkills: () => routineFlowSkills(true, declaration, [], { mode: "off", plugins: [], reason: "flow_guard_uncovered" }) }));
-    expect(answer.checks.filter(row => !row.ok)).toEqual([expect.objectContaining({ code: "flow_profile",
-      line: "This Flow routine needs a Perspicax profile on its bot to reach the Flow skills. Choose one in the bot's Connect apps." })]);
+      deps({ skills: () => [], flowSkills: () => routineFlowSkills(true, declaration, { mode: "off", plugins: [], reason: "flow_guard_uncovered" }) }));
+    expect(answer.ok).toBe(true);
+    expect(answer.checks.find(row => row.kind === "skills")).toMatchObject({ ok: true, code: "ready" });
     expect((await checkRoutineReadiness({ ...routine, prompt: "Use flow_run." }, run, deps({ skills: () => [] }))).ok).toBe(false);
-    expect(routineFlowSkills(false, declaration, ["osprey"], { mode: "off", plugins: [] })).toBeUndefined();
-    expect(routineFlowSkills(true, undefined, ["osprey"], { mode: "unknown", plugins: [] })).toBeUndefined();
+    expect(routineFlowSkills(false, declaration, { mode: "off", plugins: [] })).toBeUndefined();
+    expect(routineFlowSkills(true, undefined, { mode: "unknown", plugins: [] })).toBeUndefined();
   });
   it("uses account-scoped 402 memory for 30 minutes and a completed turn clears it immediately", async () => {
     let now = Date.UTC(2026, 10, 4, 23, 30);
@@ -218,8 +218,8 @@ describe("routine readiness", () => {
     expect((await answer).checks[0]).toMatchObject({ code: "engine_credits", ok: false });
     expect(vi.getTimerCount()).toBe(0);
   });
-  it("blocks a refused profile, while unreachable Perspicax stays a passing detail", async () => {
-    expect((await checkRoutineReadiness(routine, run, deps({ perspicax: async () => ({ refused: true, profile: "dispatch", detail: "401 invalid_token" }) }))).ok).toBe(false);
+  it("blocks a refused account connection, while unreachable Perspicax stays a passing detail", async () => {
+    expect((await checkRoutineReadiness(routine, run, deps({ perspicax: async () => ({ refused: true, detail: "401 invalid_token" }) }))).ok).toBe(false);
     const offline = await checkRoutineReadiness(routine, run, deps({ perspicax: async () => ({ detail: "unreachable" }) }));
     expect(offline.ok).toBe(true);
     expect(offline.checks.find(check => check.kind === "perspicax")).toMatchObject({ detail: "unreachable" });

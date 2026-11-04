@@ -1,6 +1,6 @@
 // POST /api/internal/perspicax/tool: one Perspicax gateway tool of the agents
 // catalog (PERSPICAX_TOOLS in server/drivers/agents-catalog.ts) forwarded to
-// the profile mounted in this turn, in the speaker's name, after the same
+// the account connection mounted in this turn, in the speaker's name, after the same
 // misuse and safety review as a Perspicax MCP call. Behind the agents
 // capability (see internal-route.ts).
 import type { PerspicaxMcp } from "../perspicax/perspicax-mcp.ts";
@@ -33,26 +33,26 @@ const REMOTE_SUPPORT_OWNED = new Set(["remote_support_status", "remote_support_c
 /** #1935: the gateway tools whose answer names the tool to call next. */
 export const PERSPICAX_NAMING_TOOLS: ReadonlySet<string> = new Set(["api_search", "api_describe", "api_list", "api_plan"]);
 
-/** #1935: where to run a tool a gateway answer names. Those tools are the
- * profile's own, on its MCP server: never on the agents server, whose
+/** #1935: where to run a tool a gateway answer names. Those tools are on the
+ * Perspicax account MCP server, never on the agents server, whose
  * call_tool answers "No tool named ..." for them. */
 export function perspicaxToolHomeNote(server: string): string {
   return `Sagax: the tools this answer names run on the MCP server "${server}", by their own names there (or through that server's call_tool when it lists only search_tools, describe_tool and call_tool). The agents server does not have them.`;
 }
 
 /** #1935: the answer to a call of a tool the agents server does not have,
- * when this turn's Perspicax profile server has it (or may have it). */
+ * when this turn's Perspicax account connection has it (or may have it). */
 export function perspicaxToolElsewhere(tool: string, home: { server: string; served: boolean }): string {
   const name = JSON.stringify(tool.slice(0, 100));
   return home.served
-    ? `${name} is not a Sagax tool: it is a tool of the Perspicax profile on the MCP server "${home.server}". Call it there, by its own name or through that server's call_tool, with the same arguments. Nothing was run.`
-    : `${name} is not a Sagax tool. This turn's Perspicax profile tools are on the MCP server "${home.server}": find and call it there (its search_tools and call_tool when it does not list it). Nothing was run.`;
+    ? `${name} is not a Sagax tool: it is a tool of the Perspicax account connection on the MCP server "${home.server}". Call it there, by its own name or through that server's call_tool, with the same arguments. Nothing was run.`
+    : `${name} is not a Sagax tool. This turn's Perspicax account tools are on the MCP server "${home.server}": find and call it there (its search_tools and call_tool when it does not list it). Nothing was run.`;
 }
 
 /** `{ locate: name }` answers `{ server, served, text }` or `{ server: null }`
  * (#1935). Otherwise answers `{ text, isError }` (200), or `{ error, code }`: 400 for a tool it
- * does not forward, 409 when no profile is mounted in this turn or the server
- * is not linked to Perspicax, 502 when Perspicax could not answer. */
+ * does not forward, 409 when the account connection is not mounted in this
+ * turn or the server is not linked to Perspicax, 502 when Perspicax could not answer. */
 export function createPerspicaxToolInternalRoutes(deps: PerspicaxToolInternalDeps): InternalRouteHandler {
   return async ({ res, path, method, json, capability, readBody }) => {
     if (!(method === "POST" && path === "/api/internal/perspicax/tool")) return PASS;
@@ -85,13 +85,13 @@ export function createPerspicaxToolInternalRoutes(deps: PerspicaxToolInternalDep
     const answer = await mcp.callTool({ threadId: capability.threadId, generation: capability.generation, botId: capability.botId, name: tool, args });
     if (!answer.ok) {
       return json(res, answer.code === "profile_not_mounted" ? 409 : 502, {
-        error: answer.code === "profile_not_mounted" ? "No Perspicax profile is mounted in this turn for the person speaking." : answer.error,
+        error: answer.code === "profile_not_mounted" ? "The Perspicax account connection is not mounted in this turn for the person speaking." : answer.error,
         code: answer.code,
       });
     }
     let text = typeof answer.value === "string" ? answer.value : JSON.stringify(answer.value);
     // #1935: api_search names `cw_psa_query`; the bot must call it on the
-    // profile's own server, not through the agents server it asked.
+    // account server, not through the agents server it asked.
     if (PERSPICAX_NAMING_TOOLS.has(tool) && !answer.isError) {
       const home = mcp.toolHome?.(capability.threadId, capability.generation, capability.botId);
       if (home) text = `${text}\n\n${perspicaxToolHomeNote(home.server)}`;

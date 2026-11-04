@@ -89,11 +89,10 @@ export function createSetupStartTurn(host: StartTurnHost) {
       await state.enginesRead;
       if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) throw new DirectTurnSetupCancelled("turn stopped while the engines were read");
     }
-    // #1955: Perspicax token exchange, session open/verify, identity switch
-    // and tools/list do not need custom mount names. Start them beside
+    // Perspicax token exchange, session open/verify and tools/list do not
+    // need custom mount names. Start them beside
     // compaction, context selection and prompt build; await before mounts.
     const perspicaxPrepared = IDENTITY.kind === "perspicax" && state.instance.adapter.capabilities.customMcp === true
-      && (store.bot(state.bot.id) ?? state.bot).perspicax?.profiles.length
       ? perspicaxTurnPrepare({ bot: state.bot, threadId: state.threadId, generation: state.dispatchClaimId, speaker: state.speaker, ...(state.warmOnly ? { quiet: true } : {}) })
       : null;
     // Let an in-flight early prepare finish so revoke/endGeneration can see
@@ -396,11 +395,11 @@ export function createSetupStartTurn(host: StartTurnHost) {
       state.githubWithheld = mounted.githubWithheld;
       if (!state.warmOnly) turnTrace(state.threadId, "mcp-mounted");
     }
-    // Slice 5: the bot's Perspicax profiles, as the person who speaks.
-    // Mount naming still runs after custom mounts (`taken`); the early
+    // The account's main Perspicax connection, as the person who speaks.
+    // The fixed reserved mount is added after custom mounts; the early
     // prepare/handshake started above is awaited here (#1955).
     state.perspicaxPrompt = "";
-    if (perspicaxPrepared || (IDENTITY.kind === "perspicax" && state.instance.adapter.capabilities.customMcp === true && (store.bot(state.bot.id) ?? state.bot).perspicax?.profiles.length)) {
+    if (perspicaxPrepared || (IDENTITY.kind === "perspicax" && state.instance.adapter.capabilities.customMcp === true)) {
       if (!directTurnClaimIsCurrent(state.bot.id, state.dispatchClaimId, state.threadId)) {
         await settlePerspicaxPrepare();
         throw new DirectTurnSetupCancelled("turn stopped during Perspicax setup");

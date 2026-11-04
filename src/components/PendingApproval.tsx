@@ -82,12 +82,13 @@ export function pendingApprovals(messages: Message[]): Pending[] {
       message: m,
       requestId: m.card!.requestId!,
       tool: m.card!.tool!,
-      allowKey: m.card!.allowKey,
+      allowKey: m.card!.approvalOrigin ? m.card!.approvalOrigin.allowKey : m.card!.allowKey,
       allowSession: m.card!.allowSession,
       commandAllowlist: m.card!.commandAllowlist,
       detail: m.card!.subtitle,
       held: m.card!.held,
       heldCode: m.card!.heldCode,
+      ...(m.card!.approvalOrigin ? { threadId: m.card!.approvalOrigin.threadId, askedBy: m.from?.name ?? "" } : {}),
     }));
 }
 
@@ -413,7 +414,7 @@ export function PendingApprovalActions({
     dispatch({
       type: "decideRequest",
       threadId: pending.threadId ?? threadId,
-      requestId: pending.requestId,
+      requestId: pending.message.card?.approvalOrigin?.requestId ?? pending.requestId,
       behavior,
       message: behavior === "deny" ? "Denied by the user." : undefined,
       reviewedSha256: behavior === "allow" ? reviewedSha256 : undefined,
@@ -524,7 +525,7 @@ export function PendingApprovalActions({
       candidate={candidate}
       bot={bot}
       threadId={pending.threadId ?? threadId}
-      requestId={pending.requestId}
+      requestId={pending.message.card?.approvalOrigin?.requestId ?? pending.requestId}
       className={secondary}
       onSaved={() => decide("allow")}
     />
@@ -766,7 +767,7 @@ export function PendingApprovalBox({
           ? {
               count: readOnly.length,
               onAllow: () => {
-                for (const each of readOnly) dispatch({ type: "decideRequest", threadId: each.threadId ?? threadId, requestId: each.requestId, behavior: "allow" });
+                for (const each of readOnly) dispatch({ type: "decideRequest", threadId: each.threadId ?? threadId, requestId: each.message.card?.approvalOrigin?.requestId ?? each.requestId, behavior: "allow" });
               },
             }
           : undefined}

@@ -42,16 +42,16 @@ export function isSagaxWorkplaceProxy(name: string, server: McpServerSpec): bool
   return !("url" in server) && (SAGAX_WORKPLACE_PROXIES.has(name) || server.env?.SAGAX_TOOL_SERVER === "sagax-stdio");
 }
 
-/** Perspicax profiles are harness-created mounts in integrations.custom,
+/** Perspicax is a harness-created mount in integrations.custom,
  * not third-party commands. A name or environment marker alone proves nothing. */
 export function isSagaxPerspicaxBridge(server: McpServerSpec): boolean {
   return !("url" in server) && server.command === process.execPath
     && server.args.length === 1 && server.args[0] === SPAWNED_PROXIES.perspicax
-    && Boolean(server.env.SAGAX_PERSPICAX_PROFILE) && Boolean(server.env.SAGAX_PERSPICAX_TOKEN);
+    && Boolean(server.env.SAGAX_PERSPICAX_TOKEN);
 }
 
-/** Codex has one parent environment for every mount. Keep each direct
- * profile's capability and identity under its final mount's own prefix;
+/** Codex has one parent environment for every mount. Keep the direct
+ * connection's capability under its final mount's own prefix;
  * the bridge restores them before reading its connection settings. */
 export function isolatedPerspicaxBridge(name: string, server: StdioMcpSpec): { server: StdioMcpSpec; literal: Record<string, string> } {
   const stem = `SAGAX_MCP_ENV_${createHash("sha256").update(name).digest("hex").toUpperCase()}__`;

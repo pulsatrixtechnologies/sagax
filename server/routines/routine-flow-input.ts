@@ -28,6 +28,7 @@ export function routineFlowInput(prompt: string): RoutineFlowInput {
     ?? prompt.match(/\broutine\s+[`"']([a-zA-Z0-9][a-zA-Z0-9_.-]*)[`"']/i)
     ?? prompt.match(/\b(?:run|execute|launch|ex[eé]cute|lance)\s+(?:(?:the|la)\s+)?routine\s+([a-zA-Z0-9][a-zA-Z0-9_.-]*)/i);
   const routine = typeof explicit === "string" ? explicit : named?.[1]?.replace(/\.+$/, "");
-  // The server supplies a bound routine when the prompt does not name one.
+  // A named recipe can be shadow-planned; otherwise readiness checks only
+  // the account connection and catalogue, and the model chooses at run time.
   return { ...(routine ? { routine } : {}), plan: object(plan?.args) ? { ...plan.args } : {} };
 }

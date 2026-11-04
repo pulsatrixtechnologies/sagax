@@ -31,3 +31,13 @@ describe("humanizeToolIds", () => {
     expect(humanizeToolIds(plain)).toBe(plain);
   });
 });
+
+describe("labels never throw (2026-11-04 black screen)", () => {
+  it("survives a missing tool name or a gateway id without a tool part", () => {
+    expect(typeof toolDisplayName(undefined)).toBe("string");
+    expect(typeof toolDisplayName("")).toBe("string");
+    expect(() => toolDisplayName("user-Outlook-___12")).not.toThrow();
+    expect(() => toolDisplayName("___12")).not.toThrow();
+    expect(humanizeToolIds(undefined)).toBe("");
+  });
+});

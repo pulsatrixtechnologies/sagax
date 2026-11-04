@@ -383,24 +383,22 @@ export type ProviderKeyResult =
   | { ok: true; key: string; fingerprint: string }
   | { ok: false; error: "no_key" | "user_inactive" | "unreachable" | "link" };
 
-/** Slice 5 (contract 1): RFC 8693 token exchange for per-turn MCP tokens. */
+/** RFC 8693 token exchange for per-turn MCP tokens. */
 export const TOKEN_EXCHANGE_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange";
 export const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
 export const LINK_SERVER_CLIENT_ID = "pulsa-bot-server";
 export const EXCHANGE_TIMEOUT_MS = 5_000;
 export const EXCHANGE_MAX_BYTES = 8 * 1024;
-/** A Perspicax profile id as Pulsa Bot stores it on a bot. */
-export const PROFILE_ID = /^[0-9A-Za-z_.:-]{1,64}$/;
 export type ExchangeResult =
   | { ok: true; token: string; expiresAt: number }
-  /** not_held: Perspicax answered invalid_target (profile unknown or not
-   * held); subject: invalid_grant (the sign-in token was refused); link: the
+  /** not_held: Perspicax answered invalid_target (the account connection is
+   * unavailable); subject: invalid_grant (the sign-in token was refused); link: the
    * link token was refused even after re-reading the file.
    * `description` is Perspicax's public error_description when present. */
   | { ok: false; error: "not_held" | "subject" | "link" | "rate_limited" | "unreachable"; description?: string };
 
-/** How long a not_held (invalid_target) answer is remembered so a turn that
- * lists several tools does not keep asking Perspicax for the same profile. */
+/** How long a not_held (invalid_target) answer is remembered so a turn does
+ * not repeatedly exchange the same account resource. */
 export const NOT_HELD_CACHE_MS = 60_000;
 
 /** 2026-10-08 : a routine always acts in its owner's name. The linked
@@ -567,8 +565,8 @@ export class PerspicaxDirectory {
   private readonly avatarCache = new Map<string, AvatarImage>();
   /** Unknown permission keys already logged (one line each). */
   private readonly loggedUnknownPermissions = new Set<string>();
-  /** Short negative cache for profiles a person does not hold (invalid_target),
-   * keyed by subject token fingerprint and profile (or marketplace) resource. */
+  /** Short negative cache for an unavailable account resource (invalid_target),
+   * keyed by subject token fingerprint and resource. */
   private readonly notHeldUntil = new Map<string, { until: number; description?: string }>();
 
   constructor(options: PerspicaxDirectoryOptions) {
@@ -725,13 +723,13 @@ export class PerspicaxDirectory {
     return `Basic ${Buffer.from(`${LINK_SERVER_CLIENT_ID}:${link.linkToken}`).toString("base64")}`;
   }
 
-  /** Slice 5 (contract 1): exchange the speaker's sign-in access token for a
-   * short MCP token holding one profile. Authenticated by the link; a 401
+  /** Exchange the speaker's sign-in access token for a short token for their
+   * main Perspicax MCP connection. The account's held roles stay in Perspicax
+   * and can be selected on that connection with identity_switch. A 401
    * re-reads the link file once. Never logs a token or puts one in a result
    * other than the ok one. */
-  async exchangeToken(subjectToken: string, profileId: string): Promise<ExchangeResult> {
-    if (!PROFILE_ID.test(profileId)) return { ok: false, error: "not_held" };
-    return this.exchange(subjectToken, `${trimSlash(this.options.issuer)}/mcp?profile=${profileId}`);
+  async exchangeToken(subjectToken: string): Promise<ExchangeResult> {
+    return this.exchange(subjectToken, `${trimSlash(this.options.issuer)}/mcp`);
   }
 
   /** The audience of the Flow marketplace token (Perspicax 2026-10-19). */

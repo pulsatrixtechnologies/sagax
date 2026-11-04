@@ -2,7 +2,7 @@
 // (`bot-settings/sections.ts`): Model, Permissions, Works on, Voice &
 // alerts and Usage, as phone forms. Each change saves at once, as on the
 // desktop (no Save button). The pages the phone already had (Skills,
-// Memory, Access, Who can see it, Shared with, Perspicax Profiles, History,
+// Memory, Access, Who can see it, Shared with, History,
 // Slack) are pushed as they are; Overview carries the prompt preview, as
 // `OverviewSection.tsx` does.
 //
@@ -649,7 +649,6 @@ struct BotPanelSectionPage: View {
         case .voice: AnyView(BotPanelFormPage(section: section) { BotVoiceSections(bot: bot) })
         case .visibility: AnyView(BotVisibilityPage(bot: bot))
         case .sharing: AnyView(BotSharingPage(bot: bot))
-        case .perspicax: AnyView(BotPerspicaxPage(bot: bot))
         case .history: AnyView(BotHistoryPage(bot: bot))
         case .usage: AnyView(BotPanelFormPage(section: section) { BotUsageSection(bot: bot) })
         }

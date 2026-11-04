@@ -1,6 +1,6 @@
 // Edit several bots at once (the sidebar's selection bar, Edit): the bot
 // editor's own sections (Model, Shared with, Workspace, Access, Voice,
-// Permissions, Perspicax Profiles), each "Do not change" until the person
+// Permissions), each "Do not change" until the person
 // opens it. A section's real controls edit a draft bot (a scoped store and
 // transport, as New bot does), so nothing is written until Apply. A value the
 // bots share shows; when they differ the section says "Mixed values" with
@@ -24,7 +24,6 @@ import { readableOr } from "../../shared/human-id";
 import { botApprovalSetting } from "../../shared/approval-mode";
 import {
   bulkOutcomeCounts,
-  commonListItems,
   commonValue,
   patchFields,
   type BulkBotOutcome,
@@ -62,7 +61,6 @@ import { WorksOnSetting } from "./computer/WorksOnSetting";
 import { AccessSection } from "./bot-settings/AccessSection";
 import { VoiceSection } from "./bot-settings/VoiceSection";
 import { PermissionsSection } from "./bot-settings/PermissionsSection";
-import { PerspicaxProfileControl, perspicaxRows, type PerspicaxAnswer, type PerspicaxProfile } from "./bot-settings/PerspicaxSection";
 import { DialogFrame, DialogLayer, GROUP_CARD, HelpTip, PILL, PRIMARY_PILL } from "./SettingsPrimitives";
 
 const LIST_MODES: BulkListMode[] = ["add", "remove", "replace"];
@@ -111,11 +109,6 @@ function fieldLabel(field: string, section: BulkSectionId): string {
   return key ? t(key) : sectionLabel(section);
 }
 
-/** Bot ids the dialog reads per bot (the lists it compares). */
-interface PerBot {
-  perspicax: Record<string, PerspicaxAnswer | null>;
-}
-
 export function BulkEditBotsDialog({ botIds, onClose, onDone }: {
   botIds: string[];
   onClose: () => void;
@@ -131,7 +124,7 @@ export function BulkEditBotsDialog({ botIds, onClose, onDone }: {
     [botIds, state.bots, state.config],
   );
   const viewerId = state.config?.viewer?.principalId ?? null;
-  const sections = BULK_SECTIONS.filter((id) => (id === "sharing" || id === "perspicax") ? perspicaxOrg !== null : true);
+  const sections = BULK_SECTIONS.filter((id) => id === "sharing" ? perspicaxOrg !== null : true);
 
   const [changes, setChanges] = useState<BulkChanges>({});
   const changesRef = useRef(changes);
@@ -144,7 +137,6 @@ export function BulkEditBotsDialog({ botIds, onClose, onDone }: {
   const [undoState, setUndoState] = useState<"idle" | "running" | "done">("idle");
   const [undoOutcomes, setUndoOutcomes] = useState<BulkBotOutcome[] | null>(null);
   const [directory, setDirectory] = useState<OrgDirectory | null>(null);
-  const [perBot, setPerBot] = useState<PerBot>({ perspicax: {} });
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const busy = step === "running" || undoState === "running";
@@ -162,15 +154,13 @@ export function BulkEditBotsDialog({ botIds, onClose, onDone }: {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [busy]);
 
-  // Shared with and Perspicax compare lists the bots hold
+  // Shared with compares the bots' grants.
   useEffect(() => {
     if (!perspicaxOrg) return;
     let alive = true;
     void api<OrgDirectory>("/api/org/directory")
       .then((body) => { if (alive) setDirectory({ people: body.people ?? [], teams: body.teams ?? [] }); })
       .catch(() => { if (alive) setDirectory({ people: [], teams: [] }); });
-    void Promise.all(bots.map(async (bot) => [bot.id, await api<PerspicaxAnswer>(`/api/bots/${bot.id}/perspicax`).catch(() => null)] as const))
-      .then((rows) => { if (alive) setPerBot({ perspicax: Object.fromEntries(rows) }); });
     return () => { alive = false; };
     // the selection is fixed while the dialog is open
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -183,14 +173,6 @@ export function BulkEditBotsDialog({ botIds, onClose, onDone }: {
   }, [directory]);
 
   const enabledServers = useMemo(() => (servers ?? []).filter((server) => server.enabled).map((server) => server.name), [servers]);
-  const profileName = useCallback((id: string) => {
-    for (const answer of Object.values(perBot.perspicax)) {
-      const found = answer?.available.find((profile) => profile.id === id) ?? answer?.selected.find((profile) => profile.id === id);
-      if (found) return found.name;
-    }
-    return readableOr(id, t("bulkEdit.unknownProfile"));
-  }, [perBot]);
-
   const formatValue = useCallback((field: string, value: unknown): string => {
     if (value === undefined || value === null || value === "") return t("bulkEdit.value.default");
     if (field === "modelSelection" && typeof value === "object") {
@@ -225,10 +207,9 @@ export function BulkEditBotsDialog({ botIds, onClose, onDone }: {
     const lists: Array<{ field: string; values: Array<{ botId: string; value: string[] }> }> = [];
     if (id === "access") lists.push({ field: "mcpServers", values: bots.map((bot) => ({ botId: bot.id, value: bot.mcpServers ?? enabledServers })) });
     if (id === "sharing") lists.push({ field: "sharing", values: bots.map((bot) => ({ botId: bot.id, value: (bot.grants ?? []).map((grant) => grant.target).sort() })) });
-    if (id === "perspicax") lists.push({ field: "perspicax", values: bots.map((bot) => ({ botId: bot.id, value: (perBot.perspicax[bot.id]?.selected ?? []).map((profile) => profile.id).sort() })) });
     const name = (botId: string) => bots.find((bot) => bot.id === botId)?.name ?? "";
     const listText = (field: string, items: string[]) => items.length === 0 ? t("bulkEdit.value.none")
-      : items.map((item) => field === "sharing" ? grantLabel(item) : field === "perspicax" ? profileName(item) : item).join(", ");
+      : items.map((item) => field === "sharing" ? grantLabel(item) : item).join(", ");
     let main = "";
     for (const field of BULK_SECTION_FIELDS[id]) {
       const common = commonValue(bots.map((bot) => ({ botId: bot.id, value: fieldValue(bot, field) })));
@@ -276,7 +257,6 @@ export function BulkEditBotsDialog({ botIds, onClose, onDone }: {
         parts.push(t("bulkEdit.summary.list", { field: label, mode: t(MODE_KEY[mode]).toLowerCase(), items: items.length ? items.join(", ") : t("bulkEdit.value.none") }));
       if (change.mcpServers && listActive(change.mcpServers)) list(fieldLabel("mcpServers", id), change.mcpServers.mode, change.mcpServers.items);
       if (change.grants && listActive(change.grants)) list(sectionLabel(id), change.grants.mode, change.grants.grants.map((grant) => grantLabel(grant.target)));
-      if (change.perspicax && listActive(change.perspicax)) list(sectionLabel(id), change.perspicax.mode, change.perspicax.items.map(profileName));
     }
     return parts;
   };
@@ -408,7 +388,7 @@ export function BulkEditBotsDialog({ botIds, onClose, onDone }: {
                   )}
                   {isOpen && (
                     <div className="mt-3 border-t border-hairline/40 pt-3">
-                      {current.mixed.length > 0 && id !== "sharing" && id !== "perspicax" && (
+                      {current.mixed.length > 0 && id !== "sharing" && (
                         <p data-bulk-mixed-note className="mb-3 rounded-lg bg-inset px-3 py-2 text-[12px] leading-relaxed text-ink-secondary">
                           {t("bulkEdit.mixedOpen", { fields: current.mixed.map((row) => row.field).join(", ") })}
                         </p>
@@ -424,7 +404,6 @@ export function BulkEditBotsDialog({ botIds, onClose, onDone }: {
                         write={(next) => update(id, next)}
                         grantLabel={grantLabel}
                         enabledServers={enabledServers}
-                        perspicax={perBot.perspicax}
                         parent={parent}
                       />
                     </div>
@@ -519,7 +498,7 @@ const MODE_HINT: Record<BulkListMode, LocaleKey> = {
 
 /** One opened section: the bot editor's own controls on a draft bot, in a
  * scoped store whose writes become the section's change. */
-function SectionEditor({ id, bots, viewerId, change, fieldValue, read, write, grantLabel, enabledServers, perspicax, parent }: {
+function SectionEditor({ id, bots, viewerId, change, fieldValue, read, write, grantLabel, enabledServers, parent }: {
   id: BulkSectionId;
   bots: Bot[];
   viewerId: string | null;
@@ -529,7 +508,6 @@ function SectionEditor({ id, bots, viewerId, change, fieldValue, read, write, gr
   write: (next: BulkSectionChange) => void;
   grantLabel: (target: string) => string;
   enabledServers: string[];
-  perspicax: Record<string, PerspicaxAnswer | null>;
   parent: ReturnType<typeof useStore>;
 }) {
   const [draftId] = useState(() => `bulk-${id}-${Math.random().toString(36).slice(2, 10)}`);
@@ -587,12 +565,11 @@ function SectionEditor({ id, bots, viewerId, change, fieldValue, read, write, gr
     },
   };
 
-  const listMode = (kind: "mcpServers" | "grants" | "perspicax"): ReactNode => {
+  const listMode = (kind: "mcpServers" | "grants"): ReactNode => {
     const current = kind === "grants" ? change?.grants?.mode : change?.[kind]?.mode;
     const mode = current ?? "add";
     const lists = kind === "mcpServers" ? bots.map((bot) => bot.mcpServers ?? enabledServers)
-      : kind === "grants" ? bots.map((bot) => (bot.grants ?? []).map((grant) => grant.target))
-        : bots.map((bot) => (perspicax[bot.id]?.selected ?? []).map((profile) => profile.id));
+      : bots.map((bot) => (bot.grants ?? []).map((grant) => grant.target));
     return (
       <>
         <ListMode mode={mode} onChange={(next) => {
@@ -618,12 +595,7 @@ function SectionEditor({ id, bots, viewerId, change, fieldValue, read, write, gr
             {listMode("mcpServers")}
           </div>
         )}
-        {id === "perspicax" ? (
-          <>
-            {listMode("perspicax")}
-            <BulkPerspicax bots={bots} answers={perspicax} change={change} read={read} write={write} />
-          </>
-        ) : <SectionBody id={id} bot={draftBot} />}
+        <SectionBody id={id} bot={draftBot} />
       </BotEditorContext.Provider>
     </BotEditorStore>
   );
@@ -641,48 +613,4 @@ function SectionBody({ id, bot }: { id: BulkSectionId; bot: Bot }) {
     case "permissions": return <PermissionsSection bot={bot} derived={derived} />;
     default: return null;
   }
-}
-
-/** Perspicax Profiles: the editor's own profile rows, every profile the
- * viewer holds or a selected bot has; the checks are the list edit's items. */
-function BulkPerspicax({ bots, answers, change, read, write }: {
-  bots: Bot[];
-  answers: Record<string, PerspicaxAnswer | null>;
-  change: BulkSectionChange | undefined;
-  read: () => BulkSectionChange;
-  write: (next: BulkSectionChange) => void;
-}) {
-  const loaded = bots.every((bot) => bot.id in answers);
-  if (!loaded) {
-    return <div className="flex items-center gap-2 text-[13px] text-ink-secondary"><Loader2 size={13} className="animate-spin" aria-hidden="true" />{t("botSettings.perspicax.loading")}</div>;
-  }
-  const available = new Map<string, PerspicaxProfile>();
-  for (const answer of Object.values(answers)) {
-    for (const profile of answer?.available ?? []) available.set(profile.id, profile);
-    for (const { heldByMe: _held, ...profile } of answer?.selected ?? []) if (!available.has(profile.id)) available.set(profile.id, profile);
-  }
-  const edit = change?.perspicax ?? { mode: "add" as BulkListMode, items: [] };
-  const rows = perspicaxRows({ available: [...available.values()], selected: [], canEdit: true }, edit.items);
-  if (rows.length === 0) return <p className="text-[13px] text-ink-secondary">{t("botSettings.perspicax.none")}</p>;
-  const lists = bots.map((bot) => (answers[bot.id]?.selected ?? []).map((profile) => profile.id));
-  const everyone = new Set(commonListItems(lists));
-  return (
-    <ul className={cn(GROUP_CARD, "divide-y divide-hairline/40 px-3.5 py-0.5")} aria-label={t("botSettings.perspicax.title")}>
-      {rows.map((row) => (
-        <PerspicaxProfileControl
-          key={row.profile.id}
-          row={{ ...row, profile: { ...row.profile, description: [row.profile.description, everyone.has(row.profile.id) ? t("bulkEdit.allHave") : ""].filter(Boolean).join(" · ") } }}
-          saving={false}
-          canRemove={false}
-          onToggle={(on) => {
-            const base = read();
-            const current = base.perspicax ?? edit;
-            const items = on ? [...current.items.filter((item) => item !== row.profile.id), row.profile.id] : current.items.filter((item) => item !== row.profile.id);
-            write({ ...base, perspicax: { mode: current.mode, items } });
-          }}
-          onRemove={() => {}}
-        />
-      ))}
-    </ul>
-  );
 }

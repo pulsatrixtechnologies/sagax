@@ -13,13 +13,13 @@ Sagax does not implement `flow` or `flow_action`. Perspicax serves them
 actions (`catalog`) and describes one (`describe`); `flow_action` runs one
 action through a bounded loop (reads, then one write batch behind
 `needs_confirmation`, `choice_needed` and `resume`), with `px_flow.py serve`
-as the pack's runner. They reach a bot through the Perspicax profile servers
-Sagax mounts for the person who speaks (`perspicax_<profile>`,
+as the pack's runner. They reach every bot through the speaking person's one
+Perspicax account connection (`perspicax`,
 `server/perspicax-mcp-bridge.ts`). Sagax only relays them: misuse
 classification marks a frame naming `flow_action` as surface `flow`
-(`server/index.ts`), and the existing profile authorization applies. Grok and Claude keep
-read-only treatment for the eight pure compute tools only on harness-owned
-Perspicax bridges (`server/drivers/acp/grok-read-only-tools.ts`).
+(`server/index.ts`), and Perspicax applies the current vendor permissions and
+organization rules. The active pack and the same Flow path serve every
+harness; no bot profile or harness mode selects it.
 
 ## Compute belongs to the signed Python pack
 
@@ -32,7 +32,7 @@ through `scripts/px_flow.py serve` (`compute.catalog`, `compute.call`).
 - Every organization fact is an argument: time zone, working hours,
   holidays, midnight split time and input records. Compute reads no tenant
   facts, business files or network, and writes nothing.
-- A selected profile linked to the active pack offers the tools. The caller
+- The active pack offers the tools on the account connection. The caller
   remains the turn's actual speaker, exactly as for other Perspicax tools.
 - Older packs offer no compute tools. Sagax does not manufacture support.
 - The tool answer preserves its fields and adds pack digest and versions.

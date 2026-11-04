@@ -42,6 +42,16 @@ const click = (result: ReturnType<typeof view>, label: string) => result.buttons
 beforeEach(() => { fixture.admin = false; fixture.alwaysAllow = true; fixture.dispatch.mockReset(); });
 
 describe("owner rule buttons", () => {
+  it("answers a teammate's linked card from the human chat on its exact source thread", () => {
+    const source = message({ requestId: "view-1", approvalOrigin: { threadId: "worker-thread", messageId: "original-card", requestId: "request-1" } });
+    source.from = { botId: bot.id, name: bot.name, color: "blue" };
+    const pending = pendingApprovals([source])[0]!;
+    expect(pending).toMatchObject({ threadId: "worker-thread", askedBy: "Cora" });
+    const tree = PendingApprovalActions({ pending, bot, threadId: "human-thread", onCancelTurn: vi.fn() });
+    const allow = nodes(tree).find(node => node.type === "button" && node.props.children === "Always allow")!;
+    allow.props.onClick!();
+    expect(fixture.dispatch).toHaveBeenCalledWith(expect.objectContaining({ threadId: "worker-thread", requestId: "request-1", behavior: "allow", rule: "allow" }));
+  });
   // 2026-10-21 (lot 1A): the organization turned Always allow off: the card
   // offers Deny and Allow once, and says why
   it("offers no Always allow when the organization turned it off", () => {

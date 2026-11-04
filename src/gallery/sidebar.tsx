@@ -124,13 +124,6 @@ if (bulk) {
   set("lina", { modelSelection: { instanceId: "grok", model: "grok-4" }, grants: [{ target: "user:pr_ada", level: "use", by: "pr_me", at: 0 }, { target: "user:pr_bob", level: "edit", by: "pr_me", at: 0 }] });
   for (const member of team) member.ownerUserId ??= "pr_me";
 }
-const PROFILES = [
-  { id: "pf_cw", slug: "tickets", name: "Billets", description: "Billets et temps" },
-  { id: "pf_s1", slug: "security", name: "Sécurité", description: "Postes et menaces" },
-  { id: "pf_bs", slug: "docs", name: "Documentation", description: "Pages et guides" },
-];
-const botProfiles: Record<string, string[]> = { atlas: ["pf_cw"], iris: ["pf_cw", "pf_s1"], lina: ["pf_cw"] };
-
 // ?character=<id> dresses the whole team as that mascot (shape, frog...)
 const characterParam = params.get("character");
 if (characterParam && (MASCOT_CHARACTERS as readonly string[]).includes(characterParam)) {
@@ -167,11 +160,6 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       { instanceId: "grok", driverKind: "grokAgent", displayName: "Grok", access: "subscription", snapshot: { state: "available", authenticated: true }, models: { options: [{ id: "grok-4", label: "Grok 4" }] } },
     ] });
     if (path === "/api/mcp/servers") return json({ servers: [{ name: "github", enabled: true }, { name: "filesystem", enabled: true }] });
-    if (target && one![2] === "/perspicax") {
-      if (method === "PUT") botProfiles[target.id] = body.profiles;
-      const mine = botProfiles[target.id] ?? [];
-      return json({ selected: PROFILES.filter((profile) => mine.includes(profile.id)).map((profile) => ({ ...profile, heldByMe: true })), available: PROFILES, canEdit: true });
-    }
     if (target && one![2] === undefined && method === "PATCH") {
       // Lina's engine is not available to take the change
       if (target.id === "lina" && body.computer !== undefined) return json({ error: "Grok n'est pas disponible pour ce Bot : reconnectez le moteur." }, 409);

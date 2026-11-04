@@ -7,8 +7,7 @@
 // group is its own page (2026-10-15: one long page with Appearance at the
 // bottom was confusing). A group's first page is its home: Profile opens on
 // the bot's identity, and its other pages (Appearance, Shared with, What it
-// does) are listed under it. Permissions (with the Perspicax
-// profiles under it), Voice, Usage and Changes are entries of their own
+// does) are listed under it. Permissions, Voice, Usage and Changes are entries of their own
 // (2026-10-15). Memory and its files are one page, the Bot folder.
 import type { BotSettingsSection } from "@/state/settings-section";
 
@@ -28,7 +27,6 @@ export const PERSONA_CATEGORIES = [
   "access",
   "slack",
   "permissions",
-  "perspicax",
   "voice",
   "usage",
   "history",
@@ -44,7 +42,7 @@ export const PERSONA_GROUPS = [
   { id: "profile", sections: ["overview", "appearance", "sharing", "visibility", "summary"] },
   { id: "instructions", sections: ["soul", "rules", "skills", "files"] },
   { id: "modelTools", sections: ["model", "worksOn", "access", "slack", "voice"] },
-  { id: "security", sections: ["permissions", "perspicax"] },
+  { id: "security", sections: ["permissions"] },
   { id: "activity", sections: ["usage", "history"] },
 ] as const satisfies ReadonlyArray<{ id: string; sections: readonly PersonaCategory[] }>;
 export type PersonaGroup = (typeof PERSONA_GROUPS)[number]["id"];

@@ -345,7 +345,7 @@ function namedProducts(list: readonly string[], products: readonly RuleProduct[]
 }
 
 /** Which products a tool belongs to, by id: its whole server id, or behind
- * the platform's gateway (`perspicax_<slug>__<api>_<verb>`) the platform
+ * the platform's gateway (`perspicax__<api>_<verb>`, plus legacy role mounts) the platform
  * and the API id; and the kinds their words name. The ids are the ones a
  * server declares (RuleProduct.id), so a rule's named product compares to
  * them whatever the names say. */

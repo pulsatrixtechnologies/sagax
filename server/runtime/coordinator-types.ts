@@ -25,6 +25,8 @@ export interface HandoffView {
   kind: "work" | "assignment";
   /** On a root: where the tree's work started (peer-provenance.ts); absent is outside. */
   origin?: WorkOrigin;
+  /** Root request id set by the harness, also used to route its approvals. */
+  request?: string;
   /** Turns of this node a restart cut and ran again in place. */
   restarts: number;
   /** Its next turn, or the one running now, follows a restart (runtime types.ts). */

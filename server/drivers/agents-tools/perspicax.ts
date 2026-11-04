@@ -100,8 +100,8 @@ if (CLAIM_TOOLS.map((tool) => tool.name).join() !== CLAIM_TOOL_NAMES.join()) thr
 
 
 /** #1935: the answer for a tool the agents server does not have, when this
- * turn's Perspicax profile server runs it (a name api_search gave): where to
- * call it instead of "No tool named ...". Null when no profile is mounted or
+ * turn's Perspicax account server runs it (a name api_search gave): where to
+ * call it instead of "No tool named ...". Null when no connection is mounted or
  * the harness cannot say. */
 export async function perspicaxToolElsewhere(name: string, context: ToolCallContext): Promise<string | null> {
   if (context.externalRuntime || !name || PERSPICAX_TOOL_NAMES.has(name) || isClaimTool(name)) return null;

@@ -29,7 +29,6 @@ public enum BotEditSearch {
         .toolsApps: ["outils", "tools", "applications", "apps", "mcp", "navigateur", "browser", "ordinateur", "computer"],
         .computer: ["zone de travail", "espace de travail", "workspace", "ordinateur", "computer", "machine virtuelle", "vm", "navigateur", "browser", "nuage", "cloud"],
         .access: ["accès", "access", "mcp", "outils", "tools", "webhooks", "autoriser", "allow", "exclure", "exclude", "horaire", "schedule"],
-        .perspicaxProfiles: ["perspicax", "profils", "profiles", "mcp", "outils", "tools", "connectwise"],
         .slack: ["slack", "messages directs", "mentions"],
         .routines: ["routines", "horaire", "schedule", "planifié", "cron", "tâches"],
         .sharing: ["partage", "sharing", "partager", "share", "équipe", "team", "personnes", "people"],

@@ -73,20 +73,6 @@ export function personalMcpPrecheck(name: string, server: PersonalMcpServer, ctx
   return { mount: "remote", headers };
 }
 
-// ── Perspicax Roles ───────────────────────────────────────────────────────
-
-/** An engine-side server name for a profile: `perspicax_<slug or id>`,
- * [a-z0-9_], at most 40 characters, with a suffix on a collision. */
-export function perspicaxServerName(label: string, taken: ReadonlySet<string>): string {
-  const base = `perspicax_${label.toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "") || "profile"}`.slice(0, 40);
-  if (!taken.has(base)) return base;
-  for (let n = 2; ; n += 1) {
-    const suffix = `_${n}`;
-    const candidate = `${base.slice(0, 40 - suffix.length)}${suffix}`;
-    if (!taken.has(candidate)) return candidate;
-  }
-}
-
 // ── plugins ───────────────────────────────────────────────────────────────
 
 /** The plugin folders a Claude turn loads with `--plugin-dir`: the bot's

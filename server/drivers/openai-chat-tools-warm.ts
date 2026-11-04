@@ -53,6 +53,8 @@ export function chatToolsFingerprint(
 }
 
 const MAX_WARM_TOOL_SESSIONS = 64;
+const reusable = (session: ChatToolSession) => !session.isClosed?.()
+  && !session.skipped.some(row => row.server === "perspicax");
 
 /** Bounded per-thread MCP session cache for createOpenAIChatRuntime. */
 export function createWarmToolSessions() {
@@ -69,13 +71,18 @@ export function createWarmToolSessions() {
     get(threadId: string, fingerprint: string): ChatToolSession | undefined {
       const row = sessions.get(threadId);
       if (!row) return undefined;
-      if (row.fingerprint !== fingerprint) {
+      if (row.fingerprint !== fingerprint || !reusable(row.session)) {
         void evict(threadId);
         return undefined;
       }
       return row.session;
     },
     set(threadId: string, fingerprint: string, session: ChatToolSession): void {
+      if (!reusable(session)) {
+        void evict(threadId);
+        void session.close().catch(() => {});
+        return;
+      }
       const previous = sessions.get(threadId);
       if (previous && previous.session !== session) void previous.session.close().catch(() => {});
       sessions.delete(threadId);

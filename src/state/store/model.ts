@@ -71,6 +71,8 @@ export type { MausColor } from "@/lib/mascot";
 export type { RoutineRunCardData } from "../../../shared/routine-run";
 
 export interface OptionCardData {
+  approvalOrigin?: import("../../../shared/wire").OptionCardData["approvalOrigin"];
+  approvalDestination?: import("../../../shared/wire").OptionCardData["approvalDestination"];
   title: string;
   subtitle: string;
   options: string[];
@@ -566,7 +568,6 @@ export interface TaskUsage {
 }
 
 export interface Bot {
-  perspicaxActAs?: { slug: string; name: string };
   /** A bot the viewer knows only from a room it is in (groupMemberBots):
    * its name and look, nothing else; it cannot be opened. */
   publicProfile?: true;

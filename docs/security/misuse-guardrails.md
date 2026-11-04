@@ -38,7 +38,7 @@ in between (2026-11-03).
 Perspicax can grant `security.triage` (group Security, label "Do defensive
 security work" / "Faire le travail de défense"). Since 2026-10-27 (#1098) it
 is a member default: talking about security tools is conversation. It is not
-admin-only, and a Perspicax profile that leaves it out withholds it. An organization admin
+admin-only, and the person's live Perspicax permissions may withhold it. An organization admin
 already holds every key. On a solo server the operator at this computer
 holds it, because their turn speaks as `operator`.
 

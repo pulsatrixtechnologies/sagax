@@ -518,7 +518,7 @@ describe("PerspicaxDirectory, slice 4: teams and owner keys", () => {
   });
 });
 
-describe("PerspicaxDirectory, slice 5: profiles and token exchange", () => {
+describe("PerspicaxDirectory: roles and account MCP token exchange", () => {
   type Answer = { status: number; body?: unknown } | "throw";
   function exchangeHarness(answers: Answer[] = []) {
     const dir = tempDir();
@@ -539,7 +539,7 @@ describe("PerspicaxDirectory, slice 5: profiles and token exchange", () => {
     });
     return { sync, calls, answers, linkFile, logs };
   }
-  const ok = { status: 200, body: { access_token: "pxlo1.BOB.exchanged-secret", issued_token_type: "urn:ietf:params:oauth:token-type:access_token", token_type: "Bearer", expires_in: 900, scope: "profile:P1" } };
+  const ok = { status: 200, body: { access_token: "pxlo1.BOB.exchanged-secret", issued_token_type: "urn:ietf:params:oauth:token-type:access_token", token_type: "Bearer", expires_in: 900, scope: "mcp" } };
 
   it("an old directory without profiles still parses; the new fields are read and sorted", async () => {
     const h = harness(directoryOf([person("BOB")]));
@@ -561,7 +561,7 @@ describe("PerspicaxDirectory, slice 5: profiles and token exchange", () => {
   it("sends the exchange with the link's Basic header and the contract's form", async () => {
     const h = exchangeHarness([ok]);
     expect(h.sync.mcpEndpoint()).toBe("http://perspicax:8787/mcp");
-    expect(await h.sync.exchangeToken("pxlo1.BOB.subject", "P1")).toEqual({ ok: true, token: "pxlo1.BOB.exchanged-secret", expiresAt: 5_000_000 + 900_000 });
+    expect(await h.sync.exchangeToken("pxlo1.BOB.subject")).toEqual({ ok: true, token: "pxlo1.BOB.exchanged-secret", expiresAt: 5_000_000 + 900_000 });
     const [call] = h.calls;
     expect(call).toMatchObject({ url: "http://perspicax:8787/oauth/token", method: "POST", redirect: "error" });
     expect(call!.headers.authorization).toBe(`Basic ${Buffer.from(`pulsa-bot-server:${TOKEN_A}`).toString("base64")}`);
@@ -570,9 +570,9 @@ describe("PerspicaxDirectory, slice 5: profiles and token exchange", () => {
       grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
       subject_token: "pxlo1.BOB.subject",
       subject_token_type: "urn:ietf:params:oauth:token-type:access_token",
-      resource: `${ISSUER}/mcp?profile=P1`,
+      resource: `${ISSUER}/mcp`,
     });
-    expect(call!.body).toContain(`resource=${encodeURIComponent(`${ISSUER}/mcp?profile=P1`)}`);
+    expect(call!.body).toContain(`resource=${encodeURIComponent(`${ISSUER}/mcp`)}`);
   });
 
   it("maps every answer", async () => {
@@ -588,11 +588,8 @@ describe("PerspicaxDirectory, slice 5: profiles and token exchange", () => {
     ];
     for (const [answer, error] of cases) {
       const h = exchangeHarness([answer]);
-      expect(await h.sync.exchangeToken("pxlo1.BOB.subject", "P1")).toEqual({ ok: false, error });
+      expect(await h.sync.exchangeToken("pxlo1.BOB.subject")).toEqual({ ok: false, error });
     }
-    const bad = exchangeHarness([ok]);
-    expect(await bad.sync.exchangeToken("pxlo1.BOB.subject", "P1&x=y")).toEqual({ ok: false, error: "not_held" });
-    expect(bad.calls).toHaveLength(0);
   });
 
   it("surfaces invalid_target's error_description and caches not_held briefly", async () => {
@@ -616,42 +613,42 @@ describe("PerspicaxDirectory, slice 5: profiles and token exchange", () => {
       issuer: `${ISSUER}/`, serverBase: "http://perspicax:8787/", linkFile, expect: EXPECT, principals,
       onPersonOut: () => {}, onRoleNarrowed: () => {}, version: "0.1.89", now: () => now, fetch: fetcher, log: () => {},
     });
-    expect(await sync.exchangeToken("pxlo1.CAROL.subject", "P1")).toEqual({
+    expect(await sync.exchangeToken("pxlo1.CAROL.subject")).toEqual({
       ok: false,
       error: "not_held",
       description: "Carol does not hold profile Dispatch",
     });
     expect(calls).toHaveLength(1);
-    // Same subject + profile: served from the short negative cache, no second call.
-    expect(await sync.exchangeToken("pxlo1.CAROL.subject", "P1")).toEqual({
+    // Same subject + account resource: served from the short negative cache.
+    expect(await sync.exchangeToken("pxlo1.CAROL.subject")).toEqual({
       ok: false,
       error: "not_held",
       description: "Carol does not hold profile Dispatch",
     });
     expect(calls).toHaveLength(1);
-    // A different subject still hits the server (cache is per person + profile).
+    // A different subject still hits the server (cache is per person and resource).
     answers.unshift({ status: 400, body: { error: "invalid_target", error_description: "Bob does not hold profile Dispatch" } });
-    expect(await sync.exchangeToken("pxlo1.BOB.subject", "P1")).toMatchObject({ ok: false, error: "not_held", description: "Bob does not hold profile Dispatch" });
+    expect(await sync.exchangeToken("pxlo1.BOB.subject")).toMatchObject({ ok: false, error: "not_held", description: "Bob does not hold profile Dispatch" });
     expect(calls).toHaveLength(2);
     // After the cache window, the same person may try again.
     now += 60_001;
-    expect(await sync.exchangeToken("pxlo1.CAROL.subject", "P1")).toEqual({ ok: true, token: "pxlo1.BOB.exchanged-secret", expiresAt: now + 900_000 });
+    expect(await sync.exchangeToken("pxlo1.CAROL.subject")).toEqual({ ok: true, token: "pxlo1.BOB.exchanged-secret", expiresAt: now + 900_000 });
     expect(calls).toHaveLength(3);
   });
 
   it("a 401 re-reads the link file once and retries, then answers link", async () => {
     const h = exchangeHarness([{ status: 401, body: { error: "invalid_client" } }, ok]);
-    expect(await h.sync.exchangeToken("pxlo1.BOB.subject", "P1")).toMatchObject({ ok: true });
+    expect(await h.sync.exchangeToken("pxlo1.BOB.subject")).toMatchObject({ ok: true });
     expect(h.calls).toHaveLength(2);
     const twice = exchangeHarness([{ status: 401 }, { status: 401 }]);
-    expect(await twice.sync.exchangeToken("pxlo1.BOB.subject", "P1")).toEqual({ ok: false, error: "link" });
+    expect(await twice.sync.exchangeToken("pxlo1.BOB.subject")).toEqual({ ok: false, error: "link" });
     expect(twice.calls).toHaveLength(2);
     // the retry uses the rotated token from the file
     const rotated = exchangeHarness([{ status: 401 }, ok]);
-    await rotated.sync.exchangeToken("pxlo1.BOB.subject", "P1");
+    await rotated.sync.exchangeToken("pxlo1.BOB.subject");
     writeLink(rotated.linkFile, linkDoc({ link_token: TOKEN_B }));
     rotated.answers.push({ status: 401 }, ok);
-    await rotated.sync.exchangeToken("pxlo1.BOB.subject", "P1");
+    await rotated.sync.exchangeToken("pxlo1.BOB.subject");
     expect(rotated.calls.at(-1)!.headers.authorization).toBe(`Basic ${Buffer.from(`pulsa-bot-server:${TOKEN_B}`).toString("base64")}`);
   });
 

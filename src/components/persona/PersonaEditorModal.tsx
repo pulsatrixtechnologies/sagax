@@ -244,18 +244,14 @@ function PersonaEditor({ bot, section, onClose }: { bot: Bot; section: BotSettin
 
   const lockOf = (id: BotSettingsSection): LocaleKey | null => botSectionLock(state.config, bot, id);
   const memoryAllowed = canEditBotField(state.config, bot, "memoryEnabled");
-  const unavailable = (id: PersonaCategory) => id === "perspicax" && perspicaxOrg === null;
   const groupLocked = (sections: readonly PersonaCategory[]) =>
-    sections.every((id) => lockOf(id) !== null || unavailable(id));
+    sections.every((id) => lockOf(id) !== null);
 
   const body = (id: PersonaCategory): ReactNode => {
     if (id === "overview") return <PersonaOverview bot={bot} derived={derived} />;
     // What the server says the bot does, reaches and won't do, the prompt
     // preview and the recent changes.
     if (id === "summary") return renderSectionBody("overview");
-    if (unavailable(id)) {
-      return <Note icon={false}>{t("persona.unavailable.perspicax")}</Note>;
-    }
     const lock = lockOf(id);
     if (lock) {
       return (
@@ -352,7 +348,7 @@ function PersonaEditor({ bot, section, onClose }: { bot: Bot; section: BotSettin
                 </div>
                 {sections.map((page) => {
                   const Icon = ENTRY.get(page)?.icon ?? LayoutDashboard;
-                  const pageLocked = lockOf(page) !== null || unavailable(page);
+                  const pageLocked = lockOf(page) !== null;
                   return (
                     <div key={page} className="flex min-w-0 flex-col">
                     <button
@@ -429,7 +425,7 @@ function PersonaEditor({ bot, section, onClose }: { bot: Bot; section: BotSettin
                 const onPage = id === current;
                 const keep = KEEP_MOUNTED.has(id);
                 if (!onPage && !keep) return null;
-                const content = keep && !unavailable(id) && lockOf(id) === null
+                const content = keep && lockOf(id) === null
                   ? kept(id, onPage)
                   : onPage ? body(id) : null;
                 if (!onPage && content === null) return null;

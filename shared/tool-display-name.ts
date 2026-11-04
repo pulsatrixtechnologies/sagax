@@ -29,7 +29,8 @@ export function gatewayToolId(name: string): string | undefined {
 
 /** `_XX` hex escapes decoded (`get_5fmail` reads `get_mail`), only in a
  * name the gateway escaped (it escapes every `_`, so `_5f` is there). */
-function decodeEscapes(part: string): string {
+function decodeEscapes(part: string | undefined): string {
+  if (!part) return "";
   if (!/_5f/i.test(part)) return part;
   return part.replace(/_([0-9a-f]{2})/gi, (match, hex: string) => {
     const code = parseInt(hex, 16);
@@ -42,14 +43,24 @@ function capitalize(text: string): string {
   return text ? text[0]!.toLocaleUpperCase() + text.slice(1) : text;
 }
 
-function words(part: string): string {
+function words(part: string | undefined): string {
+  if (!part) return "";
   return part.replace(/[_.]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
 /** The tool and the product it serves, in words: `Get mail message · Outlook`,
  * `Read file`, `Find schedule entries · ConnectWise`. `product` is the one
  * the server declared for the call, when it declared one. */
-export function toolDisplayName(name: string, product?: string): string {
+export function toolDisplayName(name: string | undefined, product?: string): string {
+  // Never throw: a label error used to blank the whole chat (2026-11-04).
+  try {
+    return toolDisplayNameUnsafe(name ?? "", product);
+  } catch {
+    return (name ?? "").trim() || "Tool";
+  }
+}
+
+function toolDisplayNameUnsafe(name: string, product?: string): string {
   const raw = name.trim();
   const declared = product?.trim() || undefined;
   const gateway = gatewayToolId(raw);
@@ -70,6 +81,7 @@ export function toolDisplayName(name: string, product?: string): string {
  * times`) read as its name in words. */
 const TOOL_ID_IN_TEXT = /(?<![\w-])(?:[A-Za-z0-9][\w.-]*?__[\w.-]*[A-Za-z0-9]|(?:user|team|org|workspace)-[\w.-]+___\d+)(?![\w-])/g;
 
-export function humanizeToolIds(text: string): string {
+export function humanizeToolIds(text: string | undefined): string {
+  if (!text) return "";
   return text.replace(TOOL_ID_IN_TEXT, (id) => toolDisplayName(id));
 }

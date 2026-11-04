@@ -1,6 +1,6 @@
 /** Stable wire codes: clients translate facts, while run errors remain English. */
 export type RoutineReadinessKind = "engine" | "skills" | "mcp" | "perspicax" | "computer" | "flow";
-export type RoutineReadinessCode = "engine_credits" | "engine_limit" | "engine_signed_out" | "engine_artifacts" | "skill_missing" | "flow_profile" | "flow_plan" | "mcp_missing" | "perspicax_profile" | "computer_offline" | "ready" | "probe_error";
+export type RoutineReadinessCode = "engine_credits" | "engine_limit" | "engine_signed_out" | "engine_artifacts" | "skill_missing" | "flow_plan" | "mcp_missing" | "perspicax_profile" | "computer_offline" | "ready" | "probe_error";
 export interface RoutineReadinessCheck {
   kind: RoutineReadinessKind;
   ok: boolean;

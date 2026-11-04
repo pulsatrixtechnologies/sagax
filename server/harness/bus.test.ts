@@ -426,26 +426,47 @@ describe("EventBus streamed text", () => {
     vi.useRealTimers();
   });
 
-  it("merges deltas that arrive within 50 ms into one event, logged once", async () => {
+  it("publishes a stream's first text at once, then merges the deltas that arrive within 50 ms", async () => {
     const bus = new EventBus();
     const seen: RuntimeEvent[] = [];
     bus.subscribe((event) => seen.push(event));
 
+    // the first word is not held: the person sees the reply start (#1952)
     bus.publish(delta("Hel", { eventId: "d1" }));
+    expect(summary(seen)).toEqual(["thread-1:assistant_text:Hel"]);
+    expect(seen[0]).toMatchObject({ eventId: "d1", turnId: "turn-1" });
     bus.publish(delta("lo, ", { eventId: "d2" }));
     vi.advanceTimersByTime(30);
     bus.publish(delta("world", { eventId: "d3" }));
-    expect(seen).toHaveLength(0);
+    expect(seen).toHaveLength(1);
 
     vi.advanceTimersByTime(20);
-    expect(summary(seen)).toEqual(["thread-1:assistant_text:Hello, world"]);
-    expect(seen[0]).toMatchObject({ eventId: "d1", turnId: "turn-1" });
+    expect(summary(seen)).toEqual(["thread-1:assistant_text:Hel", "thread-1:assistant_text:lo, world"]);
+    expect(seen[1]).toMatchObject({ eventId: "d2", turnId: "turn-1" });
     await bus.flush();
-    expect(summary(logged("thread-1"))).toEqual(["thread-1:assistant_text:Hello, world"]);
+    expect(summary(logged("thread-1"))).toEqual(["thread-1:assistant_text:Hel", "thread-1:assistant_text:lo, world"]);
 
     bus.publish(delta("!", { eventId: "d4" }));
+    expect(seen).toHaveLength(2);
     vi.advanceTimersByTime(50);
-    expect(summary(seen)).toEqual(["thread-1:assistant_text:Hello, world", "thread-1:assistant_text:!"]);
+    expect(summary(seen)).toEqual(["thread-1:assistant_text:Hel", "thread-1:assistant_text:lo, world", "thread-1:assistant_text:!"]);
+    await bus.flush();
+  });
+
+  it("publishes the text that resumes after another event at once", async () => {
+    const bus = new EventBus();
+    const seen: RuntimeEvent[] = [];
+    bus.subscribe((event) => seen.push(event));
+
+    bus.publish(delta("Let me look"));
+    bus.publish(delta(" closer"));
+    bus.publish(testEvent({ eventId: "tool", type: "item.started", itemType: "tool", title: "Read", turnId: "turn-1" }));
+    bus.publish(delta("Found it"));
+    expect(summary(seen)).toEqual(["thread-1:assistant_text:Let me look", "thread-1:assistant_text: closer", "thread-1:item.started", "thread-1:assistant_text:Found it"]);
+    bus.publish(delta(", here"));
+    expect(seen).toHaveLength(4);
+    vi.advanceTimersByTime(50);
+    expect(summary(seen).at(-1)).toBe("thread-1:assistant_text:, here");
     await bus.flush();
   });
 
@@ -482,10 +503,12 @@ describe("EventBus streamed text", () => {
     bus.publish(delta("next turn", { turnId: "turn-2" }));
     bus.publish(delta("api error", { turnId: "turn-2", synthetic: true }));
     bus.publish(delta("b2", { threadId: "thread-2" }));
-    expect(summary(seen)).toEqual(["thread-1:assistant_text:a1", "thread-1:reasoning_text:thinking", "thread-1:assistant_text:a2", "thread-1:assistant_text:next turn"]);
+    bus.publish(delta("b3", { threadId: "thread-2" }));
+    // every change of stream is a first text, out at once; only b2 and b3 continue one
+    expect(summary(seen)).toEqual(["thread-1:assistant_text:a1", "thread-2:assistant_text:b1", "thread-1:reasoning_text:thinking", "thread-1:assistant_text:a2", "thread-1:assistant_text:next turn", "thread-1:assistant_text:api error"]);
 
     vi.advanceTimersByTime(50);
-    expect(summary(seen).slice(4).sort()).toEqual(["thread-1:assistant_text:api error", "thread-2:assistant_text:b1b2"]);
+    expect(summary(seen).slice(6)).toEqual(["thread-2:assistant_text:b2b3"]);
     expect(seen.find((event) => event.type === "content.delta" && event.delta === "api error")?.synthetic).toBe(true);
     await bus.flush();
   });

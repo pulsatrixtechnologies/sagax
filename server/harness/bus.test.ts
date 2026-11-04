@@ -116,6 +116,23 @@ describe("EventBus", () => {
     expect(logged).not.toContain(key);
   });
 
+  it("redacts a content.delta on the hot log path without keeping the key", async () => {
+    const key = "sk-ant-api03-" + "y".repeat(48);
+    const bus = new EventBus();
+    bus.publish(testEvent({
+      threadId: "delta-log",
+      type: "content.delta",
+      streamKind: "assistant_text",
+      delta: `token ${key} more`,
+      turnId: "t1",
+      itemId: "i1",
+    } as Partial<RuntimeEvent>));
+    await bus.flush();
+    const logged = readFileSync(join(EVENTS_DIR, "delta-log.ndjson"), "utf8");
+    expect(logged).not.toContain(key);
+    expect(logged).toContain("«redacted");
+  });
+
   it("reports an incomplete log once while continuing live delivery", async () => {
     rmSync(EVENTS_DIR, { recursive: true, force: true });
     const bus = new EventBus();

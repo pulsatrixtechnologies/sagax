@@ -63,6 +63,11 @@ type QueuedLog = { event: RuntimeEvent; line: string; bytes: number };
  * shaped content is scrubbed as the native tee does, and a widget's whole
  * ConnectWise result never reaches it. */
 function logLine(event: RuntimeEvent): string {
+  // content.delta is the hot path under a streaming turn: only the delta
+  // text can carry a secret shape, so skip the deep object walk.
+  if (event.type === "content.delta") {
+    return JSON.stringify({ ...event, delta: typeof event.delta === "string" ? redactSecrets(event.delta) : event.delta });
+  }
   return JSON.stringify(redactSecrets(withoutPrivateFields(event)));
 }
 

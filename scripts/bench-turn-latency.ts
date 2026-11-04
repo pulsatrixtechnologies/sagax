@@ -653,7 +653,7 @@ async function runEngineMode(
       });
       samples.push(sample);
       // Brief gap so a reused CLI drains its previous result before the next send.
-      await sleep(100);
+      await sleep(500);
     }
 
     const first = samples[0] ?? null;

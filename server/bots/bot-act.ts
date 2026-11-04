@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 
 import type { ActTarget, TurnFacts } from "../../shared/bot-act.ts";
-import { actorForTurn, decideBotAct, summaryOf } from "../../shared/bot-act.ts";
+import { actMessageTarget, actorForTurn, decideBotAct, summaryOf } from "../../shared/bot-act.ts";
 import { botActClasses } from "../../shared/step-up.ts";
 
 /** 2026-10-19 ("Toujours permettre" on every card): what "Always allow"
@@ -99,6 +99,10 @@ export type BotActDeps = {
   now: () => number;
   newId: () => string;
   neededScope: (method: string, path: string) => "admin" | "client";
+  /** 0.8.46: a conversation whose work is parked on the person's answer.
+   * A bot's act never writes a line there: that line would answer the
+   * person's question for them. */
+  awaitsPersonAnswer?: (target: { botId?: string; groupId?: string; threadId?: string }) => boolean;
   operatorAudience: () => string;
   sessionForPerson: (personKey: string) => LiveSession | null;
   /** `confirmed`: this replay follows that person's own Allow on a planned
@@ -166,6 +170,9 @@ export type BotActService = {
     maxChars?: number;
   }): Promise<BotActResult>;
 };
+
+/** 0.8.46: a parked question is answered by the person only. */
+export const PERSON_ANSWER_ONLY = "This conversation waits for the person's own answer to a question: a bot never answers it, and never writes there while it waits. Tell the person in your reply; they answer the question card themselves.";
 
 export function createBotActService(deps: BotActDeps): BotActService {
   const pending = new Map<string, Pending>();
@@ -250,6 +257,8 @@ export function createBotActService(deps: BotActDeps): BotActService {
       }
       const decision = decideBotAct({ raw: input.raw, mode: input.mode, scopes, neededScope: deps.neededScope });
       if (!decision.ok) return refuse(decision.status, decision.error);
+      const writesInto = actMessageTarget(decision.target);
+      if (writesInto && deps.awaitsPersonAnswer?.(writesInto)) return refuse(409, PERSON_ANSWER_ONLY);
       if (decision.effect === "run") return run(performActor, decision.target);
       const classes = actClassesOf(decision.target);
       const candidate = actRuleCandidate(decision.target, classes, describeOf);
@@ -294,6 +303,12 @@ export function createBotActService(deps: BotActDeps): BotActService {
         if (!item.rule || !deps.saveActRule) return { handled: true, status: 409, body: { error: "This approval cannot be remembered as a rule." } };
         const refused = deps.saveActRule({ person: replay.kind === "person" ? replay.personKey : null, botId: item.botId, candidate: item.rule });
         if (refused) return { handled: true, status: refused.status, body: { error: refused.error } };
+      }
+      const heldInto = actMessageTarget(item.target);
+      if (heldInto && deps.awaitsPersonAnswer?.(heldInto)) {
+        pending.delete(item.requestId);
+        deps.patchCard(item.threadId, item.messageId, { expired: true });
+        return { handled: true, status: 409, body: { error: PERSON_ANSWER_ONLY } };
       }
       item.running = true;
       try {

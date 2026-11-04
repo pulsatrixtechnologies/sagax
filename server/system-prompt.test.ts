@@ -460,7 +460,7 @@ describe("verify-first rule (2026-10-19)", () => {
     expect(VERIFY_FIRST_PROMPT).toContain("Verify before you conclude");
     expect(VERIFY_FIRST_PROMPT).toContain("I could not see X");
     expect(VERIFY_FIRST_PROMPT).toContain("Never invent names, people, tools, commands, IDs or results");
-    expect(VERIFY_FIRST_PROMPT).toContain("Every decision that blocks your work MUST be an actionable card");
+    expect(VERIFY_FIRST_PROMPT).toContain("Ask through your native question tool");
     expect(VERIFY_FIRST_PROMPT).toContain("AskUserQuestion, ask_user_question, request_user_input or ask_user");
     expect(VERIFY_FIRST_PROMPT).toContain("the Sagax tool ask_choice");
     expect(VERIFY_FIRST_PROMPT).toContain("recommended option first, free text allowed");

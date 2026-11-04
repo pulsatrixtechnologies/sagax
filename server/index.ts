@@ -13028,6 +13028,9 @@ const coordinator: Coordinator = createCoordinator({
     // when the requester's conversation is itself a bot-to-bot one, the
     // conversation the person started the work in gets it too.
     park: (node, question, restored) => postInputRequest(node, question, false, restored),
+    // 0.8.46: closed without the person (expired, or the requester's default
+    // answer): its cards say so instead of staying open or reading answered.
+    unparked: (node, _reason, defaulted) => settleInputRequests(node.threadId, defaulted ? "defaulted" : "expired"),
     remind: (node, question) => postInputRequest(node, question, true),
     // A parked delegation whose conversation was deleted or archived has
     // nowhere left to be answered: closed (at the restart too), so it stops
@@ -13150,14 +13153,18 @@ function newestQuestionCard(threadId: string, aboutThreadId: string): Message | 
     message.kind === "activity" && (message.threadRef?.threadId ?? message.comm?.threadId) === aboutThreadId
     && (message.tool?.name.includes(" needs your input: ") === true || message.tool?.name.includes(" is still waiting for your answer: ") === true));
 }
-/** The person answered in the waiting thread: its cards say so. */
-function settleInputRequests(threadId: string): void {
+/** The person answered in the waiting thread: its cards say so. Only the
+ * person's own line answers (start-turn-prepare-admit.ts); a parked question
+ * closed without them says "expired" or "default answer used" (0.8.46). */
+function settleInputRequests(threadId: string, how: "answered" | "expired" | "defaulted" = "answered"): void {
   const rows = openInputRequests.get(threadId);
   if (!rows) return;
   openInputRequests.delete(threadId);
   for (const row of rows) {
     const message = store.activePath(row.threadId).find((candidate) => candidate.id === row.messageId);
-    if (message?.inputRequest) store.patchMessage(row.threadId, row.messageId, { inputRequest: { ...message.inputRequest, answered: true } });
+    if (!message?.inputRequest || message.inputRequest.answered || message.inputRequest.expired) continue;
+    const settled = how === "answered" ? { answered: true } : { expired: true, ...(how === "defaulted" ? { defaulted: true } : {}) };
+    store.patchMessage(row.threadId, row.messageId, { inputRequest: { ...message.inputRequest, ...settled } });
   }
 }
 const groupUsageReader = new GroupUsageReader(DATA_DIR);
@@ -34755,6 +34762,14 @@ let botActService: BotActService | null = null;
 function botActs(): BotActService {
   botActService ??= createBotActService({
     now: () => Date.now(),
+    // 0.8.46: a line a bot sends as the person into work parked on the
+    // person's question would answer it for them (an act runs as the person).
+    awaitsPersonAnswer: ({ botId, groupId, threadId }) => {
+      const thread = threadId
+        ?? (botId ? botMainThread(botId) ?? store.bot(botId)?.threadId : undefined)
+        ?? (groupId ? store.group(groupId)?.threadId : undefined);
+      return Boolean(thread && coordinator.awaitingAnswer(thread));
+    },
     newId: () => randomUUID(),
     neededScope: (method, path) => requiredScope(method, path, {
       sharedComputers: sharedComputersEnabled(cfg),

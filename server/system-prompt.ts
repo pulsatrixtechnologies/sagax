@@ -85,8 +85,7 @@ export const RUN_YOURSELF_PROMPT =
  * do not exist) and listed as "unverified" what one call would have
  * checked. Persona brevity was read as license to skip the checking. */
 export const VERIFY_FIRST_PROMPT =
-  "
-Verify before you conclude, including before calling something unverified: check what one tool call can check."
+  "\nVerify before you conclude, including before calling something unverified: check what one tool call can check."
   + " If unseen, say \"I could not see X\" and ask for it; never assume its contents."
   + " Never invent names, people, tools, commands, IDs or results: names come from sources read this turn, tools from your own list."
   + " Ask only for a real decision, once; a next step their request already covers is not a decision: do it. Never guess then act."

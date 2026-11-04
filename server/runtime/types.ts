@@ -341,6 +341,10 @@ export interface TurnRunner {
    * answer reaching the runtime. Such a park is closed as expired, at the
    * restart and on every tick. Optional: absent, nothing is closed early. */
   parkedGone?(a: Assignment): boolean;
+  /** A parked question closed without the person's answer (it expired, or
+   * the requester's declared default answer was used): its cards say so,
+   * never "Answer sent". Optional. */
+  unparked?(a: Assignment, reason: string, defaulted: boolean): void;
   /** A settled child, into its requester's conversation (a chip, a line), or
    * a root that ended alone, into its own. Called once per settlement. */
   report(a: Assignment, parent?: Assignment): void;

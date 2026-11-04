@@ -8,7 +8,7 @@ function facts(patch: Partial<TurnFacts> = {}): TurnFacts {
   return { automation: false, guest: false, requestUsable: true, senderUnproven: false, provenPerson: person, sharedServer: false, ...patch };
 }
 
-function harness(options: { mode?: "ask" | "edits" | "auto" | "full" | "custom"; session?: { id: string; scopes: Array<"admin" | "client"> } | null; routeStatus?: (path: string) => number } = {}) {
+function harness(options: { mode?: "ask" | "edits" | "auto" | "full" | "custom"; session?: { id: string; scopes: Array<"admin" | "client"> } | null; routeStatus?: (path: string) => number; parked?: (target: { botId?: string; groupId?: string; threadId?: string }) => boolean } = {}) {
   const performed: Array<{ actor: PerformActor; method?: string; path?: string }> = [];
   const broadcasts: Array<{ audience: string; command: string; input: Record<string, unknown> }> = [];
   const cards: Array<{ requestId: string; summary: string; rule?: unknown; answered?: "allow" | "deny"; expired?: true }> = [];
@@ -20,6 +20,7 @@ function harness(options: { mode?: "ask" | "edits" | "auto" | "full" | "custom";
     now: () => now,
     newId: () => `req-${++seq}`,
     neededScope: (_method, path) => path.startsWith("/api/admin") ? "admin" : "client",
+    ...(options.parked ? { awaitsPersonAnswer: options.parked } : {}),
     operatorAudience: () => "operator",
     sessionForPerson: () => options.session === undefined ? { id: "wide", scopes: ["client"] } : options.session,
     async performRoute(actor, target) {
@@ -224,5 +225,43 @@ describe("bot act", () => {
     }
     const blocked = await box.service.handle({ facts: facts(), raw: { method: "POST", path: "/api/bots" }, threadId: "t", botId: "b", botName: "Ada", botColor: "green", mode: "ask" });
     expect(blocked.status).toBe(429);
+  });
+});
+
+describe("a parked question is the person's to answer (0.8.46)", () => {
+  // GOX 2026-11-04: another bot's act sent a line, as the person, into work
+  // parked on the person's question; the runtime took it as their answer.
+  const parked = (target: { botId?: string; threadId?: string }) => target.botId === "waiting-bot" && (target.threadId ?? "main") === "work-1";
+  const base = { facts: facts(), threadId: "t", botId: "b", botName: "Ada", botColor: "green", mode: "full" as const };
+  it.each([
+    { ui: "send", input: { botId: "waiting-bot", threadId: "work-1", text: "Bascule-la sur un autre moteur." } },
+    { ui: "editMessage", input: { botId: "waiting-bot", threadId: "work-1", messageId: "m1", text: "Oui." } },
+    { method: "POST", path: "/api/bots/waiting-bot/messages", body: { threadId: "work-1", text: "Oui." } },
+  ])("refuses a line into the waiting conversation, at every level: %j", async (raw) => {
+    const { service, performed, broadcasts, cards } = harness({ parked });
+    const refused = await service.handle({ ...base, raw });
+    expect(refused.status).toBe(409);
+    expect(String(refused.body.error)).toContain("person's own answer");
+    expect(performed).toEqual([]);
+    expect(broadcasts).toEqual([]);
+    expect(cards).toEqual([]);
+  });
+  it("still sends into a conversation that waits on nobody", async () => {
+    const { service, broadcasts } = harness({ parked });
+    const sent = await service.handle({ ...base, raw: { ui: "send", input: { botId: "waiting-bot", threadId: "other", text: "Salut." } } });
+    expect(sent.status).toBe(200);
+    expect(broadcasts.map((row) => row.command)).toEqual(["send"]);
+  });
+  it("refuses a held send the person allows after the work parked, and expires its card", async () => {
+    let waiting = false;
+    const { service, performed, broadcasts, cards, answerer } = harness({ parked: (target) => waiting && parked(target) });
+    const held = await service.handle({ ...base, mode: "ask", raw: { ui: "send", input: { botId: "waiting-bot", threadId: "work-1", text: "Oui." } } });
+    expect(held.body.held).toBe(true);
+    waiting = true;
+    const answer = await service.confirm({ threadId: "t", requestId: cards[0]!.requestId, behavior: "allow", answerer: answerer(), sharedServer: false });
+    expect(answer).toMatchObject({ handled: true, status: 409 });
+    expect(cards[0]?.expired).toBe(true);
+    expect(performed).toEqual([]);
+    expect(broadcasts).toEqual([]);
   });
 });

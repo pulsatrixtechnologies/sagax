@@ -9953,6 +9953,8 @@
   "chat.inputRequest.send": "Send answer",
   "chat.inputRequest.open": "Open the conversation",
   "chat.inputRequest.answered": "Answer sent: the work continues.",
+  "chat.inputRequest.expired": "This question expired without your answer: the work stopped.",
+  "chat.inputRequest.defaulted": "No answer from you in time: the default answer was used.",
   "botPanel.branch.ahead": "{count} commits ahead",
   "botPanel.branch.aheadOne": "1 commit ahead",
   "botPanel.branch.archive": "Archive",

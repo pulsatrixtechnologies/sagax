@@ -121,6 +121,9 @@ export interface CoordinatorHost {
   /** A parked turn has no place left to be answered (its conversation is
    * gone, or the card that asked was settled): the runtime closes it. */
   parkedGone?(node: HandoffView): boolean;
+  /** A parked question closed without the person's answer (expired, or the
+   * requester's default answer used): its cards say so. */
+  unparked?(node: HandoffView, reason: string, defaulted: boolean): void;
   /** The permission level the target thread will actually run with, after
    * the host applied any delegated level, and its engine kind. Recorded on
    * the assignment so the envelope states the truth (invariant I6). */

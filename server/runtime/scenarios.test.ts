@@ -593,6 +593,25 @@ describe("§4b a question waits for the person (bot quality 2026-10-19)", () => 
     invariants(w);
   });
 
+  // 0.8.46: a question closed without the person tells its cards so
+  // (runner.unparked), never that the person answered.
+  it("S07e2 tells the host a parked question expired without the person's answer", async () => {
+    const w = world();
+    const closed: Array<{ id: string; reason: string; defaulted: boolean }> = [];
+    (w.runner as unknown as { unparked: (a: { id: string }, reason: string, defaulted: boolean) => void }).unparked = (a, reason, defaulted) => closed.push({ id: a.id, reason, defaulted });
+    const root = beginChief(w);
+    const child = ok(enqueueFrom(w, root, workFor("dev", "Pick a colour")));
+    w.runner.script("dev", needsInput("GO?"), complete("never"));
+    w.rt.end(root.id, { ok: true, text: "" });
+    await drain(w);
+    expect(closed).toEqual([]);
+    w.clock.advance(4 * 60 * 60_000 + 60_000);
+    await drain(w);
+    expect(get(w, child.id).status).toBe("expired");
+    expect(closed).toEqual([{ id: child.id, reason: expect.stringMatching(/did not answer within 240m/), defaulted: false }]);
+    invariants(w);
+  });
+
   it("S07f a restart closes a stale delegation instead of parking it again", async () => {
     const w = world();
     const root = beginChief(w);

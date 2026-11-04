@@ -11,7 +11,7 @@ import { t } from "@/lib/i18n";
 import { useStoreDispatch, useStoreSelector } from "@/state/store-selector";
 import type { Message } from "@/state/store";
 import { BotAvatar } from "../Avatar";
-import { FailedTurnRow, PreSendRefusalLine } from "../ChatView";
+import { FailedTurnRow, PreSendRefusalLine } from "../ChatView.tsx-parts/ErrorRows";
 import { InputRequestCard } from "../InputRequestCard";
 import { StepRow } from "../StepRow";
 import { ThreadChip } from "../ThreadChip";

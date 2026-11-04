@@ -1,6 +1,6 @@
 import { viewerOwnsBot } from "@/lib/bot-capabilities";
 import type { ReactNode } from "react";
-import { formatTime, openRoutineRun, useStore, type Bot, type Group, type Message } from "@/state/store";
+import { formatTime, openRoutineRun, useStore, type AppState, type Bot, type Group, type Message } from "@/state/store";
 import type { RoomRetryRequest } from "@/lib/room-retry";
 import { ClusterLabel } from "../ClusterLabel";
 import { RoomPersonLabel } from "../MessageAuthor";

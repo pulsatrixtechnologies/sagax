@@ -30,7 +30,7 @@ import { isRoutineAutoPausedNotice } from "../../shared/transient-notices";
 import { routineAutoPauseSettled } from "@/lib/transient-notice";
 import { RoutineRunCard } from "./RoutineRunCard";
 import { GoalRunHeaderChip } from "./GoalRunCard";
-import type { SideChat } from "./ChatView";
+import type { SideChat } from "./ChatView.tsx-parts/sideChat";
 import { GroupCallOverlay } from "./GroupCallView";
 import { GroupPanel, PanelSection } from "./GroupPanel";
 import { LeaveGroupDialog } from "./LeaveGroupDialog";

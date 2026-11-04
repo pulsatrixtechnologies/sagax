@@ -401,6 +401,13 @@ public extension CompanionClient {
         return try await send(request, as: RoutineRunsCleared.self).removed
     }
 
+    /// The run logs' Clear logs (`DELETE /api/routine-runs`, the store's
+    /// `clearRoutineRuns`): every saved run the person may see; runs in
+    /// progress are kept. The ids it removed.
+    func clearAllRoutineRuns() async throws -> [String] {
+        try await send(try makeRequest("DELETE", "/api/routine-runs"), as: RoutineRunsCleared.self).removed
+    }
+
     /// "Mark all as read" (`POST /api/routine-runs/seen-all`): the ids of
     /// the runs it changed and their stamp.
     func markAllRoutineRunsSeen() async throws -> RoutineRunsSeen {

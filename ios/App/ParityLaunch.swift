@@ -289,7 +289,7 @@ enum IPadParityScreen: String, CaseIterable {
         case .mainCompact, .mainCollapsed, .mainThreads, .sidebarRowHover, .sidebarBotMenu,
              .sidebarBotContextMenu, .sidebarSectionMenu, .sidebarProfileMenu, .sidebarNewMenu, .newGroup: true
         default: isDesktopChat || opensBotPanel || isDesktopSettings || parityPage != nil || self == .keyboardShortcuts || self == .aboutDialog || self == .releaseNotesDialog
-            || self == .sidebarSelect || self == .computerWindow
+            || self == .sidebarSelect || self == .computerWindow || self == .newBot || self == .noticeThreadGone
         }
     }
 

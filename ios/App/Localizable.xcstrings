@@ -14810,6 +14810,16 @@
         }
       }
     },
+    "Capabilities for members of the organization.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Capacités pour les membres de l’organisation."
+          }
+        }
+      }
+    },
     "Card from your bot": {
       "localizations": {
         "en": {
@@ -17148,6 +17158,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Limpar filtro"
+          }
+        }
+      }
+    },
+    "Clear filters": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effacer les filtres"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Limpar filtros"
           }
         }
       }
@@ -33398,6 +33424,16 @@
         }
       }
     },
+    "Hide upcoming routines": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masquer les routines à venir"
+          }
+        }
+      }
+    },
     "Hides the request": {
       "localizations": {
         "en": {
@@ -39656,6 +39692,22 @@
         }
       }
     },
+    "Lowercase letters, digits and single hyphens, at most 64 characters.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lettres minuscules, chiffres et traits d'union simples, 64 caractères au plus."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letras minúsculas, dígitos e hífens simples, no máximo 64 caracteres."
+          }
+        }
+      }
+    },
     "MCP": {
       "localizations": {
         "en": {
@@ -42960,6 +43012,16 @@
         }
       }
     },
+    "Name your bot": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nommez votre bot"
+          }
+        }
+      }
+    },
     "Name, role or description still have edits that are not saved.": {
       "localizations": {
         "en": {
@@ -43884,6 +43946,22 @@
         }
       }
     },
+    "New skill": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouvelle compétence"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nova habilidade"
+          }
+        }
+      }
+    },
     "New task": {
       "localizations": {
         "fr": {
@@ -44176,6 +44254,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Próxima imagem"
+          }
+        }
+      }
+    },
+    "Next month": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mois suivant"
           }
         }
       }
@@ -46405,7 +46493,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aucune exécution enregistrée pour l’instant. Les résultats apparaîtront ici après le démarrage d’une routine."
+            "value": "Aucune exécution enregistrée pour l'instant. Les résultats s'afficheront ici après le démarrage d'une routine."
           }
         },
         "pt-BR": {
@@ -51457,7 +51545,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ouvrir les exécutions en problème"
+            "value": "Ouvrir les journaux d'exécution en problème"
           }
         },
         "pt-BR": {
@@ -52282,6 +52370,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ou collez une clé d’accès"
+          }
+        }
+      }
+    },
+    "Or set up with help below.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ou configurez avec de l'aide ci-dessous."
           }
         }
       }
@@ -54156,6 +54254,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rotina em pausa criada"
+          }
+        }
+      }
+    },
+    "Paused routines": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Routines en pause"
           }
         }
       }
@@ -56344,6 +56452,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Imagem anterior"
+          }
+        }
+      }
+    },
+    "Previous month": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mois précédent"
           }
         }
       }
@@ -58777,7 +58895,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Exécutions récentes de vos bots. Ouvrez une exécution pour voir son résultat, son erreur et son fil d’exécution."
+            "value": "Exécutions enregistrées récentes de tous vos bots. Ouvrez-en une pour son résultat, son erreur et son fil d'exécution."
           }
         },
         "pt-BR": {
@@ -65287,7 +65405,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Chercher dans le journal"
+            "value": "Chercher dans les journaux d'exécution"
           }
         },
         "pt-BR": {
@@ -68133,7 +68251,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Afficher plus d’exécutions"
+            "value": "Afficher plus d'exécutions"
           }
         },
         "pt-BR": {
@@ -68564,6 +68682,16 @@
         }
       }
     },
+    "Show upcoming routines": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher les routines à venir"
+          }
+        }
+      }
+    },
     "Show when I am online": {
       "localizations": {
         "en": {
@@ -68597,7 +68725,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Exécutions d’une seule routine."
+            "value": "Exécutions d'une seule routine."
           }
         },
         "pt-BR": {
@@ -74014,6 +74142,16 @@
         }
       }
     },
+    "That bot is no longer here.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce bot n’est plus là."
+          }
+        }
+      }
+    },
     "That can only be done on the computer itself.": {
       "localizations": {
         "en": {
@@ -74236,6 +74374,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cette réponse dépasse 4 Mo."
+          }
+        }
+      }
+    },
+    "That thread is no longer here.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce fil n’est plus là."
+          }
+        }
+      }
+    },
+    "That thread is no longer here. Showing %@ instead.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce fil n’est plus là. Affichage de %@ à la place."
           }
         }
       }
@@ -89067,7 +89225,7 @@
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Votre administrateur vous permet d'utiliser les robots partagés seulement."
+            "value": "Votre administrateur vous permet d'utiliser les bots partagés seulement."
           }
         },
         "pt-BR": {

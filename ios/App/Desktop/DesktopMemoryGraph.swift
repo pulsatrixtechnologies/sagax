@@ -512,7 +512,7 @@ struct DesktopGraphSettingsPanel: View {
             .accessibilityIdentifier("desktop-memory-graph.settings")
         } else {
             Button { settings.open = true } label: {
-                Image(systemName: "slider.horizontal.3").font(.system(size: 13)).foregroundStyle(theme.inkSecondary).frame(width: 32, height: 32)
+                DesktopIconView(icon: .settings2, size: 16).foregroundStyle(theme.inkSecondary).frame(width: 32, height: 32)
                     .background(theme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(theme.hairline.opacity(0.5), lineWidth: 1))
             }

@@ -25,10 +25,14 @@ struct AutomationsWeekView: View {
     let onAction: (AutomationsEventAction, RoutineCalendarItem) -> Void
 
     @State private var botQuery = ""
+    /// The right rail open (`botsOpen`); its › folds it to the strip.
+    @State private var railOpen = true
     @Environment(\.automationsDesktop) private var desktop
+    @Environment(\.desktopTheme) private var theme
 
     private static var hourHeight: CGFloat { 64 }
-    private static var gutter: CGFloat { 48 }
+    /// `64px` on the desktop's grid; the phone's narrower week keeps 48.
+    private var gutter: CGFloat { desktop ? 64 : 48 }
 
     /// `startOfWeek`: the Monday of the week holding `date`.
     static func weekStart(_ date: Date, calendar: Calendar = .current) -> Date {
@@ -40,7 +44,9 @@ struct AutomationsWeekView: View {
     private var weekStart: Date { Self.weekStart(day) }
     private var days: [Date] { (0..<7).map { RoutineCalendar.addDays(weekStart, $0) } }
 
-    private var rangeLabel: String {
+    private var rangeLabel: String { Self.rangeLabel(weekStart, desktop: desktop) }
+
+    static func rangeLabel(_ weekStart: Date, desktop: Bool) -> String {
         let end = RoutineCalendar.addDays(weekStart, 6)
         if desktop {
             // the desktop's `rangeLabel`: "November 2 - 8, 2026"
@@ -56,6 +62,57 @@ struct AutomationsWeekView: View {
     }
 
     var body: some View {
+        if desktop {
+            // the page's header holds the view switch and the dates
+            HStack(spacing: 0) {
+                AnyView(grid)
+                    .overlay(alignment: .top) { Rectangle().fill(theme.hairline.opacity(0.4)).frame(height: 0.5) }
+                    .overlay(alignment: .leading) { Rectangle().fill(theme.hairline.opacity(0.4)).frame(width: 0.5) }
+                if railOpen {
+                    AnyView(desktopSide)
+                        .frame(width: 280)
+                        .background(theme.panel)
+                        .overlay(alignment: .leading) { Rectangle().fill(theme.hairline.opacity(0.4)).frame(width: 0.5) }
+                } else {
+                    railStrip
+                }
+            }
+            .background(theme.app)
+            // the grid runs to the window's foot, as the sidebar does
+            .ignoresSafeArea(.container, edges: .bottom)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("automations-week")
+        } else {
+            phoneBody
+        }
+    }
+
+    /// `RightRailStrip`: the folded rail, its icon and the vertical label.
+    private var railStrip: some View {
+        Button { railOpen = true } label: {
+            VStack(spacing: 8) {
+                DesktopIconView(icon: .calendarClock, size: 16)
+                Text("Upcoming")
+                    .font(theme.font(11))
+                    .fixedSize()
+                    .rotationEffect(.degrees(90))
+                    .frame(width: 16, height: 70)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(theme.inkSecondary)
+            .padding(.vertical, 16)
+            .frame(width: 40)
+            .frame(maxHeight: .infinity)
+            .background(theme.panel)
+            .overlay(alignment: .leading) { Rectangle().fill(theme.hairline.opacity(0.4)).frame(width: 0.5) }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("Show upcoming routines"))
+        .accessibilityIdentifier("automations-rail-show")
+    }
+
+    private var phoneBody: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 HStack(spacing: 8) { header() }
@@ -116,13 +173,17 @@ struct AutomationsWeekView: View {
             HStack(spacing: 0) {
                 // the gutter's head names the time zone (the desktop's "GMT-5")
                 Text(verbatim: desktop ? Self.zoneLabel : "")
-                    .font(Theme.font(9.5))
-                    .foregroundStyle(Theme.textTertiary)
-                    .frame(width: Self.gutter, alignment: .center)
+                    .font(desktop ? theme.font(12, .medium) : Theme.font(9.5))
+                    .foregroundStyle(desktop ? theme.inkSecondary : Theme.textTertiary)
+                    .frame(width: gutter, alignment: .center)
+                    .frame(maxHeight: .infinity)
+                    .overlay(alignment: .bottom) { Rectangle().fill(Theme.hairline.opacity(desktop ? 0.4 : 1)).frame(height: 0.5) }
+                    .overlay(alignment: .trailing) { Rectangle().fill(Theme.hairline.opacity(desktop ? 0.4 : 1)).frame(width: 0.5) }
                 ForEach(days, id: \.self) { date in
                     AnyView(dayHeader(date))
                 }
             }
+            .fixedSize(horizontal: false, vertical: true)
             ScrollViewReader { reader in
                 ScrollView {
                     HStack(alignment: .top, spacing: 0) {
@@ -155,8 +216,8 @@ struct AutomationsWeekView: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
         .background(today ? Theme.accent.opacity(0.035) : Color.clear)
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.hairline).frame(height: 0.5) }
-        .overlay(alignment: .trailing) { Rectangle().fill(Theme.hairline).frame(width: 0.5) }
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.hairline.opacity(desktop ? 0.4 : 1)).frame(height: 0.5) }
+        .overlay(alignment: .trailing) { Rectangle().fill(Theme.hairline.opacity(desktop ? 0.4 : 1)).frame(width: 0.5) }
         .accessibilityElement(children: .combine)
     }
 
@@ -164,22 +225,30 @@ struct AutomationsWeekView: View {
     private func scrollToStart(_ reader: ScrollViewProxy) {
         let thisWeek = days.contains { Calendar.current.isDateInToday($0) }
         let hour = thisWeek ? max(0, Calendar.current.component(.hour, from: Date()) - 2) : 7
-        reader.scrollTo("week-hour-\(hour)", anchor: .top)
+        // the desktop scrolls `hour * HOUR_HEIGHT` with its day header inside
+        // the scroller: the grid shows from about an hour earlier
+        reader.scrollTo("week-hour-\(desktop ? max(0, hour - 1) : hour)", anchor: .top)
     }
 
     private var hourLabels: some View {
         VStack(spacing: 0) {
             ForEach(0..<24, id: \.self) { hour in
-                Text(verbatim: hour == 0 ? "" : AutomationsCalendarView<EmptyView>.hourText(hour))
-                    .font(Theme.font(9.5))
-                    .monospacedDigit()
-                    .foregroundStyle(Theme.textTertiary)
-                    .frame(width: Self.gutter - 8, height: Self.hourHeight, alignment: .topTrailing)
-                    .offset(y: -6)
-                    .padding(.trailing, 8)
+                // the desktop's label sits on its line (`-translate-y-1/2`)
+                Color.clear
+                    .frame(width: gutter, height: Self.hourHeight)
+                    .overlay(alignment: .topTrailing) {
+                        Text(verbatim: hour == 0 ? "" : AutomationsCalendarView<EmptyView>.hourText(hour))
+                            .font(desktop ? theme.font(11) : Theme.font(9.5))
+                            .monospacedDigit()
+                            .foregroundStyle(Theme.textTertiary)
+                            .fixedSize()
+                            .alignmentGuide(.top) { $0[VerticalAlignment.center] }
+                            .padding(.trailing, 8)
+                    }
                     .id("week-hour-\(hour)")
             }
         }
+        .overlay(alignment: .trailing) { if desktop { Rectangle().fill(theme.hairline.opacity(0.4)).frame(width: 0.5) } }
         .accessibilityHidden(true)
     }
 
@@ -290,43 +359,71 @@ struct AutomationsWeekView: View {
         }.prefix(8))
     }
 
+    /// `CalendarSidebar` in `RightRailPanel`: the › fold button, the month,
+    /// a hairline, Upcoming with its count, the drag hint.
     private var desktopSide: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            DesktopMiniMonth(day: $day)
-            HStack(spacing: 6) {
-                Image(systemName: "calendar.badge.clock").font(.system(size: 11)).foregroundStyle(Theme.textSecondary)
-                Text("Upcoming").font(Theme.font(12, .medium)).foregroundStyle(Theme.textPrimary)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Button { railOpen = false } label: {
+                    DesktopIconView(icon: .chevronRight, size: 16)
+                        .foregroundStyle(theme.inkSecondary)
+                        .padding(4)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Hide upcoming routines"))
+                .accessibilityIdentifier("automations-rail-hide")
                 Spacer()
-                Text(verbatim: "\(upcoming.count)").font(Theme.font(11)).foregroundStyle(Theme.textSecondary)
             }
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(upcoming) { item in
-                        Button { onAction(.open, item) } label: {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(verbatim: item.name).font(Theme.font(12.5, .medium)).foregroundStyle(Theme.textPrimary).lineLimit(1)
-                                HStack(spacing: 4) {
-                                    if let bot = item.botId.flatMap({ id in bots.first { $0.id == id } }) {
-                                        BotMascotView(bot: bot, size: 14).frame(width: 14, height: 14)
-                                        Text(verbatim: bot.name)
+            .padding(.horizontal, 8)
+            .padding(.top, 8)
+            DesktopMiniMonth(day: $day)
+                .padding(12)
+            Rectangle().fill(theme.hairline.opacity(0.4)).frame(height: 0.5).padding(.horizontal, 16)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    DesktopIconView(icon: .calendarClock, size: 13)
+                    Text("Upcoming").font(theme.font(12, .medium))
+                    Spacer()
+                    Text(verbatim: "\(upcoming.count)")
+                        .font(theme.font(11)).monospacedDigit()
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Capsule().fill(theme.raised))
+                }
+                .foregroundStyle(theme.inkSecondary)
+                .padding(.horizontal, 4)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(upcoming) { item in
+                            Button { onAction(.open, item) } label: {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(verbatim: item.name).font(theme.font(12.5, .medium)).foregroundStyle(theme.ink).lineLimit(1)
+                                    HStack(spacing: 4) {
+                                        if let bot = item.botId.flatMap({ id in bots.first { $0.id == id } }) {
+                                            BotMascotView(bot: bot, size: 14).frame(width: 14, height: 14)
+                                            Text(verbatim: bot.name)
+                                        }
+                                        Text(verbatim: "· ") + Self.whenText(item.date)
                                     }
-                                    Text(verbatim: "· ") + Self.whenText(item.date)
+                                    .font(theme.font(11)).foregroundStyle(theme.inkSecondary).lineLimit(1)
                                 }
-                                .font(Theme.font(11)).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                                .padding(.horizontal, 4)
+                                .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+                                .contentShape(Rectangle())
                             }
-                            .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
-                            .contentShape(Rectangle())
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
+                Text("Drag a bot from the left sidebar onto a time to schedule it.")
+                    .font(theme.font(11))
+                    .foregroundStyle(theme.inkTertiary)
+                    .padding(.horizontal, 8)
             }
-            Spacer(minLength: 0)
-            Text("Drag a bot from the left sidebar onto a time to schedule it.")
-                .font(Theme.font(11))
-                .foregroundStyle(Theme.textTertiary)
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 12)
         }
-        .padding(12)
     }
 
     // MARK: Side
@@ -408,46 +505,54 @@ struct DesktopMiniMonth: View {
     }
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 0) {
             HStack {
                 Text(verbatim: monthStart.formatted(.dateTime.month(.wide).year()))
-                    .font(Theme.font(12.5, .medium)).foregroundStyle(Theme.textPrimary)
+                    .font(Theme.font(13, .semibold)).foregroundStyle(Theme.textPrimary)
                 Spacer()
-                Button { month = calendar.date(byAdding: .month, value: -1, to: monthStart) ?? month } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 11, weight: .medium)).frame(width: 28, height: 28)
+                HStack(spacing: 2) {
+                    Button { month = calendar.date(byAdding: .month, value: -1, to: monthStart) ?? month } label: {
+                        DesktopIconView(icon: .chevronLeft, size: 15).frame(width: 28, height: 28).contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Previous month"))
+                    Button { month = calendar.date(byAdding: .month, value: 1, to: monthStart) ?? month } label: {
+                        DesktopIconView(icon: .chevronRight, size: 15).frame(width: 28, height: 28).contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Next month"))
                 }
-                .accessibilityLabel(Text("Previous month"))
-                Button { month = calendar.date(byAdding: .month, value: 1, to: monthStart) ?? month } label: {
-                    Image(systemName: "chevron.right").font(.system(size: 11, weight: .medium)).frame(width: 28, height: 28)
-                }
-                .accessibilityLabel(Text("Next month"))
             }
             .foregroundStyle(Theme.textSecondary)
-            let symbols = calendar.veryShortStandaloneWeekdaySymbols
+            .padding(.horizontal, 4)
+            .padding(.bottom, 8)
+            // MiniMonth.tsx's WEEKDAY_LABELS, Monday first
             HStack(spacing: 0) {
-                ForEach(0..<7, id: \.self) { index in
-                    Text(verbatim: symbols[(index + 1) % 7])
-                        .font(Theme.font(10, .medium)).foregroundStyle(Theme.textTertiary)
-                        .frame(maxWidth: .infinity)
+                ForEach(Array(["M", "T", "W", "T", "F", "S", "S"].enumerated()), id: \.offset) { _, letter in
+                    Text(verbatim: letter)
+                        .font(Theme.font(11, .medium)).foregroundStyle(Theme.textTertiary)
+                        .frame(maxWidth: .infinity, minHeight: 24)
                 }
             }
-            let week = AutomationsWeekView.weekStart(day, calendar: calendar)
+            .accessibilityHidden(true)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7), spacing: 2) {
                 ForEach(cells, id: \.self) { date in
                     let inMonth = calendar.isDate(date, equalTo: monthStart, toGranularity: .month)
                     let today = calendar.isDateInToday(date)
-                    let shown = date >= week && date < RoutineCalendar.addDays(week, 7)
+                    // the anchor day is filled, today is in the accent's ink
+                    let selected = calendar.isDate(date, inSameDayAs: day)
                     Button { day = RoutineCalendar.startOfDay(date) } label: {
                         Text(verbatim: date.formatted(.dateTime.day()))
-                            .font(Theme.font(11, today ? .semibold : .regular))
-                            .foregroundStyle(today ? Color.white : (inMonth ? Theme.textPrimary : Theme.textTertiary))
+                            .font(Theme.font(11, selected || today ? .semibold : .regular))
+                            .foregroundStyle(selected ? Color.white : today ? Theme.accent : (inMonth ? Theme.textPrimary : Theme.textTertiary))
                             .frame(width: 24, height: 24)
-                            .background(Circle().fill(today ? Theme.accent : Color.clear))
+                            .background(Circle().fill(selected ? Theme.accent : Color.clear))
                             .frame(maxWidth: .infinity, minHeight: 28)
-                            .background(shown && !today ? Theme.accent.opacity(0.08) : Color.clear)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(Text(verbatim: date.formatted(.dateTime.weekday(.wide).month(.wide).day().year())))
+                    .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
         }

@@ -99,8 +99,6 @@ struct ChatView: View {
     @StateObject var finder = ChatFindModel()
     /// A room's composer hint: Jev routes an Auto room (`jevRoomRoutingOn`).
     @State var roomJevOn = false
-    /// The height of the top inset (header and banners), for DesktopBannerClip.
-    @State var desktopBannerTop: CGFloat = 0
     @StateObject var follow = BottomFollow()
     @StateObject var citations = CitationDrafts()
     @State var shareFile: ShareFile?
@@ -808,7 +806,10 @@ struct ChatView: View {
                                 if row.id == newDividerBefore {
                                     if desktopChatText != nil {
                                         // NewMessagesDivider.tsx, a row of its own
+                                        // measured on the reference: about 50 pt between
+                                        // the bubbles around it (12 + 6 + 20 + 12)
                                         DesktopNewMessagesDivider()
+                                            .padding(.top, 6)
                                             .padding(.bottom, DesktopChatMetrics.rowGap)
                                     } else {
                                         NewMessagesLine()
@@ -915,10 +916,6 @@ struct ChatView: View {
                         pendingTopicReveal = nil
                     }
                 }
-                // a desktop banner (a notice, a group's band) is opaque: the
-                // transcript is cut under it rather than showing through (the
-                // banners themselves are the inset below, drawn over it)
-                .modifier(DesktopBannerClip(top: desktopChat != nil && (desktopRoom != nil || desktopChat?.notice != nil) ? desktopBannerTop : 0))
                 // The transcript starts under the top bar and scrolls
                 // beneath it: a clear inset the height of the bar, then the
                 // fade and the glass controls float over the content.
@@ -947,11 +944,16 @@ struct ChatView: View {
                         Color.clear.frame(height: (pinnedPreview == nil ? 0 : Self.pinnedBannerHeight)
                             + (callPillShown ? CallBarMetrics.inset(scale: callBarScale) : 0))
                     }
-                    .background(GeometryReader { proxy in
-                        Color.clear
-                            .onAppear { desktopBannerTop = proxy.size.height }
-                            .onValueChange(of: proxy.size.height) { desktopBannerTop = $0 }
-                    })
+                    // a desktop banner stack (a notice, a group's band) sits in
+                    // the column's flow, opaque: the transcript never shows
+                    // through it or the header above it
+                    .background {
+                        if let desktop = desktopChatText, desktopRoom != nil || desktopChat?.notice != nil {
+                            // a shape, not a Color: a Color background runs on
+                            // into the safe area below the stack
+                            Rectangle().fill(desktop.app)
+                        }
+                    }
                 }
 
                 // iPad desktop: an open find bar sits in the column's flow,

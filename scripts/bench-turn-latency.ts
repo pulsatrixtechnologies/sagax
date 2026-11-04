@@ -302,6 +302,30 @@ async function newBenchThread(api: Api, botId: string, title: string): Promise<s
   return threadId;
 }
 
+/** Simulate composer focus / typing for HTTP (#1975): POST /warm and wait
+ * until MCP mounts are ready so the measured send is not the cold mount. */
+async function prewarmBenchThread(
+  api: Api,
+  botId: string,
+  threadId: string,
+  opts: { logPath: string; logOffset: { value: number } },
+): Promise<void> {
+  const warm = await api.json("POST", `/api/bots/${botId}/warm`, { threadId });
+  if (warm.warm === "skipped" || warm.warm === "limited") return;
+  const prefix = threadId.slice(0, 8);
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    const logText = existsSync(opts.logPath) ? readFileSync(opts.logPath, "utf8") : "";
+    const fresh = logText.slice(opts.logOffset.value);
+    if (parseTraceLines(fresh).some((line) => line.thread8 === prefix && line.step === "tools-prewarmed")) {
+      opts.logOffset.value = logText.length;
+      return;
+    }
+    await sleep(50);
+  }
+  // Best effort: measure anyway if the warm timed out.
+}
+
 type TraceLine = { thread8: string; step: string; epochMs: number; sinceStart: number };
 
 function parseTraceLines(logText: string): TraceLine[] {
@@ -580,6 +604,11 @@ async function runEngineMode(
   }
 
   if (engine === "http") {
+    // Cold http opens one thread per turn and prewarms each (#1975): raise
+    // the per-person warm rate and cap idle warm sessions so MCP children
+    // do not pile up and stall the stream watch.
+    parentEnv.SAGAX_PREWARM_PER_MINUTE = parentEnv.SAGAX_PREWARM_PER_MINUTE ?? "40";
+    parentEnv.SAGAX_MAX_IDLE_ENGINE_SESSIONS = parentEnv.SAGAX_MAX_IDLE_ENGINE_SESSIONS ?? "3";
     httpFixture = await startHttpFixture();
   }
 
@@ -655,17 +684,30 @@ async function runEngineMode(
 
     for (let i = 0; i < turns + 1; i++) {
       const warmup = i === 0;
+      let justOpened = false;
       const threadId = mode === "warm"
         ? (warmThread ?? (warmThread = await (async () => {
           const id = await newBenchThread(api, bot.id, "latency-warm");
           seedHistory(fixture.info.dataDir, id, history);
+          justOpened = true;
           return id;
         })()))
         : await (async () => {
           const id = await newBenchThread(api, bot.id, `latency-cold-${i}`);
           seedHistory(fixture.info.dataDir, id, history);
+          justOpened = true;
           return id;
         })();
+
+      // HTTP #1975: simulate composer focus so cold http measures a turn
+      // that already has its MCP mounts, not the mount itself. CLI cold
+      // mode still starts without /warm (process cold start is the point).
+      if (engine === "http" && justOpened) {
+        await prewarmBenchThread(api, bot.id, threadId, {
+          logPath: fixture.info.logPath,
+          logOffset,
+        });
+      }
 
       const launchesBefore = readLaunchCount(engine === "http" ? undefined : launchFile);
       const sample = await measureTurn({
@@ -683,6 +725,11 @@ async function runEngineMode(
         text: `Bench turn ${i}: summarize the fixture plan in one short paragraph.`,
       });
       samples.push(sample);
+      // Cold http: drop the just-measured thread so its MCP mount is not
+      // held across the rest of the run (idle cap alone can lag under load).
+      if (mode === "cold" && engine === "http" && !warmup) {
+        await api.json("DELETE", `/api/bots/${bot.id}/tasks/${threadId}`).catch(() => {});
+      }
       // Brief gap so a reused CLI drains its previous result before the next send.
       await sleep(500);
     }

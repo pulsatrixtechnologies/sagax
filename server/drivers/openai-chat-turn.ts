@@ -6,7 +6,7 @@ import { allowsTool, parseToolScope } from "../../shared/tool-scope.ts";
 import { redactSecretsInText } from "../redact.ts";
 import { cwToolResult, toolDetailPreview, toolFailurePreview } from "../tools/tool-summary.ts";
 import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../shared/phone-tools.ts";
-import { ChatToolSessionError, mountChatTools, providerToolLimit, type ChatToolSession, type ChatToolResult } from "./chat-mcp-tools.ts";
+import { ChatToolSessionError, mountChatTools, type ChatToolSession, type ChatToolResult } from "./chat-mcp-tools.ts";
 import { assertImageTransport, chatImageBudget, chatToolImages, type ChatContentPart } from "./chat-images.ts";
 import { createChatToolApproval } from "./chat-tool-approval.ts";
 import { ChatProtocolError, object } from "./openai-chat-protocol.ts";
@@ -36,7 +36,7 @@ import {
   stoppedAfter,
 } from "./openai-chat-shared.ts";
 import { turnTrace } from "../turns/turn-trace.ts";
-import { chatToolsFingerprint, withWarmTokens, type WarmToolSessions } from "./openai-chat-tools-warm.ts";
+import { chatToolsFingerprint, chatToolsTurnLimit, withWarmTokens, type WarmToolSessions } from "./openai-chat-tools-warm.ts";
 
 export type OpenAIChatActiveTurn = {
   abort: AbortController;
@@ -76,6 +76,24 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
     if (turn.warmOnly === true) {
       if (!turn.warmSignal?.aborted) {
         if (await pingModels(turn)) rememberWarm(turn.threadId);
+        // #1975: mount MCP now so a cold HTTP thread reuses them on the
+        // first real turn (same fingerprint / warmCommsEnv as #1953).
+        if (options.tools !== false && turn.integrations) {
+          turnTrace(turn.threadId, "tools-prewarm-start");
+          const outcome = await warmToolSessions.prewarm(turn, {
+            computerUse: Boolean(options.computerUse),
+            toolLimit: options.toolLimit,
+            driverKind: options.driverKind,
+            // TurnAccess identity is person-scoped on org servers; botId is
+            // enough on solo (one person). Caps concurrent waiting prewarms.
+            person: turn.access?.identity ?? turn.botId,
+            signal: turn.warmSignal,
+          });
+          if (outcome === "mounted" || outcome === "kept") {
+            rememberWarm(turn.threadId);
+            turnTrace(turn.threadId, "tools-prewarmed");
+          }
+        }
         turn.warmSignal?.addEventListener("abort", () => releaseWarm(turn.threadId), { once: true });
       }
       return { turnId: newId() };
@@ -191,12 +209,21 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
         const questionAllowed = options.tools !== false && allowsTool(scope, { kind: "native", name: ASK_USER_TOOL });
         // Never name more tools than the provider takes: past its limit the
         // session defers the rest behind a search (chat-mcp-tools.ts), and
-        // ask_user, added below, keeps its place within the limit.
-        const toolLimit = (options.toolLimit ?? providerToolLimit(options.driverKind)) - (questionAllowed ? 1 : 0);
+        // ask_user, added below, keeps its place within the limit. Same
+        // formula as warmOnly prewarm (chatToolsTurnLimit) so fingerprints match.
+        const limit = chatToolsTurnLimit({
+          toolsEnabled: options.tools !== false,
+          toolLimit: options.toolLimit,
+          driverKind: options.driverKind,
+          toolScope: turn.toolScope,
+        });
+        if (!limit.ok) throw new Error(limit.error);
+        const toolLimit = limit.toolLimit;
         turnTrace(turn.threadId, "tools-mount-start");
         // Per-turn tokens ride files (spawn-contract warmCommsEnv) so a kept
         // agents MCP process serves the next turn of this thread without a
-        // cold spawn before first token (#1953).
+        // cold spawn before first token (#1953). A warmOnly prewarm (#1975)
+        // lands in the same cache under the same fingerprint.
         const warmTurn = options.tools === false ? turn : withWarmTokens(turn, turn.threadId);
         mountIntegrations = options.tools === false ? undefined : warmTurn.integrations;
         toolsFp = chatToolsFingerprint(mountIntegrations, {
@@ -209,6 +236,7 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
         if (cached) {
           tools = cached;
           toolsReused = true;
+          warmToolSessions.claim(turn.threadId);
           turnTrace(turn.threadId, "tools-reused");
         } else {
           tools = await mountChatTools(mountIntegrations, abort.signal, options.computerUse, scope, turn.mcpCallTimeoutMs, toolLimit);
@@ -556,7 +584,7 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
             // token files). An interrupted turn drops it so a half-dead
             // MCP child is never reused.
             if (!abort.signal.aborted && mountIntegrations) {
-              warmToolSessions.keep(turn.threadId, tools, toolsFp);
+              warmToolSessions.keep(turn.threadId, tools, toolsFp, { prewarmed: false });
             } else if (toolsReused) {
               await warmToolSessions.release(turn.threadId);
             } else {

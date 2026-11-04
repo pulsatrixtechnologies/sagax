@@ -339,6 +339,7 @@ export function createOpenAIChatRuntime<Config>(options: RuntimeOptions<Config>)
         guestTurns: "confined",
         // GET /models on warmOnly, then ping while the call thread is warm so
         // the next spoken turn reuses the HTTP pool (no billed completion).
+        // Also mounts MCP ahead of the first HTTP turn (#1975).
         ...(options.warmSession ? { warmSession: true } : {}),
         ...(options.effortLevels ? { effortLevels: options.effortLevels } : {}) },
       sendTurn,

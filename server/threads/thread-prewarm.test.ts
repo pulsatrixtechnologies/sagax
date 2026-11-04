@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { namedTeammates, prewarmWindowMs, ThreadPrewarm } from "./thread-prewarm.ts";
+import { namedTeammates, prewarmPerPersonPerMinute, prewarmWindowMs, ThreadPrewarm } from "./thread-prewarm.ts";
 
 afterEach(() => vi.useRealTimers());
 
@@ -85,6 +85,13 @@ describe("ThreadPrewarm", () => {
     expect(prewarmWindowMs({ SAGAX_PREWARM_WINDOW_MS: "5000" })).toBe(5_000);
     expect(prewarmWindowMs({ SAGAX_PREWARM_WINDOW_MS: "99999999" })).toBe(600_000);
     expect(prewarmWindowMs({ SAGAX_PREWARM_WINDOW_MS: "nope" })).toBe(90_000);
+  });
+
+  it("reads SAGAX_PREWARM_PER_MINUTE for the per-person warm rate", () => {
+    expect(prewarmPerPersonPerMinute({})).toBe(6);
+    expect(prewarmPerPersonPerMinute({ SAGAX_PREWARM_PER_MINUTE: "40" })).toBe(40);
+    expect(prewarmPerPersonPerMinute({ SAGAX_PREWARM_PER_MINUTE: "999" })).toBe(120);
+    expect(prewarmPerPersonPerMinute({ SAGAX_PREWARM_PER_MINUTE: "nope" })).toBe(6);
   });
 });
 

@@ -20,6 +20,13 @@ export const PREWARM_PER_PERSON_PER_MINUTE = 6;
  * in one conversation at a time. A new warm closes the oldest. */
 export const PREWARM_MAX_WAITING = 3;
 
+/** Override the per-person warm rate (bench / lab). Cap 120. */
+export function prewarmPerPersonPerMinute(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = Number(env.SAGAX_PREWARM_PER_MINUTE);
+  if (Number.isFinite(raw) && raw >= 1) return Math.min(Math.floor(raw), 120);
+  return PREWARM_PER_PERSON_PER_MINUTE;
+}
+
 /** At most this many teammates warmed for one request. */
 export const NAMED_TEAMMATES_MAX = 2;
 

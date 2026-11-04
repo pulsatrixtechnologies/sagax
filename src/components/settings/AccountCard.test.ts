@@ -4,7 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { personLabel, resetPersonLabelsForTests } from "@/lib/person-labels";
+import { storedPersonLabel, resetPersonLabelsForTests } from "@/lib/person-labels";
 import { setLocale } from "@/lib/i18n";
 
 // Settings > General's one account card, clicked in a DOM: the label is
@@ -89,7 +89,7 @@ describe("Settings > General account card", () => {
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); input.blur(); });
-    await vi.waitFor(() => expect(personLabel("pr_owner")).toBe("CTO"));
+    await vi.waitFor(() => expect(storedPersonLabel("pr_owner")).toBe("CTO"));
     expect(calls).toContainEqual({ path: "/api/people/pr_owner/label", method: "PUT", body: { label: "CTO" } });
   });
 

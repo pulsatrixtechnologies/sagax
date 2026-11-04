@@ -1279,5 +1279,15 @@
   "Sign-in required": "harnessConnectors.status.needsAuth",
   "Unavailable": "harnessConnectors.status.failed",
   "Unknown": "harnessConnectors.status.unknown",
-  "Not verifiable: Grok catalog": "connectApps.grok.description"
+  "Not verifiable: Grok catalog": "connectApps.grok.description",
+  "Uses a tool.": "approval.line.other",
+  "Only reads data. Nothing changes.": "approval.line.read",
+  "Makes changes.": "approval.line.write",
+  "Runs an action.": "approval.line.execute",
+  "Deletes data.": "approval.line.destructive",
+  "Open the table in full screen": "rich.table.fullscreen",
+  "Table": "rich.table.region",
+  "Close table": "table.close",
+  "chat.newMessages": "chat.newMessages",
+  "New messages": "chat.newMessagesAria"
 }

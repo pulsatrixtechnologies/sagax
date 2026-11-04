@@ -22,12 +22,15 @@ final class BottomFollow: ObservableObject {
     private weak var scrollView: UIScrollView?
     private var observations: [NSKeyValueObservation] = []
 
-    /// Set by `hold()`: the end does not re-arm the follow on its own.
-    private var held = false
+    /// Set by `hold()`: the end does not re-arm the follow on its own, and
+    /// the transcript was moved by the app, not left by the reader, so no
+    /// Jump to latest (the desktop's follow only breaks on the reader's
+    /// wheel, drag or PageUp).
+    @Published private(set) var held = false
 
     /// The reader asked for the end (the jump button, a send, a new thread).
     func resume() {
-        held = false
+        if held { held = false }
         if !following { following = true }
     }
 
@@ -86,7 +89,7 @@ final class BottomFollow: ObservableObject {
     /// wheel or PageUp on the desktop.
     @objc private func dragged(_ pan: UIPanGestureRecognizer) {
         guard let scroll = pan.view as? UIScrollView, pan.state == .changed || pan.state == .ended else { return }
-        held = false
+        if held { held = false }
         if pan.translation(in: scroll).y > 0, distance(scroll) > Self.threshold { following = false }
     }
 }

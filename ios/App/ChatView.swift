@@ -403,7 +403,7 @@ struct ChatView: View {
                 filePreview = nil
             }
         }
-        .modifier(DevPodsPresentation(isPresented: $showingDevPods, inspector: desktopChat != nil) {
+        .modifier(DevPodsPresentation(isPresented: $showingDevPods, inspector: desktopChat != nil, enabled: devPodsEnabled || showingDevPods) {
             devPodsContent
         })
         .onValueChange(of: devPodsSignature, initial: true) { _ in evaluateDevPods() }
@@ -803,8 +803,17 @@ struct ChatView: View {
                                 } else if index > 0 {
                                     Color.clear.frame(height: Self.rowGap)
                                 }
-                                if desktopChatText == nil, row.id == newDividerBefore {
-                                    NewMessagesLine()
+                                if row.id == newDividerBefore {
+                                    if desktopChatText != nil {
+                                        // NewMessagesDivider.tsx, a row of its own
+                                        // measured on the reference: about 50 pt between
+                                        // the bubbles around it (12 + 6 + 20 + 12)
+                                        DesktopNewMessagesDivider()
+                                            .padding(.top, 6)
+                                            .padding(.bottom, DesktopChatMetrics.rowGap)
+                                    } else {
+                                        NewMessagesLine()
+                                    }
                                 }
                                 // WP15 (RM21): another person's name over their run
                                 if case let .person(_, name, initials, personId)? = roomPersonLabel(at: index, in: transcript) {
@@ -921,6 +930,12 @@ struct ChatView: View {
                         if let desktopRoom {
                             DesktopRoomBanners(room: desktopRoom)
                         }
+                        // ChatNotice: in the banner stack, under the header
+                        if let notice = desktopChat?.notice {
+                            DesktopChatNotice(notice: notice)
+                                .padding(.bottom, 8)
+                                .transition(.opacity)
+                        }
                         // A confidential thread's band: in the reserved
                         // inset, so the transcript never moves under it.
                         if ConfidentialBanner.shows(for: current) {
@@ -929,7 +944,18 @@ struct ChatView: View {
                         Color.clear.frame(height: (pinnedPreview == nil ? 0 : Self.pinnedBannerHeight)
                             + (callPillShown ? CallBarMetrics.inset(scale: callBarScale) : 0))
                     }
+                    // a desktop banner stack (a notice, a group's band) sits in
+                    // the column's flow, opaque: the transcript never shows
+                    // through it or the header above it
+                    .background {
+                        if let desktop = desktopChatText, desktopRoom != nil || desktopChat?.notice != nil {
+                            // a shape, not a Color: a Color background runs on
+                            // into the safe area below the stack
+                            Rectangle().fill(desktop.app)
+                        }
+                    }
                 }
+
                 // iPad desktop: an open find bar sits in the column's flow,
                 // so the transcript is cut under it (ChatView.tsx)
                 .modifier(DesktopFindClip(open: desktopChat != nil && finder.isOpen && session.surfaceGate.allows(.findInConversation)))
@@ -950,7 +976,7 @@ struct ChatView: View {
                         .padding(.top, Self.topBarHeight + 6)
                 }
                 .overlay(alignment: .bottom) {
-                    if !follow.following, !transcript.isEmpty {
+                    if !follow.following, !follow.held, !transcript.isEmpty {
                         if desktopChat != nil {
                             // JumpToLatestPill.tsx: 16 above the composer
                             DesktopJumpToLatestPill {

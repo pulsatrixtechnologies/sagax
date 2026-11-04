@@ -18240,6 +18240,16 @@
         }
       }
     },
+    "Close table": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fermer le tableau"
+          }
+        }
+      }
+    },
     "Close team dialog": {
       "localizations": {
         "fr": {
@@ -24912,6 +24922,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rotina excluída"
+          }
+        }
+      }
+    },
+    "Deletes data.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supprime des données."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apaga dados."
           }
         }
       }
@@ -41380,6 +41406,22 @@
         }
       }
     },
+    "Makes changes.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apporte des modifications."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faz alterações."
+          }
+        }
+      }
+    },
     "Manage": {
       "localizations": {
         "en": {
@@ -52216,6 +52258,22 @@
         }
       }
     },
+    "Only reads data. Nothing changes.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lit seulement des données. Rien ne change."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Só lê dados. Nada muda."
+          }
+        }
+      }
+    },
     "Only restore backups you trust: instructions, skills, and bot permissions are restored too. Reconnect accounts as needed. Routines, webhooks, and calendar calls arrive paused; pending work is not resumed.": {
       "localizations": {
         "fr": {
@@ -53512,6 +53570,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ouvrir l'étape"
+          }
+        }
+      }
+    },
+    "Open the table in full screen": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir le tableau en plein écran"
           }
         }
       }
@@ -65548,6 +65616,22 @@
         }
       }
     },
+    "Runs an action.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exécute une action."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Executa uma ação."
+          }
+        }
+      }
+    },
     "Runs as": {
       "localizations": {
         "en": {
@@ -75256,6 +75340,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Notificação do sistema em segundo plano"
+          }
+        }
+      }
+    },
+    "Table": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tableau"
           }
         }
       }
@@ -86922,6 +87016,22 @@
         }
       }
     },
+    "Uses a tool.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Utilise un outil."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa uma ferramenta."
+          }
+        }
+      }
+    },
     "Uses permissions defined in config.toml": {
       "localizations": {
         "en": {
@@ -95380,6 +95490,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "alterado fora do app"
+          }
+        }
+      }
+    },
+    "chat.newMessages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nouveaux"
           }
         }
       }

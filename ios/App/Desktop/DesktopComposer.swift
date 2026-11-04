@@ -629,6 +629,10 @@ enum DesktopLucide {
     static let mic = ["M12 19v3", "M19 10v2a7 7 0 0 1-14 0v-2", "M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"]
     static let audioLines = ["M2 10v3", "M6 6v11", "M10 3v18", "M14 8v7", "M18 5v13", "M22 10v3"]
     static let chevronDown = ["m6 9 6 6 6-6"]
+    /// lucide Maximize2 (RichTable.tsx's fullscreen button).
+    static let maximize2 = ["M15 3h6v6", "m21 3-7 7", "m3 21 7-7", "M9 21H3v-6"]
+    /// lucide Table2 (TableFilePreview.tsx's preview button).
+    static let table2 = ["M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"]
     /// lucide Smile, SmilePlus, Reply, Ellipsis (MessageHoverActions.tsx).
     static let smile = [circle(12, 12, 10), "M8 14s1.5 2 4 2 4-2 4-2", "M9 9h.01", "M15 9h.01"]
     static let smilePlus = ["M22 11v1a10 10 0 1 1-9-10", "M8 14s1.5 2 4 2 4-2 4-2", "M9 9h.01", "M15 9h.01", "M16 5h6", "M19 2v6"]

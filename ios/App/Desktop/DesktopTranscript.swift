@@ -212,7 +212,9 @@ struct DesktopMessageHoverStrip: View {
     @ViewBuilder
     private var replyButton: some View {
         if let reply = model.actions.reply {
+            // the user side mirrors the arrow (`-scale-x-100`)
             DesktopActionButton(lucide: DesktopLucide.reply, label: "Reply", action: reply)
+                .scaleEffect(x: mine ? -1 : 1, y: 1)
                 .accessibilityIdentifier("desktop-message-reply")
         }
     }
@@ -435,24 +437,57 @@ struct DesktopFileChip: View {
     let name: String
     let loading: Bool
 
+    /// `filePreviewKind` (TableFilePreview.tsx): what the chip's preview
+    /// button opens, from the name.
+    enum PreviewKind { case table, pdf, json, html }
+
+    static func previewKind(_ name: String) -> PreviewKind? {
+        let lower = name.lowercased().trimmingCharacters(in: .whitespaces)
+        if [".csv", ".tsv", ".xlsx"].contains(where: lower.hasSuffix) { return .table }
+        if lower.hasSuffix(".pdf") { return .pdf }
+        if lower.hasSuffix(".json") { return .json }
+        if lower.hasSuffix(".html") || lower.hasSuffix(".htm") { return .html }
+        return nil
+    }
+
+    /// CompactFileChip: a 28 pt pill at 6 % ink, the file glyph, the name
+    /// 13, the download glyph (ps-2.5 pe-2), then the preview button as a
+    /// 24 pt circle (`.file-chip .table-action`) for a file the app opens.
     var body: some View {
-        HStack(spacing: 6) {
-            DesktopIconView(icon: .fileText, size: 14)
-                .foregroundStyle(theme.inkSecondary)
-            Text(verbatim: name)
-                .font(theme.font(13))
-                .foregroundStyle(theme.ink)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            if loading {
-                ProgressView().controlSize(.mini)
-            } else {
-                DesktopLucideGlyph(paths: DesktopLucide.download, size: 13)
+        HStack(spacing: 0) {
+            HStack(spacing: 6) {
+                DesktopIconView(icon: .fileText, size: 14)
                     .foregroundStyle(theme.inkSecondary)
+                Text(verbatim: name)
+                    .font(theme.font(13))
+                    .foregroundStyle(theme.ink)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if loading {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    DesktopLucideGlyph(paths: DesktopLucide.download, size: 13, strokeWidth: 1.75)
+                        .foregroundStyle(theme.inkSecondary)
+                }
+            }
+            .padding(.leading, 10)
+            .padding(.trailing, 8)
+            if let kind = Self.previewKind(name) {
+                Group {
+                    switch kind {
+                    case .table: DesktopLucideGlyph(paths: DesktopLucide.table2, size: 14)
+                    case .pdf: DesktopIconView(icon: .fileText, size: 14)
+                    case .json: Image(systemName: "curlybraces").font(.system(size: 12))
+                    case .html: Image(systemName: "globe").font(.system(size: 12))
+                    }
+                }
+                .foregroundStyle(theme.inkSecondary)
+                .frame(width: 24, height: 24)
+                .contentShape(Circle())
+                .padding(.trailing, 2)
+                .accessibilityHidden(true)
             }
         }
-        .padding(.leading, 10)
-        .padding(.trailing, 10)
         .frame(height: 28)
         .fixedSize()
         .background(theme.ink.opacity(0.06), in: Capsule())
@@ -673,6 +708,8 @@ struct DesktopApprovalHeading: View {
     let risk: ApprovalRisk?
     let theme: DesktopTheme
     var aside: AnyView? = nil
+    /// ApprovalParts.tsx's summary under the title (`mt-0.5 text-[13px]`).
+    var summary: String? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -680,17 +717,41 @@ struct DesktopApprovalHeading: View {
                 BotMascotView(bot: bot, size: 30, state: .idle, animated: false)
                     .frame(width: 30, height: 30)
             }
-            HStack(alignment: .center, spacing: 8) {
-                Text(verbatim: title)
-                    .font(theme.font(15, .semibold))
-                    .foregroundStyle(theme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("approval-heading")
-                if let risk { DesktopRiskChip(risk: risk, theme: theme) }
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .center, spacing: 8) {
+                    Text(verbatim: title)
+                        .font(theme.font(15, .semibold))
+                        .foregroundStyle(theme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("approval-heading")
+                    if let risk { DesktopRiskChip(risk: risk, theme: theme) }
+                }
+                .frame(minHeight: 22.5)
+                if let summary {
+                    Text(verbatim: summary)
+                        .font(theme.font(13))
+                        .foregroundStyle(theme.inkSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("approval-summary")
+                }
             }
-            .frame(minHeight: 22.5)
             .frame(maxWidth: .infinity, alignment: .leading)
             if let aside { aside }
+        }
+    }
+}
+
+/// `approvalPlain`'s fallback line (shared/approval-describe.ts), for a tool
+/// ask with nothing readable to show: "Uses a tool.", "Only reads data.
+/// Nothing changes.", ...
+enum DesktopApprovalLine {
+    static func fallback(_ risk: ApprovalRisk?) -> String {
+        switch risk {
+        case .read: String(localized: "Only reads data. Nothing changes.")
+        case .write: String(localized: "Makes changes.")
+        case .execute: String(localized: "Runs an action.")
+        case .destructive: String(localized: "Deletes data.")
+        case nil: String(localized: "Uses a tool.")
         }
     }
 }
@@ -1034,5 +1095,31 @@ struct DesktopJumpToLatestPill: View {
         .accessibilityLabel(Text("Jump to latest messages"))
         .accessibilityIdentifier("jump-to-latest")
         .transition(.scale(scale: 0.9).combined(with: .opacity))
+    }
+}
+
+/// NewMessagesDivider.tsx: a 1 pt rule fading in from each side to the
+/// accent at 60 %, "NEW" between (11 pt semibold, 0.08 em tracking, the
+/// accent text), 2 pt above and below the 16 pt line.
+struct DesktopNewMessagesDivider: View {
+    @Environment(\.desktopTheme) private var theme
+
+    var body: some View {
+        HStack(spacing: 12) {
+            LinearGradient(colors: [theme.accent.opacity(0), theme.accent.opacity(0.6)], startPoint: .leading, endPoint: .trailing)
+                .frame(height: 1)
+            Text(String(localized: "chat.newMessages", defaultValue: "New"))
+                .textCase(.uppercase)
+                .font(theme.font(11, .semibold))
+                .tracking(11 * 0.08)
+                .foregroundStyle(theme.accent)
+                .frame(height: 16)
+            LinearGradient(colors: [theme.accent.opacity(0.6), theme.accent.opacity(0)], startPoint: .leading, endPoint: .trailing)
+                .frame(height: 1)
+        }
+        .padding(.vertical, 2)
+        .accessibilityElement()
+        .accessibilityLabel(Text("New messages"))
+        .accessibilityIdentifier("desktop-new-messages")
     }
 }

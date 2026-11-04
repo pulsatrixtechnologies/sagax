@@ -6860,6 +6860,16 @@
         }
       }
     },
+    "Add a card": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter une carte"
+          }
+        }
+      }
+    },
     "Add a community server?": {
       "localizations": {
         "en": {
@@ -16084,6 +16094,22 @@
         }
       }
     },
+    "Check for updates": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher des mises à jour"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verificar atualizações"
+          }
+        }
+      }
+    },
     "Check now": {
       "localizations": {
         "en": {
@@ -17340,6 +17366,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Escolha quem vê este bot, suas conversas, as salas em que está e seus arquivos. Admins sempre podem."
+          }
+        }
+      }
+    },
+    "Chosen. Not live yet: %@. Nothing is charged.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Branché. Pas encore en service: %@. Rien n'est facturé."
           }
         }
       }
@@ -27990,6 +28026,16 @@
         }
       }
     },
+    "Encrypted on this computer with the system keychain, or with the server's key.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chiffrés sur cet ordinateur avec le trousseau du système, ou avec la clé du serveur."
+          }
+        }
+      }
+    },
     "End call": {
       "localizations": {
         "fr": {
@@ -29074,6 +29120,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tout le catalogue est déjà installé."
+          }
+        }
+      }
+    },
+    "Everything in the vault": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tout"
           }
         }
       }
@@ -36710,6 +36772,16 @@
         }
       }
     },
+    "Install a downloaded update when you are away and no bot is working.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installer une mise à jour téléchargée quand vous êtes absent et qu'aucun bot ne travaille."
+          }
+        }
+      }
+    },
     "Install it and sign in on the computer, in Sagax > Settings > Model providers. This list updates when you check again.": {
       "localizations": {
         "en": {
@@ -39774,6 +39846,16 @@
         }
       }
     },
+    "Link": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link"
+          }
+        }
+      }
+    },
     "Link copied": {
       "localizations": {
         "en": {
@@ -40086,6 +40168,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transcription en direct"
+          }
+        }
+      }
+    },
+    "Live: %@ is signed in on this computer. Sagax asks it for a one-time card after you allow a purchase.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En service : %@ est connecté sur cet ordinateur. Sagax lui demande une carte à usage unique après votre accord."
           }
         }
       }
@@ -49132,6 +49224,16 @@
         }
       }
     },
+    "Not connected. Turn this on to use the account you already have. Nothing is charged.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas branché. Activez pour utiliser le compte que vous avez déjà. Rien n'est facturé."
+          }
+        }
+      }
+    },
     "Not enabled": {
       "localizations": {
         "fr": {
@@ -51598,12 +51700,32 @@
         }
       }
     },
+    "On the iPad, automatic updates are set in Settings > App Store.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur l'iPad, les mises à jour automatiques se règlent dans Réglages > App Store."
+          }
+        }
+      }
+    },
     "On the iPad, choose Persistent banners in Settings > Notifications > Sagax.": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Sur l'iPad, choisissez les bannières persistantes dans Réglages > Notifications > Sagax."
+          }
+        }
+      }
+    },
+    "On the iPad, the App Store build is the stable channel and TestFlight carries the versions still in testing.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur l'iPad, la version de l'App Store est le canal stable et TestFlight porte les versions encore en test."
           }
         }
       }
@@ -52066,6 +52188,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Uma vez"
+          }
+        }
+      }
+    },
+    "One-time card": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carte à usage unique"
           }
         }
       }
@@ -69818,6 +69950,26 @@
         }
       }
     },
+    "Shop Pay": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shop Pay"
+          }
+        }
+      }
+    },
+    "Shop Pay and Link are wallets you already have. Sagax asks that wallet for a one-time card only after you allow the purchase, through the wallet's own command line tool signed in on this computer. The site does not receive a saved card number, and the bot never sees it.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shop Pay et Link sont des portefeuilles que vous avez déjà. Sagax demande une carte à usage unique seulement après votre accord, par l'outil en ligne de commande du portefeuille connecté sur cet ordinateur. Le site ne reçoit pas le numéro enregistré, et le bot ne le voit pas."
+          }
+        }
+      }
+    },
     "Shop Pay and Link are wallets you already have. Sagax asks that wallet for a one-time card only after you allow the purchase, through the wallet's own command line tool signed in on your computer. The site does not receive a saved card number, and the bot never sees it.": {
       "localizations": {
         "en": {
@@ -73286,6 +73438,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Quadrado"
+          }
+        }
+      }
+    },
+    "Stable": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stable"
+          }
+        }
+      }
+    },
+    "Stable, or Nightly for versions still in testing.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stable, ou Nightly pour les versions encore en essai."
           }
         }
       }
@@ -80376,6 +80548,16 @@
         }
       }
     },
+    "This app": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette application"
+          }
+        }
+      }
+    },
     "This approval needs your security key, and this address cannot use one. Approve it from the desktop app or a browser on https.": {
       "localizations": {
         "fr": {
@@ -86098,6 +86280,16 @@
         }
       }
     },
+    "Update channel": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Canal de mise à jour"
+          }
+        }
+      }
+    },
     "Update now": {
       "localizations": {
         "fr": {
@@ -86158,6 +86350,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Atualizar esta habilidade aprendida"
+          }
+        }
+      }
+    },
+    "Update while I am away": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mettre à jour pendant mon absence"
           }
         }
       }
@@ -93378,6 +93580,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossible de charger votre utilisation. Réessayez plus tard."
+          }
+        }
+      }
+    },
+    "Your vault": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre coffre"
+          }
+        }
+      }
+    },
+    "Your vault is empty. Add a login here, or save one when a bot asks.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Votre coffre est vide. Ajoutez un identifiant ici, ou enregistrez-en un quand un bot le demande."
           }
         }
       }

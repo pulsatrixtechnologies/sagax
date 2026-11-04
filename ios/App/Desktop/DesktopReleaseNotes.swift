@@ -340,10 +340,10 @@ struct DesktopReleaseMarkdown: View {
                 case let .bullet(text):
                     HStack(alignment: .firstTextBaseline, spacing: 0) {
                         // `list-disc marker:text-ink-tertiary`: the list's own disc
-                        Text(verbatim: "•")
-                            .font(theme.font(13.5))
-                            .foregroundStyle(theme.inkTertiary)
+                        Circle().fill(theme.inkTertiary)
+                            .frame(width: 5, height: 5)
                             .frame(width: 20, alignment: .center)
+                            .alignmentGuide(.firstTextBaseline) { $0[.bottom] + 4 }
                         inline(text)
                             .font(theme.font(13.5))
                             .lineSpacing(3.5)

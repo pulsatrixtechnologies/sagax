@@ -1123,13 +1123,17 @@ struct DesktopBackupsSettings: View {
             AppStrings.localized("Saved account credentials and connections are not included. Reconnect your accounts on a new machine; existing credentials on the destination stay unchanged. External CLI sign-ins and remote VM disks are not included."),
             AppStrings.localized("Chats, drafts, and user files are not automatically redacted and may contain pasted secrets. Keep this backup private and save its password safely; it cannot be recovered."),
         ].joined(separator: "\n\n")))), identifier: "backups") {
-            DesktopDescribedRow(Text("Export a backup"), description: Text("An encrypted copy of your bots, conversations and files, to restore here or on another computer."), identifier: "backupExport") {
-                Button("Export") { open = open == "export" ? nil : "export" }
-                    .buttonStyle(DesktopPillButtonStyle())
-                    .accessibilityIdentifier("desktop-settings.backup-export-open")
-            } below: {
-                if open == "export" { exportForm.padding(.top, 8) }
-            }
+            {
+                var row = DesktopDescribedRow(Text("Export a backup"), description: Text("An encrypted copy of your bots, conversations and files, to restore here or on another computer."), identifier: "backupExport") {
+                    Button("Export") { open = open == "export" ? nil : "export" }
+                        .buttonStyle(DesktopPillButtonStyle())
+                        .accessibilityIdentifier("desktop-settings.backup-export-open")
+                } below: {
+                    if open == "export" { exportForm.padding(.top, 8) }
+                }
+                row.descriptionWidth = 440
+                return row
+            }()
             DesktopDescribedRow(Text("Restore a backup"), description: Text("Replaces everything here, once the file is checked."), identifier: "backupRestore") {
                 Button("Restore") { open = open == "import" ? nil : "import" }
                     .buttonStyle(DesktopPillButtonStyle())

@@ -545,6 +545,8 @@ struct DesktopDescribedRow<Control: View, Below: View>: View {
     var help: Text? = nil
     /// The lucide icon before the label (`icon`, ink-secondary, 14 pt).
     var icon: DesktopSettingsIcon? = nil
+    /// Where Chrome's wider glyphs wrap the grey line sooner than iOS's.
+    var descriptionWidth: CGFloat? = nil
     var identifier: String = ""
     @ViewBuilder let control: () -> Control
     @ViewBuilder let below: () -> Below
@@ -577,6 +579,7 @@ struct DesktopDescribedRow<Control: View, Below: View>: View {
                         if let description {
                             DesktopText(description, size: 12, line: 16, color: \.inkSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: descriptionWidth, alignment: .leading)
                         }
                     }
                 }
@@ -967,12 +970,13 @@ struct DesktopPillButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(theme.font(13))
-            .foregroundStyle(danger ? theme.danger : primary ? theme.app : theme.ink)
+            .foregroundStyle(danger ? theme.danger : primary && enabled ? theme.app : theme.ink)
             .padding(.horizontal, 13)
             .frame(height: 30)
-            .background(primary ? theme.ink.opacity(configuration.isPressed ? 0.85 : 1)
+            // a disabled primary pill reads as the grey pill with its text, as Chrome draws it
+            .background(primary ? (enabled ? theme.ink.opacity(configuration.isPressed ? 0.85 : 1) : theme.selected)
                         : (configuration.isPressed ? theme.selected : theme.hover), in: Capsule())
-            .opacity(enabled ? 1 : 0.5)
+            .opacity(enabled ? 1 : (primary ? 0.85 : 0.5))
             .contentShape(Capsule())
     }
 }

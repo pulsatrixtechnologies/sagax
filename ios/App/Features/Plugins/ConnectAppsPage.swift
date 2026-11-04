@@ -1123,6 +1123,8 @@ struct ConnectAppsManage: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .background(theme.inset, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                // the tools row's mb-3
+                .padding(.top, 12)
             }
         }
         .listRowBackground(Color.clear)

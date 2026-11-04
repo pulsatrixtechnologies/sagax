@@ -51,11 +51,14 @@ import com.openmausbot.companion.core.GroupMemoryConflict
 import com.openmausbot.companion.core.GroupMemoryView
 import com.openmausbot.companion.core.GroupPanelTab
 import com.openmausbot.companion.core.GroupSuggestionAction
+import com.openmausbot.companion.core.LibraryEntry
+import com.openmausbot.companion.core.LibraryGroups
+import com.openmausbot.companion.core.LibraryRules
 import com.openmausbot.companion.core.MemoryCapacity
 import com.openmausbot.companion.core.Room
 import com.openmausbot.companion.core.RoomPatch
 import com.openmausbot.companion.core.RoomResponder
-import com.openmausbot.companion.core.RoomViewer
+import com.openmausbot.companion.core.Routine
 import com.openmausbot.companion.core.groupComputerBots
 import com.openmausbot.companion.core.groupRoutines
 import com.openmausbot.companion.core.leadResponder
@@ -80,6 +83,7 @@ internal fun GroupPanelSheet(
     val session = environment.session
     val state by session.state.collectAsState()
     val connection by session.connection.collectAsState()
+    val account by session.account.collectAsState()
     val scope = rememberCoroutineScope()
 
     val current = state.rooms.firstOrNull { it.id == roomId }
@@ -91,8 +95,8 @@ internal fun GroupPanelSheet(
     val members = remember(current, bots) { GroupPanelRules.memberBots(current, bots) }
     // Solo Mac pairings have no serverEnvironmentId; org servers do.
     val organization = connection?.pairedWithServer == true
-    val viewer = remember { RoomViewer() }
-    val access = remember(current, bots, organization) {
+    val viewer = remember(account) { session.roomViewer }
+    val access = remember(current, bots, organization, viewer) {
         GroupPanelRules.access(current, bots, viewer, organization = organization)
     }
     val ownBots = remember(current, bots, viewer) {
@@ -110,10 +114,11 @@ internal fun GroupPanelSheet(
     var nameDraft by rememberSaveable(current.id) { mutableStateOf(current.name) }
     var bulletinDraft by rememberSaveable(current.id) { mutableStateOf(current.bulletin) }
     var advancedOpen by rememberSaveable(current.id) { mutableStateOf(false) }
-    var routines by remember(current.id) { mutableStateOf<List<com.openmausbot.companion.core.Routine>>(emptyList()) }
+    var routines by remember(current.id) { mutableStateOf<List<Routine>>(emptyList()) }
     var leaveConfirm by remember { mutableStateOf(false) }
     var deleteConfirm by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    var routineEditor by remember { mutableStateOf<RoutineEditorTarget?>(null) }
 
     LaunchedEffect(current.id) {
         nameDraft = current.name
@@ -249,11 +254,21 @@ internal fun GroupPanelSheet(
                 GroupPanelTab.DETAILS -> GroupDetailsTab(
                     room = current,
                     access = access,
+                    members = members,
                     ownBots = ownBots,
                     routines = routines,
                     onOpenTab = { picked = it.id },
                     onOpenThreads = onOpenThreads,
                     onOpenRoutines = onOpenRoutines,
+                    onOpenRoutine = { routine ->
+                        routineEditor = RoutineEditorTarget.edit(routine)
+                    },
+                    onNewRoutine = {
+                        routineEditor = RoutineEditorTarget.new(
+                            groupId = current.id,
+                            preferredBotId = leadId ?: ownBots.firstOrNull()?.id,
+                        )
+                    },
                 )
                 GroupPanelTab.MEMBERS -> GroupMembersTab(
                     room = current,
@@ -311,13 +326,7 @@ internal fun GroupPanelSheet(
                     },
                 )
                 GroupPanelTab.MEMORY -> GroupMemoryTab(room = current)
-                GroupPanelTab.LIBRARY -> FormSection(header = GroupPanelRules.LIBRARY) {
-                    Text(
-                        GroupPanelRules.LIBRARY_EMPTY,
-                        fontSize = 13.sp,
-                        color = secondaryTint,
-                    )
-                }
+                GroupPanelTab.LIBRARY -> GroupLibraryTab(room = current)
                 GroupPanelTab.COMPUTER -> GroupComputerTab(
                     bots = computerBots,
                     leadId = leadId,
@@ -328,6 +337,18 @@ internal fun GroupPanelSheet(
                 )
             }
         }
+    }
+
+    routineEditor?.let { target ->
+        RoutineEditorSheet(
+            target = target,
+            onSaved = {
+                scope.launch {
+                    routines = groupRoutines(session.loadRoutines().routines, current)
+                }
+            },
+            onDismiss = { routineEditor = null },
+        )
     }
 
     if (leaveConfirm) {
@@ -410,11 +431,14 @@ private fun GroupAvatarStack(members: List<Bot>, size: androidx.compose.ui.unit.
 private fun GroupDetailsTab(
     room: Room,
     access: com.openmausbot.companion.core.RoomInfoAccess,
+    members: List<Bot>,
     ownBots: List<Bot>,
-    routines: List<com.openmausbot.companion.core.Routine>,
+    routines: List<Routine>,
     onOpenTab: (GroupPanelTab) -> Unit,
     onOpenThreads: () -> Unit,
     onOpenRoutines: () -> Unit,
+    onOpenRoutine: (Routine) -> Unit,
+    onNewRoutine: () -> Unit,
 ) {
     val suggestions = GroupPanelRules.suggestions(
         room = room,
@@ -433,7 +457,7 @@ private fun GroupDetailsTab(
                                 when (item.action) {
                                     GroupSuggestionAction.INSTRUCTIONS -> onOpenTab(GroupPanelTab.INSTRUCTIONS)
                                     GroupSuggestionAction.MEMBERS -> onOpenTab(GroupPanelTab.MEMBERS)
-                                    GroupSuggestionAction.ROUTINE -> onOpenRoutines()
+                                    GroupSuggestionAction.ROUTINE -> onNewRoutine()
                                 }
                             }
                             .padding(vertical = 8.dp),
@@ -475,16 +499,40 @@ private fun GroupDetailsTab(
         FormSection(header = "Routines", footer = GroupPanelRules.ROUTINES_HINT) {
             if (routines.isEmpty()) {
                 Text(GroupPanelRules.ROUTINES_HINT, fontSize = 13.sp, color = secondaryTint)
-            } else {
-                routines.forEach { routine ->
-                    Text(
-                        routine.name,
-                        fontSize = 15.sp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 6.dp),
+                if (access.editable && ownBots.isNotEmpty() && room.dm != true) {
+                    ActionRow(
+                        text = GroupPanelRules.ROUTINES_CREATE,
+                        onClick = onNewRoutine,
                     )
                 }
+            } else {
+                routines.forEach { routine ->
+                    val botName = members.firstOrNull { it.id == routine.botId }?.name
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clipClickable { onOpenRoutine(routine) }
+                            .padding(vertical = 8.dp)
+                            .semantics {
+                                contentDescription = "Open routine ${routine.name}"
+                            },
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(routine.name, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        if (botName != null) {
+                            Text(botName, fontSize = 12.sp, color = secondaryTint)
+                        }
+                    }
+                }
+                if (access.editable && ownBots.isNotEmpty() && room.dm != true) {
+                    ActionRow(
+                        text = GroupPanelRules.ROUTINES_CREATE,
+                        onClick = onNewRoutine,
+                    )
+                }
+            }
+            TextButton(onClick = onOpenRoutines) {
+                Text("All routines", fontSize = 13.sp)
             }
         }
     }
@@ -504,7 +552,38 @@ private fun GroupMembersTab(
     onDelete: () -> Unit,
     busy: Boolean,
 ) {
+    val people = remember(room) { GroupPanelRules.peopleIds(room) }
     Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        FormSection(header = GroupPanelRules.PEOPLE) {
+            if (people.isEmpty()) {
+                Text(GroupPanelRules.PEOPLE_EMPTY, fontSize = 13.sp, color = secondaryTint)
+            } else {
+                people.forEach { humanId ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = MIN_TOUCH_TARGET),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.size(36.dp),
+                        ) {}
+                        Text(
+                            GroupPanelRules.personLabel(humanId),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+        }
+
         FormSection(header = GroupPanelRules.BOTS) {
             members.forEach { bot ->
                 val isLead = bot.id == leadId
@@ -518,15 +597,27 @@ private fun GroupMembersTab(
                     BotAvatar(bot = bot, size = 36.dp, state = MausState.HAPPY)
                     Column(Modifier.weight(1f)) {
                         Text(bot.name, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                        if (isLead) {
-                            Text(
-                                GroupPanelRules.LEAD_BADGE,
-                                fontSize = 12.sp,
-                                color = secondaryTint,
-                            )
+                        if (bot.title.isNotBlank()) {
+                            Text(bot.title, fontSize = 12.sp, color = secondaryTint, maxLines = 1)
                         }
                     }
-                    if (access.editable && !isLead) {
+                    if (isLead) {
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                            modifier = Modifier.semantics {
+                                contentDescription = GroupPanelRules.leadBadgeTitle(bot.name)
+                            },
+                        ) {
+                            Text(
+                                GroupPanelRules.LEAD_BADGE,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            )
+                        }
+                    } else if (access.editable) {
                         TextButton(
                             onClick = { onMakeLead(bot.id) },
                             enabled = !busy,
@@ -775,6 +866,71 @@ private fun GroupMemoryTab(room: Room) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun GroupLibraryTab(room: Room) {
+    val session = LocalCompanion.current.session
+    var groups by remember(room.id) { mutableStateOf<LibraryGroups?>(null) }
+    var loading by remember(room.id) { mutableStateOf(true) }
+    var olderExpanded by rememberSaveable(room.id) { mutableStateOf(false) }
+
+    LaunchedEffect(room.id, room.threadId, room.tasks) {
+        loading = true
+        val files = session.loadGroupLibraryFiles(room)
+        groups = LibraryRules.groups(files)
+        loading = false
+    }
+
+    FormSection(header = GroupPanelRules.LIBRARY) {
+        when {
+            loading && groups == null -> Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                Text(GroupPanelRules.LIBRARY_LOADING, fontSize = 13.sp, color = secondaryTint)
+            }
+            groups == null || groups!!.isEmpty -> Text(
+                GroupPanelRules.LIBRARY_EMPTY,
+                fontSize = 13.sp,
+                color = secondaryTint,
+            )
+            else -> {
+                val list = groups!!
+                LibraryGroupBlock(GroupPanelRules.LIBRARY_PINNED, list.pinned)
+                LibraryGroupBlock(GroupPanelRules.LIBRARY_TODAY, list.today)
+                LibraryGroupBlock(GroupPanelRules.LIBRARY_THIS_WEEK, list.thisWeek)
+                val older = list.older
+                if (older.isNotEmpty()) {
+                    val shown = if (olderExpanded) older else older.take(LibraryRules.OLDER_PREVIEW)
+                    LibraryGroupBlock(GroupPanelRules.LIBRARY_OLDER, shown)
+                    if (!olderExpanded && older.size > LibraryRules.OLDER_PREVIEW) {
+                        TextButton(onClick = { olderExpanded = true }) {
+                            Text(GroupPanelRules.LIBRARY_SHOW_MORE, fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryGroupBlock(title: String, entries: List<LibraryEntry>) {
+    if (entries.isEmpty()) return
+    Text(title, fontSize = 12.sp, color = secondaryTint, fontWeight = FontWeight.Medium)
+    entries.forEach { entry ->
+        Text(
+            entry.title,
+            fontSize = 15.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+        )
     }
 }
 

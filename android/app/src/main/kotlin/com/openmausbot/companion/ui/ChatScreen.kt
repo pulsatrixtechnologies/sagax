@@ -158,6 +158,8 @@ fun ChatScreen(
     retainsDraft: (chatId: String) -> Boolean = { false },
     /** An "Opened thread" chip pointing at another bot pushes that chat. */
     onOpenChat: (Chat) -> Unit = {},
+    /** Group panel → All routines: push the Tasks & Routines screen. */
+    onOpenRoutines: () -> Unit = {},
 ) {
     val session = LocalCompanion.current.session
     val state by session.state.collectAsState()
@@ -177,7 +179,17 @@ fun ChatScreen(
             // Resolve the owner without changing the task named by the destination.
             val resolved = (destination as? Destination.Thread)?.let { resolution.chat.target }
             LaunchedEffect(resolved) { if (resolved != null) onResolved(resolved) }
-            LoadedChat(resolution.chat, state, onBack, onOpenComputer, onOpenOverview, retainsDraft, onResolved, onOpenChat)
+            LoadedChat(
+                resolution.chat,
+                state,
+                onBack,
+                onOpenComputer,
+                onOpenOverview,
+                retainsDraft,
+                onResolved,
+                onOpenChat,
+                onOpenRoutines,
+            )
         }
     }
 }
@@ -218,6 +230,7 @@ private fun LoadedChat(
     retainsDraft: (chatId: String) -> Boolean,
     onSelectTask: (ChatTarget) -> Unit,
     onOpenChat: (Chat) -> Unit,
+    onOpenRoutines: () -> Unit,
 ) {
     // This screen's selected task, independent of the desktop's selection.
     val threadId = chat.threadId
@@ -1179,7 +1192,7 @@ private fun LoadedChat(
             },
             onOpenRoutines = {
                 showingGroupPanel = false
-                // Routines live under Settings; the roster + sheet stays the entry.
+                onOpenRoutines()
             },
         )
     }

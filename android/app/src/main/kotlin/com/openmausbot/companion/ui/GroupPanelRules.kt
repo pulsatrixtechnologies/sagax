@@ -25,6 +25,13 @@ object GroupPanelRules {
     const val LEAVE: String = "Leave group"
     const val MAKE_LEAD: String = "Make lead"
     const val LEAD_BADGE: String = "Lead"
+    const val LIBRARY_PINNED: String = "Pinned"
+    const val LIBRARY_TODAY: String = "Today"
+    const val LIBRARY_THIS_WEEK: String = "This week"
+    const val LIBRARY_OLDER: String = "Older"
+    const val LIBRARY_SHOW_MORE: String = "Show more"
+    const val LIBRARY_LOADING: String = "Loading the library…"
+    const val PEOPLE_EMPTY: String = "No people in this group yet."
     const val INSTRUCTIONS: String = "Group instructions"
     const val INSTRUCTIONS_EMPTY: String = "No group instructions yet."
     const val INSTRUCTIONS_PLACEHOLDER: String = "Goals, tone, ownership, constraints…"
@@ -79,6 +86,20 @@ object GroupPanelRules {
     fun makeLeadAria(name: String): String = "Make $name the lead"
 
     fun computerOf(name: String): String = "Computer of $name"
+
+    /**
+     * A person's row label when the org directory is not on the phone yet:
+     * email as written, else the principal id.
+     */
+    fun personLabel(humanId: String): String {
+        val trimmed = humanId.trim()
+        if (trimmed.isEmpty()) return "Person"
+        return trimmed
+    }
+
+    /** People listed on the room, newest-stable order kept. */
+    fun peopleIds(room: Room): List<String> =
+        (room.humanIds ?: emptyList()).map { it.trim() }.filter { it.isNotEmpty() }
 
     /**
      * Solo pairings manage rooms fully. An organization server still lets

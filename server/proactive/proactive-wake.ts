@@ -572,10 +572,32 @@ export function proactivePrompt(mode: ProactiveMode): string {
  * spent a model run, and a wake that reran the routine could fail again
  * and wake the bot again. A known engine auth / credits reconnect condition
  * also never wakes: the person must reconnect, and a wake would fail again. */
-export function runFailureWakesBot(run: { status: string; error?: string; attention?: string; proactive?: unknown }): boolean {
+export function runFailureWakesBot(run: { status: string; error?: string; attention?: string; proactive?: unknown; readiness?: ReadonlyArray<{ ok: boolean }> }): boolean {
   if (run.status !== "failed" || run.error === ROUTINE_RESTARTED || run.proactive) return false;
   if (isEngineReconnectCondition(run.error) || isEngineReconnectCondition(run.attention)) return false;
+  if (run.readiness?.some((check) => !check.ok) || isDeterministicRunBlock(run.error)) return false;
   return true;
+}
+
+/** 2026-11-04: a failure the same run would hit again, word for word, until
+ * a person changes something (a pack's profile list, a lock another routine
+ * holds, a refused Flow admission, a failed readiness or precheck, a missing
+ * input). A wake on one cannot fix it: measured on an organization server,
+ * each such wake spent 116k to 720k tokens to restate the error, and the
+ * person is already notified of the failure itself. */
+const DETERMINISTIC_RUN_BLOCKS: readonly RegExp[] = [
+  /routine_not_for_profile|not_for_profile|server_profiles/i,
+  /`?run\.init`?\s*(?:was\s+)?(?:refus|reject|denied|blocked)/i,
+  /lock was held by other routines|already_running|lease (?:is |was )?held/i,
+  /\breadiness\b.*\b(?:failed|blocked|not ready)|\bprecheck\b.*\b(?:failed|blocked)/i,
+  /\b(?:missing|required) (?:routine )?(?:input|plan|file)s?\b/i,
+  /not in the read allowlist|outside the read allowlist/i,
+  /rate limiting this server; this run is skipped|stayed unreachable for several minutes/i,
+];
+
+export function isDeterministicRunBlock(error: string | undefined): boolean {
+  if (!error) return false;
+  return DETERMINISTIC_RUN_BLOCKS.some((pattern) => pattern.test(error));
 }
 
 // ── proposals (propose mode) ──────────────────────────────────────────

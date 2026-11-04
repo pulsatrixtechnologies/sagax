@@ -5,13 +5,12 @@
 //   SAGAX_TURN_TRACE=1 node --experimental-strip-types scripts/bench-turn-context.ts
 //   SAGAX_TURN_TRACE=1 node --experimental-strip-types scripts/bench-turn-context.ts --messages 40 --warm 20 --cold 10
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync, existsSync, openSync, closeSync, cpSync, rmSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, existsSync, openSync, closeSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { setTimeout as delay } from "node:timers/promises";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { tmpdir } from "node:os";
 
 import {
   launchVerificationServer,
@@ -37,28 +36,6 @@ const HISTORY = Number(values.messages);
 const WARM = Number(values.warm);
 const COLD = Number(values.cold);
 const WANT_HASH = values.hash === true;
-
-const STEPS = [
-  "start",
-  "prewarm-joined",
-  "compacted",
-  "context-selected",
-  "soul-drift",
-  "skills-selected",
-  "oauth-refreshed",
-  "mcp-mounted",
-  "integrations",
-  "prompt-start",
-  "prompt-sections",
-  "connectors-patched",
-  "state.prompt-built",
-  "recall",
-  "access",
-  "command",
-  "send",
-] as const;
-
-type Step = (typeof STEPS)[number] | string;
 
 const SOUL = ("You are Wren, a careful assistant for Osprey. " +
   "Cite sources. Keep answers short. Never invent client names. ").repeat(40).slice(0, 2048);
@@ -104,7 +81,7 @@ function gapsBetween(steps: Array<{ step: string; at: number }>): Record<string,
 async function api(url: string, path: string, init: RequestInit = {}) {
   const response = await fetch(`${url}${path}`, {
     ...init,
-    headers: { "content-type": "application/json", origin: url, ...(init.headers ?? {}) },
+    headers: { "content-type": "application/json", origin: url, ...init.headers },
   });
   if (!response.ok) throw new Error(`${init.method ?? "GET"} ${path}: ${response.status} ${await response.text()}`);
   if (response.status === 204) return null;
@@ -259,10 +236,6 @@ function dumpHash(dumpPath: string): string | null {
   return createHash("sha256").update(body).digest("hex");
 }
 
-const keepDir = join(tmpdir(), `sagax-turn-context-bench-${process.pid}`);
-rmSync(keepDir, { recursive: true, force: true });
-mkdirSync(keepDir, { recursive: true });
-
 const bootstrap = await launchVerificationServer({
   ...process.env,
   SAGAX_TURN_TRACE: "1",
@@ -270,11 +243,12 @@ const bootstrap = await launchVerificationServer({
   SAGAX_CONTENT_ENCRYPTION: "0",
 });
 let url = bootstrap.info.url;
-let dataDir = bootstrap.info.dataDir;
+const dataDir = bootstrap.info.dataDir;
 let logPath = bootstrap.info.logPath;
 let dumpPath = bootstrap.fixtureDumpPath;
 let env = { SAGAX_URL: url };
 let liveClose: (() => Promise<void>) | null = null;
+let bootstrapStopped = false;
 
 console.log(JSON.stringify({
   benchmark: "turn-context",
@@ -289,7 +263,16 @@ console.log(JSON.stringify({
 let logOffset = readFileSync(logPath).length;
 const warmGaps: Array<Record<string, number>> = [];
 const coldGaps: Array<Record<string, number>> = [];
+const warmQueue: number[] = [];
+const coldQueue: number[] = [];
 const hashes: string[] = [];
+
+async function readQueueMs(botId: string, threadId: string): Promise<number | null> {
+  const body = await api(url, `/api/bots?messages=0`) as { bots: Array<{ id: string; tasks?: Array<{ threadId?: string; taskId?: string; turnTiming?: { queueMs?: number } }> }> };
+  const bot = body.bots.find((row) => row.id === botId);
+  const task = bot?.tasks?.find((row) => row.threadId === threadId || row.taskId === threadId);
+  return typeof task?.turnTiming?.queueMs === "number" ? task.turnTiming.queueMs : null;
+}
 
 try {
   const created = await runControlOmb(["new-bot", "--name", "Wren"], { env }) as { bot: { id: string; activeTaskId: string } };
@@ -301,18 +284,17 @@ try {
   await runControlOmb(["send", "--bot", botId, "--task", threadId, "--text", "Prime the bench fixture."], { env });
   await settle(url, botId, 90);
 
-  // Keep the data dir, stop the bootstrap server, seed history offline, relaunch.
-  cpSync(dataDir, keepDir, { recursive: true });
-  await bootstrap.close();
+  // Stop the child but keep dataDir (cwd paths stay valid), seed, relaunch.
+  await waitForExit(bootstrap.child, { signal: "SIGTERM" });
+  bootstrapStopped = true;
   if (HISTORY > 0) {
     console.error(`seeding ${HISTORY} history message pairs offline…`);
-    await seedHistoryOffline(keepDir, threadId, HISTORY);
+    await seedHistoryOffline(dataDir, threadId, HISTORY);
   }
   const port = await freePortBlock([0, 1]);
-  const relaunched = await relaunchOnDataDir(keepDir, port);
+  const relaunched = await relaunchOnDataDir(dataDir, port);
   liveClose = () => relaunched.close();
   url = relaunched.url;
-  dataDir = keepDir;
   logPath = relaunched.logPath;
   dumpPath = relaunched.fixtureDumpPath;
   env = { SAGAX_URL: url };
@@ -328,7 +310,13 @@ try {
     const steps = parseTrace(text, prefix);
     const lastStart = [...steps].reverse().findIndex((s) => s.step === "start" || s.step.startsWith("start:"));
     const run = lastStart >= 0 ? steps.slice(steps.length - 1 - lastStart) : steps;
-    warmGaps.push(gapsBetween(run));
+    const gaps = gapsBetween(run);
+    const queueMs = await readQueueMs(botId, threadId);
+    if (queueMs !== null) {
+      gaps["accept->send(queueMs)"] = queueMs;
+      warmQueue.push(queueMs);
+    }
+    warmGaps.push(gaps);
     if (WANT_HASH) {
       const hash = dumpHash(dumpPath);
       if (hash) hashes.push(hash);
@@ -337,6 +325,9 @@ try {
     if (payload) console.error(payload);
   }
   summarize(`warm-${HISTORY}`, warmGaps);
+  if (warmQueue.length) {
+    console.log(JSON.stringify({ acceptToSend: `warm-${HISTORY}`, p50: percentile(warmQueue, 0.5), p95: percentile(warmQueue, 0.95), n: warmQueue.length }));
+  }
 
   for (let i = 0; i < COLD; i++) {
     const task = await api(url, `/api/bots/${botId}/tasks`, {
@@ -351,13 +342,22 @@ try {
     logOffset = next;
     const prefix = coldThread.slice(0, 8);
     const steps = parseTrace(text, prefix);
-    coldGaps.push(gapsBetween(steps));
+    const gaps = gapsBetween(steps);
+    const queueMs = await readQueueMs(botId, coldThread);
+    if (queueMs !== null) {
+      gaps["accept->send(queueMs)"] = queueMs;
+      coldQueue.push(queueMs);
+    }
+    coldGaps.push(gaps);
     if (WANT_HASH) {
       const hash = dumpHash(dumpPath);
       if (hash) hashes.push(hash);
     }
   }
   summarize(`cold-${HISTORY}`, coldGaps);
+  if (coldQueue.length) {
+    console.log(JSON.stringify({ acceptToSend: `cold-${HISTORY}`, p50: percentile(coldQueue, 0.5), p95: percentile(coldQueue, 0.95), n: coldQueue.length }));
+  }
 
   if (WANT_HASH && hashes.length) {
     const unique = [...new Set(hashes)];
@@ -365,6 +365,9 @@ try {
   }
 } finally {
   if (liveClose) await liveClose();
-  else await bootstrap.close().catch(() => undefined);
-  rmSync(keepDir, { recursive: true, force: true });
+  if (!bootstrapStopped) await bootstrap.close().catch(() => undefined);
+  else {
+    // bootstrap.close would remove dataDir; the child is already stopped.
+    rmSync(dataDir, { recursive: true, force: true });
+  }
 }

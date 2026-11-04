@@ -242,6 +242,8 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
       github: { clientId: null, fromEnvironment: false }, pluginMarketplaces: { mode: "any" },
       // 84841aeed (capabilities lot 4): this older directory keeps local policy.
       pluginMarketplacesOwner: "local",
+      // 0be6878de: unanswered approvals expire after seven days by default.
+      pendingApprovalExpireDays: 7,
       // Pulsatrix Flow for members (#1091)
       flowPlugins: expect.anything(),
     });
@@ -319,6 +321,9 @@ posixOnly("Perspicax organization, slice 3: directory, sharing with a user, acce
     expect(mine.find((engine) => engine.instanceId === "claude")).toMatchObject({ orgKey: false, orgKeyNotGiven: true, myTurns: "none" });
     setBob(undefined);
     await signIn(BOB);
+    // Directory refresh is asynchronous; the next case needs the restored grant.
+    await waitFor(async () => ((await api("GET", "/api/me/engines", bob)).body.engines as Array<{ instanceId: string; orgKey: boolean }>)
+      .find(engine => engine.instanceId === "claude")?.orgKey === true);
   }, 60_000);
 
   it("S3-5 (C): removing bob's grant ends his stream and the bot is gone for him at once", async () => {

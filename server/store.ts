@@ -2711,11 +2711,14 @@ export class Store {
     return bot;
   }
 
-  setTaskActivity(botId: string, threadId: string, activity: BotActivity): BotRecord | null {
+  setTaskActivity(botId: string, threadId: string, activity: BotActivity, options?: { settledQuestion?: boolean }): BotRecord | null {
     const bot = this.bot(botId);
     const task = this.taskByThread(botId, threadId);
     if (!bot || !task) return null;
-    const busy = ACTIVITY_BUSY.has(activity);
+    // A persistent question still needs the person after its engine ended.
+    // Keep that attention state on every device, but free the turn slot so
+    // its answer starts a new turn instead of queuing behind a dead engine.
+    const busy = activity === "waiting-on-you" && options?.settledQuestion === true ? false : ACTIVITY_BUSY.has(activity);
     if ((task.activity ?? "idle") === activity && Boolean(task.busy) === busy) return bot;
     const wasBusy = Boolean(task.busy);
     task.activity = activity;
@@ -2746,15 +2749,15 @@ export class Store {
    * (server/threads/thread-privacy.ts), never over someone else's. */
   activityOf(botId: string, include: (task: TaskRecord) => boolean): { activity: BotActivity; busy: boolean } {
     const bot = this.bot(botId);
+    const tasks = (bot?.tasks ?? []).filter((task) => include(task) && !task.routineRunId);
+    const legacy = this.legacyActivities.get(botId);
     const activities = [
-      this.legacyActivities.get(botId),
-      ...(bot?.tasks ?? [])
-        .filter((task) => include(task) && !task.routineRunId)
-        .map((task) => task.activity),
+      legacy,
+      ...tasks.map((task) => task.activity),
     ];
     const activity = (["waiting-on-you", "no-signal", "working", "dead"] as const)
       .find((candidate) => activities.includes(candidate)) ?? "idle";
-    return { activity, busy: ACTIVITY_BUSY.has(activity) };
+    return { activity, busy: Boolean(legacy && ACTIVITY_BUSY.has(legacy)) || tasks.some((task) => task.busy === true) };
   }
 
   /** Who owns a bot, as one key per person. index.ts sets the server's own

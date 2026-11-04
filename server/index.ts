@@ -750,6 +750,7 @@ import {
 } from "../shared/email-draft-send.ts";
 import { builtinAgentToolName, memberOwnScopeTool, unknownAgentToolRefusal } from "./people/member-tool-scope.ts";
 import { serverApprovalWords } from "./approvals/approval-words.ts";
+import { finalConfirmation, finalConfirmationOptions } from "./approvals/final-confirmation.ts";
 import { personLanguageOf } from "./people/person-language.ts";
 import {
   isModelVariant,
@@ -16812,8 +16813,7 @@ function notify(notification: Notification | null) {
   // 2026-10-29: an outside agent's conversation (a person's AI client over
   // MCP) is silent for the person, but for what only they can answer
   if (notification && notificationInAgentConversation(notification)) return;
-  // ...and even that never rings a phone or a watch: the AI client that
-  // asked carries the approval to the person; the desktop still shows it
+  // Routine and MCP decisions reach the person on every device (#1984).
   if (notification && notificationQuietOnPhones(notification)) notification = { ...notification, quietOnPhones: true };
   // the conversation on a live voice call is heard, not buzzed (notify.ts)
   if (notification && quietForCall(notification, lastPersonMessage(notification.threadId), Date.now(), Boolean(voiceCalls.active(notification.threadId)))) return;
@@ -16857,7 +16857,10 @@ type HarnessChoice = { title: string; question: string; options: string[] };
  * question card instead. Never in a room (its speakers answer there). */
 function harnessQuestionThread(threadId: string): boolean {
   if (store.groupByThread(threadId)) return false;
-  return routineRunThread(threadId) || notificationInHiddenThread(threadId);
+  const bot = store.botByThread(threadId);
+  return routineRunThread(threadId) || notificationInHiddenThread(threadId)
+    || Boolean(bot && isAgentConversation(store.taskByThread(bot.id, threadId)))
+    || lastPersonMessage(threadId)?.aiClient === true;
 }
 
 /** The bot's ask_choice as a question request: the same path as an engine's
@@ -16866,7 +16869,7 @@ function harnessQuestionThread(threadId: string): boolean {
  * notification and the run's "Waiting for your answer". No engine holds the
  * request (harnessAsk): the answer comes back as the person's next message
  * (deliverLateQuestionAnswer). The card's row, or null when none was drawn. */
-function raiseHarnessQuestion(threadId: string, choice: HarnessChoice): { messageId: string } | null {
+function raiseHarnessQuestion(threadId: string, choice: HarnessChoice, origin: "tool" | "output" = "tool"): { messageId: string } | null {
   if (!store.botByThread(threadId)) return null;
   const requestId = `ask-choice-${newId()}`;
   const header = choice.title !== "Your bot has a question" ? choice.title.slice(0, 40) : undefined;
@@ -16875,7 +16878,7 @@ function raiseHarnessQuestion(threadId: string, choice: HarnessChoice): { messag
     type: "request.opened", requestType: "question", requestId, tool: "ask_choice", summary: choice.question,
     choices: choice.options,
     questions: [{ ...(header ? { header } : {}), question: choice.question, options: choice.options.map((label) => ({ label })) }],
-    origin: "tool", harnessAsk: true,
+    origin, harnessAsk: true,
   });
   const messageId = askMessageByRequest.get(`${threadId}:${requestId}`);
   return messageId ? { messageId } : null;
@@ -17054,8 +17057,9 @@ function notificationIsInterBotChatter(notification: Notification): boolean {
 
 /** Whether a notification comes out of a conversation an AI client holds
  * with a bot over MCP, an outside agent's (shared/agent-conversation.ts) or a
- * hidden one (#291): never on a phone or a watch, approvals included. */
+ * hidden one (#291). Decisions reach phones and watches too (#1984). */
 function notificationQuietOnPhones(notification: Notification): boolean {
+  if (notification.kind === "approval" || notification.kind === "question") return false;
   if (!notification.threadId) return false;
   // 2026-11-02: a routine run's thread is hidden, but what it asks is the
   // person's (prod: an approval never reached the phone and expired). Only an
@@ -19011,6 +19015,33 @@ bus.subscribe((event: RuntimeEvent) => {
       }
     }
   }
+  // #1984: recover a final confirmation before the routine manager settles
+  // the run or the MCP wait observes completion. Output supplies a question,
+  // never a grant: its answer still goes through every ordinary write gate.
+  // Existing tool cards keep their own identity, choices and lifecycle.
+  if (event.type === "turn.completed") {
+    const threadBot = store.botByThread(event.threadId);
+    const task = threadBot && store.taskByThread(threadBot.id, event.threadId);
+    const request = directRequestOwners.get(event.threadId);
+    const personLine = request?.messageId
+      ? store.messagesFor(event.threadId).find((line) => line.id === request.messageId)
+      : lastPersonMessage(event.threadId);
+    const text = lastReply.get(event.threadId) ?? "";
+    const confirmation = finalConfirmation({
+      text,
+      routineRun: routineRunThread(event.threadId),
+      mcpStarted: isAgentConversation(task) || notificationInHiddenThread(event.threadId) || personLine?.aiClient === true,
+      ok: event.ok,
+      stopped: stoppedTurns.has(event.threadId) || request?.stopped === true || event.stopReason === "interrupted" || event.stopReason === "cancelled",
+      hasCard: Boolean(openPersonCard(event.threadId)),
+    });
+    if (confirmation && threadBot && task && !store.groupByThread(event.threadId)) {
+      raiseHarnessQuestion(event.threadId, {
+        title: "Your bot has a question", question: confirmation,
+        options: finalConfirmationOptions(languageOfPerson(task.ownerPrincipalId ?? recordedBotOwner(threadBot))),
+      }, "output");
+    }
+  }
   const routineRun = privateImageEvent ? null : (routines?.handleRuntimeEvent(event) ?? null);
   const ownerBot = store.botByThread(event.threadId);
   const bot = ownerBot ? botForThread(ownerBot.id, event.threadId) ?? undefined : undefined;
@@ -20163,7 +20194,7 @@ bus.subscribe((event: RuntimeEvent) => {
             // the person's conversation says so and opens the run (2026-10-22).
             const waitingRun = routineRun ? routines?.runForThread(event.threadId) : null;
             if (waitingRun?.status === "waiting") syncRoutineRunToSource(waitingRun);
-            else if (asker.busy) store.setActivity(asker.id, "waiting-on-you");
+            else if (!bot && asker.busy) store.setActivity(asker.id, "waiting-on-you");
             if (event.requestId) showWaitingOnPersonChip(event.threadId, event.requestId, asker, permission ? "approval" : "answer");
             const notificationBot = (routineRun && routineSourceOwner(routineRun)?.bot) || asker;
             // #1743: name the execution thread that holds the card. A routine's
@@ -20611,7 +20642,9 @@ bus.subscribe((event: RuntimeEvent) => {
           scheduleFinishUntilRound(bot.id, event.threadId, { ok: event.ok, stopped: clientStopped });
           scheduleUnfinishedTurn(bot.id, event.threadId, completedTurnId, { ok: event.ok, stopped, personTurn });
           if (store.taskByThread(bot.id, event.threadId)?.activity !== "dead") {
-            store.setTaskActivity(bot.id, event.threadId, resourceOwner?.computerParkedOn !== undefined ? "parked.computer" : "idle");
+            const question = event.ok && !stopped && openQuestionCard(event.threadId);
+            store.setTaskActivity(bot.id, event.threadId, question ? "waiting-on-you" : resourceOwner?.computerParkedOn !== undefined ? "parked.computer" : "idle",
+              question ? { settledQuestion: true } : undefined);
           }
           directTurnBots.delete(event.threadId);
           if (continueComputerSelection(event.threadId, generation, event.ok)) return;
@@ -36286,7 +36319,8 @@ function ownLineageFields(bot: BotRecord, threadId: string): { botOwnerPrincipal
 function aiClientThreadPerson(bot: BotRecord, threadId: string, commsDepth: number, message: Message): string {
   if (commsDepth > 0 || message.role !== "user" || message.peerAsk) return "";
   const task = store.taskByThread(bot.id, threadId);
-  if (!task || task.hidden !== true || task.openedBy?.botId || store.isConfidentialThread(threadId)) return "";
+  if (!task || store.isConfidentialThread(threadId)) return "";
+  if (!isAgentConversation(task) && (task.hidden !== true || task.openedBy?.botId)) return "";
   const sender = message.sender?.id?.trim().toLowerCase();
   if (!sender || !task.ownerPrincipalId || task.ownerPrincipalId.trim().toLowerCase() !== sender) return "";
   return aiClientPrompt(message.sender?.name ?? "");
@@ -46965,6 +46999,14 @@ try {
   if (closed > 0) console.log(`[approval] expired ${closed} approval card(s) left open by the previous run`);
   // #1940: age-based expiry of every inbox kind (permission, question, request).
   const aged = runPendingApprovalExpirySweep();
+  // Durable questions have no live engine after a restart. Restore their
+  // attention state (iOS Needs you) without occupying a new turn's slot.
+  for (const { threadId, message } of openPendingInboxCards()) {
+    const bot = store.botByThread(threadId);
+    if (bot && isPersistentQuestionCard(message.card) && !isApprovalCardMessage(message)) {
+      store.setTaskActivity(bot.id, threadId, "waiting-on-you", { settledQuestion: true });
+    }
+  }
   if (aged > 0) console.log(`[approval] expired ${aged} pending approval(s) older than the configured age`);
 } catch (error) {
   console.warn(`[approval] startup expiry of open approval cards failed: ${error instanceof Error ? error.message : String(error)}`);

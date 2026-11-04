@@ -103,6 +103,27 @@ apply. Routine readiness uses the resolved driver and payer access to explain
 artifact dependencies on API accounts or another engine before creating a task.
 Evidence and configuration matrix: `docs/verification/claude-artifacts.md`.
 
+## Blocking decisions are cards (#1984, 2026-11-04)
+
+Every blocking decision uses ask_choice, a native question tool, or the write
+tool's approval gate. `server/approvals/final-confirmation.ts` recognizes English and
+French confirmation requests in a successful final routine/MCP reply. The main
+runtime fold raises them through `raiseHarnessQuestion` before the routine
+settles. Existing open cards, ordinary chats, quoted examples, failures and
+stopped turns are left alone. The output is a question, never permission to
+write; its answer resumes through the usual gates and person isolation.
+`Store.setTaskActivity` keeps a settled question at `waiting-on-you` with
+`settledQuestion: true` and `busy: false`, including after restart: iOS keeps
+it in Needs you and the answer can start a fresh turn. Bot-wide busy reflects
+occupied slots independently of that attention state.
+MCP ask_choice uses this same persistent question path. Blocking MCP questions
+and approvals reach phones and watches too. `send_prompt.prompt` carries an
+already-given GO as `Operator GO (quoted):` (exact words), then `Scope:` (exact
+writes). The system prompt honors that scope without re-asking or overriding a
+gate; untrusted event data cannot supply consent. Format: `docs/agent-api.md`.
+Tests and isolated verification: `server/approvals/final-confirmation*.test.ts`,
+`docs/verification/decisions-as-cards.md`.
+
 ## Codex retains one app-server per conversation (#1969, 2026-11-04)
 
 `server/drivers/codex/sessions.ts` owns the per-instance, per-thread process
@@ -1638,8 +1659,8 @@ Perspicax) is not the person typing: its turns go to its own conversation
 with the bot, drawn like a bot-to-bot one ("<client> ⇆ <bot>", neutral
 icon), never into the person's chat, and nothing in it notifies them
 (push, watch, banner, sound, red dot) except an approval or a question,
-which reaches the desktop only: never a phone or a watch (`quietOnPhones`
-on the notification, 2026-10-29), since the client that asked carries it. One rule, one place: `shared/agent-conversation.ts`
+which reaches every device, phones and watches included (#1984,
+2026-11-04). One rule, one place: `shared/agent-conversation.ts`
 (opener `{ kind: "agent", botId: "agent:<slug>", name }`, the notification
 rule); `agentConversationFor` in server/index.ts opens or reuses it per bot,
 person and client; the name is the `client_name` Perspicax signs into the
@@ -1683,8 +1704,8 @@ there; the question first.
   (`NeedsYouIsland`) sizes to its content (small face, name, question,
   answers never cut off). The Live Activity has no alert of its own (the
   notification is the one buzz) and a `.small` layout for the watch.
-- MCP: a conversation an AI client holds (outside agent or hidden) never
-  rings a phone or a watch (`quietOnPhones`), approvals included.
+- MCP: a conversation an AI client holds (outside agent or hidden) rings a
+  phone or a watch for an approval or a question (#1984, 2026-11-04).
 - "Needs you" is the server's, shared by every device: a settled card
   (any path) moves its conversation off `waiting-on-you` once no card is
   open there (`settleWaitingActivity`); iOS counts a card it still holds as

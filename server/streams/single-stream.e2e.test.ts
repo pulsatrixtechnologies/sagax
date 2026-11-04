@@ -17,6 +17,9 @@ it("merges topics into one stream: digest, recall_topic, privacy exclusions, thr
   const mcpDump = join(evidence, "mcp.json");
   const fixture = await launchVerificationServer({
     ...process.env,
+    // 95e8f39e4 continues a turn ending on tools. Finish after the real MCP
+    // calls so a continuation cannot overwrite their dump with no calls.
+    FAKE_CLAUDE_TOOL_CALLS: "[]",
     FAKE_CLAUDE_MCP_DUMP: mcpDump,
     FAKE_CLAUDE_MCP_CALLS: JSON.stringify([
       { server: "agents", tool: "recall_topic", arguments: {}, when: "RECALL_LIST" },

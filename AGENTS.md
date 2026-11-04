@@ -41,11 +41,13 @@ refuses a model the bot's engine does not list. Tests:
 
 Flow readiness calls `flow_run` on the account's main Perspicax connection
 with the run-as person's routine delegation. It never selects a bot profile
-or identity. It opens a
-shadow run, checks the first plan with the prompt's explicit server inputs,
-then finishes its run in `finally`, with an independent cleanup signal.
-An `already_running` answer keeps the live lease and reports that the plan
-was not checked. Actual Flow refusals are `flow_plan`; transport errors and
+or identity. A prompt without a named recipe checks the connection and
+catalogue only, leaving the recipe choice to the model. A named recipe opens
+a shadow run and checks the first plan with the prompt's explicit inputs.
+Cleanup calls `release {routine, run_id}` only for a successful init with an
+identified run, using an independent signal; it never finishes a business
+run or releases an unnamed claim after an init timeout. An `already_running`
+answer keeps the live lease and reports that the plan was not checked. Actual Flow refusals are `flow_plan`; transport errors and
 timeouts remain `probe_error`, passing in run mode. The Flow probe runs
 beside the fast probes with its own 45-second budget and a per-routine,
 per-input cache. Tests: `perspicax-flow-readiness.test.ts`,

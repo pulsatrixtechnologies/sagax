@@ -80,26 +80,38 @@ struct DesktopThreadPickerCard: View {
             }
             .frame(maxHeight: 320)
             .fixedSize(horizontal: false, vertical: tasks.count < 6)
-            Button {
-                close()
-                Task {
-                    if let created = await session.createRosterThread(for: live) { model.open(.bot(created)) }
+            // `newThreadChoices` (src/lib/confidential-thread.ts): New thread
+            // and New confidential thread, the confidential one first where
+            // the organization makes threads confidential by default
+            VStack(spacing: 0) {
+                ForEach(newThreadChoices, id: \.confidential) { choice in
+                    Button {
+                        close()
+                        Task {
+                            if let created = await session.createRosterThread(for: live, confidential: choice.confidential ? true : nil) {
+                                model.open(.bot(created))
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            DesktopLucideGlyph(paths: choice.confidential
+                                ? ["M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z", "M7 11V7a5 5 0 0 1 10 0v4"]
+                                : ["M5 12h14", "M12 5v14"], size: 12)
+                            Text(choice.label).lineLimit(1)
+                        }
+                        .font(theme.font(12))
+                        .foregroundStyle(theme.inkSecondary)
+                        .padding(.horizontal, 10)
+                        .frame(maxWidth: .infinity, minHeight: 35, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .hoverEffect(.highlight)
+                    .accessibilityIdentifier(choice.confidential ? "desktop-thread-picker-new-confidential" : "desktop-thread-picker-new")
                 }
-            } label: {
-                HStack(spacing: 8) {
-                    DesktopLucideGlyph(paths: ["M5 12h14", "M12 5v14"], size: 12)
-                    Text("New thread").lineLimit(1)
-                }
-                .font(theme.font(12))
-                .foregroundStyle(theme.inkSecondary)
-                .padding(.horizontal, 10)
-                .frame(maxWidth: .infinity, minHeight: 35, alignment: .leading)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
             .overlay(alignment: .top) { Rectangle().fill(theme.hairline.opacity(0.4)).frame(height: 1) }
             .padding(.top, 4)
-            .accessibilityIdentifier("desktop-thread-picker-new")
         }
         .padding(.vertical, 4)
         .padding(1)
@@ -109,6 +121,12 @@ struct DesktopThreadPickerCard: View {
         .shadow(color: .black.opacity(0.5), radius: 25, y: 25)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("desktop-thread-picker-card")
+    }
+
+    private var newThreadChoices: [(confidential: Bool, label: LocalizedStringKey)] {
+        session.confidentialThreadsByDefault
+            ? [(true, "New confidential thread"), (false, "New ordinary thread")]
+            : [(false, "New thread"), (true, "New confidential thread")]
     }
 
     private var search: some View {
@@ -206,7 +224,8 @@ private struct DesktopThreadPickerRow: View {
         .contentShape(.contextMenuPreview, Rectangle())
         .onHover { hovering = $0 }
         .threadMenu(task, owner: .bot(bot), actions: actions, session: session)
-        .background(active ? theme.raised.opacity(0.6) : (hovering ? theme.raised.opacity(0.4) : .clear))
+        // `bg-popover-hover` on the current thread (and on hover)
+        .background(active || hovering ? theme.raisedHover : .clear)
         .accessibilityIdentifier("desktop-thread-picker.\(task.threadId)")
     }
 

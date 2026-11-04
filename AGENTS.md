@@ -1,3 +1,19 @@
+## Prompt index and on-demand references (#1997, 2026-11-04)
+
+`server/context/prompt-references.ts` replaces exact shipped guidance with
+short triggers only when the turn actually offers `sagax_help`. Its reserved
+`question: "prompt:<id>"` reads return the complete original reference through
+the existing authenticated route, without a new tool or permission. Personal
+instructions, approval/isolation rules and roster data are never rewritten.
+The sign-in policy stays intact, once; local foreground restrictions stay inline.
+Managed `skills_list` + `workspace_read` now give every engine a name and
+one-line description index; without retrieval, API engines keep whole files.
+Native Claude plugins stay native. This supersedes the older Q8 C inline
+delivery notes below. Per-turn surface, routine execution, selected skill
+bodies, playbooks, cwd and group memory are volatile on every engine.
+Measurements and limits: `docs/verification/prompt-diet.md`; targeted builder
+snapshots: `server/context/prompt-budget.test.ts`.
+
 ## Shared warm-resource budget (#1985, 2026-11-04)
 
 `server/resources/warm-resources.ts` is the shared retention registry for

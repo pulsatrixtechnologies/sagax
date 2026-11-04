@@ -1,4 +1,4 @@
-// A real chat-only turn must receive whole instructions, not host paths.
+// A real chat-only turn gets an index, then reads whole instructions on demand.
 // The receipt and preview use the exact same per-capability budget.
 import { createServer } from "node:http";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -8,8 +8,8 @@ import { launchVerificationServer, runControlOmb } from "../../scripts/control-o
 import { fixtureApi } from "../../scripts/testing/preview-fixture.ts";
 import { seedMarketplaceBeforeBoot } from "../testing/seed-marketplace.ts";
 
-it("sends whole personal and plugin instructions to an API with the same visible per-capability budget", async () => {
-  const requests: unknown[] = [];
+it("indexes personal and plugin references, then loads exact scoped instructions on an API turn", async () => {
+  const requests: Array<{ messages: Array<{ role: string; content?: string }>; tools?: Array<{ function: { name: string } }> }> = [];
   const provider = createServer((req, res) => {
     let body = "";
     req.on("data", (chunk) => { body += chunk; });
@@ -18,9 +18,17 @@ it("sends whole personal and plugin instructions to an API with the same visible
         res.writeHead(200, { "content-type": "application/json", connection: "close" });
         res.end(JSON.stringify({ data: [{ id: "fixture-model" }] }));
       } else if (req.url === "/v1/chat/completions") {
-        requests.push(JSON.parse(body));
+        const request = JSON.parse(body) as typeof requests[number];
+        requests.push(request);
         res.writeHead(200, { "content-type": "text/event-stream", connection: "close" });
-        res.end(`data: ${JSON.stringify({ choices: [{ delta: { content: "fixture reply" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`);
+        const results = request.messages.filter(message => message.role === "tool");
+        const tool = results.length === 0 ? "skills_list" : "workspace_read";
+        const name = request.tools?.find(row => row.function.name.endsWith(tool))?.function.name;
+        const listing = results[0]?.content ? JSON.parse(results[0].content) as { result?: string } : undefined;
+        const path = listing?.result?.match(/Read "([^"]+)"/)?.[1];
+        const delta = name && results.length < 2 ? { tool_calls: [{ index: 0, id: `read-${results.length}`, type: "function", function: { name,
+          arguments: JSON.stringify(results.length ? { path } : { query: "packing-list" }) } }] } : { content: "fixture reply" };
+        res.end(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: "tool_calls" in delta ? "tool_calls" : "stop" }] })}\n\ndata: [DONE]\n\n`);
       } else res.writeHead(404).end();
     });
   });
@@ -58,30 +66,31 @@ it("sends whole personal and plugin instructions to an API with the same visible
     const { bot } = await control(["new-bot", "--name", "API capability fixture"]);
     await control(["set-model", "--bot", bot.id, "--instance", "openaiCompat", "--model", "fixture-model"]);
     const receipt = await api("GET", `/api/bots/${bot.id}/capabilities`);
-    // Each whole file is named by its workspace_read alias, so the 4,000-byte
-    // budget is reached before the 30-file cap: what fits is reported.
+    // Bodies, including oversized ones, no longer consume the index budget.
     const packing = receipt.items.find((item: { key: string }) => item.key === "plugin:me:packing@catalog");
     expect(packing).toMatchObject({ state: "on", promptIndex: { maxBytes: 4_000, maxSkills: 30 } });
     const { skills: shown, omitted } = packing.promptIndex as { skills: number; omitted: number };
     expect(shown).toBeGreaterThan(20);
     expect(shown).toBeLessThanOrEqual(30);
     expect(shown + omitted).toBe(36);
-    const wire = (i: number) => `WIRE_${String(i).padStart(2, "0")}_COMPLETE.`;
     expect(receipt.items.find((item: { key: string }) => item.key === "skill:me:packing-list")).toMatchObject({ state: "on", promptIndex: { skills: 1, omitted: 0 } });
     const preview = JSON.stringify(await api("GET", `/api/bots/${bot.id}/system-prompt`));
     await control(["send", "--bot", bot.id, "--text", "Reply briefly."]);
     expect((await control(["wait", "--bot", bot.id, "--timeout", "30"])).status).toBe("settled");
     expect(requests.length).toBeGreaterThan(0);
-    const sent = JSON.stringify(requests);
+    const sent = JSON.stringify(requests[0]);
     for (const prompt of [sent, preview]) {
-      expect(prompt).toContain("PERSONAL_WHOLE_INSTRUCTION: verify the destination, then the label.");
-      expect(prompt).toContain(wire(0));
-      expect(prompt).toContain(wire(shown - 1));
-      expect(prompt).not.toContain(wire(shown));
+      expect(prompt).toContain("packing-list: Verify packages");
+      expect(prompt).toContain("a-big: Fixture");
+      expect(prompt).not.toContain("PERSONAL_WHOLE_INSTRUCTION");
+      expect(prompt).not.toContain("WIRE_");
       expect(prompt).not.toContain("OVERSIZED_MUST_STAY_WHOLE_");
       expect(prompt).toContain(`${omitted} omitted.`);
       expect(prompt).not.toContain(`${fixture.info.dataDir}/principals/`);
     }
+    const toolResults = requests.flatMap(request => request.messages.filter(message => message.role === "tool"));
+    expect(toolResults.some(message => message.content?.includes("capability-skills/me/skills/packing-list/SKILL.md"))).toBe(true);
+    expect(toolResults.some(message => message.content?.includes("PERSONAL_WHOLE_INSTRUCTION: verify the destination, then the label."))).toBe(true);
   } finally {
     await fixture.close();
     await new Promise<void>((resolve) => provider.close(() => resolve()));

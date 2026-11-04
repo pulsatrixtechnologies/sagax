@@ -3,8 +3,8 @@
 exports[`prompt size by engine and turn kind (#1997) > measures each section and both cache halves using the production builders 1`] = `
 [
   {
-    "approxTokens": 15526,
-    "bytes": 62102,
+    "approxTokens": 5739,
+    "bytes": 22954,
     "engine": "claudeAgent",
     "kind": "chat",
     "sections": [
@@ -13,11 +13,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -29,7 +29,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -37,11 +37,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -53,43 +53,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 3672,
+        "bytes": 1063,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -97,17 +97,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 62015,
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 4752,
-    "bytes": 19007,
+    "approxTokens": 2798,
+    "bytes": 11190,
     "engine": "claudeAgent",
     "kind": "routine",
     "sections": [
@@ -116,11 +116,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -132,7 +132,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -140,11 +140,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 600,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1200,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -156,39 +156,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 1200,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 800,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 600,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1200,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 1200,
+        "bytes": 489,
         "id": "routine-execution",
       },
       {
-        "bytes": 800,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 733,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -204,13 +204,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 17720,
-    "volatileBytes": 1287,
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
   },
   {
-    "approxTokens": 12943,
-    "bytes": 51771,
+    "approxTokens": 5457,
+    "bytes": 21827,
     "engine": "claudeAgent",
     "kind": "room",
     "sections": [
@@ -219,11 +219,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -235,7 +235,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -243,11 +243,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -259,39 +259,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -299,17 +299,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 51684,
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 14974,
-    "bytes": 59893,
+    "approxTokens": 5645,
+    "bytes": 22577,
     "engine": "claudeAgent",
     "kind": "sub-agent",
     "sections": [
@@ -318,11 +318,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -334,7 +334,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -342,11 +342,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -358,43 +358,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -402,7 +402,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
       {
@@ -410,13 +410,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "assignment",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 59806,
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
     "volatileBytes": 87,
   },
   {
-    "approxTokens": 15526,
-    "bytes": 62102,
+    "approxTokens": 5739,
+    "bytes": 22954,
     "engine": "codex",
     "kind": "chat",
     "sections": [
@@ -425,11 +425,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -441,7 +441,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -449,11 +449,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -465,43 +465,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 3672,
+        "bytes": 1063,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -509,17 +509,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 62035,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 4752,
-    "bytes": 19007,
+    "approxTokens": 2798,
+    "bytes": 11190,
     "engine": "codex",
     "kind": "routine",
     "sections": [
@@ -528,11 +528,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -544,7 +544,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -552,11 +552,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 600,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1200,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -568,39 +568,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 1200,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 800,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 600,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1200,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 1200,
+        "bytes": 489,
         "id": "routine-execution",
       },
       {
-        "bytes": 800,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 733,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -616,13 +616,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 18940,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
   },
   {
-    "approxTokens": 12943,
-    "bytes": 51771,
+    "approxTokens": 5457,
+    "bytes": 21827,
     "engine": "codex",
     "kind": "room",
     "sections": [
@@ -631,11 +631,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -647,7 +647,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -655,11 +655,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -671,39 +671,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -711,17 +711,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 51704,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 14974,
-    "bytes": 59893,
+    "approxTokens": 5645,
+    "bytes": 22577,
     "engine": "codex",
     "kind": "sub-agent",
     "sections": [
@@ -730,11 +730,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -746,7 +746,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -754,11 +754,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -770,43 +770,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -814,7 +814,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
       {
@@ -822,13 +822,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "assignment",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 59826,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 15526,
-    "bytes": 62102,
+    "approxTokens": 5739,
+    "bytes": 22954,
     "engine": "piAgent",
     "kind": "chat",
     "sections": [
@@ -837,11 +837,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -853,7 +853,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -861,11 +861,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -877,43 +877,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 3672,
+        "bytes": 1063,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -921,17 +921,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 62035,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 4752,
-    "bytes": 19007,
+    "approxTokens": 2798,
+    "bytes": 11190,
     "engine": "piAgent",
     "kind": "routine",
     "sections": [
@@ -940,11 +940,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -956,7 +956,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -964,11 +964,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 600,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1200,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -980,39 +980,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 1200,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 800,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 600,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1200,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 1200,
+        "bytes": 489,
         "id": "routine-execution",
       },
       {
-        "bytes": 800,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 733,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -1028,13 +1028,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 18940,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
   },
   {
-    "approxTokens": 12943,
-    "bytes": 51771,
+    "approxTokens": 5457,
+    "bytes": 21827,
     "engine": "piAgent",
     "kind": "room",
     "sections": [
@@ -1043,11 +1043,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -1059,7 +1059,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -1067,11 +1067,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -1083,39 +1083,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -1123,17 +1123,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 51704,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 14974,
-    "bytes": 59893,
+    "approxTokens": 5645,
+    "bytes": 22577,
     "engine": "piAgent",
     "kind": "sub-agent",
     "sections": [
@@ -1142,11 +1142,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -1158,7 +1158,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -1166,11 +1166,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -1182,43 +1182,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -1226,7 +1226,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
       {
@@ -1234,13 +1234,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "assignment",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 59826,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 15526,
-    "bytes": 62102,
+    "approxTokens": 5739,
+    "bytes": 22954,
     "engine": "grokAgent",
     "kind": "chat",
     "sections": [
@@ -1249,11 +1249,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -1265,7 +1265,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -1273,11 +1273,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -1289,43 +1289,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 3672,
+        "bytes": 1063,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -1333,17 +1333,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 62035,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 4752,
-    "bytes": 19007,
+    "approxTokens": 2798,
+    "bytes": 11190,
     "engine": "grokAgent",
     "kind": "routine",
     "sections": [
@@ -1352,11 +1352,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -1368,7 +1368,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -1376,11 +1376,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 600,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1200,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -1392,39 +1392,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 1200,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 800,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 600,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1200,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 1200,
+        "bytes": 489,
         "id": "routine-execution",
       },
       {
-        "bytes": 800,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 733,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -1440,13 +1440,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 18940,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
   },
   {
-    "approxTokens": 12943,
-    "bytes": 51771,
+    "approxTokens": 5457,
+    "bytes": 21827,
     "engine": "grokAgent",
     "kind": "room",
     "sections": [
@@ -1455,11 +1455,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -1471,7 +1471,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -1479,11 +1479,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -1495,39 +1495,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -1535,17 +1535,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 51704,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 14974,
-    "bytes": 59893,
+    "approxTokens": 5645,
+    "bytes": 22577,
     "engine": "grokAgent",
     "kind": "sub-agent",
     "sections": [
@@ -1554,11 +1554,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -1570,7 +1570,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -1578,11 +1578,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -1594,43 +1594,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -1638,7 +1638,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
       {
@@ -1646,13 +1646,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "assignment",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 59826,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 15526,
-    "bytes": 62102,
+    "approxTokens": 5739,
+    "bytes": 22954,
     "engine": "geminiAgent",
     "kind": "chat",
     "sections": [
@@ -1661,11 +1661,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -1677,7 +1677,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -1685,11 +1685,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -1701,43 +1701,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 3672,
+        "bytes": 1063,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -1745,17 +1745,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 62035,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 4752,
-    "bytes": 19007,
+    "approxTokens": 2798,
+    "bytes": 11190,
     "engine": "geminiAgent",
     "kind": "routine",
     "sections": [
@@ -1764,11 +1764,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -1780,7 +1780,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -1788,11 +1788,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 600,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1200,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -1804,39 +1804,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 1200,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 800,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 600,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1200,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 1200,
+        "bytes": 489,
         "id": "routine-execution",
       },
       {
-        "bytes": 800,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 733,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -1852,13 +1852,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 18940,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
   },
   {
-    "approxTokens": 12943,
-    "bytes": 51771,
+    "approxTokens": 5457,
+    "bytes": 21827,
     "engine": "geminiAgent",
     "kind": "room",
     "sections": [
@@ -1867,11 +1867,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -1883,7 +1883,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -1891,11 +1891,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -1907,39 +1907,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -1947,17 +1947,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 51704,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 14974,
-    "bytes": 59893,
+    "approxTokens": 5645,
+    "bytes": 22577,
     "engine": "geminiAgent",
     "kind": "sub-agent",
     "sections": [
@@ -1966,11 +1966,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -1982,7 +1982,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -1990,11 +1990,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -2006,43 +2006,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -2050,7 +2050,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
       {
@@ -2058,13 +2058,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "assignment",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 59826,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 15526,
-    "bytes": 62102,
+    "approxTokens": 5739,
+    "bytes": 22954,
     "engine": "kimiAgent",
     "kind": "chat",
     "sections": [
@@ -2073,11 +2073,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -2089,7 +2089,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -2097,11 +2097,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -2113,43 +2113,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 3672,
+        "bytes": 1063,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -2157,17 +2157,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 62035,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 4752,
-    "bytes": 19007,
+    "approxTokens": 2798,
+    "bytes": 11190,
     "engine": "kimiAgent",
     "kind": "routine",
     "sections": [
@@ -2176,11 +2176,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -2192,7 +2192,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -2200,11 +2200,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 600,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1200,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -2216,39 +2216,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 1200,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 800,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 600,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1200,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 1200,
+        "bytes": 489,
         "id": "routine-execution",
       },
       {
-        "bytes": 800,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 733,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -2264,13 +2264,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 18940,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
   },
   {
-    "approxTokens": 12943,
-    "bytes": 51771,
+    "approxTokens": 5457,
+    "bytes": 21827,
     "engine": "kimiAgent",
     "kind": "room",
     "sections": [
@@ -2279,11 +2279,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -2295,7 +2295,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -2303,11 +2303,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -2319,39 +2319,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -2359,17 +2359,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 51704,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 14974,
-    "bytes": 59893,
+    "approxTokens": 5645,
+    "bytes": 22577,
     "engine": "kimiAgent",
     "kind": "sub-agent",
     "sections": [
@@ -2378,11 +2378,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -2394,7 +2394,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -2402,11 +2402,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -2418,43 +2418,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -2462,7 +2462,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
       {
@@ -2470,13 +2470,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "assignment",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 59826,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 15526,
-    "bytes": 62102,
+    "approxTokens": 5739,
+    "bytes": 22954,
     "engine": "opencodeGo",
     "kind": "chat",
     "sections": [
@@ -2485,11 +2485,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -2501,7 +2501,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -2509,11 +2509,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -2525,43 +2525,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 3672,
+        "bytes": 1063,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -2569,17 +2569,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 62035,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 4752,
-    "bytes": 19007,
+    "approxTokens": 2798,
+    "bytes": 11190,
     "engine": "opencodeGo",
     "kind": "routine",
     "sections": [
@@ -2588,11 +2588,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -2604,7 +2604,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -2612,11 +2612,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 600,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1200,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -2628,39 +2628,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 1200,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 800,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 600,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1200,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 1200,
+        "bytes": 489,
         "id": "routine-execution",
       },
       {
-        "bytes": 800,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 733,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -2676,13 +2676,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 18940,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
   },
   {
-    "approxTokens": 12943,
-    "bytes": 51771,
+    "approxTokens": 5457,
+    "bytes": 21827,
     "engine": "opencodeGo",
     "kind": "room",
     "sections": [
@@ -2691,11 +2691,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -2707,7 +2707,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -2715,11 +2715,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -2731,39 +2731,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -2771,17 +2771,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 51704,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 14974,
-    "bytes": 59893,
+    "approxTokens": 5645,
+    "bytes": 22577,
     "engine": "opencodeGo",
     "kind": "sub-agent",
     "sections": [
@@ -2790,11 +2790,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -2806,7 +2806,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -2814,11 +2814,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 767,
+        "bytes": 225,
         "id": "shell",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -2830,43 +2830,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -2874,7 +2874,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 30306,
+        "bytes": 10783,
         "id": "skills",
       },
       {
@@ -2882,13 +2882,2897 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "assignment",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 59826,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 14070,
-    "bytes": 56278,
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "antigravityAgent",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "antigravityAgent",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "antigravityAgent",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "antigravityAgent",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "droidAgent",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "droidAgent",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "droidAgent",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "droidAgent",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "cursorAgent",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "cursorAgent",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "cursorAgent",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "cursorAgent",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "qwenAgent",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "qwenAgent",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "qwenAgent",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "qwenAgent",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "hermesAgent",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "hermesAgent",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "hermesAgent",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "hermesAgent",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "clineAgent",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "clineAgent",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "clineAgent",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "clineAgent",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5739,
+    "bytes": 22954,
+    "engine": "customAcp",
+    "kind": "chat",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 1063,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22867,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 2798,
+    "bytes": 11190,
+    "engine": "customAcp",
+    "kind": "routine",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 600,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 489,
+        "id": "routine-execution",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 286,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 148,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 10614,
+    "volatileBytes": 576,
+  },
+  {
+    "approxTokens": 5457,
+    "bytes": 21827,
+    "engine": "customAcp",
+    "kind": "room",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 21740,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5645,
+    "bytes": 22577,
+    "engine": "customAcp",
+    "kind": "sub-agent",
+    "sections": [
+      {
+        "bytes": 1842,
+        "id": "misuse-policy",
+      },
+      {
+        "bytes": 347,
+        "id": "run-yourself",
+      },
+      {
+        "bytes": 1594,
+        "id": "verify-first",
+      },
+      {
+        "bytes": 28,
+        "id": "persona",
+      },
+      {
+        "bytes": 462,
+        "id": "soul",
+      },
+      {
+        "bytes": 684,
+        "id": "work-style",
+      },
+      {
+        "bytes": 41,
+        "id": "files-cwd",
+      },
+      {
+        "bytes": 225,
+        "id": "shell",
+      },
+      {
+        "bytes": 1123,
+        "id": "computer",
+      },
+      {
+        "bytes": 20,
+        "id": "plan",
+      },
+      {
+        "bytes": 1059,
+        "id": "approval-level",
+      },
+      {
+        "bytes": 434,
+        "id": "browser",
+      },
+      {
+        "bytes": 349,
+        "id": "data",
+      },
+      {
+        "bytes": 825,
+        "id": "coordination",
+      },
+      {
+        "bytes": 560,
+        "id": "credential",
+      },
+      {
+        "bytes": 318,
+        "id": "reactions",
+      },
+      {
+        "bytes": 262,
+        "id": "recall",
+      },
+      {
+        "bytes": 327,
+        "id": "routine",
+      },
+      {
+        "bytes": 271,
+        "id": "profile",
+      },
+      {
+        "bytes": 247,
+        "id": "learn",
+      },
+      {
+        "bytes": 624,
+        "id": "rich-output",
+      },
+      {
+        "bytes": 26,
+        "id": "memory",
+      },
+      {
+        "bytes": 10783,
+        "id": "skills",
+      },
+      {
+        "bytes": 126,
+        "id": "assignment",
+      },
+    ],
+    "skillsBytes": 10783,
+    "stableBytes": 22490,
+    "volatileBytes": 87,
+  },
+  {
+    "approxTokens": 5683,
+    "bytes": 22729,
     "engine": "grok",
     "kind": "chat",
     "sections": [
@@ -2897,11 +5781,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -2913,7 +5797,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -2921,7 +5805,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -2933,43 +5817,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 3672,
+        "bytes": 1063,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -2977,17 +5861,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 56211,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22642,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 4602,
-    "bytes": 18407,
+    "approxTokens": 2742,
+    "bytes": 10965,
     "engine": "grok",
     "kind": "routine",
     "sections": [
@@ -2996,11 +5880,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -3012,7 +5896,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -3020,7 +5904,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1200,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -3032,39 +5916,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 1200,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 800,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 600,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1200,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 1200,
+        "bytes": 489,
         "id": "routine-execution",
       },
       {
-        "bytes": 800,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 733,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -3080,13 +5964,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 18340,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 10389,
+    "volatileBytes": 576,
   },
   {
-    "approxTokens": 11487,
-    "bytes": 45947,
+    "approxTokens": 5401,
+    "bytes": 21602,
     "engine": "grok",
     "kind": "room",
     "sections": [
@@ -3095,11 +5979,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -3111,7 +5995,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -3119,7 +6003,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -3131,39 +6015,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -3171,17 +6055,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 45880,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 21515,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 13518,
-    "bytes": 54069,
+    "approxTokens": 5588,
+    "bytes": 22352,
     "engine": "grok",
     "kind": "sub-agent",
     "sections": [
@@ -3190,11 +6074,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -3206,7 +6090,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -3214,7 +6098,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -3226,43 +6110,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -3270,7 +6154,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
       {
@@ -3278,13 +6162,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "assignment",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 54002,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22265,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 14070,
-    "bytes": 56278,
+    "approxTokens": 5683,
+    "bytes": 22729,
     "engine": "openai-compat",
     "kind": "chat",
     "sections": [
@@ -3293,11 +6177,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -3309,7 +6193,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -3317,7 +6201,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -3329,43 +6213,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 3672,
+        "bytes": 1063,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -3373,17 +6257,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 56211,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22642,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 4602,
-    "bytes": 18407,
+    "approxTokens": 2742,
+    "bytes": 10965,
     "engine": "openai-compat",
     "kind": "routine",
     "sections": [
@@ -3392,11 +6276,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -3408,7 +6292,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -3416,7 +6300,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1200,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -3428,39 +6312,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 1200,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 800,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 600,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1200,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 1200,
+        "bytes": 489,
         "id": "routine-execution",
       },
       {
-        "bytes": 800,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 733,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -3476,13 +6360,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 18340,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 10389,
+    "volatileBytes": 576,
   },
   {
-    "approxTokens": 11487,
-    "bytes": 45947,
+    "approxTokens": 5401,
+    "bytes": 21602,
     "engine": "openai-compat",
     "kind": "room",
     "sections": [
@@ -3491,11 +6375,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -3507,7 +6391,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -3515,7 +6399,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -3527,39 +6411,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -3567,17 +6451,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 45880,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 21515,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 13518,
-    "bytes": 54069,
+    "approxTokens": 5588,
+    "bytes": 22352,
     "engine": "openai-compat",
     "kind": "sub-agent",
     "sections": [
@@ -3586,11 +6470,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -3602,7 +6486,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -3610,7 +6494,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -3622,43 +6506,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -3666,7 +6550,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
       {
@@ -3674,13 +6558,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "assignment",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 54002,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22265,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 14070,
-    "bytes": 56278,
+    "approxTokens": 5683,
+    "bytes": 22729,
     "engine": "minimax",
     "kind": "chat",
     "sections": [
@@ -3689,11 +6573,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -3705,7 +6589,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -3713,7 +6597,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -3725,43 +6609,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 3672,
+        "bytes": 1063,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -3769,17 +6653,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 56211,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22642,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 4602,
-    "bytes": 18407,
+    "approxTokens": 2742,
+    "bytes": 10965,
     "engine": "minimax",
     "kind": "routine",
     "sections": [
@@ -3788,11 +6672,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -3804,7 +6688,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -3812,7 +6696,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1200,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -3824,39 +6708,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 1200,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 800,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 600,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1200,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 1200,
+        "bytes": 489,
         "id": "routine-execution",
       },
       {
-        "bytes": 800,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 733,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -3872,13 +6756,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 18340,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 10389,
+    "volatileBytes": 576,
   },
   {
-    "approxTokens": 11487,
-    "bytes": 45947,
+    "approxTokens": 5401,
+    "bytes": 21602,
     "engine": "minimax",
     "kind": "room",
     "sections": [
@@ -3887,11 +6771,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -3903,7 +6787,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -3911,7 +6795,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -3923,39 +6807,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -3963,17 +6847,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 45880,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 21515,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 13518,
-    "bytes": 54069,
+    "approxTokens": 5588,
+    "bytes": 22352,
     "engine": "minimax",
     "kind": "sub-agent",
     "sections": [
@@ -3982,11 +6866,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -3998,7 +6882,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -4006,7 +6890,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -4018,43 +6902,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -4062,7 +6946,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
       {
@@ -4070,13 +6954,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "assignment",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 54002,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22265,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 14070,
-    "bytes": 56278,
+    "approxTokens": 5683,
+    "bytes": 22729,
     "engine": "mistral",
     "kind": "chat",
     "sections": [
@@ -4085,11 +6969,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -4101,7 +6985,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -4109,7 +6993,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -4121,43 +7005,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 3672,
+        "bytes": 1063,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -4165,17 +7049,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 56211,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22642,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 4602,
-    "bytes": 18407,
+    "approxTokens": 2742,
+    "bytes": 10965,
     "engine": "mistral",
     "kind": "routine",
     "sections": [
@@ -4184,11 +7068,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -4200,7 +7084,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -4208,7 +7092,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1200,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -4220,39 +7104,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 1200,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 800,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 600,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1200,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 1200,
+        "bytes": 489,
         "id": "routine-execution",
       },
       {
-        "bytes": 800,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 733,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -4268,13 +7152,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 18340,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 10389,
+    "volatileBytes": 576,
   },
   {
-    "approxTokens": 11487,
-    "bytes": 45947,
+    "approxTokens": 5401,
+    "bytes": 21602,
     "engine": "mistral",
     "kind": "room",
     "sections": [
@@ -4283,11 +7167,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -4299,7 +7183,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -4307,7 +7191,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -4319,39 +7203,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -4359,17 +7243,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 45880,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 21515,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 13518,
-    "bytes": 54069,
+    "approxTokens": 5588,
+    "bytes": 22352,
     "engine": "mistral",
     "kind": "sub-agent",
     "sections": [
@@ -4378,11 +7262,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -4394,7 +7278,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -4402,7 +7286,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -4414,43 +7298,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -4458,7 +7342,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
       {
@@ -4466,13 +7350,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "assignment",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 54002,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22265,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 14070,
-    "bytes": 56278,
+    "approxTokens": 5683,
+    "bytes": 22729,
     "engine": "cerebras",
     "kind": "chat",
     "sections": [
@@ -4481,11 +7365,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -4497,7 +7381,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -4505,7 +7389,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -4517,43 +7401,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 3672,
+        "bytes": 1063,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -4561,17 +7445,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 56211,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22642,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 4602,
-    "bytes": 18407,
+    "approxTokens": 2742,
+    "bytes": 10965,
     "engine": "cerebras",
     "kind": "routine",
     "sections": [
@@ -4580,11 +7464,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -4596,7 +7480,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -4604,7 +7488,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1200,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -4616,39 +7500,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 1200,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 800,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 600,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1200,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 1200,
+        "bytes": 489,
         "id": "routine-execution",
       },
       {
-        "bytes": 800,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 733,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -4664,13 +7548,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 18340,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 10389,
+    "volatileBytes": 576,
   },
   {
-    "approxTokens": 11487,
-    "bytes": 45947,
+    "approxTokens": 5401,
+    "bytes": 21602,
     "engine": "cerebras",
     "kind": "room",
     "sections": [
@@ -4679,11 +7563,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -4695,7 +7579,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -4703,7 +7587,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -4715,39 +7599,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -4755,17 +7639,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 45880,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 21515,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 13518,
-    "bytes": 54069,
+    "approxTokens": 5588,
+    "bytes": 22352,
     "engine": "cerebras",
     "kind": "sub-agent",
     "sections": [
@@ -4774,11 +7658,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -4790,7 +7674,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -4798,7 +7682,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -4810,43 +7694,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -4854,7 +7738,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
       {
@@ -4862,13 +7746,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "assignment",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 54002,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22265,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 14070,
-    "bytes": 56278,
+    "approxTokens": 5683,
+    "bytes": 22729,
     "engine": "groq",
     "kind": "chat",
     "sections": [
@@ -4877,11 +7761,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -4893,7 +7777,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -4901,7 +7785,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -4913,43 +7797,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 3672,
+        "bytes": 1063,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -4957,17 +7841,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 56211,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22642,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 4602,
-    "bytes": 18407,
+    "approxTokens": 2742,
+    "bytes": 10965,
     "engine": "groq",
     "kind": "routine",
     "sections": [
@@ -4976,11 +7860,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -4992,7 +7876,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -5000,7 +7884,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1200,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -5012,39 +7896,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 1200,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 800,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 600,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1200,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 1200,
+        "bytes": 489,
         "id": "routine-execution",
       },
       {
-        "bytes": 800,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 733,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -5060,13 +7944,13 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "skills",
       },
     ],
-    "skillsBytes": 30306,
-    "stableBytes": 18340,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 10389,
+    "volatileBytes": 576,
   },
   {
-    "approxTokens": 11487,
-    "bytes": 45947,
+    "approxTokens": 5401,
+    "bytes": 21602,
     "engine": "groq",
     "kind": "room",
     "sections": [
@@ -5075,11 +7959,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -5091,7 +7975,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -5099,7 +7983,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -5111,39 +7995,39 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
@@ -5151,17 +8035,17 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 45880,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 21515,
+    "volatileBytes": 87,
   },
   {
-    "approxTokens": 13518,
-    "bytes": 54069,
+    "approxTokens": 5588,
+    "bytes": 22352,
     "engine": "groq",
     "kind": "sub-agent",
     "sections": [
@@ -5170,11 +8054,11 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "misuse-policy",
       },
       {
-        "bytes": 668,
+        "bytes": 347,
         "id": "run-yourself",
       },
       {
-        "bytes": 2472,
+        "bytes": 1594,
         "id": "verify-first",
       },
       {
@@ -5186,7 +8070,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "soul",
       },
       {
-        "bytes": 1207,
+        "bytes": 684,
         "id": "work-style",
       },
       {
@@ -5194,7 +8078,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "files-cwd",
       },
       {
-        "bytes": 1707,
+        "bytes": 1123,
         "id": "computer",
       },
       {
@@ -5206,43 +8090,43 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "approval-level",
       },
       {
-        "bytes": 2498,
+        "bytes": 434,
         "id": "browser",
       },
       {
-        "bytes": 1099,
+        "bytes": 349,
         "id": "data",
       },
       {
-        "bytes": 2304,
+        "bytes": 825,
         "id": "coordination",
       },
       {
-        "bytes": 1337,
+        "bytes": 560,
         "id": "credential",
       },
       {
-        "bytes": 1284,
+        "bytes": 318,
         "id": "reactions",
       },
       {
-        "bytes": 570,
+        "bytes": 262,
         "id": "recall",
       },
       {
-        "bytes": 1298,
+        "bytes": 327,
         "id": "routine",
       },
       {
-        "bytes": 519,
+        "bytes": 271,
         "id": "profile",
       },
       {
-        "bytes": 257,
+        "bytes": 247,
         "id": "learn",
       },
       {
-        "bytes": 7996,
+        "bytes": 624,
         "id": "rich-output",
       },
       {
@@ -5250,7 +8134,7 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "memory",
       },
       {
-        "bytes": 25249,
+        "bytes": 10783,
         "id": "skills",
       },
       {
@@ -5258,9 +8142,9 @@ exports[`prompt size by engine and turn kind (#1997) > measures each section and
         "id": "assignment",
       },
     ],
-    "skillsBytes": 25249,
-    "stableBytes": 54002,
-    "volatileBytes": 67,
+    "skillsBytes": 10783,
+    "stableBytes": 22265,
+    "volatileBytes": 87,
   },
 ]
 `;

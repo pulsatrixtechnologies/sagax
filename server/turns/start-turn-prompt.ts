@@ -3,6 +3,7 @@
 // Never imports server/index.ts.
 import { hideServerPathsInSections } from "../server-path-prompt.ts";
 import { turnTracePayloadHash } from "./turn-trace.ts";
+import { onDemandPromptParts, promptReferencesAvailable } from "../context/prompt-references.ts";
 import type { StartTurnHost } from "./start-turn-types.ts";
 import type { TurnState } from "./start-turn-state.ts";
 
@@ -237,6 +238,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       state.promptParts = hidden.sections;
     }
     if (!state.warmOnly) turnTrace(state.threadId, "prompt-sections");
+    state.promptParts = onDemandPromptParts(state.promptParts, promptReferencesAvailable(Boolean(state.integrations.agents), state.toolScope));
     state.builtPrompt = buildSystemPrompt(state.persona, state.liveBot?.soul ?? state.bot.soul ?? "", state.coldPrompt ? lightenColdPrompt(state.promptParts) : state.promptParts, state.stablePrompt || state.instance.driverKind === "claudeAgent"
       ? new Set([
         ...(state.instance.driverKind === "claudeAgent" ? CLAUDE_REUSE_VOLATILE_SECTIONS : []),

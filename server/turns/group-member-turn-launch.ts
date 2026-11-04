@@ -1,6 +1,7 @@
 // @ts-nocheck
 // #1388 wave 4 step 3: runGroupMemberTurn phase. Never imports server/index.ts.
 import { hideServerPathsInSections } from "../server-path-prompt.ts";
+import { onDemandPromptParts, onDemandPromptText, promptReferencesAvailable } from "../context/prompt-references.ts";
 import type { GroupMemberTurnHost } from "./group-member-turn-types.ts";
 import type { GroupMemberTurnCtx } from "./group-member-turn-ctx.ts";
 
@@ -782,6 +783,8 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
   const outsideRoom = integrations.agents && !roomPeerHop && orchestration && !orchestration.roomHandoffId
     ? reachablePeers(store.bots, bot).filter((peer) => !readyGroup.memberIds.includes(peer.id))
     : [];
+  const referenceReads = promptReferencesAvailable(Boolean(integrations.agents), roomToolScope);
+  const referenceText = (text: string) => onDemandPromptText(text, referenceReads);
   const system = [
     `You are ${bot.name}, a bot in the room "${readyGroup.name}" in Sagax.`,
     bot.title && `Role: ${bot.title}.`,
@@ -789,12 +792,12 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     `Room members: ${roster}, and ${userName} (the human).`,
     readyGroup.bulletin.trim() && `Room bulletin (shared instructions for everyone):\n${readyGroup.bulletin.trim()}`,
     `Reply as yourself, briefly and conversationally. To bring a teammate in, mention them like @Name — they'll see the conversation and respond.`,
-    outsideRoom.length > 0 && roomPeerRosterSystemPrompt(outsideRoom),
-    integrations.agents && (CREDENTIAL_PROMPT + REACTION_PROMPT + (orchestration && !orchestration.roomHandoffId && !roomPeerHop ? THREADS_PROMPT : "")).trim(),
+    outsideRoom.length > 0 && referenceText(roomPeerRosterSystemPrompt(outsideRoom)),
+    integrations.agents && referenceText(CREDENTIAL_PROMPT + REACTION_PROMPT + (orchestration && !orchestration.roomHandoffId && !roomPeerHop ? THREADS_PROMPT : "")).trim(),
     integrations.agents && (!orchestration || orchestration.roomHandoffId) && "For actual Sagax teamwork, discover IDs with list_room_targets and use coordinate_bots for advice or work in this or another room. Do not substitute native coding helpers for these named bots. Consult only when needed to make a decision; no discussion step is mandatory. Give concrete responsibilities, exact accessible paths and acceptance checks. End your turn after assigning; busy teammates queue and results automatically resume you. When they return, finish the requested verification and give the user one final answer. Native helper names are not evidence that a Sagax teammate participated. Plain @mentions are only for conversational replies in this room.",
-    integrations.agents && ROUTINE_PROMPT.trim(),
-    integrations.agents && botProfilePrompt(bot).trim(),
-    skillAuthoring && LEARN_PROMPT.trim(),
+    integrations.agents && referenceText(ROUTINE_PROMPT).trim(),
+    integrations.agents && referenceText(botProfilePrompt(bot)).trim(),
+    skillAuthoring && referenceText(LEARN_PROMPT).trim(),
     orchestration?.systemInstructions,
   ]
     .filter(Boolean)
@@ -946,9 +949,10 @@ export function createLaunchGroupMemberTurn(host: GroupMemberTurnHost) {
     { id: "skill-instructions", label: "Skill instructions", text: renderSkillInstructions(selectedSkills, { includeRoot: Boolean(workspace) && roomServerFiles }) },
     { id: "playbooks", label: "Playbooks", text: installedPlaybookInstructions(text, bot.playbooks) },
   ];
-  const roomHidden = roomServerFiles ? null : hideServerPathsInSections(roomParts, serverPathView(bot.id));
+  const referencedParts = onDemandPromptParts(roomParts, referenceReads);
+  const roomHidden = roomServerFiles ? null : hideServerPathsInSections(referencedParts, serverPathView(bot.id));
   if (roomHidden?.leaked.length) console.warn(`[prompt] server paths hidden for ${bot.id} (no server file tools): ${roomHidden.leaked.join(", ")}`);
-  const roomBuilt = buildSystemPrompt(system, store.bot(bot.id)?.soul ?? bot.soul ?? "", roomHidden?.sections ?? roomParts, roomStable || instance.driverKind === "claudeAgent"
+  const roomBuilt = buildSystemPrompt(system, store.bot(bot.id)?.soul ?? bot.soul ?? "", roomHidden?.sections ?? referencedParts, roomStable || instance.driverKind === "claudeAgent"
     ? new Set([
       ...(instance.driverKind === "claudeAgent" ? CLAUDE_REUSE_VOLATILE_SECTIONS : []),
       ...(roomStable ? COMPACT_VOLATILE_SECTIONS : []),

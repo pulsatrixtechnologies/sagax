@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { McpAuditRecord } from "../mcp/mcp-permissions.ts";
 import type { SubjectTokenOutcome } from "../auth/idp-session.ts";
 import type { ExchangeResult } from "./perspicax-link.ts";
-import { PERSPICAX_ACCESS_ENDED, PERSPICAX_ROUTINE_RETRY_MS, PERSPICAX_SESSION_RESET, PERSPICAX_UNAVAILABLE_WHY, PerspicaxMcp, parseMcpBody, perspicaxReadOnlyToolsOf, perspicaxReplayable, reviewedReadsOf, perspicaxSessionLost, perspicaxUnavailableRow, perspicaxUnavailableWhy, type PerspicaxMcpLink, type PerspicaxMcpOptions } from "./perspicax-mcp.ts";
+import { PERSPICAX_ACCESS_ENDED, PERSPICAX_KEEPALIVE_PER_PERSON, PERSPICAX_ROUTINE_RETRY_MS, PERSPICAX_SESSION_RESET, PERSPICAX_UNAVAILABLE_WHY, PerspicaxMcp, parseMcpBody, perspicaxReadOnlyToolsOf, perspicaxReplayable, reviewedReadsOf, perspicaxSessionLost, perspicaxUnavailableRow, perspicaxUnavailableWhy, type PerspicaxMcpLink, type PerspicaxMcpOptions } from "./perspicax-mcp.ts";
 
 const ISS = "https://px.example.test";
 const ALICE = "pr_alice";
@@ -15,8 +15,20 @@ const CATALOG = [
   { id: "P2", slug: "billing", name: "Billing", description: "" },
 ];
 
-function harness(options: { held?: Record<string, string[]>; mcp?: (request: { headers: Record<string, string>; body: any; method: string }) => Response | Promise<Response>; onCall?: Set<string>; guard?: PerspicaxMcpOptions["permissionGuard"]; remoteSupport?: PerspicaxMcpOptions["onRemoteSupport"]; askGo?: PerspicaxMcpOptions["askGo"] } = {}) {
+function harness(options: {
+  held?: Record<string, string[]>;
+  mcp?: (request: { headers: Record<string, string>; body: any; method: string }) => Response | Promise<Response>;
+  onCall?: Set<string>;
+  engineWarm?: Set<string>;
+  keepaliveMs?: number;
+  keepaliveJitterMs?: number;
+  maxPingedPerPerson?: number;
+  guard?: PerspicaxMcpOptions["permissionGuard"];
+  remoteSupport?: PerspicaxMcpOptions["onRemoteSupport"];
+  askGo?: PerspicaxMcpOptions["askGo"];
+} = {}) {
   let clock = 1_000_000;
+  const timers: Array<{ at: number; fn: () => void | Promise<void>; cancelled: boolean }> = [];
   const held = options.held ?? { A: ["P1", "P2"], B: ["P1"], C: [] };
   const subjects: Record<string, { iss: string; sub: string; disabled: boolean }> = {
     [ALICE]: { iss: ISS, sub: "A", disabled: false },
@@ -88,6 +100,15 @@ function harness(options: { held?: Record<string, string[]>; mcp?: (request: { h
     delegationRefused: (principalId) => refusedDelegations.push(principalId),
     botProfiles: (id) => botProfiles[id],
     ...(options.onCall ? { keepWarm: (threadId: string) => options.onCall!.has(threadId) } : {}),
+    ...(options.engineWarm ? { engineWarm: (threadId: string) => options.engineWarm!.has(threadId) } : {}),
+    ...(options.keepaliveMs !== undefined ? { keepaliveMs: options.keepaliveMs } : {}),
+    ...(options.keepaliveJitterMs !== undefined ? { keepaliveJitterMs: options.keepaliveJitterMs } : { keepaliveJitterMs: 0 }),
+    ...(options.maxPingedPerPerson !== undefined ? { maxPingedPerPerson: options.maxPingedPerPerson } : {}),
+    after: (ms, fn) => {
+      const timer = { at: clock + ms, fn, cancelled: false };
+      timers.push(timer);
+      return { cancel: () => { timer.cancelled = true; } };
+    },
     version: "0.1.89",
     ...(options.guard ? { permissionGuard: options.guard } : {}),
     ...(options.remoteSupport ? { onRemoteSupport: options.remoteSupport } : {}),
@@ -101,6 +122,15 @@ function harness(options: { held?: Record<string, string[]>; mcp?: (request: { h
   return {
     mcp, subjects, sleeps, botProfiles, exchanges, revoked, logs, mcpCalls, subjectCalls, delegations, delegationCalls, refusedDelegations,
     advance: (ms: number) => { clock += ms; },
+    /** Fire keep-alive timers that are due at the current clock. */
+    runDue: async () => {
+      const due = timers.filter((timer) => !timer.cancelled && timer.at <= clock).sort((a, b) => a.at - b.at);
+      for (const timer of due) {
+        if (timer.cancelled) continue;
+        timer.cancelled = true;
+        await timer.fn();
+      }
+    },
     failSignIn: (outcome: SubjectTokenOutcome | null) => { signInFails = outcome; },
     failExchange: (outcome: ExchangeResult | null) => { exchangeFails = outcome; },
     failExchangeOnce: (outcome: ExchangeResult) => { exchangeFailsOnce = outcome; },
@@ -893,6 +923,127 @@ describe("PerspicaxMcp remote support answers", () => {
       args: { code: "BQDHS7" },
       result: { content: [{ type: "text", text: JSON.stringify({ state: "connected", fetch_ip_count: 1 }) }] },
     }]);
+  });
+});
+
+describe("PerspicaxMcp keep-alive (#1955)", () => {
+  const warm = new Set(["t1"]);
+
+  it("sends a ping on the schedule while the engine is warm, and re-arms after it", async () => {
+    const h = harness({ engineWarm: warm, keepaliveMs: 90_000, keepaliveJitterMs: 0 });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    const before = h.mcpCalls.filter((c) => c.body?.method === "ping").length;
+    h.advance(90_000);
+    await h.runDue();
+    expect(h.mcpCalls.filter((c) => c.body?.method === "ping").length).toBe(before + 1);
+    h.advance(90_000);
+    await h.runDue();
+    expect(h.mcpCalls.filter((c) => c.body?.method === "ping").length).toBe(before + 2);
+  });
+
+  it("never pings a cold thread", async () => {
+    const h = harness({ keepaliveMs: 1_000, keepaliveJitterMs: 0 });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    h.advance(5_000);
+    await h.runDue();
+    expect(h.mcpCalls.some((c) => c.body?.method === "ping")).toBe(false);
+  });
+
+  it("stops on noteEngineCold (engine idle close)", async () => {
+    const h = harness({ engineWarm: warm, keepaliveMs: 90_000, keepaliveJitterMs: 0 });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    h.mcp.noteEngineCold("t1");
+    h.advance(90_000);
+    await h.runDue();
+    expect(h.mcpCalls.some((c) => c.body?.method === "ping")).toBe(false);
+  });
+
+  it("stops on endGeneration retire when the engine is cold", async () => {
+    const h = harness({ engineWarm: new Set(), keepaliveMs: 90_000, keepaliveJitterMs: 0 });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    await h.mcp.endGeneration("t1", "g1");
+    h.advance(90_000);
+    await h.runDue();
+    expect(h.mcpCalls.some((c) => c.body?.method === "ping")).toBe(false);
+  });
+
+  it("stops on endAll (process shutdown)", async () => {
+    const h = harness({ engineWarm: warm, keepaliveMs: 90_000, keepaliveJitterMs: 0 });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    await h.mcp.endAll();
+    h.advance(90_000);
+    await h.runDue();
+    expect(h.mcpCalls.some((c) => c.body?.method === "ping")).toBe(false);
+  });
+
+  it("a failed ping ends the entry; the next turn reopens", async () => {
+    let failPing = false;
+    const engineWarm = new Set(["t1"]);
+    const h = harness({
+      engineWarm,
+      keepaliveMs: 90_000,
+      keepaliveJitterMs: 0,
+      mcp: ({ body, method }) => {
+        if (method === "DELETE") return new Response(null, { status: 204 });
+        if (body?.method === "ping" && failPing) return new Response("gone", { status: 404 });
+        if (body?.id === undefined) return new Response(null, { status: 202 });
+        return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: body.method === "tools/list" ? { tools: [] } : {} }), {
+          status: 200,
+          headers: { "content-type": "application/json", "mcp-session-id": "sess-1" },
+        });
+      },
+    });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    failPing = true;
+    h.advance(90_000);
+    await h.runDue();
+    expect(h.mcpCalls.some((c) => c.body?.method === "ping")).toBe(true);
+    // Entry ended: next turn with a cold-then-warm engine pays a fresh exchange
+    engineWarm.delete("t1");
+    await h.mcp.endGeneration("t1", "g1");
+    const exchangesBefore = h.exchanges.length;
+    engineWarm.add("t1");
+    await h.mcp.prepareTurn({ threadId: "t1", generation: "g2", bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    expect(h.exchanges.length).toBeGreaterThan(exchangesBefore);
+  });
+
+  it("keeps at most maxPingedPerPerson entries pinged (newest)", async () => {
+    const engineWarm = new Set<string>();
+    for (let i = 0; i < 10; i += 1) engineWarm.add(`t${i}`);
+    const h = harness({
+      engineWarm,
+      keepaliveMs: 90_000,
+      keepaliveJitterMs: 0,
+      maxPingedPerPerson: 8,
+      held: { B: ["P1"] },
+    });
+    h.botProfiles.x = ["P1"];
+    for (let i = 0; i < 10; i += 1) {
+      await h.mcp.prepareTurn({ threadId: `t${i}`, generation: "g", bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+      await h.mcp.relay({ threadId: `t${i}`, generation: "g", botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    }
+    h.advance(90_000);
+    await h.runDue();
+    const pings = h.mcpCalls.filter((c) => c.body?.method === "ping");
+    expect(pings.length).toBe(PERSPICAX_KEEPALIVE_PER_PERSON);
+    expect(pings.length).toBe(8);
+  });
+
+  it("keeps the MCP session across turns when the engine stays warm", async () => {
+    const h = harness({ engineWarm: warm, keepaliveMs: 90_000, keepaliveJitterMs: 0 });
+    await h.mcp.prepareTurn({ ...turn, bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    await h.mcp.relay({ ...turn, botId: "x", profileId: "P1", frame: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+    const exchangesAfterFirst = h.exchanges.length;
+    await h.mcp.endGeneration("t1", "g1");
+    await h.mcp.prepareTurn({ threadId: "t1", generation: "g2", bot, speakerPrincipalId: BOB, speakerOrigin: "person" });
+    expect(h.exchanges.length).toBe(exchangesAfterFirst);
+    expect(h.logs.some((line) => /warm engine/.test(line))).toBe(true);
   });
 });
 

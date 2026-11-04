@@ -112,6 +112,19 @@ export interface PerspicaxMcpOptions {
    * next turn instead of revoked, so the call's tools stay mounted from turn
    * to turn without a new exchange (server/voice/voice-call-session.ts). */
   keepWarm?(threadId: string): boolean;
+  /** The thread's engine session is still warm (idle pool, running turn, or
+   * a pooled ACP/Claude process): Perspicax MCP entries stay and are pinged
+   * so Perspicax's 120 s idle close does not fire (#1955). */
+  engineWarm?(threadId: string): boolean;
+  /** One-shot timer for keep-alive (tests inject a fake clock). Default:
+   * setTimeout, unref'd. `fn` may return a Promise; tests await it. */
+  after?(ms: number, fn: () => void | Promise<void>): { cancel: () => void };
+  /** Keep-alive base delay (default PERSPICAX_KEEPALIVE_MS). */
+  keepaliveMs?: number;
+  /** Keep-alive jitter (default PERSPICAX_KEEPALIVE_JITTER_MS). */
+  keepaliveJitterMs?: number;
+  /** Per-person pinged-entry cap (default PERSPICAX_KEEPALIVE_PER_PERSON). */
+  maxPingedPerPerson?: number;
   /** Pulsa Bot's version, sent in `clientInfo`. */
   version: string;
   /** Permission check for tools/call frames (server/mcp/mcp-permissions.ts). Null
@@ -186,6 +199,12 @@ export const VOICE_CALL_UNAVAILABLE = "Refused by Sagax: a call goes through pla
 export const PERSPICAX_TOKEN_MIN_LIFE_MS = 60_000;
 export const PERSPICAX_RELAY_TIMEOUT_MS = 10 * 60_000;
 export const PERSPICAX_RELAY_MAX_BYTES = 20 * 1024 * 1024;
+/** Idle keep-alive ping cadence: under Perspicax KEEP_ALIVE (120 s). */
+export const PERSPICAX_KEEPALIVE_MS = 90_000;
+/** Jitter added on top of PERSPICAX_KEEPALIVE_MS so many entries do not fire together. */
+export const PERSPICAX_KEEPALIVE_JITTER_MS = 15_000;
+/** At most this many entries of one person are pinged (newest kept). */
+export const PERSPICAX_KEEPALIVE_PER_PERSON = 8;
 export const PERSPICAX_ACCESS_ENDED = "Perspicax access for this turn ended";
 /** A call Sagax did not replay after Perspicax dropped the MCP session: it can
  * change data, so the bot decides (the call never reached Perspicax's tool). */
@@ -292,6 +311,12 @@ interface Entry {
   /** The person is out, or the access could not be renewed: every call ends. */
   ended?: boolean;
   renewing?: Promise<boolean>;
+  /** Idle keep-alive timer (#1955): one per entry, unref'd. */
+  keepAlive?: { cancel: () => void } | null;
+  /** When this entry's keep-alive was last armed (per-person newest cap). */
+  keepAliveArmedAt?: number;
+  /** True while a keep-alive ping is in flight (do not re-arm over it). */
+  keepAlivePing?: boolean;
 }
 
 export interface PerspicaxRelayAnswer {
@@ -519,6 +544,11 @@ export class PerspicaxMcp {
   /** "At the same time": a 5 minute window, then a write is sent again. */
   private readonly writes = new WriteOnce<PerspicaxRelayAnswer>({ ttlMs: 5 * 60_000 });
 
+  private readonly keepaliveMs: number;
+  private readonly keepaliveJitterMs: number;
+  private readonly maxPingedPerPerson: number;
+  private disposed = false;
+
   constructor(options: PerspicaxMcpOptions) {
     this.options = options;
     this.fetcher = options.fetch ?? fetch;
@@ -526,6 +556,134 @@ export class PerspicaxMcp {
     this.log = options.log ?? ((line) => console.log(line));
     this.routineRetryMs = options.routineRetryMs ?? PERSPICAX_ROUTINE_RETRY_MS;
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.keepaliveMs = options.keepaliveMs ?? PERSPICAX_KEEPALIVE_MS;
+    this.keepaliveJitterMs = options.keepaliveJitterMs ?? PERSPICAX_KEEPALIVE_JITTER_MS;
+    this.maxPingedPerPerson = Math.max(1, options.maxPingedPerPerson ?? PERSPICAX_KEEPALIVE_PER_PERSON);
+  }
+
+  /** Voice call or a still-warm engine session: entries stay across turns. */
+  private sessionShouldStay(threadId: string): boolean {
+    return this.options.keepWarm?.(threadId) === true || this.options.engineWarm?.(threadId) === true;
+  }
+
+  private scheduleAfter(ms: number, fn: () => void | Promise<void>): { cancel: () => void } {
+    if (this.options.after) return this.options.after(ms, fn);
+    const timer = setTimeout(() => { void fn(); }, ms);
+    timer.unref?.();
+    return { cancel: () => clearTimeout(timer) };
+  }
+
+  private disarmKeepAlive(entry: Entry): void {
+    entry.keepAlive?.cancel();
+    entry.keepAlive = null;
+    entry.keepAliveArmedAt = undefined;
+  }
+
+  /** Arm (or re-arm) a keep-alive ping when the engine session is warm.
+   * Never for a cold thread; at most maxPingedPerPerson per person (newest). */
+  private touchKeepAlive(entry: Entry): void {
+    this.disarmKeepAlive(entry);
+    if (this.disposed || entry.ended || entry.keepAlivePing) return;
+    if (!entry.mcpSessionId || !this.sessionShouldStay(entry.threadId)) return;
+    if (entry.expiresAt - this.now() < PERSPICAX_TOKEN_MIN_LIFE_MS) return;
+    entry.keepAliveArmedAt = this.now();
+    this.enforcePingCap(entry);
+    if (!entry.keepAliveArmedAt) return; // dropped by the per-person cap
+    const delay = this.keepaliveMs + (this.keepaliveJitterMs > 0 ? Math.floor(Math.random() * this.keepaliveJitterMs) : 0);
+    entry.keepAlive = this.scheduleAfter(delay, () => this.pingKeepAlive(entry));
+  }
+
+  /** Drop the oldest pinged entries of this person until the cap holds. */
+  private enforcePingCap(newest: Entry): void {
+    const pinged = [...this.entries.values(), ...this.warm.values()]
+      .filter((entry) => entry.principalId === newest.principalId && entry.keepAliveArmedAt !== undefined && !entry.ended);
+    if (pinged.length <= this.maxPingedPerPerson) return;
+    pinged.sort((a, b) => (a.keepAliveArmedAt ?? 0) - (b.keepAliveArmedAt ?? 0));
+    const drop = pinged.length - this.maxPingedPerPerson;
+    for (let i = 0; i < drop; i += 1) {
+      const old = pinged[i]!;
+      this.disarmKeepAlive(old);
+    }
+  }
+
+  private async pingKeepAlive(entry: Entry): Promise<void> {
+    entry.keepAlive = null;
+    if (this.disposed || entry.ended || entry.keepAlivePing) return;
+    if (!this.sessionShouldStay(entry.threadId) || !entry.mcpSessionId) {
+      this.disarmKeepAlive(entry);
+      return;
+    }
+    if (entry.expiresAt - this.now() < PERSPICAX_TOKEN_MIN_LIFE_MS) {
+      if (!(await this.renew(entry))) {
+        this.disarmKeepAlive(entry);
+        return;
+      }
+    }
+    const link = this.options.link();
+    if (!link) {
+      this.disarmKeepAlive(entry);
+      return;
+    }
+    entry.keepAlivePing = true;
+    try {
+      const id = `sagax-keepalive-${++this.nativeCalls}`;
+      const sent = await this.send(link, entry, { jsonrpc: "2.0", id, method: "ping", params: {} }, undefined, true);
+      if (typeof sent === "string" || !sent.response.ok) {
+        this.disarmKeepAlive(entry);
+        this.end(entry);
+        return;
+      }
+      // A lost session answered as 404/422: treat as a failed ping.
+      if (perspicaxSessionLost(sent.response.status, sent.text)) {
+        this.disarmKeepAlive(entry);
+        this.end(entry);
+        return;
+      }
+    } catch {
+      this.disarmKeepAlive(entry);
+      this.end(entry);
+      return;
+    } finally {
+      entry.keepAlivePing = false;
+    }
+    if (!entry.ended) this.touchKeepAlive(entry);
+  }
+
+  /** Engine session went cold: stop pings and drop kept tokens for this thread. */
+  noteEngineCold(threadId: string): void {
+    for (const entry of [...this.entries.values(), ...this.warm.values()]) {
+      if (entry.threadId === threadId) this.disarmKeepAlive(entry);
+    }
+    if (this.options.keepWarm?.(threadId) === true) return;
+    void this.endWarm(threadId);
+  }
+
+  /** Engine session is warm again (idle pool): re-arm pings on kept entries. */
+  noteEngineWarm(threadId: string): void {
+    for (const entry of [...this.entries.values(), ...this.warm.values()]) {
+      if (entry.threadId === threadId && entry.mcpSessionId && !entry.ended) this.touchKeepAlive(entry);
+    }
+  }
+
+  /** Open (or verify) the MCP session and identity lease for every mounted
+   * profile of this turn, so the handshake can run beside setup (#1955). */
+  async ensureTurnSessions(threadId: string, generation: string): Promise<void> {
+    const prefix = `${threadId}\u0000${generation}\u0000`;
+    const work: Promise<void>[] = [];
+    for (const [at, entry] of this.entries) {
+      if (!at.startsWith(prefix) || entry.ended) continue;
+      work.push((async () => {
+        const link = this.options.link();
+        if (!link || entry.ended) return;
+        if (!entry.initialized && !entry.mcpSessionId) await this.reopen(link, entry);
+        if (entry.identity) await entry.identity.ensure();
+        else if (!entry.toolsListBody && entry.mcpSessionId) {
+          await this.identityRpc(entry, "tools/list").catch(() => undefined);
+        }
+        if (entry.mcpSessionId && !entry.ended) this.touchKeepAlive(entry);
+      })());
+    }
+    await Promise.all(work);
   }
 
   private setIdentity(entry: Entry, slug: string | undefined): void {
@@ -631,10 +789,10 @@ export class PerspicaxMcp {
     // quick turns hit Perspicax's rate limit, and a refused exchange left
     // the profile out of that turn: tools gone, then back).
     let need = known;
-    const keepWarm = this.options.keepWarm?.(input.threadId) === true;
-    // the call ended (or expired) without saying so: its kept tokens go
-    if (!keepWarm) void this.endWarm(input.threadId);
-    if (keepWarm) {
+    const stay = this.sessionShouldStay(input.threadId);
+    // the call or warm engine ended without saying so: its kept tokens go
+    if (!stay) void this.endWarm(input.threadId);
+    if (stay) {
       need = [];
       for (const profileId of known) {
         const at = warmKey(input.threadId, profileId, principalId, source);
@@ -642,13 +800,19 @@ export class PerspicaxMcp {
         if (kept && !kept.ended && kept.botId === input.bot.id && kept.expiresAt - this.now() >= PERSPICAX_TOKEN_MIN_LIFE_MS) {
           this.warm.delete(at);
           kept.generation = input.generation;
-          this.setIdentity(kept, input.bot.perspicaxActAs?.slug);
+          const wanted = input.bot.perspicaxActAs?.slug;
+          // Voice keep clears the identity lease each turn; an engine-warm
+          // keep leaves the lease and tools/list cache so the next turn
+          // skips the re-handshake (#1955).
+          if (!kept.identity || (wanted && kept.identity.profile() !== wanted) || (!wanted && kept.identity.profile())) {
+            this.setIdentity(kept, wanted);
+          }
           const previous = this.entries.get(key(input.threadId, input.generation, profileId));
           if (previous && previous !== kept) void this.close(previous);
           this.entries.set(key(input.threadId, input.generation, profileId), kept);
           const profile = catalog.get(profileId)!;
           plan.mounted.push({ profileId, slug: profile.slug, name: profile.name || profile.slug || profileId });
-          this.log(`perspicax mcp: profile ${profileId} kept for the call's next turn`);
+          this.log(`perspicax mcp: profile ${profileId} kept for the ${this.options.keepWarm?.(input.threadId) ? "call" : "warm engine"}'s next turn`);
         } else need.push(profileId);
       }
       if (!need.length) return plan;
@@ -1172,7 +1336,11 @@ export class PerspicaxMcp {
       const onNotification = (note: Json) => {
         if (note.method === "notifications/tools/list_changed") entry.toolsListBody = undefined;
       };
-      return { response, text: await readBounded(response, PERSPICAX_RELAY_MAX_BYTES, onRequest, onNotification) };
+      const text = await readBounded(response, PERSPICAX_RELAY_MAX_BYTES, onRequest, onNotification);
+      // A real exchange (and a successful keep-alive ping) refreshes the idle
+      // timer so Perspicax's 120 s close does not fire while the engine is warm.
+      if (!entry.keepAlivePing && response.ok) this.touchKeepAlive(entry);
+      return { response, text };
     } catch {
       return "unreachable";
     }
@@ -1276,31 +1444,40 @@ export class PerspicaxMcp {
   }
 
   /** Every generation of a thread (stop, delete, the backstop before a new
-   * turn). On a live call its tokens are kept for the call's next turn. */
+   * turn). On a live call or warm engine its tokens are kept for the next turn. */
   async endThread(threadId: string): Promise<void> {
-    const keep = this.options.keepWarm?.(threadId) === true;
+    const keep = this.sessionShouldStay(threadId);
     await Promise.all([this.retire(`${threadId}\u0000`, threadId), ...(keep ? [] : [this.endWarm(threadId)])]);
   }
 
-  /** End the entries under `prefix`: kept for a live call's next turn
-   * (prepareTurn takes them over), revoked otherwise. */
+  /** End the entries under `prefix`: kept for a live call or warm engine's
+   * next turn (prepareTurn takes them over), revoked otherwise. */
   private async retire(prefix: string, threadId: string): Promise<void> {
     const done: Promise<unknown>[] = [];
-    const keep = this.options.keepWarm?.(threadId) === true;
+    const voiceKeep = this.options.keepWarm?.(threadId) === true;
+    const engineKeep = this.options.engineWarm?.(threadId) === true;
+    const keep = voiceKeep || engineKeep;
     for (const [at, entry] of this.entries) {
       if (!at.startsWith(prefix)) continue;
       this.entries.delete(at);
-      await entry.identity?.clear();
-      entry.identity = undefined;
-      entry.servedTools = undefined;
-      entry.readOnlyTools = undefined;
-      entry.twilioTools = undefined;
-      entry.toolsListBody = undefined;
+      // Voice turns clear the identity lease each time (AGENTS.md). An
+      // engine-warm keep leaves the lease and tools/list cache so the next
+      // turn skips the re-handshake; keep-alive pings continue.
+      if (voiceKeep || !engineKeep) {
+        this.disarmKeepAlive(entry);
+        await entry.identity?.clear();
+        entry.identity = undefined;
+        entry.servedTools = undefined;
+        entry.readOnlyTools = undefined;
+        entry.twilioTools = undefined;
+        entry.toolsListBody = undefined;
+      }
       if (keep && !entry.ended && entry.expiresAt - this.now() >= PERSPICAX_TOKEN_MIN_LIFE_MS) {
         const warm = warmKey(entry.threadId, entry.profileId, entry.principalId, entry.source);
         const previous = this.warm.get(warm);
         if (previous && previous !== entry) done.push(this.close(previous));
         this.warm.set(warm, entry);
+        if (engineKeep && entry.mcpSessionId) this.touchKeepAlive(entry);
         continue;
       }
       done.push(this.close(entry));
@@ -1310,9 +1487,11 @@ export class PerspicaxMcp {
 
   /** Shutdown: revoke everything. */
   async endAll(): Promise<void> {
+    this.disposed = true;
     const all = [...this.entries.values(), ...this.warm.values()];
     this.entries.clear();
     this.warm.clear();
+    for (const entry of all) this.disarmKeepAlive(entry);
     await Promise.all(all.map((entry) => this.close(entry)));
   }
 
@@ -1398,6 +1577,7 @@ export class PerspicaxMcp {
   private end(entry: Entry): void {
     if (entry.ended) return;
     entry.ended = true;
+    this.disarmKeepAlive(entry);
     void entry.identity?.clear();
     void this.revoke(entry.token);
   }
@@ -1405,6 +1585,7 @@ export class PerspicaxMcp {
   private async close(entry: Entry): Promise<void> {
     const link = this.options.link();
     if (entry.ended) return;
+    this.disarmKeepAlive(entry);
     await entry.identity?.clear();
     entry.ended = true;
     // The session goes first, while its token still opens it; then the token.

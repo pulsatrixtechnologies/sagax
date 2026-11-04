@@ -10,6 +10,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import { allowsTool, parseToolScope } from "../../shared/tool-scope.ts";
 import { DATA_DIR } from "../config.ts";
+import { codexFullApprovalPolicy } from "./codex/approvals.ts";
 
 /** A policy file Sagax owns for withheld turns (a system settings file, a
  * config an engine reads through an environment variable). Written under
@@ -273,13 +274,15 @@ export const CODEX_WITHHELD_APPROVAL = {
   turn: { approvalPolicy: "on-request", approvalsReviewer: "user", sandboxPolicy: { type: "readOnly" } },
 } as const;
 
-/** A withheld Codex turn in Full access: Codex never asks (`never`) and its
- * own sandbox stays read-only, so nothing runs or writes on the Sagax server
- * (the target there is the person's environment or desktop, reached through
- * Sagax's MCP tools, which Full lets through without a prompt). */
+/** A withheld Codex turn in Full access: Codex never asks about a command,
+ * a file or a sandbox escalation, and its own sandbox stays read-only, so
+ * nothing runs or writes on the Sagax server (the target there is the
+ * person's environment or desktop, reached through Sagax's MCP tools).
+ * #1977: an MCP tool approval goes to Sagax's gate (codexFullApprovalPolicy);
+ * with `never` and this read-only sandbox Codex refused every such call. */
 export const CODEX_WITHHELD_FULL_APPROVAL = {
-  thread: { approvalPolicy: "never", approvalsReviewer: "user", sandbox: "read-only" },
-  turn: { approvalPolicy: "never", approvalsReviewer: "user", sandboxPolicy: { type: "readOnly" } },
+  thread: { approvalPolicy: codexFullApprovalPolicy(), approvalsReviewer: "user", sandbox: "read-only" },
+  turn: { approvalPolicy: codexFullApprovalPolicy(), approvalsReviewer: "user", sandboxPolicy: { type: "readOnly" } },
 } as const;
 
 /** The folder a withheld turn of an engine that reads workspace files runs

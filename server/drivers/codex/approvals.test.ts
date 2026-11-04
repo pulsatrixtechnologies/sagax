@@ -111,7 +111,8 @@ describe("effectiveApprovalPolicy and customApprovalParams", () => {
 describe("codexNamedApprovalParams", () => {
   it("maps full and ask modes to Codex thread and turn fields", () => {
     expect(codexNamedApprovalParams("full").thread).toMatchObject({
-      approvalPolicy: "never",
+      // #1977: MCP tool approvals reach Sagax's gate; everything else as never
+      approvalPolicy: { granular: { mcp_elicitations: true, rules: false, sandbox_approval: false, request_permissions: false, skill_approval: false } },
       sandbox: "danger-full-access",
     });
     expect(codexNamedApprovalParams("ask").turn).toMatchObject({

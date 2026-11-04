@@ -96,6 +96,31 @@ export function mcpAppApprovalForm(params: unknown): McpApprovalForm | null {
   return { tool, summary: message, allowResult: { action: "accept", content } };
 }
 
+/** #1977 (2026-11-04): Full access on Codex. `never` is not usable here:
+ * Codex then refuses every MCP tool its mount marks "prompt" (a person's
+ * connector, Perspicax, Data) with "MCP tool call requires approval, but
+ * approval policy is never" whenever the sandbox is not danger-full-access
+ * (probed on codex-cli 0.166.0 with the organization server's read-only
+ * sandbox), and with danger-full-access it runs them with no word to Sagax,
+ * past the organization's and the person's rules. The granular policy keeps
+ * `never` for everything else (a sandbox escalation, an exec-policy prompt
+ * rule, a skill or a permission request is refused without asking, as
+ * `never` does) and lets only the MCP tool approval reach Sagax, whose gate
+ * answers it (index.ts request.opened: Full approves unless a rule, the
+ * safety review or isolation holds it). Requires the experimental API,
+ * which the driver always negotiates (finish.ts initialize). */
+export function codexFullApprovalPolicy(): { granular: Record<string, boolean> } {
+  return {
+    granular: {
+      mcp_elicitations: true,
+      rules: false,
+      sandbox_approval: false,
+      request_permissions: false,
+      skill_approval: false,
+    },
+  };
+}
+
 /** Codex persists these values on its native thread. Keep them explicit on
  * start, resume, and every turn so switching modes cannot leave a more
  * permissive sandbox/reviewer stuck to the next request. */
@@ -106,12 +131,12 @@ export function codexNamedApprovalParams(mode: Exclude<ApprovalMode, "custom">, 
   if (mode === "full") {
     return {
       thread: {
-        approvalPolicy: "never",
+        approvalPolicy: codexFullApprovalPolicy(),
         approvalsReviewer: "user",
         sandbox: "danger-full-access",
       },
       turn: {
-        approvalPolicy: "never",
+        approvalPolicy: codexFullApprovalPolicy(),
         approvalsReviewer: "user",
         sandboxPolicy: { type: "dangerFullAccess" },
       },

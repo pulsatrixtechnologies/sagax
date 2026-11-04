@@ -651,6 +651,8 @@ struct ConnectAppsMain: View {
             Rectangle().fill(theme.hairlineWeak).frame(height: 1)
         }
         .padding(.top, 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("connect-apps-tabs")
     }
 
     /// The category chips of Discover: All, then each category with apps.

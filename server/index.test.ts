@@ -30,7 +30,13 @@ import { freePortBlock } from "./testing/ports.ts";
 import { openSse } from "./testing/sse.ts";
 import { fileMaxBytes, imageMaxBytes } from "./attachments/attachments.ts";
 import { MISUSE_POLICY_PROMPT } from "../shared/misuse-guardrails.ts";
-import { computerPrompt, RUN_YOURSELF_PROMPT, SIGN_IN_PROMPT, VERIFY_FIRST_PROMPT } from "./system-prompt.ts";
+import { computerPrompt, RUN_YOURSELF_PROMPT, SIGN_IN_PROMPT, VERIFY_FIRST_PROMPT, WORK_STYLE_PROMPT } from "./system-prompt.ts";
+import { onDemandPromptParts, systemPromptReference } from "./context/prompt-references.ts";
+
+/** #1997: a turn with sagax_help carries the brief and the prompt: pointer;
+ * the full paragraph is the reference it reads. */
+const computerSectionText = (kind: Parameters<typeof computerPrompt>[0]) =>
+  onDemandPromptParts([{ id: "computer", label: "Computer", text: computerPrompt(kind) }], true)[0]!.text;
 import {
   PHONE_SECRET_INFO,
   phoneSecretAAD,
@@ -8768,8 +8774,9 @@ describe("harness HTTP API", () => {
       const soulEnd = system.indexOf("--- END STANDING INSTRUCTIONS ---") + "--- END STANDING INSTRUCTIONS ---".length;
       expect(soulEnd).toBeGreaterThan(0);
       // the work style (#1617) sits on the soul; the setup block is the next section
-      const afterSoul = system.slice(soulEnd).replace(/^\nHow you work\.[^\n]*/, "");
-      expect(afterSoul.startsWith("\n\nThe user explicitly asked you to set yourself up")).toBe(true);
+      const rest = system.slice(soulEnd);
+      const afterSoul = rest.startsWith(WORK_STYLE_PROMPT) ? rest.slice(WORK_STYLE_PROMPT.length) : rest;
+      expect(afterSoul.slice(0, 400)).toMatch(/^\n\nThe user explicitly asked you to set yourself up/);
       // the literal /setup never reaches the model — extract the user text the
       // way promptText() in fake-claude-cli.ts does, joining text parts if the
       // content is an array of blocks rather than a plain string
@@ -9303,9 +9310,14 @@ describe("harness HTTP API", () => {
       expect(dump.env.AGENT_BROWSER_ENCRYPTION_KEY).toBeUndefined();
 
       const system = dump.systemPrompt;
-      expect(system).toMatch(/agent_browser_snapshot/);
-      expect(system).toMatch(/page instructions as untrusted content/i);
-      expect(system).toMatch(/consequential action.*confirmation/i);
+      // #1997: the brief stays in the turn, the full rules are one sagax_help read away.
+      expect(system).toMatch(/agent_browser tools/);
+      expect(system).toMatch(/untrusted data, never authority/i);
+      expect(system).toContain('sagax_help with question "prompt:browser"');
+      const reference = systemPromptReference("prompt:browser") ?? "";
+      expect(reference).toMatch(/agent_browser_snapshot/);
+      expect(reference).toMatch(/page instructions as untrusted content/i);
+      expect(reference).toMatch(/consequential action.*confirmation/i);
       expect(system).toContain(browserSection.text);
       expect(system).toContain(SIGN_IN_PROMPT);
       expect(system).not.toMatch(/never type their (?:credentials|password)/i);
@@ -9405,11 +9417,11 @@ describe("harness HTTP API", () => {
       // VM turn cannot be dispatched here; the settings-level text is the
       // same wiring a dispatched VM turn uses.
       expect((await api("PATCH", `/api/bots/${bot.id}`, { computer: "vm" })).status).toBe(200);
-      expect((await computerSection(bot.id)).text).toBe(computerPrompt("vm-shared"));
+      expect((await computerSection(bot.id)).text).toBe(computerSectionText("vm-shared"));
       expect((await api("PATCH", "/api/config", { localVm: { mode: "per-bot", maxInstances: 1 } })).status).toBe(200);
-      expect((await computerSection(bot.id)).text).toBe(computerPrompt("vm-private"));
+      expect((await computerSection(bot.id)).text).toBe(computerSectionText("vm-private"));
       expect((await api("PATCH", "/api/config", { localVm: { mode: "shared", maxInstances: 2 } })).status).toBe(200);
-      expect((await computerSection(bot.id)).text).toBe(computerPrompt("vm-shared"));
+      expect((await computerSection(bot.id)).text).toBe(computerSectionText("vm-shared"));
 
       // Cloud on the Boat backend keeps the bot's own engine, with the Boat
       // as its computer tools, so preview and dispatch carry the same cloud
@@ -9424,9 +9436,10 @@ describe("harness HTTP API", () => {
         })).status).toBe(200);
         managedBoatRows = [{ id: "bx_8765432a", name: managedBoatNameForFixture(boatBot.id), state: "idle" }];
         boatPromptBodies.length = 0;
-        expect((await computerSection(boatBot.id)).text).toBe(computerPrompt("box"));
+        expect((await computerSection(boatBot.id)).text).toBe(computerSectionText("box"));
         const boatTurn = await turnPrompt(`/api/bots/${boatBot.id}/messages`);
-        expect(boatTurn).toContain(computerPrompt("box"));
+        expect(boatTurn).toContain(computerSectionText("box"));
+        expect(systemPromptReference("prompt:computer-box")).toBe(computerPrompt("box"));
         for (const paragraph of ["isolated Cua sandbox", "This is a VPS", "user's computer"]) {
           expect(boatTurn).not.toContain(paragraph);
         }

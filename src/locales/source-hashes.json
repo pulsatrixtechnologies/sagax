@@ -15715,6 +15715,7 @@
       "capabilities.state.notServed": "271d9fe63771bc27daae18638fcc63b983ac14eea1e0c4a31c77baa683a5f4e7",
       "capabilities.state.reserved": "2adf89c2048b8e8295549373d738e4043e567abdb21f33ceeb0c1c1d12bbc3b1",
       "capabilities.state.unverifiable": "11f6e195058ad6a4e1af39a194af8f24914fdb21dfc8f3030ed8eb259c6e68ff",
+      "capabilities.installed.supersededByFlow": "ba4ac2f242b4a4de76e4b79b1cf144f5ac2d5e30382b58e4241b7f91a69727e1",
       "capabilities.reason.nameTaken": "db2e416efd5d508c67d8603d296c549ea5a8e875d741206bec13c1911c2fb10e",
       "capabilities.reason.notSelected": "91424ca551904ecffb937275e5d9dad9642d126dc1f38539969fbce95b951646",
       "capabilities.reason.hostCommand": "f42ae21316e42b0d604b13f1596dd915c38c98a2b371b14b93a6f6704ed5f60c",

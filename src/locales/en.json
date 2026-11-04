@@ -12422,6 +12422,7 @@
   "capabilities.state.notServed": "Not served by this engine",
   "capabilities.state.reserved": "Reserved name",
   "capabilities.state.unverifiable": "Cannot be checked",
+  "capabilities.installed.supersededByFlow": "Superseded by the organization's Flow pack ({tenant} {version})",
   "capabilities.reason.nameTaken": "Another server of this bot already has this name, so it is left out.",
   "capabilities.reason.notSelected": "This bot's own list of servers leaves it out.",
   "capabilities.reason.hostCommand": "A command server never runs on an organization's server.",

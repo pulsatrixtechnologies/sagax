@@ -49,7 +49,7 @@ import { permissionMissingText } from "@/lib/permissions";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import { canEditConfig } from "@/lib/viewer";
 import { detailIdentity, discoverItems, installedEntries, privateSkills, type InstalledEntry } from "@/lib/installed-model";
-import { engineGetsNothing, enginesLine, organizationRows, useBotCapabilities } from "@/lib/capabilities";
+import { botPluginKey, engineGetsNothing, enginesLine, organizationRows, useBotCapabilities } from "@/lib/capabilities";
 import type { CapabilityForm, EngineParts } from "../../shared/capabilities";
 import type { SkillsLibrarySkillWire } from "../../shared/wire";
 import { WHOP_KEY, TAILSCALE_KEY, buildPluginItems, isGrokConnector, marketplacePluginKey, type PluginFilter, type PluginItem, type PluginTypeFilter } from "@/lib/plugins-model";
@@ -1290,6 +1290,12 @@ export function PluginsPanel() {
           resolved={scope === "bot" ? botCapabilities.data : undefined}
           resolvedError={scope === "bot" && !botCapabilities.data ? botCapabilities.error : null}
           onRetryResolved={() => void botCapabilities.reload()}
+          removingSuperseded={botBusy}
+          onRemoveSuperseded={scope === "bot" && scopedPluginView?.canChange ? (item) => {
+            const key = botPluginKey(item);
+            if (!key || !scopeBotId || botBusy !== null) return;
+            void botAction(`remove:${key}`, () => uninstallBotPlugin(scopeBotId, key));
+          } : undefined}
           onToggleOrganization={(item, next) => {
             if (!item.orgDeclaration) return;
             void setMine(item.orgDeclaration, next).then(() => botCapabilities.reload(), (failure) => setPanelError(readableError(failure)));

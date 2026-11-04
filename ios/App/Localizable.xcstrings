@@ -52704,6 +52704,16 @@
         }
       }
     },
+    "Open agent settings": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir les réglages de l'agent"
+          }
+        }
+      }
+    },
     "Open and start %@": {
       "localizations": {
         "en": {

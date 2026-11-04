@@ -53,6 +53,7 @@ struct DesktopComposerPill: View {
     /// The bot's realtime voice: false, the call button says "Calls need a
     /// realtime voice" and opens Settings > Voice (CallView.tsx, 2026-11-02).
     @State private var realtimeReady: Bool?
+    @State private var callHelpOpen = false
     /// A room: text to speech is set up on the computer.
     @State private var roomSpeechConfigured = false
     /// The model menu (#477, #478, #518), as the desktop chip opens it.
@@ -280,12 +281,8 @@ struct DesktopComposerPill: View {
 
     private var voiceButton: some View {
         Button {
-            if realtimeReady == false {
-                shell.settingsSection = .voice
-                shell.modal = .settings
-            } else {
-                voice()
-            }
+            // CallView.tsx: an unavailable call opens its help bubble
+            if realtimeReady == false { callHelpOpen.toggle() } else { voice() }
         } label: {
             if bot != nil {
                 DesktopLucideGlyph(paths: DesktopLucide.audioLines, size: 16)
@@ -325,6 +322,27 @@ struct DesktopComposerPill: View {
             : roomSpeechConfigured ? Text("Give every group member a voice before starting a group call.")
             : Text("Set up ElevenLabs, Fish Audio, Chatterbox, or a built-in Mac voice so the bot can speak during calls."))
         .accessibilityIdentifier("desktop-composer-voice")
+        .popover(isPresented: $callHelpOpen, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Call unavailable").font(theme.font(13, .medium)).foregroundStyle(theme.ink)
+                callHelpReason.font(theme.font(12)).foregroundStyle(theme.inkSecondary).fixedSize(horizontal: false, vertical: true)
+                Button {
+                    callHelpOpen = false
+                    shell.settingsSection = .voice
+                    shell.modal = .settings
+                } label: {
+                    Text("Open agent settings").font(theme.font(12, .medium)).foregroundStyle(theme.accentInk)
+                        .padding(.horizontal, 12).frame(height: 28)
+                        .background(theme.accent, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 6)
+                .accessibilityIdentifier("desktop-composer-voice-setup")
+            }
+            .padding(12)
+            .frame(width: 280, alignment: .leading)
+            .accessibilityIdentifier("desktop-composer-voice-help")
+        }
         .task(id: bot?.id ?? room.map { "room:\($0.id):\($0.memberIds.joined(separator: ","))" }) {
             if let id = bot?.id {
                 realtimeReady = await session.voiceModeStatus(botId: id)?.realtimeCallReady
@@ -340,6 +358,13 @@ struct DesktopComposerPill: View {
                 realtimeReady = nil
             }
         }
+    }
+
+    /// The help bubble's reason (CallView.tsx `reason`).
+    private var callHelpReason: Text {
+        if room == nil { return Text("A call runs on the realtime voice, never text to speech. Add or fix the xAI key in Settings > Voice.") }
+        return roomSpeechConfigured ? Text("Give every group member a voice before starting a group call.")
+            : Text("Set up ElevenLabs, Fish Audio, Chatterbox, or a built-in Mac voice so the bot can speak during calls.")
     }
 
     /// `voiceMode.start` / `voiceMode.realtimeNeededLabel`.

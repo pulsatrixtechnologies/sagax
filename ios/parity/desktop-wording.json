@@ -1256,5 +1256,7 @@
   "Set up a voice in an agent profile to make calls": "callView.setupVoice",
   "Call %@": "callView.callName",
   "Give every group member a voice before starting a group call.": "callView.groupVoiceReason",
-  "Set up ElevenLabs, Fish Audio, Chatterbox, or a built-in Mac voice so the bot can speak during calls.": "callView.setupReason"
+  "Set up ElevenLabs, Fish Audio, Chatterbox, or a built-in Mac voice so the bot can speak during calls.": "callView.setupReason",
+  "Call unavailable": "callView.unavailable",
+  "Open agent settings": "callView.openAgentSettings"
 }

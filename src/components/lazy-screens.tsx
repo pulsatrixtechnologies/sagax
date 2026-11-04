@@ -12,7 +12,7 @@ export const AchievementsScreen = lazyScreen("AchievementsScreen", async () => (
 export const ArtifactsHost = lazyScreen("ArtifactsHost", async () => (await import("./artifacts/ArtifactsHost")).ArtifactsHost);
 export const BotCatalogModal = lazyScreen("BotCatalogModal", async () => (await import("./bot-catalog/BotCatalogModal")).BotCatalogModal);
 /** Browse Bots inside Connect apps' window (the same chunk as the modal). */
-export const BotCatalogPane = lazyScreen("BotCatalogPane", async () => (await import("./bot-catalog/BotCatalogModal")).BotCatalogPane);
+import { BotCatalogPane } from "./lazy-bot-catalog";
 export const ActivityPanel = lazyScreen("ActivityPanel", async () => (await import("./ActivityPanel")).ActivityPanel);
 export const BulkEditBotsDialog = lazyScreen("BulkEditBotsDialog", async () => (await import("./BulkEditBotsDialog")).BulkEditBotsDialog);
 export const BotSettingsDialog = lazyScreen("BotSettingsDialog", async () => (await import("./BotSettingsDialog")).BotSettingsDialog);

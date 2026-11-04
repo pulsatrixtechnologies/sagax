@@ -85,6 +85,14 @@ export interface LimitFailover {
   to: ModelSelection;
   /** When `from`'s limit resets (said or estimated). */
   resetsAt: number;
+  /** `resetsAt` is Sagax's estimate: the engine named no reset (2026-11-02). */
+  estimated?: true;
+  /** No hold on `from`'s engine reaches `resetsAt`: the limit that moved the
+   * conversation off bound only `from`'s model (Claude's limitScope "model":
+   * its extra-usage credits, its family's weekly window). That engine taking
+   * turns again, even answering one on another model, says nothing of
+   * `from`'s own limit, which holds until `resetsAt` (2026-11-02). */
+  modelOnly?: true;
   at: number;
 }
 
@@ -100,7 +108,9 @@ export type LimitResume = (
   retry?: true;
 };
 
-interface Block { key: string; until: number }
+/** `estimated`: the engine named no reset, so `until` is Sagax's estimate
+ * (a line never presents it as the engine's own time). */
+interface Block { key: string; until: number; estimated?: true }
 interface Fired { key: string; at: number }
 
 interface Saved {
@@ -171,13 +181,23 @@ export class LimitFailoverStore {
     return `${payer}\u0000${instanceId}`;
   }
 
-  /** This engine refuses this payer's turns until `until`. A later reset wins. */
-  block(payer: string, instanceId: string, until: number): void {
+  /** This engine refuses this payer's turns until `until`. A later reset
+   * wins. `estimated`: the engine named no reset and `until` is Sagax's. */
+  block(payer: string, instanceId: string, until: number, estimated = false): void {
     const key = LimitFailoverStore.key(payer, instanceId);
     const earlier = this.state.blocks.find((row) => row.key === key);
     if (earlier && earlier.until >= until) return;
-    this.state.blocks = [...this.state.blocks.filter((row) => row.key !== key), { key, until }].slice(-MAX_ROWS);
+    this.state.blocks = [...this.state.blocks.filter((row) => row.key !== key), { key, until, ...(estimated ? { estimated: true as const } : {}) }].slice(-MAX_ROWS);
     this.save();
+  }
+
+  /** The hold on this engine for this payer: until when, and whether that
+   * time is Sagax's estimate; null while it should work. */
+  holdOf(payer: string, instanceId: string): { until: number; estimated: boolean } | null {
+    const until = this.blockedUntil(payer, instanceId);
+    if (until === null) return null;
+    const row = this.state.blocks.find((candidate) => candidate.key === LimitFailoverStore.key(payer, instanceId));
+    return { until, estimated: row?.estimated === true };
   }
 
   /** A turn on this engine worked for this payer: its hold ends now. */
@@ -203,11 +223,18 @@ export class LimitFailoverStore {
   }
 
   /** A thread moved to `to`. A second move keeps the engine the thread
-   * started on, so it still goes back there. */
+   * started on, so it still goes back there, and what its own limit was
+   * (`modelOnly`). */
   record(failover: LimitFailover): LimitFailover {
     const earlier = this.state.failovers.find((row) => row.threadId === failover.threadId && row.botId === failover.botId);
+    // The later reset wins, and with it whether that time is only Sagax's estimate.
+    const later = earlier && earlier.resetsAt > failover.resetsAt ? earlier : failover;
+    const { estimated: _estimated, modelOnly: _modelOnly, ...moved } = failover;
     const kept = earlier && earlier.to.instanceId === failover.from.instanceId && earlier.to.model === failover.from.model
-      ? { ...failover, from: earlier.from, resetsAt: Math.max(earlier.resetsAt, failover.resetsAt) } : failover;
+      ? {
+        ...moved, from: earlier.from, resetsAt: later.resetsAt, ...(later.estimated ? { estimated: true as const } : {}),
+        ...(earlier.modelOnly ? { modelOnly: true as const } : {}),
+      } : failover;
     this.state.failovers = [...this.state.failovers.filter((row) => row.threadId !== failover.threadId), kept].slice(-MAX_ROWS);
     this.save();
     return kept;

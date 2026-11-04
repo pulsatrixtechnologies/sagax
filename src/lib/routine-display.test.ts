@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { setLocale } from "./i18n";
-import { routineAutoPauseChoices, routineAutoPausedText, routineAutoPauseOption, routineResultText, routineRunError, routineRunPreview, routineRunProblems, routineRunsOn, routineRunSummary, routineWeekRunsText, scheduleRepeatsEventDate } from "./routine-display";
+import type { RoutineRun } from "./routines";
+import { routineAutoPauseChoices, routineAutoPausedText, routineAutoPauseOption, routineResultText, routineRunLabel, routineRunError, routineRunPreview, routineRunProblems, routineRunsOn, routineRunSummary, routineWeekRunsText, scheduleRepeatsEventDate } from "./routine-display";
 
 describe("a routine's details (#1516)", () => {
   it("says one run in the singular", () => {
@@ -136,5 +137,27 @@ describe("a run's result in plain words", () => {
     expect(routineResultText("Billed 3 clients.").text).toBe("Billed 3 clients.");
     expect(routineResultText("RUN_STATUS: partial: CW refused one write\nBilled 2 of 3.").text).toBe("Partly done: CW refused one write\nBilled 2 of 3.");
     expect(routineRunSummary({ status: "blocked", handedTo: [{ botId: "m", threadId: "t", name: "Nova", status: "queued" }] }).text).toBe("Blocked: waiting for Nova");
+  });
+});
+
+// 2026-11-02: a run a limit sent on to another model (another engine's, or
+// its conversation's own after Sagax's quick model was refused) never waited
+// for a reset; its status never says it did.
+describe("a run another model took over after a limit", () => {
+  const run = { id: "run-1", routineId: "routine-1", routineName: "New email", botId: "bot-1", status: "completed", retried: "usage_limit", limitTakeovers: 1 } as RoutineRun;
+
+  it("says it went on on another model, in English and Quebec French", () => {
+    expect(routineRunLabel(run)).toBe("Continued on another model after a limit · Completed");
+    expect(routineRunLabel(run)).not.toMatch(/reset/i);
+    setLocale("fr");
+    try {
+      expect(routineRunLabel(run)).toBe("Poursuivie sur un autre modèle après une limite · Terminée");
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("keeps the reset wording for a run that did wait for one", () => {
+    expect(routineRunLabel({ ...run, limitTakeovers: undefined })).toBe("Ran after the usage limit reset · Completed");
   });
 });

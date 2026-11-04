@@ -132,6 +132,20 @@ describe("incident wording", () => {
     expect(incidentChip({ ...incident, room: "Standup" })).toContain('Ada\'s run in the room "Standup" failed');
   });
 
+  // 2026-11-02: a Primary Bot relayed a proactive wake's failure as a scheduled routine's.
+  it("calls a proactive wake and a webhook run by what they are, never a scheduled routine", () => {
+    // What a wake whose quick model (another engine's) a limit refused now leaves behind (routine-limit-words.ts).
+    const limit = "Usage limit reached on Codex (gpt-6.1-luna) and no other engine could take this run. Sagax skips Codex (gpt-6.1-luna) for quick turns until it resets, around Nov 5, 1:16 PM (UTC).";
+    const wake = { ...incident, kind: "routine-failed" as const, title: "Proactive: failed run", detail: limit, run: "proactive" as const };
+    expect(incidentChip(wake)).toBe(`Incident: Ada's proactive wake in its thread #Proactive: failed run failed: "${limit}"`);
+    const report = incidentText(wake, { count: 1, mayRetry: true, muted: false });
+    expect(report).toContain("Ada's proactive wake in its thread #Proactive: failed run failed");
+    // The Primary Bot is never told the bot's own engine is down, nor to change it.
+    expect(report).not.toMatch(/this bot's engine|stays down|choose another engine/i);
+    expect(incidentChip({ ...wake, title: "New email", run: "webhook" })).toContain("Ada's webhook run in its thread #New email failed");
+    expect(incidentChip({ ...wake, title: "Inbox digest", run: "routine" })).toContain("Ada's scheduled routine in its thread #Inbox digest failed");
+  });
+
   it("labels an empty model response apart from a person cancel, and caps identical retries", () => {
     const empty = {
       ...incident,

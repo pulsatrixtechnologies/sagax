@@ -282,6 +282,11 @@ export interface RoutineRun {
   error?: string;
   /** Set when the run used its one automatic second start, and why. */
   retried?: RoutineRetryCause;
+  /** 2026-11-02: how many times a limit sent this run on at once to another
+   * model: another engine's, or its conversation's own after only Sagax's
+   * quick model was refused (server/routines/routine-recovery.ts takeOver);
+   * it never waited for a reset. */
+  limitTakeovers?: number;
   /** A queued run starts no earlier than this. */
   retryAt?: number;
   /** Concise, redacted question or approval reason while status is waiting,

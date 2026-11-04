@@ -8,8 +8,9 @@ import { CLAUDE_NEEDS_RECONNECTING, CLAUDE_SIGN_IN_EXPIRED, claudeSignInExpired 
 import { CODEX_SIGN_IN_EXPIRED, codexSignInExpired } from "../drivers/codex-errors.ts";
 import { engineNeedsReconnecting, engineReconnectAheadDetail } from "../engines/engine-reconnect-ahead.ts";
 import {
-  classifyRoutineFailure, dispatchRefusal, firstOwnerNotice, loadOwnerNotices, retryNote, ROUTINE_BUSY_RECHECK_MS, ROUTINE_BUSY_WAIT_MS, weekRuns, type RoutineAlert,
+  classifyRoutineFailure, dispatchRefusal, firstOwnerNotice, loadOwnerNotices, recoverRun, retryNote, ROUTINE_BUSY_RECHECK_MS, ROUTINE_BUSY_WAIT_MS, usedRetry, weekRuns, type RoutineAlert,
 } from "./routine-recovery.ts";
+import type { RoutineUsageLimit } from "./routine-limit-words.ts";
 import { RoutineManager, type RoutineManagerOptions, type RoutineRun } from "./routines.ts";
 
 const dirs: string[] = [];
@@ -433,10 +434,11 @@ describe("an unattended run only its owner can fix", () => {
     const limit = "This Claude account has reached its 5-hour limit, which resets soon. Until then, switch this bot to another engine or Claude account.";
     const run = await h.start(h.routine().id);
     h.fail("thread-1", limit, { stopReason: "quota", limitResetsAt: resetsAt });
+    // No engine known to the run (no limit failover wired here): it names none rather than guess "this bot's engine".
     expect(h.run(run.id)).toMatchObject({ status: "queued", retried: "usage_limit", retryAt: resetsAt + MINUTE, threadId: "thread-1",
-      attention: expect.stringMatching(/^Waiting for the engine's usage limit to reset; this run starts again at /) });
+      attention: expect.stringMatching(/^This run's engine reached its usage limit\. This run starts again at the reset, .+\.$/) });
     expect(h.failed).toEqual([]);
-    expect(h.deferred).toEqual([expect.objectContaining({ alert: { detail: expect.stringMatching(/^This bot's engine reached its usage limit\. This run starts again at .+\.$/) } })]);
+    expect(h.deferred).toEqual([expect.objectContaining({ alert: { detail: expect.stringMatching(/^This run's engine reached its usage limit\. This run starts again at the reset, .+\.$/) } })]);
     expect(h.manager.wakeHold()).toEqual({ hold: false });
     expect(h.manager.wakeHold(3 * 3_600_000)).toEqual({ hold: true, reason: "due", at: resetsAt + MINUTE });
 
@@ -459,7 +461,7 @@ describe("an unattended run only its owner can fix", () => {
     const far = await h.start(h.routine("maus-2").id);
     h.fail(far.threadId!, "This Claude account has reached its weekly limit.", { stopReason: "quota", limitResetsAt: START + 13 * 3_600_000 });
     expect(h.run(far.id).status).toBe("blocked");
-    const action = "This bot's engine reached its usage limit. Its routines work again once it resets, or choose another engine for this bot now.";
+    const action = "This run's engine reached its usage limit. Runs on it work again once it resets. Or choose another engine for this bot now.";
     expect(h.failed.map(({ alert }) => alert)).toEqual(h.failed.map(({ run }) => ({ detail: `${run.routineName}: "${run.error}" ${action}` })));
     expect(h.deferred).toEqual([]);
   });
@@ -472,6 +474,63 @@ describe("a run that a restart cut off", () => {
     expect(h.run(run.id).status).toBe("running");
     h.restart();
     expect(h.run(run.id)).toMatchObject({ status: "running", retried: "restarted", threadId: "thread-1", restartResumes: 1 });
+    h.manager.failThread("thread-1", ROUTING);
+    expect(h.run(run.id)).toMatchObject({ status: "failed", error: `Failed after one automatic retry: ${ROUTING}` });
+  });
+});
+
+// 2026-11-02 (review): a limit's takeover starts the run again on another engine at once. Its start carries the
+// usage-limit note (retried), but it is not the run's one automatic retry: a stall on that engine, or a wait for a
+// reset after it, still has it, and a failure never claims a retry the run did not have.
+describe("a run a limit's takeover sent on", () => {
+  const HOUR = 60 * MINUTE;
+  const LIMIT = "You've hit your usage limit. Try again in 2 hours.";
+  const fresh = () => ({ id: "run-1", routineId: "routine-1", routineName: "Inbox sweep", botId: "bot-1", target: "bot", status: "running", createdAt: START } as RoutineRun);
+  const takenBy = (to: string): RoutineUsageLimit => ({
+    kind: "quota", from: "Claude", resetsAt: START + 2 * HOUR, estimated: false, to, selection: { instanceId: to.toLowerCase(), model: "m" }, returnsAt: START + 2 * HOUR,
+  });
+
+  it("keeps the run's one retry for a stall on the engine that took it over", () => {
+    const run = fresh();
+    expect(recoverRun(run, LIMIT, { limit: takenBy("Codex") }, START, [], { timeZone: "UTC" })).toEqual({ queued: true });
+    expect(run).toMatchObject({ status: "queued", retried: "usage_limit", takeoverRetried: true, limitTakeovers: 1, limitTakeoverUntil: START + 2 * HOUR });
+    expect(usedRetry(run)).toBe(false);
+    run.status = "running";
+    expect(recoverRun(run, STALL, { stalled: true }, START + MINUTE, [])).toEqual({ queued: true });
+    expect(run).toMatchObject({ status: "queued", retried: "stalled" });
+    expect(run.takeoverRetried).toBeUndefined();
+    expect(usedRetry(run)).toBe(true);
+    run.status = "running";
+    expect(recoverRun(run, STALL, { stalled: true }, START + 2 * MINUTE, [])).toEqual({ queued: false, error: `Failed after one automatic retry: ${STALL}` });
+  });
+
+  it("never says a takeover's run failed after a retry, and a second takeover keeps the retry unused", () => {
+    const run = fresh();
+    recoverRun(run, LIMIT, { limit: takenBy("Codex") }, START, []);
+    recoverRun(run, LIMIT, { limit: { ...takenBy("Grok"), from: "Codex" } }, START + MINUTE, []);
+    expect(run).toMatchObject({ limitTakeovers: 2, retried: "usage_limit", takeoverRetried: true, limitTakeover: { instanceId: "grok" } });
+    run.status = "running";
+    expect(recoverRun(run, "The model refused this request.", {}, START + 2 * MINUTE, [])).toEqual({ queued: false, error: "The model refused this request." });
+  });
+
+  it("marks the return time as Sagax's estimate when the engine that refused named none", () => {
+    const run = fresh();
+    recoverRun(run, LIMIT, { limit: { ...takenBy("Codex"), estimated: true, returnsEstimated: true } }, START, []);
+    expect(run).toMatchObject({ limitTakeoverUntil: START + 2 * HOUR, limitTakeoverEstimated: true });
+    recoverRun(run, LIMIT, { limit: { ...takenBy("Grok"), from: "Codex" } }, START + MINUTE, []);
+    expect(run.limitTakeoverEstimated).toBeUndefined();
+  });
+
+  it("is still the run's one automatic second start when a restart cut it", async () => {
+    const h = harness();
+    const run = await h.start(h.routine().id);
+    // As a takeover leaves it (recoverRun's takeOver), saved; then Sagax restarts while it runs.
+    const inside = h.manager as unknown as { runs: RoutineRun[]; save(): void };
+    Object.assign(inside.runs.find((candidate) => candidate.id === run.id)!, { retried: "usage_limit", takeoverRetried: true });
+    inside.save();
+    h.restart();
+    expect(h.run(run.id)).toMatchObject({ status: "running", retried: "usage_limit", restartResumes: 1 });
+    expect(h.run(run.id).takeoverRetried).toBeUndefined();
     h.manager.failThread("thread-1", ROUTING);
     expect(h.run(run.id)).toMatchObject({ status: "failed", error: `Failed after one automatic retry: ${ROUTING}` });
   });

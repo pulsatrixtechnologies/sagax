@@ -28,6 +28,9 @@ export function routineRunLabel(run: RoutineRun): string {
   if (run.status === "completed" && run.quiet) return t("routines.status.nothing_to_report");
   if (run.goalStatus) return t(`routines.goal.${run.goalStatus}`);
   const status = t(`routines.status.${run.status}`);
+  // 2026-11-02: a limit sent the run on to another engine at once; it never
+  // waited for a reset, whatever its one retry is recorded as.
+  if (run.limitTakeovers && run.status !== "queued") return t("routines.retried.limitSwitched", { status });
   return run.retried && run.status !== "queued" ? t(`routines.retried.${run.retried}`, { status }) : status;
 }
 

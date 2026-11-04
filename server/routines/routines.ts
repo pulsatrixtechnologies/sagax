@@ -69,9 +69,10 @@ import {
 } from "../engines/engine-reconnect-ahead.ts";
 import type { LoginDriver } from "../engines/principal-engine-logins.ts";
 import {
-  classifyRoutineFailure, firstOwnerNotice, dispatchRefusal, engineFacts, loadOwnerNotices, recoverRun, retryNote, weekRuns,
+  classifyRoutineFailure, firstOwnerNotice, dispatchRefusal, engineFacts, engineTakeovers, loadOwnerNotices, recoverRun, retryNote, ROUTINE_LIMIT_TAKEOVERS, weekRuns,
   type RoutineAlert, type RoutineFailureFacts, type RoutineOwnerNotice,
 } from "./routine-recovery.ts";
+import type { RoutineUsageLimit } from "./routine-limit-words.ts";
 import { ROUTINE_DEFERRAL_NOTICE_MS, ROUTINE_SKIPPED_WHILE_WAITING, ROUTINE_SUPERSEDED, ROUTINE_SUPERSEDED_BY_NEW_RUN, ROUTINE_TURN_LOST, ROUTINE_TURN_LOST_MS, skipNeedsNotice, supersededBy } from "./routine-execution.ts";
 
 export type { RoutineAccess };
@@ -598,6 +599,11 @@ export interface RoutineManagerOptions {
   };
   /** A failed attempt went back to the queue: what the attempt left pending must not reach its second start. */
   onRunRequeued?: (run: RoutineRun) => void;
+  /** A bot run's failed turn, read by the usage-limit failover (server/limit-failover-host.ts routineLimit): null
+   * when it is no limit; else the engine that really refused (the model the turn ran on, a wake's fast model
+   * included), its reset, and, when `takeover` allows it, who runs the run now. A routine, a webhook run and a
+   * proactive wake alike go on at once on that engine instead of failing. */
+  usageLimit?: (run: RoutineRun, failure: string, facts: RoutineFailureFacts, takeover: boolean) => RoutineUsageLimit | null;
   /** A successful provider turn is intermediate while its peer work or
    * queued continuation still belongs to this detached execution. */
   hasPendingDelegations?: (threadId: string) => boolean;
@@ -1693,8 +1699,9 @@ export class RoutineManager {
         (run.restartResumes ?? 0) < ROUTINE_RESTART_RESUMES) {
         run.status = "running";
         run.restartResumes = (run.restartResumes ?? 0) + 1;
-        // The resume is its one automatic second start.
+        // The resume is its one automatic second start (a limit's takeover was not).
         run.retried ??= "restarted";
+        delete run.takeoverRetried;
         run.attention = undefined;
         this.restartResumes.push(run.id);
         resumable = true;
@@ -3755,7 +3762,24 @@ export class RoutineManager {
     const refusal = classifyRoutineFailure(failure, facts);
     const engine = this.readinessEngines.get(run.id) ?? this.options.engineForRun?.(run);
     if (engine && refusal.kind === "owner" && refusal.cause !== "setup") noteEngineRefusal({ ...engine, cause: refusal.cause, resetsAt: refusal.resetsAt, at: this.now() });
-    const recovery = recoverRun(run, redactSecretsInText(failure), facts, this.now(), this.ownerNotices);
+    const said = redactSecretsInText(failure);
+    // The usage-limit failover reads which engine refused (and who takes the run over) before the run fails: a
+    // routine, a webhook run and a proactive wake go on at once on another engine instead of a failure that names
+    // "this bot's engine".
+    let limit: RoutineUsageLimit | null = null;
+    if (run.target === "bot" && this.options.usageLimit) {
+      try {
+        limit = this.options.usageLimit(cloneRun(run), said, facts, engineTakeovers(run) < ROUTINE_LIMIT_TAKEOVERS);
+      } catch (error) {
+        console.warn(`routine: usage limit read failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    const who = { botId: run.botId, ...(run.runAs ? { runAs: run.runAs } : {}) };
+    const language = this.options.languageFor?.(who);
+    const timeZone = this.options.timeZoneFor?.(who);
+    const recovery = recoverRun(run, said, limit ? { ...facts, limit } : facts, this.now(), this.ownerNotices, {
+      ...(language ? { language } : {}), ...(timeZone ? { timeZone } : {}),
+    });
     if ("waiting" in recovery && recovery.waiting) {
       this.wait(run, recovery.attention);
       delete run.error;
@@ -3770,7 +3794,10 @@ export class RoutineManager {
     } else if ("error" in recovery) {
       if (refusal.kind === "owner" && refusal.cause !== "setup") {
         const routineName = this.routines.find(routine => routine.id === run.routineId)?.name ?? run.routineName;
-        this.blockRun(run, recovery.error, recovery.alert ? { detail: `${routineName}: "${recovery.error}" ${recovery.alert.detail}` } : null);
+        // A limit's words already are the run's error (routine-limit-words): said once, never quoted before themselves.
+        const detail = recovery.alert && (recovery.alert.detail === recovery.error ? `${routineName}: ${recovery.error}`
+          : `${routineName}: "${recovery.error}" ${recovery.alert.detail}`);
+        this.blockRun(run, recovery.error, detail ? { detail } : null);
       } else this.failRun(run, recovery.error, recovery.alert);
     }
     queueMicrotask(() => this.tickInBackground());

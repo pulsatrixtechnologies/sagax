@@ -1089,6 +1089,140 @@ plain words (`noModelLeftMessage`). Tests:
 `server/drivers/openai-responses.test.ts`, `server/models/refused-models.test.ts`,
 `server/usage/limit-failover-host.test.ts`.
 
+## A refused run goes on elsewhere, and says who refused (2026-11-02)
+
+A routine run, a webhook run or a proactive wake whose turn a limit refused
+never fails as "This bot's engine reached its usage limit" any more (a
+Primary Bot relayed that as the bot being down while its own engine was
+answering: the wake had run on its fast model, #1694, on another engine,
+and the failover skipped it because the turn's model was not the thread's).
+Before the run fails, `RoutineManager` asks the limit failover
+(`usageLimit`, wired to `limitFailover.routineLimit`,
+`server/limit-failover-host.ts`), which reads the turn it saw dispatched:
+the engine and model that really refused, the reset (said or estimated) and
+who takes the run over: the conversation's own model when only a fast
+detour refused, else a backup as for a person's message (`pickLimitBackup`
+on `candidatesNow`), else Auto's next pick. The run then starts again at
+once in its own thread, the same run with the same webhook event
+(`takeOver`, `server/routines/routine-recovery.ts`: queued, `limitTakeover` the model
+of its next start, at most `ROUTINE_LIMIT_TAKEOVERS` takeovers by another
+engine, `engineTakeovers`: the one retry on the conversation's own model
+after only its engine's quick model refused, `limitModelRetry`, does not
+count), with no failure, notification or incident; `startTurn`
+(`server/turns/start-turn-prepare-validate.ts`) moves its thread there and
+skips the wake's fast pick (`limitFailover.takeOver`), and
+`server/turns/start-turn-prompt.ts` notes a turn on a fast pick as a detour
+(`LimitDispatch.detour`). The return is always recorded, at the
+reset of the limit that moved it (`limitTakeoverUntil`) or a later hold:
+a model-only refusal never leaves a conversation on the backup, the
+person's own chat included (a wait's follow-up runs there). A run that
+starts once that limit is over (it waited past the reset, its conversation
+busy) moves nothing: never to the backup and straight back, two switches
+that would replay its engine session. The engine's error row becomes the hidden
+switch notice, and the run's status reads "Continued on another model
+after a limit", never "Ran after the usage limit reset"
+(`routines.retried.limitSwitched`). A quick model Sagax picked is not the
+conversation's (`LimitDispatch.detour`, `RoutineUsageLimit.detour`,
+`LimitFailoverLine.detour`): its lines say Sagax skips it for quick turns
+until it resets, never that the run goes back to it nor to choose another
+engine for the bot. A call turn on such a model goes again at once when a
+limit refuses it (`turnFailed`, `detourFailed`), its conversation
+untouched and no incident filed. A fast model Sagax picked on the
+conversation's own engine (`LimitDispatch.detour`) holds only that model for
+the payer (`refuseModel`, Auto's refusal memory), never the whole engine,
+unless that engine's plan is spent. So does a refusal bound to one model
+(Claude's `limitScope` "model": its extra-usage credits, its family's weekly
+window) of any quick model Sagax picked, on any engine: nothing engine-wide,
+but the next wake's or call's quick pick skips that model until the reset, as
+the lines say, instead of picking it again (a call's message used to go back
+onto it up to `MAX_RESENDS` times). An Auto conversation's call turn included
+(`quickPicked`): its quick pick runs in place of Auto's own, so Auto's refusal
+memory never sees it, even when it is the model Auto falls back to (Auto sent
+the message again onto it up to six times). A takeover is not the run's one
+automatic retry: its start carries the limit's note (`retried`) with
+`takeoverRetried`, so a stall or an empty response on the engine that took
+the run over, or a wait for a reset after it, still gets that retry
+(`usedRetry`, `server/routines/routine-recovery.ts`); a restart's resume uses it.
+When the engine that refused was itself standing in for the run's
+conversation's own model (an earlier takeover, `homeOf`), the verdict names
+that model's engine and its own reset (`RoutineUsageLimit.home`): the run
+goes on elsewhere and back there at that reset, never to the backup that
+refused; it goes back at once when that limit is over (`backHome`, even past
+the two takeovers: it is no other engine; `takeOver` then ends the takeover
+with no second line); with no taker it waits for the earlier real reset
+under 12 h of the two (the bot's own engine on a tie, its next start naming
+no takeover model, so `beforeTurn` brings the conversation back), else
+fails with the bot's own engine and its reset. A backup never is another
+sign-in to a subscription engine this payer is held on, whatever engine
+refused (`outOf`, as `autoExcluded`): a chat backup, `beforeTurn` and a run's
+takeover agree, and the conversation's own engine is never a backup for its
+own refused model. With no taker the words say why (`noTaker`: no other
+engine this person may use, the two moves already made, or switching off
+with `SAGAX_LIMIT_FAILOVER=0`); they advise choosing another engine for the
+bot only when switching is off. A failed run's own error is those words
+(its row, any tool reading runs); the engine's raw words stay in its
+thread. Every line names the engine (its model on a detour) and gives the
+real reset or says the engine gave none, in English or Quebec French ("2 nov.
+à 15 h 16") by the person's language and zone
+(`server/routines/routine-limit-words.ts`); a rate limit is called one. The
+thread's notice names a backup standing in (`LimitFailoverLine.home`,
+`limitFailover.switchedStandIn`) and a return after its refusal
+(`back` with `refused`, `limitFailover.backAfterLimit`); a person's message
+(and a run left to `turnFailed`) says the same when that backup is refused,
+or known to be held before the next turn (`beforeTurn`): the switch names
+the backup at its limit and the engine it stood in for, never that engine
+as the one that refused, and goes back there at that engine's own reset;
+with nothing else to take it, the wait names both and the engine it waits
+for (`waiting` or `waitingRoutine` with `home`,
+`limitFailover.waitingStandIn`, `limitFailover.waitingRoutineStandIn`), the
+bot owner's limit included (`limitFailover.ownerSwitchedStandIn`,
+`limitFailover.ownerWaitingStandIn`). When the backup picked then is the
+conversation's own engine (its hold ended before its return was due: within
+the minute after its reset, or a turn on it worked since), the conversation
+goes back to its own model at once, as a run does (`backHome`): its row is
+forgotten and the line is `back` with `refused`, never "continuing on
+Claude, back on Claude when it resets". A limit bound only to its own model
+held nothing on that engine (`LimitFailover.modelOnly`, kept across a second
+move): that engine is no backup until the row's reset (`ownModelHolds`, as
+`routineBackup`), even when a turn on another of its models works.
+Incidents and notification titles say "proactive wake" or "webhook run",
+failed or waiting (`routineRunTitle`, `server/notify.ts`), never "scheduled
+routine".
+
+What Sagax holds is per payer and per engine, and as accurate as it knows.
+Only a refusal Sagax saw holds an engine for Auto, its panel, a backup
+(chat, `beforeTurn`) and a run's takeover. A plan window the person's own
+usage report showed spent (J4, `GET /api/plan-usage` through
+`announcePlanThresholds`, `spentPlanUntil`, read as `planLimitUntil`) is a
+hint, since a report can be wrong: it never reads as spent while the row
+shows extra usage or credit left (Claude's "Extra Usage", a "Credits"
+line), it keeps only Sagax's quick pick (a wake's or a call's fast model,
+`autoExcluded(..., "quick")`) off that engine until a turn on it works again
+(`planWorked`, from `turnSucceeded`). A real refusal there that names no
+reset is still held for the one-hour estimate, marked as one, and the engine
+tried again after it, never until that window's reset: a top-up shows only in
+a later report, which clears the hint and never a hold, so such a hold kept
+the person's own conversation off that engine for days. A person's chosen
+engine is still moved only after a real refusal. The engines' report
+(`/api/limit-resets`) notes a refusal only when it holds the
+whole engine (`refusalHoldsEngine`): never one bound to one model (its
+extra-usage credits, its own weekly window), nor a fast model Sagax picked
+on the conversation's own engine. A hold, and a takeover's return
+(`LimitFailover.estimated`, `RoutineRun.limitTakeoverEstimated`), remember
+when their time is only Sagax's estimate (`LimitFailoverStore.block` with
+`estimated`, `holdOf`), and every switch or wait line then says the engine
+gave no reset time instead of passing the estimate off as one
+(`LimitFailoverLine.estimated`, `limitFailover.*NoReset`). A conversation a
+backup standing in for its engine moved on goes back at its own engine's
+reset, never at the later reset of that backup. Tests:
+`server/limit-failover-runs.test.ts`, `server/limit-failover-runs.e2e.test.ts`
+(a wake on another engine's fast model, and a wake nothing could take with
+its notification and incident, end to end),
+`server/routines/routine-limit-words.test.ts`, `server/limit-failover-host.test.ts`,
+`server/routines/routine-recovery.test.ts`, `server/notify.test.ts`,
+`server/incidents.test.ts`, `server/plan-usage.test.ts`,
+`src/lib/limit-failover.test.ts`, `src/lib/routine-display.test.ts`.
+
 ## A reply is never an error (2026-10-29)
 
 A bot's reply always reads as a reply, its Markdown whole. Claude Code can
@@ -9080,10 +9214,11 @@ the rule: no card, the turn continues at once.
   the reset plus `AFTER_RESET_MS` goes back to the engine the thread started
   on, with one line. A thread someone moved since is left alone.
 - No backup: the line says the message is sent again at the reset, and it
-  is, once. A routine run is run again on the backup (`runNow`, once per
-  run), else at the reset (at most once per 12 h per routine). Other turns
-  (delegations, webhooks) only block the engine: their next turn starts on a
-  backup before it is refused (`beforeTurn` in `startTurn`).
+  is, once. A routine run, a webhook run or a proactive wake goes on at once
+  on the backup, else waits for a reset under 12 h or fails with the
+  engine's reset (2026-11-02, "A refused run goes on elsewhere" above).
+  Delegations only block the engine: their next turn starts on a backup
+  before it is refused (`beforeTurn` in `startTurn`).
 - Auto threads are left to Auto. Off with `SAGAX_LIMIT_FAILOVER=0`. Tests:
   `server/usage/limit-reset-time.test.ts`, `server/usage/limit-failover.test.ts`,
   `server/usage/limit-failover-host.test.ts`, `src/lib/limit-failover.test.ts`,

@@ -12727,9 +12727,13 @@ const coordinator: Coordinator = createCoordinator({
       });
       if (group) store.patchGroup(group.id, { unread: true });
       else {
-        store.patchTask(parent.botId, parent.threadId, { unread: true });
+        // fd0c41c04: an ordinary consultation is recorded without calling
+        // for the person's attention. A room keeps its visible-room badge;
+        // failed or withheld consultations and actual work still need it.
+        const markUnread = !child.consult || child.status !== "completed" || Boolean(problem);
+        if (markUnread) store.patchTask(parent.botId, parent.threadId, { unread: true });
         const source = store.bot(parent.botId);
-        if (source) markTaskContextExternallyUpdated(source, parent.threadId);
+        if (source) markTaskContextExternallyUpdated(source, parent.threadId, markUnread);
       }
       // A successful direct work thread closes after its result is reported:
       // folded out of the sidebar, never deleted, and reopened if addressed.
@@ -21326,7 +21330,7 @@ function noteCallBesideConversation(bot: BotRecord, threadId: string, beforeId: 
   callLinesSince.set(threadId, beforeId);
 }
 
-function markTaskContextExternallyUpdated(bot: BotRecord, threadId: string): void {
+function markTaskContextExternallyUpdated(bot: BotRecord, threadId: string, markUnread = true): void {
   const task = store.taskByThread(bot.id, threadId);
   if (!task) return;
   // An engine that records which messages its current session was handed
@@ -21339,13 +21343,13 @@ function markTaskContextExternallyUpdated(bot: BotRecord, threadId: string): voi
   if (owner && record?.session !== undefined && record.session === task.resumeCursors[owner] &&
     (botForThread(bot.id, threadId) ?? bot).modelSelection.instanceId === owner &&
     registry.get(owner)?.adapter.capabilities.strictResume) {
-    store.patchTask(bot.id, threadId, { unread: true });
+    if (markUnread) store.patchTask(bot.id, threadId, { unread: true });
     return;
   }
   store.patchTask(bot.id, threadId, {
     resumeCursors: {},
     lastInstanceId: `${EXTERNAL_CONTEXT_MARKER_PREFIX}${randomUUID()}`,
-    unread: true
+    ...(markUnread ? { unread: true } : {})
   });
 }
 

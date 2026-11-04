@@ -163,7 +163,7 @@ export function isToolStep(message: Message): message is Message & { tool: NonNu
 }
 
 /** A settled turn's folded rows and how long the whole turn took. */
-type TurnFold = { turnId: string; elapsedMs: number; messages: Message[] };
+export type TurnFold = { turnId: string; elapsedMs: number; messages: Message[] };
 
 function foldable(message: Message): boolean {
   return isToolStep(message) && message.tool.ok === true;

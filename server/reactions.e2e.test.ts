@@ -13,7 +13,7 @@
 //         message, never its own message, a small budget per turn,
 //         remove_reaction, and no message created
 import { spawn, type ChildProcess } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -28,7 +28,6 @@ const SERVER_DIR = dirname(fileURLToPath(import.meta.url));
 const FAKE_CLAUDE = join(SERVER_DIR, "testing", "fake-claude-cli.ts");
 const posixOnly = describe.skipIf(process.platform === "win32");
 const ORG_KEY = "sk-ant-test-org-key";
-const TEST_CAPABILITY_KEY = "reactions-fixture-capability-key";
 const ALICE: FakeOidcUser = { sub: "01J9PTALICE0000000000000A", email: "alice@example.test", name: "Alice", preferred_username: "alice", role: "admin" };
 const BOB: FakeOidcUser = { sub: "01J9PTBOB00000000000000B", email: "bob@example.test", name: "Bob", preferred_username: "bob", role: "employee" };
 const CAROL: FakeOidcUser = { sub: "01J9PTCAROL0000000000000C", email: "carol@example.test", name: "Carol", preferred_username: "carol", role: "employee" };
@@ -38,6 +37,8 @@ let PORT = 0;
 let BASE = "";
 let child: ChildProcess;
 let home: string;
+let finishGate: string;
+let engineDump: string;
 let log = "";
 let idp: FakeOidcProvider;
 
@@ -110,7 +111,6 @@ async function start() {
       SAGAX_PERSPICAX_DIRECTORY_SECONDS: "5",
       SAGAX_ANTHROPIC_API_KEY: ORG_KEY,
       SAGAX_ORG_NAME: "Acme",
-      SAGAX_TEST_INTERNAL_CAPABILITY_KEY: TEST_CAPABILITY_KEY,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -146,6 +146,9 @@ posixOnly("Perspicax organization: emoji reactions", () => {
     PORT = await freePortBlock([0, 1]);
     BASE = `http://127.0.0.1:${PORT}`;
     home = mkdtempSync(join(tmpdir(), "omb-reactions-"));
+    finishGate = join(home, "finish-turn");
+    engineDump = join(home, "engine-dump.json");
+    writeFileSync(finishGate, "finish");
     const data = join(home, ".openmausbot");
     mkdirSync(data, { recursive: true });
     mkdirSync(join(home, "link"), { recursive: true, mode: 0o750 });
@@ -153,7 +156,12 @@ posixOnly("Perspicax organization: emoji reactions", () => {
       version: 1, issuer: idp.issuer, client_id: "pulsa-bot", server_id: idp.serverId, origin: BASE, link_token: idp.linkToken,
     }), { mode: 0o640 });
     writeFileSync(join(data, "config.json"), JSON.stringify({
-      instances: { claude: { driver: "claudeAgent", access: "api", config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } } },
+      instances: { claude: { driver: "claudeAgent", access: "api", environment: {
+        FAKE_CLAUDE_MODE: "slow", FAKE_CLAUDE_SLOW_FINISH_GATE: finishGate, FAKE_CLAUDE_DUMP: engineDump,
+        // 95e8f39e4 continues tool-only endings. Keep Bash, then answer;
+        // RX-3 owns when that native turn may finish and retire its token.
+        FAKE_CLAUDE_TOOL_CALLS: JSON.stringify([{ name: "Bash", input: { command: "echo hi" }, ok: true, output: "hi" }]),
+      }, config: { cli: FAKE_CLAUDE, fullAuto: true, requireApiKey: true } } },
     }));
     await start();
     alice = await signIn(ALICE);
@@ -255,65 +263,91 @@ posixOnly("Perspicax organization: emoji reactions", () => {
 
   it("RX-3: a bot reacts from its turn, once per message, never to itself, without a message", async () => {
     const bot = (await api("GET", "/api/bots", alice)).body.bots.find((candidate: { id: string }) => candidate.id === botId) as { threadId: string };
-    const say = async (text: string, replies: number) => {
+    const busy = async () => (await api("GET", "/api/bots", alice)).body.bots
+      .find((candidate: { id: string }) => candidate.id === botId).tasks
+      .find((task: { threadId: string }) => task.threadId === bot.threadId).busy === true;
+    const say = async (text: string, held = false) => {
       expect((await api("POST", `/api/bots/${botId}/messages`, alice, { text, threadId: bot.threadId })).status).toBe(202);
-      await waitFor(async () => (await transcript(bot.threadId, alice)).filter((m) => m.role === "bot" && m.kind === "text" && m.text).length >= replies, 60_000);
-      await sleep(500);
+      await waitFor(async () => {
+        const lines = await transcript(bot.threadId, alice);
+        const asked = lines.findIndex((message) => message.role === "user" && message.text === text);
+        return asked >= 0 && lines.slice(asked + 1).some((message) => message.role === "bot" && message.kind === "text" && message.text)
+          && (await busy()) === held;
+      }, 60_000);
     };
-    await say("ship the fix", 1);
-    await say("thanks, that is all", 2);
-    const lines = await transcript(bot.threadId, alice);
-    const first = lines.find((m) => m.role === "user" && m.text === "ship the fix")!;
-    const asked = lines.find((m) => m.role === "user" && m.text === "thanks, that is all")!;
-    const own = lines.find((m) => m.role === "bot" && m.kind === "text" && m.text)!;
-    const before = lines.length;
-    const tokenRes = await fetch(`${BASE}/api/testing/internal-capability`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-openmausbot-test-capability": TEST_CAPABILITY_KEY },
-      body: JSON.stringify({ botId, threadId: bot.threadId }),
-    });
-    expect(tokenRes.status).toBe(201);
-    const { token } = await tokenRes.json() as { token: string };
-    const internal = async (body: unknown) => {
-      const res = await fetch(`${BASE}/api/internal/reaction`, {
-        method: "POST",
-        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
+    await say("ship the fix");
+    rmSync(engineDump, { force: true });
+    rmSync(finishGate, { force: true });
+    try {
+      await say("thanks, that is all", true);
+      // The exact native turn's mount, not a synthetic capability minted
+      // after a turn settled. Match bot, thread and prompt before reading it.
+      const mounted = await waitFor(async () => {
+        if (!existsSync(engineDump)) return false;
+        const dump = JSON.parse(readFileSync(engineDump, "utf8"));
+        const env = dump.mcpConfig?.mcpServers?.agents?.env;
+        return env?.SAGAX_BOT_ID === botId && env.SAGAX_THREAD_ID === bot.threadId
+          && JSON.stringify(dump.prompt ?? "").includes("thanks, that is all") ? env : false;
       });
-      return { status: res.status, body: await res.json() as any };
-    };
+      const token = mounted.SAGAX_COMMS_TOKEN_FILE
+        ? readFileSync(mounted.SAGAX_COMMS_TOKEN_FILE, "utf8").trim() : mounted.SAGAX_COMMS_TOKEN;
+      expect(Boolean(token)).toBe(true);
+      expect(await busy()).toBe(true);
+      const lines = await transcript(bot.threadId, alice);
+      const first = lines.find((m) => m.role === "user" && m.text === "ship the fix")!;
+      const asked = lines.find((m) => m.role === "user" && m.text === "thanks, that is all")!;
+      const own = lines.find((m) => m.role === "bot" && m.kind === "text" && m.text)!;
+      const before = lines.length;
+      const internal = async (body: unknown) => {
+        const res = await fetch(`${BASE}/api/internal/reaction`, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+          body: JSON.stringify(body),
+        });
+        return { status: res.status, body: await res.json() as any };
+      };
 
-    // no id: the message it is answering (the person's newest line)
-    const thumbs = await internal({ emoji: "👍" });
-    expect(thumbs.status, JSON.stringify(thumbs.body)).toBe(200);
-    expect(thumbs.body).toMatchObject({ ok: true, messageId: asked.id, emoji: "👍", changed: true });
-    // the same again changes nothing; another emoji on that message is refused
-    expect((await internal({ emoji: "👍", messageId: asked.id })).body.changed).toBe(false);
-    const second = await internal({ emoji: "✅", messageId: asked.id });
-    expect(second.status).toBe(409);
-    expect(second.body.code).toBe("reaction_one");
-    // never its own line, never text, never a message of another thread
-    expect((await internal({ emoji: "👍", messageId: own.id })).body.code).toBe("reaction_own");
-    expect((await internal({ emoji: "thumbs up" })).status).toBe(400);
-    expect((await internal({ emoji: "👍", messageId: "nope" })).status).toBe(404);
+      // no id: the message it is answering (the person's newest line)
+      const thumbs = await internal({ emoji: "👍" });
+      expect(thumbs.status, JSON.stringify(thumbs.body)).toBe(200);
+      expect(thumbs.body).toMatchObject({ ok: true, messageId: asked.id, emoji: "👍", changed: true });
+      // the same again changes nothing; another emoji on that message is refused
+      expect((await internal({ emoji: "👍", messageId: asked.id })).body.changed).toBe(false);
+      const second = await internal({ emoji: "✅", messageId: asked.id });
+      expect(second.status).toBe(409);
+      expect(second.body.code).toBe("reaction_one");
+      // never its own line, never text, never a message of another thread
+      expect((await internal({ emoji: "👍", messageId: own.id })).body.code).toBe("reaction_own");
+      expect((await internal({ emoji: "thumbs up" })).status).toBe(400);
+      expect((await internal({ emoji: "👍", messageId: "nope" })).status).toBe(404);
 
-    // recorded with the bot as the actor, its name for the tooltip
-    const stored = (await transcript(bot.threadId, alice)).find((m) => m.id === asked.id)!;
-    expect(stored.reactions).toEqual([{ emoji: "👍", actors: [{ id: `bot:${botId}`, kind: "bot", name: "Quasar" }], at: expect.any(Number) }]);
+      // recorded with the bot as the actor, its name for the tooltip
+      const stored = (await transcript(bot.threadId, alice)).find((m) => m.id === asked.id)!;
+      expect(stored.reactions).toEqual([{ emoji: "👍", actors: [{ id: `bot:${botId}`, kind: "bot", name: "Quasar" }], at: expect.any(Number) }]);
 
-    // remove_reaction, then a new one is allowed
-    const removed = await internal({ remove: true, messageId: asked.id });
-    expect(removed.body).toMatchObject({ ok: true, changed: true, removed: ["👍"] });
-    expect((await internal({ emoji: "✅", messageId: asked.id })).body.changed).toBe(true);
-    // and a person's reaction sits beside the bot's
-    expect((await react(bot.threadId, asked.id, alice, "✅")).body.reactions[0].actors.map((actor: { kind: string }) => actor.kind)).toEqual(["bot", "person"]);
+      // remove_reaction, then a new one is allowed
+      const removed = await internal({ remove: true, messageId: asked.id });
+      expect(removed.body).toMatchObject({ ok: true, changed: true, removed: ["👍"] });
+      expect((await internal({ emoji: "✅", messageId: asked.id })).body.changed).toBe(true);
+      // and a person's reaction sits beside the bot's
+      expect((await react(bot.threadId, asked.id, alice, "✅")).body.reactions[0].actors.map((actor: { kind: string }) => actor.kind)).toEqual(["bot", "person"]);
 
-    // a small budget per turn: three adds (👍, ✅ and this one), then refused
-    expect((await internal({ emoji: "👀", messageId: first.id })).body.changed).toBe(true);
-    expect((await internal({ remove: true, messageId: first.id })).body.changed).toBe(true);
-    expect((await internal({ emoji: "🙏", messageId: first.id })).body.code).toBe("reaction_budget");
+      // a small budget per turn: three adds (👍, ✅ and this one), then refused
+      expect((await internal({ emoji: "👀", messageId: first.id })).body.changed).toBe(true);
+      expect((await internal({ remove: true, messageId: first.id })).body.changed).toBe(true);
+      const exhausted = await internal({ emoji: "🙏", messageId: first.id });
+      expect(exhausted.status, JSON.stringify(exhausted.body)).toBe(429);
+      expect(exhausted.body.code, JSON.stringify(exhausted.body)).toBe("reaction_budget");
 
-    // no reaction wrote a line
-    expect(await transcript(bot.threadId, alice)).toHaveLength(before);
+      // no reaction wrote a line
+      expect(await transcript(bot.threadId, alice)).toHaveLength(before);
+      expect(await busy()).toBe(true);
+      writeFileSync(finishGate, "finish");
+      await waitFor(async () => !(await busy()));
+      // The same native credential is no longer authorised after its turn.
+      expect((await internal({ emoji: "🙏", messageId: first.id })).status).toBe(401);
+    } finally {
+      writeFileSync(finishGate, "finish");
+    }
   }, 120_000);
 });

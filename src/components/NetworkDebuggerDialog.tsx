@@ -3,11 +3,11 @@ import { Download, Pause, Play } from "lucide-react";
 import { t } from "@/lib/i18n";
 import { api } from "@/state/store";
 import { cn } from "@/lib/cn";
-import { formatDebuggerBytes as formatBytes } from "../../shared/format-bytes";
+import { formatDebuggerBytes } from "../../shared/format-bytes";
 import { DetailPanel } from "./DetailPanel";
 import { PILL } from "./SettingsPrimitives";
 
-export { formatBytes };
+export { formatDebuggerBytes };
 
 /** One request as the server sends it: already redacted (no body, no
  * credential), headers only when asked for. See server/browser/browser-network-debug.ts. */
@@ -192,7 +192,7 @@ export function NetworkDebuggerDialog({ botId, botName, onClose }: { botId: stri
               <dt>{t("browser.network.status")}</dt><dd className="text-ink">{detail.status || "-"} {detail.statusText}</dd>
               <dt>{t("browser.network.type")}</dt><dd className="text-ink">{detail.mimeType || detail.resourceType}</dd>
               <dt>{t("browser.network.time")}</dt><dd className="text-ink">{formatMs(detail.time)}</dd>
-              <dt>{t("browser.network.size")}</dt><dd className="text-ink">{formatBytes(detail.responseBodySize)}</dd>
+              <dt>{t("browser.network.size")}</dt><dd className="text-ink">{formatDebuggerBytes(detail.responseBodySize)}</dd>
             </dl>
             {detail.timings && <div className="mt-2 text-ink-secondary">{Object.entries(detail.timings).map(([name, value]) => `${name} ${formatMs(value)}`).join(", ")}</div>}
             {showHeaders ? (["requestHeaders", "responseHeaders"] as const).map((key) => <section key={key} className="mt-3">

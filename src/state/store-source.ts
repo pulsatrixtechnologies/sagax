@@ -2,7 +2,7 @@
 // publishes each state it renders here. Kept apart from store-selector.ts so
 // store.tsx can provide it without importing the hooks, which read
 // `useStore` from "./store" (a test that mocks the store reaches them there).
-import type { BotAnnouncement } from "./store";
+import type { BotAnnouncement } from "./store/model";
 import { createContext, useLayoutEffect, useRef, type Dispatch } from "react";
 
 /** What selector reads subscribe to: the latest rendered state and the store's dispatch.

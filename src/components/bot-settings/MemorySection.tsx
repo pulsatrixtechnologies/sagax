@@ -23,7 +23,7 @@ import {
   fetchMemoryDoc,
   fetchMemoryJournal,
   fetchMemoryOverview,
-  formatBytes,
+  formatMemoryBytes,
   journalSource,
   journalSummary,
   relativeTime,
@@ -729,7 +729,7 @@ export function MemoryGauge({ index }: { index: MemoryCapacity }) {
   return (
     <div data-memory-gauge={status.level} title={status.sentence}>
       <GaugeBar label={t("botPanel.memory.linesLabel")} value={`${index.lines} / ${index.maxLines}`} share={status.lineShare} fill={fill} />
-      <GaugeBar label={t("botPanel.memory.sizeLabel")} value={`${formatBytes(index.bytes)} / ${formatBytes(index.maxBytes)}`} share={status.byteShare} fill={fill} />
+      <GaugeBar label={t("botPanel.memory.sizeLabel")} value={`${formatMemoryBytes(index.bytes)} / ${formatMemoryBytes(index.maxBytes)}`} share={status.byteShare} fill={fill} />
       {status.warning && <p role="alert" className="mt-2 text-[12.5px] leading-relaxed text-danger">{status.warning}</p>}
     </div>
   );
@@ -817,7 +817,7 @@ export function MemoryFileRows({
                 <FileText size={14} className="shrink-0 text-ink-secondary" />
                 <span className="truncate font-mono text-[12.5px] text-ink">{file.name}</span>
                 <span className="shrink-0 text-[11.5px] text-ink-secondary">
-                  {formatBytes(file.bytes)} · {relativeTime(file.modifiedAt)}
+                  {formatMemoryBytes(file.bytes)} · {relativeTime(file.modifiedAt)}
                 </span>
               </button>
               <button

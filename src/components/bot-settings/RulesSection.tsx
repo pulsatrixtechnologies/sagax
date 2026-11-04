@@ -18,7 +18,7 @@ import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/cn";
 import { t } from "@/lib/i18n";
-import { formatBytes } from "@/lib/memory";
+import { formatMemoryBytes } from "@/lib/memory";
 import {
   DEFAULT_RULE_SET_ID,
   RULE_SET_MAX_BYTES,
@@ -87,8 +87,8 @@ export function RulesCounter({ text, maxLines = RULE_SET_MAX_LINES, maxBytes = R
       {t("persona.rules.counter", {
         lines: count.lines,
         maxLines: count.maxLines,
-        bytes: formatBytes(count.bytes),
-        maxBytes: formatBytes(count.maxBytes),
+        bytes: formatMemoryBytes(count.bytes),
+        maxBytes: formatMemoryBytes(count.maxBytes),
       })}
     </span>
   );
@@ -244,8 +244,8 @@ export function RulesSection({ bot, active, initial }: { bot: Bot; active: boole
   const totalLabel = t("persona.rules.sets.total", {
     lines: total.lines,
     maxLines: budgets.total.maxLines,
-    bytes: formatBytes(total.bytes),
-    maxBytes: formatBytes(budgets.total.maxBytes),
+    bytes: formatMemoryBytes(total.bytes),
+    maxBytes: formatMemoryBytes(budgets.total.maxBytes),
   });
 
   return (
@@ -273,7 +273,7 @@ export function RulesSection({ bot, active, initial }: { bot: Bot; active: boole
         {sets.map((set, index) => {
           const label = ruleSetLabel(set);
           const setCount = rulesCount(draftOf(set), budgets.set.maxLines, budgets.set.maxBytes);
-          const counterText = t("persona.rules.sets.rowCounter", { lines: setCount.lines, maxLines: setCount.maxLines, bytes: formatBytes(setCount.bytes) });
+          const counterText = t("persona.rules.sets.rowCounter", { lines: setCount.lines, maxLines: setCount.maxLines, bytes: formatMemoryBytes(setCount.bytes) });
           const isSelected = set.id === selected;
           return (
             <div
@@ -413,7 +413,7 @@ export function RulesSection({ bot, active, initial }: { bot: Bot; active: boole
           />
           {count.over && (
             <p role="alert" className="text-[12.5px] text-danger">
-              {t("persona.rules.sets.setOver", { maxLines: count.maxLines, maxBytes: formatBytes(count.maxBytes) })}
+              {t("persona.rules.sets.setOver", { maxLines: count.maxLines, maxBytes: formatMemoryBytes(count.maxBytes) })}
             </p>
           )}
           {conflict && conflict.id === current.id && (

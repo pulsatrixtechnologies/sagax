@@ -1,7 +1,7 @@
 /** Stream notifications and child IO for a Codex app-server session. */
 import { describeSpawnFailure } from "../../procs.ts";
 import { appendNative } from "../native.ts";
-import { classifyError, RETRY_MAX_ATTEMPTS } from "../retry.ts";
+import { classifyError } from "../retry.ts";
 import { commandSummary, cwToolResult, inputPreviewMax, toolDetailPreview, toolFailurePreview } from "../../tools/tool-summary.ts";
 import { isPhoneToolCallName, PHONE_TOOL_OUTPUT_NOT_KEPT } from "../../../shared/phone-tools.ts";
 import { filesField, writtenFilesFromToolInput } from "../../threads/thread-files.ts";
@@ -216,6 +216,7 @@ s.handleNotification = (msg: any) => {
       if (t) {
         const b = s.state.usageBaseline ?? { input: 0, output: 0, cachedInput: 0 };
         const now = shape(t);
+        s.lastUsage = now;
         s.state.usage = {
           input: Math.max(0, now.input - b.input),
           output: Math.max(0, now.output - b.output),
@@ -283,15 +284,15 @@ s.handleNotification = (msg: any) => {
   }
 };
 
-s.buf = "";
+s.buf = s.previous?.buf ?? "";
 // decode as UTF-8 across chunk boundaries — a raw `buf += chunk` splits
 // multibyte characters that straddle two reads and corrupts the text
 s.child.stdout!.setEncoding("utf8");
-s.child.stdout!.on("data", (chunk) => {
-  if (s.abandoned || s.state.settled) return;
+const stdout = (chunk: string) => {
+  if (s.abandoned) return;
   s.buf += chunk;
   let nl;
-  while (!s.state.settled && !s.abandoned && (nl = s.buf.indexOf("\n")) !== -1) {
+  while (!s.abandoned && (nl = s.buf.indexOf("\n")) !== -1) {
     const line = s.buf.slice(0, nl);
     s.buf = s.buf.slice(nl + 1);
     if (!line.trim()) continue;
@@ -299,6 +300,12 @@ s.child.stdout!.on("data", (chunk) => {
     try {
       msg = JSON.parse(line);
     } catch {
+      continue;
+    }
+    if (s.state.settled) {
+      // Retired turns cannot approve a late server request, even at Full.
+      if (msg.id !== undefined && msg.method) s.send({ jsonrpc: "2.0", id: msg.id,
+        error: { code: -32000, message: "Sagax: the turn ended" } });
       continue;
     }
     s.stderrSinceOutput = "";
@@ -312,12 +319,18 @@ s.child.stdout!.on("data", (chunk) => {
         else pend.resolve(msg.result);
       }
     } else if (msg.id !== undefined && msg.method) {
+      if (msg.params?.threadId === s.codexThreadId && s.codexTurnId &&
+          typeof msg.params?.turnId === "string" && msg.params.turnId !== s.codexTurnId) {
+        s.send({ jsonrpc: "2.0", id: msg.id, error: { code: -32000, message: "Sagax: the turn ended" } });
+        continue;
+      }
       s.handleServerRequest(msg);
     } else if (msg.method) {
       s.handleNotification(msg);
     }
   }
-});
+};
+s.child.stdout!.on("data", stdout);
 
 s.stderr = "";
 // Stderr that arrived after the last parsed protocol message. The
@@ -327,18 +340,21 @@ s.stderr = "";
 // process). Only this slice can explain an exit; older bytes are
 // context, not cause.
 s.stderrSinceOutput = "";
-s.child.stderr!.on("data", (c) => {
+const stderr = (c: Buffer) => {
   s.stderr += c;
   s.stderrSinceOutput += c;
   if (s.stderr.length > 8192) s.stderr = s.stderr.slice(-8192);
   if (s.stderrSinceOutput.length > 2048) s.stderrSinceOutput = s.stderrSinceOutput.slice(-2048);
-});
-s.child.on("error", (e) => {
+};
+s.child.stderr!.on("data", stderr);
+const error = (e: Error) => {
   if (s.abandoned) return;
   s.emit({ ...s.base(s.threadId, s.turnId), type: "runtime.error", ...describeSpawnFailure(e, s.config.cli, turn.cwd ?? homedir()) });
   void s.settle(false, "spawn_error");
-});
-s.child.on("close", (code, signal) => {
+};
+s.child.on("error", error);
+const close = (code: number | null, signal: NodeJS.Signals | null) => {
+  s.sessions.forget(s);
   if (s.abandoned) return;
   if (s.state.settled) {
     // Root exit alone cannot release a turn after an uncertain stop.
@@ -360,28 +376,25 @@ s.child.on("close", (code, signal) => {
   // websocket 426 logged at turn start.
   const recentStderr = s.stderrSinceOutput.trim();
   const hadStreamedOutput = s.codexTurnId !== null || s.state.sawStreamDelta;
-  // A signal exit is terminal no matter what the stderr says:
-  // something killed the process (OOM, kill -9), and classifyError
-  // cannot see the signal — with code null, transient-looking recent
-  // stderr could still mark a killed attempt retryable.
-  // Classification also reads only stderr received after the last
-  // protocol output; the lifetime buffer's tail can name a
-  // long-past event (the websocket-426 misattribution).
-  const verdict =
-    signal !== null
-      ? { transient: false, reason: "interrupted" }
-      : classifyError({ exitCode: code, stderr: recentStderr });
   const exitMessage = `codex exited ${code}${signal ? ` (signal ${signal})` : ""} before turn/completed${
     recentStderr ? `: ${recentStderr.slice(-300)}` : hadStreamedOutput && s.stderr.trim() ? "; no stderr after the last app-server output" : ""
   }`;
-  // Relaunch only when turn/start was never acknowledged: a replay could re-run tools the user saw.
-  if (!s.stopRequested && s.codexTurnId === null && s.earlyNotifications.length === 0 && verdict.transient && s.attempt < RETRY_MAX_ATTEMPTS - 1) {
-    void s.relaunch(verdict.reason, exitMessage, "exit_before_result").catch(() => {});
+  // One unexpected process loss gets a replacement within this logical turn.
+  // After acknowledgement or native output, resume history with a continuation
+  // and the received steps; never replay the original request as a new root.
+  if (s.recoverCrash(s.codexThreadId, s.codexTurnId !== null || s.earlyNotifications.length > 0)) {
+    void s.relaunch("app_server_exit", exitMessage, "exit_before_result").catch(() => {});
     return;
   }
   s.emit({ ...s.base(s.threadId, s.turnId), type: "runtime.error", message: exitMessage });
   void s.settle(false, "exit_before_result");
-});
-
+};
+s.child.on("close", close);
+s.detachStream = () => {
+  s.child.stdout!.off("data", stdout);
+  s.child.stderr!.off("data", stderr);
+  s.child.off("error", error);
+  s.child.off("close", close);
+};
 
 }

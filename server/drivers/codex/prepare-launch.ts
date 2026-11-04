@@ -37,6 +37,8 @@ import {
 import type { CodexConfig } from "./config.ts";
 import type { PreparedCodexLaunch } from "./turn-types.ts";
 import type { SendTurnInput } from "../../contracts.ts";
+import { turnSwitches, warmCommsEnv, warmPerspicaxEnv, withoutTurnTokens } from "../spawn-contract.ts";
+import { CodexSessions, codexAccountFiles, codexContractKey, codexFileContract } from "./sessions.ts";
 
 export type PrepareLaunchDeps = {
   childEnv: () => Record<string, string | undefined>;
@@ -47,12 +49,29 @@ export type PrepareLaunchDeps = {
   config: CodexConfig;
   withholdHostTools: boolean;
   waitForLaunchSlot: (attempt: number) => Promise<(() => void) | null>;
+  sessions: CodexSessions;
+  stopRequested: boolean;
+  approvalMode: string;
 };
 
 export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: number): Promise<PreparedCodexLaunch | null> {
-  const { childEnv, chatgptTurn, planToken, turn, plan, config, withholdHostTools, waitForLaunchSlot } = deps;
+  const { childEnv, chatgptTurn, planToken, plan, config, withholdHostTools, waitForLaunchSlot, sessions } = deps;
+  let turn = deps.turn;
+  // Retire another principal's process before writing any shared turn file.
+  const identity = codexContractKey({ bot: turn.botId, person: turn.principalId, access: turn.access, env: childEnv(),
+    principal: turn.integrations?.agents?.env.SAGAX_MCP_PRINCIPAL,
+    claims: turn.integrations?.agents?.env.SAGAX_CLAIMS,
+  });
+  await sessions.isolate(turn.threadId, identity);
+  if (deps.stopRequested) return null;
+  if (turn.integrations) {
+    const integrations = { ...turn.integrations };
+    if (integrations.agents) integrations.agents = { ...integrations.agents, env: warmCommsEnv(turn.threadId, turn.botId, integrations.agents.env) };
+    integrations.custom = Object.fromEntries(Object.entries(integrations.custom ?? {}).map(([name, server]) =>
+      [name, !("url" in server) && isSagaxPerspicaxBridge(server) ? { ...server, env: warmPerspicaxEnv(turn.threadId, turn.botId, server.env) } : server]));
+    turn = { ...turn, integrations };
+  }
   const env = childEnv();
-  const launchedLogin = chatgptTurn ? (storedCodexLogin(env) ?? null) : null;
   if (planToken) env.SAGAX_CHATGPT_TOKEN = planToken;
   // Desktop bridge: this turn's network traffic leaves through the
   // person's computer (never the model traffic: NO_PROXY).
@@ -60,6 +79,7 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
   // An organization owner key (codexAccessLaunch) wins over a ChatGPT
   // plan sign-in, which wins over a managed or local provider.
   const launch = codexAccessLaunch(env, turn.access);
+  const launchedLogin = chatgptTurn ? (storedCodexLogin(env) ?? null) : null;
   const appServerArgs = ["app-server", ...(launch.ownerKey ? ownerKeyCodexArgs() : plan ? chatgptPlanCodexArgs() : config.managed ? managedCodexArgs(config.managed) : codexLocalProviderArgs(env, turn.model)), ...codexToolSurfaceArgs(),
     // Native snapshots can restore inherited variables after the shell
     // policy has filtered them. Scoped MCP gate settings must stay private.
@@ -248,8 +268,34 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
   ) } };
 
   const commandCwd = permissionLaunchCwd(turn.cwd ?? homedir()) ?? (turn.cwd ?? homedir());
+  const key = codexContractKey({
+    cli: config.cli, args: appServerArgs, env: Object.fromEntries(baseEnv),
+    files: codexFileContract(codexAccountFiles(env, turn.cwd ?? homedir())),
+    integrations: { ...turn.integrations, ...withoutTurnTokens({
+      ...turn.integrations,
+      custom: undefined,
+    }), custom: withoutTurnTokens(turn.integrations?.custom ?? {}) },
+    bot: turn.botId, person: turn.principalId, identity: turn.access, model: turn.model, effort: turn.effort,
+    switches: turnSwitches(turn.integrations ?? {}),
+    cwd: turn.cwd ?? homedir(), approval: deps.approvalMode, scope: turn.toolScope,
+    commandEnvironment: turn.commandEnvironment,
+    // A loaded native thread ignores thread/resume instruction overrides
+    // (Codex 0.166). Only a new process reasserts the persistent developer
+    // slot. The volatile context still rides user input without a restart.
+    instructions: typeof turn.systemStable === "string" && typeof turn.systemVolatile === "string"
+      ? turn.systemStable : turn.system ?? "",
+  });
+  const process = await sessions.take(turn.threadId, key, turn.sessionReset === true || attempt > 0);
+  if (deps.stopRequested) return null;
+  const previous = process?.session;
+  if (previous) return {
+    env, launchedLogin, appServerArgs, privateEnv, provenPrivateEnv, selectedMcp, selectedApprovals,
+    directoryMounts, selectionConfig, commandCwd, releaseSlot: () => {}, child: previous.child,
+    process: process!, previous,
+  };
   const releaseSlot = tryCodexLaunchSlot() ?? await waitForLaunchSlot(attempt);
   if (!releaseSlot) return null;
+  if (deps.stopRequested) { releaseSlot(); return null; }
   const child = spawnHoldingSlot(releaseSlot, () => spawnCli(...codexLaunch(config.cli, appServerArgs), {
     cwd: turn.cwd ?? homedir(),
     env,
@@ -269,5 +315,6 @@ export async function prepareCodexLaunch(deps: PrepareLaunchDeps, attempt: numbe
     commandCwd,
     releaseSlot,
     child,
+    process: { key, identity, initialized: false },
   };
 }

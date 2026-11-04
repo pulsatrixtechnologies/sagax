@@ -36,6 +36,7 @@ if (s.attempt === 0 && !s.announced) s.emit({ ...s.base(s.threadId, s.turnId), t
 // one relaunch of the whole app-server after backoff — but only when
 // nothing streamed yet, and never for auth/shape errors or interrupts
 try {
+  if (!s.process.initialized) {
   await s.request("initialize", {
     clientInfo: { name: "openmausbot", title: "Sagax", version: serverVersion() },
     // Named permission profiles are an experimental app-server field in
@@ -44,6 +45,8 @@ try {
     capabilities: { experimentalApi: true },
   });
   s.send({ jsonrpc: "2.0", method: "initialized", params: {} });
+  s.process.initialized = true;
+  }
   // developerInstructions replaces, rather than appends to, native
   // config. Read it for every approval mode so existing rules survive.
   // request() already redacts config/read responses from native logs.
@@ -89,8 +92,8 @@ try {
   // `set` table on the thread, over stdin, so Codex's shell gets them
   // after its exclusions and the app-server's own environment never
   // does (no billing switch, nothing on argv). The person's own `set`
-  // entries stay. Codex starts for every turn, so a change or a revoke
-  // holds at the next one.
+  // entries stay. Command variables are part of the process contract,
+  // so a change or a revoke holds at the next turn.
   const commandVariables = cleanCommandVariables(turn.commandEnvironment);
   if (commandVariables.length) {
     const rawSet = plainRecord((effectiveConfig as { shell_environment_policy?: { set?: unknown } } | null)?.shell_environment_policy?.set) ?? {};
@@ -159,7 +162,7 @@ try {
     mode: s.approvalMode,
     sagaxAnswers: s.approvalMode !== "custom" && approvalParams.turn.approvalsReviewer === "user",
   });
-  // Each turn launches a new app-server. Reassert current bot instructions
+  // Reassert current bot instructions on the retained app-server too,
   // on start AND resume so Codex owns their lifetime through compaction.
   // Removed bot rules are cleared without dropping native configured rules.
   const selection = s.config.managed
@@ -175,7 +178,7 @@ try {
   const renewFull = !s.inTurnRenewal && s.freshNextTurn.has(s.threadId) && typeof turn.resumeCursor === "string";
   s.freshNextTurn.delete(s.threadId);
   const renewingNow = Boolean(s.inTurnRenewal);
-  const cursor = renewingNow || renewFull ? null
+  const cursor = turn.sessionReset || renewingNow || renewFull ? null
     : (typeof turn.resumeCursor === "string" ? turn.resumeCursor : null);
   let startedModel: string | null = null;
   let resumedNativeThread = false;

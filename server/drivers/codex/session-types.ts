@@ -5,6 +5,7 @@ import type { RenewalStep } from "../../context/context-renewal.ts";
 import type { CodexRoute } from "../codex-errors.ts";
 import type { CodexConfig } from "./config.ts";
 import type { PreparedCodexLaunch } from "./turn-types.ts";
+import type { CodexSessions } from "./sessions.ts";
 
 export type CodexSession = PreparedCodexLaunch & {
   input: SendTurnInput;
@@ -87,4 +88,8 @@ export type CodexSession = PreparedCodexLaunch & {
   stderr: string;
   stderrSinceOutput: string;
   runLaunchAttempt: (attempt: number) => Promise<void>;
+  sessions: CodexSessions;
+  detachStream: () => void;
+  lastUsage?: { input: number; output: number; cachedInput: number };
+  recoverCrash: (nativeThreadId: string | null, acknowledged: boolean) => boolean;
 };

@@ -406,6 +406,12 @@ async function benchCodex(): Promise<EngineReport> {
   const dataHint = mkdtempSync(join(tmpdir(), "bench-codex-"));
   const startupLog = join(dataHint, "codex-startup.jsonl");
   writeFileSync(startupLog, "");
+  const launches = () => {
+    if (!existsSync(startupLog)) return 0;
+    const rows = readFileSync(startupLog, "utf8").trim().split("\n").filter(Boolean)
+      .map(line => JSON.parse(line) as { event: string; pid: number });
+    return new Set(rows.filter(row => row.event === "initialize").map(row => row.pid)).size;
+  };
   const delayMs = String(Math.min(COLD_MS, 800));
   const fixture = await launchVerificationServer(
     { ...process.env, SAGAX_TURN_TRACE: "1" },
@@ -443,10 +449,10 @@ async function benchCodex(): Promise<EngineReport> {
     events = await openEvents(url);
     const warm: TurnSample[] = [];
     for (let i = 0; i < WARM; i++) {
-      const before = countLaunches(startupLog);
+      const before = launches();
       warm.push(await sendAndMeasure({
         url, botId, threadId, text: `warm turn ${i + 1}`, events, log,
-        launchesBefore: before, launchesAfter: () => countLaunches(startupLog), kind: "warm",
+        launchesBefore: before, launchesAfter: launches, kind: "warm",
       }));
     }
     const cold: TurnSample[] = [];
@@ -457,22 +463,22 @@ async function benchCodex(): Promise<EngineReport> {
       const coldThread = created.bot.threadId ?? created.bot.activeTaskId;
       if (!coldThread) throw new Error(`cold bot has no thread: ${JSON.stringify(created.bot)}`);
       await runControlOmb(["set-model", "--bot", created.bot.id, "--instance", "codex", "--model", "gpt-fake-default"], { env });
-      const before = countLaunches(startupLog);
+      const before = launches();
       cold.push(await sendAndMeasure({
         url, botId: created.bot.id, threadId: coldThread, text: `cold turn ${i + 1}`, events, log,
-        launchesBefore: before, launchesAfter: () => countLaunches(startupLog), kind: "cold",
+        launchesBefore: before, launchesAfter: launches, kind: "cold",
       }));
     }
     const inits = countLaunches(startupLog);
     const initEvents = existsSync(startupLog)
       ? readFileSync(startupLog, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as { event: string; pid: number })
       : [];
-    const pids = new Set(initEvents.map((e) => e.pid));
-    return summarize("codex", warm, cold, pids.size, undefined, [
-      `startup log lines=${inits} distinct pids=${pids.size}`,
-      `initialize events=${initEvents.filter((e) => e.event === "initialize").length}`,
+    const pids = new Set(initEvents.filter(e => e.event === "turn/start").map(e => e.pid));
+    return summarize("codex", warm, cold, pids.size, sessionIdlePolicy("CODEX").idleMs, [
+      `startup log lines=${inits} turn process pids=${pids.size}`,
+      `initialize events (including account probes)=${initEvents.filter((e) => e.event === "initialize").length}`,
       `turn/start events=${initEvents.filter((e) => e.event === "turn/start").length}`,
-      "today each Codex turn launches a new app-server (finish.ts)",
+      "one app-server per unchanged thread and execution identity (#1969)",
     ]);
   } finally {
     events?.close();

@@ -17,7 +17,7 @@ import { RequestTooLargeError, sizeChange, smallerResend } from "./chat-size-lim
 import { requestTooLargeMessage } from "../../shared/request-too-large.ts";
 import { providerReplyCutMessage, providerReplyCutReason } from "../../shared/provider-reply-cut.ts";
 import { classifyContinuable, writeTurnHandoff } from "../turns/turn-continuation.ts";
-import { fullAccessActs } from "../approvals/full-access-gate.ts";
+
 import { ModelUnsupportedError, UnsupportedChatToolsError, UnsupportedReasoningReplayError, RejectedToolCallError } from "./openai-chat-completion.ts";
 import type { Completion, RuntimeOptions, Usage } from "./openai-chat-types.ts";
 import type { OpenAIChatMessage } from "./openai-chat-message.ts";
@@ -149,9 +149,10 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
       // A guest's turn neither uses the owner's grants nor keeps one: its
       // cards offer allow once only (index.ts request.opened).
       granted: turn.guestConfined ? undefined : granted,
-      // below Full only: at Full this runtime answers its own gate
-      // (fullAccessActs below); judged in index.ts otherwise.
-      // full-access: chat-engine
+      // #1982: always emit; Full is answered in index.ts request.opened
+      // (org/person rules, safety, isolation still hold). Never short-
+      // circuit MCP asks in this driver the way Codex #1977 used to.
+      // full-access: engine-bridge
       open: (ask) => emit({
         ...base(turn.threadId, turnId), type: "request.opened", requestType: "permission",
         requestId: ask.id, tool: ask.tool, summary: ask.summary, allowSession: ask.grant !== undefined,
@@ -512,14 +513,13 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
                 // its catalog reads ask nothing, as listing tools never did.
                 const shown = tools.view(call.function.name, args as Record<string, unknown>);
                 const shownPreview = shown.input === args ? inputPreview : preview(shown.input);
-                // Full access is the person's explicit grant to answer every
-                // prompt. This runtime has no provider reviewer to hand it to,
-                // so it is honoured here: without it every single tool call on
-                // an OpenAI-compatible engine stops for a card, and a Primary Bot's
-                // delegated Full access cannot help either. #1905: read from
-                // the one Full access decision (full-access-gate.ts).
-                // full-access: chat-engine
-                const allowed = fullAccessActs(turn.approvalMode) || !shown.ask
+                // #1982 / #1977: an MCP ask always reaches Sagax's gate
+                // (request.opened). Full is answered there unless an
+                // organization or personal rule, the safety review or
+                // isolation holds it; never auto-accept here with empty
+                // facts (that skipped those holds). Reads with ask:false
+                // still run without a card.
+                const allowed = !shown.ask
                   || await approval.ask(shown.title, shownPreview ?? "This tool has no arguments.", shown.grant, shown.mcpTool);
                 abort.signal.throwIfAborted();
                 emit({ ...base(turn.threadId, turnId), type: "item.started", itemType: "tool", itemId: call.id,

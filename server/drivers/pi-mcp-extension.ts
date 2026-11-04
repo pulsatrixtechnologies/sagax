@@ -23,8 +23,8 @@ interface McpServerDef {
   args?: string[];
   env?: Record<string, string>;
   /** "local-computer" marks the user's real host desktop: every tool on such
-   * a server is gated behind a permission card before it executes, unless
-   * the turn runs under Full access. */
+   * a server is gated behind a permission card before it executes. Full
+   * also confirms (#1982); Sagax's gate Full-approves unless a rule holds. */
   scope?: string;
   /** A URL server behind the remote proxy's tool directory: a big catalog
    * arrives as search_tools, describe_tool and call_tool (mcp-directory.ts). */
@@ -807,9 +807,11 @@ export default async function (pi: PiExtensionApi): Promise<void> {
     };
     // "approval": Sagax's own Browser and Data (pi.ts buildMcpServers), which
     // ask like a custom server so Sagax's approval path decides. The
-    // person's own computer asks too, except under Full access, which she
-    // chose for her own environment.
-    const gated = (def.scope === "local-computer" || def.scope === "custom" || def.scope === "approval") && config.approvalMode !== "full";
+    // person's own computer asks too. #1982: Full also confirms — the ask
+    // reaches request.opened and index.ts Full-approves unless an
+    // organization or personal rule, the safety review or isolation holds
+    // it (Codex #1977 pattern). Never skip the gate here at Full.
+    const gated = def.scope === "local-computer" || def.scope === "custom" || def.scope === "approval";
     let registered = 0;
 
     for (const tool of tools) {

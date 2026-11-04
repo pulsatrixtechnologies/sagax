@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { adminWillAnswerLine, ApprovalCard } from "./ApprovalCard";
+import { adminWillAnswerLine, ApprovalCard, approvalCardStaysInChat } from "./ApprovalCard";
 import { approvalWho } from "./PerspicaxOrgSettings";
 import { pendingApprovals, PendingApprovalPanel, spokenApprovalPrompt, type Pending } from "./PendingApproval";
 import type { Bot, Message } from "@/state/store";
@@ -603,6 +603,14 @@ describe("ApprovalCard for a change that applied on its own", () => {
     routineRequest: { ...routineRequest, operation, resultId: "routine-1", ...(undo ? { undo } : {}) } as NonNullable<Message["card"]>["routineRequest"],
   });
   const render = (message: Message) => renderToStaticMarkup(createElement(ApprovalCard, { bot: { name: "Scout" }, message, threadId: "thread-1" }));
+
+  it("keeps an auto-applied Undo receipt in the chat even when dismissed (#1982)", () => {
+    const card = applied({}).card!;
+    expect(approvalCardStaysInChat(card)).toBe(true);
+    expect(approvalCardStaysInChat({ ...card, dismissed: undefined })).toBe(true);
+    expect(approvalCardStaysInChat({ ...card, autoApplied: undefined })).toBe(false);
+    expect(approvalCardStaysInChat({ ...card, held: "Ask first" })).toBe(false);
+  });
 
   it("reads as one plain line with Undo instead of the approval box", () => {
     const at = new Date();

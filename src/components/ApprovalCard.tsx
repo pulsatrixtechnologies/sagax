@@ -114,12 +114,13 @@ export function approvalCardOutcome(card: OptionCardData): string | undefined {
  *  Allowed once, Declined, Expired. An ask the engine closed on its own (the
  *  turn ended, nothing could answer it) leaves the transcript. A question or
  *  a quiz is not this card. A change that applied without a person is not an
- *  ask: it stays as its one line with Undo. */
+ *  ask: it stays as its one line with Undo (#1982: even when the server
+ *  marked the receipt dismissed so it leaves the pending dock). */
 export function approvalCardStaysInChat(
   card: Pick<OptionCardData, "requestId" | "tool" | "answered" | "expired" | "dismissed" | "autoApplied" | "held"> | undefined,
 ): boolean {
   if (!card?.requestId || !card.tool) return false;
-  if (card.autoApplied === true && card.answered === "allow" && !card.held && card.dismissed !== true) return true;
+  if (card.autoApplied === true && card.answered === "allow" && !card.held) return true;
   if (card.expired === true) return true;
   return card.dismissed !== true && card.answered !== "unavailable";
 }

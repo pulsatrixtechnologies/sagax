@@ -185,8 +185,9 @@ export function grokLoadsAccountConnectors(turn: { grokCloudConnectors?: boolean
 
 /** Grok's `--permission-mode` for a turn.
  *
- * Without the account's connectors: Full access (`fullAuto`) bypasses, a
- * gated Auto turn runs in `default` (grok-approval-gate.ts), Auto runs Grok's
+ * Without the account's connectors: a gated Auto or Full turn runs in
+ * `default` (grok-approval-gate.ts, #1982) so every Sagax MCP ask reaches
+ * request.opened; ungated Full (`fullAuto`) bypasses; Auto runs Grok's
  * own `auto`, Edits `acceptEdits`, Ask `default`.
  *
  * With them (2026-10-30, the operator: "Oui, avec carte, si le allow always
@@ -201,8 +202,10 @@ export function grokLoadsAccountConnectors(turn: { grokCloudConnectors?: boolean
  * level (an embedder's) keeps the legacy instance flag. */
 export function grokPermissionMode(input: { fullAuto: boolean; gated: boolean; approvalMode?: string; accountConnectors: boolean }): string {
   if (input.accountConnectors && input.approvalMode !== undefined) return input.approvalMode === "edits" ? "acceptEdits" : "default";
-  if (input.fullAuto) return "bypassPermissions";
+  // #1982: gated before fullAuto — Full under the gate stays in default so
+  // MCP asks reach Sagax (reads pass; writes follow the level with a card).
   if (input.gated) return "default";
+  if (input.fullAuto) return "bypassPermissions";
   return input.approvalMode === "auto" ? "auto" : input.approvalMode === "edits" ? "acceptEdits" : "default";
 }
 
@@ -994,16 +997,17 @@ const support: AcpSupport = {
   // residual requests still ask. Never replace it with bypassPermissions.
   // Verified: grok 1.0.3 --help and xai-org/grok-build@37949780,
   // crates/codegen/xai-grok-pager-bin/src/main.rs:1259-1273.
-  // Approval gate (grok-approval-gate.ts), on unless the bot opts out: an Auto turn runs
-  // Grok in `default` mode, with no per-call classifier wait, and Sagax
-  // holds every MCP call that is not reviewed read-only for a card.
+  // Approval gate (grok-approval-gate.ts), on unless the bot opts out: an
+  // Auto or Full turn (#1982) runs Grok in `default` mode, with no per-call
+  // classifier wait, and Sagax holds every MCP call that is not reviewed
+  // read-only for a card (Full-approves unless a rule holds).
   // Solo only: MCP servers the person declared in Grok's own config.toml are
   // not mounted by Sagax, so the gate cannot hold them, and in `default`
   // mode Grok may call them with no prompt. Such a turn keeps Grok's own
   // auto mode. An organization turn withholds host tools: Grok reaches any
   // MCP tool through use_tool only, and gated-mcp-ask.ts keeps every ask
   // that names a server Sagax did not mount as a card.
-  approvalGate: (config, turn, context) => !config.fullAuto && turn.approvalMode === "auto" && grokApprovalGateEnabled(turn.botId)
+  approvalGate: (_config, turn, context) => (turn.approvalMode === "auto" || turn.approvalMode === "full") && grokApprovalGateEnabled(turn.botId)
     && (turn.withholdHostTools === true || !grokConfigDeclaresMcp(context?.env ?? process.env, context?.cwd)),
   approvalReadOnly: (server, botId) => gateReadOnlyTools(server, botId),
   // a use_tool target the session's own catalog lists on a managed gateway
@@ -1012,7 +1016,8 @@ const support: AcpSupport = {
 
   spawnArgs: (config, turn, launch) => {
     const withhold = turn.withholdHostTools === true;
-    const gated = launch?.approvalGate === true && !config.fullAuto;
+    // #1982: Full under the gate stays gated (do not drop it for fullAuto).
+    const gated = launch?.approvalGate === true;
     const accountConnectors = grokLoadsAccountConnectors(turn);
     const mode = grokPermissionMode({ fullAuto: config.fullAuto, gated, approvalMode: turn.approvalMode, accountConnectors });
     return [

@@ -18,6 +18,19 @@ afterEach(() => vi.unstubAllGlobals());
 
 const sse = (body: string) => new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
 
+/** #1982: driver unit tests have no index.ts harness. Auto-allow permission
+ * cards so Full turns that now open request.opened can still finish. */
+function allowOpenedPermissions(
+  instance: { adapter: { onEvent(listener: (event: RuntimeEvent) => void): void; respondToRequest(threadId: string, requestId: string, decision: { behavior: "allow" | "deny" }): unknown } },
+  threadId: string,
+) {
+  instance.adapter.onEvent((event) => {
+    if (event.type === "request.opened" && event.requestType === "permission" && event.requestId) {
+      void instance.adapter.respondToRequest(threadId, event.requestId, { behavior: "allow" });
+    }
+  });
+}
+
 /** `body` is the stream every request gets, or a factory for each chat
  * completion request (the model catalog fetch then gets a 404). */
 async function runTurn(body: string | (() => Response), driver: "openai-compat" | "minimax" = "openai-compat") {
@@ -166,12 +179,14 @@ describe("createOpenAIChatRuntime tool approvals", () => {
       : driver === "mistral" ? await MistralDriver.create({ ...common, config: MistralDriver.defaultConfig() })
       : await MinimaxDriver.create({ ...common, config: MinimaxDriver.defaultConfig() });
     const events: RuntimeEvent[] = []; instance.adapter.onEvent((event) => events.push(event));
+    allowOpenedPermissions(instance, "scoped-api");
     try {
       await instance.adapter.sendTurn({ threadId: "scoped-api", text: "Use only the selected tool.", approvalMode: "full", toolScope: { allow: ["mcp:fx:write"] }, integrations: { custom: { fx: toolServer(receipt) } } });
       await vi.waitFor(() => expect(bodies.length).toBeGreaterThan(0), { timeout: 10_000 });
       expect(bodies[0].tools.map((tool: any) => tool.function.name)).toEqual(["fx_write"]);
       await vi.waitFor(() => expect(events.some((event) => event.type === "turn.completed")).toBe(true), { timeout: 10_000 });
-      expect(events.filter((event) => event.type === "request.opened")).toEqual([]);
+      // #1982: Full MCP asks open the gate; this fixture answers allow.
+      expect(events.some((event) => event.type === "request.opened" && event.requestType === "permission")).toBe(true);
       expect(readFileSync(receipt, "utf8")).toBe("write\n");
       const withheld = bodies[1].messages.find((message: any) => message.role === "tool" && message.tool_call_id === "withheld");
       expect(JSON.parse(withheld.content)).toMatchObject({ ok: false });
@@ -237,8 +252,11 @@ describe("createOpenAIChatRuntime tool approvals", () => {
     expect(await cardRaisedFor("ask")).toBe(true);
   }, 20_000);
 
-  it("answers for the person under Full access, so no card is raised", async () => {
-    expect(await cardRaisedFor("full")).toBe(false);
+  // #1982: Full no longer short-circuits MCP asks in the driver. The ask
+  // reaches Sagax's gate (request.opened); index.ts Full-approves unless a
+  // hold applies. Driver unit tests have no harness, so the card stays open.
+  it("hands an MCP tool approval to Sagax's gate at Full (#1982)", async () => {
+    expect(await cardRaisedFor("full")).toBe(true);
   }, 20_000);
 
   it("still holds an ask_user card for a person under Full access and returns the reply verbatim", async () => {
@@ -332,6 +350,7 @@ describe("createOpenAIChatRuntime tool approvals", () => {
     });
     const events: RuntimeEvent[] = [];
     instance.adapter.onEvent((event) => events.push(event));
+    allowOpenedPermissions(instance, "toolerr");
     try {
       await instance.adapter.sendTurn({
         threadId: "toolerr", text: "Use the tool, then answer.", approvalMode: "full",
@@ -373,6 +392,7 @@ describe("createOpenAIChatRuntime tool approvals", () => {
       });
       const events: RuntimeEvent[] = [];
       instance.adapter.onEvent((event) => events.push(event));
+      allowOpenedPermissions(instance, "corrective");
       try {
         await instance.adapter.sendTurn({
           threadId: "corrective", text: "Use the tool, then answer.", approvalMode: "full",
@@ -680,6 +700,7 @@ describe("createOpenAIChatRuntime mid-turn steer", () => {
     });
     const events: RuntimeEvent[] = [];
     instance.adapter.onEvent((event) => events.push(event));
+    allowOpenedPermissions(instance, "t");
     await instance.adapter.sendTurn({
       threadId: "t", text: "hi", approvalMode: "full",
       integrations: { custom: { fx: toolServer() } },
@@ -739,6 +760,7 @@ describe("createOpenAIChatRuntime mid-turn steer", () => {
     });
     const events: RuntimeEvent[] = [];
     instance.adapter.onEvent((event) => events.push(event));
+    allowOpenedPermissions(instance, "t");
     await instance.adapter.sendTurn({
       threadId: "t", text: "hi", approvalMode: "full",
       integrations: { custom: { fx: toolServer() } },

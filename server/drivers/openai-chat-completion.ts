@@ -12,6 +12,12 @@ import type { EffortLevel } from "../../shared/model-selection.ts";
 import { refusedResponsesOption, refusesModel, refusesResponsesEndpoint, responsesEffort, responsesInput, ResponsesReader, responsesTools } from "./openai-responses.ts";
 import type { Completion, CompletionJson, RuntimeOptions, Usage } from "./openai-chat-types.ts";
 
+/** Optional per-step TTFT markers (SAGAX_TURN_TRACE=1). No secrets. */
+function httpTrace(step: string): void {
+  if (process.env.SAGAX_TURN_TRACE !== "1") return;
+  console.error(`[turn-trace] http-driver ${step} ${Date.now()}`);
+}
+
 /** The message of a JSON error body a provider returned with HTTP 200.
  *  MiniMax reports auth, balance, and parameter failures as `base_resp`. */
 function providerError(json: CompletionJson): string | null {
@@ -164,6 +170,8 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
         ...(level ? { reasoning: { effort: level } } : {}),
         ...(typeof maxTokens === "number" ? { max_output_tokens: maxTokens } : {}),
       });
+      httpTrace("endpoint-/responses");
+      httpTrace("request-sent");
       const response = await fetch(`${options.apiUrl}/responses`, {
         method: "POST",
         ...(messages.some(message => Array.isArray(message.content) && message.content.some(part => part.type === "image_url")) ? { redirect: "error" as const } : {}),
@@ -171,6 +179,7 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
         body: payload,
         signal: activeSignal,
       });
+      httpTrace(`response-headers-${response.status}`);
       if (!response.ok) {
         const body = await response.text().catch(() => "");
         if (rejectsKey(response.status, body)) noteKeyRejected(options.apiUrl, apiKey);
@@ -194,8 +203,10 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
         const stream = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
+        let firstSse = false;
         const consume = (line: string) => {
           if (!line.startsWith("data:")) return;
+          if (!firstSse) { firstSse = true; httpTrace("first-sse-line"); }
           const data = line.slice(5).trim();
           if (!data || data === "[DONE]") return;
           let event: unknown;
@@ -268,21 +279,28 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
     effort?: EffortLevel,
   ): Promise<Completion> => {
     if (options.responsesApi?.(model) && !responsesRefused.endpoint.has(model)) {
+      httpTrace("try-/responses");
       for (let resend = 0; ; resend++) {
         try {
           return await completeResponses(messages, model, stream, signal, onDelta, tools, onUsage, maxTokens, apiKey, effort);
         } catch (error) {
           if (error instanceof ResponsesOptionError && resend < 2) {
             responsesRefused[error.option].add(model);
+            httpTrace(`responses-option-retry-${error.option}`);
             continue;
           }
           if (error instanceof ResponsesEndpointError) {
             responsesRefused.endpoint.add(model);
+            httpTrace("responses-refused-fallback");
             break;
           }
           throw error;
         }
       }
+    } else if (options.responsesApi?.(model) && responsesRefused.endpoint.has(model)) {
+      httpTrace("skip-/responses-cached");
+    } else {
+      httpTrace("endpoint-/chat/completions");
     }
     return completeChat(messages, model, stream, signal, onDelta, tools, onUsage, maxTokens, apiKey);
   };
@@ -320,6 +338,7 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
         ...(tools.length ? { tools } : {}),
         ...(typeof maxTokens === "number" ? { max_tokens: maxTokens } : {}),
       });
+      httpTrace("chat-request-sent");
       const response = options.chatRequest ? await options.chatRequest(payload, apiKey, activeSignal) : await fetch(`${options.apiUrl}/chat/completions`, {
         method: "POST",
         ...(messages.some(message => Array.isArray(message.content) && message.content.some(part => part.type === "image_url")) ? { redirect: "error" as const } : {}),
@@ -327,6 +346,7 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
         body: payload,
         signal: activeSignal,
       });
+      httpTrace(`chat-response-headers-${response.status}`);
       if (!response.ok) {
         const body = await response.text().catch(() => "");
         if (rejectsKey(response.status, body)) noteKeyRejected(options.apiUrl, apiKey);
@@ -395,6 +415,8 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
       let finishReason: string | null = null;
       let malformedFrame = false;
       let sawChoice = false;
+      let firstSse = false;
+      let firstContent = false;
       const calls = new ChatToolCalls();
       const details = new ChatReasoningDetails();
       const reader = response.body.getReader();
@@ -402,6 +424,7 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
       let buffer = "";
       const consumeDataLine = (line: string, atEof = false): boolean => {
         if (!line.startsWith("data:")) return false;
+        if (!firstSse) { firstSse = true; httpTrace("first-sse-line"); }
         const data = line.slice(5).trim();
         if (data === "[DONE]") return true;
         let chunk: CompletionJson;
@@ -437,6 +460,7 @@ export function createChatCompletions<Config>(options: RuntimeOptions<Config>, a
           onDelta?.(reasoningDelta, "reasoning_text");
         }
         if (contentDelta) {
+          if (!firstContent) { firstContent = true; httpTrace("first-content-delta"); }
           text += contentDelta;
           onDelta?.(contentDelta, "assistant_text");
         }

@@ -35,6 +35,7 @@ import {
   refusedToolCallFailure,
   stoppedAfter,
 } from "./openai-chat-shared.ts";
+import { turnTrace } from "../turns/turn-trace.ts";
 
 export type OpenAIChatActiveTurn = {
   abort: AbortController;
@@ -187,7 +188,9 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
         // session defers the rest behind a search (chat-mcp-tools.ts), and
         // ask_user, added below, keeps its place within the limit.
         const toolLimit = (options.toolLimit ?? providerToolLimit(options.driverKind)) - (questionAllowed ? 1 : 0);
+        turnTrace(turn.threadId, "tools-mount-start");
         tools = await mountChatTools(options.tools === false ? undefined : turn.integrations, abort.signal, options.computerUse, scope, turn.mcpCallTimeoutMs, toolLimit);
+        turnTrace(turn.threadId, "tools-mounted");
         for (const { server, reason } of tools.skipped) {
           // A technical detail for the logs, never a row in the chat.
           console.warn(`[chat-tools] MCP server "${server}" was skipped for this turn: ${safeText(reason)}`);
@@ -220,6 +223,7 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
           for (;;) {
             let streamed = false;
             let answerStreamed = false;
+            let firstDeltaTraced = false;
             const pending = { assistant_text: "", reasoning_text: "" };
             const delta = (text: string, streamKind: keyof typeof pending, flush = false) => {
               let combined = pending[streamKind] + text;
@@ -236,9 +240,16 @@ export async function runOpenAIChatTurn<Config>(deps: OpenAIChatSendTurnDeps<Con
               }
               pending[streamKind] = hold ? combined.slice(-hold) : "";
               const visible = safeText(hold ? combined.slice(0, -hold) : combined);
-              if (visible) emit({ ...base(turn.threadId, turnId), type: "content.delta", streamKind, delta: visible });
+              if (visible) {
+                if (streamKind === "assistant_text" && !firstDeltaTraced) {
+                  firstDeltaTraced = true;
+                  turnTrace(turn.threadId, "first-delta-emit");
+                }
+                emit({ ...base(turn.threadId, turnId), type: "content.delta", streamKind, delta: visible });
+              }
             };
             try {
+              turnTrace(turn.threadId, "request-built");
               completion = await complete(messages, model, true, abort.signal, (text: string, streamKind: "assistant_text" | "reasoning_text") => {
                 streamed = true;
                 if (streamKind === "assistant_text") answerStreamed = true;

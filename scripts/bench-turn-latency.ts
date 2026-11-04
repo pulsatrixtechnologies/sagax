@@ -338,6 +338,11 @@ function readAcpRpc(file: string | undefined): Array<{ method: string }> {
 async function startHttpFixture(): Promise<{ server: Server; url: string }> {
   const tokens = Array.from({ length: 120 }, (_, i) => (i === 0 ? "Word" : ` t${i}`));
   const server = createServer(async (req, res) => {
+    const t0 = Date.now();
+    const path = req.url ?? "";
+    if (process.env.SAGAX_TURN_TRACE === "1") {
+      console.error(`[http-fixture] hit ${path} ${t0}`);
+    }
     if (req.url === "/v1/models") {
       res.setHeader("content-type", "application/json");
       res.end(JSON.stringify({ data: [{ id: "fixture-model" }] }));
@@ -346,13 +351,22 @@ async function startHttpFixture(): Promise<{ server: Server; url: string }> {
     if (!req.url?.startsWith("/v1/chat/completions")) {
       res.statusCode = 404;
       res.end("missing");
+      if (process.env.SAGAX_TURN_TRACE === "1") {
+        console.error(`[http-fixture] 404 ${path} +${Date.now() - t0}`);
+      }
       return;
     }
     let body = "";
     for await (const chunk of req) body += chunk;
     void body;
+    if (process.env.SAGAX_TURN_TRACE === "1") {
+      console.error(`[http-fixture] body-read ${path} +${Date.now() - t0}`);
+    }
     res.writeHead(200, { "content-type": "text/event-stream" });
     await sleep(FIRST_TOKEN_MS);
+    if (process.env.SAGAX_TURN_TRACE === "1") {
+      console.error(`[http-fixture] first-token-write ${path} +${Date.now() - t0}`);
+    }
     for (const token of tokens) {
       res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: token }, finish_reason: null }] })}\n\n`);
       await sleep(TOKEN_MS);

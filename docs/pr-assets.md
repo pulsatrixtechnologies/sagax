@@ -44,7 +44,10 @@ under `docs/` larger than 2 MiB (`scripts/testing/docs-media.guard.test.ts`).
 ## Orphan media (issue #1386)
 
 Media under `docs/` that no tracked file referenced were removed from product
-branches. Branch-name PR links were rewritten (or are rewritten with
+branches. A file counts as referenced when a tracked text file names its path,
+its basename, or one of its own folders (a capture script's reference set such
+as `docs/screenshots/shapes` is cited by its folder); the shared containers
+(`docs/screenshots`, `docs/verification/evidence`) do not count. Branch-name PR links were rewritten (or are rewritten with
 `scripts/repo/rewrite-pr-asset-links.mjs`) to the `pr-assets` branch. SHA-pinned
 links stay as they are.
 

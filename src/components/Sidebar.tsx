@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -2356,6 +2357,33 @@ export function ArchivedBotsPanel({
 /** A named team's context menu: add bots, rename, share the whole team,
  * delete. Exported for a markup test. */
 
+function RoomMenuSlot({
+  actions,
+  sidebarRef,
+}: {
+  actions: ReturnType<typeof useSidebarBotActions>;
+  sidebarRef: RefObject<HTMLElement | null>;
+}) {
+  return (
+    <RoomContextMenu
+      menu={actions.roomMenu}
+      onClose={() => actions.setRoomMenu(null)}
+      onMoveToSection={(groupId) => {
+        if (!actions.roomMenu) return;
+        actions.setRoomSectionPicker({ groupId, x: actions.roomMenu.x, y: actions.roomMenu.y });
+      }}
+      onDelete={(groupId) => {
+        sidebarRef.current?.focus();
+        actions.setDeletingRoomId(groupId);
+      }}
+      onLeave={(groupId) => {
+        sidebarRef.current?.focus();
+        actions.setLeavingRoomId(groupId);
+      }}
+    />
+  );
+}
+
 export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
   open: boolean;
   onClose: () => void;
@@ -2728,24 +2756,7 @@ export function Sidebar({ open, onClose, onCompose, composeOpen = false }: {
         multi={multi}
         dnd={dnd}
         roster={roster}
-        roomMenuSlot={
-          <RoomContextMenu
-            menu={actions.roomMenu}
-            onClose={() => actions.setRoomMenu(null)}
-            onMoveToSection={(groupId) => {
-              if (!actions.roomMenu) return;
-              actions.setRoomSectionPicker({ groupId, x: actions.roomMenu.x, y: actions.roomMenu.y });
-            }}
-            onDelete={(groupId) => {
-              sidebarRef.current?.focus();
-              actions.setDeletingRoomId(groupId);
-            }}
-            onLeave={(groupId) => {
-              sidebarRef.current?.focus();
-              actions.setLeavingRoomId(groupId);
-            }}
-          />
-        }
+        roomMenuSlot={<RoomMenuSlot actions={actions} sidebarRef={sidebarRef} />}
       />
       <SidebarResizeHandle
         autoRail={autoRail}

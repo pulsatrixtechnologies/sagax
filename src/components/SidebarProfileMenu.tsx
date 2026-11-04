@@ -998,26 +998,47 @@ export function SidebarProfileMenu({ avatarOnly = false, withName = false, place
             </div>
           </div>
           {updateButton && update && (
-            <button
-              type="button"
-              data-sidebar-update=""
-              data-wide={wide ? "" : undefined}
-              title={update.label}
-              aria-label={update.label}
+            <SidebarUpdateRoundButton
+              label={update.label}
+              wide={wide}
+              setWide={setWide}
               onClick={openUpdatePrompt}
-              onMouseEnter={() => setWide(true)}
-              onMouseLeave={() => setWide(false)}
-              onFocus={() => setWide(true)}
-              onBlur={() => setWide(false)}
-              style={{ flexBasis: wide ? "100%" : "2.75rem" }}
-              className="flex h-11 min-w-11 shrink grow-0 items-center justify-center rounded-full bg-ink text-app shadow-sm transition-[flex-basis,filter] duration-200 ease-out hover:brightness-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
-            >
-              <CloudDownload size={20} strokeWidth={2} aria-hidden="true" />
-            </button>
+            />
           )}
         </div>
       )}
     </div>
+  );
+}
+
+function SidebarUpdateRoundButton({
+  label,
+  wide,
+  setWide,
+  onClick,
+}: {
+  label: string;
+  wide: boolean;
+  setWide: (on: boolean) => void;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-sidebar-update=""
+      data-wide={wide ? "" : undefined}
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      onMouseEnter={() => setWide(true)}
+      onMouseLeave={() => setWide(false)}
+      onFocus={() => setWide(true)}
+      onBlur={() => setWide(false)}
+      style={{ flexBasis: wide ? "100%" : "2.75rem" }}
+      className="flex h-11 min-w-11 shrink grow-0 items-center justify-center rounded-full bg-ink text-app shadow-sm transition-[flex-basis,filter] duration-200 ease-out hover:brightness-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+    >
+      <CloudDownload size={20} strokeWidth={2} aria-hidden="true" />
+    </button>
   );
 }
 

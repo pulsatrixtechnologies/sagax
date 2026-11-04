@@ -1880,6 +1880,7 @@ import {
   type ApprovalViewer
 } from "./approvals/approval-audience.ts";
 import { interBotWaiting } from "./approvals/inter-bot-approvals.ts";
+import { createOriginApprovals, humanApprovalRoot } from "./approvals/origin-approvals.ts";
 import { interBotConversations } from "./peers/inter-bot-conversations.ts";
 import type { BotHost } from "./turns/turn-route.ts";
 import { signInListWithOpenInvites, type OrgRole } from "./org/org-directory.ts";
@@ -13036,6 +13037,25 @@ const coordinator: Coordinator = createCoordinator({
   }
 });
 threadsWithActiveCoordination = () => coordinator.activeDirectThreads();
+const originApprovals = createOriginApprovals({
+  store,
+  rootFor: threadId => humanApprovalRoot(coordinator, threadId),
+  mayRelay: (source, destination, message) => {
+    const sourceBot = store.botByThread(source);
+    const destinationBot = store.botByThread(destination);
+    if (!sourceBot || !destinationBot || sourceBot.hidden || destinationBot.hidden) return false;
+    const sourceTask = store.taskByThread(sourceBot.id, source);
+    const destinationTask = store.taskByThread(destinationBot.id, destination);
+    if (!sourceTask || !destinationTask || destinationTask.archivedAt) return false;
+    const person = cardAnswererId(sourceBot, source, message.card);
+    return privateThreadOwner(destinationTask, effectiveBotOwner(destinationBot)) === person
+      && botThreadReadable(sourceBot, source, person) && botThreadReadable(destinationBot, destination, person);
+  },
+  speaker: threadId => {
+    const bot = store.botByThread(threadId);
+    return bot ? { botId: bot.id, name: bot.name, color: bot.color } : undefined;
+  }
+});
 /** The input-request cards still open per waiting work thread, so the answer
  * marks them answered (in memory: a restart parks again and re-posts). */
 const openInputRequests = new Map<string, Array<{ threadId: string; messageId: string }>>();
@@ -13694,6 +13714,7 @@ store.onChange((change) => {
       break;
   }
 });
+originApprovals.subscribe();
 
 // ── message pages ──────────────────────────────────────────────────────
 // GET /api/bots hands back every bot with its entire transcript, which is
@@ -14946,7 +14967,7 @@ function pendingApprovalCards(): Array<{ bot: BotRecord; threadId: string; messa
   for (const threadId of threads) {
     for (const message of store.messagesFor(threadId)) {
       const card = message.card;
-      if (!card?.requestId || card.answered || card.dismissed || card.expired || !isApprovalCardMessage(message)) continue;
+      if (!card?.requestId || card.approvalOrigin || card.answered || card.dismissed || card.expired || !isApprovalCardMessage(message)) continue;
       const bot = botForApproval(threadId, message);
       if (bot) out.push({ bot, threadId, message, card });
     }
@@ -15103,7 +15124,7 @@ function pendingInboxCards(): Array<{ bot: BotRecord; threadId: string; message:
   for (const threadId of threads) {
     for (const message of store.messagesFor(threadId)) {
       const card = message.card;
-      if (!card?.requestId || card.answered || card.dismissed || card.expired || message.kind !== "options") continue;
+      if (!card?.requestId || card.approvalOrigin || card.answered || card.dismissed || card.expired || message.kind !== "options") continue;
       const question = isPersistentQuestionCard(card) && !isApprovalCardMessage(message);
       if (!question && !isApprovalCardMessage(message)) continue;
       const bot = botForApproval(threadId, message);
@@ -16103,7 +16124,11 @@ async function respondToCard(input: {
   /** The Live call a spoken answer was given on: a late answer's line carries it. */
   callId?: string;
 }): Promise<CardRespondResult> {
-  const { auth, threadId, requestId, behavior, message, callId } = input;
+  const { auth, behavior, message, callId } = input;
+  const source = originApprovals.sourceFor(input.threadId, input.requestId);
+  if (source === false) return { ok: false, status: 409, error: "This approval is no longer available in this conversation." };
+  const threadId = source ? source.threadId : input.threadId;
+  const requestId = source ? source.requestId : input.requestId;
   // A call outlives the request that started it: the session must still be valid.
   if (auth.kind === "session" && !sessions.isLive(auth.session.id)) {
     return { ok: false, status: 401, error: "The session that started this call has ended." };
@@ -16244,7 +16269,7 @@ function closeOpenApprovals(threadId: string): void {
   cancelPeerApprovalsForThread(threadId);
   for (const message of store.messagesFor(threadId)) {
     const card = message.card;
-    if (!card?.requestId || card.answered || card.dismissed) continue;
+    if (!card?.requestId || card.approvalOrigin || card.answered || card.dismissed) continue;
     if (card.routineRequest || card.skillRequest) continue;
     if (isPersistentQuestionCard(card)) {
       // Keep the durable card; its in-flight adapter mapping cannot survive
@@ -20082,20 +20107,23 @@ bus.subscribe((event: RuntimeEvent) => {
             if (waitingRun?.status === "waiting") syncRoutineRunToSource(waitingRun);
             else if (asker.busy) store.setActivity(asker.id, "waiting-on-you");
             if (event.requestId) showWaitingOnPersonChip(event.threadId, event.requestId, asker, permission ? "approval" : "answer");
-            const notificationBot = (routineRun && routineSourceOwner(routineRun)?.bot) || asker;
-            // #1743: name the execution thread that holds the card. A routine's
-            // results thread is for report pushes only; Allow on the phone or
-            // Watch posts to notification.threadId, and notify-withdraw /
-            // noteSettled must match that same key.
+            const notificationThread = card.approvalDestination?.threadId ?? event.threadId;
+            const notificationBot = (card.approvalDestination && store.botByThread(notificationThread))
+              || (routineRun && routineSourceOwner(routineRun)?.bot) || asker;
+            const notificationRequest = card.approvalDestination
+              ? store.messagesFor(notificationThread).find(row => row.id === card.approvalDestination!.messageId)?.card?.requestId
+              : event.requestId;
+            // A peer view routes back to the execution; routines keep their
+            // execution thread (#1743). Allow and withdrawal use the same address.
             notify(deliverableNotification(
               permission ? "approval" : "question",
               notificationBot,
-              event.threadId,
+              notificationThread,
               plain ? plain.line : event.summary,
               {
                 ...(notificationBot.avatarUrl ? { avatarUrl: notificationBot.avatarUrl } : {}),
                 ...(plain ? { title: plain.title } : {}),
-                ...(event.requestId ? { requestId: event.requestId } : {}),
+                ...(notificationRequest ? { requestId: notificationRequest } : {}),
                 // Allow on the phone opens Sagax: this class needs the person's key.
                 ...(permission && ownerStepUp.length > 0 ? { needsKey: true } : {}),
                 // a question's own choices: the banner's buttons on the phone and the watch
@@ -32787,6 +32815,13 @@ ROUTES.push(createSecurityKeyRoutes({
     ? (auth.session.email ?? auth.session.label ?? "Sagax").trim() || "Sagax"
     : (cfg.profile?.email ?? "Sagax"),
   approvalGrants: (auth, _person, target) => {
+    const source = originApprovals.sourceFor(target.threadId, target.requestId);
+    if (source === false) return { status: 409, error: "This approval is no longer available in this conversation." };
+    if (source) {
+      const view = store.messagesFor(target.threadId).find(row => row.card?.requestId === target.requestId)?.card;
+      if (target.answer?.alwaysAllowKey && target.answer.alwaysAllowKey !== view?.allowKey) return { status: 409, error: "That grant is not on this approval." };
+      target = { ...target, ...source, ...(target.answer?.alwaysAllowKey ? { answer: { ...target.answer, alwaysAllowKey: view?.approvalOrigin?.allowKey } } : {}) };
+    }
     const message = store.messagesFor(target.threadId).find((row) => row.card?.requestId === target.requestId);
     const card = message?.card;
     if (!message || !card || card.answered || card.dismissed || card.expired) return { status: 404, error: "This approval is no longer waiting." };
@@ -43846,6 +43881,7 @@ ROUTES.push(createWebhooksRoutes({
   isBotAct: (auth) => auth.kind === "session" && isBotActSession(auth.session)
 }));
 ROUTES.push(createBotsMessagesRoutes({
+  originApprovals,
   approvalBus,
   ADMIN_APPROVAL_REQUIRED,
   CONFIDENTIAL_CARD_DELEGATED,
@@ -44790,6 +44826,7 @@ ROUTES.push(createBotObservabilityRoutes({ store, DATA_DIR, EVENTS_DIR, ownerOrA
 ROUTES.push(createFleetRoutes({ entitled, fleetSocketPath, fleetAvailable, fleetRequest }));
 ROUTES.push(createBotSecretCardRoutes({ getConfig: () => cfg, provideSecretFromPhone, secretMessage, phoneSecretSubmissions, phoneSecretSubmissionKey, resumeSecretCard, currentSecretState }));
 ROUTES.push(createBotsMutateRoutes({
+  originApprovals,
   ADMIN_APPROVAL_REQUIRED,
   BOTS_READ_ONLY,
   COMMAND_ALLOWLIST_ADD_REFUSAL,
@@ -46704,6 +46741,10 @@ console.log(describeBrand(loadBrand()));
 // Approval cards whose live request died with the previous process: they
 // read Expired instead of staying pending forever (server/approvals/approval-restart.ts).
 try {
+  // Restore the durable links before startup expiry settles their sources.
+  for (const { threadId, message } of openPendingInboxCards()) {
+    originApprovals.observe({ type: "message.patch", threadId, message });
+  }
   const closed = expireApprovalsAfterRestart({
     open: openApprovalCardMessages,
     patch: (threadId, messageId, card) => { store.patchMessage(threadId, messageId, { card }); },

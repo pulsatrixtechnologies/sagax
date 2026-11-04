@@ -13,12 +13,13 @@ describe("expireApprovalsAfterRestart", () => {
       { threadId: "t3", message: msg("m3", { answered: "allow" }) },
       { threadId: "t4", message: msg("m4", { requestType: "question" }) },
       { threadId: "t5", message: msg("m5", { expired: true }) },
+      { threadId: "human", message: msg("view", { approvalOrigin: { threadId: "t1", messageId: "m1", requestId: "r1" } }) },
     ];
     const patched: Array<[string, string, any]> = [];
     const decided: any[] = [];
     const n = expireApprovalsAfterRestart({ open: () => rows, patch: (t, m, c) => patched.push([t, m, c]), decide: (r) => decided.push(r) });
     expect(n).toBe(2);
-    expect(patched.map(([t, m]) => `${t}/${m}`)).toEqual(["t1/m1", "t2/m2"]);
+    expect(patched.map(([t, m]) => `${t}/${m}`)).toEqual(["t1/m1", "t2/m2", "human/view"]);
     expect(patched[0][2]).toMatchObject({ answered: "deny", expired: true, options: [], mcpTool: "sagax-environment__run_command" });
     expect(decided).toEqual([
       { threadId: "t1", requestId: "r1", tool: "other", summary: "s" },

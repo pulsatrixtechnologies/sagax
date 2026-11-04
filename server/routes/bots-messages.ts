@@ -114,7 +114,8 @@ interface AutoRouteContext {
 }
 
 export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHandler {
-  return async ({ req, res, url, path, method, auth, json, readBody }) => {
+  return async (context) => {
+    const { req, res, url, path, method, auth, json, readBody } = context;
     if (!(path.startsWith("/api/bots/") || /^\/api\/threads\/[\w-]+\/respond$/.test(path))) {
       return PASS;
     }
@@ -899,6 +900,9 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
       const body = await readBody(req);
       const selected = requestedTaskBot(m[1], body.threadId);
       const bot = botForThread(selected.id, selected.threadId)!;
+      const source = deps.originApprovals?.sourceFor(bot.threadId, String(body.requestId));
+      if (source === false) return json(res, 409, { error: "This approval is no longer available in this conversation." });
+      if (source) return createBotsMessagesRoutes(deps)({ ...context, path: `/api/threads/${source.threadId}/respond`, readBody: async () => ({ ...body, requestId: source.requestId }) });
       const behavior = requestBehavior(body.behavior);
       const reviewedSha256 = typeof body.reviewedSha256 === "string" ? body.reviewedSha256 : undefined;
       if (!behavior) return json(res, 400, { error: "behavior must be allow, deny, or answer" });
@@ -1030,6 +1034,9 @@ export function createBotsMessagesRoutes(deps: BotsMessagesRouteDeps): RouteHand
     if (m && method === "POST") {
       const threadId = m[1];
       const body = await readBody(req);
+      const source = deps.originApprovals?.sourceFor(threadId, String(body.requestId));
+      if (source === false) return json(res, 409, { error: "This approval is no longer available in this conversation." });
+      if (source) return createBotsMessagesRoutes(deps)({ ...context, path: `/api/threads/${source.threadId}/respond`, readBody: async () => ({ ...body, requestId: source.requestId }) });
       const behavior = requestBehavior(body.behavior);
       const reviewedSha256 = typeof body.reviewedSha256 === "string" ? body.reviewedSha256 : undefined;
       if (!behavior) return json(res, 400, { error: "behavior must be allow, deny, or answer" });

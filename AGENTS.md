@@ -1,5 +1,20 @@
 # Sagax agent notes
 
+## Peer approvals return to the human chat (2026-11-04)
+
+`server/approvals/origin-approvals.ts` links a delegated turn's actionable
+cards to the proven human runtime root, through nested handoffs. Each view
+has a unique request id and a durable backlink to the exact source thread,
+message and provider request. Legacy grant keys have distinct view keys too,
+so two peers asking for the same tool never share a grant. HTTP, Live and
+security-key answers resolve that address before the source's existing
+authorization and resolver gates.
+Source patches mirror settlement; views create no inbox or journal decision
+and never expire the source independently. Same answerer and current read
+access are rechecked; confidential threads never relay. Background work
+without a proven human root keeps the existing route.
+Verification: `docs/verification/peer-approvals.md`.
+
 ## Desktop store subscriptions
 
 Shell selects routing and chrome; BotSurface and GroupSurface subscribe to

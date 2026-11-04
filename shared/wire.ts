@@ -1046,6 +1046,11 @@ export function nextOpenThread<T extends OpenThreadCandidate>(tasks: readonly T[
 }
 
 export interface OptionCardData extends WaitCardField {
+  /** Server-linked view of a teammate's card in the human initiating chat.
+   * Answers resolve to this original message before any permission checks. */
+  approvalOrigin?: { threadId: string; messageId: string; requestId: string; allowKey?: string };
+  /** Original card's durable backlink. Its copy is never another decision. */
+  approvalDestination?: { threadId: string; messageId: string };
   /** calls: one per outbound call the card covers, in subtitle order. Absent
    * on cards from older computers. */
   outboundRequest?: { tool: string; app: string | null; calls?: Array<{ app: string | null; label: string }> };

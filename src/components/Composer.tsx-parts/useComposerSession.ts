@@ -89,7 +89,9 @@ export function useComposerSession({
   // about something else leaves it open (the bot never picks for the
   // person, and there is no X on a waiting question, #885).
   const openQuestions = pendingQuestions(group ? group.messages : bot ? visibleMessages(bot) : []);
-  const approvalBotFor = (pending: Pending) => group
+  const approvalBotFor = (pending: Pending) => pending.message.card?.approvalOrigin
+    ? storeBots.find(candidate => candidate.id === pending.message.from?.botId)
+    : group
     ? members?.find((member) => member.id === pending.message.from?.botId) ??
       members?.find((member) => member.id === groupBusyBotId)
     : bot;

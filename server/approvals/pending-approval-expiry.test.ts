@@ -122,6 +122,7 @@ describe("sweepPendingApprovalExpiry", () => {
       [
         { threadId: "t1", message: old },
         { threadId: "t2", message: young },
+        { threadId: "human", message: msg("view", old.at, { requestId: "r-old", approvalOrigin: { threadId: "t1", messageId: "m-old", requestId: "r-old" } }) },
       ],
       7,
     );

@@ -71,6 +71,8 @@ export type { MausColor } from "@/lib/mascot";
 export type { RoutineRunCardData } from "../../../shared/routine-run";
 
 export interface OptionCardData {
+  approvalOrigin?: import("../../../shared/wire").OptionCardData["approvalOrigin"];
+  approvalDestination?: import("../../../shared/wire").OptionCardData["approvalDestination"];
   title: string;
   subtitle: string;
   options: string[];

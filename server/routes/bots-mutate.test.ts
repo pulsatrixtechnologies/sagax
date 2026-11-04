@@ -93,6 +93,29 @@ function baseDeps(overrides: Partial<BotsMutateRouteDeps> = {}): BotsMutateRoute
 }
 
 describe("bots-mutate routes", () => {
+  it("Always allow from a linked root card saves only its exact source bot's grant", async () => {
+    const worker = { ...bot, id: "worker", threadId: "work" };
+    const original = { card: { requestId: "provider-request", allowKey: "mcp:read" } };
+    const mirror = { card: { requestId: "origin:card", allowKey: "origin:card" } };
+    const deps = baseDeps({
+      originApprovals: { sourceFor: () => ({ threadId: "work", requestId: "provider-request" }) },
+      requestedTaskBot: vi.fn((_id: string, threadId: string) => threadId === "work" ? worker : bot),
+      requirePinnedClientThread: vi.fn(), memberOwnedInOrg: () => false,
+      approvalAnswerRefusal: vi.fn(() => null), cardAnswerRefusal: vi.fn(() => null),
+      alwaysAllowStepUpGate: vi.fn(() => null), directTurnBots: new Map(),
+    });
+    deps.store.messagesFor = (threadId: string) => [threadId === "work" ? original : mirror];
+    deps.store.botByThread = () => worker;
+    deps.store.bot = () => worker;
+    const { ctx, json } = context("/api/bots/osprey/always-allow", "POST", { threadId: "thread-1", allowKey: "origin:card" });
+    await createBotsMutateRoutes(deps)(ctx);
+    expect(json).toHaveBeenCalledWith(ctx.res, 200, expect.anything());
+    expect(deps.approvalAnswerRefusal).toHaveBeenCalledWith(ctx.auth, "work", "provider-request");
+    expect(deps.alwaysAllowStepUpGate).toHaveBeenCalledWith("pr_osprey", "worker", "work", "provider-request", "mcp:read", undefined);
+    expect(deps.store.patchTask).toHaveBeenCalledOnce();
+    expect(deps.store.patchTask).toHaveBeenCalledWith("worker", "work", { alwaysAllow: ["mcp:read"] });
+  });
+
   it("passes unrelated requests to the next route", async () => {
     expect(await createBotsMutateRoutes(baseDeps())(context("/api/unrelated").ctx)).toBe(PASS);
   });

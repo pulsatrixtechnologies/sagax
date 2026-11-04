@@ -351,13 +351,13 @@ m = path.match(/^\/api\/bots\/([\w-]+)\/always-allow$/);
 if (m && method === "POST") {
   const body = await readBody(req);
   requirePinnedClientThread(m[1], body?.threadId);
-  const allowKey = typeof body.allowKey === "string" ? body.allowKey : "";
-  const bot = requestedTaskBot(m[1], body.threadId);
+  let allowKey = typeof body.allowKey === "string" ? body.allowKey : "";
+  let bot = requestedTaskBot(m[1], body.threadId);
   if (!allowKey) {
     json(res, 400, { error: "allowKey required" });
     return;
   }
-  const pending = store.messagesFor(bot.threadId).find((message: any) =>
+  let pending = store.messagesFor(bot.threadId).find((message: any) =>
     message.card?.requestId &&
     !message.card.answered &&
     message.card.dismissed !== true &&
@@ -366,6 +366,16 @@ if (m && method === "POST") {
   if (!pending) {
     json(res, 409, { error: "that grant is not on a pending approval for this bot" });
     return;
+  }
+  const source = deps.originApprovals?.sourceFor(bot.threadId, pending.card.requestId);
+  if (source === false) return json(res, 409, { error: "This approval is no longer available in this conversation." });
+  if (source) {
+    const owner = store.botByThread(source.threadId);
+    if (!owner) return json(res, 409, { error: "The approval's bot is no longer available." });
+    bot = requestedTaskBot(owner.id, source.threadId);
+    pending = store.messagesFor(source.threadId).find((message: any) => message.card?.requestId === source.requestId);
+    if (!pending?.card?.allowKey) return json(res, 409, { error: "That grant is no longer on the original approval." });
+    allowKey = pending.card.allowKey;
   }
   // A card an admin answers (a command on the shared server) is approved
   // once, by an admin. 2026-10-26: any other card of a member's own bot

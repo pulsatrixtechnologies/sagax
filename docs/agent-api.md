@@ -1,8 +1,8 @@
 # The agent-to-agent API
 
-Twelve tools let one agent find, prompt and read another agent, with the same
-names, parameters and limits as the reference design's agent tools, plus `get_agent` and
-`delete_agent` (Perspicax #321). One core
+The agent tools let one agent find, prompt, read and configure another agent, with the same
+names, parameters and limits as the reference design's agent tools, plus `get_agent`,
+`delete_agent` (Perspicax #321) and the fleet writes of #1944. One core
 (`server/agent-api.ts`) serves two transports:
 
 - **Bots**: the agents MCP server offers the tools in a bot's direct turns
@@ -28,15 +28,20 @@ names, parameters and limits as the reference design's agent tools, plus `get_ag
 | `read_latest_page` | read | `agents.read` | the newest page: `limit` ≤ 200 (default 20), `cursor`, optional `thread_id` (one of the caller's conversations, 404 `unknown_thread` otherwise) |
 | `read_latest_page_with_threads` | read | `agents.read` | the newest page and the conversations it spans, with their status; optional `thread_id` like `read_latest_page` |
 | `read_transcript_cold` | read | `agents.read` | the stored transcript only: pages of 50 by `cursor`; never reads live state, never wakes a computer or sandbox |
+| `list_agent_models` | read | `agents.read` | `agent_id`: engines and models the caller may pick as that agent's default, plus `current` (#1944) |
+| `update_agent_model` | write | `agents.send` | `agent_id`, `instance_id` (or `instance` / `engine`), `model`, optional `effort`, or `auto` true. Same rights and validation as `PATCH /api/bots/:id` `{ modelSelection }` (owner, granted editor, admin). Exact `instance_id` first; a short engine name must resolve to one engine, else the answer lists the candidates. An invalid model is refused with a plain hint of valid choices. Person AI clients only; a bot uses `propose_team_setup` |
+| `update_agent_settings` | write | `agents.send` | `agent_id` plus a partial patch of every Edit bot field the UI can change through `PATCH /api/bots/:id` (identity, look, permission-gated fields such as approval level, tools, computer, visibility, section, cwd, voice notes, …), plus runtime settings (`maxConcurrentThreads` and the rest via `PATCH /api/bots/:id/runtime-settings`) and `primary` true/false (Primary Bot switch). Derived from `MEMBER_BOT_FIELDS` + `BOT_FIELD_PERMISSIONS` so the allowlist cannot drift; the same server checks decide per field. Answers `changed` and `refused` (each with a plain reason, no permission keys). Model changes use `update_agent_model` |
+| `update_routine` | write | `agents.send` | `routine_id`, then `enabled` / `name` / `instructions` / `schedule`. Same as member `PATCH /api/org/member/routines/{id}` (own routines). Person AI clients only; a bot uses `propose_routine_action` |
 
 `list_agents`, `find_agents` and `create_agent` answer each agent as `{id,
-name, description, status, temporary, owner}`. `owner` is
+name, description, status, temporary, owner, model?}`. `owner` is
 `{principal_id, name}` or `null` (same source as `get_agent`, with no
-per-agent profile call). Pass `owner.principal_id` to `sagax_nudge` to
+per-agent profile call). `model` is `{instance_id, model, effort?, auto?}` when
+known (#1944). Pass `owner.principal_id` to `sagax_nudge` to
 reach that agent's owner.
 
 `get_agent` answers `agent` (the summary and its `title`), `owner`
-(`principal_id`, `name`), `profile`, `temporary` and `profile_url` (the
+(`principal_id`, `name`), `model`, `profile`, `temporary` and `profile_url` (the
 Perspicax console sheet, `<issuer>/console/sagax/bots/<id>`, on an
 organization server; null otherwise). `profile` holds the `instructions`
 (capped at 32,000 characters, `instructions_truncated`), their `persona`,
@@ -234,8 +239,8 @@ and the options (`queue`, `supersede`, `await_turn`).
 
   | Tools | Limit |
   |---|---|
-  | reads | 240 per minute |
-  | `send_prompt` | 30 per minute |
+  | reads (including `list_agent_models`) | 240 per minute |
+  | `send_prompt`, `update_agent_model`, `update_agent_settings`, `update_routine` | 30 per minute |
   | `create_agent` | 5 per hour |
   | `delete_agent` | 30 per hour |
 

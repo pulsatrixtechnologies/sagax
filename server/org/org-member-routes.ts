@@ -111,7 +111,7 @@ export interface MemberPerson {
 
 /** One Sagax route performed as the person. */
 export interface MemberRequest {
-  method: "GET" | "POST" | "PATCH";
+  method: "GET" | "POST" | "PATCH" | "DELETE";
   path: string;
   query?: Record<string, string>;
   body?: unknown;

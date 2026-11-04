@@ -72,8 +72,8 @@ if (turn.integrations?.agents) {
   // Not when the turn names its built-ins (a guest's turn, an instance
   // tool list) without ToolSearch: a deferred tool would be unreachable.
   const toolSearch = !turn.guestConfined && (config.tools === undefined || config.tools.includes("ToolSearch"));
-  // #1276: a compact prompt lists the core and searches the rest
-  // itself (agents-proxy.ts); Claude Code's own tool search is off.
+  // #1276: a compact prompt lists the core and searches the remaining
+  // Sagax tools itself (agents-proxy.ts), independently of native tools.
   const agentsEnv = turn.compactPrompt
     ? { ...turn.integrations.agents.env, SAGAX_COMPACT_TOOLS: JSON.stringify({ core: turn.compactPrompt.agents.core, pinned: [...new Set(turn.compactPrompt.agents.pinned)].sort() }) }
     // The whole catalog, with each family of tools as one tool
@@ -302,23 +302,28 @@ else {
   const deny = remoteSupportDenyRules();
   if (allow.length || deny.length) settings.permissions = { ...(allow.length ? { allow } : {}), ...(deny.length ? { deny } : {}) };
 }
+// #1990: print/SDK sessions default artifacts off. Opt into the native
+// family and its deferred database/comments tools without changing the
+// account, provider or the CLI's own eligibility and organization checks.
+// Explicit engine settings still win.
+env.CLAUDE_CODE_ARTIFACT ??= "1";
+env.CLAUDE_CODE_ARTIFACT_TOOLSET ??= "1";
 // #1276: a compact prompt keeps Claude Code's auto memory in one folder
-// per bot and person, so its path (in the system prompt) is the same in
-// every conversation, and turns Claude Code's own tool search off: the
-// tools listed are exactly the ones Sagax lists, the same every time.
+// per bot and person, so its path is the same in every conversation.
 if (turn.compactPrompt?.memoryDir) {
   const configDir = env.CLAUDE_CONFIG_DIR?.trim() || join(homedir(), ".claude");
   adoptLegacyAutoMemory(turn.compactPrompt.memoryDir, legacyClaudeAutoMemoryDir(configDir, turn.cwd ?? homedir()));
   settings.autoMemoryDirectory = turn.compactPrompt.memoryDir;
 }
-if (turn.compactPrompt) env.ENABLE_TOOL_SEARCH = "false";
-// Otherwise tool search is always on where the turn can search: MCP
+// Tool search is always on where the turn can search: MCP
 // tools Sagax does not load up front (alwaysLoad) wait for ToolSearch.
 // The CLI's own default ("auto") sends every schema while they fit in
 // the model's window, which on a 1M-token model is always, and flips
 // when they stop fitting, so the cached tool list is rewritten.
-// A value the person set for the engine stays theirs.
-else if (!env.ENABLE_TOOL_SEARCH && !turn.guestConfined && (config.tools === undefined || config.tools.includes("ToolSearch"))) env.ENABLE_TOOL_SEARCH = "true";
+// Compact MCP catalogs keep Sagax's directory, but native deferred tools
+// such as ArtifactData still need Claude's ToolSearch. A value the person
+// set for the engine stays theirs.
+if (!env.ENABLE_TOOL_SEARCH && !turn.guestConfined && (config.tools === undefined || config.tools.includes("ToolSearch"))) env.ENABLE_TOOL_SEARCH = "true";
 const authSettingsPath = mcpConfigPath && Object.keys(settings).length
   ? join(dirname(mcpConfigPath), "auth-settings.json") : null;
 if (authSettingsPath) args.push("--settings", authSettingsPath);

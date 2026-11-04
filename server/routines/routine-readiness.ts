@@ -9,7 +9,10 @@ export const ROUTINE_READINESS_PROBE_TIMEOUT_MS = ROUTINE_READINESS_TIMEOUT_MS -
 export const ROUTINE_READINESS_CACHE_MS = 60_000;
 export interface ReadinessRoutine { botId: string; prompt: string; requires?: RoutineRequirements; runAs?: string; runOn?: string }
 export interface ReadinessRun { botId: string; prompt?: string; runAs?: string; runOn?: string; threadId?: string }
-export interface ReadinessEngine { engine: string; name: string; account?: string; signedIn?: boolean; signedInAt?: number; detail?: string }
+export interface ReadinessEngine { engine: string; name: string; account?: string; signedIn?: boolean; signedInAt?: number; detail?: string;
+  /** Resolved routing facts, not credentials. Absent means unknown. */
+  driver?: string; accessVia?: string; keyBacked?: boolean;
+}
 /** Refusal facts stay live even when the sign-in probe is cached. */
 export function routineEngineRefusal(engine: ReadinessEngine, now: number): EngineRefusal | undefined {
   const recorded = activeEngineRefusal(engine.engine, engine.account, now);
@@ -68,7 +71,7 @@ function boundedProbe(work: (signal: AbortSignal) => unknown, timeoutMs = ROUTIN
 /** Bound checks at persistence boundaries as well as at probe creation. */
 export function loadRoutineReadiness(value: unknown): RoutineReadinessCheck[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const codes = new Set(["engine_credits", "engine_limit", "engine_signed_out", "skill_missing", "flow_profile", "mcp_missing", "perspicax_profile", "computer_offline", "ready", "probe_error"]);
+  const codes = new Set(["engine_credits", "engine_limit", "engine_signed_out", "engine_artifacts", "skill_missing", "flow_profile", "mcp_missing", "perspicax_profile", "computer_offline", "ready", "probe_error"]);
   return value.slice(0, 100).filter((check): check is RoutineReadinessCheck => Boolean(check && kinds.includes(check.kind) && codes.has(check.code) && typeof check.ok === "boolean" && typeof check.line === "string")).map(check => ({
     kind: check.kind, ok: check.ok, code: check.code, line: clean(check.line),
     ...(typeof check.detail === "string" ? { detail: clean(check.detail) } : {}),
@@ -122,10 +125,17 @@ export async function checkRoutineReadiness(routine: ReadinessRoutine, run: Read
         const engine = probe.value as ReadinessEngine | undefined;
         if (engine) {
           const refusal = routineEngineRefusal(engine, now);
-          if (refusal && deps.backup) {
-            const candidate = backup.value as ReadinessEngine | undefined;
-            if (candidate && !routineEngineRefusal(candidate, now)) { checks.push(ready(kind)); continue; }
-          }
+          const candidate = refusal && deps.backup ? backup.value as ReadinessEngine | undefined : undefined;
+          const onBackup = Boolean(candidate && !routineEngineRefusal(candidate, now));
+          // The artifact family belongs to the engine that will really run (the backup on failover).
+          const runs = onBackup ? candidate! : engine;
+          const artifactTool = (run.prompt ?? routine.prompt).match(/\b(ArtifactData|ArtifactComments|Artifact)\b/)?.[1];
+          const cannotOfferArtifacts = (runs.driver !== undefined && runs.driver !== "claudeAgent") ||
+            (runs.accessVia !== undefined && runs.accessVia !== "subscription" && runs.accessVia !== "server") ||
+            (runs.accessVia !== "subscription" && runs.keyBacked === true);
+          if (artifactTool && cannotOfferArtifacts) checks.push({ kind, ok: false, code: "engine_artifacts", params: { engine: runs.name, tool: artifactTool },
+            line: `This routine needs ${artifactTool}, which ${runs.name} cannot offer with this account. Choose Claude with a claude.ai subscription sign-in for this bot; API keys and other engines do not provide claude.ai artifact tools.` });
+          if (onBackup) { if (checks.length === start) checks.push(ready(kind)); continue; }
           if (refusal?.cause === "signed_out") {
             checks.push({ kind, ok: false, code: "engine_signed_out", params: { engine: engine.name }, line: `${engine.name} is signed out for this bot. Reconnect it in Settings > Model providers.`, ...(engine.detail ? { detail: clean(engine.detail) } : {}) });
           } else if (refusal) {

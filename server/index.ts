@@ -24608,6 +24608,8 @@ function routineEngineForBot(bot: BotRecord, speaker: TurnSpeaker, instanceId = 
   const signedIn = IDENTITY.kind === "perspicax" ? (!plan.ok ? false : plan.via === "subscription" ? true : undefined)
     : engineProbes.get(instance.instanceId)?.ready;
   return { engine: instance.instanceId, name: engineDisplayName(instance), account, signedIn,
+    driver: instance.driverKind, ...(plan.ok ? { accessVia: plan.via } : {}),
+    keyBacked: driverKeyBacked(cfg, instance.driverKind, instance.instanceId) || keyOnlyInstance(instance.instanceId),
     ...(IDENTITY.kind !== "perspicax" ? { signedInAt: engineProbes.get(instance.instanceId)?.at } : {}),
     ...(!plan.ok ? { detail: plan.cause ?? plan.reason } : {}) };
 }

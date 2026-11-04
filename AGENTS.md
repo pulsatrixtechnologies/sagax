@@ -1,6 +1,16 @@
 # Sagax agent notes
 
 ## Routine readiness and failover (#1986, 2026-11-04)
+
+Routine pre-flight uses `limitFailover.backupFor` to check the same backup
+order and access rules as dispatch. Account refusals stay live outside the
+probe cache. `RoutineManager.prepareTurn` applies the failover before
+capturing the run's engine account, so a backup's success never clears the
+primary's refusal. Credits keep the 30-minute refusal TTL, including in the
+failover store; a thread returns through the existing reset path.
+Tests: `routine-readiness.test.ts`, `routine-reliability.test.ts`,
+`limit-failover-host.test.ts`.
+
 ## Skills follow the dispatched engine (#1987, 2026-11-04)
 
 Real turns project the scoped inventory into their private task folder's
@@ -14,15 +24,16 @@ and skill probes (`server/routines/routine-readiness-target.ts`). Previews
 and receipts remain reads. Regressions: `turn-skill-links.test.ts` and
 `start-turn-computer-workspace.test.ts` (temporary files and fake dispatch).
 
+## Native Claude artifact tools (#1990, 2026-11-04)
 
-Routine pre-flight uses `limitFailover.backupFor` to check the same backup
-order and access rules as dispatch. Account refusals stay live outside the
-probe cache. `RoutineManager.prepareTurn` applies the failover before
-capturing the run's engine account, so a backup's success never clears the
-primary's refusal. Credits keep the 30-minute refusal TTL, including in the
-failover store; a thread returns through the existing reset path.
-Tests: `routine-readiness.test.ts`, `routine-reliability.test.ts`,
-`limit-failover-host.test.ts`.
+Organization Claude turns keep `Artifact`, `ArtifactData` and `ArtifactComments`
+in `CLAUDE_ORG_TOOLS`, with no host deny on their parent. The driver opts print
+sessions into `CLAUDE_CODE_ARTIFACT` and `CLAUDE_CODE_ARTIFACT_TOOLSET` by default.
+Native ToolSearch remains available on compact turns; their Sagax MCP directory
+stays compact. Explicit engine settings and Claude account eligibility still
+apply. Routine readiness uses the resolved driver and payer access to explain
+artifact dependencies on API accounts or another engine before creating a task.
+Evidence and configuration matrix: `docs/verification/claude-artifacts.md`.
 
 ## Desktop store subscriptions
 

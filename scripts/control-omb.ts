@@ -419,9 +419,6 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   // A pre-warm window short enough for a test to see the idle engine closed
   // (server/threads/thread-prewarm.ts).
   if (parentEnv.SAGAX_PREWARM_WINDOW_MS) childEnv.SAGAX_PREWARM_WINDOW_MS = parentEnv.SAGAX_PREWARM_WINDOW_MS;
-  // Per-step turn timing on stderr (server/turns/turn-trace.ts). Forwarded
-  // only when set, so a fixture stays quiet unless a bench opts in.
-  if (parentEnv.SAGAX_TURN_TRACE) childEnv.SAGAX_TURN_TRACE = parentEnv.SAGAX_TURN_TRACE;
   // The Code section's fake Perspicax (server/testing/fake-perspicax-agents.ts),
   // started inside the fixture; a solo server only, never real Perspicax.
   if (parentEnv.SAGAX_CODE_FIXTURE === "1") childEnv.SAGAX_CODE_FIXTURE = "1";
@@ -464,9 +461,6 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   // Stalled-turn e2e: the stall watchdog's window elapses on a marker file
   // instead of after 20 minutes of silence (stall-clock-hooks.mjs).
   if (parentEnv.SAGAX_TEST_STALL_CLOCK === "1") childEnv.SAGAX_TEST_STALL_CLOCK = "1";
-  // Per-step turn timing on stderr (server/turns/turn-trace.ts). Forwarded
-  // only when set: the fixture strips the parent env by default.
-  if (parentEnv.SAGAX_TURN_TRACE === "1") childEnv.SAGAX_TURN_TRACE = "1";
   // Desktop mode: the server runs as the desktop app runs it, and the owner
   // capability the app would hand it is this one (see desktop-parent.mjs).
   // A test that hands the server this computer's connection the way the

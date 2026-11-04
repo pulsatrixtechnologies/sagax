@@ -275,7 +275,7 @@ export function createPromptStartTurn(host: StartTurnHost) {
       ...(state.onCall ? { budget: CALL_RECALL_BUDGET } : state.compactPrompt ? { budget: LOCAL_RECALL_BUDGET } : {})
     });
     if (!state.warmOnly) turnTrace(state.threadId, "recall");
-    if (!state.warmOnly) {
+    if (!state.warmOnly && process.env.SAGAX_TURN_TRACE === "1") {
       turnTracePayloadHash(state.threadId, {
         system: `${state.prompt.stable}${state.prompt.volatile}`,
         systemStable: state.prompt.stable,

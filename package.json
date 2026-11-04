@@ -57,6 +57,8 @@
     "bench:persistence": "node --experimental-strip-types scripts/bench-persistence.ts",
     "bench:server-hot-paths": "node --experimental-strip-types scripts/bench-server-hot-paths.ts",
     "bench:turn-latency": "node --experimental-strip-types scripts/bench-turn-latency.ts",
+    "bench:turn-context": "node --experimental-strip-types scripts/bench-turn-context.ts",
+    "bench:engine-warm": "node --experimental-strip-types scripts/bench-engine-warm.ts",
     "bench:routine-watch": "node --experimental-strip-types --expose-gc scripts/bench-routine-watch.ts",
     "test:watch": "vitest",
     "test:unit": "node scripts/testing/vitest-shards.mjs --group unit",
@@ -101,8 +103,7 @@
     "package": "pnpm package:mac",
     "test:packaged-server": "pnpm build:server && node scripts/smoke-packaged-server.mjs",
     "icons:generate": "electron scripts/generate-app-icon.mjs",
-    "build:duckdb": "node scripts/prepare-duckdb.mjs",
-    "bench:engine-warm": "node --experimental-strip-types scripts/bench-engine-warm.ts"
+    "build:duckdb": "node scripts/prepare-duckdb.mjs"
   },
   "dependencies": {
     "@clack/prompts": "1.8.1",

@@ -344,7 +344,10 @@ const CLOUD_HOME_SURFACE = {
  * reactions, widgets, memory, files, computer choice, approvals and results
  * paging stay loaded, and so does any tool not named here. */
 export const DEFERRED_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
-  "propose_routine", "propose_routine_action", "list_routines", "run_routine",
+  // #1989: list_routines and run_routine stay always loaded (and listed by
+  // name, not only inside the merged routines family) so every bot that owns
+  // a routine can check or run it without a ToolSearch step that may miss them.
+  "propose_routine", "propose_routine_action",
   "propose_team_setup", "list_team_setup", "propose_profile", "propose_model", "propose_rule", "propose_bot_deletion", "archive_bot",
   "propose_team_memory", "propose_page", "page_comments", "create_room", "manage_room", "create_bot",
   "add_mcp_server", "skill_manage", "rules_update", "docs_update",
@@ -372,6 +375,8 @@ export const COMPACT_CORE_AGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
   "delegate_bot", "check_delegation", "wait_delegation",
   "react_to_message", "show_widget", "update_widget", "check_widget", "attach_file", "select_computer", "request_credential",
   "memory_update", "memory_log", "session_search", "tool_result_read", "answer_approval", "act",
+  // #1989: same always-loaded rule as DEFERRED: every bot can list and check/run its routines
+  "list_routines", "run_routine",
 ]);
 
 /** The agents tools a compact turn lists whole (#1276). `core` "default" is

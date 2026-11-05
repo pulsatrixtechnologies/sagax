@@ -3,7 +3,18 @@
 import { describe, expect, it } from "vitest";
 
 import { driverKeyBacked, instanceConfigs, type AppConfig } from "./config.ts";
-import { addCompatServer, compatServers, editCompatServer, editCompatServerSchema, newCompatServerSchema, removeCompatServer, strippedUrl } from "./openai-compat-servers.ts";
+import {
+  addCompatServer,
+  canManageCompatServer,
+  compatServerOwner,
+  compatServers,
+  compatServerVisible,
+  editCompatServer,
+  editCompatServerSchema,
+  newCompatServerSchema,
+  removeCompatServer,
+  strippedUrl,
+} from "./openai-compat-servers.ts";
 
 describe("named OpenAI-compatible servers", () => {
   it("keeps a pasted endpoint as its base address (#2022)", () => {
@@ -70,5 +81,27 @@ describe("named OpenAI-compatible servers", () => {
     expect(newCompatServerSchema.safeParse({ displayName: "A", url: "https://user:pw@x.example.test/v1" }).success).toBe(false);
     expect(newCompatServerSchema.safeParse({ displayName: "", url: "https://x.example.test/v1" }).success).toBe(false);
     expect(editCompatServerSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("stamps a personal owner and keeps org-wide servers visible to everyone (#2054)", () => {
+    const personal = addCompatServer({}, undefined, { displayName: "Mine", url: "https://mine.example.test/v1", key: "k" }, () => "p", "pr_alice");
+    expect(personal.keys["compat-p"]).toEqual({ key: "k", ownerPrincipalId: "pr_alice" });
+    const shared = addCompatServer(personal.instances, personal.keys, { displayName: "Org", url: "https://org.example.test/v1" }, () => "o", null);
+    expect(shared.keys["compat-o"]).toEqual({});
+    expect(compatServerOwner(shared.keys, "compat-p")).toBe("pr_alice");
+    expect(compatServerOwner(shared.keys, "compat-o")).toBeNull();
+    expect(canManageCompatServer({ admin: false, principalId: "pr_alice", owner: "pr_alice" })).toBe(true);
+    expect(canManageCompatServer({ admin: false, principalId: "pr_bob", owner: "pr_alice" })).toBe(false);
+    expect(canManageCompatServer({ admin: false, principalId: "pr_alice", owner: null })).toBe(false);
+    expect(canManageCompatServer({ admin: true, principalId: "pr_admin", owner: null })).toBe(true);
+    expect(canManageCompatServer({ admin: false, principalId: "pr_alice", owner: undefined })).toBe(true);
+    expect(canManageCompatServer({ admin: false, principalId: null, owner: undefined })).toBe(false);
+    const cfg: AppConfig = { instances: shared.instances, openaiCompatServers: shared.keys };
+    expect(compatServers(cfg, { principalId: "pr_alice", admin: false }).map((row) => row.instanceId)).toEqual(["compat-p", "compat-o"]);
+    expect(compatServers(cfg, { principalId: "pr_bob", admin: false }).map((row) => row.instanceId)).toEqual(["compat-o"]);
+    expect(compatServers(cfg, { principalId: "pr_admin", admin: true }).map((row) => row.instanceId)).toEqual(["compat-p", "compat-o"]);
+    expect(compatServerVisible("pr_alice", { principalId: "pr_bob", admin: false })).toBe(false);
+    // clearing the key keeps the owner
+    expect(editCompatServer(shared.instances, shared.keys, "compat-p", { key: "" })!.keys["compat-p"]).toEqual({ ownerPrincipalId: "pr_alice" });
   });
 });

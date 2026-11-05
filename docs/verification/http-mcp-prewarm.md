@@ -24,13 +24,22 @@ Access matches send (`warmBotAccessRefusal`). Caps reuse ThreadPrewarm rate plus
 
 `pnpm bench:turn-latency --engine http --mode cold --turns 8`
 
-| Metric | Before (#1971 table) | After (prewarm) |
-|---|---:|---:|
-| overhead_ttft p50 / p95 | 653 / 1083 | 190 / 974 |
-| client first_token p50 / p95 | 1253 / 1683 | 790 / 1574 |
+The harness sets `SAGAX_PREWARM_PER_MINUTE=40` and
+`SAGAX_MAX_IDLE_ENGINE_SESSIONS=3`. `scripts/control-omb.ts` must forward
+both into the fixture child (otherwise the default 6 warms/min caps later
+cold threads and the table looks like a cold mount again).
 
-Local MCP-ready microbench (fake stdio MCP, 40 ms initialize + 20 ms tools/list, N=8):
-cold mount p50 ~172 ms; first-turn reuse after prewarm ~0.007 ms.
+| Metric | Before (#1971 table) | After (prewarm, env forward fixed) |
+|---|---:|---:|
+| overhead_ttft p50 / p95 | 653 / 1083 | 77 / 142 |
+| client first_token p50 / p95 | 1253 / 1683 | 677 / 742 |
+| tools-reused | n/a | 8 / 8 |
+
+Without the env forward, the same harness capped at 6 warms/min and later
+turns remounted (overhead_ttft p50 ~822 ms on one noisy pass).
+
+Local MCP-ready microbench (fake stdio MCP, ~60 ms handshake, N=8):
+cold mount p50 ~222 ms; first-turn reuse after prewarm ~0.007 ms.
 
 ## Reproduce
 

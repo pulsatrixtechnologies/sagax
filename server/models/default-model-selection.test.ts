@@ -342,8 +342,9 @@ describe("an organization member's new bot model (#1060)", () => {
 describe("POST /api/bots for an organization member (#1060)", () => {
   it("resolves the member's model through the organization's default, not the bare server default", () => {
     const source = readFileSync(new URL("../index.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
-    // 062d7c42e extracted the route; its policy helper remains in index.ts.
-    const routes = readFileSync(new URL("../routes/bots-core.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+    // 062d7c42e extracted the route; #1383 moved POST /api/bots into bots-core-create.ts.
+    // The policy helper remains in index.ts.
+    const routes = readFileSync(new URL("../routes/bots-core-create.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
     expect(source).toMatch(/createBotsCoreRoutes\(\{[\s\S]*?\n  memberDefaultSelection,/);
     const route = routes.slice(routes.indexOf('if (method === "POST" && path === "/api/bots") {'));
     expect(route.slice(0, route.indexOf("store.createBot("))).toContain("memberCreate ? await memberDefaultSelection(sessionPrincipal(auth)) : await defaultSelection()");

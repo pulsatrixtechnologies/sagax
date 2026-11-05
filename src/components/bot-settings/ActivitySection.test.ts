@@ -626,10 +626,13 @@ describe("no separate Ongoing activities rail beside the bot", () => {
     const { dirname, join } = await import("node:path");
     const { fileURLToPath } = await import("node:url");
     const here = dirname(fileURLToPath(import.meta.url));
-    const app = readFileSync(join(here, "../../App.tsx"), "utf8");
-    expect(app).not.toMatch(/BackgroundWorkPanel/);
+    const shell = [
+      readFileSync(join(here, "../../App.tsx"), "utf8"),
+      readFileSync(join(here, "../../App.tsx-parts/ShellLayout.tsx"), "utf8"),
+    ].join("\n");
+    expect(shell).not.toMatch(/BackgroundWorkPanel/);
     // 0c909a88c: the bot leaf owns its store subscription around the same chat.
-    expect(app).toMatch(/: bot \? <BotSurface key=\{uiLocale\} id=\{bot.id\}>\{\(current\) => <ChatView bot=\{current\} \/>}<\/BotSurface> : null/);
+    expect(shell).toMatch(/bot \? <BotSurface key=\{uiLocale\} id=\{bot.id\}>\{\(current\) => <ChatView bot=\{current\} \/>}<\/BotSurface>/);
     expect(existsSync(join(here, "../BackgroundWorkPanel.tsx"))).toBe(false);
   });
 });
@@ -641,11 +644,14 @@ describe("one place for ongoing work while the bot panel is open", () => {
     const { readFileSync } = await import("node:fs");
     const { dirname, join } = await import("node:path");
     const { fileURLToPath } = await import("node:url");
-    const app = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../App.tsx"), "utf8");
+    const shell = [
+      readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../App.tsx"), "utf8"),
+      readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../App.tsx-parts/ShellLayout.tsx"), "utf8"),
+    ].join("\n");
     const screen = details;
     expect(screen).not.toContain('data-activity-card="thread:w1"');
     expect(screen).not.toContain("Ongoing activities");
-    expect(app).not.toMatch(/data-background-work-panel|BackgroundWorkPanel/);
+    expect(shell).not.toMatch(/data-background-work-panel|BackgroundWorkPanel/);
     expect(details).not.toContain("data-activity-stop");
   });
 

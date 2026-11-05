@@ -29,7 +29,7 @@ export function optionsCardRow({ message: m, transcript, botId, botName, threadI
   ) : m.card?.requestId && m.card.phoneCallConsent ? (
     <PhoneCallConsentCard botId={botId} botName={botName} threadId={threadId} message={m} />
   ) : m.card?.requestId && m.card.questionRequest ? (
-    <QuestionCard threadId={threadId} bot={{ name: botName }} message={m} />
+    <QuestionCard threadId={threadId} bot={{ id: botId, name: botName }} message={m} />
   ) : m.card?.requestId && m.card.tool ? (
     approvalCardStaysInChat(m.card) ? <ApprovalCard bot={{ name: botName }} message={m} threadId={threadId} /> : null
   ) : shouldHideOnboardingCard(m, transcript) ? null : (

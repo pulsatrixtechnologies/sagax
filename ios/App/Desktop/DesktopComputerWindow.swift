@@ -218,8 +218,12 @@ struct DesktopComputerWindowView: View {
                 }
                 // the drawn arrow is the touch trackpad's: with a trackpad or
                 // a mouse the iPad's own pointer moves over the screen, as the
-                // desktop's does, and no second one is drawn
-                if controller.isHeld, !DesktopPointer.shared.present { pointer(width: size.width, height: size.height) }
+                // desktop's does, and no second one is drawn. The parity
+                // gallery's fake desktop has no cursor (computer-screens.tsx),
+                // so nothing is drawn over it either.
+                if controller.isHeld, !DesktopPointer.shared.present, !Self.parityGallery, controller.pointerMoved {
+                    pointer(width: size.width, height: size.height)
+                }
                 TrackpadSurface { controller.handle($0) }
                     .frame(width: size.width, height: size.height)
                 RemoteKeyboardField(

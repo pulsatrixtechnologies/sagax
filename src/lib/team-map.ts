@@ -1,4 +1,5 @@
 import { t } from "./i18n";
+import { isViewersPrimaryBot } from "./primary-bot";
 
 export interface TeamMapBot {
   id: string;
@@ -6,6 +7,7 @@ export interface TeamMapBot {
   hidden?: boolean;
   section?: string;
   chiefOfStaff?: boolean;
+  ownerUserId?: string;
   busy?: boolean;
   activity?: "working" | "waiting-on-you" | "idle" | "no-signal" | "dead" | "parked.computer";
 }
@@ -22,6 +24,10 @@ export interface TeamMapSection<T extends TeamMapBot = TeamMapBot> {
   name: string;
   chiefs: T[];
   members: T[];
+  /** Sub-team level (#2045): 0 for a top-level team. */
+  depth?: number;
+  /** The team this one sits under, when it is a sub-team. */
+  parent?: string;
 }
 
 export type TeamMapEdge = {
@@ -46,7 +52,10 @@ export const EMPTY_TEAM_MAP_SNAPSHOT: TeamMapSnapshot = {
   running: [],
 };
 
-export function buildTeamMapSections<T extends TeamMapBot>(bots: T[], names: string[] = [], options: { general?: boolean } = {}): TeamMapSection<T>[] {
+export function buildTeamMapSections<T extends TeamMapBot>(bots: T[], names: string[] = [], options: { general?: boolean; viewerId?: string } = {}): TeamMapSection<T>[] {
+  // The Primary Bot heads a team for its own person only (#2045): another
+  // person's Primary Bot shared with the viewer is a member here.
+  const chief = (bot: T) => options.viewerId === undefined ? Boolean(bot.chiefOfStaff) : isViewersPrimaryBot(bot, options.viewerId);
   const sections = new Map<string, T[]>();
   // Unassigned holds what has no section; the sidebar asks for it when only a
   // room is there (someone with no bot of their own, added to a group).
@@ -63,8 +72,8 @@ export function buildTeamMapSections<T extends TeamMapBot>(bots: T[], names: str
   return [...sections].map(([key, sectionBots]) => ({
     key,
     name: key || "Unassigned",
-    chiefs: sectionBots.filter((bot) => bot.chiefOfStaff),
-    members: sectionBots.filter((bot) => !bot.chiefOfStaff),
+    chiefs: sectionBots.filter(chief),
+    members: sectionBots.filter((bot) => !chief(bot)),
   }));
 }
 

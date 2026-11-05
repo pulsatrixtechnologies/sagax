@@ -59,7 +59,7 @@ public enum ClaudeArtifacts {
 
     /// The bot message that asks for a copy under the person's own account.
     public static func copyMessage(url: String) -> String {
-        "Publie une copie de \(url) depuis ton compte avec claude_artifact"
+        "Publie une copie de \(url) depuis ton compte avec claude_artifact. Tu ne peux pas lire cette page (autre compte claude.ai) : publie depuis un fichier HTML de ton workspace (ou un collage), puis donne la nouvelle URL pour mettre à jour les références."
     }
 
     /// Parses the server's ISO time (with or without fractions).

@@ -24,6 +24,9 @@ export type TeamMapEntry = {
   key: string;
   chiefs: Bot[];
   members: Bot[];
+  /** Sub-team level (#2045), 0 or absent at the top. */
+  depth?: number;
+  parent?: string;
 };
 
 export type ItemDragProps = {

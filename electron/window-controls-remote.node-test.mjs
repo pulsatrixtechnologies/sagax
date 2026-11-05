@@ -31,4 +31,7 @@ test("a remote server page gets the five window controls and nothing local", asy
   await controls.minimize(); await controls.toggleMaximize(); await controls.close(); await controls.state();
   assert.deepEqual(invoked, ["window:minimize", "window:toggle-maximize", "window:close", "window:state"]);
   assert.equal(exposed.api.copyText, undefined);
+  // OS fullscreen stays on a remote page too (#2043): same class of window chrome.
+  assert.ok(exposed.api.windowFullscreen);
+  assert.deepEqual(Object.keys(exposed.api.windowFullscreen).sort(), ["onChanged", "set", "state"]);
 });

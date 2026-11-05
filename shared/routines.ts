@@ -204,9 +204,7 @@ export interface Routine {
   /** 2026-11-04 (shared/routine-model.ts): the model its runs use, on the
    * bot's own engine. Absent: the bot's model. */
   model?: string;
-  /** #2038: the model its runs' sub-agents use (Claude), on the bot's own
-   * engine; wins over `model` for them. Absent: `model`, else the bot's fast
-   * model, else the turn's model. */
+  /** #2038: Claude sub-agent model for its runs. Absent: fast model / none. */
   subagentModel?: string;
   /** 2026-11-05 (shared/routine-act-as.ts): the Perspicax role its runs act
    * as ("Au nom de"); "" is "Moi". Absent: not chosen yet. */
@@ -322,7 +320,7 @@ export interface RoutineRun {
   access?: RoutineAccess;
   /** Snapshot of the routine's model for this run. */
   model?: string;
-  /** Snapshot of the routine's sub-agent model for this run. */
+  /** #2038: snapshot of the routine's Claude sub-agent model for this run. */
   subagentModel?: string;
   /** Snapshot of the routine's "Au nom de" role for this run ("" = Moi). */
   actAs?: string;
@@ -373,7 +371,7 @@ export interface RoutineInput {
   /** The model its runs use; null or "" goes back to the bot's model,
    * omission preserves it on updates. */
   model?: string | null;
-  /** The sub-agents' model (Claude); null or "" clears it, omission preserves it. */
+  /** #2038: Claude sub-agent model; null or "" clears; omission preserves. */
   subagentModel?: string | null;
   /** The role its runs act as on Perspicax ("" = Moi); null clears the
    * choice, omission preserves it on updates. */

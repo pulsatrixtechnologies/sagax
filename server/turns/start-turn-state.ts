@@ -40,9 +40,9 @@ export type TurnState = {
   model: any;
   /** 2026-11-04: the routine's model this turn runs on (shared/routine-model.ts), else undefined. */
   routineModel: any;
+  /** #2038: per-routine Claude sub-agent model override (RoutineRun.subagentModel). */
+  routineSubagentModel: any;
   routineEffort: any;
-  /** #2038: the model Claude sub-agents run on, else undefined (they inherit the turn's). */
-  subagentModel: any;
   notice: any;
   onCall: any;
   onDispatchError: any;
@@ -157,6 +157,8 @@ export type TurnState = {
   voiceView: any;
   integrations: any;
   compactPrompt: any;
+  /** #2037: agents pins for native tool-search deferral when not compact. */
+  agentsKnownUse: any;
   recalled: any;
   transcript: any;
   wants: any;
@@ -210,8 +212,8 @@ export function createTurnState(init: {
     maySelectComputer: undefined,
     model: undefined,
     routineModel: undefined,
+    routineSubagentModel: undefined,
     routineEffort: undefined,
-    subagentModel: undefined,
     notice: undefined,
     onCall: undefined,
     onDispatchError: undefined,
@@ -321,6 +323,7 @@ export function createTurnState(init: {
     voiceView: undefined,
     integrations: undefined,
     compactPrompt: undefined,
+    agentsKnownUse: undefined,
     recalled: undefined,
     transcript: undefined,
     wants: undefined,

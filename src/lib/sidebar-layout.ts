@@ -1,3 +1,4 @@
+import { isViewersPrimaryBot } from "./primary-bot";
 import type { GroupGoalRunCardData } from "../../shared/group-goal-run";
 
 export const PINNED_SECTION_ID = "builtin:pinned";
@@ -122,10 +123,14 @@ export function pinnedCircleThreadListVisible(
  * section's chief. Without it, chiefs stay in the group they run. */
 export function partitionSidebarBots<T extends SidebarBot>(
   bots: T[],
-  options?: { universalPins?: boolean },
+  options?: { universalPins?: boolean; viewerId?: string },
 ) {
   const universalPins = options?.universalPins === true;
-  const visible = bots.filter((bot) => !bot.hidden);
+  // #2045: only the viewer's own Primary Bot heads a section; another
+  // person's, shared with them, is an ordinary row.
+  const viewerId = options?.viewerId;
+  const visible = bots.filter((bot) => !bot.hidden).map((bot) =>
+    viewerId !== undefined && bot.chiefOfStaff && !isViewersPrimaryBot(bot, viewerId) ? { ...bot, chiefOfStaff: false } : bot);
   const pinnedBots = visible.filter((bot) => Boolean(bot.pinned) && (universalPins || !bot.chiefOfStaff));
   const pinnedIds = new Set(pinnedBots.map((bot) => bot.id));
   const unsectionedChief = visible.find((bot) => bot.chiefOfStaff && !bot.section && !pinnedIds.has(bot.id)) ?? null;

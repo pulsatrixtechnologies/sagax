@@ -7,7 +7,7 @@
 // scouted folder). TeamImportPreview is also the community template's
 // "Use this template" step in the catalogue's detail view.
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
-import { Compass, ExternalLink, FolderOpen, Loader2, Share2, UploadCloud } from "lucide-react";
+import { Loader2, Share2, UploadCloud } from "lucide-react";
 
 import { track } from "@/lib/analytics";
 import { cn } from "@/lib/cn";
@@ -24,8 +24,9 @@ import { takeImportName } from "../../../shared/import-name";
 import { Github } from "../brand-icons";
 import { ShareTeamDialog } from "../ShareTeamDialog";
 import { BotZipImportPanel } from "../BotZipImport";
-import { shareableTeamList, TEAM_GLYPHS, TeamGlyph, TeamImportDetails, type TeamImportResult } from "./TeamImportDetails";
+import { shareableTeamList, TeamGlyph, TeamImportDetails, type TeamImportResult } from "./TeamImportDetails";
 import { readableError } from "@/lib/plain-error";
+import { TemplateScoutPanel, type DirectoryCandidate, type ScoutResult } from "./TemplateScoutPanel";
 
 export type TemplateTool = "import" | "zip" | "scout" | "share";
 export const TEMPLATE_TOOLS: readonly TemplateTool[] = ["import", "zip", "scout", "share"];
@@ -38,29 +39,6 @@ export const TEMPLATE_TOOL_LABEL: Record<TemplateTool, LocaleKey> = {
 
 /** Where an import came from, for analytics (as the library reported it). */
 export type ImportSource = "library" | "file" | "github" | "grok";
-
-/** the scout endpoint's answer, as far as this pane renders it: the
- * manifest itself stays opaque and goes back to the server verbatim */
-interface ScoutResult {
-  profile: { name: string; summary: string; stacks: string[] };
-  suggestion: {
-    roomName: string;
-    manifest: {
-      team: { members: Array<{ key: string; name: string; title: string; description: string; appearance: { color: string } }> };
-    };
-    reasons: Record<string, string>;
-  };
-}
-
-interface DirectoryCandidate {
-  slug: string;
-  name: string;
-  category: string;
-  integrations: string[];
-  prompt: string;
-  detailUrl: string;
-  matched: string[];
-}
 
 /** appearance colors for community bots folded into a scouted team */
 const DIRECTORY_COLORS = ["cyan", "red", "purple", "green", "orange"] as const;
@@ -493,125 +471,23 @@ export function TemplateTools({ tool, onTool, installUrl, onImported, backRef }:
         )}
 
         {!pending && tool === "scout" && (
-          <div>
-            <div className="mb-3 text-[12px] font-medium text-ink-secondary">{t("templateTools.scoutTitle")}</div>
-            <p className="max-w-2xl text-[12.5px] leading-relaxed text-ink-secondary">
-              {t("templateTools.scoutHelp")}
-            </p>
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              <input
-                value={scoutFolder}
-                onChange={(event) => setScoutFolder(event.target.value)}
-                onKeyDown={(event) => event.key === "Enter" && scoutTarget && void runScout(scoutTarget)}
-                placeholder="/path/to/your/project"
-                aria-label={t("templateTools.scoutFolder")}
-                className={fieldCls}
-              />
-              {Boolean(window.ogb?.pickFolder) && (
-                <button type="button" onClick={() => void pickScoutFolder()} disabled={scouting} className="ui-button disabled:opacity-40">
-                  <FolderOpen size={14} />
-                  {t("templateTools.browse")}
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => void runScout(scoutTarget)}
-                disabled={!scoutTarget || scouting}
-                className="flex items-center justify-center gap-1.5 rounded-full bg-accent px-4 py-2.5 text-[13px] font-medium text-accent-ink hover:bg-accent/90 disabled:opacity-40"
-              >
-                {scouting ? <Loader2 size={14} className="animate-spin" /> : <Compass size={14} />}
-                {scouting ? t("templateTools.scouting") : t("templateTools.scout")}
-              </button>
-            </div>
-
-            {scouted && (
-              <div className="mt-6">
-                <div className="rounded-2xl bg-raised/25 px-5 py-4">
-                  <div className="text-[15px] font-semibold text-ink">{scouted.profile.name}</div>
-                  {scouted.profile.summary && <p className="mt-1 text-[12.5px] leading-relaxed text-ink-secondary">{scouted.profile.summary}</p>}
-                  {scouted.profile.stacks.length > 0 && (
-                    <div className="mt-2.5 flex flex-wrap gap-1.5">
-                      {scouted.profile.stacks.map((stack) => (
-                        <span key={stack} className="rounded-full bg-raised px-2.5 py-1 text-[11.5px] text-ink-secondary">{stack}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-5 text-[12px] font-medium text-ink-secondary">{t("templateTools.suggested")}</div>
-                <div className="mt-1 grid grid-cols-1 gap-x-10 md:grid-cols-2">
-                  {scouted.suggestion.manifest.team.members.map((member, index) => (
-                    <div key={member.key} className="flex min-h-[64px] items-center gap-3 border-b border-hairline/35 px-1 py-3">
-                      <div className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg text-[13px] font-semibold", TEAM_GLYPHS[index % TEAM_GLYPHS.length])}>
-                        {member.name.slice(0, 1).toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="truncate text-[14px] font-medium text-ink">
-                          {member.name} <span className="font-normal text-ink-secondary">· {member.title}</span>
-                        </div>
-                        <div className="mt-0.5 truncate text-[12px] text-ink-secondary">{scouted.suggestion.reasons[member.key] ?? ""}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {directory && directory.length > 0 && (
-                  <>
-                    <div className="mt-5 text-[12px] font-medium text-ink-secondary">{t("templateTools.fromDirectory")}</div>
-                    <div className="mt-1 flex flex-col">
-                      {directory.map((candidate) => (
-                        <div key={candidate.slug} className="flex items-center gap-3 border-b border-hairline/35 px-1 py-3">
-                          <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
-                            <input
-                              type="checkbox"
-                              checked={pickedDirectory.has(candidate.slug)}
-                              onChange={() =>
-                                setPickedDirectory((prev) => {
-                                  const next = new Set(prev);
-                                  if (next.has(candidate.slug)) next.delete(candidate.slug);
-                                  else next.add(candidate.slug);
-                                  return next;
-                                })
-                              }
-                              className="size-4 accent-accent"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-[13.5px] font-medium text-ink">
-                                {candidate.name}
-                                {candidate.category && <span className="font-normal text-ink-secondary"> · {candidate.category}</span>}
-                              </div>
-                              <div className="mt-0.5 truncate text-[12px] text-ink-secondary">Matches {candidate.matched.join(", ")}</div>
-                            </div>
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => void openExternal(candidate.detailUrl)}
-                            aria-label={t("templateTools.openCandidate", { name: candidate.name })}
-                            title={t("templateTools.readBotPage")}
-                            className="rounded-lg p-1.5 text-ink-secondary hover:bg-raised hover:text-ink"
-                          >
-                            <ExternalLink size={14} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-
-                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <input value={roomName} onChange={(event) => setRoomName(event.target.value)} aria-label={t("templateTools.roomName")} className={fieldCls} />
-                  <button type="button" onClick={() => void createProject()} disabled={creating} className={primaryCls}>
-                    {creating && <Loader2 size={15} className="animate-spin" />}
-                    {creating ? t("templateTools.creating") : t("templateTools.createRoom")}
-                  </button>
-                </div>
-                <p className="mt-2 text-[12px] text-ink-secondary">
-                  {t("templateTools.createHelp")}
-                </p>
-              </div>
-            )}
-            <ErrorLine error={error} />
-          </div>
+          <TemplateScoutPanel
+            scoutFolder={scoutFolder}
+            setScoutFolder={setScoutFolder}
+            scoutTarget={scoutTarget}
+            scouting={scouting}
+            scouted={scouted}
+            directory={directory}
+            pickedDirectory={pickedDirectory}
+            setPickedDirectory={setPickedDirectory}
+            roomName={roomName}
+            setRoomName={setRoomName}
+            creating={creating}
+            error={error}
+            pickScoutFolder={pickScoutFolder}
+            runScout={runScout}
+            createProject={createProject}
+          />
         )}
       </div>
       <ShareTeamDialog

@@ -206,12 +206,12 @@ export interface Routine {
   /** Delete once the schedule ends and the last run settles (#1648). */
   deleteWhenFinished?: boolean;
   /** 2026-11-04 (shared/routine-model.ts): the model its runs use, on the
-   * bot's own engine (sub-agents too on Claude). Absent: the bot's model.
-   * A model the bot's engine does not offer is ignored at run start. */
+   * bot's own engine. Absent: the bot's model. A model the bot's engine
+   * does not offer is ignored at run start. */
   model?: string;
-  /** #2038: the model its runs' sub-agents use (Claude), on the bot's own
-   * engine; wins over `model` for them. Absent: `model`, else the bot's fast
-   * model, else the turn's model. */
+  /** #2038: Claude sub-agent model for its runs (CLAUDE_CODE_SUBAGENT_MODEL).
+   * Overrides the bot's fast model and the routine model for sub-agents only.
+   * Absent: resolveClaudeSubagentModel (fast, else routine model, else none). */
   subagentModel?: string;
   /** 2026-11-05 (shared/routine-act-as.ts): the Perspicax role its runs act
    * as ("Au nom de"); "" is "Moi". Absent: not chosen yet. */
@@ -457,8 +457,7 @@ export interface RoutineInput {
   /** The model its runs use; null or "" goes back to the bot's model,
    * omission preserves it on updates. */
   model?: string | null;
-  /** The model its runs' sub-agents use (Claude); null or "" clears it,
-   * omission preserves it on updates. */
+  /** #2038: Claude sub-agent model; null or "" clears; omission preserves. */
   subagentModel?: string | null;
   /** The role its runs act as on Perspicax ("" = Moi); null clears the
    * choice, omission preserves it on updates. */
@@ -1416,7 +1415,7 @@ function sanitizeInput(input: RoutineInput, after: number): Omit<Routine, "id" |
   if (model.model && target === "room-goal") throw new RoutineInputError("A room goal runs on each bot's own model: choose the model on a bot routine");
   const subagentModel = parseRoutineModel(input.subagentModel);
   if (!subagentModel.ok) throw new RoutineInputError(subagentModel.error);
-  if (subagentModel.model && target === "room-goal") throw new RoutineInputError("A room goal runs on each bot's own model: choose the sub-agent model on a bot routine");
+  if (subagentModel.model && target === "room-goal") throw new RoutineInputError("A room goal's bots pick their own sub-agent model: choose it on a bot routine");
   const actAs = parseRoutineActAs(input.actAs);
   if (!actAs.ok) throw new RoutineInputError(actAs.error);
   if (actAs.actAs !== undefined && target === "room-goal") throw new RoutineInputError("A room goal's bots act with their own roles: choose \"Au nom de\" on a bot routine");
@@ -1905,13 +1904,10 @@ export class RoutineManager {
     if (refusal) throw new RoutineInputError(refusal);
   }
 
-  private assertModel(clean: { botId: string; model?: string; subagentModel?: string }): void {
-    if (!this.options.checkModel) return;
-    for (const model of [clean.model, clean.subagentModel]) {
-      if (!model) continue;
-      const refusal = this.options.checkModel(clean.botId, model);
-      if (refusal) throw new RoutineInputError(refusal);
-    }
+  private assertModel(clean: { botId: string; model?: string }): void {
+    if (!clean.model || !this.options.checkModel) return;
+    const refusal = this.options.checkModel(clean.botId, clean.model);
+    if (refusal) throw new RoutineInputError(refusal);
   }
 
   private routineWithHealth(routine: Routine): Routine {
@@ -2110,6 +2106,7 @@ export class RoutineManager {
     const clean = validInput(input, at);
     if (this.targetState(clean) === "missing") throw new RoutineInputError(this.missingTargetMessage(clean.target));
     this.assertModel(clean);
+    this.assertModel({ botId: clean.botId, model: clean.subagentModel });
     this.assertEffort(clean);
     if (clean.folder) clean.folder = this.admitFolder(clean.botId, clean.folder);
     const id = randomUUID();
@@ -2197,7 +2194,10 @@ export class RoutineManager {
     if (this.targetState(clean) === "missing") throw new RoutineInputError(this.missingTargetMessage(clean.target));
     // Checked when it is chosen or the bot changes; a kept model whose
     // engine moved on is ignored at run start instead (shared/routine-model.ts).
-    if (clean.model !== routine.model || clean.subagentModel !== routine.subagentModel || clean.botId !== routine.botId) this.assertModel(clean);
+    if (clean.model !== routine.model || clean.botId !== routine.botId) this.assertModel(clean);
+    if (clean.subagentModel !== routine.subagentModel || clean.botId !== routine.botId) {
+      this.assertModel({ botId: clean.botId, model: clean.subagentModel });
+    }
     if (clean.effort !== routine.effort || clean.botId !== routine.botId) this.assertEffort(clean);
     if (clean.folder) clean.folder = this.admitFolder(clean.botId, clean.folder);
     const previousBotId = routine.botId;

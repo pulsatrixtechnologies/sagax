@@ -61,7 +61,7 @@ const isLocalPage = !localOrigin || location.origin === localOrigin;
 // windowControls stays on every remote page: a Windows window with a hidden
 // title bar draws its own caption buttons, including when the page is not
 // this app's bundled UI (electron/window-controls-remote.node-test.mjs).
-const REMOTE_SAFE = new Set(["platform", "windowControls", "getCapabilities", "onCapabilitiesChanged", "applySkin", "setUnreadCount", "nudgeWindow", "notify", "withdrawNotification", "onNotificationClick", "systemIdle", "permStatus", "workspaces", "takeSignInReturn", "pulsatrixSignIn", "orgJoin"]);
+const REMOTE_SAFE = new Set(["platform", "windowControls", "windowFullscreen", "getCapabilities", "onCapabilitiesChanged", "applySkin", "setUnreadCount", "nudgeWindow", "notify", "withdrawNotification", "onNotificationClick", "systemIdle", "permStatus", "workspaces", "takeSignInReturn", "pulsatrixSignIn", "orgJoin"]);
 // An organization server's page drawn from THIS app's bundle
 // (electron/bundled-ui.cjs) is the desktop's own UI on that server, so it
 // also gets the desktop-UI parts that hold no local data: floating bots and
@@ -78,7 +78,7 @@ const REMOTE_SAFE = new Set(["platform", "windowControls", "getCapabilities", "o
 // every one of these channels again (local-origin.cjs desktopUiOnly, and
 // sharingUiOnly for the server-mode server only). Nothing that reads this
 // computer's files, screen, logins or secrets is handed to the page.
-const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "onOpenAppSettings", "onOpenAbout", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts"]);
+const BUNDLED_EXTRA = new Set(["floatingBots", "dataWindow", "artifactWindow", "retroAssistant", "windowControls", "windowFullscreen", "onOpenAppSettings", "onOpenAbout", "openExternal", "openConnectorSetup", "confirm", "updater", "serverMode", "computerSharing", "appIcon", "orgMemory", "securityKey", "onChatLink", "desktopLanguage", "openPdf", "shellPreferences", "localModels", "accounts"]);
 let bundledPage = false;
 // main.mjs always answers this channel: a sendSync nobody answers would
 // block this page for good (a test harness must answer it too).
@@ -364,6 +364,17 @@ const bridge = {
       const handler = (_event, maximized) => cb(maximized);
       ipcRenderer.on("window:maximized-changed", handler);
       return () => ipcRenderer.removeListener("window:maximized-changed", handler);
+    },
+  },
+  /** OS fullscreen of this window (BrowserWindow.setFullScreen). The page
+   * label follows enter/leave-full-screen (#2043). */
+  windowFullscreen: {
+    set: (on) => ipcRenderer.invoke("window:set-fullscreen", on === true),
+    state: () => ipcRenderer.invoke("window:fullscreen-state"),
+    onChanged: (cb) => {
+      const handler = (_event, fullscreen) => cb(fullscreen === true);
+      ipcRenderer.on("window:fullscreen-changed", handler);
+      return () => ipcRenderer.removeListener("window:fullscreen-changed", handler);
     },
   },
   /** A reviewed BotMRR package opened through sagax://install. */
@@ -669,8 +680,12 @@ const bridge = {
       // a screen point to open at (a panel dragged out of the app)
       ...(Number.isFinite(request?.x) && Number.isFinite(request?.y) ? { x: Number(request.x), y: Number(request.y) } : {}),
       ...(request?.focus === false ? { focus: false } : {}),
+      ...(typeof request?.alwaysOnTop === "boolean" ? { alwaysOnTop: request.alwaysOnTop } : {}),
     }),
     close: (artifactId) => ipcRenderer.invoke("artifact-window:close", { artifactId: String(artifactId ?? "") }),
+    /** Keep a page or artifact window above other apps (#2046). */
+    setAlwaysOnTop: (artifactId, on) => ipcRenderer.invoke("artifact-window:set-top", { artifactId: String(artifactId ?? ""), on: on === true }),
+    isAlwaysOnTop: (artifactId) => ipcRenderer.invoke("artifact-window:get-top", { artifactId: String(artifactId ?? "") }),
     /** A claude.ai artifact (#2018) on claude.ai itself, in a window whose
      * persistent session keeps the person's claude.ai sign-in. */
     openClaudeAi: (url) => ipcRenderer.invoke("artifact-window:open-claude-ai", { url: String(url ?? "") }),

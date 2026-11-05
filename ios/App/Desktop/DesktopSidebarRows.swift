@@ -380,9 +380,12 @@ struct DesktopSidebarRow: View {
                     }
                     Spacer(minLength: 0)
                     if selected, !threadsOpen, !hovered, let time = lastTime {
+                        // `text-[12px] leading-4` on GroupListItem's time
                         Text(verbatim: time)
                             .font(theme.font(12))
                             .foregroundStyle(theme.sidebarInkSecondary)
+                            .lineLimit(1)
+                            .frame(height: 16)
                     }
                     if unread, threadsOpen || (compact && !quietStatus) {
                         Circle().fill(theme.accent).frame(width: 6, height: 6)
@@ -643,10 +646,12 @@ struct DesktopStackedMauses: View {
                 ? [CGPoint(x: 0, y: 2), CGPoint(x: far, y: far)]
                 : [CGPoint(x: 0, y: 0), CGPoint(x: 0, y: far), CGPoint(x: far, y: far)]
             ZStack(alignment: .topLeading) {
-                ForEach(Array(shown.enumerated()), id: \.offset) { index, bot in
+                // memberIds order, later faces over earlier (StackedMauses)
+                ForEach(Array(shown.enumerated()), id: \.element.id) { index, bot in
                     BotMascotView(bot: bot, size: face, state: .idle, animated: false, sidebarTapReact: true, fillBox: true)
                         .frame(width: face, height: face)
                         .offset(x: spots[index].x, y: spots[index].y)
+                        .zIndex(Double(index))
                 }
             }
             .frame(width: slot, height: slot, alignment: .topLeading)
@@ -675,10 +680,12 @@ struct DesktopGroupAvatarStack: View {
                     ? [CGPoint(x: 0, y: 0), CGPoint(x: size - face, y: size - face)]
                     : [CGPoint(x: 0, y: 0), CGPoint(x: size - face, y: size * 0.18), CGPoint(x: size * 0.22, y: size - face)]
                 ZStack(alignment: .topLeading) {
-                    ForEach(Array(shown.enumerated()), id: \.offset) { index, bot in
+                    // memberIds order, later faces over earlier (GroupAvatarStack)
+                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, bot in
                         BotMascotView(bot: bot, size: face, state: .happy, animated: false)
                             .frame(width: face, height: face)
                             .offset(x: spots[index].x, y: spots[index].y)
+                            .zIndex(Double(index))
                     }
                 }
             }

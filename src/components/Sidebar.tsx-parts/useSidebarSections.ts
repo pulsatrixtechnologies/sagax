@@ -1,3 +1,4 @@
+import { editSectionParents, renameInSectionTree } from "@/lib/section-tree";
 import type { SidebarState } from "./types";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { api, type Bot, type Group } from "@/state/store";
@@ -149,6 +150,7 @@ export function useSidebarSections({
   const renameOrgSection = async (oldName: string, name: string): Promise<string | null> => {
     const code = editPersonalSections((prefs) => renamePersonalSection(prefs, oldName, name));
     if (code) return sectionEditMessage(code);
+    editSectionParents((tree) => renameInSectionTree(tree, oldName, name.trim()));
     setSectionEdit(null);
     renamedTeam(oldName, name.trim());
     return null;

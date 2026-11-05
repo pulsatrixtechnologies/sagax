@@ -205,12 +205,17 @@ describe("the reference design's app-wide chords", () => {
   it("is wired where the action lives: the shell, the selection toolbar, and ⌘F leaves ⌘⇧F to search", async () => {
     const { readFileSync } = await import("node:fs");
     const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
-    const app = read("../App.tsx");
-    expect(app).toMatch(/chord === "toggle-sidebar"\) \{\s*e\.preventDefault\(\);\s*toggleSidebarCollapsed\(\);/);
-    expect(app).toMatch(/chord === "focus-composer"\) \{\s*if \(focusComposer\(\)\) e\.preventDefault\(\);/);
-    expect(app).toMatch(/chord === "search-everything"\) \{\s*e\.preventDefault\(\);\s*openCommandPalette\(\);/);
-    expect(app).toMatch(/chord === "new-group"\) \{\s*e\.preventDefault\(\);\s*setComposeGroup\(true\);\s*setComposeOpen\(true\);/);
-    expect(app).toContain('<ComposeToPicker key={composeGroup ? "group" : "browse"} startInGroup={composeGroup}');
+    const shell = [
+      read("../App.tsx"),
+      read("../App.tsx-parts/useShellNavigation.ts"),
+      read("../App.tsx-parts/ShellLayout.tsx"),
+      read("../App.tsx-parts/useShellEffects.ts"),
+    ].join("\n");
+    expect(shell).toMatch(/chord === "toggle-sidebar"\) \{\s*e\.preventDefault\(\);\s*toggleSidebarCollapsed\(\);/);
+    expect(shell).toMatch(/chord === "focus-composer"\) \{\s*if \(focusComposer\(\)\) e\.preventDefault\(\);/);
+    expect(shell).toMatch(/chord === "search-everything"\) \{\s*e\.preventDefault\(\);\s*openCommandPalette\(\);/);
+    expect(shell).toMatch(/chord === "new-group"\) \{\s*e\.preventDefault\(\);\s*setComposeGroup\(true\);\s*setComposeOpen\(true\);/);
+    expect(shell).toContain('<ComposeToPicker key={composeGroup ? "group" : "browse"} startInGroup={composeGroup}');
     expect(read("../components/ComposeToPicker.tsx")).toContain('useState<ComposeMode>(startInGroup ? "group" : "browse")');
     expect(read("../components/CitationUI.tsx")).toMatch(/appShortcutFor\(event\) === "quote-selection"\) \{[\s\S]*?addRef\.current\(captured\.citation\);/);
     for (const view of ["../components/ChatView.tsx", "../components/GroupView.tsx"]) {

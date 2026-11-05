@@ -90,6 +90,8 @@ struct QuestionSheetRow: View {
     let index: Int
     let label: String
     var detail: String? = nil
+    /// Lucide icon key from the option (#2048 page targets); mapped to SF Symbol.
+    var icon: String? = nil
     var multi = false
     var on = false
     var settled = false
@@ -98,6 +100,17 @@ struct QuestionSheetRow: View {
 
     static func key(_ index: Int) -> String { String(UnicodeScalar(UInt8(65 + min(index, 25)))) }
 
+    /// Lucide name → SF Symbol for the few icons the page-target card uses.
+    static func systemIcon(for key: String?) -> String? {
+        switch key {
+        case "file-text": return "doc.text"
+        case "layout-dashboard": return "rectangle.split.3x3"
+        case "sparkles": return "sparkles"
+        case "box": return "shippingbox"
+        default: return nil
+        }
+    }
+
     var body: some View {
         Button {
             Haptics.selection()
@@ -105,6 +118,12 @@ struct QuestionSheetRow: View {
         } label: {
             HStack(alignment: .center, spacing: 12) {
                 if multi { box } else { keyBadge }
+                if let symbol = Self.systemIcon(for: icon) {
+                    Image(systemName: symbol)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(colors.inkSecondary)
+                        .frame(width: 18, height: 18)
+                }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(label)
                         .font(colors.font(13.5))
@@ -132,7 +151,8 @@ struct QuestionSheetRow: View {
                 }
             }
             .contentShape(Rectangle())
-            .opacity(settled && !on ? 0.45 : 1)
+            // Settled-unpicked and unavailable options (#2048) share the same dim.
+            .opacity((settled && !on) || (disabled && !on) ? 0.45 : 1)
         }
         .buttonStyle(QuestionSheetRowStyle(colors: colors))
         .disabled(settled || disabled)

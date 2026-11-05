@@ -20,6 +20,16 @@ import type { ApprovalMode } from "../../shared/approval-mode.ts";
 import { fullAccessChoiceAnswer } from "../approvals/full-access-gate.ts";
 import { isSecretName, mask, redactSecretsInText } from "../redact.ts";
 import type { AgentCardResult, AgentCardStore } from "./chat-card-types.ts";
+import { CHOOSE_PAGE_TARGET_TOOL } from "../drivers/agents-artifact-tools.ts";
+import {
+  pageTargetQuestionOptions,
+  resolvePageTargets,
+  shouldShowPageTargetCard,
+  type PageTargetAvailability,
+  type PageTargetChoiceCardData,
+  type PageTargetIntent,
+} from "../../shared/page-targets.ts";
+import type { AskQuestionOption } from "../../shared/ask-question.ts";
 
 export type { AgentCardResult, AgentCardStore } from "./chat-card-types.ts";
 
@@ -27,6 +37,8 @@ const ROOM_REFUSAL = "Widgets are not available in rooms yet. Answer in text.";
 const NO_SUCH_WIDGET = "No widget with that id in this conversation.";
 /** ask_choice where nobody watches, when its question card could not be raised. */
 export const QUESTION_NOT_RAISED = "The question card could not be shown to the person. Nothing is waiting for them: do not say a card is shown. Ask again, or end the run saying what you need from them.";
+const PAGE_TARGET_ROOM = "Publish targets are not available in rooms. Propose a page or artifact in a direct conversation.";
+const PAGE_TARGET_NONE = "No publish target is available for this bot and conversation.";
 /** What a widget with nothing readable in it (a lone spacer) is called, so
  * the row still has words to preview, replay and reply to. */
 const EMPTY_FALLBACK = "[widget]";
@@ -140,12 +152,25 @@ export function createAgentCard(args: {
    * waits in the Approvals inbox, the member API, a notification and the
    * run's status, and its answer comes back as the person's next message.
    * Null: the card could not be raised, and the tool fails saying so. */
-  raiseQuestion?(choice: { title: string; question: string; options: string[] }): { messageId: string } | null;
+  raiseQuestion?(choice: {
+    title: string;
+    question: string;
+    options: string[];
+    /** #2048: rich options (label + description + id) and durable payload. */
+    questionOptions?: AskQuestionOption[];
+    pageTargetChoice?: PageTargetChoiceCardData;
+  }): { messageId: string } | null;
+  /** #2048: availability and remembered default for choose_page_target. */
+  pageTargetContext?: {
+    defaultId?: string | null;
+    availability: PageTargetAvailability;
+  };
 }): AgentCardResult {
   const { store, bot, threadId, input } = args;
   if (!isRecord(input) || input.tool === undefined) return createOptionsCard(args);
   // full-access: ask-choice
   if (input.tool === ASK_CHOICE_TOOL) return createChoiceCard(args, input);
+  if (input.tool === CHOOSE_PAGE_TARGET_TOOL) return choosePageTargetCard(args, input);
   if (input.tool === "propose_page") return proposePageCard(args, input);
   if (isAppTool(input.tool)) return createAppCard({ store, bot, threadId, input, authored: args.authored });
   if (input.tool !== "show_widget" && input.tool !== "update_widget") {
@@ -214,6 +239,95 @@ function createChoiceCard(args: Parameters<typeof createAgentCard>[0], input: Re
   });
   args.authored?.(message.id);
   return { ok: true, messageId: message.id };
+}
+
+/** #2048: choose which surface hosts a new page or artifact. One available
+ * target or a remembered default returns immediately; otherwise a question
+ * card (same family as ask_choice) lists the offers. */
+function choosePageTargetCard(args: Parameters<typeof createAgentCard>[0], input: Record<string, unknown>): AgentCardResult {
+  const { store, threadId } = args;
+  if (store.groupByThread(threadId)) return { ok: false, status: 409, error: PAGE_TARGET_ROOM };
+  const intentRaw = input.intent;
+  const intent: PageTargetIntent = intentRaw === "page" || intentRaw === "artifact" || intentRaw === "any" ? intentRaw : "any";
+  const ctx = args.pageTargetContext ?? { availability: { pages: true, artifacts: true, claudeArtifacts: false } };
+  const resolution = resolvePageTargets({
+    intent,
+    availability: ctx.availability,
+    defaultId: ctx.defaultId,
+  });
+  if (resolution.available.length === 0) {
+    const why = resolution.unavailable.map((row) => `${row.name}: ${row.reason ?? "unavailable"}`).join(" ");
+    return { ok: false, status: 409, error: why ? `${PAGE_TARGET_NONE} ${why}` : PAGE_TARGET_NONE };
+  }
+  const targets = [...resolution.available, ...resolution.unavailable].map((row) => ({
+    id: row.id,
+    tool: row.tool,
+    name: row.name,
+    description: row.description,
+    available: row.available,
+    ...(row.icon ? { icon: row.icon } : {}),
+    ...(row.reason ? { reason: row.reason } : {}),
+  }));
+  if (resolution.auto && resolution.autoReason) {
+    return {
+      ok: true,
+      messageId: "",
+      auto: {
+        id: resolution.auto.id,
+        tool: resolution.auto.tool,
+        name: resolution.auto.name,
+        description: resolution.auto.description,
+        ...(resolution.auto.icon ? { icon: resolution.auto.icon } : {}),
+        reason: resolution.autoReason,
+      },
+      targets,
+    };
+  }
+  if (!shouldShowPageTargetCard(resolution)) {
+    return { ok: false, status: 409, error: PAGE_TARGET_NONE };
+  }
+  const questionOptions = pageTargetQuestionOptions(resolution.available);
+  const pageTargetChoice: PageTargetChoiceCardData = {
+    version: 1,
+    targets: resolution.available.map((row) => ({
+      id: row.id,
+      tool: row.tool,
+      name: row.name,
+      ...(row.icon ? { icon: row.icon } : {}),
+    })),
+  };
+  const title = "Where should I publish this?";
+  const question = "Pick the surface for this page or artifact.";
+  const labels = questionOptions.map((option) => option.label);
+  if (args.raiseQuestion) {
+    const raised = args.raiseQuestion({
+      title,
+      question,
+      options: labels,
+      questionOptions,
+      pageTargetChoice,
+    });
+    if (!raised) return { ok: false, status: 409, error: QUESTION_NOT_RAISED };
+    args.authored?.(raised.messageId);
+    return { ok: true, messageId: raised.messageId, waitsForPerson: true, targets };
+  }
+  const from = store.groupByThread(threadId) ? { from: { botId: args.bot.id, name: args.bot.name, color: args.bot.color } } : {};
+  // full-access: ask-choice (publish-target choice)
+  const message = store.appendMessage(threadId, {
+    role: "bot",
+    kind: "options",
+    card: {
+      title,
+      subtitle: question,
+      options: labels,
+      requestType: "question",
+      questionRequest: { version: 1, questions: [{ question, options: questionOptions, custom: false }] },
+      pageTargetChoice,
+    },
+    ...from,
+  });
+  args.authored?.(message.id);
+  return { ok: true, messageId: message.id, targets };
 }
 
 /** A bot's page proposal: the version is stored as proposed and the row the

@@ -421,6 +421,17 @@ export function verificationServerEnvironment(parentEnv: NodeJS.ProcessEnv, data
   // A pre-warm window short enough for a test to see the idle engine closed
   // (server/threads/thread-prewarm.ts).
   if (parentEnv.SAGAX_PREWARM_WINDOW_MS) childEnv.SAGAX_PREWARM_WINDOW_MS = parentEnv.SAGAX_PREWARM_WINDOW_MS;
+  // Per-person warm rate for cold-http / cold-grok prewarm benches
+  // (#1975 / #2055). Without this, the fixture keeps the default 6/min and
+  // later cold threads skip.
+  if (/^\d+$/.test(parentEnv.SAGAX_PREWARM_PER_MINUTE ?? "")) {
+    childEnv.SAGAX_PREWARM_PER_MINUTE = parentEnv.SAGAX_PREWARM_PER_MINUTE;
+  }
+  // Idle engine cap so HTTP MCP / ACP children from cold threads do not pile
+  // up (scripts/bench-turn-latency.ts cold http and cold grok).
+  if (/^\d+$/.test(parentEnv.SAGAX_MAX_IDLE_ENGINE_SESSIONS ?? "")) {
+    childEnv.SAGAX_MAX_IDLE_ENGINE_SESSIONS = parentEnv.SAGAX_MAX_IDLE_ENGINE_SESSIONS;
+  }
   // The Code section's fake Perspicax (server/testing/fake-perspicax-agents.ts),
   // started inside the fixture; a solo server only, never real Perspicax.
   if (parentEnv.SAGAX_CODE_FIXTURE === "1") childEnv.SAGAX_CODE_FIXTURE = "1";

@@ -7,6 +7,7 @@
 // finishes. Pure helpers are exported for tests.
 import { api as defaultApi, type Bot } from "@/state/store";
 import { autoSelectionReady, readBotDefaults } from "@/lib/first-bot";
+import { isViewersPrimaryBot, viewerOwnsBot } from "@/lib/primary-bot";
 import {
   kitSuggestions,
   ruleSuggestion,
@@ -243,10 +244,21 @@ export async function sendWizardMessage(botId: string, threadId: string, text: s
 
 /** The bot that guides: the person's Bot designer when they have one, else
  * their Primary Bot, else their first other bot (never the one being made).
- * Null: the wizard creates the Bot designer when Guided is chosen. Pure. */
-export function guideBot<T extends Pick<Bot, "id" | "hidden" | "chiefOfStaff"> & { name?: string }>(bots: readonly T[], draftBotId: string | null): T | null {
+ * Null: the wizard creates the Bot designer when Guided is chosen. Pure.
+ * #2045: in org mode pass viewerId so another person's Primary Bot is never
+ * chosen as the guide. */
+export function guideBot<T extends Pick<Bot, "id" | "hidden" | "chiefOfStaff" | "ownerUserId"> & { name?: string }>(
+  bots: readonly T[],
+  draftBotId: string | null,
+  viewerId?: string,
+): T | null {
   const others = bots.filter((bot) => !bot.hidden && bot.id !== draftBotId);
-  return others.find((bot) => isDesignerBot(bot)) ?? others.find((bot) => bot.chiefOfStaff) ?? others[0] ?? null;
+  const mine = viewerId === undefined ? others : others.filter((bot) => viewerOwnsBot(bot, viewerId));
+  const pool = mine.length ? mine : others;
+  const primary = viewerId === undefined
+    ? pool.find((bot) => bot.chiefOfStaff)
+    : pool.find((bot) => isViewersPrimaryBot(bot, viewerId));
+  return pool.find((bot) => isDesignerBot(bot)) ?? primary ?? pool[0] ?? null;
 }
 
 /** "Do it for me" chips: the role's answer, only when the field is empty

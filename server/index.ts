@@ -208,6 +208,7 @@ import {
   type ApprovalMode
 } from "../shared/approval-mode.ts";
 import { isProactiveMode, normalizeProactiveMode, proactiveModeFor } from "../shared/proactive-mode.ts";
+import { parsePageTargetDefault } from "../shared/page-targets.ts";
 import { createProactiveProposalRoutes } from "./routes/proactive-proposals.ts";
 import { ProactiveEngine, proactiveDryRunSummary } from "./proactive/proactive.ts";
 import {
@@ -577,7 +578,8 @@ import {
   liveCallKey,
   mergeOpenCodeProviderKeys,
   newRoutinesPaused,
-  openCodeProviderKeys
+  openCodeProviderKeys,
+  isCompatServerId,
 } from "./config.ts";
 import { sweepThreadEventLogsPaced, type ThreadLogRetentionCandidate } from "./threads/thread-retention.ts";
 import { ComputerControl } from "./computer/computer-control.ts";
@@ -1149,11 +1151,14 @@ import {
   type MemoryJournalEntry
 } from "./memory/memory-journal.ts";
 import {
+  clearSectionContext,
+  migrateSectionContextKeys,
   readSectionContext,
   readSections,
   sectionContextKey,
   sectionContextLabel,
   sectionContextSystemPrompt,
+  teamDataKey,
   writeSectionContext
 } from "./rooms/section-context.ts";
 import {
@@ -1271,7 +1276,7 @@ import { recordRoutineChange, recordRoutineToggle, routineToggleForViewer } from
 import { botReplyQuoteId } from "./turns/reply-to-turn.ts";
 import { isTriggerSchedule } from "../shared/routines.ts";
 import { routineTurnEffort } from "../shared/routine-effort.ts";
-import { routineTurnModel, subagentTurnModel } from "../shared/routine-model.ts";
+import { routineTurnModel } from "../shared/routine-model.ts";
 import {
   nextOccurrence,
   PREWARM_ENGINE_LEAD_MS,
@@ -1759,7 +1764,7 @@ import {
   type Principal
 } from "./auth/principals.ts";
 import { OrgTeams } from "./org/org-teams.ts";
-import { compatServers } from "./openai-compat-servers.ts";
+import { compatServers, compatServerOwner, compatServerVisible } from "./openai-compat-servers.ts";
 import { createOpenAiCompatServerRoutes } from "./routes/openai-compat-servers.ts";
 import {
   keyVia,
@@ -2346,7 +2351,7 @@ import { parseEvalJson } from "./meetings/meet-scripts.ts";
 import type { MeetingBrowser } from "./meetings/meeting-session.ts";
 import { createTemplateLinkRoutes, handleTemplateLinkPublic } from "./routes/template-links.ts";
 import { TemplateLinks } from "./template-links.ts";
-import { PublishedPages } from "./pages/published-pages.ts";
+import { pageOwnerFor, PublishedPages } from "./pages/published-pages.ts";
 import {
   createPublishedPageRoutes,
   handlePagesOriginRequest,
@@ -2603,6 +2608,7 @@ import {
 } from "./org/org-person-connections.ts";
 import { peopleRoutes, type EngineVia, type PeopleDeps } from "./org/org-admin-people.ts";
 import { botsRoutes, type BotsDeps } from "./org/org-admin-bots.ts";
+import { adminBotEngine } from "./org/org-admin-bot-engine.ts";
 import { botLook, botPersona, readBotAvatar } from "./org/org-admin-look.ts";
 import { ConsoleRefusal } from "./org/org-admin-console.ts";
 import { routineScheduleLabel } from "./org/org-admin-schedule.ts";
@@ -10889,8 +10895,8 @@ function previewSystemPrompt(bot: BotRecord, principal?: string) {
     { id: "routine", label: "Routines", text: agentsMounted ? ROUTINE_PROMPT : "" },
     { id: "profile", label: "Profile changes", text: agentsMounted ? botProfilePrompt(bot) : "" },
     { id: "rich-output", label: "Rich output", text: richOutputPrompt(bot.emailDrafts !== false) },
-    { id: "section-context", label: "Section context", text: sectionContextSystemPrompt(bot.section) },
-    { id: "team-memory", label: "Team memory", text: teamMemory.systemPrompt(bot.section) + (agentsMounted ? TEAM_MEMORY_PROMPT : "") },
+    { id: "section-context", label: "Section context", text: (() => { const team = teamStorageForBot(bot); return sectionContextSystemPrompt(team.key, team.label); })() },
+    { id: "team-memory", label: "Team memory", text: (() => { const team = teamStorageForBot(bot); return teamMemory.systemPrompt(team.key, team.label) + (agentsMounted ? TEAM_MEMORY_PROMPT : ""); })() },
     teamAvailabilityPart(agentsMounted && coordination ? peers : []),
     { id: "rules", label: "Rules (RULES.md)", text: rulesSystemPrompt(bot.id, { writes: agentsMounted }) },
     { id: "memory", label: "Memory", text: memoryPromptFor(bot, { managedWrites: agentsMounted, fileTools: Boolean(privateWorkspace), withholdHostTools: Boolean(instance && withholdHostToolsFor(instance)) }) },
@@ -15618,16 +15624,7 @@ const autoApprovals = createAutoApprovalNotes();
 /** 2026-11-05 (visible roles): the Perspicax role of each tool step, the
  * transitions, the refusals and the owner's rules (server/perspicax/role-journal.ts). */
 const roleJournal = new RoleJournal(process.env.VITEST ? null : join(DATA_DIR, "perspicax-roles.json"));
-const roleEvents = createRoleEvents({
-  journal: roleJournal,
-  messagesFor: (threadId) => store.messagesFor(threadId),
-  patchTool: (threadId, messageId, tool) => { store.patchMessage(threadId, messageId, { tool: tool as NonNullable<Message["tool"]> }); },
-  appendRow: (threadId, row) => { store.appendMessage(threadId, { role: "bot", ...row } as Omit<Message, "id" | "at">); },
-  personName: (principalId) => (isPrincipalId(principalId) ? personDisplayName(principals.byId(principalId)) : "") || "",
-  botName: (botId) => store.bot(botId)?.name ?? "",
-  ownerOf: (botId) => { const bot = store.bot(botId); return bot ? effectiveBotOwner(bot) || undefined : undefined; },
-  language: (principalId) => languageOfPerson(principalId),
-});
+const roleEvents = createRoleEvents({ journal: roleJournal });
 /** Put what answered an ask with no card on the call's own row: the newest
  * row of this tool in the conversation that has none yet (Claude writes the
  * row before it asks), else on the row the engine writes next. */
@@ -16555,7 +16552,14 @@ function routineRunThread(threadId: string | undefined): boolean {
   return Boolean(bot && store.taskByThread(bot.id, threadId)?.routineRunId);
 }
 
-type HarnessChoice = { title: string; question: string; options: string[] };
+type HarnessChoice = {
+  title: string;
+  question: string;
+  options: string[];
+  /** #2048: rich options for the question card (id + description + icon). */
+  questionOptions?: import("../shared/ask-question.ts").AskQuestionOption[];
+  pageTargetChoice?: import("../shared/page-targets.ts").PageTargetChoiceCardData;
+};
 
 /** 2026-11-03 (a person: "J'ai jamais reçu de card pour faire un choix"): a Grok
  * routine run called ask_choice, the passive card landed in the run's hidden
@@ -16582,12 +16586,23 @@ function raiseHarnessQuestion(threadId: string, choice: HarnessChoice, origin: "
   if (!store.botByThread(threadId)) return null;
   const requestId = `ask-choice-${newId()}`;
   const header = choice.title !== "Your bot has a question" ? choice.title.slice(0, 40) : undefined;
+  const questionOptions = choice.questionOptions?.length
+    ? choice.questionOptions
+    : choice.options.map((label) => ({ label }));
   bus.publish({
     eventId: newId(), provider: "harness" as RuntimeEvent["provider"], threadId, createdAt: new Date().toISOString(),
-    type: "request.opened", requestType: "question", requestId, tool: "ask_choice", summary: choice.question,
+    type: "request.opened", requestType: "question", requestId,
+    tool: choice.pageTargetChoice ? "choose_page_target" : "ask_choice",
+    summary: choice.question,
     choices: choice.options,
-    questions: [{ ...(header ? { header } : {}), question: choice.question, options: choice.options.map((label) => ({ label })) }],
+    questions: [{
+      ...(header ? { header } : {}),
+      question: choice.question,
+      options: questionOptions,
+      ...(choice.pageTargetChoice ? { custom: false as const } : {}),
+    }],
     origin, harnessAsk: true,
+    ...(choice.pageTargetChoice ? { pageTargetChoice: choice.pageTargetChoice } : {}),
   });
   const messageId = askMessageByRequest.get(`${threadId}:${requestId}`);
   return messageId ? { messageId } : null;
@@ -18979,6 +18994,7 @@ bus.subscribe((event: RuntimeEvent) => {
         // 2026-10-29: the step the working line names, the same for every
         // engine (shared/working-step.ts); older clients ignore the field
         const step = toolWorkingStep({ name, summary: event.summary, input: event.input, product: product?.product });
+        // 2026-11-05 (#2033): no tool.role on chat steps; the role journal keeps it
         const message = pushMessage({
           role: "bot",
           kind: "activity",
@@ -19787,6 +19803,7 @@ bus.subscribe((event: RuntimeEvent) => {
           questionRequest: questions
             ? { version: 1, questions, ...(event.origin === "output" ? { origin: "output" as const } : {}) }
             : undefined,
+          ...(event.pageTargetChoice ? { pageTargetChoice: event.pageTargetChoice } : {}),
           commandAllowlist: command ?? undefined,
           ...(gateAllowKey && !strictCard && grantsOffered && !guestDriven && !gateGrantBlocked ? { allowKey: gateAllowKey } : {}),
           // Provider-owned session grants remain separate from exact commands.
@@ -21164,13 +21181,10 @@ const personAttentionDeps: AttentionRelayDeps<BotRecord> = {
   ticketUrl: attentionTicketUrl,
   notify: (bot, threadId, title, body) => notify(deliverableNotification("needs-you", bot, threadId, body, { avatarUrl: bot.avatarUrl, title })),
 };
-/** 2026-11-05 (visible roles): the role a Perspicax turn starts under. The
- * person's composer pick for this thread's next turn (theirs only), else a
- * routine run's "Au nom de" role (the run's snapshot, else the routine's).
- * Undefined: the default surface ("Moi"). */
+/** 2026-11-05 (visible roles, #2032): the role a Perspicax turn starts under.
+ * Only a Pulsatrix Flow routine's "Au nom de" (the run's snapshot, else the
+ * routine's). Chat has no role picker. Undefined: the default surface ("Moi"). */
 function perspicaxTurnRole(turn: { threadId: string; botId: string; principalId: string; routine: boolean }): { slug: string; reason: "person" | "routine" } | undefined {
-  const picked = roleJournal.takePick(turn.threadId, turn.principalId);
-  if (picked !== undefined) return { slug: picked, reason: "person" };
   if (!turn.routine) return undefined;
   const run = activeRoutineRunForThread(turn.threadId);
   if (!run || run.botId !== turn.botId) return undefined;
@@ -21205,40 +21219,18 @@ const routineModelNoticed = new Set<string>();
 /** The routine model this turn runs on: the run's model on the bot's own
  * engine, unless a limit takeover moved the thread. A model that cannot
  * apply is ignored with one line in the run, once. */
-function routineModelForTurn(botId: string, threadId: string, instance: { instanceId: string; models: { default?: string; options: Array<{ id: string }> } }): { model?: string; subagentModel?: string } | null {
+function routineModelForTurn(botId: string, threadId: string, instance: { instanceId: string; models: { default?: string; options: Array<{ id: string }> } }): { model: string } | null {
+  const run = activeRoutineRunForThread(threadId);
+  if (!run?.model || run.botId !== botId) return null;
   const bot = store.bot(botId);
   if (!bot) return null;
-  const run = activeRoutineRunForThread(threadId);
-  const ownRun = run && run.botId === botId ? run : undefined;
-  const takenOver = Boolean(limitFailoverStore.failover(botId, threadId));
-  const payer = effectiveBotOwner(bot);
-  // #2038: the model of the turn's Claude sub-agents. The routine's own
-  // sub-agent model, then the routine model, then the bot's fast model on
-  // this engine; the main turn's model is never touched.
-  const decidedModel = ownRun?.model ? routineModelDecision(ownRun, bot, threadId, instance, takenOver) : null;
-  const applied = decidedModel && "model" in decidedModel ? decidedModel.model : undefined;
-  const subagentModel = subagentTurnModel({
-    routineSubagentModel: ownRun?.subagentModel,
-    routineModel: applied,
-    fast: bot.modelSelection.fast,
-    turnInstanceId: instance.instanceId,
-    botInstanceId: bot.modelSelection.instanceId,
-    takenOver,
-    offered: engineModelIds(instance),
-    refusal: (model) => modelSwitchRefusal(instance.instanceId, model, payer),
-  });
-  if (!applied && !subagentModel) return null;
-  return { ...(applied ? { model: applied } : {}), ...(subagentModel ? { subagentModel } : {}) };
-}
-
-function routineModelDecision(run: { id: string; model?: string }, bot: BotRecord, threadId: string, instance: { instanceId: string; models: { default?: string; options: Array<{ id: string }> } }, takenOver: boolean): { model: string } | null {
   const decided = routineTurnModel({
     model: run.model,
     botInstanceId: bot.modelSelection.instanceId,
     turnInstanceId: instance.instanceId,
-    takenOver,
+    takenOver: Boolean(limitFailoverStore.failover(botId, threadId)),
     offered: engineModelIds(instance),
-    refusal: modelSwitchRefusal(instance.instanceId, run.model!, effectiveBotOwner(bot)),
+    refusal: modelSwitchRefusal(instance.instanceId, run.model, effectiveBotOwner(bot)),
   });
   if (decided && "ignored" in decided) {
     if (!routineModelNoticed.has(run.id)) {
@@ -21246,6 +21238,36 @@ function routineModelDecision(run: { id: string; model?: string }, bot: BotRecor
       if (routineModelNoticed.size > 500) routineModelNoticed.delete(routineModelNoticed.values().next().value!);
       console.info(`[routine-model] ${threadId}: ${decided.ignored}`);
       store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: `notice: ${decided.ignored}`, ok: true } });
+    }
+    return null;
+  }
+  return decided;
+}
+
+const routineSubagentModelNoticed = new Set<string>();
+
+/** #2038: per-routine Claude sub-agent model override on the bot's own
+ * engine. Same rules as routineModelForTurn; does not change the main model. */
+function routineSubagentModelForTurn(botId: string, threadId: string, instance: { instanceId: string; models: { default?: string; options: Array<{ id: string }> } }): { model: string } | null {
+  const run = activeRoutineRunForThread(threadId);
+  if (!run?.subagentModel || run.botId !== botId) return null;
+  const bot = store.bot(botId);
+  if (!bot) return null;
+  const decided = routineTurnModel({
+    model: run.subagentModel,
+    botInstanceId: bot.modelSelection.instanceId,
+    turnInstanceId: instance.instanceId,
+    takenOver: Boolean(limitFailoverStore.failover(botId, threadId)),
+    offered: engineModelIds(instance),
+    refusal: modelSwitchRefusal(instance.instanceId, run.subagentModel, effectiveBotOwner(bot)),
+  });
+  if (decided && "ignored" in decided) {
+    if (!routineSubagentModelNoticed.has(run.id)) {
+      routineSubagentModelNoticed.add(run.id);
+      if (routineSubagentModelNoticed.size > 500) routineSubagentModelNoticed.delete(routineSubagentModelNoticed.values().next().value!);
+      const line = decided.ignored.replace(/^Routine model/, "Routine sub-agent model");
+      console.info(`[routine-subagent-model] ${threadId}: ${line}`);
+      store.appendMessage(threadId, { role: "bot", kind: "activity", tool: { name: `notice: ${line}`, ok: true } });
     }
     return null;
   }
@@ -26134,13 +26156,18 @@ const outboundCounts = new OutboundCounts(join(DATA_DIR, "outbound-counts.json")
  * live stream (message.patch, under each viewer's usual filter). */
 function settleTeamMemoryCards(auth: RequestAuth, section: string, entryId: string, answer: "allow" | "deny", sourceThreadId?: string): number {
   const key = sectionContextKey(section);
-  const matches = (message: Message) => {
+  const matches = (message: Message, threadId: string) => {
     const request = message.card?.teamMemoryRequest;
-    return Boolean(request && request.entryId === entryId && sectionContextKey(request.section) === key && message.card?.requestId);
+    if (!request || request.entryId !== entryId || !message.card?.requestId) return false;
+    const cardSection = sectionContextKey(request.section);
+    if (cardSection === key) return true;
+    // #2045: cards still carry the display name; the page settles by owner/id.
+    const proposer = message.from?.botId ? store.bot(message.from.botId) : store.botByThread(threadId);
+    return teamStorageKeyFor(cardSection, proposer ? effectiveBotOwner(proposer) : undefined) === key;
   };
   const threads = new Set<string>();
   if (sourceThreadId) threads.add(sourceThreadId);
-  if (!sourceThreadId || !store.messagesFor(sourceThreadId).some(matches)) {
+  if (!sourceThreadId || !store.messagesFor(sourceThreadId).some((message) => matches(message, sourceThreadId))) {
     for (const bot of store.bots) for (const task of store.tasks(bot.id)) threads.add(task.threadId);
     for (const group of store.groups) {
       threads.add(group.threadId);
@@ -26150,7 +26177,7 @@ function settleTeamMemoryCards(auth: RequestAuth, section: string, entryId: stri
   let closed = 0;
   for (const threadId of threads) {
     for (const message of store.messagesFor(threadId)) {
-      if (!matches(message) || teamMemoryCardSettled(message.card)) continue;
+      if (!matches(message, threadId) || teamMemoryCardSettled(message.card)) continue;
       store.patchMessage(threadId, message.id, { card: { ...message.card!, answered: answer, answeredBy: cardAnswererFor(auth) } });
       const proposer = message.from?.botId ? store.bot(message.from.botId) : store.botByThread(threadId);
       appendDecision(DATA_DIR, {
@@ -26186,7 +26213,8 @@ function resolveAndSendTrust(res: ServerResponse, threadId: string, requestId: s
       json(res, late.status, late.body);
       return true;
     }
-    const result = teamMemory.resolve(request.section, request.entryId, behavior === "allow" ? "accept" : "reject");
+    const memoryKey = teamStorageKeyFor(request.section, proposer ? effectiveBotOwner(proposer) : undefined);
+    const result = teamMemory.resolve(memoryKey, request.entryId, behavior === "allow" ? "accept" : "reject");
     if (!result.claimed || result.state === "already_settled") {
       // the entry was deleted, or accepted, before this card heard of it:
       // close the card (no answerer to name) and say so
@@ -29155,7 +29183,8 @@ function configStatus() {
     openaiCompat: { configured: Boolean(cfg.openaiCompat?.key), url: cfg.openaiCompat?.url ?? "", model: cfg.openaiCompat?.model ?? "" },
     // lot 4: changes when the organization's declarations (public fields) do
     ...(orgCapabilitiesRevision ? { orgCapabilities: { revision: orgCapabilitiesRevision } } : {}),
-    // 2026-10-30: the named OpenAI-compatible servers, never their keys
+    // 2026-10-30: the named OpenAI-compatible servers, never their keys.
+    // Person isolation (#2054) is applied in configForPerson / instancesForViewer.
     openaiCompatServers: compatServers(cfg),
     // configured = cloud computers work here; included = through Cloud Pro,
     // not a saved key
@@ -29277,7 +29306,19 @@ function configStatus() {
  * where they set one, and their own profiles follow the installation's,
  * marked `personal`. `personalSettings` tells the app they may set them. */
 function configForPerson<T extends Parameters<typeof configForViewer>[0]>(status: T, viewer: ViewerIdentity | null): T & { viewer?: ViewerIdentity } {
-  const shown = configForViewer(status, viewer);
+  let shown = configForViewer(status, viewer);
+  // #2054: a member only sees their own named OpenAI-compatible servers
+  // plus org-wide ones; another person's stay out of Settings.
+  if (IDENTITY.kind === "perspicax" && shown && typeof shown === "object" && "openaiCompatServers" in shown) {
+    const admin = Boolean((viewer as { orgAdmin?: boolean } | null)?.orgAdmin) || viewer?.role === "admin";
+    shown = {
+      ...shown,
+      openaiCompatServers: compatServers(cfg, {
+        principalId: viewer?.principalId?.trim().toLowerCase() || null,
+        admin,
+      }),
+    };
+  }
   const owner = personSettingsOwner(viewer?.principalId);
   if (!owner) return shown;
   const own = personSettings.get(owner);
@@ -30905,8 +30946,17 @@ async function instancesForViewer(person: string | null) {
   const owner = providerAccountOwner(person);
   if (owner !== null) await syncPersonalProviders(owner).catch(() => {});
   // #1450: a model the paying account turned off is not offered again for a while
+  const compatViewer = IDENTITY.kind === "perspicax"
+    ? { principalId: person, admin: false }
+    : undefined;
   const instances = withoutRefusedModels(await describeInstances(), (instanceId) => refusedModelsFor(person, instanceId))
     .filter((instance) => personalProviderInstances.visible(instance.instanceId, IDENTITY.kind === "perspicax" ? person ?? "" : "solo"))
+    // #2054: a named OpenAI-compatible server owned by someone else stays out
+    // of this viewer's picker (org-wide servers have no owner and stay).
+    .filter((instance) => {
+      if (!compatViewer || !isCompatServerId(instance.instanceId)) return true;
+      return compatServerVisible(compatServerOwner(cfg.openaiCompatServers, instance.instanceId), compatViewer);
+    })
     .map((instance) => {
       const account = personalProviderInstances.get(instance.instanceId);
       return account ? { ...instance, access: "api" as const, providerAccount: { provider: account.provider, serverId: account.serverId } } : instance;
@@ -31908,18 +31958,42 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     saveToolResult: (capability, text, truncated) => toolResults.save(capability, text, truncated),
     readToolResult: (capability, id, offset) => toolResults.read(capability, id, offset),
     checkWidget: (turnKey, body) => checkWidgetForTurn(widgetRenderer, widgetCheckAttempts, turnKey, body),
-    createCard: ({ bot, threadId, body, authored, proposePage }) => createAgentCard({
-      store,
-      bot,
-      threadId,
-      input: body,
-      authored,
-      proposePage: proposePage as Parameters<typeof createAgentCard>[0]["proposePage"],
-      // #1905: a may-I ask_choice under Full access is answered, not drawn
-      approvalLevel: sourceApprovalMode(bot.id, threadId),
-      // 2026-11-03: where nobody watches, a real question card (raiseHarnessQuestion)
-      ...(harnessQuestionThread(threadId) ? { raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, choice) } : {}),
-    }),
+    createCard: ({ bot, threadId, body, authored, proposePage }) => {
+      const confidential = store.isConfidentialThread(threadId);
+      const owning = store.botByThread(threadId) ?? bot;
+      const person = IDENTITY.kind === "perspicax"
+        ? pageOwnerFor(store.taskByThread(owning.id, threadId), effectiveBotOwner(owning))
+        : localPrincipalId();
+      const claude = person ? claudeAccountForPrincipal(person) : { unavailable: "no_engine" as const };
+      const claudeOk = !("unavailable" in claude);
+      const defaultId = typeof owning.pageTargetDefault === "string" ? owning.pageTargetDefault : null;
+      return createAgentCard({
+        store,
+        bot,
+        threadId,
+        input: body,
+        authored,
+        proposePage: proposePage as Parameters<typeof createAgentCard>[0]["proposePage"],
+        // #1905: a may-I ask_choice under Full access is answered, not drawn
+        approvalLevel: sourceApprovalMode(bot.id, threadId),
+        // 2026-11-03: where nobody watches, a real question card (raiseHarnessQuestion)
+        ...(harnessQuestionThread(threadId) ? { raiseQuestion: (choice: HarnessChoice) => raiseHarnessQuestion(threadId, choice) } : {}),
+        // #2048: publish-target availability for this bot, engine and person
+        pageTargetContext: {
+          defaultId,
+          availability: {
+            pages: !confidential,
+            artifacts: !confidential,
+            claudeArtifacts: claudeOk,
+            ...(claudeOk ? {} : {
+              claudeReason: "unavailable" in claude && claude.unavailable === "not_signed_in"
+                ? "Claude is not signed in for this person."
+                : "Claude artifacts are not available for this person.",
+            }),
+          },
+        },
+      });
+    },
     authored: (threadId, generation, messageId) => handoffs.authored(threadId, generation, messageId),
     proposePublishedPage: (input) => publishedPages.propose({
       ...input,
@@ -31962,7 +32036,10 @@ const INTERNAL_ROUTES: InternalRouteHandler[] = [
     updateDoc: (botId, update, opts) => updateDoc(botId, update as never, opts),
     searchDocs: (botId, q, limit) => searchDocFiles(botId, q, limit),
     markWorkspaceUse,
-    proposeTeamMemory: (section, entry, meta) => teamMemory.propose(section, entry, meta),
+    proposeTeamMemory: (section, entry, meta) => {
+      const owner = meta.botId ? effectiveBotOwner(store.bot(meta.botId) ?? {}) : undefined;
+      return teamMemory.propose(teamStorageKeyFor(section, owner), entry, meta);
+    },
     appendMessage: (threadId, message) => store.appendMessage(threadId, message as never),
     appendDecision: (row) => appendDecision(DATA_DIR, row as never),
     notify
@@ -38753,17 +38830,46 @@ function orgSectionNames(): string[] {
   sectionChannels?.migrate(names, sectionMigrationOwner);
   return names;
 }
-/** The section names an organization member may see: the ones they own or
- * belong to, and the ones holding a bot or room they see. */
+/** #2045: team instructions / memory storage key for a display name. */
+function teamStorageKeyFor(sectionName: string | null | undefined, ownerPrincipalId?: string | null): string {
+  const name = sectionContextKey(sectionName);
+  if (!name) return "";
+  if (!sectionChannels || !ownerPrincipalId?.trim()) return name;
+  const record = sectionChannels.byNameForOwner(name, ownerPrincipalId);
+  return record ? teamDataKey(record.ownerPrincipalId, record.id) : name;
+}
+
+function teamStorageKeyForAuth(auth: RequestAuth, sectionName: string): string {
+  const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+  return teamStorageKeyFor(sectionName, owner);
+}
+
+function teamStorageForBot(bot: { section?: string; ownerUserId?: string } | null | undefined): { key: string; label: string } {
+  const name = sectionContextKey(bot?.section);
+  if (!name) return { key: "", label: "General" };
+  const owner = bot ? effectiveBotOwner(bot) : "";
+  const record = sectionChannels && owner ? sectionChannels.byNameForOwner(name, owner) : null;
+  if (record) return { key: teamDataKey(record.ownerPrincipalId, record.id), label: record.name };
+  return { key: name, label: sectionContextLabel(name) };
+}
+
+/** The section names an organization member may see (#2045): only the
+ * ones they own, or a legacy one they were made a member of. A section is
+ * never shown because it holds a bot or room someone shared: the bot is
+ * shared, the other person's team stays theirs. Admins included. Two people
+ * may share a display name; each still only sees their own. */
 function orgVisibleSections(all: readonly string[], viewerId: string | undefined): string[] {
   if (IDENTITY.kind !== "perspicax" || !viewerId || !sectionChannels) return [...all];
   const viewer = authzViewerFromId(viewerId)!;
-  return all.filter((name) => {
-    const record = sectionChannels!.byName(name);
-    if (record && (record.ownerPrincipalId === viewerId || (record.members.length && sectionRole(viewer, { ...record }) !== null))) return true;
-    return store.bots.some((bot) => sectionKey(bot.section) === name && listedBotVisible(bot, viewerId)) ||
-      store.groups.some((group) => sectionKey(group.section) === name && groupVisible(group, viewerId));
-  });
+  const me = viewerId.trim().toLowerCase();
+  const visible = new Set<string>();
+  for (const record of sectionChannels.list()) {
+    if (record.ownerPrincipalId.trim().toLowerCase() === me) visible.add(record.name);
+    else if (record.members.length > 0 && sectionRole(viewer, { ...record }) !== null) visible.add(record.name);
+  }
+  const ordered = all.filter((name) => visible.has(name));
+  for (const name of visible) if (!ordered.includes(name)) ordered.push(name);
+  return ordered;
 }
 if (sectionChannels) {
   // First organization boot of slice 4: every existing section becomes a
@@ -38771,6 +38877,16 @@ if (sectionChannels) {
   const created = sectionChannels.migrate(store.sections, sectionMigrationOwner);
   if (created) console.log(`sections: ${created} existing section(s) became private channels`);
   migrateSectionSharesToBotGrants(sectionChannels);
+  // #2045: team instructions and memory move from name keys to owner/id.
+  const resolveTeamOwner = (name: string) => {
+    const record = sectionChannels.byName(name);
+    return record ? { ownerPrincipalId: record.ownerPrincipalId, id: record.id } : null;
+  };
+  const movedBriefs = migrateSectionContextKeys(resolveTeamOwner);
+  const movedMemory = teamMemory.migrateSectionKeys(resolveTeamOwner);
+  if (movedBriefs || movedMemory) {
+    console.log(`sections: migrated team data to owner/id (${movedBriefs} brief(s), ${movedMemory} memory section(s))`);
+  }
   const channels = sectionChannels;
   ROUTES.push(createSectionChannelRoutes({
     channels,
@@ -38782,8 +38898,17 @@ if (sectionChannels) {
       const result = store.setBotsSection([], name);
       return result.ok ? undefined : "the section could not be created";
     },
-    renameSection: (name, nextName) => store.renameSection(name, nextName, teamComputers),
-    deleteSection: (name) => (teamComputers.forSection(name) ? "Unassign this section's computer before deleting it" : store.deleteSection(name)),
+    // #2045: rename/delete only the owner's bots for that team name.
+    renameSection: (record, nextName) => store.renameSectionForOwner(record.name, nextName, record.ownerPrincipalId, teamComputers),
+    deleteSection: (record) => {
+      if (teamComputers.forSection(record.name)) return "Unassign this section's computer before deleting it";
+      const error = store.deleteSectionForOwner(record.name, record.ownerPrincipalId);
+      if (error) return error;
+      const key = teamDataKey(record.ownerPrincipalId, record.id);
+      try { clearSectionContext(key); } catch { /* leave disk as-is */ }
+      try { teamMemory.clearSection(key); } catch { /* leave disk as-is */ }
+      return undefined;
+    },
     onChanged: () => {
       broadcast({ kind: "sections", sections: store.sections });
       audienceChanged();
@@ -39658,7 +39783,7 @@ if (IDENTITY.kind === "perspicax") {
   ROUTES.push(createPeopleAvatarRoutes({
     principals,
     issuer,
-    perspicaxDirectory,
+    perspicaxDirectory: () => perspicaxDirectory,
   }));
   // Slice 8: people from before Perspicax, attached by an admin.
   ROUTES.push(createInterimAttachRoutes({
@@ -40362,7 +40487,7 @@ ROUTES.push(createClaudeArtifactRoutes({
     try {
       await acceptDirectSend({
         botId, threadId: thread,
-        text: `Publie une copie de ${url} depuis ton compte avec claude_artifact.`,
+        text: `Publie une copie de ${url} depuis ton compte avec claude_artifact. Tu ne peux pas lire cette page (autre compte claude.ai) : publie depuis un fichier HTML de ton workspace (ou un collage), puis donne la nouvelle URL pour mettre à jour les références.`,
         sendId: randomUUID().replaceAll("-", ""),
         sender: messageSender(auth),
         trigger: usageTriggerFor(auth),
@@ -40990,7 +41115,16 @@ function orgAdminBots(): Array<{ bot: AdminBot; reach: AdminBotReach }> {
         name: bot.name,
         owner: adminPerson(facts.ownerPrincipalId),
         ownerRole,
-        engine: { instanceId: engine.instanceId, driverKind: engine.driver, installed: engineInstalled(engine.instanceId) },
+        engine: (() => {
+          const live = registry.get(engine.instanceId);
+          return adminBotEngine({
+            instanceId: engine.instanceId,
+            driverKind: engine.driver,
+            installed: engineInstalled(engine.instanceId),
+            displayName: live?.displayName,
+            driverDisplayName: engine.driver ? driverDisplayName(engine.driver) : null,
+          });
+        })(),
         model: bot.modelSelection?.model || null,
         access,
         // Kept empty for the older console wire shape. Roles belong to the
@@ -43571,7 +43705,12 @@ ROUTES.push(createAntigravityLeftoverRoutes({
 // (server/openai-compat-servers.ts); the provider-settings lock as above.
 ROUTES.push(createOpenAiCompatServerRoutes({
   // a hosted-models home keeps its providers (HOSTED_PROVIDER_SETTINGS_ERROR)
-  allowed: (auth) => !hostedModels && (IDENTITY.kind !== "perspicax" || orgAdminCaller(auth)),
+  allowed: () => !hostedModels,
+  // #2054: solo treats every caller as able to manage org-wide rows; on
+  // Perspicax only an organization admin changes a shared (unowned) server.
+  // A member manages their own through ownerPrincipalId below.
+  isAdmin: (auth) => IDENTITY.kind !== "perspicax" || orgAdminCaller(auth),
+  principalId: (auth) => auth.kind === "session" ? auth.session.principalId?.trim().toLowerCase() || null : null,
   instances: () => persistableInstanceConfigs(cfg),
   keys: () => cfg.openaiCompatServers,
   persist: async (instanceId, instances, keys) => {
@@ -44378,16 +44517,40 @@ ROUTES.push(createTeamExportImportRoutes({
 ROUTES.push(createTeamLibraryRoutes());
 ROUTES.push(createSidebarSectionsRoutes({
   sections: () => store.sections,
+  // #2045: on an organization server each person sees only their own teams.
+  sectionsFor: (auth) => (sectionChannels ? orgVisibleSections(orgSectionNames(), auth.kind === "session" ? auth.session.principalId?.trim() || undefined : localPrincipalId()) : store.sections),
+  mayFile: (auth, bot) => !sectionChannels || auth.kind !== "session" || effectiveBotOwner(bot).trim().toLowerCase() === (auth.session.principalId ?? "").trim().toLowerCase(),
+  onSectionCreated: (section, auth) => {
+    if (sectionChannels) sectionChannels.ensure(section, auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId());
+  },
   bot: (id) => store.bot(id) ?? undefined,
   assertTeamComputerChangeIdle,
   teamComputerForSection: (section) => teamComputers.forSection(section),
-  deleteSection: (section) => store.deleteSection(section) ?? null,
-  renameSection: (section, nextName) => store.renameSection(section, nextName, teamComputers) ?? null,
+  deleteSection: (section, auth) => {
+    if (sectionChannels) {
+      const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+      return store.deleteSectionForOwner(section, owner) ?? null;
+    }
+    return store.deleteSection(section) ?? null;
+  },
+  renameSection: (section, nextName, auth) => {
+    if (sectionChannels) {
+      const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+      return store.renameSectionForOwner(section, nextName, owner, teamComputers) ?? null;
+    }
+    return store.renameSection(section, nextName, teamComputers) ?? null;
+  },
   updateTeamMembers: (section, addBotIds, removeBotIds) => store.updateTeamMembers(section, [...addBotIds], [...removeBotIds]),
   setBotsSection: (botIds, name) => store.setBotsSection([...botIds], name),
   wireBot,
-  onSectionRemoved: (section) => sectionChannels?.removeByName(section),
-  onSectionRenamed: (from, to) => sectionChannels?.rename(from, to)
+  onSectionRemoved: (section, auth) => {
+    const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+    sectionChannels?.removeByName(section, owner);
+  },
+  onSectionRenamed: (from, to, auth) => {
+    const owner = auth.kind === "session" ? auth.session.principalId?.trim() || localPrincipalId() : localPrincipalId();
+    sectionChannels?.rename(from, to, owner);
+  },
 }));
 ROUTES.push(createTeamMemoryHttpRoutes({
   list: (section) => teamMemory.list(section),
@@ -44395,6 +44558,7 @@ ROUTES.push(createTeamMemoryHttpRoutes({
   resolve: (section, entryId, decision) => teamMemory.resolve(section, entryId, decision),
   remove: (section, entryId) => teamMemory.remove(section, entryId),
   update: (section, entryId, patch) => teamMemory.update(section, entryId, patch),
+  storageKey: (auth, section) => teamStorageKeyForAuth(auth, section),
   settleCards: settleTeamMemoryCards
 }));
 ROUTES.push(createSectionContextRoutes({
@@ -44402,6 +44566,7 @@ ROUTES.push(createSectionContextRoutes({
   bots: () => store.bots,
   groups: () => store.groups,
   sectionKey,
+  storageKey: (auth, section) => teamStorageKeyForAuth(auth, section),
   read: readSectionContext,
   write: writeSectionContext
 }));
@@ -44527,13 +44692,8 @@ ROUTES.push(createWebhooksRoutes({
   isBotAct: (auth) => auth.kind === "session" && isBotActSession(auth.session)
 }));
 ROUTES.push(createBotsMessagesRoutes({
-  // 2026-11-05 (visible roles, batch 3): the composer's pick, kept for the
-  // sender's next turn of this thread (perspicaxTurnRole takes it)
-  pickPerspicaxRole: (bot: BotRecord, threadId: string, auth: RequestAuth, slug: string) => {
-    if (IDENTITY.kind !== "perspicax") return;
-    const principal = orgSpeakerPrincipal(bot, speakerFor(auth));
-    if (principal) roleJournal.pick(threadId, principal, slug);
-  },
+  // 2026-11-05 (#2032): chat no longer picks a role; Flow routines use actAs
+  pickPerspicaxRole: (_bot: BotRecord, _threadId: string, _auth: RequestAuth, _slug: string) => {},
   originApprovals,
   approvalBus,
   ADMIN_APPROVAL_REQUIRED,
@@ -45571,6 +45731,7 @@ ROUTES.push(createBotsMutateRoutes({
   normalizeAllowedRecipients,
   normalizeOutboundPolicy,
   normalizeProactiveMode,
+  parsePageTargetDefault,
   orgFullAccessRefusalFor,
   ownerChosenVisibility,
   ownerOrAdminOf,
@@ -47167,6 +47328,7 @@ const startTurnRunner = createStartTurn({
   turnHolder,
   turnModelRequested,
   routineModelForTurn,
+  routineSubagentModelForTurn,
   routineEffortForTurn,
   turnModelSwitches,
   turnNetworkProxy,

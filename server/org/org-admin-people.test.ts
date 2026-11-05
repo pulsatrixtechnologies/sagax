@@ -16,7 +16,7 @@ const person = (principalId: string, name: string, extra: Partial<PersonFacts> =
 });
 const bot = (id: string, owner: string): { bot: AdminBot; reach: { ownerPrincipalId: string; grantTargets: string[]; sectionMemberTargets: string[] } } => ({
   bot: {
-    id, name: id, owner: { principalId: owner, sub: null, name: owner }, ownerRole: "member", engine: { instanceId: "claude", driverKind: "claudeAgent", installed: true },
+    id, name: id, owner: { principalId: owner, sub: null, name: owner }, ownerRole: "member", engine: { instanceId: "claude", driverKind: "claudeAgent", installed: true, name: "Claude" },
     model: null, access: "org-key", mcpProfiles: [], grants: [], sections: [], routines: 0, createdAt: null, lastActivityAt: null, status: "active", label: null, threads: 1,
     look: botLook({ name: id, color: "green" }, () => false), persona: botPersona({ name: id }), approvalMode: "ask",
   },

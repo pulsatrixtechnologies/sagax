@@ -159,13 +159,28 @@ const label = (key: string, en: Locale, fr: Locale) => {
 
 export interface SettingsSectionRow { id: string; group: string; labelKey: string; keywords: string[] }
 
-/** The pages of Settings (src/components/SettingsModal.tsx SECTIONS). */
+const SETTINGS_NAV = "src/components/settings/settings-nav.ts";
+
+/** The pages of Settings (settings-nav.ts SECTIONS). Throws naming that file
+ * when the export is missing or no row matches, never a later TypeError on
+ * an empty page map. */
 export function settingsSectionRows(root: string): SettingsSectionRow[] {
-  const source = read(root, "src/components/SettingsModal.tsx");
-  const block = source.slice(source.indexOf("export const SECTIONS"), source.indexOf("\n];", source.indexOf("export const SECTIONS")));
+  const source = read(root, SETTINGS_NAV);
+  const start = source.indexOf("export const SECTIONS");
+  if (start < 0) {
+    throw new Error(`${SETTINGS_NAV}: expected "export const SECTIONS" (Settings pages for sagax_help)`);
+  }
+  const end = source.indexOf("\n];", start);
+  if (end < 0) {
+    throw new Error(`${SETTINGS_NAV}: SECTIONS array is not closed with ];`);
+  }
+  const block = source.slice(start, end);
   const rows: SettingsSectionRow[] = [];
   for (const match of block.matchAll(/\{ id: "(\w+)", group: "(\w+)", labelKey: "([\w.]+)",[^\n]*?keywords: \[([^\]]*)\]/g)) {
     rows.push({ id: match[1], group: match[2], labelKey: match[3], keywords: [...match[4].matchAll(/"([^"]+)"/g)].map((word) => word[1]) });
+  }
+  if (rows.length === 0) {
+    throw new Error(`${SETTINGS_NAV}: SECTIONS found but no { id, group, labelKey, keywords } rows matched`);
   }
   return rows;
 }
@@ -197,7 +212,7 @@ function settingsSections(root: string): KnowledgeSection[] {
       ...(note?.access ? { access: note.access } : {}),
       keywords: row.keywords.join(" "),
       text: `${note?.text ? `${note.text} ` : ""}Holds: ${row.keywords.slice(0, 40).join(", ")}.`,
-      source: "src/components/SettingsModal.tsx",
+      source: SETTINGS_NAV,
     });
   }
   // Cards: every settings card with an id and a title, under its page.

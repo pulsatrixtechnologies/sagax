@@ -275,9 +275,16 @@ export const OpenAICompatDriver: ProviderDriver<OpenAICompatConfig> = {
           issue = issueForStatus(response.status, false);
           return;
         }
-        type Row = { id?: unknown; name?: unknown; created?: unknown };
-        const json = await response.json() as { data?: Row[] } | Row[];
+        type Row = { id?: unknown; name?: unknown; created?: unknown; endpoints?: unknown };
+        const json = await response.json() as { data?: Row[]; models?: Row[] } | Row[];
         let rows = Array.isArray(json) ? json : Array.isArray(json.data) ? json.data : [];
+        // A private Cohere deployment lists `{ models: [{ name, endpoints }] }`
+        // on /v1/models (#2054): the name is the id, chat rows only.
+        if (!Array.isArray(json) && !Array.isArray(json.data) && Array.isArray(json.models)) {
+          rows = json.models
+            .filter((row) => !Array.isArray(row.endpoints) || row.endpoints.includes("chat"))
+            .map((row) => (typeof row.id === "string" ? row : { ...row, id: row.name }));
+        }
         // OpenAI lists its catalog unordered and mixed with non-chat models:
         // keep chat models, newest first.
         if (config.catalog === "openai") {

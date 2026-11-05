@@ -31,126 +31,47 @@ import { canManageComputers } from "@/lib/viewer";
 import { OrgComputerSettings } from "./settings/OrgComputerSettings";
 import { ComputerCareSettings } from "./settings/ComputerCareSettings";
 import { readableError } from "@/lib/plain-error";
+import {
+  computerInventoryRequest,
+  confirmComputerAction,
+  localVmEnsurePlan,
+  localVmResetPlan,
+} from "./LocalComputerSection.tsx-parts/inventoryApi";
+import type {
+  Action,
+  CloudComputerInventoryInstance,
+  ComputerStateKind,
+  LocalVmAutoState,
+  LocalVmInventoryInstance,
+  PendingCloudAction,
+  Status,
+  VpsComputerInventoryInstance,
+} from "./LocalComputerSection.tsx-parts/types";
+import { useComputerInventories } from "./LocalComputerSection.tsx-parts/useComputerInventories";
 
-type Action = "pull" | "run" | "start" | "stop" | "remove" | "recreate";
+export type {
+  CloudComputerInventoryInstance,
+  CloudComputerInventoryPayload,
+  CloudPostActionOverride,
+  CloudPostActionOverrides,
+  ComputerActionPlan,
+  ComputerStateKind,
+  LocalVmAutoState,
+  LocalVmInventoryInstance,
+  VpsComputerInventoryInstance,
+} from "./LocalComputerSection.tsx-parts/types";
 
-/** The automatic Local VM care's state, as the desktop app's own server
- * reports it (a mirror of server/computer/local-vm-auto.ts's LocalVmAutoSnapshot). */
-export interface LocalVmAutoState {
-  phase: "idle" | "checking" | "starting" | "running" | "stopped" | "waiting" | "problem";
-  step: "runtime" | "image" | "container" | "start" | null;
-  problem: "no_runtime" | "runtime_stopped" | "foreign" | "unsupported" | "image_failed" | "start_failed" | null;
-  detail: string | null;
-  attempts: number;
-  nextRetryAt: number | null;
-  stoppedByPerson: boolean;
-}
-
-interface Status {
-  platform: string;
-  runtime: string | null;
-  available: string[];
-  daemonUp: boolean;
-  image: boolean;
-  imageMatches: boolean;
-  managed: boolean;
-  container: "running" | "stopped" | "missing";
-  network: "loopback" | "unsafe" | "unknown";
-  security: "hardened" | "unsafe" | "unknown";
-  persistence: "durable" | "unsafe" | "unknown";
-  desktopReady: boolean;
-  ready: boolean;
-  problem: string | null;
-  image_ref: string;
-  base_image_ref: string;
-  driver_version: string;
-  container_name: string;
-  workspace_path: string;
-  workspace_guest_path: string;
-  viewer_url: string;
-  idle_timeout_ms: number;
-  stop_reason?: "idle" | null;
-  mode: "shared" | "per-bot" | "pool";
-  /** An organization server: one environment per person, no VM per bot. */
-  organization?: boolean;
-  max_instances: number;
-  /** The automatic care's state (null on an organization or self-hosted
-   * server, where nothing starts the Local VM by itself). */
-  auto: LocalVmAutoState | null;
-  commands: {
-    install: string | null;
-    runtimeStart: string | null;
-    pull: string | null;
-    run: string | null;
-    start: string | null;
-    stop: string | null;
-    remove: string | null;
-    view: string;
-  };
-}
-
-export interface LocalVmInventoryInstance {
-  botId: string;
-  name: string;
-  destination: "auto" | "cloud" | "vm" | "local" | "browser" | "off";
-  container: "running" | "stopped";
-  ready: boolean;
-  managed: boolean;
-  problem: string | null;
-  inUse: boolean;
-}
-
-interface LocalVmInventoryPayload {
-  instances: LocalVmInventoryInstance[];
-  maxInstances: number;
-  available: boolean;
-  problem: string | null;
-}
-
-export interface CloudComputerInventoryInstance {
-  boxId: string;
-  name: string;
-  state: string;
-  ownerBotId: string | null;
-  ownerName: string | null;
-  orphaned: boolean;
-  inUse: boolean;
-}
-
-export interface CloudComputerInventoryPayload {
-  configured: boolean;
-  available: boolean;
-  problem: string | null;
-  instances: CloudComputerInventoryInstance[];
-}
-
-type CloudAction = "sleep" | "delete";
-type PendingCloudAction = { boxId: string; action: CloudAction } | null;
-export type CloudPostActionOverride = "deleted" | "deleting" | "sleeping";
-export type CloudPostActionOverrides = Record<string, CloudPostActionOverride>;
-
-const PENDING_CLOUD_DELETE_REFRESH_DELAYS_MS = [1_000, 2_000, 4_000] as const;
-
-function waitForCloudDeleteRefresh(delayMs: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, delayMs));
-}
-
-export interface VpsComputerInventoryInstance {
-  name: string;
-  state: "created" | "restarting" | "running" | "removing" | "paused" | "exited" | "dead" | "unknown";
-  ownerBotId: string | null;
-  ownerName: string | null;
-  orphaned: boolean;
-  inUse: boolean;
-}
-
-interface VpsComputerInventoryPayload {
-  configured: boolean;
-  available: boolean;
-  sshAlias: string | null;
-  problem: string | null;
-  instances: VpsComputerInventoryInstance[];
-}
+export {
+  cloudComputerActionPlan,
+  computerInventoryRequest,
+  confirmComputerAction,
+  localVmEnsurePlan,
+  localVmResetPlan,
+  perBotLocalVmDeletePlan,
+  reconcileCloudInventoryPayload,
+  reconcileCloudInventorySnapshot,
+  vpsComputerRemovePlan,
+} from "./LocalComputerSection.tsx-parts/inventoryApi";
 
 const destinationLabelKeys: Record<LocalVmInventoryInstance["destination"], LocaleKey> = {
   auto: "vm.dest.auto",
@@ -163,19 +84,6 @@ const destinationLabelKeys: Record<LocalVmInventoryInstance["destination"], Loca
 
 /** The badge's colour is decided by the kind, never by the label: a
  * translated label would silently stop matching `=== "Running"`. */
-export type ComputerStateKind =
-  | "unmanaged"
-  | "in-use"
-  | "stopped"
-  | "running"
-  | "attention"
-  | "sleeping"
-  | "going-to-sleep"
-  | "starting"
-  | "restarting"
-  | "removing"
-  | "paused";
-
 const stateLabelKeys: Record<ComputerStateKind, LocaleKey> = {
   unmanaged: "vm.state.notManaged",
   "in-use": "vm.state.inUse",
@@ -222,61 +130,6 @@ export function cloudComputerInventoryState(instance: CloudComputerInventoryInst
   return computerStateLabel(cloudComputerInventoryStateKind(instance));
 }
 
-/** Boat's account LIST is eventually consistent. Preserve the result of an
- * action the provider accepted instead of letting an older snapshot make a
- * confirmed deletion reappear, a pending deletion disappear, or a sleeping
- * computer look awake. */
-export function reconcileCloudInventorySnapshot(
-  incoming: CloudComputerInventoryInstance[],
-  previous: CloudComputerInventoryInstance[],
-  overrides: CloudPostActionOverrides,
-): { instances: CloudComputerInventoryInstance[]; overrides: CloudPostActionOverrides } {
-  const nextOverrides = { ...overrides };
-  const incomingIds = new Set(incoming.map((instance) => instance.boxId));
-  const instances = incoming.flatMap((instance) => {
-    const override = overrides[instance.boxId];
-    if (override === "deleted") return [];
-    if (override === "deleting") return [{ ...instance, state: "removing" }];
-    if (override !== "sleeping") return [instance];
-    if (["archived", "stopped"].includes(instance.state)) {
-      delete nextOverrides[instance.boxId];
-      return [instance];
-    }
-    return [{ ...instance, state: "archived" }];
-  });
-
-  // A transitioning Boat can briefly disappear from LIST. Keep the last safe
-  // row until LIST returns the terminal sleeping state.
-  for (const instance of previous) {
-    if (overrides[instance.boxId] !== "sleeping" || incomingIds.has(instance.boxId)) continue;
-    instances.push({ ...instance, state: "archived" });
-  }
-  for (const [boxId, override] of Object.entries(overrides)) {
-    if ((override === "deleted" || override === "deleting") && !incomingIds.has(boxId)) {
-      delete nextOverrides[boxId];
-    }
-  }
-  return { instances, overrides: nextOverrides };
-}
-
-/** An empty list proves deletion only when Boat says the inventory read was
- * authoritative. Provider outages and disconnected accounts must not erase
- * the last known row or settle a pending deletion as successful. */
-export function reconcileCloudInventoryPayload(
-  payload: CloudComputerInventoryPayload,
-  previous: CloudComputerInventoryInstance[],
-  overrides: CloudPostActionOverrides,
-): { instances: CloudComputerInventoryInstance[]; overrides: CloudPostActionOverrides } {
-  if (payload.configured !== true || payload.available !== true) {
-    return { instances: previous, overrides: { ...overrides } };
-  }
-  return reconcileCloudInventorySnapshot(
-    Array.isArray(payload.instances) ? payload.instances : [],
-    previous,
-    overrides,
-  );
-}
-
 function cloudComputerCanSleep(instance: CloudComputerInventoryInstance): boolean {
   return ["idle", "ready", "running"].includes(instance.state);
 }
@@ -300,103 +153,6 @@ export function vpsComputerInventoryState(instance: VpsComputerInventoryInstance
 export function vpsComputerShortId(name: string): string {
   const suffix = /-([a-f0-9]{12})$/i.exec(name)?.[1];
   return suffix ? suffix.slice(-8).toLowerCase() : "unknown";
-}
-
-type ComputerInventoryRequest = "status" | "local-vms" | "cloud" | "vps";
-type ComputerApiRequest = [url: string, init: RequestInit];
-export interface ComputerActionPlan {
-  confirmation: string | null;
-  request: ComputerApiRequest;
-}
-
-const computerInventoryPaths: Record<ComputerInventoryRequest, string> = {
-  status: "/api/local-computer",
-  "local-vms": "/api/local-computer/instances",
-  cloud: "/api/computers/boxes",
-  vps: "/api/computers/vps",
-};
-
-/** Keep the observation-only Settings reads explicit and independently
- * testable: opening Computers must never provision or wake anything. */
-export function computerInventoryRequest(
-  inventory: ComputerInventoryRequest,
-  signal?: AbortSignal,
-): ComputerApiRequest {
-  return [computerInventoryPaths[inventory], { signal }];
-}
-
-function jsonPostRequest(url: string, body: unknown): ComputerApiRequest {
-  return [url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  }];
-}
-
-export function perBotLocalVmDeletePlan(instance: LocalVmInventoryInstance): ComputerActionPlan {
-  return {
-    confirmation: t("vm.confirm.deleteBotVm", { name: instance.name }),
-    request: jsonPostRequest(`/api/bots/${instance.botId}/local-computer/remove`, {}),
-  };
-}
-
-export function cloudComputerActionPlan(
-  action: CloudAction,
-  instance: CloudComputerInventoryInstance,
-): ComputerActionPlan {
-  return {
-    confirmation: action === "delete"
-      ? t("vm.confirm.deleteCloud", {
-          subject: instance.orphaned
-            ? t("vm.confirm.orphanCloud")
-            : t("vm.confirm.ownedCloud", { name: instance.ownerName ?? "" }),
-        })
-      : null,
-    request: jsonPostRequest(
-      `/api/computers/boxes/${encodeURIComponent(instance.boxId)}/${action}`,
-      action === "delete" ? { confirmName: instance.name } : {},
-    ),
-  };
-}
-
-export function vpsComputerRemovePlan(instance: VpsComputerInventoryInstance): ComputerActionPlan {
-  return {
-    confirmation: t("vm.confirm.removeVps", {
-      subject: instance.orphaned
-        ? t("vm.confirm.orphanVpsUnnamed")
-        : t("vm.confirm.ownedVps", { name: instance.ownerName ?? "" }),
-    }),
-    request: jsonPostRequest(`/api/computers/vps/${encodeURIComponent(instance.name)}/remove`, {
-      confirmName: instance.name,
-    }),
-  };
-}
-
-/** The person's own Start or Retry: a fresh budget for the automatic care
- * (a new download allowance and attempt count), answered at once. */
-export function localVmEnsurePlan(): ComputerActionPlan {
-  return {
-    confirmation: null,
-    request: jsonPostRequest("/api/local-computer/ensure", { reason: "person" }),
-  };
-}
-
-/** Reset: delete this computer's Local VMs (the shared one and, in per-bot
- * mode, each bot's), keep the files saved on this computer, then let the
- * automatic care create the shared one again. */
-export function localVmResetPlan(perBot: boolean): ComputerActionPlan {
-  return {
-    confirmation: t(perBot ? "vm.reset.confirmPerBot" : "vm.reset.confirm"),
-    request: jsonPostRequest("/api/local-computer/reset", { confirm: true }),
-  };
-}
-
-export async function confirmComputerAction(
-  plan: ComputerActionPlan,
-  confirm: (message: string) => Promise<boolean> | boolean,
-): Promise<ComputerApiRequest | null> {
-  if (plan.confirmation !== null && !(await confirm(plan.confirmation))) return null;
-  return plan.request;
 }
 
 export function VpsComputersCard({
@@ -1119,31 +875,14 @@ export function LocalComputerSection() {
   const [policyPending, setPolicyPending] = useState(false);
   const [autoPending, setAutoPending] = useState<"ensure" | "reset" | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [inventory, setInventory] = useState<LocalVmInventoryInstance[]>([]);
-  const [inventoryMax, setInventoryMax] = useState(2);
-  const [inventoryLoading, setInventoryLoading] = useState(false);
-  const [inventoryError, setInventoryError] = useState<string | null>(null);
-  const [inventoryUnavailableReason, setInventoryUnavailableReason] = useState<string | null>(null);
-  const [deletingBotId, setDeletingBotId] = useState<string | null>(null);
-  const [inventoryRefreshKey, setInventoryRefreshKey] = useState(0);
-  const [cloudInventory, setCloudInventory] = useState<CloudComputerInventoryInstance[]>([]);
-  const [cloudConfigured, setCloudConfigured] = useState<boolean | null>(null);
-  const [cloudLoading, setCloudLoading] = useState(true);
-  const [cloudError, setCloudError] = useState<string | null>(null);
-  const [cloudUnavailableReason, setCloudUnavailableReason] = useState<string | null>(null);
-  const [cloudPending, setCloudPending] = useState<PendingCloudAction>(null);
-  const [cloudRefreshKey, setCloudRefreshKey] = useState(0);
-  const cloudInventoryRef = useRef<CloudComputerInventoryInstance[]>([]);
-  const cloudOverridesRef = useRef<CloudPostActionOverrides>({});
-  const [vpsInventory, setVpsInventory] = useState<VpsComputerInventoryInstance[]>([]);
-  const [vpsConfigured, setVpsConfigured] = useState<boolean | null>(null);
-  const [vpsSshAlias, setVpsSshAlias] = useState<string | null>(null);
-  const [vpsLoading, setVpsLoading] = useState(true);
-  const [vpsError, setVpsError] = useState<string | null>(null);
-  const [vpsUnavailableReason, setVpsUnavailableReason] = useState<string | null>(null);
-  const [vpsRemovingName, setVpsRemovingName] = useState<string | null>(null);
-  const [vpsRefreshKey, setVpsRefreshKey] = useState(0);
   const [announcement, setAnnouncement] = useState("");
+
+  const inventories = useComputerInventories({
+    manageComputers,
+    statusMode: status?.mode,
+    confirmDanger,
+    setAnnouncement,
+  });
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch(...computerInventoryRequest("status", signal));
@@ -1155,55 +894,6 @@ export function LocalComputerSection() {
     setStatus(body as Status);
     setError(null);
     return body as Status;
-  }, []);
-
-  const refreshInventory = useCallback(async (signal?: AbortSignal) => {
-    const response = await fetch(...computerInventoryRequest("local-vms", signal));
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.error ?? t("vm.err.inventory", { code: response.status }));
-    const payload = body as LocalVmInventoryPayload;
-    setInventory(payload.instances);
-    setInventoryMax(payload.maxInstances);
-    setInventoryUnavailableReason(payload.available ? null : (payload.problem ?? t("vm.err.runtimeUnavailable")));
-    setInventoryError(null);
-  }, []);
-
-  const refreshCloudInventory = useCallback(async (signal?: AbortSignal) => {
-    const response = await fetch(...computerInventoryRequest("cloud", signal));
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.error ?? t("vm.err.cloudInventory", { code: response.status }));
-    const payload = body as CloudComputerInventoryPayload;
-    const reconciled = reconcileCloudInventoryPayload(
-      payload,
-      cloudInventoryRef.current,
-      cloudOverridesRef.current,
-    );
-    cloudOverridesRef.current = reconciled.overrides;
-    cloudInventoryRef.current = reconciled.instances;
-    setCloudInventory(reconciled.instances);
-    setCloudConfigured(payload.configured === true);
-    setCloudUnavailableReason(
-      payload.available || !payload.configured
-        ? null
-        : (payload.problem ?? t("vm.err.cloudUnavailable")),
-    );
-    setCloudError(null);
-  }, []);
-
-  const refreshVpsInventory = useCallback(async (signal?: AbortSignal) => {
-    const response = await fetch(...computerInventoryRequest("vps", signal));
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.error ?? t("vm.err.vpsInventory", { code: response.status }));
-    const payload = body as VpsComputerInventoryPayload;
-    setVpsInventory(Array.isArray(payload.instances) ? payload.instances : []);
-    setVpsConfigured(payload.configured === true);
-    setVpsSshAlias(typeof payload.sshAlias === "string" ? payload.sshAlias : null);
-    setVpsUnavailableReason(
-      payload.available || !payload.configured
-        ? null
-        : (payload.problem ?? t("vm.err.vpsUnavailable")),
-    );
-    setVpsError(null);
   }, []);
 
   useEffect(() => {
@@ -1234,65 +924,6 @@ export function LocalComputerSection() {
       if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [manageComputers, refresh, refreshKey]);
-
-  useEffect(() => {
-    if (status?.mode !== "per-bot") {
-      setInventory([]);
-      setInventoryLoading(false);
-      setInventoryError(null);
-      setInventoryUnavailableReason(null);
-      return;
-    }
-    const controller = new AbortController();
-    setInventoryLoading(true);
-    void refreshInventory(controller.signal)
-      .catch((e) => {
-        if (!(e instanceof DOMException && e.name === "AbortError")) {
-          setInventoryError(readableError(e));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setInventoryLoading(false);
-      });
-    return () => controller.abort();
-  }, [inventoryRefreshKey, refreshInventory, status?.mode]);
-
-  // Boat account listing is deliberately not polled. It can be expensive and
-  // Settings must remain an observation-only surface until the person clicks
-  // Sleep or Delete.
-  useEffect(() => {
-    if (!manageComputers) return;
-    const controller = new AbortController();
-    setCloudLoading(true);
-    void refreshCloudInventory(controller.signal)
-      .catch((e) => {
-        if (!(e instanceof DOMException && e.name === "AbortError")) {
-          setCloudUnavailableReason(readableError(e));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setCloudLoading(false);
-      });
-    return () => controller.abort();
-  }, [cloudRefreshKey, manageComputers, refreshCloudInventory]);
-
-  // Docker-over-SSH inventory is also manual/mount-only. A Settings view
-  // must never become a hidden remote poller or wake a stopped container.
-  useEffect(() => {
-    if (!manageComputers) return;
-    const controller = new AbortController();
-    setVpsLoading(true);
-    void refreshVpsInventory(controller.signal)
-      .catch((e) => {
-        if (!(e instanceof DOMException && e.name === "AbortError")) {
-          setVpsUnavailableReason(readableError(e));
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setVpsLoading(false);
-      });
-    return () => controller.abort();
-  }, [manageComputers, refreshVpsInventory, vpsRefreshKey]);
 
   const post = async (action: Exclude<Action, "recreate">, signal: AbortSignal) => {
     const response = await fetch(`/api/local-computer/${action}`, {
@@ -1387,28 +1018,6 @@ export function LocalComputerSection() {
     setStatus((current) => current ? { ...current, idle_timeout_ms: idleTimeoutMinutes * 60_000 } : current);
   };
 
-  const deletePerBotVm = async (instance: LocalVmInventoryInstance) => {
-    if (!instance.managed) {
-      setInventoryError(t("vm.unmanagedError"));
-      return;
-    }
-    const request = await confirmComputerAction(perBotLocalVmDeletePlan(instance), confirmDanger);
-    if (!request) return;
-    setDeletingBotId(instance.botId);
-    setInventoryError(null);
-    try {
-      const response = await fetch(...request);
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error ?? t("vm.deleteError"));
-      await refreshInventory();
-      setAnnouncement(t("vm.announce.deletedBot", { name: instance.name }));
-    } catch (e) {
-      setInventoryError(readableError(e));
-    } finally {
-      setDeletingBotId(null);
-    }
-  };
-
   const autoBusy = pending !== null || autoPending !== null || policyPending;
 
   // The person's own Start or Retry: a fresh budget for the automatic care.
@@ -1446,121 +1055,12 @@ export function LocalComputerSection() {
       const body = await response.json().catch(() => ({})) as { error?: string; code?: string };
       if (!response.ok) throw new Error(body.code === "in_use" ? t("vm.reset.inUse") : (body.error ?? t("vm.reset.error")));
       setStatus(body as Status);
-      if (perBotNow) setInventoryRefreshKey((key) => key + 1);
+      if (perBotNow) inventories.bumpInventoryRefresh();
       setAnnouncement(t("vm.reset.announce"));
     } catch (e) {
       setError(readableError(e));
     } finally {
       setAutoPending(null);
-    }
-  };
-
-  const actOnCloudComputer = async (action: CloudAction, instance: CloudComputerInventoryInstance) => {
-    const request = await confirmComputerAction(cloudComputerActionPlan(action, instance), confirmDanger);
-    if (!request) return;
-    setCloudPending({ boxId: instance.boxId, action });
-    setCloudError(null);
-    setAnnouncement("");
-    try {
-      const response = await fetch(...request);
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error ?? t(action === "delete" ? "vm.cloud.deleteError" : "vm.cloud.sleepError"));
-      const deletionPending = action === "delete" && body?.pending === true;
-      cloudOverridesRef.current = {
-        ...cloudOverridesRef.current,
-        [instance.boxId]: action === "delete"
-          ? deletionPending ? "deleting" : "deleted"
-          : "sleeping",
-      };
-      const reconciled = reconcileCloudInventorySnapshot(
-        cloudInventoryRef.current,
-        cloudInventoryRef.current,
-        cloudOverridesRef.current,
-      );
-      cloudOverridesRef.current = reconciled.overrides;
-      cloudInventoryRef.current = reconciled.instances;
-      setCloudInventory(reconciled.instances);
-      const subject = instance.orphaned
-        ? t("vm.announce.orphanCloud")
-        : t("vm.confirm.ownedCloud", { name: instance.ownerName ?? "" });
-      setAnnouncement(
-        deletionPending
-          ? `${subject}: ${t("vm.state.removing")}.`
-          : t(action === "delete" ? "vm.announce.cloudDeleted" : "vm.announce.cloudSleeping", { subject }),
-      );
-
-      if (deletionPending) {
-        // Boat may accept a background operation before the computer is gone.
-        // Keep the row visible as Removing while we check, then drop the
-        // optimistic state if the provider still lists it so the person can
-        // refresh or retry instead of being shown a false success forever.
-        for (const delayMs of PENDING_CLOUD_DELETE_REFRESH_DELAYS_MS) {
-          await waitForCloudDeleteRefresh(delayMs);
-          try {
-            await refreshCloudInventory();
-          } catch {
-            // A later bounded attempt can still establish the final state.
-          }
-          if (cloudOverridesRef.current[instance.boxId] !== "deleting") {
-            setAnnouncement(t("vm.announce.cloudDeleted", { subject }));
-            return;
-          }
-        }
-
-        const nextOverrides = { ...cloudOverridesRef.current };
-        delete nextOverrides[instance.boxId];
-        cloudOverridesRef.current = nextOverrides;
-        const restored = cloudInventoryRef.current.map((current) =>
-          current.boxId === instance.boxId ? { ...current, state: instance.state } : current
-        );
-        cloudInventoryRef.current = restored;
-        setCloudInventory(restored);
-        try {
-          await refreshCloudInventory();
-          if (!cloudInventoryRef.current.some((current) => current.boxId === instance.boxId)) {
-            setAnnouncement(t("vm.announce.cloudDeleted", { subject }));
-          }
-        } catch (refreshError) {
-          const detail = readableError(refreshError);
-          setCloudError(`${subject}: ${t("vm.state.removing")}. ${detail}`);
-        }
-        return;
-      }
-
-      try {
-        await refreshCloudInventory();
-      } catch (refreshError) {
-        const detail = readableError(refreshError);
-        setCloudError(t(action === "delete" ? "vm.cloud.deletedRefreshError" : "vm.cloud.sleepRefreshError", { subject, detail }));
-      }
-    } catch (e) {
-      setCloudError(readableError(e));
-    } finally {
-      setCloudPending(null);
-    }
-  };
-
-  const removeVpsComputer = async (instance: VpsComputerInventoryInstance) => {
-    const request = await confirmComputerAction(vpsComputerRemovePlan(instance), confirmDanger);
-    if (!request) return;
-    setVpsRemovingName(instance.name);
-    setVpsError(null);
-    try {
-      const response = await fetch(...request);
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error ?? t("vm.vpsRemoveError"));
-      await refreshVpsInventory();
-      setAnnouncement(
-        t("vm.announce.vpsRemoved", {
-          subject: instance.orphaned
-            ? t("vm.vps.orphanUnnamed")
-            : t("vm.confirm.ownedVps", { name: instance.ownerName ?? "" }),
-        }),
-      );
-    } catch (e) {
-      setVpsError(readableError(e));
-    } finally {
-      setVpsRemovingName(null);
     }
   };
 
@@ -1593,6 +1093,132 @@ export function LocalComputerSection() {
             : (status?.problem ?? t("vm.main.notReady"));
 
   return (
+    <LocalComputerSectionView
+      announcement={announcement}
+      orgBridge={orgBridge}
+      storeState={storeState}
+      boatOn={boatOn}
+      vpsOn={vpsOn}
+      manageComputers={manageComputers}
+      status={status}
+      loading={loading}
+      pending={pending}
+      error={error}
+      policyPending={policyPending}
+      autoBusy={autoBusy}
+      c={c}
+      ready={ready}
+      existing={existing}
+      needsRecreate={needsRecreate}
+      unavailable={unavailable}
+      perBot={perBot}
+      perBotRuntimeUnsupported={perBotRuntimeUnsupported}
+      headerReady={headerReady}
+      statusText={statusText}
+      inventories={inventories}
+      onRecheck={() => {
+        setLoading(true);
+        setRefreshKey((key) => key + 1);
+        inventories.bumpInventoryRefresh();
+      }}
+      onAct={(action) => void act(action)}
+      onEnsure={() => void ensureVm()}
+      onReset={() => void resetVm()}
+      onSavePolicy={(mode, max) => void savePolicy(mode, max)}
+      onSaveIdleTimeout={saveIdleTimeout}
+    />
+  );
+}
+
+
+function LocalComputerSectionView({
+  announcement,
+  orgBridge,
+  storeState,
+  boatOn,
+  vpsOn,
+  manageComputers,
+  status,
+  loading,
+  pending,
+  error,
+  policyPending,
+  autoBusy,
+  c,
+  ready,
+  existing,
+  needsRecreate,
+  unavailable,
+  perBot,
+  perBotRuntimeUnsupported,
+  headerReady,
+  statusText,
+  inventories,
+  onRecheck,
+  onAct,
+  onEnsure,
+  onReset,
+  onSavePolicy,
+  onSaveIdleTimeout,
+}: {
+  announcement: string;
+  orgBridge: ReturnType<typeof useDesktopBridgeStatus>;
+  storeState: ReturnType<typeof useStore>["state"];
+  boatOn: boolean;
+  vpsOn: boolean;
+  manageComputers: boolean;
+  status: Status | null;
+  loading: boolean;
+  pending: Action | null;
+  error: string | null;
+  policyPending: boolean;
+  autoBusy: boolean;
+  c: Status["commands"] | undefined;
+  ready: boolean;
+  existing: boolean;
+  needsRecreate: boolean;
+  unavailable: boolean;
+  perBot: boolean;
+  perBotRuntimeUnsupported: boolean;
+  headerReady: boolean;
+  statusText: string;
+  inventories: ReturnType<typeof useComputerInventories>;
+  onRecheck: () => void;
+  onAct: (action: Action) => void;
+  onEnsure: () => void;
+  onReset: () => void;
+  onSavePolicy: (mode: Status["mode"], maxInstances: number) => void;
+  onSaveIdleTimeout: (minutes: number) => Promise<void>;
+}) {
+  const {
+    inventory,
+    inventoryMax,
+    inventoryLoading,
+    inventoryError,
+    inventoryUnavailableReason,
+    deletingBotId,
+    bumpInventoryRefresh,
+    cloudInventory,
+    cloudConfigured,
+    cloudLoading,
+    cloudError,
+    cloudUnavailableReason,
+    cloudPending,
+    bumpCloudRefresh,
+    vpsInventory,
+    vpsConfigured,
+    vpsSshAlias,
+    vpsLoading,
+    vpsError,
+    vpsUnavailableReason,
+    vpsRemovingName,
+    bumpVpsRefresh,
+    deletePerBotVm,
+    actOnCloudComputer,
+    removeVpsComputer,
+  } = inventories;
+
+  return (
     <>
       <p role="status" aria-live="polite" aria-atomic="true" className="sr-only">{announcement}</p>
       {orgBridge && <OrgComputerSettings bridge={orgBridge} localVmAllowed={storeState.config?.managedPolicy?.computers?.localVm !== false} />}
@@ -1604,7 +1230,7 @@ export function LocalComputerSection() {
         pending={cloudPending}
         error={cloudError}
         unavailableReason={cloudUnavailableReason}
-        onRefresh={() => setCloudRefreshKey((key) => key + 1)}
+        onRefresh={() => bumpCloudRefresh()}
         onSleep={(instance) => void actOnCloudComputer("sleep", instance)}
         onDelete={(instance) => void actOnCloudComputer("delete", instance)}
       />}
@@ -1617,7 +1243,7 @@ export function LocalComputerSection() {
         removingName={vpsRemovingName}
         error={vpsError}
         unavailableReason={vpsUnavailableReason}
-        onRefresh={() => setVpsRefreshKey((key) => key + 1)}
+        onRefresh={() => bumpVpsRefresh()}
         onRemove={(instance) => void removeVpsComputer(instance)}
       />}
 
@@ -1650,8 +1276,8 @@ export function LocalComputerSection() {
                   auto={status?.auto ?? null}
                   perBot={perBot}
                   busy={autoBusy}
-                  onEnsure={() => void ensureVm()}
-                  onReset={() => void resetVm()}
+                  onEnsure={onEnsure}
+                  onReset={onReset}
                 />
                 {error && <p role="alert" className="mt-2 text-[12px] leading-4 text-danger">{error}</p>}
               </>
@@ -1659,11 +1285,7 @@ export function LocalComputerSection() {
           >
             <button
               type="button"
-              onClick={() => {
-                setLoading(true);
-                setRefreshKey((key) => key + 1);
-                setInventoryRefreshKey((key) => key + 1);
-              }}
+              onClick={onRecheck}
               disabled={loading || pending !== null}
               className="ui-button gap-1.5 disabled:opacity-40"
             >
@@ -1699,7 +1321,7 @@ export function LocalComputerSection() {
               key={mode}
               type="button"
               disabled={!status || policyPending}
-              onClick={() => void savePolicy(mode, status?.max_instances ?? 2)}
+              onClick={() => onSavePolicy(mode, status?.max_instances ?? 2)}
               className={cn(
                 "flex-1 px-3 py-2 text-[13px] disabled:opacity-50",
                 index > 0 && "border-l border-hairline/40",
@@ -1721,7 +1343,7 @@ export function LocalComputerSection() {
               ariaLabel={t("vm.isolation.maxAria")}
               value={String(status?.max_instances ?? 2)}
               disabled={!status || policyPending}
-              onChange={(next) => void savePolicy(status?.mode ?? "shared", Number(next))}
+              onChange={(next) => onSavePolicy(status?.mode ?? "shared", Number(next))}
               options={[1, 2, 3, 4, 5, 6, 7, 8].map((value) => ({ value: String(value), label: String(value) }))}
             />
           </div>
@@ -1729,7 +1351,7 @@ export function LocalComputerSection() {
         <LocalVmIdleTimeoutSetting
           minutes={status ? Math.round(status.idle_timeout_ms / 60_000) : DEFAULT_LOCAL_VM_IDLE_TIMEOUT_MINUTES}
           disabled={!status || policyPending}
-          onSave={saveIdleTimeout}
+          onSave={onSaveIdleTimeout}
         />
         {policyPending && <div className="mt-2 flex items-center gap-1.5 text-[12px] text-ink-secondary"><Loader2 size={12} className="animate-spin" /> {t("vm.saving")}</div>}
       </Card>
@@ -1778,7 +1400,7 @@ export function LocalComputerSection() {
 
           <Step n={3} title={t("vm.setup.step3")} done={Boolean(status?.image)}>
             {status?.daemonUp && (
-              <ActionButton action="pull" pending={pending} onClick={() => void act("pull")}>{t("vm.setup.prepare")}</ActionButton>
+              <ActionButton action="pull" pending={pending} onClick={() => onAct("pull")}>{t("vm.setup.prepare")}</ActionButton>
             )}
             {c?.pull && <details className="text-[12px] text-ink-secondary"><summary className="cursor-pointer">{t("vm.setup.showPull")}</summary><div className="mt-2"><CommandLine command={c.pull} /></div></details>}
           </Step>
@@ -1807,7 +1429,7 @@ export function LocalComputerSection() {
                   <span>{status?.problem}</span>
                 </div>
                 {status?.image ? (
-                  <ActionButton action="recreate" pending={pending} onClick={() => void act("recreate")} danger>
+                  <ActionButton action="recreate" pending={pending} onClick={() => onAct("recreate")} danger>
                     <RotateCcw size={13} /> {t("vm.setup.recreate")}
                   </ActionButton>
                 ) : (
@@ -1817,13 +1439,13 @@ export function LocalComputerSection() {
             ) : status?.container === "stopped" ? (
               <>
                 <p className="text-[13px] text-ink-secondary">{t(status.stop_reason === "idle" ? "vm.stopped.idle" : "vm.stopped.detail")}</p>
-                <ActionButton action="start" pending={pending} onClick={() => void act("start")}>{t("vm.setup.start")}</ActionButton>
+                <ActionButton action="start" pending={pending} onClick={() => onAct("start")}>{t("vm.setup.start")}</ActionButton>
               </>
             ) : status?.container === "running" ? (
               <div className="flex items-center gap-2 text-[13px] text-ink-secondary"><Loader2 size={13} className="animate-spin" /> {t("vm.setup.waiting")}</div>
             ) : status?.image ? (
               <>
-                <ActionButton action="run" pending={pending} onClick={() => void act("run")}>{t("vm.setup.start")}</ActionButton>
+                <ActionButton action="run" pending={pending} onClick={() => onAct("run")}>{t("vm.setup.start")}</ActionButton>
                 <p className="text-[13px] leading-relaxed text-ink-secondary">{t("vm.setup.idleHint")}</p>
               </>
             ) : null}
@@ -1840,7 +1462,7 @@ export function LocalComputerSection() {
           deletingBotId={deletingBotId}
           error={inventoryError}
           unavailableReason={inventoryUnavailableReason}
-          onRefresh={() => setInventoryRefreshKey((key) => key + 1)}
+          onRefresh={() => bumpInventoryRefresh()}
           onDelete={(instance) => void deletePerBotVm(instance)}
         />
       )}
@@ -1867,11 +1489,11 @@ export function LocalComputerSection() {
         {existing && (
           <div className="flex flex-wrap gap-2">
             {status?.container === "running" && (
-              <ActionButton action="stop" pending={pending} onClick={() => void act("stop")}>
+              <ActionButton action="stop" pending={pending} onClick={() => onAct("stop")}>
                 <Square size={12} /> {t("vm.safety.stop")}
               </ActionButton>
             )}
-            <ActionButton action="remove" pending={pending} onClick={() => void act("remove")} danger>
+            <ActionButton action="remove" pending={pending} onClick={() => onAct("remove")} danger>
               <Trash2 size={12} /> {perBot ? t("vm.safety.deleteLegacy") : t("vm.safety.deleteVm")}
             </ActionButton>
           </div>

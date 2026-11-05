@@ -30,6 +30,11 @@ import { MarkdownEditor } from "./markdown/MarkdownEditor";
 import type { TeamComputer } from "../../shared/team-computer";
 import { useMacInsetChrome } from "./DesktopCapabilities";
 import { readableError } from "@/lib/plain-error";
+import { usePerspicaxOrg } from "@/lib/perspicax-org";
+import { EMPTY_PERSONAL_SECTIONS, personalSectionNames, usePersonalSections, withPersonalSections } from "@/lib/personal-sections";
+import { orderSectionTree, useSectionParents } from "@/lib/section-tree";
+import { deleteTeam, moveBotToTeam, type TeamWriteContext } from "@/lib/team-writes";
+import { viewerActorId } from "@/lib/viewer";
 
 /** One hand-off between two bots. It opens the thread doing the work, the
  * room it ran in, or else the bot it went to, as its own row would. */
@@ -264,13 +269,33 @@ export function TeamMapPage() {
       .catch(() => { if (alive) setCanManageTeams(false); });
     return () => { alive = false; };
   }, [remoteClient]);
-  const manageTeams = canManageTeams === true;
-  const bots = useMemo(() => state.bots.filter((bot) => !bot.hidden), [state.bots]);
+  // #2045: on an organization server the teams are the person's own sidebar
+  // sections. They create, fill, nest and delete them without any admin
+  // right; the server-wide team computers stay with the admins.
+  const orgMode = usePerspicaxOrg() !== null;
+  const personalStored = usePersonalSections();
+  const personal = orgMode ? personalStored ?? EMPTY_PERSONAL_SECTIONS : null;
+  const sectionParents = useSectionParents();
+  const viewerId = viewerActorId(state.config);
+  const adminTeams = canManageTeams === true;
+  const manageTeams = orgMode ? !remoteClient : adminTeams;
+  const laidOut = useMemo(() => personal ? withPersonalSections(state.bots, state.groups, personal) : { bots: state.bots, groups: state.groups }, [personal, state.bots, state.groups]);
+  const bots = useMemo(() => laidOut.bots.filter((bot) => !bot.hidden), [laidOut.bots]);
   const sections = useMemo(() => {
-    const names = [...new Set([...(state.sections ?? []), ...state.groups.flatMap((group) => group.section ? [group.section] : [])])];
-    const order = (key: string) => key === "" ? -1 : names.includes(key) ? names.indexOf(key) : names.length;
-    return buildTeamMapSections(bots, names).sort((a, b) => order(a.key) - order(b.key));
-  }, [bots, state.sections, state.groups]);
+    const names = personal
+      ? personalSectionNames(personal)
+      : [...new Set([...(state.sections ?? []), ...state.groups.flatMap((group) => group.section ? [group.section] : [])])];
+    const rows = orderSectionTree(names, sectionParents);
+    const place = new Map(rows.map((row, index) => [row.name, { index, row }]));
+    const order = (key: string) => key === "" ? -1 : place.get(key)?.index ?? rows.length;
+    return buildTeamMapSections(bots, names, { viewerId: orgMode ? viewerId : undefined })
+      .map((section) => {
+        const row = place.get(section.key)?.row;
+        return row && row.depth > 0 ? { ...section, depth: row.depth, parent: row.parent } : section;
+      })
+      .sort((a, b) => order(a.key) - order(b.key));
+  }, [bots, personal, sectionParents, state.sections, state.groups, viewerId, orgMode]);
+  const writeContext: TeamWriteContext = { orgMode, dispatch, viewerId, bots: state.bots, serverSections: state.sections ?? [] };
   const edges = useMemo(() => buildTeamMapEdges(bots, snapshot), [bots, snapshot]);
 
   const refresh = useCallback(async () => {
@@ -293,11 +318,8 @@ export function TeamMapPage() {
   const moveBot = async (bot: Bot, destination: string) => {
     setError(null);
     try {
-      const result: { sections: string[]; bots: Bot[] } = await api("/api/sidebar-sections", {
-        method: "POST", body: JSON.stringify({ name: destination, botIds: [bot.id] }),
-      });
-      dispatch({ type: "sections", sections: result.sections });
-      for (const patched of result.bots) dispatch({ type: "botPatched", bot: patched });
+      const refused = await moveBotToTeam(writeContext, bot.id, destination);
+      if (refused) throw new Error(refused);
     } catch (cause) {
       setError(teamMapMutationError(cause));
       throw cause;
@@ -326,7 +348,7 @@ export function TeamMapPage() {
           <p className="mt-1 text-[12px] text-ink-secondary">{t("canvas.description")}</p>
         </div>
         {!remoteClient && <div style={controlsShiftStyle} className="flex items-center gap-2">
-          {manageTeams && <button onClick={() => setComputersOpen((value) => !value)} aria-label={t("settings.group.computers")} aria-expanded={computersOpen} className="flex size-9 items-center justify-center rounded-lg border border-hairline/50 bg-panel text-ink-secondary hover:bg-raised hover:text-ink"><Monitor size={16} /></button>}
+          {adminTeams && <button onClick={() => setComputersOpen((value) => !value)} aria-label={t("settings.group.computers")} aria-expanded={computersOpen} className="flex size-9 items-center justify-center rounded-lg border border-hairline/50 bg-panel text-ink-secondary hover:bg-raised hover:text-ink"><Monitor size={16} /></button>}
           {manageTeams && <details className="relative" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) event.currentTarget.removeAttribute("open"); }} onKeyDown={(event) => {
             if (event.key === "Escape") { event.currentTarget.removeAttribute("open"); event.currentTarget.querySelector("summary")?.focus(); }
           }}>
@@ -335,15 +357,15 @@ export function TeamMapPage() {
               const details = event.currentTarget.closest("details"); details?.querySelector("summary")?.focus(); details?.removeAttribute("open");
             }}>
               <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => setTeamEditor({})}><Users size={16} />{t("team.create")}</button>
-              {boatComputerEnabled(state.config) && <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => { setComputersOpen(true); setCreateComputerRequest((value) => value + 1); }}><Box size={16} />{t("teamMap.boatComputer")}</button>}
+              {adminTeams && boatComputerEnabled(state.config) && <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => { setComputersOpen(true); setCreateComputerRequest((value) => value + 1); }}><Box size={16} />{t("teamMap.boatComputer")}</button>}
               {/* An OMB Cloud home has no Local VM (shared/cloud-home.ts). */}
-              {placeOffered("vm", state.config) && <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => dispatch({ type: "toggleAppSettings", section: "computer", open: true })}><Monitor size={16} />{t("teamMap.localVm")}</button>}
+              {adminTeams && placeOffered("vm", state.config) && <button className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] leading-[18px] text-ink hover:bg-hover" onClick={() => dispatch({ type: "toggleAppSettings", section: "computer", open: true })}><Monitor size={16} />{t("teamMap.localVm")}</button>}
             </div>
           </details>}
         </div>}
       </header>
       <div className="content-card-body flex min-h-0 flex-1 flex-col">
-      {canManageTeams === false && !remoteClient && <p data-team-map-admin-only className="shrink-0 border-b border-hairline/40 bg-panel px-6 py-2 text-[12px] text-ink-secondary">{t("team.adminOnly")}</p>}
+      {canManageTeams === false && !orgMode && !remoteClient && <p data-team-map-admin-only className="shrink-0 border-b border-hairline/40 bg-panel px-6 py-2 text-[12px] text-ink-secondary">{t("team.adminOnly")}</p>}
       {(error || refreshError) && <div role="alert" className="flex shrink-0 items-center justify-between gap-3 border-b border-danger/20 bg-danger/10 px-6 py-2 text-[12px] text-danger">
         {error || refreshError}
         <button aria-label={t("common.close")} className="rounded p-1 hover:bg-danger/10" onClick={() => { setError(null); setRefreshError(null); }}><X size={14} /></button>
@@ -354,13 +376,13 @@ export function TeamMapPage() {
         onComputer={(bot) => dispatch({ type: "toggleSettings", botId: bot.id, section: "access", open: true })}
         teamComputers={Object.fromEntries(computers.filter((computer) => computer.section !== null).map((computer) => [computer.section!, { name: computer.name, state: computer.state }]))}
         onTeamComputer={() => setComputersOpen(true)}
-        onComputerDrop={(id, section) => { if (manageTeams) { setComputersOpen(true); setComputerDrop({ id, section }); } }}
+        onComputerDrop={(id, section) => { if (adminTeams) { setComputersOpen(true); setComputerDrop({ id, section }); } }}
         onInstructions={(section, label) => setContextEditor({ section, label })}
         onMemory={(section, label) => setMemoryEditor({ section, label })}
         onEditTeam={(section, rename) => setTeamEditor({ section, rename })}
         onDeleteTeam={setDeletingTeam}
-        isEmpty={(key) => ![...state.bots, ...state.groups].some((record) => record.section?.trim() === key)} />
-      {manageTeams && <CanvasComputers open={computersOpen} createRequest={createComputerRequest} drop={computerDrop} sections={sections}
+        isEmpty={(key) => ![...laidOut.bots, ...laidOut.groups].some((record) => record.section?.trim() === key)} />
+      {adminTeams && <CanvasComputers open={computersOpen} createRequest={createComputerRequest} drop={computerDrop} sections={sections}
         onClose={() => setComputersOpen(false)} onDropHandled={clearComputerDrop} onChange={setComputers} />}
       </div>
       {edges.length > 0 && <details className="shrink-0 border-t border-hairline/40 bg-panel px-6 py-3">
@@ -391,9 +413,7 @@ export function TeamMapPage() {
           const name = deletingTeam;
           setDeletingTeam(null);
           if (!name) return;
-          void api(`/api/sidebar-sections?section=${encodeURIComponent(name)}`, { method: "DELETE" })
-            .then(({ sections: names }) => dispatch({ type: "sections", sections: names }))
-            .catch((cause) => setError(teamMapMutationError(cause)));
+          void deleteTeam(writeContext, name).catch((cause) => setError(teamMapMutationError(cause)));
         }} />
     </main>
   );

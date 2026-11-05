@@ -25,7 +25,7 @@ import { showBotZipImport } from "@/lib/bot-zip";
 import { canEditBotField } from "@/lib/bot-capabilities";
 import { memberNewBotSettings } from "@/lib/member-new-bot-settings";
 import { botsReadOnlyText } from "@/lib/permissions";
-import { viewerBotsReadOnly, viewerCanCreateBots } from "@/lib/viewer";
+import { viewerActorId, viewerBotsReadOnly, viewerCanCreateBots } from "@/lib/viewer";
 import {
   createDesignerBot,
   createWizardBot,
@@ -93,8 +93,8 @@ export function BotWizard() {
   const bot = botId ? state.bots.find((candidate) => candidate.id === botId) ?? null : null;
   const guide = useMemo(() => {
     if (draft?.guidedBotId) return state.bots.find((candidate) => candidate.id === draft.guidedBotId) ?? null;
-    return guideBot(state.bots, botId);
-  }, [draft?.guidedBotId, state.bots, botId]);
+    return guideBot(state.bots, botId, viewerActorId(state.config));
+  }, [draft?.guidedBotId, state.bots, botId, state.config]);
   const readOnly = viewerBotsReadOnly(state.config) || !viewerCanCreateBots(state.config);
   const canImport = showBotZipImport(state.config);
 

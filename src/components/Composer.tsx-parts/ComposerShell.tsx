@@ -262,6 +262,7 @@ export function ComposerShell({
             sendBlock={sendBlock}
             busy={busy}
             canSteer={canSteer}
+            interruptTurn={interruptTurn}
             sendLabelFor={sendLabelFor}
             sendTitleFor={sendTitleFor}
             nudgePeer={nudgePeer}

@@ -184,6 +184,14 @@ export function SidebarSectionList({
                 ? (team.key ? sectionedRooms.filter((group) => group.section === team.key) : unsectionedRooms)
                 : [];
         const sectionBotItems = (team?.members ?? []).filter((bot) => !inTopGrid(bot));
+        // A sub-team (#2045) sits under its parent, one step in, and folds
+        // away with it.
+        let ancestor = team?.parent;
+        for (let hops = 0; ancestor && hops < 8; hops += 1) {
+          if (sectionCollapsed(userSectionId(ancestor))) return null;
+          ancestor = teamMap.find((item) => item.key === ancestor)?.parent;
+        }
+        const depth = density !== "icons" ? team?.depth ?? 0 : 0;
         const collapsed = sectionCollapsed(id);
         const queued = collapsed ? [...sectionChiefItems, ...sectionBotItems].flatMap((bot) =>
           sidebarBotActivityTasks(bot, state.pendingQueued).filter((task) => task.queued).map((task) => `${bot.name}: ${task.title}`)) : [];
@@ -197,6 +205,8 @@ export function SidebarSectionList({
           <div
             key={id}
             data-sidebar-section-id={id}
+            data-sub-team-of={team?.parent}
+            style={depth ? { paddingLeft: depth * 12 } : undefined}
             onDragOver={(event) => { if (!acceptItemDrag(event, id)) updateSectionDropTarget(event, id); }}
             onDragLeave={(event) => { if (itemDropId === id && !event.currentTarget.contains(event.relatedTarget as Node | null)) setItemDropId(null); }}
             onDrop={(event) => { if (!dropItem(event, id, team?.key ?? "")) dropSection(event); }}

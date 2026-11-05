@@ -15,14 +15,15 @@ import SwiftUI
 /// tab per question for a set. One question with one pick answers in one
 /// tap; a set or a choose-several question has a quiet send.
 /// The answer text is built by `AskQuestionAnswer.format`, so an answer given
-/// here is byte-for-byte the one the Mac would have sent.
+/// here is byte-for-byte the one the Mac would have sent. Page-target cards
+/// (#2048) send the bare option id instead, and may PATCH the bot default.
 struct QuestionCardView: View {
     @Environment(\.themePalette) var themePalette
     let chat: Chat
     let message: Message
     @EnvironmentObject private var session: Session
 
-    /// Per question: the option labels ticked, and the free-text reply.
+    /// Per question: the option keys ticked (id ?? label), and the free-text reply.
     @State private var picked: [Int: Set<String>] = [:]
     @State private var custom: [Int: String] = [:]
     @State private var other: Set<Int> = []
@@ -31,16 +32,34 @@ struct QuestionCardView: View {
     /// The harness settles the card, but only after a round trip. Holding the
     /// sent answer closes the window where the buttons are still live.
     @State private var sent: String?
+    /// #2048: remember this publish target as the bot's default.
+    @State private var rememberTarget = false
     @FocusState private var otherFocused: Bool
     /// iPad desktop shell: QuestionCard.tsx's card (card fill, accent ring
     /// at 40 %, radius 16, 16 in, at most 840 wide).
     @Environment(\.desktopChatText) private var desktop
 
     private var card: OptionCard? { message.card }
-    private var questions: [AskQuestion] { card?.questions ?? [] }
+    private var questions: [AskQuestion] {
+        let raw = card?.questions ?? []
+        guard let targets = card?.pageTargetChoice?.targets, !targets.isEmpty else { return raw }
+        return PageTargetCopy.localizeQuestions(raw, targets: targets)
+    }
 
     private var index: Int { min(active, max(questions.count - 1, 0)) }
     private var current: AskQuestion? { questions.indices.contains(index) ? questions[index] : nil }
+
+    /// Bot id when this chat is a bot (page-target default PATCH).
+    private var botId: String? {
+        if case .bot = chat { return chat.id }
+        return nil
+    }
+
+    /// Radiogroup identity: prefer stable id when the option carries one.
+    private func optionKey(_ option: AskQuestionOption) -> String {
+        let id = option.id?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return id.isEmpty ? option.label : id
+    }
 
     /// An open "Other" field with nothing in it is not an answer.
     private func answers(for position: Int) -> [String] {
@@ -99,12 +118,18 @@ struct QuestionCardView: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(Array(current.options.enumerated()), id: \.offset) { position, option in
+                    let key = optionKey(option)
+                    let rowDisabled = answering || option.disabled == true
                     QuestionSheetRow(
                         colors: colors, index: position, label: option.label, detail: option.detail,
+                        icon: option.icon,
                         multi: current.allowsMultiple,
-                        on: picked[index]?.contains(option.label) == true,
-                        disabled: answering
-                    ) { choose(option.label, in: current, oneTap: oneTap) }
+                        on: picked[index]?.contains(key) == true,
+                        disabled: rowDisabled
+                    ) {
+                        guard option.disabled != true else { return }
+                        choose(key, in: current, oneTap: oneTap)
+                    }
                 }
                 if !current.options.isEmpty {
                     QuestionSheetRow(
@@ -112,6 +137,27 @@ struct QuestionCardView: View {
                         multi: current.allowsMultiple, on: other.contains(index), disabled: answering
                     ) { toggleOther(current) }
                 }
+            }
+            if card.pageTargetChoice != nil {
+                Button {
+                    Haptics.selection()
+                    rememberTarget.toggle()
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: rememberTarget ? "checkmark.square.fill" : "square")
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundStyle(colors.inkSecondary)
+                        Text(PageTargetCopy.alwaysUse)
+                            .font(colors.font(12.5))
+                            .foregroundStyle(colors.inkSecondary)
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(answering)
+                .padding(.top, 4)
+                .accessibilityIdentifier("page-target-remember")
             }
             if current.options.isEmpty || other.contains(index) {
                 QuestionSheetField(
@@ -168,10 +214,17 @@ struct QuestionCardView: View {
         let skipped = QuestionIgnore.isSkip(answer)
         let closed = skipped || (answer == nil && card.answered != nil && card.answered != "answer")
         let readable = skipped ? nil : answer
-        let read = readable.map { AskQuestionAnswer.byQuestion($0, questions: questions) } ?? [:]
+        // Page-target answers are a bare id; match by id ?? label (#2048).
+        let byQuestion: [String: String]
+        if card.pageTargetChoice != nil, let readable, questions.count == 1 {
+            byQuestion = [questions[0].question: AskQuestionAnswer.withoutPreamble(readable)]
+        } else {
+            byQuestion = readable.map { AskQuestionAnswer.byQuestion($0, questions: questions) } ?? [:]
+        }
         let single = questions.count == 1
         let parts = questions.map { question in
-            AskQuestionAnswer.picks(in: read[question.question] ?? "", labels: question.options.map(\.label))
+            let keys = question.options.map(optionKey)
+            return AskQuestionAnswer.picks(in: byQuestion[question.question] ?? "", labels: keys)
         }
         let unreadable = answer != nil && parts.allSatisfy { $0.picked.isEmpty && $0.rest.isEmpty }
         return QuestionSheet(colors: colors, title: single ? questions[0].question : named) {
@@ -185,9 +238,14 @@ struct QuestionCardView: View {
                     }
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(Array(question.options.enumerated()), id: \.offset) { row, option in
+                            let key = optionKey(option)
                             QuestionSheetRow(
                                 colors: colors, index: row, label: option.label, detail: option.detail,
-                                multi: question.allowsMultiple, on: parts[position].picked.contains(option.label), settled: true
+                                icon: option.icon,
+                                multi: question.allowsMultiple,
+                                on: parts[position].picked.contains(key),
+                                settled: true,
+                                disabled: option.disabled == true
                             ) {}
                         }
                     }
@@ -212,17 +270,17 @@ struct QuestionCardView: View {
         Binding(get: { custom[position] ?? "" }, set: { custom[position] = $0 })
     }
 
-    private func choose(_ label: String, in question: AskQuestion, oneTap: Bool = false) {
+    private func choose(_ key: String, in question: AskQuestion, oneTap: Bool = false) {
         guard !settled else { return }
         var chosen = picked[index] ?? []
         if question.allowsMultiple {
-            if chosen.contains(label) { chosen.remove(label) } else { chosen.insert(label) }
+            if chosen.contains(key) { chosen.remove(key) } else { chosen.insert(key) }
             picked[index] = chosen
             return
         }
         // Single-select is a radio group: picking replaces, and picking an
         // option means the free-text answer was not the one they wanted.
-        picked[index] = [label]
+        picked[index] = [key]
         other.remove(index)
         custom[index] = nil
         otherFocused = false
@@ -265,15 +323,29 @@ struct QuestionCardView: View {
 
     private func send() {
         guard !settled, complete, let card, let requestId = card.requestId else { return }
-        let answer = AskQuestionAnswer.format(
-            questions: questions,
-            answers: questions.indices.map(answers(for:))
-        )
+        let perQuestion = questions.indices.map(answers(for:))
+        // #2048: the bot expects the bare target id as the next message.
+        let answer: String
+        if card.pageTargetChoice != nil {
+            answer = (perQuestion.first?.first ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            answer = AskQuestionAnswer.format(questions: questions, answers: perQuestion)
+        }
         guard !answer.isEmpty else { return }
         sent = answer
         answering = true
         otherFocused = false
+        let rememberId = rememberTarget && card.pageTargetChoice != nil ? answer : ""
+        let targetBotId = botId
         Task {
+            // Mirror desktop: PATCH the remembered default, then answer.
+            if !rememberId.isEmpty, let targetBotId {
+                if let bot = session.state.bot(targetBotId) {
+                    _ = await sendPanelPatch(BotPanelPatch(pageTargetDefault: rememberId), bot: bot, session: session)
+                } else if let client = session.profileClient {
+                    _ = try? await client.patchBotSettings(botId: targetBotId, patch: BotPanelPatch(pageTargetDefault: rememberId))
+                }
+            }
             // A question only ever answers with text; the harness rejects an
             // allow/deny on one, so this never takes the permission path.
             await session.answer(

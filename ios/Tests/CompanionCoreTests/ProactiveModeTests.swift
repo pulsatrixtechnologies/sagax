@@ -45,4 +45,37 @@ final class ProactiveModeTests: XCTestCase {
         let data = try JSONEncoder().encode(BotPanelPatch(proactiveMode: "proactive"))
         XCTAssertEqual(try JSONSerialization.jsonObject(with: data) as? [String: String], ["proactiveMode": "proactive"])
     }
+
+    /// #2048: publish-target picker ids stay stable; labels come from the catalog.
+    func testPageTargetDefaultChoiceIds() {
+        XCTAssertEqual(PageTargetDefaultChoice.all.map(\.id), ["", "sagax_page", "sagax_artifact", "claude_artifact"])
+        XCTAssertFalse(PageTargetDefaultChoice.label(for: "sagax_page").isEmpty)
+        XCTAssertFalse(PageTargetDefaultChoice.summary(for: nil).isEmpty)
+        XCTAssertFalse(PageTargetDefaultChoice.summary(for: "sagax_artifact").isEmpty)
+    }
+
+    /// #2048: card copy remaps built-in target ids the way desktop does.
+    func testPageTargetCopyLocalizesBuiltInQuestions() {
+        let targets = [
+            PageTargetChoiceTarget(id: "sagax_page", tool: "propose_page", name: "Sagax page", icon: "file-text"),
+            PageTargetChoiceTarget(id: "sagax_artifact", tool: "save_artifact", name: "Sagax artifact", icon: "layout-dashboard"),
+        ]
+        let questions = [
+            AskQuestion(
+                question: "Pick the surface for this page or artifact.",
+                options: [
+                    AskQuestionOption(label: "Sagax page", detail: "Shareable", id: "sagax_page", icon: "file-text"),
+                    AskQuestionOption(label: "Sagax artifact", detail: "Private", id: "sagax_artifact"),
+                ]
+            ),
+        ]
+        let localized = PageTargetCopy.localizeQuestions(questions, targets: targets)
+        XCTAssertEqual(localized.count, 1)
+        XCTAssertEqual(localized[0].question, PageTargetCopy.question)
+        XCTAssertEqual(localized[0].options.map(\.id), ["sagax_page", "sagax_artifact"])
+        XCTAssertEqual(localized[0].options[0].label, PageTargetCopy.name(id: "sagax_page", fallback: "x"))
+        XCTAssertEqual(localized[0].options[1].detail, PageTargetCopy.detail(id: "sagax_artifact", fallback: "x"))
+        XCTAssertEqual(localized[0].options[1].icon, "layout-dashboard")
+        XCTAssertFalse(PageTargetCopy.alwaysUse.isEmpty)
+    }
 }

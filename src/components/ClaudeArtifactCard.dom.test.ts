@@ -115,7 +115,9 @@ describe("ClaudeArtifactCard", () => {
     expect(host.textContent).toContain("engine@example.com");
     const copy = [...host.querySelectorAll("button")].find((b) => b.textContent?.includes("publish a copy"))!;
     act(() => copy.click());
-    expect(send).toHaveBeenCalledWith(`Publish a copy of ${URL_A} from your account with claude_artifact`);
+    expect(send).toHaveBeenCalledWith(
+      `Publish a copy of ${URL_A} from your account with claude_artifact. You cannot read that page from another claude.ai account: publish from an HTML file in your workspace (or a paste), then give the new URL so references can be updated.`,
+    );
     expect(host.textContent).toContain("Reconnect the account");
   });
 

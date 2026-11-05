@@ -34,6 +34,13 @@ export const MAX_CUSTOM_ANSWER = 2000;
 export interface AskQuestionOption {
   label: string;
   description?: string;
+  /** Stable id the answer carries when it differs from the visible label
+   * (page-target choice #2048: sagax_page, …). Absent: the label is the answer. */
+  id?: string;
+  /** Optional icon key the sheet knows (lucide name). */
+  icon?: string;
+  /** Greyed row the person cannot pick (unavailable target with a reason). */
+  disabled?: boolean;
 }
 
 export interface AskQuestion {
@@ -108,7 +115,16 @@ function parseOption(value: unknown): AskQuestionOption | null {
   const label = text(value.label, MAX_LABEL);
   if (!label) return null;
   const description = text(value.description, MAX_DESCRIPTION);
-  return description ? { label, description } : { label };
+  const id = text(value.id, MAX_LABEL);
+  const icon = text(value.icon, 40);
+  const disabled = value.disabled === true ? true : undefined;
+  return {
+    label,
+    ...(description ? { description } : {}),
+    ...(id ? { id } : {}),
+    ...(icon ? { icon } : {}),
+    ...(disabled ? { disabled } : {}),
+  };
 }
 
 function parseQuestion(value: unknown): AskQuestion | null {

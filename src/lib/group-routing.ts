@@ -1,5 +1,6 @@
 import type { Bot, ConfigStatus, Group, GroupDefaultResponder } from "@/state/store";
 import { isMentionBoundary, isMentionNameContinuation } from "../../shared/mention-boundary";
+import { isViewersPrimaryBot } from "./primary-bot";
 import { t } from "./i18n";
 
 /** Whether an Auto room asks the decision model right now: the master switch
@@ -112,13 +113,16 @@ export function roomRespondersForComposer<T extends { id: string; name: string; 
 
 /** Goal mode always starts with one coordinator: an explicit mention, the
  * configured lead, an in-room Chief, or the first active member. Keep this
- * aligned with the server's selectGroupGoalCoordinator path. */
+ * aligned with the server's selectGroupGoalCoordinator path.
+ * #2045: when viewerId is set, the fallback Chief is the viewer's own
+ * Primary Bot only. */
 export function goalCoordinatorForComposer<
-  T extends { id: string; name: string; hidden?: boolean; chiefOfStaff?: boolean },
+  T extends { id: string; name: string; hidden?: boolean; chiefOfStaff?: boolean; ownerUserId?: string },
 >(
   text: string,
   members: T[],
   group: Pick<Group, "defaultResponder">,
+  viewerId?: string,
 ): T | null {
   const available = members.filter((member) => !member.hidden);
   const explicitlyMentioned = roomRespondersForComposer(
@@ -134,7 +138,32 @@ export function goalCoordinatorForComposer<
     const configured = available.find((member) => member.id === lead);
     if (configured) return configured;
   }
-  return available.find((member) => member.chiefOfStaff) ?? available[0] ?? null;
+  const primary = viewerId === undefined
+    ? available.find((member) => member.chiefOfStaff)
+    : available.find((member) => isViewersPrimaryBot(member, viewerId));
+  return primary ?? available[0] ?? null;
+}
+
+/** #2045: the room lead for a viewer: preferred id, configured lead, then
+ * the viewer's own Primary Bot, then the first member. */
+export function preferredRoomLead<
+  T extends { id: string; hidden?: boolean; chiefOfStaff?: boolean; ownerUserId?: string },
+>(
+  group: Pick<Group, "defaultResponder" | "memberIds"> | undefined,
+  bots: readonly T[],
+  options: { preferredId?: string; viewerId?: string } = {},
+): T | undefined {
+  const members = (group?.memberIds ?? []).flatMap((id) => {
+    const bot = bots.find((candidate) => candidate.id === id);
+    return bot && !bot.hidden ? [bot] : [];
+  });
+  const explicitLeadId = group?.defaultResponder.kind === "member" ? group.defaultResponder.botId : undefined;
+  return members.find((bot) => bot.id === options.preferredId)
+    ?? members.find((bot) => bot.id === explicitLeadId)
+    ?? (options.viewerId === undefined
+      ? members.find((bot) => bot.chiefOfStaff)
+      : members.find((bot) => isViewersPrimaryBot(bot, options.viewerId!)))
+    ?? members[0];
 }
 
 function mentionedMembers<T extends { name: string; hidden?: boolean }>(text: string, peers: T[]): T[] {

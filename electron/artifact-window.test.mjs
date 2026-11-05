@@ -5,6 +5,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  applyArtifactWindowOnTop,
   ARTIFACT_WINDOW_MIN,
   ARTIFACT_WINDOW_SIZE,
   artifactWindowNavigationAllowed,
@@ -31,6 +32,7 @@ function fakeElectron() {
       this.options = options;
       this.bounds = { x: options.x ?? 0, y: options.y ?? 0, width: options.width, height: options.height };
       this.destroyed = false;
+      this.onTop = options.alwaysOnTop === true;
       this.events = new Map();
       this.calls = [];
       const contentHandlers = new Map();
@@ -51,17 +53,28 @@ function fakeElectron() {
       this.fire("closed");
     }
     setTitle(title) { this.calls.push(["setTitle", title]); }
+    setAlwaysOnTop(flag, level) { this.onTop = flag === true; this.calls.push(["setAlwaysOnTop", flag, level]); }
+    isAlwaysOnTop() { return this.onTop === true; }
     isMinimized() { return false; }
     isMaximized() { return false; }
-    isFullScreen() { return false; }
+    isFullScreen() { return this.fullscreen === true; }
+    setFullScreen(on) { this.fullscreen = on === true; this.calls.push(["setFullScreen", on === true]); }
     maximize() { this.calls.push(["maximize"]); }
+    getBounds() { return { ...this.bounds }; }
     getNormalBounds() { return { ...this.bounds }; }
-    setBounds(bounds) { this.bounds = { ...bounds }; this.fire("move"); }
+    setBounds(bounds) { this.bounds = { ...bounds }; this.fire("resize"); this.fire("move"); }
     show() { this.calls.push(["show"]); }
     showInactive() { this.calls.push(["showInactive"]); }
     focus() { this.calls.push(["focus"]); }
     on(name, fn) { this.events.set(name, [...(this.events.get(name) ?? []), fn]); }
-    once(name, fn) { this.on(name, fn); }
+    once(name, fn) {
+      const wrap = (...args) => {
+        const list = this.events.get(name) ?? [];
+        this.events.set(name, list.filter((entry) => entry !== wrap));
+        fn(...args);
+      };
+      this.on(name, wrap);
+    }
     fire(name, ...args) { (this.events.get(name) ?? []).forEach((fn) => fn(...args)); }
   }
   const ipcMain = {
@@ -82,13 +95,19 @@ function memoryStore(initial = null) {
   return { read: () => value, write: vi.fn((next) => { value = JSON.parse(JSON.stringify(next)); }), get: () => value };
 }
 
-function setup({ displays = [PRIMARY, SECOND], store = memoryStore(), trusted = true, session, openExternal } = {}) {
+function setup({ displays = [PRIMARY, SECOND], store = memoryStore(), trusted = true, session, openExternal, preload = "/app/electron/artifact-window-preload.cjs" } = {}) {
   const fake = fakeElectron();
   const onChange = vi.fn();
   const screen = {
     getPrimaryDisplay: () => displays[0],
     getAllDisplays: () => displays,
-    getDisplayMatching: () => displays[0],
+    getDisplayMatching: (bounds) => {
+      const point = { x: (bounds?.x ?? 0) + ((bounds?.width ?? 0) / 2), y: (bounds?.y ?? 0) + ((bounds?.height ?? 0) / 2) };
+      return displays.find((display) => {
+        const area = display.workArea;
+        return point.x >= area.x && point.x < area.x + area.width && point.y >= area.y && point.y < area.y + area.height;
+      }) ?? displays[0];
+    },
   };
   const controller = createArtifactWindows({
     BrowserWindow: fake.BrowserWindow,
@@ -98,6 +117,7 @@ function setup({ displays = [PRIMARY, SECOND], store = memoryStore(), trusted = 
     screen,
     boundsStore: store,
     onChange,
+    preload,
     ...(session ? { session } : {}),
     ...(openExternal ? { openExternal } : {}),
   });
@@ -107,12 +127,13 @@ function setup({ displays = [PRIMARY, SECOND], store = memoryStore(), trusted = 
 }
 
 describe("artifact window requests", () => {
-  it("keeps the ids, a plain title, a size, a screen point and the focus choice", () => {
-    expect(sanitizeArtifactWindowRequest({ botId: "bot-a", artifactId: "art_1", title: "Live\ntable", x: 1500.4, y: 200, focus: false })).toEqual({
-      botId: "bot-a", artifactId: "art_1", title: "Live table", width: ARTIFACT_WINDOW_SIZE.width, height: ARTIFACT_WINDOW_SIZE.height, at: { x: 1500, y: 200 }, focus: false,
+  it("keeps the ids, a plain title, a size, a screen point, the focus choice and always-on-top", () => {
+    expect(sanitizeArtifactWindowRequest({ botId: "bot-a", artifactId: "art_1", title: "Live\ntable", x: 1500.4, y: 200, focus: false, alwaysOnTop: true })).toEqual({
+      botId: "bot-a", artifactId: "art_1", title: "Live table", width: ARTIFACT_WINDOW_SIZE.width, height: ARTIFACT_WINDOW_SIZE.height, at: { x: 1500, y: 200 }, focus: false, alwaysOnTop: true,
     });
     expect(sanitizeArtifactWindowRequest({ botId: "bot-a", artifactId: "../x" })).toBeNull();
     expect(sanitizeArtifactWindowRequest({ botId: "bot-a", artifactId: "art_1", x: 1e9, y: 0 })).not.toHaveProperty("at");
+    expect(sanitizeArtifactWindowRequest({ botId: "bot-a", artifactId: "art_1" })).not.toHaveProperty("alwaysOnTop");
   });
 
   it("only navigates within its own route", () => {
@@ -168,14 +189,49 @@ describe("artifact windows", () => {
       fullscreenable: true,
       minWidth: ARTIFACT_WINDOW_MIN.width,
       minHeight: ARTIFACT_WINDOW_MIN.height,
-      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: "/app/electron/artifact-window-preload.cjs" },
     });
-    expect(win.options.webPreferences).not.toHaveProperty("preload");
+    expect(win.events.has("enter-full-screen")).toBe(true);
+    expect(win.events.has("leave-full-screen")).toBe(true);
     expect(win.loadURL).toHaveBeenCalledWith(`${ORIGIN}/artifact-window#bot=bot-a&artifact=art_1`);
     expect(controller.entries()).toEqual([{ artifactId: "art_1", title: "Live table" }]);
     expect(onChange).toHaveBeenCalled();
     win.fire("ready-to-show");
     expect(win.calls).toContainEqual(["focus"]);
+  });
+
+  it("toggles always on top from the main window and from the page window itself (#2046)", async () => {
+    const { fake, open, event, store } = setup();
+    expect(await open({ artifactId: "page:pageAAAA1111" })).toBe("created");
+    const [win] = fake.windows;
+    expect(win.onTop).toBe(false);
+    expect(await fake.handlers.get("artifact-window:set-top")(event, { artifactId: "page:pageAAAA1111", on: true })).toBe(true);
+    expect(win.calls).toContainEqual(["setAlwaysOnTop", true, "floating"]);
+    expect(await fake.handlers.get("artifact-window:get-top")(event, { artifactId: "page:pageAAAA1111" })).toBe(true);
+    // the page window itself (sender = its webContents) may toggle without an id
+    expect(await fake.handlers.get("artifact-window:set-top")({ sender: win.webContents }, { on: false })).toBe(true);
+    expect(win.calls.at(-1)).toEqual(["setAlwaysOnTop", false, undefined]);
+    expect(await fake.handlers.get("artifact-window:get-top")({ sender: win.webContents })).toBe(false);
+    expect(await fake.handlers.get("artifact-window:set-top")({ sender: win.webContents }, { on: true })).toBe(true);
+    // a stranger's sender cannot toggle
+    expect(await fake.handlers.get("artifact-window:set-top")({ sender: {} }, { on: false })).toBe(false);
+    win.close();
+    expect(store.get().windows["page:pageAAAA1111"].alwaysOnTop).toBe(true);
+  });
+
+  it("remembers always-on-top and puts it back the next time (#2046)", async () => {
+    const store = memoryStore({ version: 1, windows: { "page:pageAAAA1111": { bounds: { x: 100, y: 80, width: 700, height: 500 }, maximized: false, alwaysOnTop: true } } });
+    const { fake, open } = setup({ store });
+    expect(await open({ artifactId: "page:pageAAAA1111" })).toBe("created");
+    expect(fake.windows[0].options.alwaysOnTop).toBe(true);
+    expect(fake.windows[0].calls).toContainEqual(["setAlwaysOnTop", true, "floating"]);
+  });
+
+  it("applyArtifactWindowOnTop uses the floating level when on", () => {
+    const win = { destroyed: false, isDestroyed() { return this.destroyed; }, calls: [], setAlwaysOnTop(flag, level) { this.calls.push([flag, level]); } };
+    expect(applyArtifactWindowOnTop(win, true)).toBe(true);
+    expect(applyArtifactWindowOnTop(win, false)).toBe(true);
+    expect(win.calls).toEqual([[true, "floating"], [false, undefined]]);
   });
 
   it("keeps one window per artifact: asking again brings it forward", async () => {
@@ -301,5 +357,95 @@ describe("claude.ai artifact windows (#2018)", () => {
   it("refuses a page that is not the main window's own", async () => {
     const { fake, event } = setup({ trusted: false });
     expect(await fake.handlers.get("artifact-window:open-claude-ai")(event, { url: URL_OK })).toBe("refused");
+  });
+});
+
+describe("page window fit-to-content (#2051)", () => {
+  const PAGE_ID = "page:abcdefgh12345678";
+  const PRELOAD = "/tmp/artifact-window-preload.cjs";
+
+  it("gives a page window its preload and fits before show", async () => {
+    vi.useFakeTimers();
+    const { fake, open } = setup({ preload: PRELOAD });
+    expect(await open({ artifactId: PAGE_ID, title: "KPI" })).toBe("created");
+    const win = fake.windows[0];
+    expect(win.options.webPreferences.preload).toBe(PRELOAD);
+    win.fire("ready-to-show");
+    expect(win.calls.map(([name]) => name)).not.toContain("show");
+    const fromPage = { sender: win.webContents };
+    const fitted = await fake.handlers.get("artifact-window:fit-content")(fromPage, { width: 640, height: 360 });
+    expect(fitted).toMatchObject({ width: 640, height: 360 });
+    expect(win.bounds).toMatchObject({ width: 640, height: 360 });
+    expect(win.calls.map(([name]) => name)).toContain("show");
+    vi.useRealTimers();
+  });
+
+  it("clamps a fit to the work area and refuses a non-page window", async () => {
+    const { fake, open } = setup({ preload: PRELOAD });
+    await open({ artifactId: PAGE_ID });
+    const win = fake.windows[0];
+    const fromPage = { sender: win.webContents };
+    const fitted = await fake.handlers.get("artifact-window:fit-content")(fromPage, { width: 5000, height: 5000 });
+    expect(fitted.width).toBeLessThanOrEqual(PRIMARY.workArea.width);
+    expect(fitted.height).toBeLessThanOrEqual(PRIMARY.workArea.height);
+
+    await open({ artifactId: "art_1" });
+    const artifact = fake.windows[1];
+    // Every artifact/page window loads the shared preload (#2046/#2043/#2051);
+    // fit-content still answers only for a page window.
+    expect(artifact.options.webPreferences.preload).toBe(PRELOAD);
+    expect(await fake.handlers.get("artifact-window:fit-content")({ sender: artifact.webContents }, { width: 400, height: 300 })).toBeNull();
+  });
+
+  it("remembers a person resize and stops auto-fitting that page", async () => {
+    vi.useFakeTimers();
+    const store = memoryStore();
+    const first = setup({ store, preload: PRELOAD });
+    await first.open({ artifactId: PAGE_ID });
+    const win = first.fake.windows[0];
+    await first.fake.handlers.get("artifact-window:fit-content")({ sender: win.webContents }, { width: 640, height: 360 });
+    // person drags the size: not during an applying fit
+    win.bounds = { ...win.bounds, width: 900, height: 700 };
+    win.fire("resize");
+    await vi.advanceTimersByTimeAsync(500);
+    expect(store.get().windows[PAGE_ID]).toMatchObject({
+      bounds: { width: 900, height: 700 },
+      personSized: true,
+    });
+    expect(await first.fake.handlers.get("artifact-window:fit-content")({ sender: win.webContents }, { width: 500, height: 300 })).toBeNull();
+    expect(win.bounds).toMatchObject({ width: 900, height: 700 });
+    win.close();
+
+    const second = setup({ store, preload: PRELOAD });
+    await second.open({ artifactId: PAGE_ID });
+    const again = second.fake.windows[0];
+    expect(again.options).toMatchObject({ width: 900, height: 700 });
+    again.fire("ready-to-show");
+    expect(again.calls.map(([name]) => name)).toContain("show");
+    expect(await second.fake.handlers.get("artifact-window:fit-content")({ sender: again.webContents }, { width: 400, height: 280 })).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("shows a page window after the fit timeout when no measure arrives", async () => {
+    vi.useFakeTimers();
+    const { fake, open } = setup({ preload: PRELOAD });
+    await open({ artifactId: PAGE_ID });
+    const win = fake.windows[0];
+    win.fire("ready-to-show");
+    expect(win.calls.map(([name]) => name)).not.toContain("show");
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(win.calls.map(([name]) => name)).toContain("show");
+    vi.useRealTimers();
+  });
+
+  it("skips fit while the window is fullscreen so auto-fit never fights OS fullscreen", async () => {
+    const { fake, open } = setup({ preload: PRELOAD });
+    await open({ artifactId: PAGE_ID });
+    const win = fake.windows[0];
+    win.fire("ready-to-show");
+    win.fullscreen = true;
+    const before = { ...win.bounds };
+    expect(await fake.handlers.get("artifact-window:fit-content")({ sender: win.webContents }, { width: 640, height: 360 })).toBeNull();
+    expect(win.bounds).toEqual(before);
   });
 });

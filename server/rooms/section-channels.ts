@@ -123,11 +123,15 @@ export class SectionChannels {
       const parsed = fileSchema.safeParse(JSON.parse(readFileSync(this.path, "utf8")));
       if (!parsed.success) throw new Error("not a version 1 file");
       this.migratedAt = parsed.data.botSharesMigratedAt;
-      const names = new Set<string>();
+      // #2045: the same team name may belong to two people. Uniqueness is
+      // (owner, name); skip only a second copy of the exact same pair.
+      const ownedNames = new Set<string>();
       for (const entry of parsed.data.sections) {
         const record = recordSchema.safeParse(entry);
-        if (!record.success || names.has(record.data.name)) continue;
-        names.add(record.data.name);
+        if (!record.success) continue;
+        const pair = `${record.data.ownerPrincipalId.trim().toLowerCase()}\0${record.data.name}`;
+        if (ownedNames.has(pair)) continue;
+        ownedNames.add(pair);
         this.records.push(record.data);
       }
     } catch (error) {
@@ -147,6 +151,21 @@ export class SectionChannels {
   byName(name: string): SectionRecord | null {
     const found = this.records.find((record) => record.name === name.trim());
     return found ? structuredClone(found) : null;
+  }
+
+  /** #2045: the caller's own team with this name, when two people share it. */
+  byNameForOwner(name: string, ownerPrincipalId: string): SectionRecord | null {
+    const key = name.trim();
+    const owner = ownerPrincipalId.trim().toLowerCase();
+    const found = this.records.find(
+      (record) => record.name === key && record.ownerPrincipalId.trim().toLowerCase() === owner,
+    );
+    return found ? structuredClone(found) : null;
+  }
+
+  /** #2045: whether this person already has a team with this name. */
+  nameTakenByOwner(name: string, ownerPrincipalId: string): boolean {
+    return this.byNameForOwner(name, ownerPrincipalId) !== null;
   }
 
   /** The access facts of a section by name; null for a private one (no
@@ -210,9 +229,10 @@ export class SectionChannels {
     this.save();
   }
 
-  /** The record behind a name, created (private, no member) when missing. */
+  /** The record behind a name for this owner, created (private, no member)
+   * when missing. #2045: another person's team with the same name is left alone. */
   ensure(name: string, ownerPrincipalId: string): SectionRecord {
-    const existing = this.byName(name);
+    const existing = this.byNameForOwner(name, ownerPrincipalId);
     if (existing) return existing;
     const record: SectionRecord = { id: this.newId(), name: name.trim(), ownerPrincipalId, members: [], defaultLevel: "use", createdAt: this.now() };
     this.records.push(record);
@@ -226,24 +246,52 @@ export class SectionChannels {
     let created = 0;
     for (const name of names) {
       const key = name.trim();
-      if (!key || this.records.some((record) => record.name === key)) continue;
-      this.records.push({ id: this.newId(), name: key, ownerPrincipalId: ownerFor(key), members: [], defaultLevel: "use", createdAt: this.now() });
+      if (!key) continue;
+      const owner = ownerFor(key);
+      if (this.records.some((record) => record.name === key && record.ownerPrincipalId.trim().toLowerCase() === owner.trim().toLowerCase())) continue;
+      // A legacy unique name already owned by someone else keeps its record;
+      // do not invent a second copy for the same historical name.
+      if (this.records.some((record) => record.name === key)) continue;
+      this.records.push({ id: this.newId(), name: key, ownerPrincipalId: owner, members: [], defaultLevel: "use", createdAt: this.now() });
       created += 1;
     }
     if (created) this.save();
     return created;
   }
 
-  rename(name: string, nextName: string): void {
-    const found = this.records.find((record) => record.name === name.trim());
+  rename(name: string, nextName: string, ownerPrincipalId?: string): void {
+    const found = ownerPrincipalId
+      ? this.records.find((record) => record.name === name.trim() && record.ownerPrincipalId.trim().toLowerCase() === ownerPrincipalId.trim().toLowerCase())
+      : this.records.find((record) => record.name === name.trim());
     if (!found) return;
     found.name = nextName.trim();
     this.save();
   }
 
-  removeByName(name: string): void {
+  /** Rename one record by id (#2045: safe when two people share a name). */
+  renameById(id: string, nextName: string): SectionRecord | null {
+    const found = this.records.find((record) => record.id === id);
+    if (!found) return null;
+    found.name = nextName.trim();
+    this.save();
+    return structuredClone(found);
+  }
+
+  removeByName(name: string, ownerPrincipalId?: string): void {
     const before = this.records.length;
-    this.records = this.records.filter((record) => record.name !== name.trim());
+    const key = name.trim();
+    const owner = ownerPrincipalId?.trim().toLowerCase();
+    this.records = this.records.filter((record) => {
+      if (record.name !== key) return true;
+      if (!owner) return false;
+      return record.ownerPrincipalId.trim().toLowerCase() !== owner;
+    });
+    if (this.records.length !== before) this.save();
+  }
+
+  removeById(id: string): void {
+    const before = this.records.length;
+    this.records = this.records.filter((record) => record.id !== id);
     if (this.records.length !== before) this.save();
   }
 
@@ -351,12 +399,21 @@ export interface SectionRouteDeps {
   sections(): string[];
   /** Create an empty section; an error text, or undefined. */
   createSection(name: string): string | undefined;
-  renameSection(name: string, nextName: string): string | undefined;
-  deleteSection(name: string): string | undefined;
+  /** #2045: rename only this owner's bots/rooms for the team; an error text, or undefined. */
+  renameSection(record: SectionRecord, nextName: string): string | undefined;
+  /** #2045: delete only this owner's team; an error text, or undefined. */
+  deleteSection(record: SectionRecord): string | undefined;
   /** Something about who sees what changed. */
   onChanged(): void;
   /** Slice 7: one audit row per saved change (category section). */
   audit?(auth: RequestAuth, row: SectionAuditRow): void;
+}
+
+/** #2045: the person who owns the team (admins keep org-wide rights elsewhere). */
+export function isSectionOwner(viewer: Viewer | undefined, record: Pick<SectionRecord, "ownerPrincipalId">): boolean {
+  if (!viewer) return true;
+  if (viewer.disabled) return false;
+  return viewer.principalId.trim().toLowerCase() === record.ownerPrincipalId.trim().toLowerCase();
 }
 
 /** A section change for the admin activity log (slice 7). */
@@ -397,9 +454,11 @@ export function createSectionChannelRoutes(deps: SectionRouteDeps): RouteHandler
     const viewer = deps.viewer(auth);
 
     if (path === "/api/org/sections" && method === "GET") {
+      // #2045: the list is the viewer's own teams (and a legacy one they
+      // belong to). Moderation by admin right no longer lists other people's.
       const sections = deps.channels.list().flatMap((record) => {
         const shown = sectionForViewer(viewer, record, deps.teamsOf);
-        return shown ? [shown] : [];
+        return shown && (!viewer || shown.viewerRole !== null) ? [shown] : [];
       });
       return json(res, 200, { sections });
     }
@@ -408,10 +467,15 @@ export function createSectionChannelRoutes(deps: SectionRouteDeps): RouteHandler
       const name = body && typeof body === "object" ? (body as { name?: unknown }).name : undefined;
       if (!validSectionName(name)) return json(res, 400, { error: "A section name is 1 to 60 characters without control characters.", code: "bad_name" });
       if (isGeneralName(name)) return json(res, 400, GENERAL);
-      if (deps.sections().includes(name.trim())) return json(res, 409, { error: "A section with that name already exists.", code: "exists" });
+      const ownerId = deps.principalId(auth);
+      // #2045: names are unique per person. Another person's "Ops" never
+      // yields a 409 that would reveal it.
+      if (deps.channels.nameTakenByOwner(name.trim(), ownerId)) {
+        return json(res, 409, { error: "A section with that name already exists.", code: "exists" });
+      }
       const error = deps.createSection(name.trim());
       if (error) return json(res, 409, { error });
-      const record = deps.channels.ensure(name.trim(), deps.principalId(auth));
+      const record = deps.channels.ensure(name.trim(), ownerId);
       deps.onChanged();
       deps.audit?.(auth, { action: "section.create", section: { id: record.id, name: record.name } });
       return json(res, 201, { section: sectionForViewer(viewer, record, deps.teamsOf) ?? { ...record, viewerRole: "owner", canModerate: true } });
@@ -422,31 +486,35 @@ export function createSectionChannelRoutes(deps: SectionRouteDeps): RouteHandler
     if (one[1] === "general" || one[1] === "General") return json(res, 400, GENERAL);
     const record = deps.channels.byId(one[1]!);
     if (!record) return json(res, 404, { error: "no such section" });
-    const access = recordAccess(record);
     const sub = one[2];
 
     if (!sub && method === "PATCH") {
-      if (!canModerateSection(viewer, access)) return json(res, 403, NOT_ALLOWED);
+      // #2045: only the owner renames their team. Admins keep org-wide
+      // rights elsewhere; isolation between people is a hard rule.
+      if (!isSectionOwner(viewer, record)) return json(res, 403, NOT_ALLOWED);
       const body = await readBody(req);
       const name = body && typeof body === "object" ? (body as { name?: unknown }).name : undefined;
       if (!validSectionName(name)) return json(res, 400, { error: "A section name is 1 to 60 characters without control characters.", code: "bad_name" });
       if (isGeneralName(name)) return json(res, 400, GENERAL);
       const next = name.trim();
       if (next !== record.name) {
-        const error = deps.renameSection(record.name, next);
+        if (deps.channels.nameTakenByOwner(next, record.ownerPrincipalId)) {
+          return json(res, 409, { error: "A section with that name already exists.", code: "exists" });
+        }
+        const error = deps.renameSection(record, next);
         if (error) return json(res, 409, { error });
-        deps.channels.rename(record.name, next);
+        deps.channels.renameById(record.id, next);
         deps.onChanged();
         deps.audit?.(auth, { action: "section.rename", section: { id: record.id, name: next }, before: { name: record.name }, after: { name: next } });
       }
       const current = deps.channels.byId(record.id)!;
-      return json(res, 200, { section: sectionForViewer(viewer, current, deps.teamsOf) ?? { ...current, viewerRole: null, canModerate: true } });
+      return json(res, 200, { section: sectionForViewer(viewer, current, deps.teamsOf) ?? { ...current, viewerRole: "owner", canModerate: true } });
     }
     if (!sub && method === "DELETE") {
-      if (!canModerateSection(viewer, access)) return json(res, 403, NOT_ALLOWED);
-      const error = deps.deleteSection(record.name);
+      if (!isSectionOwner(viewer, record)) return json(res, 403, NOT_ALLOWED);
+      const error = deps.deleteSection(record);
       if (error) return json(res, 409, { error });
-      deps.channels.removeByName(record.name);
+      deps.channels.removeById(record.id);
       deps.onChanged();
       deps.audit?.(auth, { action: "section.delete", section: { id: record.id, name: record.name } });
       return json(res, 200, { ok: true });

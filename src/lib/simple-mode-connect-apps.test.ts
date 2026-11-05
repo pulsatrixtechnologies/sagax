@@ -19,7 +19,7 @@ describe("Connect apps in Simple mode", () => {
   });
 
   it("the shell's Simple-mode effect never closes Connect apps", () => {
-    const app = readFileSync(join(here, "../App.tsx"), "utf8");
+    const app = readFileSync(join(here, "../App.tsx-parts/useShellEffects.ts"), "utf8");
     const start = app.indexOf("if (advanced) return;");
     expect(start).toBeGreaterThan(-1);
     const effect = app.slice(start, app.indexOf("}, [advanced", start));

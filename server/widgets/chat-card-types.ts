@@ -13,6 +13,18 @@ export type AgentCardResult =
    * `answered` (#1905): an ask_choice that asked for permission under Full
    * access, answered with its recommended option; the card is settled.
    * `waitsForPerson` (2026-11-03): an ask_choice raised as a real question
-   * card (chat-widgets.ts raiseQuestion); the run waits for the answer. */
-  | { ok: true; messageId: string; masked?: true; pageId?: string; version?: number; answered?: { choice: string; question: string }; waitsForPerson?: true }
+   * card (chat-widgets.ts raiseQuestion); the run waits for the answer.
+   * `auto` / `targets` (#2048): choose_page_target resolved without a card,
+   * or listed the offers on a waiting card. */
+  | {
+      ok: true;
+      messageId: string;
+      masked?: true;
+      pageId?: string;
+      version?: number;
+      answered?: { choice: string; question: string };
+      waitsForPerson?: true;
+      auto?: { id: string; tool: string; name: string; description: string; icon?: string; reason: "single" | "default" };
+      targets?: Array<{ id: string; tool: string; name: string; description: string; available: boolean; icon?: string; reason?: string }>;
+    }
   | { ok: false; status: 400 | 403 | 404 | 409; error: string };

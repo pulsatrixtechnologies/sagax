@@ -3646,6 +3646,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       const calls = () => readFileSync(appendFile, "utf8").trim().split("\n").map((line) => JSON.parse(line).method as string)
         .filter((method) => !method.endsWith(".result") && method !== "_x.ai/mcp/list"); // the MCP settle poll (grok.ts) is not what these tests check
       await instance.adapter.sendTurn({ threadId: "t-call-new", text: "", keepWarm: true, warmOnly: true });
+      // warmOnly also runs configureSession (#2055); without a model that is
+      // only the MCP settle poll, filtered above.
       expect(calls()).toEqual(["initialize", "authenticate", "session/new"]);
       const first = await instance.adapter.sendTurn({ threadId: "t-call-new", text: "hello", keepWarm: true });
       expect(first.reused).toBe(true);
@@ -3662,6 +3664,27 @@ createInterface({ input: process.stdin }).on("line", (line) => {
       expect(next.reused).toBeUndefined();
       await recorder.until((e) => e.type === "turn.completed" && e.turnId === next.turnId);
       expect(launches()).toBe(3);
+    });
+
+    it("pins the model during warmOnly so the first turn is a bare prompt (#2055)", async () => {
+      countFile = join(scratch, "launches");
+      const appendFile = join(scratch, "rpc-all.jsonl");
+      process.env.FAKE_ACP_LAUNCH_COUNT_FILE = countFile;
+      process.env.FAKE_ACP_RPC_APPEND_FILE = appendFile;
+      await create();
+      const calls = () => readFileSync(appendFile, "utf8").trim().split("\n").map((line) => JSON.parse(line).method as string)
+        .filter((method) => !method.endsWith(".result") && method !== "_x.ai/mcp/list");
+      await instance.adapter.sendTurn({
+        threadId: "t-call-model-warm", text: "", keepWarm: true, warmOnly: true, model: "grok-4.7-build-fast",
+      });
+      expect(calls()).toEqual(["initialize", "authenticate", "session/new", "session/set_model"]);
+      const first = await instance.adapter.sendTurn({
+        threadId: "t-call-model-warm", text: "hello", keepWarm: true, model: "grok-4.7-build-fast",
+      });
+      expect(first.reused).toBe(true);
+      await recorder.until((e) => e.type === "turn.completed" && e.turnId === first.turnId);
+      expect(calls()).toEqual(["initialize", "authenticate", "session/new", "session/set_model", "session/prompt"]);
+      expect(launches()).toBe(1);
     });
 
     it("primes a call's prompt cache in the background, then the spoken turn prompts again", async () => {

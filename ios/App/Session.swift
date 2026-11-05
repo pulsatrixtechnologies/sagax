@@ -2850,6 +2850,27 @@ final class Session: ObservableObject {
         return URL(string: normalized, relativeTo: base)?.absoluteURL
     }
 
+    // claude.ai artifact cards (#2018): the person's own session, never another account.
+    func claudeArtifactSummary(url: String) async throws -> ClaudeArtifactSummary {
+        guard let client else { throw APIError.transport("This computer is offline.") }
+        return try await client.claudeArtifactSummary(url: url)
+    }
+
+    func claudeArtifactComments(url: String) async throws -> [ClaudeArtifactThread] {
+        guard let client else { throw APIError.transport("This computer is offline.") }
+        return try await client.claudeArtifactComments(url: url)
+    }
+
+    func claudeArtifactReply(url: String, threadId: String, text: String) async throws {
+        guard let client else { throw APIError.transport("This computer is offline.") }
+        try await client.claudeArtifactReply(url: url, threadId: threadId, text: text)
+    }
+
+    func claudeArtifactResolve(url: String, threadId: String) async throws {
+        guard let client else { throw APIError.transport("This computer is offline.") }
+        try await client.claudeArtifactResolve(url: url, threadId: threadId)
+    }
+
     func youtubeTranscript(videoId: String) async throws -> YouTubeTranscriptResponse {
         guard let client else { throw APIError.transport("This computer is offline.") }
         return try await client.youtubeTranscript(videoId: videoId)

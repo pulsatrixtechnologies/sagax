@@ -219,7 +219,7 @@ describe("buildSystemPrompt", () => {
     expect(built.stable).toContain(WORK_STYLE_PROMPT);
     expect(built.volatile).not.toContain("How you work");
     // the five things the reference app's bots do that ours were measured not to
-    for (const said of ["say the plan in one or two lines", "keep going until the result is in hand", "Search before you ask", "session_search", "change what caused it and call once more", "take another route", "Never repeat the same failing call unchanged", "name that one step; do not list options", "Say the answer first, in the person's language", "no preamble"]) {
+    for (const said of ["state a 1-2 line plan and complete it", "report unfinished work and what remains", "before asking", "session_search", "fix its cause and retry once", "try another route", "never repeat an unchanged failure", "name only the one next step", "Answer first in the person's language", "no preamble"]) {
       expect(WORK_STYLE_PROMPT).toContain(said);
     }
     expect(WORK_STYLE_PROMPT.startsWith("\n")).toBe(true);
@@ -410,6 +410,12 @@ describe("cloudHomePrompt", () => {
 });
 
 describe("buildSystemPrompt volatile sections", () => {
+  it("keeps per-turn payloads out of every engine's stable prefix without an engine override (#1997)", () => {
+    const ids = ["plan", "routine-execution", "skill-instructions", "playbooks", "files-cwd", "group-memory"];
+    const build = (value: string) => buildSystemPrompt("Osprey", "", ids.map(id => ({ id, label: id, text: `\n${id}: ${value}` })));
+    expect(build("A").stable).toBe(build("B").stable);
+    for (const id of ids) expect(build("B").volatile).toContain(`${id}: B`);
+  });
   it("returns the volatile half by section, in prompt order, for per-section delivery", () => {
     const built = buildSystemPrompt("I am Testy.", "", [
       { id: "memory", label: "Memory", text: "\n\nMemory: tea." },
@@ -454,12 +460,12 @@ describe("verify-first rule (2026-10-19)", () => {
     expect(VERIFY_FIRST_PROMPT).toContain("Verify before you conclude");
     expect(VERIFY_FIRST_PROMPT).toContain("I could not see X");
     expect(VERIFY_FIRST_PROMPT).toContain("Never invent names, people, tools, commands, IDs or results");
-    expect(VERIFY_FIRST_PROMPT).toContain("Always ask through the interactive question tool, never in your reply text");
+    expect(VERIFY_FIRST_PROMPT).toContain("Ask through your native question tool");
     expect(VERIFY_FIRST_PROMPT).toContain("AskUserQuestion, ask_user_question, request_user_input or ask_user");
     expect(VERIFY_FIRST_PROMPT).toContain("the Sagax tool ask_choice");
-    expect(VERIFY_FIRST_PROMPT).toContain("the one you recommend first");
+    expect(VERIFY_FIRST_PROMPT).toContain("recommended option first, free text allowed");
     expect(VERIFY_FIRST_PROMPT).toContain("a next step their request already covers is not a decision: do it");
-    expect(VERIFY_FIRST_PROMPT).toContain("Never use that tool to ask permission for work their request already authorized");
+    expect(VERIFY_FIRST_PROMPT).toContain("Never ask permission for authorized work");
     expect(VERIFY_FIRST_PROMPT).toContain("Ask before contacting bots is off");
     expect(VERIFY_FIRST_PROMPT).toContain("Never put the question or a list of choices");
     expect(VERIFY_FIRST_PROMPT).toContain("never how far you check");

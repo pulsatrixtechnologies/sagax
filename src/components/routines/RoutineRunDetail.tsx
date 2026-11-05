@@ -26,6 +26,7 @@ import { routineAutoPausedText, routineDateTime, routineQueuePosition, routineRe
 import { RunResultDetails, TeammateThreadLinks } from "../RoutineRunCard";
 import { formatUsd } from "@/lib/usage";
 import { ChatMarkdown } from "../ChatMarkdown";
+import { StepBoundary, stepFallbackText } from "../MessageBoundary";
 import { ActivityStepGroups } from "../task/ActivityStepGroups";
 import { TaskComposer } from "../task/TaskComposer";
 import { activityJobStage, TaskStatusHeader } from "../task/TaskStatusHeader";
@@ -210,7 +211,9 @@ export function RoutineRunDetail({ run, runs, routine, bots, groups = [], viewer
     : detail === null ? (detailError ? <p className="text-[12.5px] text-ink-secondary">{t("routineRun.stepsUnavailable")}</p> : <p className="flex items-center gap-2 text-[12.5px] text-ink-secondary"><Loader2 size={13} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />{t("routineRun.stepsLoading")}</p>)
     : steps.length === 0 ? <p className="text-[12.5px] text-ink-secondary">{detail.threadId ? t("botPanel.activity.stepsEmpty") : t("routineRun.stepsUnavailable")}</p>
     : <>
-        <ActivityStepGroups steps={steps} truncated={detail.stepsTruncated} />
+        <StepBoundary stepId={run.id} fallbackText={stepFallbackText(steps[0])}>
+          <ActivityStepGroups steps={steps} truncated={detail.stepsTruncated} />
+        </StepBoundary>
         {detail.files.length > 0 && <ul className="mt-3 flex flex-col gap-1" aria-label={t("botPanel.activity.files")}>{detail.files.map((file) => <li key={file} className="flex min-w-0 items-center gap-2 text-[12px] text-ink"><FileText size={13} aria-hidden="true" className="shrink-0 text-ink-secondary" /><span className="min-w-0 truncate font-mono" title={file}>{file}</span></li>)}</ul>}
       </>;
 

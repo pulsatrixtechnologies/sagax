@@ -39,4 +39,17 @@ describe("InputRequestCard", () => {
     }));
     expect(html).not.toContain("<textarea");
   });
+
+  // 0.8.46: a question closed without the person never reads "Answer sent".
+  it.each([
+    [{ expired: true }, "expired without your answer"],
+    [{ expired: true, defaulted: true }, "default answer was used"],
+  ])("says an unanswered question expired, never that an answer was sent (%j)", (state, line) => {
+    const html = renderToStaticMarkup(createElement(InputRequestCard, {
+      message: { id: "m3", role: "bot", kind: "activity", tool: { name: "x", ok: true }, inputRequest: { botId: BOT_ID, threadId: THREAD_ID, botName: "Mira", question: "Which one?", ...state } } as never,
+    }));
+    expect(html).not.toContain("<textarea");
+    expect(text(html)).toContain(line);
+    expect(text(html)).not.toContain("Answer sent");
+  });
 });

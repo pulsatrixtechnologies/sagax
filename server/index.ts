@@ -1171,6 +1171,7 @@ import { approvalLevelPrompt, peerContactPrompt } from "./approvals/approval-lev
 import { fullAccessActs, fullAccessChoiceAnswer, fullAccessChoiceLine, fullAccessDecision, peerContactCardRequired } from "./approvals/full-access-gate.ts";
 import { expandLearnTurnText } from "./skills/skill-learn.ts";
 import { expandSetupTurnText, setupModeActive, setupSystemPrompt } from "./setup-mode.ts";
+import { onDemandPromptParts, promptReferencesAvailable } from "./context/prompt-references.ts";
 import type { SkillRequestCardData } from "../shared/skill-request.ts";
 import {
   checkSoulDrift
@@ -10244,19 +10245,18 @@ function scopedSkillInventory(bot: BotRecord, instance: { driverKind: string } |
 }
 /** The selected skill and plugin instructions of one turn, budgeted per
  * capability (server/capabilities/capability-prompt.ts): file engines get readable paths,
- * engines without files the whole files, read through the same checks as
- * workspace_read. `syncNative` refreshes the active engine's links on a real turn
+ * engines without retrieval get whole files, read through the same checks as
+ * workspace_read. Managed reads use a short index on every engine. `syncNative`
+ * refreshes the active engine's links on a real turn
  * only: the preview and the receipt never touch them. */
 function scopedSkillsPrompt(bot: BotRecord, instance: { driverKind: string } | null | undefined, principal: string | undefined, options: { managedTools: boolean; fileAccess: boolean; syncNative?: boolean; nativeWorkspace?: string; indexOnly?: boolean }) {
   const kind = instance?.driverKind ?? "";
   const names = new Set(personalSkillInputs(bot, principal).filter((skill) => skill.enabled && !skill.shadowed).map((skill) => skill.name));
   if (options.syncNative) syncSkillLinks(bot.id, { excludeNames: names });
   // A file engine needs its files or the managed tools (paths to read). An
-  // engine without files always receives the whole instruction files inline
-  // within each capability's budget (Q8 C, say then fill): with
-  // skills_list/workspace_read allowed they are named by alias and those
-  // tools reach the rest; tools off, the prompt is all it gets. Cold /
-  // automation turns pass indexOnly so chat engines stay on the index too.
+  // engine without files receives an index when skills_list/workspace_read
+  // are available. Without that retrieval route it receives whole files
+  // within the per-capability budget. Native Claude plugins remain native.
   const person = IDENTITY.kind === "perspicax" ? principal ?? effectiveBotOwner(bot) : localPrincipalId();
   // Incident 2026-11-03: a Perspicax bot whose turn gets no Flow folder is
   // told where the Flow skills are (server/org/org-flow-plugins.ts).
@@ -10859,7 +10859,7 @@ function previewSystemPrompt(bot: BotRecord, principal?: string) {
   // 2026-11-02: the preview names no server path where the turn would not
   // (server/server-path-prompt.ts)
   const previewHidden = instance && withholdHostToolsFor(instance) ? hideServerPathsInSections(previewParts, serverPathView(bot.id)).sections : previewParts;
-  const built = buildSystemPrompt(persona, bot.soul ?? "", previewHidden, instance?.driverKind === "claudeAgent" ? CLAUDE_REUSE_VOLATILE_SECTIONS : undefined);
+  const built = buildSystemPrompt(persona, bot.soul ?? "", onDemandPromptParts(previewHidden, promptReferencesAvailable(agentsMounted, bot.toolScope)), instance?.driverKind === "claudeAgent" ? CLAUDE_REUSE_VOLATILE_SECTIONS : undefined);
   const totalBytes = built.sections.reduce((n, s) => n + s.bytes, 0);
   return {
     sections: built.sections,
@@ -13028,6 +13028,9 @@ const coordinator: Coordinator = createCoordinator({
     // when the requester's conversation is itself a bot-to-bot one, the
     // conversation the person started the work in gets it too.
     park: (node, question, restored) => postInputRequest(node, question, false, restored),
+    // 0.8.46: closed without the person (expired, or the requester's default
+    // answer): its cards say so instead of staying open or reading answered.
+    unparked: (node, _reason, defaulted) => settleInputRequests(node.threadId, defaulted ? "defaulted" : "expired"),
     remind: (node, question) => postInputRequest(node, question, true),
     // A parked delegation whose conversation was deleted or archived has
     // nowhere left to be answered: closed (at the restart too), so it stops
@@ -13079,6 +13082,19 @@ const originApprovals = createOriginApprovals({
   },
   withdraw: (threadId, requestId) => withdrawApprovalNotice(threadId, requestId)
 });
+/** 0.8.46: send ids of lines a bot's act wrote as the person (bot-act.ts
+ * tagActSend). Such a line is delivered as before but never answers a
+ * question the runtime parked on the person. In memory, ten minutes. */
+const botActSendIds = new Map<string, number>();
+function markBotActSend(sendId: string): void {
+  const now = Date.now();
+  for (const [id, at] of botActSendIds) if (now - at > 10 * 60_000) botActSendIds.delete(id); else break;
+  botActSendIds.set(sendId, now);
+  if (botActSendIds.size > 5_000) botActSendIds.delete(botActSendIds.keys().next().value!);
+}
+function isBotActSend(sendId: string | undefined): boolean {
+  return Boolean(sendId && botActSendIds.has(sendId));
+}
 /** The input-request cards still open per waiting work thread, so the answer
  * marks them answered (in memory: a restart parks again and re-posts). */
 const openInputRequests = new Map<string, Array<{ threadId: string; messageId: string }>>();
@@ -13150,14 +13166,18 @@ function newestQuestionCard(threadId: string, aboutThreadId: string): Message | 
     message.kind === "activity" && (message.threadRef?.threadId ?? message.comm?.threadId) === aboutThreadId
     && (message.tool?.name.includes(" needs your input: ") === true || message.tool?.name.includes(" is still waiting for your answer: ") === true));
 }
-/** The person answered in the waiting thread: its cards say so. */
-function settleInputRequests(threadId: string): void {
+/** The person answered in the waiting thread: its cards say so. Only the
+ * person's own line answers (start-turn-prepare-admit.ts); a parked question
+ * closed without them says "expired" or "default answer used" (0.8.46). */
+function settleInputRequests(threadId: string, how: "answered" | "expired" | "defaulted" = "answered"): void {
   const rows = openInputRequests.get(threadId);
   if (!rows) return;
   openInputRequests.delete(threadId);
   for (const row of rows) {
     const message = store.activePath(row.threadId).find((candidate) => candidate.id === row.messageId);
-    if (message?.inputRequest) store.patchMessage(row.threadId, row.messageId, { inputRequest: { ...message.inputRequest, answered: true } });
+    if (!message?.inputRequest || message.inputRequest.answered || message.inputRequest.expired) continue;
+    const settled = how === "answered" ? { answered: true } : { expired: true, ...(how === "defaulted" ? { defaulted: true } : {}) };
+    store.patchMessage(row.threadId, row.messageId, { inputRequest: { ...message.inputRequest, ...settled } });
   }
 }
 const groupUsageReader = new GroupUsageReader(DATA_DIR);
@@ -34755,6 +34775,9 @@ let botActService: BotActService | null = null;
 function botActs(): BotActService {
   botActService ??= createBotActService({
     now: () => Date.now(),
+    // 0.8.46: a line a bot's act writes as the person is never taken as the
+    // person's own answer to a parked question (start-turn-prepare-admit.ts).
+    markActSend: (sendId) => markBotActSend(sendId),
     newId: () => randomUUID(),
     neededScope: (method, path) => requiredScope(method, path, {
       sharedComputers: sharedComputersEnabled(cfg),
@@ -46715,6 +46738,7 @@ const startTurnRunner = createStartTurn({
   settleDirectCoordination,
   settleDirectFollowup,
   settleInputRequests,
+  isBotActSend,
   settleTrackedRequest,
   settlingResourceOwners,
   setupModeActive,

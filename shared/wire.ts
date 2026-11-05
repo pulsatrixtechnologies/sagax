@@ -978,7 +978,12 @@ export interface WireMessage extends WaitLineField {
   /** A teammate parked on a question for the person (server park/remind,
    * 2026-10-19): the whole question, answered from the card in place (the
    * answer is a person's message into `threadId`, the waiting work). */
-  inputRequest?: { botId: string; threadId: string; botName: string; title?: string; question: string; reminder?: boolean; answered?: boolean };
+  inputRequest?: { botId: string; threadId: string; botName: string; title?: string; question: string; reminder?: boolean;
+    /** The person's own answer reached the waiting work. */
+    answered?: boolean;
+    /** Closed without the person's answer (0.8.46): it expired, or with
+     * `defaulted` the requester's declared default answer was used. */
+    expired?: boolean; defaulted?: boolean };
   /** A bot's page proposal (shared/published-pages.ts): the card the person
    * reviews and publishes it from. `text` is the fallback line. */
   pagePublish?: { pageId: string; version: number; title: string };
